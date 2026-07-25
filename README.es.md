@@ -70,6 +70,12 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 - Guarda instantáneas localmente en el navegador y exporta el contenido confirmado como PNG.
 - Elige entre los temas Arcane, Sci-fi, Research y Studio.
 
+## Novedades de la versión 0.7.1
+
+- **Imágenes y fotos en el lienzo.** Añade imágenes con el selector del sistema: biblioteca de fotos o cámara en móviles y tabletas, archivos de imagen en escritorio. Las imágenes grandes se reducen y comprimen automáticamente para que lienzos e instantáneas sigan siendo ligeros.
+- **Edición con pulsación larga y acciones claras.** Mantén pulsada una imagen para moverla o redimensionarla de nuevo y elige Colocar, Fusionar o Eliminar. Colocar la mantiene flotando bajo tu tinta para dibujar sobre ella; Fusionar la convierte en trazos reales que puedes borrar.
+- **Sin solicitudes de IA inesperadas.** Las imágenes nunca inician solicitudes de IA por sí solas; si trabajas con una imagen mientras la IA sigue procesando, el resultado en curso se descarta y el reconocimiento de escritura se reanuda automáticamente. Las imágenes admiten deshacer y rehacer, instantáneas locales y exportación PNG.
+
 ## Novedades de la versión 0.7.0
 
 - **HTML interactivo en el lienzo.** El plugin General HTML permite crear relojes, calculadoras, paneles y otras interfaces como widgets interactivos aislados.

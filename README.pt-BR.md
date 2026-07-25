@@ -70,6 +70,12 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Salve instantâneos localmente no navegador e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
 
+## Novidades da versão 0.7.1
+
+- **Imagens e fotos na tela.** Adicione imagens pelo seletor do sistema — biblioteca de fotos ou câmera em celulares e tablets, arquivos de imagem no desktop. Imagens grandes são reduzidas e compactadas automaticamente, mantendo telas e snapshots leves.
+- **Edição com toque longo, ações claras.** Pressione e segure uma imagem para movê-la ou redimensioná-la novamente e escolha Posicionar, Mesclar ou Excluir. Posicionar mantém a imagem flutuando sob a tinta para desenhar por cima; Mesclar a transforma em traços reais que podem ser apagados.
+- **Sem solicitações de IA inesperadas.** Imagens nunca iniciam solicitações de IA por conta própria; se você trabalhar com uma imagem enquanto a IA ainda está processando, o resultado em andamento é descartado e o reconhecimento de escrita é retomado automaticamente. Imagens participam de desfazer/refazer, snapshots locais e exportação PNG.
+
 ## Novidades da versão 0.7.0
 
 - **HTML interativo na tela.** O plugin General HTML permite criar relógios, calculadoras, painéis e outras interfaces como widgets interativos isolados.

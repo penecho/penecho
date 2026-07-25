@@ -70,6 +70,12 @@ npm start
 - Enregistrez des instantanés localement dans le navigateur et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
+## Nouveautés de la version 0.7.1
+
+- **Images et photos sur le canevas.** Ajoutez des images via le sélecteur système — photothèque ou appareil photo sur mobiles et tablettes, fichiers image sur ordinateur. Les grandes images sont automatiquement réduites et compressées pour garder canevas et instantanés légers.
+- **Modification par appui long, actions claires.** Appuyez longuement sur une image pour la déplacer ou la redimensionner, puis choisissez Placer, Fusionner ou Supprimer. Placer garde l'image flottante sous votre encre pour dessiner par-dessus ; Fusionner la transforme en véritables traits effaçables.
+- **Aucune requête IA inattendue.** Les images ne lancent jamais de requêtes IA d'elles-mêmes ; si vous manipulez une image pendant que l'IA travaille encore, le résultat en cours est abandonné et la reconnaissance de l'écriture reprend automatiquement. Les images prennent en charge annulation/rétablissement, instantanés locaux et export PNG.
+
 ## Nouveautés de la version 0.7.0
 
 - **HTML interactif sur le canevas.** Le plugin General HTML permet de créer des horloges, calculatrices, tableaux de bord et autres interfaces sous forme de widgets interactifs isolés.

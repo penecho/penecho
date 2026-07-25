@@ -80,7 +80,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("0.7.0 changelog is a one-page dialog shown once after the feature tour", () => {
+test("0.7.1 changelog is a one-page dialog shown once after the feature tour", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -89,9 +89,9 @@ test("0.7.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(layer, /class="changelog-layer"[^>]*hidden[^>]*aria-hidden="true"/);
   assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"[^>]*aria-describedby="changelogIntro"/);
   for (const id of ["changelogClose", "changelogTitle", "changelogIntro", "changelogCurrentVersion", "changelogEarlierTitle", "changelogDone"]) assert.match(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />0\.7\.0</);
+  assert.match(layer, />0\.7\.1</);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "0\.7\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "0\.7\.1"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
@@ -99,7 +99,7 @@ test("0.7.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogPlugins", "changelogBrowserData", "changelogCreator", "changelogCanvas", "changelogEarlierTitle", "changelogAnimation", "changelogFoundation", "changelogDone"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogImages", "changelogImageEdit", "changelogImageAi", "changelogEarlierTitle", "changelogPluginsSummary", "changelogAnimation", "changelogFoundation", "changelogDone"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
@@ -128,6 +128,8 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourLassoBody",
       "tourTextTitle",
       "tourTextBody",
+      "tourImageTitle",
+      "tourImageBody",
       "tourFullscreenTitle",
       "tourFullscreenBody",
       "tourFilesTitle",
