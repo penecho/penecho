@@ -338,6 +338,23 @@ test("doctor is diagnostic-only and reports the unified timeout", async () => {
   assert.match(output.text(), /no model request was made/);
 });
 
+test("Claude doctor does not claim an untested session is ready", async () => {
+  const directory = temporaryDirectory(), output = capture(), configuration = resolveConfiguration(parseArgs(["doctor", "--claude"]), {
+    env:{ AI_PROVIDER:"claude-cli", AI_TIMEOUT_SECONDS:"180", PORT:"3888", CLAUDE_CLI_PATH:process.execPath, PATH:process.env.PATH },
+    home:directory, cwd:directory, packageRoot:ROOT,
+  });
+  const ready = await runDoctor(parseArgs(["doctor", "--claude"]), configuration, {
+    output:output.stream,
+    portChecker:async () => ({ ok:true }),
+    runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "claude test\n" : "logged in\n", stderr:"" }),
+  });
+  assert.equal(ready, true);
+  assert.match(output.text(), /Claude CLI reports an authenticated session/);
+  assert.match(output.text(), /no model request was made/);
+  assert.match(output.text(), /claude auth login/);
+  assert.doesNotMatch(output.text(), /login is ready/);
+});
+
 test("help documents configure, global config, explicit config, and transient overrides", () => {
   const help = helpText();
   assert.match(help, /penecho configure/);

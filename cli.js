@@ -471,7 +471,9 @@ async function runDoctor(args, configuration, options = {}) {
     report(codex.ok, codex.ok ? `${codex.version}; login is ready (no model request was made)` : codex.error);
   } else {
     const claude = await runClaudePreflight(configuration, { runner: options.runner });
-    report(claude.ok, claude.ok ? `${claude.version}; login is ready (no model request was made)` : claude.error);
+    report(claude.ok, claude.ok
+      ? `${claude.version}; Claude CLI reports an authenticated session, but no model request was made. If a request fails, run \`claude auth login\` and try again.`
+      : claude.error);
   }
   return ready;
 }
