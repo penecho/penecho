@@ -73,7 +73,7 @@
     "desktop:collect": "node scripts/collect-artifacts.js"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=20.3.0"
   },
   "dependencies": {
     "@inquirer/prompts": "7.10.1",

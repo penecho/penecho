@@ -44,7 +44,7 @@ PenEcho는 [Moonshot AI](https://www.kimi.com/)가 뛰어난 오픈 소스 프�
 
 [GitHub Releases에서 다운로드](https://github.com/penecho/penecho/releases/latest).
 
-npm으로 설치하려면 [Node.js 22.12 이상](https://nodejs.org/)과 API 키, 인증된 [Codex CLI](https://developers.openai.com/codex/cli), 또는 인증된 [Claude Code CLI](https://code.claude.com/docs/en/overview) 중 하나가 필요합니다.
+npm으로 설치하려면 [Node.js 20.3 이상](https://nodejs.org/)과 API 키, 인증된 [Codex CLI](https://developers.openai.com/codex/cli), 또는 인증된 [Claude Code CLI](https://code.claude.com/docs/en/overview) 중 하나가 필요합니다.
 
 ```bash
 npm install -g penecho
