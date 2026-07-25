@@ -42,9 +42,7 @@ PenEcho는 [Moonshot AI](https://www.kimi.com/)가 뛰어난 오픈 소스 프�
 
 ### 데스크톱 앱
 
-[GitHub Releases](https://github.com/penecho/penecho/releases/latest)에서 최신 macOS 또는 Windows 설치 프로그램을 다운로드하세요. 데스크톱 앱에는 실행 환경이 포함되어 있으므로 Node.js나 Python을 별도로 설치할 필요가 없습니다.
-
-### 명령줄
+[GitHub Releases에서 다운로드](https://github.com/penecho/penecho/releases/latest).
 
 npm으로 설치하려면 [Node.js 22.12 이상](https://nodejs.org/)과 API 키, 인증된 [Codex CLI](https://developers.openai.com/codex/cli), 또는 인증된 [Claude Code CLI](https://code.claude.com/docs/en/overview) 중 하나가 필요합니다.
 

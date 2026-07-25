@@ -42,9 +42,7 @@ PenEcho es miembro oficial de **Kimi Open Source Friends**, el programa de [Moon
 
 ### Aplicación de escritorio
 
-Descarga el instalador más reciente para macOS o Windows desde [GitHub Releases](https://github.com/penecho/penecho/releases/latest). La aplicación de escritorio incluye su propio entorno de ejecución, por lo que no requiere Node.js ni Python.
-
-### Línea de comandos
+[Descargar desde GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
 Para instalar mediante npm, necesitas [Node.js 22.12 o posterior](https://nodejs.org/) y una de estas opciones: una clave de API, un [Codex CLI](https://developers.openai.com/codex/cli) autenticado o un [Claude Code CLI](https://code.claude.com/docs/en/overview) autenticado.
 

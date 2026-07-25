@@ -83,11 +83,9 @@ Using these links directly supports the project:
 
 ### Desktop app
 
-Download the latest macOS or Windows installer from [GitHub Releases](https://github.com/penecho/penecho/releases/latest). The desktop app includes its own runtime, so Node.js and Python are not required.
+[Download from GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-### Command line
-
-For the npm installation, you need [Node.js 22.12+](https://nodejs.org/) and one of the following: an API key, an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
+For npm installation, you need [Node.js 22.12+](https://nodejs.org/) and one of the following: an API key, an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho
