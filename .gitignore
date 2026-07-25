@@ -9,6 +9,9 @@ logs/
 test-results/
 playwright-report/
 coverage/
+out/
+release/
+build/icons/generated/
 .DS_Store
 Thumbs.db
 local/*

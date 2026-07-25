@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>PenEcho Setup</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="page-glow glow-one"></div>
+  <div class="page-glow glow-two"></div>
+  <main class="setup-shell">
+    <aside class="welcome-panel" aria-labelledby="welcomeTitle">
+      <header class="brand-row">
+        <img src="../../build/icons/penecho.png" alt="" width="48" height="48">
+        <div><strong>PenEcho</strong><span id="versionLabel">Desktop</span></div>
+      </header>
+      <div class="welcome-copy">
+        <p class="eyebrow" data-i18n="eyebrow">AI canvas, ready in minutes</p>
+        <h1 id="welcomeTitle" data-i18n="title">Set up your AI connection</h1>
+        <p data-i18n="subtitle">PenEcho runs on this computer. Choose how it reaches your AI model, test once, then start drawing.</p>
+      </div>
+      <ol class="steps" aria-label="Quick start">
+        <li><span>1</span><div><strong data-i18n="stepOneTitle">Choose a provider</strong><p data-i18n="stepOneBody">API is the easiest option for most people.</p></div></li>
+        <li><span>2</span><div><strong data-i18n="stepTwoTitle">Test securely</strong><p data-i18n="stepTwoBody">Your API key is encrypted by macOS or Windows.</p></div></li>
+        <li><span>3</span><div><strong data-i18n="stepThreeTitle">Create on canvas</strong><p data-i18n="stepThreeBody">Write or draw, then let AI respond visually.</p></div></li>
+      </ol>
+      <div class="privacy-note"><span aria-hidden="true">✓</span><p><strong data-i18n="localTitle">Local desktop service</strong><br><span data-i18n="localBody">The canvas stays on your computer. Model requests go only to your selected provider.</span></p></div>
+    </aside>
+
+    <section class="settings-panel" aria-labelledby="settingsTitle">
+      <header class="settings-header">
+        <div><p class="eyebrow" data-i18n="configuration">Configuration</p><h2 id="settingsTitle" data-i18n="settingsTitle">Connect your model</h2></div>
+        <div class="language-switch" role="group" aria-label="Language"><button type="button" data-language="en" class="active">EN</button><button type="button" data-language="zh">中文</button></div>
+      </header>
+
+      <form id="settingsForm" novalidate>
+        <fieldset class="provider-fieldset">
+          <legend data-i18n="providerLegend">AI provider</legend>
+          <div class="provider-grid">
+            <label class="provider-card recommended"><input type="radio" name="provider" value="api" checked><span class="provider-icon">API</span><span><strong data-i18n="apiTitle">API</strong><small data-i18n="apiDescription">Recommended · no CLI installation</small></span><em data-i18n="recommended">Recommended</em></label>
+            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi"><span class="provider-icon">K</span><span><strong>Kimi</strong><small data-i18n="kimiDescription">Official partner · Kimi K3</small></span></label>
+            <label class="provider-card"><input type="radio" name="provider" value="codex-cli"><span class="provider-icon">C</span><span><strong>Codex CLI</strong><small data-i18n="codexDescription">Install automatically or use your account</small></span></label>
+            <label class="provider-card"><input type="radio" name="provider" value="claude-cli"><span class="provider-icon">A</span><span><strong>Claude CLI</strong><small data-i18n="claudeDescription">Install automatically or use your account</small></span></label>
+          </div>
+        </fieldset>
+
+        <section class="provider-section" data-provider-panel="api kimi">
+          <div class="kimi-partner" data-kimi-only hidden>
+            <span class="partner-medal" aria-hidden="true">K</span>
+            <span class="partner-message"><strong data-i18n="kimiFriendTitle">Official Kimi Open Source Friend</strong><small data-i18n="kimiFriendBody">PenEcho is supported by Moonshot AI, with Kimi K3 recommended for demanding visual work.</small></span>
+            <span class="partner-links"><a href="https://www.kimi.com/code?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiCodeLink">Kimi Code</a><a href="https://platform.kimi.com?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiChinaLink">Mainland China</a><a href="https://platform.kimi.ai?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiGlobalLink">Global</a></span>
+          </div>
+          <div class="field-row two-column" data-kimi-only hidden>
+            <label><span data-i18n="kimiOffering">Kimi service</span><select name="kimiProduct"><option value="code" data-i18n="kimiCodeOption">Kimi Code · subscription</option><option value="platform" data-i18n="kimiPlatformOption">Open Platform · pay as you go</option></select></label>
+            <label><span data-i18n="kimiRegion">Access region</span><select name="kimiRegion"><option value="global" data-i18n="globalOption">Global</option><option value="china" data-i18n="chinaOption">Mainland China</option></select></label>
+          </div>
+          <div class="field-row two-column">
+            <label><span data-i18n="apiType">API type</span><select name="apiFormat"><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic-compatible</option></select></label>
+            <label><span data-i18n="model">Model</span><input name="apiModel" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol"></label>
+          </div>
+          <label><span data-i18n="baseUrl">API base URL</span><input name="apiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1"></label>
+          <label><span data-i18n="apiKey">API key</span><span class="input-with-badge"><input name="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"><small id="savedKeyBadge" hidden data-i18n="savedSecurely">Saved securely</small></span><small class="field-help" data-i18n="apiKeyHelp">Stored with operating-system encryption and never exposed to the canvas page.</small></label>
+        </section>
+
+        <section class="provider-section" data-provider-panel="codex-cli" hidden>
+          <div class="cli-notice"><span class="cli-notice-copy"><strong data-i18n="codexRequired">Use your existing ChatGPT account session through Codex CLI.</strong><span data-i18n="codexInstallHelp">PenEcho installs the official CLI and uses your existing signed-in session.</span></span><span class="cli-actions"><button class="inline-primary" type="button" data-install-cli="codex-cli" data-i18n="install">Install</button></span></div>
+          <div class="field-row two-column">
+            <label><span data-i18n="modelOptional">Model (optional)</span><input name="codexModel" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol"></label>
+            <label><span data-i18n="pathOptional">Executable path (optional)</span><input name="codexPath" autocomplete="off" spellcheck="false" placeholder="codex"></label>
+          </div>
+        </section>
+
+        <section class="provider-section" data-provider-panel="claude-cli" hidden>
+          <div class="cli-notice"><span class="cli-notice-copy"><strong data-i18n="claudeRequired">Use your existing Anthropic account session through Claude Code.</strong><span data-i18n="claudeInstallHelp">PenEcho installs the official stable CLI and uses your existing signed-in session.</span></span><span class="cli-actions"><button class="inline-primary" type="button" data-install-cli="claude-cli" data-i18n="install">Install</button></span></div>
+          <div class="field-row two-column">
+            <label><span data-i18n="modelOptional">Model (optional)</span><input name="claudeModel" autocomplete="off" spellcheck="false" placeholder="opus"></label>
+            <label><span data-i18n="pathOptional">Executable path (optional)</span><input name="claudePath" autocomplete="off" spellcheck="false" placeholder="claude"></label>
+          </div>
+        </section>
+
+        <div class="field-row two-column compact-row">
+          <label><span data-i18n="effort">Reasoning effort</span><select name="effort"><option value="">Provider default</option><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Maximum</option></select></label>
+          <label><span data-i18n="imageFormat">Canvas image format</span><select name="imageFormat"><option value="webp">WebP · recommended</option><option value="png">PNG</option></select></label>
+        </div>
+
+        <details class="advanced-settings">
+          <summary><span><strong data-i18n="advanced">Advanced settings</strong><small data-i18n="advancedHelp">Network, timeout and diagnostics</small></span><span class="chevron">⌄</span></summary>
+          <div class="advanced-body">
+            <div class="field-row three-column">
+              <label><span data-i18n="timeout">Model timeout (seconds)</span><input name="timeout" type="number" min="10" max="600" step="1"></label>
+              <label><span data-i18n="autoDelay">Auto AI delay (seconds)</span><input name="autoDelay" type="number" min="0" max="10" step="0.1"></label>
+              <label><span data-i18n="port">Local port</span><input name="port" type="number" min="0" max="65535" step="1"></label>
+            </div>
+            <label><span data-i18n="network">Network access</span><select name="host"><option value="127.0.0.1">This computer only · recommended</option><option value="0.0.0.0" selected>Local network devices · advanced</option></select></label>
+            <div id="lanAccessHint" class="lan-access-hint" hidden>
+              <span class="lan-access-icon" aria-hidden="true">LAN</span>
+              <span class="lan-access-copy"><strong data-i18n="lanAccessTitle">Open PenEcho on another device</strong><small id="lanAccessHelp" data-i18n="lanAccessHelp">Use this address on a device connected to the same trusted network. PenEcho must remain open.</small><code id="lanAccessAddresses"></code></span>
+              <button id="copyLanAddress" class="inline-secondary" type="button" data-i18n="copyAddress">Copy address</button>
+            </div>
+            <div class="trace-row"><label class="check-label"><input name="requestTrace" type="checkbox"><span><strong data-i18n="recordRequests">Record complete AI request details</strong><small data-i18n="recordWarning">Useful for debugging; records may contain private canvas content.</small></span></label><label class="trace-limit"><span data-i18n="keepRecords">Keep</span><input name="traceLimit" type="number" min="1" max="1000" step="1"><span data-i18n="records">records</span></label></div>
+          </div>
+        </details>
+
+        <div id="statusBox" class="status-box" role="status" aria-live="polite" hidden><span class="status-symbol"></span><div class="status-copy"><strong id="statusTitle"></strong><p id="statusMessage"></p></div><button id="statusAction" class="status-action" type="button" hidden></button></div>
+
+        <div class="form-actions">
+          <button id="helpButton" class="secondary-button" type="button" data-i18n="help">Setup help</button>
+          <button id="submitButton" class="primary-button" type="submit"><span data-i18n="submit">Test, save &amp; launch</span><span class="button-arrow" aria-hidden="true">→</span></button>
+        </div>
+        <p class="config-path"><span data-i18n="settingsStored">Settings:</span> <code id="configPath"></code></p>
+      </form>
+    </section>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

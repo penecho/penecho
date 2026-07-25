@@ -2,6 +2,8 @@
   "name": "penecho",
   "version": "0.7.1",
   "description": "Think with AI on a shared canvas for handwriting, equations, and diagrams",
+  "productName": "PenEcho",
+  "main": "desktop/main.js",
   "license": "AGPL-3.0-only",
   "keywords": [
     "canvas",
@@ -59,14 +61,30 @@
   "scripts": {
     "start": "node cli.js",
     "dev": "node server.js",
-    "check": "node --check cli.js && node --check server.js && node --check typeset.js && node --check update.js && node --check api-config.js && node --check configure-ui.js && node --check codex-cli.js && node --check claude-cli.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/widget-host.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
-    "test": "node --test"
+    "check": "node --check cli.js && node --check server.js && node --check typeset.js && node --check update.js && node --check api-config.js && node --check configure-ui.js && node --check codex-cli.js && node --check claude-cli.js && node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/secret-store.js && node --check desktop/settings-contract.js && node --check desktop/settings/settings.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/widget-host.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
+    "test": "node --test",
+    "icons": "node scripts/generate-icons.js",
+    "desktop": "electron-forge start",
+    "predesktop": "npm run icons",
+    "desktop:package": "npm run icons && electron-forge package",
+    "desktop:make": "npm run icons && electron-forge make",
+    "desktop:make:mac": "npm run icons && electron-forge make --platform=darwin",
+    "desktop:make:windows": "npm run icons && electron-forge make --platform=win32",
+    "desktop:collect": "node scripts/collect-artifacts.js"
   },
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "@inquirer/prompts": "7.10.1",
     "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-dmg": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/maker-zip": "7.11.2",
+    "electron": "43.2.0",
+    "png2icons": "2.0.1"
   }
 }

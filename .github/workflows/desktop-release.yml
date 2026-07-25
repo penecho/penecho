@@ -1,0 +1,117 @@
+name: Desktop installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  mac:
+    needs: test
+    env:
+      MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Import Apple signing certificate
+        if: env.MAC_CERTIFICATE_P12_BASE64 != ''
+        env:
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/penecho.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/penecho-signing.keychain-db"
+          echo "$MAC_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p actions "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p actions "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$MAC_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions "$KEYCHAIN_PATH"
+      - name: Build macOS installer
+        env:
+          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run desktop:make:mac -- --arch=${{ matrix.arch }}
+      - run: npm run desktop:collect
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penecho-mac-${{ matrix.arch }}
+          path: release/*
+
+  windows:
+    needs: test
+    runs-on: windows-2025
+    env:
+      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Restore Windows signing certificate
+        if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\penecho.pfx", $bytes)
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_FILE: ${{ runner.temp }}\penecho.pfx
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run desktop:make:windows -- --arch=x64
+      - run: npm run desktop:collect
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penecho-windows-x64
+          path: release/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: penecho-*
+          path: artifacts
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir release
+          find artifacts -type f ! -name 'SHA256SUMS-*' -exec cp {} release/ \;
+          (cd release && sha256sum * > SHA256SUMS.txt)
+          gh release create "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --draft --generate-notes --title "PenEcho ${GITHUB_REF_NAME}"

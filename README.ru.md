@@ -40,7 +40,13 @@ PenEcho является официальным участником прогр�
 
 ## Быстрый старт
 
-Потребуется [Node.js 18.17 или новее](https://nodejs.org/), а также ключ API, авторизованный [Codex CLI](https://developers.openai.com/codex/cli) или авторизованный [Claude Code CLI](https://code.claude.com/docs/en/overview).
+### Настольное приложение
+
+Скачайте последнюю версию установщика для macOS или Windows на странице [GitHub Releases](https://github.com/penecho/penecho/releases/latest). Среда выполнения уже входит в настольное приложение, поэтому Node.js и Python не требуются.
+
+### Командная строка
+
+Для установки через npm потребуется [Node.js 22.12 или новее](https://nodejs.org/), а также ключ API, авторизованный [Codex CLI](https://developers.openai.com/codex/cli) или авторизованный [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho
