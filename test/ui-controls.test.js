@@ -34,6 +34,62 @@ test("New canvas controls are available in the toolbar and History panel", () =>
   assert.match(functionSource(app, "loadSnapshot"), /clearTextEditors\(\)/);
 });
 
+test("canvas photos use one picker, editable image records, side action bar, and no auto AI", () => {
+  const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js"), css = read("public/style.css"),
+    end = functionSource(app, "end"),
+    save = functionSource(app, "save"),
+    loadSnapshot = functionSource(app, "loadSnapshot"),
+    startBlankCanvas = functionSource(app, "startBlankCanvas"),
+    renderExportCanvas = functionSource(app, "renderExportCanvas");
+
+  assert.match(html, /id="imagePickerBtn"/);
+  assert.match(html, /id="imagePickerInput" type="file" accept="image\/\*" hidden/);
+  assert.doesNotMatch(html, /id="imagePickerInput"[^>]*\bcapture\b/);
+  assert.match(app, /MAX_VISIBLE_IMAGES = 20/);
+  assert.match(app, /IMAGE_TOUCH_HOLD_MS = 500/);
+  assert.match(app, /function canvasIdentityGeneration\(\)/);
+  assert.match(app, /function beginCanvasPointerAction\(e, point\)/);
+  assert.match(app, /isAnimationActivationPointer\(e\) && valid\(point\)\) \{\s*const item = imageAtPoint\(point\);[\s\S]{0,220}?beginImageTouchHold\(e, point, item\)/);
+  assert.match(app, /hold\.pointerType === "touch"[\s\S]{0,200}?beginCanvasPointerAction\(hold\.downEvent, hold\.point\)/);
+  assert.match(app, /imageTapHold && imageTapHold\.pointerType !== "touch"[\s\S]{0,80}?beginCanvasPointerAction\(imageTapHold\.downEvent, imageTapHold\.point\)/);
+  const mergeImage = functionSource(app, "mergeImage"),
+    beginImageGesture = functionSource(app, "beginImageGesture"),
+    addImageFile = functionSource(app, "addImageFile"),
+    imageControlHit = functionSource(app, "imageControlHit"),
+    drawImageChrome = functionSource(app, "drawImageChrome"),
+    renderInteractionLayer = functionSource(app, "renderInteractionLayer");
+  assert.doesNotMatch(addImageFile, /requestAI|buildViewportImage/);
+  assert.match(addImageFile, /beginImageEdit\(item\)/);
+  assert.doesNotMatch(beginImageGesture, /result\.hit === "(accept|merge|cancel)"/);
+  assert.match(mergeImage, /recordBefore\(tx, ty\)[\s\S]{0,160}?drawImage\(item\.image/);
+  assert.match(mergeImage, /extendInkBounds\(key\(tx, ty\)/);
+  assert.match(mergeImage, /state\.images\.filter/);
+  assert.match(mergeImage, /mergeDirty[\s\S]*?schedule\(\)[\s\S]*?save\(\)/);
+  assert.doesNotMatch(imageControlHit, /draftActionPoints|merge/);
+  assert.doesNotMatch(drawImageChrome, /drawDraftActions|drawImageMergeAction/);
+  for (const id of ["imageEditBar", "imagePlaceBtn", "imageMergeBtn", "imageDeleteBtn"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(css, /\.image-edit-bar \{/);
+  assert.match(css, /\.image-action-hint \{/);
+  assert.match(app, /function positionImageEditBar\(\)/);
+  assert.match(renderInteractionLayer, /positionImageEditBar\(\)/);
+  assert.match(app, /imagePlaceButton\.onclick = \(\) => acceptImageEdit\(\)/);
+  assert.match(app, /imageMergeButton\.onclick =[\s\S]{0,80}?mergeImage\(item\)/);
+  assert.match(app, /imageDeleteButton\.onclick =[\s\S]{0,80}?deleteImage\(item\)/);
+  assert.match(app, /images = storedImages\(\)/);
+  assert.match(loadSnapshot, /decodeStoredImages\(item\.images\)/);
+  assert.match(loadSnapshot, /restoreImages\(images\)/);
+  assert.match(startBlankCanvas, /restoreImages\(\[\]\)/);
+  assert.match(save, /imagesBefore[\s\S]*?imagesAfter[\s\S]*?state\.history\.push\(\{[^}]*imagesBefore, imagesAfter/);
+  assert.match(renderExportCanvas, /drawImagesToContext\(context, region\)/);
+  assert.ok(end.indexOf("cancelImageTouchHold") < end.indexOf("state.widgetGesture"));
+  assert.ok(end.indexOf("state.imageGesture") < end.indexOf("state.pendingGesture"));
+  assert.equal((app.match(/imagePickerButton\.addEventListener\("click"/g) || []).length, 1);
+  for (const key of ["addImage", "imageAdded", "imageSelected", "imageDeleted", "imageMerged", "imageEditBarLabel", "imagePlace", "imagePlaceHint", "imageMerge", "imageMergeHint", "imageDelete", "imageDeleteHint", "snapshotImages"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
+});
+
 test("declarative animation scenes use persistent, interaction, and dirty-region canvas layers", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css");
   assert.ok(html.indexOf('src="animation.js"') < html.indexOf('src="app.js"'));
@@ -422,7 +478,7 @@ test("mouse and pen select animations immediately while touch requires a one-sec
   const app = read("public/app.js"),
     pointerDownStart = app.indexOf('screen.addEventListener("pointerdown"'),
     pointerDownEnd = app.indexOf('screen.addEventListener("pointermove"', pointerDownStart),
-    pointerDown = app.slice(pointerDownStart, pointerDownEnd),
+    pointerDown = app.slice(pointerDownStart, pointerDownEnd) + functionSource(app, "beginCanvasPointerAction"),
     pointerMoveStart = pointerDownEnd,
     pointerMoveEnd = app.indexOf("function end(e)", pointerMoveStart),
     pointerMove = app.slice(pointerMoveStart, pointerMoveEnd),

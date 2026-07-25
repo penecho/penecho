@@ -56,6 +56,12 @@
     selectionTypesetButton = document.querySelector("#selectionTypesetBtn"),
     selectionDeleteButton = document.querySelector("#selectionDeleteBtn"),
     selectionCancelButton = document.querySelector("#selectionCancelBtn"),
+    imagePickerButton = document.querySelector("#imagePickerBtn"),
+    imagePickerInput = document.querySelector("#imagePickerInput"),
+    imageEditBar = document.querySelector("#imageEditBar"),
+    imagePlaceButton = document.querySelector("#imagePlaceBtn"),
+    imageMergeButton = document.querySelector("#imageMergeBtn"),
+    imageDeleteButton = document.querySelector("#imageDeleteBtn"),
     textEditorLayer = document.querySelector("#textEditorLayer"),
     textInputHint = document.querySelector("#textInputHint"),
     tourMain = document.querySelector("main"),
@@ -99,11 +105,17 @@
     COPY_FEEDBACK_MS = 1600,
     ANIMATION_CONTROLS_VISIBLE_MS = 10000,
     ANIMATION_TOUCH_HOLD_MS = 1000,
-    ANIMATION_TOUCH_HOLD_MOVE_PX = 10;
+    ANIMATION_TOUCH_HOLD_MOVE_PX = 10,
+    IMAGE_TOUCH_HOLD_MS = 500,
+    IMAGE_TOUCH_HOLD_MOVE_PX = 8;
   const MAX_SHARP_OVERLAY_PIXELS = 8000000,
     MAX_SHARP_OVERLAY_ITEM_PIXELS = 2500000,
     MAX_VISIBLE_ANIMATIONS = 20,
     MAX_VISIBLE_WIDGETS = 20,
+    MAX_VISIBLE_IMAGES = 20,
+    MAX_IMAGE_SOURCE_BYTES = 32 * 1024 * 1024,
+    MAX_IMAGE_DIMENSION = 1024,
+    MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
     MAX_WIDGET_HTML_LENGTH = 40000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
@@ -176,6 +188,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textEmpty: "Enter some text first",
       textMixedModeError: "Mixed formatting was unavailable; plain text was inserted",
       textHelp: "Text formatting help",
+      addImage: "Add image or photo",
+      imageLoading: "Preparing image...",
+      imageAdded: "Image added",
+      imageSelected: "Editing image: drag to move, handles to resize — use the side buttons to place, merge, or delete",
+      imageMerged: "Merged into canvas ink — the eraser now works on it",
+      imageEditBarLabel: "Image actions",
+      imagePlace: "Place image",
+      imagePlaceHint: "Keep it as an image; long-press to edit again",
+      imageMerge: "Merge into ink",
+      imageMergeHint: "Fuse into the canvas; the eraser then works on it",
+      imageDelete: "Delete image",
+      imageDeleteHint: "Remove this image from the canvas",
+      imageDeleted: "Image deleted",
+      imageLimitReached: "Image limit reached (20). Delete an image before adding another.",
+      imageTooLarge: "The selected image is too large (32 MB maximum)",
+      imageUnsupported: "This image format could not be opened",
+      imageImportFailed: "The image could not be added",
       textHelpTitle: "Markdown + LaTeX",
       textHelpClose: "Close text help",
       textHelpIntro: "Type normally; line breaks are preserved. Markdown and likely LaTeX are formatted automatically when confirmed; Preview shows the result.",
@@ -256,6 +285,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourLassoBody: "With a mouse or stylus, draw a closed loop around handwriting. Drag the selected region to move it; use the right edge, bottom edge, or lower-right corner to resize it. The selection toolbar can typeset handwriting, delete it, or cancel. Selection-scoped AI requests do not reference the rest of the canvas.",
       tourTextTitle: "Add editable text and formulas",
       tourTextBody: "Choose Text, then click the canvas to create an input box. Markdown and likely LaTeX are formatted automatically; Preview shows the exact placement before confirmation. Confirm with the check button or Ctrl/Cmd + Enter.",
+      tourImageTitle: "Add images and photos",
+      tourImageBody: "Add a picture from your device—photo library or camera on phones and tablets, image files on desktop; large pictures are compressed automatically. Long-press an image to move or resize it again. Place keeps it floating under your ink so you can draw over it, and Merge turns it into erasable strokes. Simply adding an image never triggers an AI request.",
       tourFullscreenTitle: "Give the canvas the whole screen",
       tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
       tourFilesTitle: "Start, export, and save locally",
@@ -269,13 +300,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Interactive ideas, directly on the canvas",
-      changelogIntro: "Version 0.7.0 adds a plugin system for richer live and interactive work while keeping disabled capabilities completely out of AI requests.",
-      changelogPlugins: "AI can now return sandboxed HTML widgets for clocks, calculators, dashboards, and other interfaces, or use focused data plugins for weather, stocks, news, and more.",
-      changelogBrowserData: "Live data is fetched directly by your browser. Each plugin declares the API origins it may contact, and PenEcho does not proxy or cache those requests.",
-      changelogCreator: "The local plugin creator includes a concise Markdown template, AI-assisted improvement, automatic titles, and removable personal plugins.",
-      changelogCanvas: "Widgets support direct interaction, long-press canvas editing, independent width and height reflow, snapshots, undoable deletion, and PNG export.",
+      changelogTitle: "Images and photos, right on the canvas",
+      changelogIntro: "Version 0.7.1 adds images and photos: keep them floating under your ink, draw over them, or merge them into erasable strokes.",
+      changelogImages: "Add images or photos through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.",
+      changelogImageEdit: "Long-press an image to move or resize it, with clear Place, Merge, and Delete actions. Place keeps it floating under your ink; Merge turns it into real strokes you can erase.",
+      changelogImageAi: "Images never start AI requests on their own. If you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images are included in undo and redo, local snapshots, and PNG export.",
       changelogEarlierTitle: "Earlier highlights",
+      changelogPluginsSummary: "0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.",
       changelogAnimation: "0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.",
       changelogFoundation: "0.5.x added lasso editing and Typeset, Markdown and LaTeX text, reasoning controls, PNG export, the Studio theme, and the feature tour.",
       changelogDone: "Got it",
@@ -312,6 +343,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exportError: "Export: ",
       snapshotError: "Local history: ",
       snapshotTiles: "canvas tiles",
+      snapshotImages: "images",
       deleteSnapshotConfirm: "Delete this local snapshot?",
       footerTip: "AI drafts: move the whole group or adjust, accept, and discard items independently",
       ready: "Ready",
@@ -541,6 +573,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       animationHistoryBefore: null,
       sharpOverlays: [],
       sharpOverlayPixels: 0,
+      images: [],
+      nextImageId: 1,
+      selectedImageId: null,
+      imageEdit: null,
+      imageGesture: null,
+      imageTouchHold: null,
+      imageHistoryBefore: null,
+      imageImporting: false,
       textInputBlockedUntil: 0,
       textTap: null,
       latestTypedInput: null,
@@ -600,7 +640,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.7.0";
+  const CHANGELOG_VERSION = "0.7.1";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -608,6 +648,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     { id: "studio-theme-v1", targets: ["#theme"], titleKey: "tourStudioThemeTitle", bodyKey: "tourStudioThemeBody", placement: "bottom", radius: 8 },
     { id: "core-lasso-v1", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
     { id: "core-text-v1", targets: ["#textToolBtn"], titleKey: "tourTextTitle", bodyKey: "tourTextBody", placement: "bottom", radius: 7 },
+    { id: "core-image-v1", targets: ["#imagePickerBtn"], titleKey: "tourImageTitle", bodyKey: "tourImageBody", placement: "bottom", radius: 7 },
     { id: "core-fullscreen-v1", targets: ["#fullscreenBtn"], titleKey: "tourFullscreenTitle", bodyKey: "tourFullscreenBody", placement: "bottom", radius: 7 },
     { id: "core-files-v1", targets: ["#canvasFileActions"], titleKey: "tourFilesTitle", bodyKey: "tourFilesBody", placement: "bottom", radius: 8 },
     { id: "core-manual-ai-v1", targets: ["#aiOrb"], titleKey: "tourManualAITitle", bodyKey: "tourManualAIBody", placement: "left", radius: 50 },
@@ -1830,6 +1871,396 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
 
+  function imageBox(item) {
+    return { x:item.x, y:item.y, w:item.w, h:item.h };
+  }
+  function imageLayout(item) {
+    return imageBox(item);
+  }
+  function imageHistoryRecord(item) {
+    return {
+      id:item.id,
+      x:item.x,
+      y:item.y,
+      w:item.w,
+      h:item.h,
+      naturalW:item.naturalW,
+      naturalH:item.naturalH,
+      sourceName:item.sourceName,
+      blob:item.blob,
+      image:item.image,
+    };
+  }
+  function storedImageRecord(item) {
+    return {
+      id:item.id,
+      x:item.x,
+      y:item.y,
+      w:item.w,
+      h:item.h,
+      naturalW:item.naturalW,
+      naturalH:item.naturalH,
+      sourceName:item.sourceName,
+      blob:item.blob,
+    };
+  }
+  function imageRecord(item) {
+    if (!item || typeof item !== "object" || !(item.blob instanceof Blob) || !item.image || item.blob.size <= 0 || item.blob.size > MAX_IMAGE_SOURCE_BYTES) return null;
+    if (!n(item.x) || !n(item.y) || !n(item.w, 80, 6000) || !n(item.h, 80, 6000) || item.w * item.h > MAX_IMAGE_PIXELS * 2 || item.x + item.w > SIZE || item.y + item.h > SIZE) return null;
+    const naturalW = Number(item.naturalW) || item.image.naturalWidth || item.image.width,
+      naturalH = Number(item.naturalH) || item.image.naturalHeight || item.image.height;
+    if (!n(naturalW, 1, MAX_IMAGE_DIMENSION) || !n(naturalH, 1, MAX_IMAGE_DIMENSION) || naturalW * naturalH > MAX_IMAGE_PIXELS) return null;
+    return {
+      id:typeof item.id === "string" && /^image-\d+$/.test(item.id) ? item.id : `image-${state.nextImageId++}`,
+      x:Math.round(item.x),
+      y:Math.round(item.y),
+      w:Math.round(item.w),
+      h:Math.round(item.h),
+      naturalW:Math.round(naturalW),
+      naturalH:Math.round(naturalH),
+      sourceName:typeof item.sourceName === "string" ? item.sourceName.trim().slice(0, 160) : "",
+      blob:item.blob,
+      image:item.image,
+    };
+  }
+  function imageHistoryState() {
+    return state.images.map(imageHistoryRecord);
+  }
+  function storedImages() {
+    return state.images.map(storedImageRecord);
+  }
+  function recordImagesBefore() {
+    if (!state.imageHistoryBefore) state.imageHistoryBefore = imageHistoryState();
+  }
+  function restoreImages(items) {
+    state.images = [];
+    state.nextImageId = 1;
+    state.selectedImageId = null;
+    state.imageEdit = null;
+    state.imageGesture = null;
+    cancelImageTouchHold();
+    for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : []) {
+      const record = imageRecord(item);
+      if (!record || state.images.some((existing) => existing.id === record.id)) continue;
+      const numbered = /^image-(\d+)$/.exec(record.id);
+      if (numbered) state.nextImageId = Math.max(state.nextImageId, Number(numbered[1]) + 1);
+      state.images.push(record);
+    }
+  }
+  async function decodeStoredImage(item) {
+    if (!item || !(item.blob instanceof Blob)) return null;
+    try {
+      const image = await imageFromBlob(item.blob);
+      return imageRecord({ ...item, image });
+    } catch {
+      return null;
+    }
+  }
+  async function decodeStoredImages(items) {
+    return (await Promise.all((Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : []).map(decodeStoredImage))).filter(Boolean);
+  }
+  function visibleImages(region = null) {
+    return state.images.filter((item) => !region || intersection(imageBox(item), region));
+  }
+  function imageBounds(region = null) {
+    let bounds = null;
+    for (const item of visibleImages(region)) bounds = unionLocalBounds(bounds, region ? intersection(imageBox(item), region) : imageBox(item));
+    return bounds;
+  }
+  function drawImagesToContext(context, region = null) {
+    for (const item of visibleImages(region)) context.drawImage(item.image, item.x, item.y, item.w, item.h);
+  }
+  function selectedImage() {
+    return state.images.find((item) => item.id === state.selectedImageId) || null;
+  }
+  function beginImageEdit(item) {
+    if (!item || !state.images.includes(item)) return false;
+    if (state.imageEdit?.id === item.id) return true;
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    if (state.imageEdit) acceptImageEdit();
+    recordImagesBefore();
+    state.selectedImageId = item.id;
+    state.imageEdit = { id:item.id, before:imageLayout(item), changed:false };
+    requestInteractionLayerRender();
+    setStatusKey("imageSelected");
+    return true;
+  }
+  function acceptImageEdit() {
+    const edit = state.imageEdit;
+    state.imageGesture = null;
+    state.imageEdit = null;
+    state.selectedImageId = null;
+    if (edit?.changed) {
+      state.userRevision++;
+      save();
+    } else if (edit) state.imageHistoryBefore = null;
+    if (edit) schedule();
+    requestRender();
+    if (edit) setStatusKey("ready");
+    return Boolean(edit);
+  }
+  function cancelImageEdit() {
+    const edit = state.imageEdit,
+      item = edit ? state.images.find((candidate) => candidate.id === edit.id) : null;
+    if (item) Object.assign(item, edit.before);
+    state.imageHistoryBefore = null;
+    state.imageGesture = null;
+    state.imageEdit = null;
+    state.selectedImageId = null;
+    if (edit) schedule();
+    requestRender();
+    if (edit) setStatusKey("ready");
+    return Boolean(edit);
+  }
+  function imageControlHit(item, point, pointerType = "mouse") {
+    const box = imageBox(item),
+      handle = 14 / state.scale,
+      radius = (pointerType === "touch" ? 24 : 14) / state.scale,
+      controls = [
+        { hit:"resize", target:{ x:box.x + box.w, y:box.y + box.h }, radius },
+        { hit:"width", target:{ x:box.x + box.w + handle * 0.08, y:box.y + box.h / 2 }, radius },
+        { hit:"height", target:{ x:box.x + box.w / 2, y:box.y + box.h + handle * 0.08 }, radius },
+      ],
+      control = controls
+        .map((candidate) => ({ ...candidate, distance:Math.hypot(point.x - candidate.target.x, point.y - candidate.target.y) }))
+        .filter((candidate) => candidate.distance <= candidate.radius)
+        .sort((a, b) => a.distance - b.distance)[0];
+    if (control) return control.hit;
+    return point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h ? "move" : null;
+  }
+  function imageAtPoint(point) {
+    for (let index = state.images.length - 1; index >= 0; index--) {
+      const item = state.images[index], box = imageBox(item);
+      if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) return item;
+    }
+    return null;
+  }
+  function imagePointerHit(point, pointerType = "mouse", includeUnselected = false) {
+    const selected = selectedImage();
+    if (selected && state.imageEdit) {
+      const hit = imageControlHit(selected, point, pointerType);
+      if (hit) return { image:selected, hit };
+    }
+    if (!includeUnselected) return null;
+    const item = imageAtPoint(point);
+    return item ? { image:item, hit:"move" } : null;
+  }
+  function resizeImageBox(start, point, hit) {
+    const minimumWidth = 80, minimumHeight = 80,
+      maximumWidth = Math.min(6000, SIZE - start.x),
+      maximumHeight = Math.min(6000, SIZE - start.y);
+    if (hit === "width") return { ...start, w:Math.max(minimumWidth, Math.min(maximumWidth, point.x - start.x)) };
+    if (hit === "height") return { ...start, h:Math.max(minimumHeight, Math.min(maximumHeight, point.y - start.y)) };
+    const minimumScale = Math.max(minimumWidth / start.w, minimumHeight / start.h),
+      maximumScale = Math.min(maximumWidth / start.w, maximumHeight / start.h, Math.sqrt(MAX_IMAGE_PIXELS * 2 / (start.w * start.h))),
+      requestedScale = Math.max((point.x - start.x) / start.w, (point.y - start.y) / start.h),
+      scale = Math.max(minimumScale, Math.min(maximumScale, requestedScale));
+    return { ...start, w:start.w * scale, h:start.h * scale };
+  }
+  function beginImageGesture(event, point, result) {
+    if (!result?.image) return false;
+    beginImageEdit(result.image);
+    state.imageGesture = {
+      id:event.pointerId,
+      image:result.image,
+      hit:result.hit,
+      startPoint:point,
+      start:imageLayout(result.image),
+      changed:false,
+    };
+    setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
+    requestInteractionLayerRender();
+    return true;
+  }
+  function updateImageGesture(event) {
+    const gesture = state.imageGesture;
+    if (!gesture || gesture.id !== event.pointerId) return false;
+    const point = clientPoint(event), item = gesture.image;
+    if (gesture.hit === "move") {
+      item.x = Math.max(0, Math.min(SIZE - item.w, gesture.start.x + point.x - gesture.startPoint.x));
+      item.y = Math.max(0, Math.min(SIZE - item.h, gesture.start.y + point.y - gesture.startPoint.y));
+    } else Object.assign(item, resizeImageBox(gesture.start, point, gesture.hit));
+    gesture.changed = ["x", "y", "w", "h"].some((key) => Math.abs(item[key] - gesture.start[key]) > 0.01);
+    requestRender();
+    requestInteractionLayerRender();
+    return true;
+  }
+  function finishImageGesture(event) {
+    const gesture = state.imageGesture;
+    if (!gesture || gesture.id !== event.pointerId) return false;
+    state.imageGesture = null;
+    setCanvasCursor("crosshair");
+    if (gesture.changed && state.imageEdit?.id === gesture.image.id) state.imageEdit.changed = true;
+    requestInteractionLayerRender();
+    return true;
+  }
+  function cancelImageTouchHold(pointerId = null) {
+    const hold = state.imageTouchHold;
+    if (!hold || pointerId !== null && hold.id !== pointerId) return false;
+    clearTimeout(hold.timer);
+    state.imageTouchHold = null;
+    return true;
+  }
+  function beginImageTouchHold(event, point, item) {
+    cancelImageTouchHold();
+    const hold = { id:event.pointerId, pointerType:event.pointerType, startX:event.clientX, startY:event.clientY, point, image:item, downEvent:event, timer:0 };
+    hold.timer = setTimeout(() => {
+      if (state.imageTouchHold !== hold) return;
+      state.imageTouchHold = null;
+      if (!state.pointers.has(hold.id)) return;
+      if (hold.pointerType === "touch" && (state.touches.size !== 1 || !state.touches.has(hold.id))) return;
+      if (!state.images.includes(item)) return;
+      state.panGesture = null;
+      setNavigating(false);
+      beginImageGesture({ pointerId:hold.id }, hold.point, { image:item, hit:"move" });
+    }, IMAGE_TOUCH_HOLD_MS);
+    state.imageTouchHold = hold;
+    return true;
+  }
+  function deleteImage(item) {
+    if (!item || !state.images.includes(item)) return false;
+    recordImagesBefore();
+    state.images = state.images.filter((candidate) => candidate !== item);
+    if (state.selectedImageId === item.id) {
+      state.selectedImageId = null;
+      state.imageEdit = null;
+      state.imageGesture = null;
+    }
+    state.userRevision++;
+    save();
+    schedule();
+    requestRender();
+    setStatusKey("imageDeleted");
+    return true;
+  }
+  function mergeImage(item) {
+    if (!item || !state.images.includes(item)) return false;
+    recordImagesBefore();
+    const box = imageBox(item);
+    invalidateSharpOverlays(box);
+    const x0 = Math.max(0, Math.floor(box.x / TILE)),
+      y0 = Math.max(0, Math.floor(box.y / TILE)),
+      x1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.ceil((box.x + box.w) / TILE) - 1),
+      y1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.ceil((box.y + box.h) / TILE) - 1);
+    for (let ty = y0; ty <= y1; ty++)
+      for (let tx = x0; tx <= x1; tx++) {
+        recordBefore(tx, ty);
+        const canvas = tile(tx, ty);
+        canvas.getContext("2d").drawImage(item.image, item.x - tx * TILE, item.y - ty * TILE, item.w, item.h);
+        extendInkBounds(key(tx, ty), {
+          x: Math.max(0, item.x - tx * TILE),
+          y: Math.max(0, item.y - ty * TILE),
+          w: Math.min(TILE, item.x + item.w - tx * TILE) - Math.max(0, item.x - tx * TILE),
+          h: Math.min(TILE, item.y + item.h - ty * TILE) - Math.max(0, item.y - ty * TILE),
+        });
+      }
+    state.images = state.images.filter((candidate) => candidate !== item);
+    if (state.selectedImageId === item.id) {
+      state.selectedImageId = null;
+      state.imageEdit = null;
+      state.imageGesture = null;
+    }
+    state.userRevision++;
+    mergeDirty(box.x, box.y, 0);
+    mergeDirty(box.x + box.w, box.y + box.h, 0);
+    state.autoEligible = true;
+    schedule();
+    save();
+    requestRender();
+    setStatusKey("imageMerged");
+    return true;
+  }
+  function importedImagePlacement(naturalW, naturalH) {
+    const visible = viewportRect() || { x:0, y:0, w:SIZE, h:SIZE },
+      rect = view.getBoundingClientRect(),
+      maxW = Math.max(80, Math.min(6000, visible.w * 0.72, Math.max(240, rect.width * 0.52) / state.scale)),
+      maxH = Math.max(80, Math.min(6000, visible.h * 0.72, Math.max(200, rect.height * 0.52) / state.scale)),
+      scale = Math.min(maxW / naturalW, maxH / naturalH),
+      w = Math.max(80, naturalW * scale),
+      h = Math.max(80, naturalH * scale),
+      x = Math.max(0, Math.min(SIZE - w, visible.x + (visible.w - w) / 2)),
+      y = Math.max(0, Math.min(SIZE - h, visible.y + (visible.h - h) / 2));
+    return { x, y, w, h };
+  }
+  function imageImportError(key) {
+    const error = Error(t(key));
+    error.statusKey = key;
+    return error;
+  }
+  async function prepareImportedImage(file) {
+    if (!(file instanceof Blob) || file.size <= 0 || file.size > MAX_IMAGE_SOURCE_BYTES) throw imageImportError("imageTooLarge");
+    if (file.type && !file.type.toLowerCase().startsWith("image/")) throw imageImportError("imageUnsupported");
+    let source;
+    try { source = await imageFromBlob(file); } catch { throw imageImportError("imageUnsupported"); }
+    const sourceW = source.naturalWidth || source.width,
+      sourceH = source.naturalHeight || source.height;
+    if (!Number.isFinite(sourceW) || !Number.isFinite(sourceH) || sourceW <= 0 || sourceH <= 0) throw imageImportError("imageUnsupported");
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / sourceW, MAX_IMAGE_DIMENSION / sourceH, Math.sqrt(MAX_IMAGE_PIXELS / (sourceW * sourceH))),
+      naturalW = Math.max(1, Math.round(sourceW * scale)),
+      naturalH = Math.max(1, Math.round(sourceH * scale)),
+      canvas = offscreen(naturalW, naturalH),
+      context = canvas.getContext("2d");
+    context.drawImage(source, 0, 0, naturalW, naturalH);
+    const blob = await canvasBlob(canvas, "image/webp", 0.92);
+    canvas.width = canvas.height = 1;
+    if (!blob || blob.size <= 0 || blob.size > MAX_IMAGE_SOURCE_BYTES) throw imageImportError("imageTooLarge");
+    const image = await imageFromBlob(blob);
+    return { blob, image, naturalW, naturalH };
+  }
+  function canvasIdentityGeneration() {
+    return state.snapshotLoadGeneration;
+  }
+  async function addImageFile(file) {
+    if (state.imageImporting) return;
+    if (state.images.length >= MAX_VISIBLE_IMAGES) {
+      setStatusKey("imageLimitReached");
+      return;
+    }
+    if (selectionAIBusy()) {
+      setStatusKey(selectionAIStatusKey());
+      return;
+    }
+    const expectedIdentityGeneration = canvasIdentityGeneration();
+    state.imageImporting = true;
+    imagePickerButton.disabled = true;
+    setStatusKey("imageLoading");
+    try {
+      const prepared = await prepareImportedImage(file);
+      if (expectedIdentityGeneration !== canvasIdentityGeneration()) return;
+      if (state.pending) acceptPending();
+      if (state.pendingWidget) acceptPendingWidget();
+      if (state.images.length >= MAX_VISIBLE_IMAGES) throw imageImportError("imageLimitReached");
+      if (state.selection) commitSelection();
+      if (state.selection) {
+        setStatusKey(selectionAIStatusKey());
+        return;
+      }
+      if (state.widgetEdit) acceptWidgetEdit();
+      if (state.animationEdit) acceptAnimationEdit();
+      if (state.imageEdit) acceptImageEdit();
+      recordImagesBefore();
+      const item = imageRecord({
+        id:`image-${state.nextImageId++}`,
+        ...importedImagePlacement(prepared.naturalW, prepared.naturalH),
+        ...prepared,
+        sourceName:typeof file.name === "string" ? file.name : "",
+      });
+      if (!item) throw imageImportError("imageImportFailed");
+      state.images.push(item);
+      state.userRevision++;
+      save();
+      requestRender();
+      beginImageEdit(item);
+      setStatusKey("imageAdded");
+    } catch (error) {
+      setStatusKey(error?.statusKey || "imageImportFailed");
+    } finally {
+      state.imageImporting = false;
+      imagePickerButton.disabled = false;
+      imagePickerInput.value = "";
+    }
+  }
   function widgetBox(widget) {
     return { x: widget.x, y: widget.y, w: widget.w, h: widget.h };
   }
@@ -2096,6 +2527,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function beginWidgetEdit(widget) {
     if (!widget || widget.pending) return false;
+    if (state.imageEdit) acceptImageEdit();
     if (state.widgetEdit?.id === widget.id) return true;
     if (state.widgetEdit) acceptWidgetEdit();
     recordWidgetsBefore();
@@ -2553,6 +2985,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function beginAnimationEdit(animation) {
     if (!animation) return false;
+    if (state.imageEdit) acceptImageEdit();
     if (state.animationEdit?.id === animation.id) return true;
     if (state.animationEdit) acceptAnimationEdit();
     const now = performance.now();
@@ -2966,6 +3399,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       ctx.stroke();
     }
+    drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
     forTiles(l, t, rr - l, b - t, (c, tx, ty) => ctx.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(ctx, { x: l, y: t, w: rr - l, h: b - t });
     ctx.restore();
@@ -3023,6 +3457,51 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.stroke();
     context.restore();
   }
+  function positionImageEditBar() {
+    const item = state.imageEdit ? selectedImage() : null;
+    if (!item) {
+      if (!imageEditBar.hidden) imageEditBar.hidden = true;
+      return;
+    }
+    if (imageEditBar.hidden) imageEditBar.hidden = false;
+    const rect = view.getBoundingClientRect(),
+      box = imageBox(item),
+      left = state.panX + box.x * state.scale,
+      top = state.panY + box.y * state.scale,
+      width = box.w * state.scale,
+      height = box.h * state.scale,
+      barWidth = imageEditBar.offsetWidth || 200,
+      barHeight = imageEditBar.offsetHeight || 210,
+      gap = 12,
+      style = Reflect.get(imageEditBar, "style");
+    let x = left + width + gap;
+    if (x + barWidth > rect.width - 8) x = left - barWidth - gap;
+    if (x < 8) x = Math.max(8, Math.min(rect.width - barWidth - 8, left + width / 2 - barWidth / 2));
+    const y = Math.max(8, Math.min(rect.height - barHeight - 8, top + height / 2 - barHeight / 2));
+    style.setProperty("--image-edit-bar-x", `${x.toFixed(1)}px`);
+    style.setProperty("--image-edit-bar-y", `${y.toFixed(1)}px`);
+  }
+  function drawImageChrome(context) {
+    const item = state.imageEdit ? selectedImage() : null;
+    if (!item) return;
+    const box = imageBox(item),
+      unit = 1 / state.scale,
+      handle = 14 * unit;
+    context.save();
+    context.strokeStyle = "#2679b8";
+    context.lineWidth = 2 * unit;
+    context.setLineDash([7 * unit, 6 * unit]);
+    context.strokeRect(box.x, box.y, box.w, box.h);
+    context.setLineDash([]);
+    context.beginPath();
+    drawResizeHandle(context, box, handle);
+    context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
+    context.lineTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 + handle * 0.48);
+    context.moveTo(box.x + box.w / 2 - handle * 0.48, box.y + box.h + handle * 0.08);
+    context.lineTo(box.x + box.w / 2 + handle * 0.48, box.y + box.h + handle * 0.08);
+    context.stroke();
+    context.restore();
+  }
   function renderInteractionLayer() {
     const d = devicePixelRatio || 1,
       r = view.getBoundingClientRect();
@@ -3044,8 +3523,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       interactionCtx.restore();
     }
     drawWidgetChrome(interactionCtx);
+    drawImageChrome(interactionCtx);
     interactionCtx.restore();
     positionAnimationControls();
+    positionImageEditBar();
   }
   function clientPoint(e) {
     const r = view.getBoundingClientRect();
@@ -3755,8 +4236,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
     return snapshotDbPromise;
   }
-  function canvasBlob(canvas) {
-    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), "image/png"));
+  function canvasBlob(canvas, type = "image/png", quality) {
+    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), type, quality));
   }
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -3788,7 +4269,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function snapshotPreview() {
     const preview = offscreen(180, 120),
       q = preview.getContext("2d"),
-      bounds = unionLocalBounds(unionLocalBounds(visibleInkBounds({ x: 0, y: 0, w: SIZE, h: SIZE }), animationBounds()), widgetBounds());
+      bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), animationBounds()), widgetBounds());
     q.fillStyle = state.paint.paper;
     q.fillRect(0, 0, preview.width, preview.height);
     if (!bounds) return preview;
@@ -3797,6 +4278,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       dx = (preview.width - bounds.w * scale) / 2,
       dy = (preview.height - bounds.h * scale) / 2;
     const captureTime = performance.now();
+    q.save();
+    q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
+    drawImagesToContext(q, bounds);
+    q.restore();
     for (const [k, canvas] of tiles) {
       const [tx, ty] = k.split(",").map(Number),
         x = tx * TILE,
@@ -3822,6 +4307,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bounds = unionLocalBounds(bounds, { x: tx * TILE + ink.x, y: ty * TILE + ink.y, w: ink.w, h: ink.h });
     }
     bounds = unionLocalBounds(bounds, animationBounds());
+    bounds = unionLocalBounds(bounds, imageBounds());
     bounds = unionLocalBounds(bounds, widgetBounds());
     const selection = state.selection;
     if (selection?.phase !== "active") return bounds;
@@ -3868,6 +4354,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       context.stroke();
     }
+    drawImagesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -3940,7 +4427,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return null;
     }
     if (state.selection) commitSelection();
-    if (!tiles.size && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
     }
@@ -3951,6 +4438,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       createdAt = Date.now(),
       animations = serializedAnimations(),
       widgets = serializedWidgets(),
+      images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
       preview = await canvasBlob(snapshotPreview()),
       requestedName = String(name === null ? nameInput.value : name).trim().slice(0, 48),
@@ -3965,6 +4453,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         animations,
         widgetCount: widgets.length,
         widgets,
+        imageCount: images.length,
+        images,
         preview,
       },
       db = await snapshotDb();
@@ -3998,7 +4488,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tilesRequest = transaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAll(id),
       [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
     if (!item) return;
-    const decoded = await Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) })));
+    const [decoded, images] = await Promise.all([
+      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) }))),
+      decodeStoredImages(item.images),
+    ]);
     if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
     state.userRevision++;
     invalidateRecognition();
@@ -4012,6 +4505,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
     state.historyBefore.clear();
+    state.imageHistoryBefore = null;
     for (const { k, image } of decoded) {
       const canvas = offscreen(TILE, TILE);
       canvas.getContext("2d").drawImage(image, 0, 0);
@@ -4020,6 +4514,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     restoreAnimations(item.animations);
     restoreWidgets(item.widgets);
     if (["arcane", "scifi", "research", "studio"].includes(item.theme)) applyTheme(item.theme);
+    restoreImages(images);
     if (item.view) {
       state.scale = Math.max(0.03, Math.min(2, item.view.scale));
       state.panX = item.view.panX;
@@ -4079,6 +4574,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     restoreAnimations([]);
     state.widgetHistoryBefore = null;
     restoreWidgets([]);
+    state.imageHistoryBefore = null;
+    restoreImages([]);
     state.historyBefore.clear();
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
@@ -4090,7 +4587,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("newCanvasReady");
   }
   function openNewCanvasDialog() {
-    if (!tiles.size && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       startBlankCanvas();
       return;
     }
@@ -4155,6 +4652,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       detail.textContent = `${new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.createdAt)} · ${item.tileCount} ${t("snapshotTiles")}`;
       if (pluginEnabled("animation") && item.animationCount) detail.textContent += " · " + item.animationCount + " " + t("snapshotAnimations");
       if (item.widgetCount) detail.textContent += " · " + item.widgetCount + " " + t("snapshotWidgets");
+      if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
       actions.className = "history-actions";
       load.textContent = t("loadSnapshot");
       load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id));
@@ -4309,12 +4807,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     ctx.stroke();
   }
   function save() {
-    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore) return;
+    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore) return;
     const changes = [];
     const animationsBefore = state.animationHistoryBefore,
       animationsAfter = animationsBefore ? serializedAnimations() : null,
       widgetsBefore = state.widgetHistoryBefore,
-      widgetsAfter = widgetsBefore ? serializedWidgets() : null;
+      widgetsAfter = widgetsBefore ? serializedWidgets() : null,
+      imagesBefore = state.imageHistoryBefore,
+      imagesAfter = imagesBefore ? imageHistoryState() : null;
     for (const [k, before] of state.historyBefore) {
       let current = tiles.get(k);
       if (current && state.inkBounds.get(k) === undefined) {
@@ -4330,9 +4830,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changes.push({ k, before, after: cloneCanvas(current) });
     }
     state.historyBefore.clear();
-    state.history.push({ tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter });
+    state.history.push({ tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter });
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
+    state.imageHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
   }
@@ -4348,6 +4849,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (animationState) restoreAnimations(animationState);
     const widgetState = !Array.isArray(entry) ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
     if (widgetState) restoreWidgets(widgetState);
+    const imageState = !Array.isArray(entry) ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
+    if (imageState) restoreImages(imageState);
     clearSharpOverlays();
     requestAnimationLayerRender();
     render();
@@ -4777,7 +5280,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         state.activeAI = null;
         setBusy(false);
       }
-      if (!active.dirtyRestored && active.recognitionGeneration === state.recognitionGeneration) {
+      if (!active.dirtyRestored && !active.oneShotInput && active.recognitionGeneration === state.recognitionGeneration) {
         restoreDirty(active.dirtySnapshot);
         active.dirtyRestored = true;
         state.autoEligible = Boolean(state.dirty);
@@ -4786,7 +5289,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function hasUnsettledToolbox() {
-    return Boolean(state.pending || state.pendingWidget || state.pendingGesture || state.widgetEdit || state.widgetGesture || state.selection || state.selectionGesture || state.textEditors.size);
+    return Boolean(state.pending || state.pendingWidget || state.pendingGesture || state.widgetEdit || state.widgetGesture || state.imageEdit || state.imageGesture || state.imageImporting || state.selection || state.selectionGesture || state.textEditors.size);
   }
   function launchAutomaticAI(reason) {
     if (!state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
@@ -4838,6 +5341,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestOptions = requestOptions || {};
     const automatic = action === "auto",
       isolatedSelection = Boolean(requestOptions.isolatedSelection),
+      oneShotInput = Boolean(requestOptions.oneShotInput),
       revision = state.userRevision,
       recognitionGeneration = state.recognitionGeneration,
       aiColor = state.aiColor,
@@ -4875,7 +5379,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const controller = new AbortController(),
       // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, action };
     state.activeAI = run;
     setBusy(true);
     setStatusKey(isolatedSelection && action === "normalize" ? "selectionTypesetting" : "observing");
@@ -4934,9 +5438,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         tools: commands.map((c) => c.tool),
       });
       if (state.userRevision !== revision) {
-        if (!isolatedSelection && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
+          schedule();
         }
         setStatusKey("deferred");
         debug("ai-deferred", { ...meta, reason: "user-revision-changed" });
@@ -4992,7 +5497,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (run.superseded) {
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "request-superseded" });
       } else if (e.message === AI_REJECTED) {
-        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           state.lastUserBox = requestBox;
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
         }
@@ -5004,16 +5509,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         }
         setStatusKey("ready");
       } else if (state.userRevision !== revision) {
-        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
+          schedule();
         }
         setStatusKey("deferred");
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "stale-request-error" });
       } else if (e.message === AI_CANCELLED) {
-        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
+          schedule();
         }
         setStatusKey("deferred");
         debug("ai-deferred", {
@@ -5115,7 +5622,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const visible = viewportRect();
     if (!visible) return null;
     const captureRect = captureRectFor(latestBox, visible),
-      ink = unionLocalBounds(visibleInkBounds(captureRect), animationBounds(captureRect));
+      ink = unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), animationBounds(captureRect));
     if (!ink) return null;
     const margin = Math.max(120, Math.min(640, 160 / state.scale)),
       left = Math.max(captureRect.x, ink.x - margin),
@@ -5138,6 +5645,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.fillRect(0, 0, out.width, out.height);
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
+    drawImagesToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
     drawAnimationsToContext(q, sourceRect, captureTime);
@@ -5146,6 +5654,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.beginPath();
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
+    drawImagesToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
     drawAnimationsToContext(q, latestVisible, captureTime);
@@ -5262,6 +5771,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.clip();
     q.setTransform(focusScale, 0, 0, focusScale, position.x - focusRect.x * focusScale, position.y - focusRect.y * focusScale);
     q.globalAlpha = 0.32;
+    drawImagesToContext(q, focusRect);
     forTiles(focusRect.x, focusRect.y, focusRect.w, focusRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.globalAlpha = 1;
     drawSharpOverlays(q, focusRect);
@@ -5270,6 +5780,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.beginPath();
     q.rect(latestBox.x, latestBox.y, latestBox.w, latestBox.h);
     q.clip();
+    drawImagesToContext(q, latestBox);
     forTiles(latestBox.x, latestBox.y, latestBox.w, latestBox.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.restore();
     drawSharpOverlays(q, latestBox);
@@ -7313,78 +7824,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
     if (shouldRequest) setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }
-  screen.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    if (Date.now() < state.textInputBlockedUntil) return;
-    try {
-      screen.setPointerCapture(e.pointerId);
-    } catch {}
-    calibrateScreenClientRatio(e, false);
-    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (e.pointerType === "touch") {
-      state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (state.touches.size >= 2) {
-        cancelAnimationTouchHold();
-        state.textTap = null;
-        if (state.pendingGesture) state.pendingGesture = null;
-        if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
-        if (state.selectedWidgetId) acceptWidgetEdit();
-        if (state.animationGesture) finishAnimationGesture({ pointerId: state.animationGesture.id });
-        if (state.selectedAnimationId) acceptAnimationEdit();
-        finishDrawing("pen");
-        beginTouchGesture();
-        return;
-      }
-    }
-    if (isMousePan(e)) {
-      if (state.selectedWidgetId) acceptWidgetEdit();
-      if (state.selectedAnimationId) acceptAnimationEdit();
-      state.panGesture = {
-        id: e.pointerId,
-        last: { x: e.clientX, y: e.clientY },
-      };
-      setCanvasCursor("grabbing");
-      setNavigating(true);
-      return;
-    }
-    if (state.pending) {
-      const result = pendingHit(state.pending, e, state.pending.revealProgress < 1),
-        hit = typeof result === "string" ? result : result?.hit,
-        itemIndex = result && typeof result === "object" ? result.itemIndex : null;
-      if (hit) {
-        if (hit === "copy" || hit === "item-copy") {
-          armPendingCopy(e, hit, itemIndex);
-          return;
-        }
-        if (hit === "accept") return acceptPending();
-        if (hit === "cancel") return rejectPending();
-        if (hit === "item-accept") return acceptPendingItem(itemIndex);
-        if (hit === "item-cancel") return rejectPendingItem(itemIndex);
-        beginPendingGesture(e, hit, itemIndex);
-        return;
-      }
-    }
-    const point = clientPoint(e);
-    const widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType) : null;
-    if (widgetResult) {
-      beginWidgetGesture(e, point, widgetResult);
-      return;
-    }
-    if (state.selectedWidgetId) acceptWidgetEdit();
-    if (e.pointerType === "touch" && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationTouchHold(e, point, animationResult);
-        return;
-      }
-    }
-    if (isAnimationActivationPointer(e) && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationGesture(e, point, animationResult);
-        return;
-      }
-    }
+  function beginCanvasPointerAction(e, point) {
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (state.mode === "text" && e.pointerType === "touch") {
@@ -7458,6 +7898,111 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
     dot(p, erasing, size, !erasing);
     requestRender();
+  }
+  screen.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (Date.now() < state.textInputBlockedUntil) return;
+    try {
+      screen.setPointerCapture(e.pointerId);
+    } catch {}
+    calibrateScreenClientRatio(e, false);
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerType === "touch") {
+      state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (state.touches.size >= 2) {
+        cancelAnimationTouchHold();
+        cancelImageTouchHold();
+        state.textTap = null;
+        if (state.pendingGesture) state.pendingGesture = null;
+        if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
+        if (state.selectedWidgetId) acceptWidgetEdit();
+        if (state.imageGesture) finishImageGesture({ pointerId:state.imageGesture.id });
+        if (state.selectedImageId) acceptImageEdit();
+        if (state.animationGesture) finishAnimationGesture({ pointerId: state.animationGesture.id });
+        if (state.selectedAnimationId) acceptAnimationEdit();
+        finishDrawing("pen");
+        beginTouchGesture();
+        return;
+      }
+    }
+    if (isMousePan(e)) {
+      if (state.selectedImageId) acceptImageEdit();
+      if (state.selectedWidgetId) acceptWidgetEdit();
+      if (state.selectedAnimationId) acceptAnimationEdit();
+      state.panGesture = {
+        id: e.pointerId,
+        last: { x: e.clientX, y: e.clientY },
+      };
+      setCanvasCursor("grabbing");
+      setNavigating(true);
+      return;
+    }
+    if (state.pending) {
+      const result = pendingHit(state.pending, e, state.pending.revealProgress < 1),
+        hit = typeof result === "string" ? result : result?.hit,
+        itemIndex = result && typeof result === "object" ? result.itemIndex : null;
+      if (hit) {
+        if (hit === "copy" || hit === "item-copy") {
+          armPendingCopy(e, hit, itemIndex);
+          return;
+        }
+        if (hit === "accept") return acceptPending();
+        if (hit === "cancel") return rejectPending();
+        if (hit === "item-accept") return acceptPendingItem(itemIndex);
+        if (hit === "item-cancel") return rejectPendingItem(itemIndex);
+        beginPendingGesture(e, hit, itemIndex);
+        return;
+      }
+    }
+    const point = clientPoint(e);
+    const widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType) : null;
+    if (widgetResult) {
+      beginWidgetGesture(e, point, widgetResult);
+      return;
+    }
+    if (state.selectedWidgetId) acceptWidgetEdit();
+    const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType) : null;
+    if (selectedImageResult) {
+      if (state.selectedAnimationId) acceptAnimationEdit();
+      if (e.pointerType === "touch" && selectedImageResult.hit === "move") {
+        beginImageTouchHold(e, point, selectedImageResult.image);
+        return;
+      }
+      beginImageGesture(e, point, selectedImageResult);
+      return;
+    }
+    if (state.selectedImageId) acceptImageEdit();
+    if (e.pointerType === "touch" && valid(point)) {
+      const animationResult = animationPointerHit(point, e.pointerType);
+      if (animationResult) {
+        beginAnimationTouchHold(e, point, animationResult);
+        return;
+      }
+    }
+    if (isAnimationActivationPointer(e) && valid(point)) {
+      const animationResult = animationPointerHit(point, e.pointerType);
+      if (animationResult) {
+        beginAnimationGesture(e, point, animationResult);
+        return;
+      }
+    }
+    if (e.pointerType === "touch" && valid(point)) {
+      const item = imageAtPoint(point);
+      if (item) {
+        if (state.selectedAnimationId) acceptAnimationEdit();
+        beginImageTouchHold(e, point, item);
+        return;
+      }
+    }
+    if (isAnimationActivationPointer(e) && valid(point)) {
+      const item = imageAtPoint(point);
+      if (item) {
+        if (state.selectedAnimationId) acceptAnimationEdit();
+        beginImageTouchHold(e, point, item);
+        return;
+      }
+    }
+    beginCanvasPointerAction(e, point);
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
@@ -7471,6 +8016,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (state.widgetGesture?.id === e.pointerId) {
       updateWidgetGesture(e);
+      return;
+    }
+    if (state.imageGesture?.id === e.pointerId) {
+      updateImageGesture(e);
       return;
     }
     if (state.animationGesture?.id === e.pointerId) {
@@ -7491,6 +8040,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY } };
         setNavigating(true);
       } else return;
+    }
+    if (state.imageTouchHold?.id === e.pointerId) {
+      const hold = state.imageTouchHold,
+        distance = Math.hypot(e.clientX - hold.startX, e.clientY - hold.startY);
+      if (distance <= IMAGE_TOUCH_HOLD_MOVE_PX) return;
+      cancelImageTouchHold(e.pointerId);
+      if (hold.pointerType === "touch") {
+        state.panGesture = { id:e.pointerId, last:old || { x:hold.startX, y:hold.startY } };
+        setNavigating(true);
+      } else beginCanvasPointerAction(hold.downEvent, hold.point);
     }
     if (state.animationTouchHold?.id === e.pointerId) {
       const hold = state.animationTouchHold,
@@ -7546,8 +8105,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pointers.delete(e.pointerId);
     if (e.pointerType === "touch") state.touches.delete(e.pointerId);
     cancelAnimationTouchHold(e.pointerId);
+    const imageTapHold = state.imageTouchHold?.id === e.pointerId ? state.imageTouchHold : null;
+    cancelImageTouchHold(e.pointerId);
+    if (imageTapHold && imageTapHold.pointerType !== "touch" && e.type !== "pointercancel") beginCanvasPointerAction(imageTapHold.downEvent, imageTapHold.point);
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
+      return;
+    }
+    if (state.imageGesture?.id === e.pointerId) {
+      finishImageGesture(e);
       return;
     }
     if (state.pendingGesture?.id === e.pointerId) {
@@ -7641,6 +8207,37 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
+  });
+  imagePlaceButton.onclick = () => acceptImageEdit();
+  imageMergeButton.onclick = () => {
+    const item = selectedImage();
+    if (item) mergeImage(item);
+  };
+  imageDeleteButton.onclick = () => {
+    const item = selectedImage();
+    if (item) deleteImage(item);
+  };
+  for (const button of [imagePlaceButton, imageMergeButton, imageDeleteButton]) {
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => event.stopPropagation());
+  }
+  imagePickerButton.addEventListener("click", () => {
+    if (state.imageImporting) return;
+    if (selectionAIBusy()) {
+      setStatusKey(selectionAIStatusKey());
+      return;
+    }
+    if (state.images.length >= MAX_VISIBLE_IMAGES) {
+      setStatusKey("imageLimitReached");
+      return;
+    }
+    imagePickerInput.value = "";
+    imagePickerInput.click();
+  });
+  imagePickerInput.addEventListener("change", () => {
+    const file = imagePickerInput.files?.[0];
+    if (file) void addImageFile(file);
+    else imagePickerInput.value = "";
   });
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
@@ -7877,12 +8474,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             if (state.selection) commitSelection();
             clearTextEditors();
             state.userRevision++;
+            state.snapshotLoadGeneration++;
             invalidateRecognition();
             state.historyBefore.clear();
             clearSharpOverlays();
             for (const [k, c] of tiles) state.historyBefore.set(k, cloneCanvas(c));
             recordAnimationsBefore();
             recordWidgetsBefore();
+            recordImagesBefore();
             state.animations = [];
             state.selectedAnimationId = null;
             state.animationGesture = null;
@@ -7890,6 +8489,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             hideAnimationControls();
             requestAnimationLayerRender();
             restoreWidgets([]);
+            restoreImages([]);
             tiles.clear();
             state.inkBounds.clear();
             cancelPendingForRevision();
@@ -8001,6 +8601,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (e.key === "Escape" && state.pendingWidget) {
       rejectPendingWidget();
+      return;
+    }
+    if (e.key === "Escape" && state.imageEdit) {
+      cancelImageEdit();
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && state.imageEdit && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) {
+      deleteImage(selectedImage());
       return;
     }
     if (e.key === "Escape" && state.widgetEdit) {

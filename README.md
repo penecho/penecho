@@ -68,6 +68,7 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
+- [What's new in 0.7.1](#whats-new-in-071)
 - [What's new in 0.7.0](#whats-new-in-070)
 - [Earlier releases](#earlier-releases)
 - [How it works](#how-it-works)
@@ -178,6 +179,12 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 - Export confirmed canvas ink as a cropped PNG with one `512`-pixel tile of paper margin on every side.
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
+
+## What's new in 0.7.1
+
+- **Images and photos on the canvas.** Add pictures through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.
+- **Long-press editing with clear actions.** Long-press an image to move or resize it again, then choose Place, Merge, or Delete. Place keeps the image floating under your ink so you can draw over it; Merge turns it into real strokes you can erase.
+- **No surprise AI requests.** Images never start AI requests on their own; if you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images participate in undo and redo, local snapshots, and PNG export.
 
 ## What's new in 0.7.0
 

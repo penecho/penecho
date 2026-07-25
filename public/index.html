@@ -106,6 +106,10 @@
             <button id="textToolBtn" data-mode="text" class="icon-button" data-i18n-aria="text" aria-label="Text input" data-i18n-title="text" title="Text input">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 8h8M12 8v8M9 16h6"/></svg>
             </button>
+            <button id="imagePickerBtn" class="icon-button" type="button" data-i18n-aria="addImage" aria-label="Add image or photo" data-i18n-title="addImage" title="Add image or photo">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
+            </button>
+            <input id="imagePickerInput" type="file" accept="image/*" hidden>
           </div>
           <label class="range-control"><span data-i18n="penSize">Pen size</span>
             <input id="penSize" type="range" min="2" max="16" value="4" data-i18n-aria="penSize" aria-label="Pen size">
@@ -240,6 +244,20 @@
           <button id="animationPlayPause" type="button" data-i18n="animationPause">Pause</button>
           <button id="animationRestart" type="button" data-i18n="animationRestart">Restart</button>
           <button id="animationDelete" class="danger" type="button" data-i18n="animationDelete">Delete</button>
+        </div>
+        <div id="imageEditBar" class="image-edit-bar" hidden role="toolbar" data-i18n-aria="imageEditBarLabel" aria-label="Image actions">
+          <button id="imagePlaceBtn" class="image-action primary" type="button">
+            <span class="image-action-title" data-i18n="imagePlace">Place image</span>
+            <span class="image-action-hint" data-i18n="imagePlaceHint">Keep it as an image; long-press to edit again</span>
+          </button>
+          <button id="imageMergeBtn" class="image-action merge" type="button">
+            <span class="image-action-title" data-i18n="imageMerge">Merge into ink</span>
+            <span class="image-action-hint" data-i18n="imageMergeHint">Fuse into the canvas; the eraser then works on it</span>
+          </button>
+          <button id="imageDeleteBtn" class="image-action danger" type="button">
+            <span class="image-action-title" data-i18n="imageDelete">Delete image</span>
+            <span class="image-action-hint" data-i18n="imageDeleteHint">Remove this image from the canvas</span>
+          </button>
         </div>
         <div id="selectionOverlayLayer" class="selection-overlay-layer" hidden>
           <div id="selectionToolbar" class="selection-context-toolbar" role="toolbar" data-i18n-aria="selectionTools" aria-label="Selection tools">
@@ -382,27 +400,27 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">0.7.0</span>
+          <span class="changelog-version">0.7.1</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </header>
       <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Interactive ideas, directly on the canvas</h2>
-        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.7.0 adds a plugin system for richer live and interactive work while keeping disabled capabilities completely out of AI requests.</p>
+        <h2 id="changelogTitle" data-i18n="changelogTitle">Images and photos, right on the canvas</h2>
+        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.7.1 adds images and photos: keep them floating under your ink, draw over them, or merge them into erasable strokes.</p>
         <section class="changelog-release" aria-labelledby="changelogCurrentVersion">
-          <h3 id="changelogCurrentVersion">0.7.0</h3>
+          <h3 id="changelogCurrentVersion">0.7.1</h3>
           <ul>
-            <li data-i18n="changelogPlugins">AI can now return sandboxed HTML widgets for clocks, calculators, dashboards, and other interfaces, or use focused data plugins for weather, stocks, news, and more.</li>
-            <li data-i18n="changelogBrowserData">Live data is fetched directly by your browser. Each plugin declares the API origins it may contact, and PenEcho does not proxy or cache those requests.</li>
-            <li data-i18n="changelogCreator">The local plugin creator includes a concise Markdown template, AI-assisted improvement, automatic titles, and removable personal plugins.</li>
-            <li data-i18n="changelogCanvas">Widgets support direct interaction, long-press canvas editing, independent width and height reflow, snapshots, undoable deletion, and PNG export.</li>
+            <li data-i18n="changelogImages">Add images or photos through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.</li>
+            <li data-i18n="changelogImageEdit">Long-press an image to move or resize it, with clear Place, Merge, and Delete actions. Place keeps it floating under your ink; Merge turns it into real strokes you can erase.</li>
+            <li data-i18n="changelogImageAi">Images never start AI requests on their own. If you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images are included in undo and redo, local snapshots, and PNG export.</li>
           </ul>
         </section>
         <section class="changelog-release changelog-earlier" aria-labelledby="changelogEarlierTitle">
           <h3 id="changelogEarlierTitle" data-i18n="changelogEarlierTitle">Earlier highlights</h3>
           <ul>
+            <li data-i18n="changelogPluginsSummary">0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.</li>
             <li data-i18n="changelogAnimation">0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.</li>
             <li data-i18n="changelogFoundation">0.5.x added lasso editing and Typeset, Markdown and LaTeX text, reasoning controls, PNG export, the Studio theme, and the feature tour.</li>
           </ul>

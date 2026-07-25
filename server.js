@@ -256,7 +256,7 @@ function allowDebug(ip) { const now=Date.now(), item=debugRate.get(ip); if (!ite
 const DEBUG_TOOLS = new Set(["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "html_widget", "erase"]),
   DEBUG_ACTIONS = new Set(["auto", "hint", "continue", "explain", "plot", "answer", "normalize"]),
   DEBUG_INTENTS = new Set(["none", "hint", "continue", "explain", "plot", "correct", "erase", "answer", "typeset"]),
-  DEBUG_REASONS = new Set(["new-stroke-deadline", "user-revision-changed", "request-superseded", "stale-request-error", "animation-cancelled"]),
+  DEBUG_REASONS = new Set(["new-stroke-deadline", "user-revision-changed", "request-superseded", "stale-request-error", "animation-cancelled", "image-added"]),
   DEBUG_ERRORS = new Set(["timeout", "http-error", "request-error", "render-error"]);
 function finiteDebugNumber(value) { return Number.isFinite(value) ? value : undefined; }
 function finiteDebugBox(value) {

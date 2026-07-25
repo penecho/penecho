@@ -70,6 +70,12 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Speichere Schnappschüsse lokal im Browser und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
+## Neu in Version 0.7.1
+
+- **Bilder und Fotos auf der Leinwand.** Fügen Sie Bilder über die Systemauswahl hinzu – Foto-Mediathek oder Kamera auf Smartphones und Tablets, Bilddateien auf dem Desktop. Große Bilder werden automatisch verkleinert und komprimiert, damit Leinwände und Schnappschüsse leicht bleiben.
+- **Bearbeiten per langem Druck, klare Aktionen.** Drücken Sie lange auf ein Bild, um es erneut zu verschieben oder seine Größe zu ändern, und wählen Sie Platzieren, Verschmelzen oder Löschen. Platzieren hält das Bild frei unter Ihrer Tinte, sodass Sie darüber zeichnen können; Verschmelzen verwandelt es in echte Striche, die sich radieren lassen.
+- **Keine unerwarteten KI-Anfragen.** Bilder starten niemals selbst KI-Anfragen; wenn Sie ein Bild bearbeiten, während die KI noch arbeitet, wird das laufende Ergebnis verworfen und die Handschrifterkennung automatisch fortgesetzt. Bilder unterstützen Rückgängig/Wiederholen, lokale Schnappschüsse und PNG-Export.
+
 ## Neu in Version 0.7.0
 
 - **Interaktives HTML auf der Leinwand.** Das General-HTML-Plugin erstellt Uhren, Rechner, Dashboards und andere Oberflächen als isolierte, interaktive Widgets.
