@@ -61,6 +61,8 @@ test("release workflow builds and publishes the Android APK", () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /push:[\s\S]*?tags:/);
   assert.match(workflow, /^  android:$/m);
+  assert.doesNotMatch(workflow, /android-actions\/setup-android/);
+  assert.match(workflow, /sdkmanager "platform-tools" "platforms;android-35" "build-tools;35\.0\.0"/);
   assert.match(workflow, /npm ci --prefix tools\/mobile/);
   assert.match(workflow, /npm run mobile:apk/);
   assert.match(workflow, /release\/mobile\/\*\.apk/);
