@@ -1,6 +1,6 @@
 {
   "name": "penecho",
-  "version": "0.6.0",
+  "version": "0.7.2",
   "description": "Think with AI on a shared canvas for handwriting, equations, and diagrams",
   "productName": "PenEcho",
   "main": "desktop/main.js",
