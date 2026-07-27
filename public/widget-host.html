@@ -8,9 +8,14 @@
     html, body, iframe { width: 100%; height: 100%; margin: 0; color-scheme: light; border: 0; }
     html, body { overflow: hidden; background: transparent; }
     iframe { display: block; touch-action: none; background: transparent; }
+    #widgetCopySource { position: fixed; z-index: 2; top: 12px; right: 12px; min-height: 38px; padding: 7px 11px; color: #172033; border: 1px solid #a9b4c5; border-radius: 6px; background: rgba(255,255,255,.96); box-shadow: 0 3px 12px rgba(15,23,42,.18); cursor: pointer; font: 600 14px/1.2 system-ui, sans-serif; transform-origin: top right; }
+    #widgetCopySource:hover { background: #f1f5f9; }
+    #widgetCopySource:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+    #widgetCopySource[hidden] { display: none; }
   </style>
 </head>
 <body>
+  <button id="widgetCopySource" type="button" hidden>Copy source</button>
   <script src="widget-host.js"></script>
 </body>
 </html>

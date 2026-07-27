@@ -1,0 +1,17 @@
+{
+  "name": "penecho-mobile-toolchain",
+  "version": "0.6.0",
+  "private": true,
+  "description": "Isolated Capacitor toolchain for PenEcho Android and iOS clients",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.4.3",
+    "@capacitor/cli": "7.4.3",
+    "@capacitor/core": "7.4.3",
+    "@capacitor/ios": "7.4.3",
+    "plist": "3.1.1",
+    "xml2js": "0.6.2"
+  }
+}

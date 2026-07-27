@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../api-config.js");
+const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../src/server/api-config.js");
 
 test("API format selection builds the matching endpoint", () => {
   assert.deepEqual(resolveApiConfig("https://api.openai.com/v1", "openai"), {

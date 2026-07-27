@@ -76,7 +76,7 @@ function configurationIsReady(loaded) {
     if (apiKey) configuration.env.AI_API_KEY = apiKey;
     return apiConfigurationIssues(configuration.env).length === 0;
   }
-  return ["codex-cli", "claude-cli"].includes(configuration.provider);
+  return ["kimi-cli", "codex-cli", "claude-cli"].includes(configuration.provider);
 }
 
 function applyEnvironment(configuration) {
@@ -247,7 +247,10 @@ function registerIpc() {
     const loaded = loadConfiguration();
     const settings = publicSettings(loaded.configuration, { version:pkg.version, hasSavedApiKey:Boolean(loaded.apiKey) }),
       options = { stateDir:loaded.paths.stateDir, home:app.getPath("home") },
-      codex = managedCliPath("codex-cli", options), claude = managedCliPath("claude-cli", options);
+      kimi = managedCliPath("kimi-cli", options),
+      codex = managedCliPath("codex-cli", options),
+      claude = managedCliPath("claude-cli", options);
+    if (!settings.kimiCliPath && fs.existsSync(kimi)) settings.kimiCliPath = kimi;
     if (!settings.codexPath && fs.existsSync(codex)) settings.codexPath = codex;
     if (!settings.claudePath && fs.existsSync(claude)) settings.claudePath = claude;
     settings.lanHosts = lanHosts();

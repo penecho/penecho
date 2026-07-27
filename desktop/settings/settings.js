@@ -36,10 +36,10 @@ const translations = {
     eyebrow:"几分钟内连接 AI 画布", title:"设置你的 AI 连接", subtitle:"PenEcho 在本机运行。选择 AI 模型来源，测试一次，然后就可以开始创作。",
     stepOneTitle:"选择模型来源", stepOneBody:"对大多数用户，API 是最简单的选择。", stepTwoTitle:"安全测试", stepTwoBody:"API Key 由 macOS 或 Windows 加密保存。", stepThreeTitle:"在画布上创作", stepThreeBody:"书写或绘画，让 AI 直接以视觉内容回应。",
     localTitle:"本地桌面服务", localBody:"画布保留在你的电脑中，模型请求只发送给你选择的服务商。", configuration:"配置", settingsTitle:"连接你的模型", providerLegend:"AI 模型来源",
-    apiTitle:"API", apiDescription:"推荐 · 无需安装命令行工具", recommended:"推荐", kimiDescription:"官方合作伙伴 · Kimi K3", codexDescription:"自动安装或使用已有账户", claudeDescription:"自动安装或使用已有账户",
+    apiTitle:"API", apiDescription:"推荐 · 无需安装命令行工具", recommended:"推荐", kimiDescription:"官方合作伙伴 · Kimi K3", kimiCliDescription:"使用本机 Kimi Code 登录", codexDescription:"自动安装或使用已有账户", claudeDescription:"自动安装或使用已有账户",
     kimiFriendTitle:"Kimi Open Source Friends 官方成员", kimiFriendBody:"PenEcho 获 Moonshot AI 支持，推荐 Kimi K3 处理高要求的视觉创作。", kimiCodeLink:"Kimi Code", kimiChinaLink:"中国大陆", kimiGlobalLink:"全球", kimiOffering:"Kimi 服务", kimiRegion:"访问区域", kimiCodeOption:"Kimi Code · 订阅制", kimiPlatformOption:"开放平台 · 按量付费", globalOption:"全球", chinaOption:"中国大陆",
     apiType:"API 类型", model:"模型", baseUrl:"API 地址", apiKey:"API Key", savedSecurely:"已安全保存", apiKeyHelp:"使用操作系统加密保存，不会暴露给画布页面。",
-    codexRequired:"通过 Codex CLI 使用你现有的 ChatGPT 登录状态。", codexInstallHelp:"PenEcho 会安装官方 CLI，并直接使用你已有的登录状态。", claudeRequired:"通过 Claude Code 使用你现有的 Anthropic 登录状态。", claudeInstallHelp:"PenEcho 会安装官方稳定版 CLI，并直接使用你已有的登录状态。", install:"安装", modelOptional:"模型（可选）", pathOptional:"可执行文件路径（可选）",
+    kimiCliRequired:"使用你已有的 Kimi Code CLI 登录状态。", kimiCliInstallHelp:"PenEcho 可以安装官方 Kimi Code CLI，并使用它已有的登录状态。", installGuide:"安装说明", codexRequired:"通过 Codex CLI 使用你现有的 ChatGPT 登录状态。", codexInstallHelp:"PenEcho 会安装官方 CLI，并直接使用你已有的登录状态。", claudeRequired:"通过 Claude Code 使用你现有的 Anthropic 登录状态。", claudeInstallHelp:"PenEcho 会安装官方稳定版 CLI，并直接使用你已有的登录状态。", install:"安装", modelOptional:"模型（可选）", pathOptional:"可执行文件路径（可选）",
     effort:"推理强度", imageFormat:"画布图片格式", advanced:"高级设置", advancedHelp:"网络、超时和诊断", timeout:"模型超时（秒）", autoDelay:"自动 AI 延迟（秒）", port:"本地端口", network:"网络访问",
     lanAccessTitle:"在其他设备上打开 PenEcho", lanAccessHelp:"在连接同一可信网络的设备上使用以下地址，并保持 PenEcho 运行。", lanDynamicPort:"启动后系统会选择端口，并显示最终的局域网地址。", noLanAddress:"暂未检测到局域网地址。连接网络后，启动时会显示最终地址。", copyAddress:"复制地址",
     recordRequests:"记录完整 AI 请求详情", recordWarning:"用于调试，记录中可能包含私密画布内容。", keepRecords:"保留", records:"条", help:"设置帮助", submit:"测试、保存并启动", settingsStored:"设置文件：",
@@ -107,7 +107,7 @@ function payload() {
   return {
     provider:provider(),
     apiFormat:value("apiFormat"), apiUrl:value("apiUrl"), apiModel:value("apiModel"), apiKey:value("apiKey"),
-    kimiProduct:value("kimiProduct"), kimiRegion:value("kimiRegion"),
+    kimiProduct:value("kimiProduct"), kimiRegion:value("kimiRegion"), kimiCliModel:value("kimiCliModel"), kimiCliPath:value("kimiCliPath"),
     codexModel:value("codexModel"), codexPath:value("codexPath"), claudeModel:value("claudeModel"), claudePath:value("claudePath"),
     effort:value("effort"), imageFormat:value("imageFormat"), timeout:value("timeout"), autoDelay:value("autoDelay"),
     host:value("host"), port:value("port"), requestTrace:form.elements.requestTrace.checked, traceLimit:value("traceLimit"),
@@ -164,7 +164,7 @@ async function initialize() {
     document.getElementById("configPath").textContent = settings.configFile;
     const selected = form.querySelector(`input[name="provider"][value="${CSS.escape(settings.provider)}"]`) || form.elements.provider[0];
     selected.checked = true;
-    for (const name of ["apiFormat","apiUrl","apiModel","kimiProduct","kimiRegion","codexModel","codexPath","claudeModel","claudePath","effort","imageFormat","timeout","autoDelay","host","port","traceLimit"]) assign(name, settings[name]);
+    for (const name of ["apiFormat","apiUrl","apiModel","kimiProduct","kimiRegion","kimiCliModel","kimiCliPath","codexModel","codexPath","claudeModel","claudePath","effort","imageFormat","timeout","autoDelay","host","port","traceLimit"]) assign(name, settings[name]);
     form.elements.requestTrace.checked = settings.requestTrace === true;
     savedKeyBadge.hidden = !settings.apiKeySaved;
     form.elements.apiKey.placeholder = settings.apiKeySaved ? "Leave blank to keep saved key" : "Paste your API key";
@@ -201,7 +201,7 @@ async function testAndLaunch() {
   try {
     const result = await desktop.saveAndTest(payload());
     if (!result.ok) {
-      const selected = provider(), missingCli = ["codex-cli", "claude-cli"].includes(selected) && /not found|executable|install/i.test(result.error || ""),
+      const selected = provider(), missingCli = ["kimi-cli", "codex-cli", "claude-cli"].includes(selected) && /not found|executable|install/i.test(result.error || ""),
         action = missingCli
           ? { label:translations[currentLanguage]?.install || "Install", handler:() => installProvider(selected) }
           : result.saved ? { label:translations[currentLanguage]?.launchAnyway || "Launch anyway", handler:launchSavedSettings } : null;
@@ -238,7 +238,11 @@ async function installProvider(providerName) {
       setStatus("error", translations[currentLanguage]?.installFailed || "Automatic installation did not finish", result.error || "Installation failed.");
       return;
     }
-    assign(providerName === "codex-cli" ? "codexPath" : "claudePath", result.executable);
+    assign({
+      "kimi-cli":"kimiCliPath",
+      "codex-cli":"codexPath",
+      "claude-cli":"claudePath",
+    }[providerName], result.executable);
     setStatus("success", translations[currentLanguage]?.installed || "Installation complete", translations[currentLanguage]?.checkingExistingSession || "Checking your existing account session…");
     await testAndLaunch();
   } catch (error) {

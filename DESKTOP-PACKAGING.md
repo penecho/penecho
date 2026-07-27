@@ -29,9 +29,12 @@ Packaging requires Node.js 22.12 or newer on the build machine only.
 
 ```bash
 npm ci
+npm run desktop:deps
 npm run check
 npm run desktop
 ```
+
+The Electron/Forge toolchain is isolated under `tools/electron`. A normal root `npm install` installs only the web/CLI application and icon generator; it does not install Electron or the macOS/Windows makers. Run `npm run desktop:deps` explicitly only on machines that develop or package the desktop app.
 
 Create platform-native distributables:
 
@@ -104,7 +107,11 @@ Recommended public assets:
 
 - `PenEcho-0.7.1-mac-arm64.dmg`
 - `PenEcho-0.7.1-mac-x64.dmg`
+- `PenEcho-0.7.1-mac-arm64.zip`
+- `PenEcho-0.7.1-mac-x64.zip`
 - `PenEcho-Setup-0.7.1-win-x64.exe`
+- `RELEASES`
+- `penecho-0.7.1-full.nupkg`
 - `SHA256SUMS-<platform>-<arch>.txt`
 
-The existing npm update installer is intentionally not invoked by the Electron entry point. Desktop auto-update should be added separately only after signed release artifacts are stable.
+The DMG and Setup executable are the visible installers. Electron uses the macOS ZIP and the Windows `RELEASES`/`.nupkg` assets for in-app updates, so those assets must remain attached when the draft is published.

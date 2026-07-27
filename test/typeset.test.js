@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
-const typeset = require("../typeset.js");
+const typeset = require("../src/server/typeset.js");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -41,7 +41,7 @@ test("Typeset policy is the only normalize-specific module behavior", () => {
 });
 
 test("normalize runtime relies on prompt guidance without content comparison, retry, or fallback", () => {
-  const server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8");
+  const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8");
   assert.match(server, /const \{ NORMALIZE_TYPESET_POLICY \} = require\("\.\/typeset\.js"\)/);
   assert.match(server, /normalizePolicy:payload\.userAction==="normalize"\?NORMALIZE_TYPESET_POLICY:null/);
   assert.match(server, /return action==="normalize"\?commands\.filter\(command=>\["write_text","draw_formula","plot_function"\]\.includes\(command\?\.tool\)\):commands/);
@@ -52,7 +52,7 @@ test("normalize runtime relies on prompt guidance without content comparison, re
 });
 
 test("Typeset placement translates a mixed tool group without changing relative geometry", () => {
-  const server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8"),
+  const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     translate = vm.runInNewContext(`(${functionSource(server, "translateTypesetGroup")})`, {
       CANVAS_SIZE: 20000,
       Number,

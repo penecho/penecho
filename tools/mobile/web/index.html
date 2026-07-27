@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>PenEcho Mobile</title>
+  <link rel="icon" href="penecho-mark.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <img class="mark" src="penecho-mark.png" alt="PenEcho">
+    <p class="eyebrow">PenEcho</p>
+    <h1>Connect your canvas</h1>
+    <p class="description">Enter the address of a PenEcho server running on this computer or on your private network.</p>
+    <form id="connectForm">
+      <label for="serverUrl">PenEcho server address</label>
+      <input id="serverUrl" name="serverUrl" type="url" inputmode="url" autocomplete="url" placeholder="http://192.168.1.20:3888" required>
+      <p id="error" class="error" role="alert" hidden></p>
+      <button type="submit">Connect</button>
+    </form>
+    <p class="note">Use HTTPS for a server exposed outside your private network.</p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

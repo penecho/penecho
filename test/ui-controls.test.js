@@ -21,11 +21,14 @@ const functionSource = (source, name) => {
   assert.fail(`unterminated function ${name}`);
 };
 
-test("New canvas controls are available in the toolbar and History panel", () => {
+test("canvas file actions are in the top-right header and available in History", () => {
   const html = read("public/index.html"), app = read("public/app.js");
+  const topRow = html.indexOf('class="top-row"'), toolbar = html.indexOf('class="toolbar"'), files = html.indexOf('id="canvasFileActions"');
+  assert.ok(topRow < files && files < toolbar);
   assert.ok(html.indexOf('id="newCanvasBtn"') < html.indexOf('id="exportPngBtn"'));
   assert.ok(html.indexOf('id="exportPngBtn"') < html.indexOf('id="historyBtn"'));
-  for (const id of ["historyNew", "newCanvasDialog", "newDiscard", "newSaveCopy", "newOverwrite"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.ok(html.indexOf('id="tourReplayBtn"') < files);
+  for (const id of ["historyNew", "historySaveCurrent", "newCanvasDialog", "newDiscard", "newSaveCopy", "newOverwrite", "saveCanvasBtn"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(app, /currentSnapshotId:\s*null/);
   assert.match(app, /saveSnapshot\(\{\s*overwriteId\s*=\s*null,\s*name\s*=\s*null\s*\}/);
   assert.match(app, /completeNewCanvas\("overwrite"\)/);
@@ -40,12 +43,15 @@ test("canvas photos use one picker, editable image records, side action bar, and
     save = functionSource(app, "save"),
     loadSnapshot = functionSource(app, "loadSnapshot"),
     startBlankCanvas = functionSource(app, "startBlankCanvas"),
-    renderExportCanvas = functionSource(app, "renderExportCanvas");
+    renderExportCanvas = functionSource(app, "renderExportCanvas"),
+    prepareImportedImage = functionSource(app, "prepareImportedImage");
 
   assert.match(html, /id="imagePickerBtn"/);
   assert.match(html, /id="imagePickerInput" type="file" accept="image\/\*" hidden/);
   assert.doesNotMatch(html, /id="imagePickerInput"[^>]*\bcapture\b/);
   assert.match(app, /MAX_VISIBLE_IMAGES = 20/);
+  assert.match(app, /MAX_IMAGE_DIMENSION = 2048/);
+  assert.match(prepareImportedImage, /scale = Math\.min\(1, MAX_IMAGE_DIMENSION \/ sourceW, MAX_IMAGE_DIMENSION \/ sourceH/);
   assert.match(app, /IMAGE_TOUCH_HOLD_MS = 500/);
   assert.match(app, /function canvasIdentityGeneration\(\)/);
   assert.match(app, /function beginCanvasPointerAction\(e, point\)/);
@@ -56,8 +62,12 @@ test("canvas photos use one picker, editable image records, side action bar, and
     beginImageGesture = functionSource(app, "beginImageGesture"),
     addImageFile = functionSource(app, "addImageFile"),
     imageControlHit = functionSource(app, "imageControlHit"),
+    imageRecord = functionSource(app, "imageRecord"),
+    resizeImageBox = functionSource(app, "resizeImageBox"),
     drawImageChrome = functionSource(app, "drawImageChrome"),
-    renderInteractionLayer = functionSource(app, "renderInteractionLayer");
+    renderInteractionLayer = functionSource(app, "renderInteractionLayer"),
+    resizeImage = vm.runInNewContext(`(${resizeImageBox})`, { SIZE:20000 }),
+    resizeStart = { x:100, y:200, w:1200, h:800 };
   assert.doesNotMatch(addImageFile, /requestAI|buildViewportImage/);
   assert.match(addImageFile, /beginImageEdit\(item\)/);
   assert.doesNotMatch(beginImageGesture, /result\.hit === "(accept|merge|cancel)"/);
@@ -67,6 +77,11 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(mergeImage, /mergeDirty[\s\S]*?schedule\(\)[\s\S]*?save\(\)/);
   assert.doesNotMatch(imageControlHit, /draftActionPoints|merge/);
   assert.doesNotMatch(drawImageChrome, /drawDraftActions|drawImageMergeAction/);
+  assert.deepEqual({ ...resizeImage(resizeStart, { x:15100, y:0 }, "width") }, { ...resizeStart, w:15000 });
+  assert.deepEqual({ ...resizeImage(resizeStart, { x:0, y:15200 }, "height") }, { ...resizeStart, h:15000 });
+  assert.deepEqual({ ...resizeImage(resizeStart, { x:15100, y:10200 }, "resize") }, { ...resizeStart, w:15000, h:10000 });
+  assert.doesNotMatch(resizeImageBox, /6000|MAX_IMAGE_PIXELS/);
+  assert.doesNotMatch(imageRecord, /n\(item\.(?:w|h), 80, 6000\)|item\.w \* item\.h > MAX_IMAGE_PIXELS/);
   for (const id of ["imageEditBar", "imagePlaceBtn", "imageMergeBtn", "imageDeleteBtn"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(css, /\.image-edit-bar \{/);
   assert.match(css, /\.image-action-hint \{/);
@@ -88,6 +103,64 @@ test("canvas photos use one picker, editable image records, side action bar, and
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
+});
+
+test("hand tool moves the canvas and all movable objects without triggering AI", () => {
+  const html = read("public/index.html"),
+    app = read("public/app.js"),
+    css = read("public/style.css"),
+    zh = read("public/locales/zh.js"),
+    handIndex = html.indexOf('data-mode="hand"'),
+    penIndex = html.indexOf('data-mode="pen"'),
+    pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
+    mode = functionSource(app, "setCanvasMode"),
+    handOutlines = functionSource(app, "drawHandModeOutlines"),
+    widgetHit = functionSource(app, "widgetPointerHit");
+
+  assert.ok(handIndex >= 0 && handIndex < penIndex);
+  assert.match(html.slice(handIndex, penIndex), /aria-pressed="false"[\s\S]*?data-i18n-aria="hand"/);
+  assert.match(app, /mode:\s*"pen"/);
+  assert.match(app, /hand:\s*"Hand tool: move canvas and objects"/);
+  assert.match(zh, /hand:\s*"小手：移动画布和对象"/);
+  assert.doesNotMatch(
+    mode,
+    /clearTimeout\(state\.timer\)|state\.timer\s*=|state\.autoEligible|supersedeActiveAI|controller\.abort/,
+  );
+  assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
+  assert.match(mode, /requestInteractionLayerRender\(\)/);
+  assert.match(functionSource(app, "beginCanvasPointerAction"), /state\.mode === "hand"[\s\S]*?state\.panGesture[\s\S]*?setCanvasCursor\("grabbing"\)/);
+  assert.match(pointerDown, /widgetPointerHit\(point, e\.pointerType, handMode\)/);
+  assert.match(pointerDown, /imagePointerHit\(point, e\.pointerType, handMode\)/);
+  assert.match(pointerDown, /!handMode && e\.pointerType === "touch"[\s\S]*?beginImageTouchHold/);
+  assert.match(pointerDown, /handMode && valid\(point\)[\s\S]*?animationPointerHit\(point, e\.pointerType\)/);
+  assert.match(widgetHit, /includeUnselected[\s\S]*?visibleWidgets\(\)[\s\S]*?hit:"move"/);
+  assert.match(handOutlines, /visibleImages\(\)[\s\S]*?visibleAnimations\(\)[\s\S]*?visibleWidgets\(\)/);
+  assert.match(functionSource(app, "renderInteractionLayer"), /drawHandModeOutlines\(interactionCtx\)/);
+  assert.match(css, /#viewport\.hand-mode \.canvas-widget-frame\s*\{\s*pointer-events:\s*none/);
+  for (const name of ["acceptImageEdit", "cancelImageEdit", "deleteImage", "mergeImage"]) {
+    assert.match(functionSource(app, name), /state\.mode !== "hand"/);
+  }
+  assert.doesNotMatch(functionSource(app, "updateImageGesture"), /schedule|requestAI/);
+  assert.doesNotMatch(functionSource(app, "updateWidgetGesturePoint"), /schedule\(\)|requestAI/);
+  assert.doesNotMatch(functionSource(app, "updateAnimationGesture"), /schedule|requestAI/);
+});
+
+test("canvas navigation guidance emphasizes middle-mouse panning for at least ten seconds", () => {
+  const html = read("public/index.html"),
+    app = read("public/app.js"),
+    css = read("public/style.css"),
+    zh = read("public/locales/zh.js"),
+    navigating = functionSource(app, "setNavigating");
+
+  assert.match(html, /id="tip"[^>]*data-i18n="tip"/);
+  assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
+  assert.match(navigating, /view\.classList\.add\("is-navigating"\)[\s\S]*?NAVIGATION_HINT_VISIBLE_MS/);
+  assert.match(functionSource(app, "wheelNavigating"), /setNavigating\(true\)/);
+  assert.match(app, /fit\(\);\s*setNavigating\(true\)/);
+  assert.match(app, /tip:\s*"Pan: middle-mouse drag, Hand tool, or one finger · Zoom: wheel or pinch"/);
+  assert.match(zh, /tip:\s*"移动画布：鼠标中键、小手或单指拖动 · 缩放：滚轮或双指"/);
+  assert.match(css, /#tip\s*\{[^}]*right:\s*12px[^}]*visibility:\s*hidden[^}]*opacity:\s*0/);
+  assert.match(css, /#viewport\.is-navigating #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
 });
 
 test("declarative animation scenes use persistent, interaction, and dirty-region canvas layers", () => {
@@ -150,7 +223,9 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
   assert.match(app, /PLUGIN_DEFINITIONS\s*=\s*\[\.\.\.BUILTIN_PLUGIN_DEFINITIONS\]/);
   assert.match(app, /id:\s*"animation"[\s\S]*?requestField:\s*"animationEnabled"[\s\S]*?defaultEnabled:\s*true[\s\S]*?onChange:\s*applyAnimationPluginState/);
   assert.doesNotMatch(app, /documentPath:\s*"plugins\/weather\.md"/);
-  assert.match(functionSource(app, "loadPluginDocuments"), /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?generalDefinitions[\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.remainingDefinitions\)/);
+  const loadPluginDocuments = functionSource(app, "loadPluginDocuments");
+  assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "image-search", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
+  assert.doesNotMatch(loadPluginDocuments, /defaultEnabled:\[[^\]]*"flowchart"/);
   assert.match(app, /localStorage\.setItem\(PLUGIN_STORAGE_KEY, JSON\.stringify/);
   assert.match(app, /if \(!state\.pluginCatalogLoaded\) void loadPluginDocuments\(\)/);
   assert.match(app, /applyTheme\(state\.theme\);\s*loadPluginDocuments\(\)\.catch/);
@@ -160,11 +235,19 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
   assert.match(functionSource(app, "animate"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
   assert.match(functionSource(app, "preparePendingItem"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);
+  assert.match(app, /pluginPromptEstimate:\s*"adds about \{tokens\} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens"/);
+  assert.match(zh, /pluginPromptEstimate:\s*"启用时，每次 AI 请求约增加 \{tokens\} 个 prompt token；内容添加到画布后，显示、交互、刷新和重绘都不消耗 token"/);
   assert.match(functionSource(app, "renderPluginOptions"), /plugin\.id === "general"[\s\S]*?pluginRecommended[\s\S]*?generalPluginRecommendedHelp/);
   assert.match(functionSource(app, "renderPluginOptions"), /pluginSourceLabel[\s\S]*?pluginApiLabel[\s\S]*?manifest\.connect\.length[\s\S]*?pluginNoNetwork/);
   assert.match(functionSource(app, "renderPluginOptions"), /pluginPersonalSection[\s\S]*?plugin\.builtIn === false[\s\S]*?pluginBuiltInSection[\s\S]*?plugin\.builtIn !== false/);
+  assert.match(functionSource(app, "renderPluginOptions"), /detailDocument[\s\S]*?pluginBuiltInRuntime[\s\S]*?dataset\.pluginDetail[\s\S]*?manifest\?\.document[\s\S]*?dataset\.pluginCopy/);
+  assert.match(functionSource(app, "togglePluginDetails"), /detail\.hidden[\s\S]*?aria-expanded/);
+  assert.match(functionSource(app, "copyPluginMarkdown"), /writeClipboardText\(document\)[\s\S]*?pluginMarkdownCopied[\s\S]*?pluginMarkdownCopyFailed/);
   assert.match(app, /plugins\\\/\(\?:private\\\//);
   assert.match(css, /\.plugin-option-section-title\s*\{/);
+  assert.match(css, /\.plugin-option-detail\s*\{[^}]*grid-column:\s*1 \/ -1/);
+  assert.match(zh, /pluginDetails:\s*"详情"/);
+  assert.match(zh, /copyPluginMarkdown:\s*"复制 Markdown"/);
   assert.match(css, /\.plugin-option-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.plugin-control\s*\{[^}]*height:\s*29px;\s*min-height:\s*29px/);
   assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.plugin-control\s*\{\s*height:\s*38px;\s*min-height:\s*38px;\s*\}[\s\S]*?\.toolbar \.plugin-trigger\s*\{\s*height:\s*36px;\s*min-height:\s*36px/);
@@ -186,7 +269,7 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
 });
 
 test("plugin creator offers one air-quality template, AI title completion, deletion, and local save-and-enable", () => {
-  const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js"), server = read("server.js");
+  const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js"), server = read("src/server/main.js");
   for (const id of ["pluginCreateForm", "pluginSimpleTemplate", "pluginTitle", "pluginDocumentEditor", "pluginDocumentBytes", "pluginDocumentStatus", "pluginImprove", "pluginSave"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /id="pluginApiTemplate"|id="pluginImproveInstructions"/);
   assert.match(html, /data-i18n="sharePluginComing"[^>]*disabled|disabled[^>]*data-i18n="sharePluginComing"/);
@@ -230,6 +313,15 @@ test("disabled data plugins send no plugin payload and detach widget runtime hoo
   assert.match(functionSource(app, "drawWidgetChrome"), /if \(!widgetRuntimeEnabled\(\)\) return/);
   assert.match(pointerDown, /widgetRuntimeEnabled\(\) && valid\(point\) \? widgetPointerHit/);
   assert.match(functionSource(app, "validate"), /if \(widgetPluginIds\.size\) acceptedTools\.push\("html_widget"\)/);
+});
+
+test("AI completion always leaves a user-visible result or diagnostic", () => {
+  const app = read("public/app.js"),
+    zh = read("public/locales/zh.js"),
+    request = functionSource(app, "requestAI");
+  assert.match(request, /commands\.length[\s\S]*?typeof data\.message === "string"[\s\S]*?setStatus\(data\.message\.trim\(\)\)[\s\S]*?setStatusKey\("aiNoVisibleResponse"\)/);
+  assert.match(app, /aiNoVisibleResponse:\s*"AI returned no displayable content/);
+  assert.match(zh, /aiNoVisibleResponse:\s*"AI 没有返回可显示的内容/);
 });
 
 test("animation defaults on without overriding an explicitly disabled plugin choice", () => {
@@ -350,6 +442,9 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     bounded = resize({ x:18500, y:19000, w:1200, h:800, contentW:1200, contentH:800 }, { x:22000, y:22000 }, "resize"),
     scaledWidth = resize({ x:100, y:200, w:600, h:400, contentW:1200, contentH:800 }, { x:1000, y:0 }, "width"),
     scaledHeight = resize({ x:100, y:200, w:600, h:400, contentW:1200, contentH:800 }, { x:0, y:800 }, "height"),
+    unrestrictedWidth = resize(start, { x:15100, y:0 }, "width"),
+    unrestrictedHeight = resize(start, { x:0, y:15200 }, "height"),
+    unrestrictedCorner = resize(start, { x:15100, y:10200 }, "resize"),
     chrome = functionSource(app, "drawWidgetChrome"),
     hit = functionSource(app, "widgetControlHit"),
     begin = functionSource(app, "beginWidgetGesture"),
@@ -373,6 +468,9 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.deepEqual({ ...bounded }, { x:18500, y:19000, w:1500, h:1000, contentW:1200, contentH:800 });
   assert.deepEqual({ ...scaledWidth }, { x:100, y:200, w:900, h:400, contentW:1800, contentH:800 });
   assert.deepEqual({ ...scaledHeight }, { x:100, y:200, w:600, h:600, contentW:1200, contentH:1200 });
+  assert.deepEqual({ ...unrestrictedWidth }, { x:100, y:200, w:15000, h:800, contentW:15000, contentH:800 });
+  assert.deepEqual({ ...unrestrictedHeight }, { x:100, y:200, w:1200, h:15000, contentW:1200, contentH:15000 });
+  assert.deepEqual({ ...unrestrictedCorner }, { x:100, y:200, w:15000, h:10000, contentW:1200, contentH:800 });
   assert.equal(width.w / width.contentW, width.h / width.contentH);
   assert.equal(height.w / height.contentW, height.h / height.contentH);
   assert.equal(scaledWidth.w / scaledWidth.contentW, scaledWidth.h / scaledWidth.contentH);
@@ -386,7 +484,9 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(frameRule, /color-scheme:\s*light/);
   assert.match(frameRule, /background:\s*transparent/);
   assert.match(functionSource(app, "serializedWidgets"), /contentW:\s*widget\.contentW[\s\S]*?contentH:\s*widget\.contentH/);
+  assert.match(functionSource(app, "serializedWidgets"), /copyText:widget\.copyText[\s\S]*?copyLabel:widget\.copyLabel/);
   assert.match(functionSource(app, "widgetRecord"), /contentW = item\.contentW \?\? item\.w[\s\S]*?contentH = item\.contentH \?\? item\.h/);
+  assert.doesNotMatch(functionSource(app, "resizeWidgetBox"), /5000|4000|12000000|maximumArea/);
   assert.doesNotMatch(functionSource(app, "widgetRecord"), /pluginManifests\.has/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /width:widget\.contentW, height:widget\.contentH/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /if \(widget\.snapshotPromise\) return widget\.snapshotPromise[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
@@ -404,6 +504,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(pointerHit, /hit && hit !== "move"/);
   assert.match(messageHandler, /validWidgetHostDrag\(message\)[\s\S]*?beginWidgetHostDrag\(widget, message\)[\s\S]*?updateWidgetHostDrag\(widget, message\)[\s\S]*?updateWidgetHostTouch[\s\S]*?finishWidgetHostDrag\(widget, message\)/);
   assert.match(messageHandler, /validWidgetHostTouch\(message\)[\s\S]*?beginWidgetHostTouch\(widget, message\)[\s\S]*?updateWidgetHostTouch\(widget, message\)[\s\S]*?finishWidgetHostTouch\(widget, message\)/);
+  assert.match(messageHandler, /penecho-widget-copy-source-result[\s\S]*?typeof message\.copied !== "boolean"[\s\S]*?widgetSourceCopied/);
   assert.match(functionSource(app, "sendWidgetHostState"), /selected[\s\S]*?penecho-widget-state[\s\S]*?scaleX[\s\S]*?scaleY/);
   assert.match(functionSource(app, "beginWidgetHostDrag"), /state\.touches\.keys[\s\S]*?releaseWidgetHostTouch[\s\S]*?source:"widget-host"[\s\S]*?hit:message\.hit[\s\S]*?startPoint:clientPoint/);
   assert.match(functionSource(app, "updateWidgetHostDrag"), /widgetHostViewportPoint[\s\S]*?updateWidgetGesturePoint/);
@@ -434,7 +535,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(frameRule, /background:\s*transparent/);
   assert.doesNotMatch(frameRule, /box-shadow|border-radius/);
   assert.doesNotMatch(css, /canvas-widget-toolbar/);
-  assert.match(read("server.js"), /Keep user-facing text natively selectable and do not globally disable text selection/);
+  assert.match(read("src/server/main.js"), /Keep user-facing text natively selectable and do not globally disable text selection/);
 });
 
 test("downsampled animation drafts clip against logical rather than raster dimensions", () => {
@@ -503,18 +604,36 @@ test("mouse and pen select animations immediately while touch requires a one-sec
 });
 
 test("Save canvas exposes non-blocking progress and completion feedback", () => {
-  const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
+  const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js"),
+    saveCurrent = functionSource(app, "saveCurrentCanvas");
   assert.match(html, /id="historyNotice"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(app, /async function saveSnapshotFromHistory\(\)/);
   assert.match(app, /showHistoryNoticeKey\("snapshotSaving", "busy", 0\)/);
   assert.match(app, /selectionBusyKey = selectionAIStatusKey\(\)/);
   assert.match(app, /showHistoryNoticeKey\(id \? "snapshotSaved" : selectionBusy \? selectionBusyKey : "emptyCanvas"/);
+  assert.match(app, /historySaveCurrent"\)\.onclick = saveCurrentCanvas/);
   assert.match(app, /historySave\"\)\.onclick = saveSnapshotFromHistory/);
-  assert.match(app, /if \(event\.key === "Enter"\) saveSnapshotFromHistory\(\)/);
+  assert.match(app, /if \(event\.key === "Enter"\) saveCurrentCanvas\(\)/);
   assert.match(app, /button\.disabled = busy/);
   assert.match(css, /\.history-notice\s*\{[^}]*pointer-events:\s*none/);
-  assert.match(css, /#historySave\.is-saving::before/);
+  assert.match(css, /#historySaveCurrent\.is-saving::before/);
   assert.match(zh, /snapshotSaving:/);
+  assert.match(html, /id="saveCanvasBtn"/);
+  assert.match(html, /id="historySaveCurrent"[^>]*>Save<\/button>/);
+  assert.match(html, /id="historySave"[^>]*>Save New<\/button>/);
+  assert.match(saveCurrent, /overwriteId = state\.currentSnapshotId/);
+  assert.match(saveCurrent, /requestedName = document\.querySelector\("#historyName"\)/);
+  assert.match(saveCurrent, /saveSnapshot\(\{ overwriteId, name \}\)/);
+  assert.match(functionSource(app, "loadSnapshot"), /state\.currentSnapshotId = item\.id/);
+  assert.match(app, /async function saveSnapshot\([\s\S]*?state\.currentSnapshotId = id/);
+  assert.match(app, /querySelector\("#saveCanvasBtn"\)\.onclick = saveCurrentCanvas/);
+});
+
+test("local snapshot database upgrades preserve existing canvas records", () => {
+  const snapshotDb = functionSource(read("public/app.js"), "snapshotDb");
+  assert.match(snapshotDb, /indexedDB\.open\(SNAPSHOT_DB, 2\)/);
+  assert.match(snapshotDb, /createObjectStore\(SNAPSHOT_TILE_STORE/);
+  assert.doesNotMatch(snapshotDb, /objectStore\(SNAPSHOT_STORE\)\.clear\(\)/);
 });
 
 test("New, Export, Clear, and Debug are accessible theme-aware icon buttons", () => {
@@ -556,6 +675,16 @@ test("Studio theme is wired through initialization, localization, and snapshots"
   assert.match(css, /body\[data-theme="studio"\]\.is-fullscreen\s+#viewport\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0/);
 });
 
+test("the canvas fills the available browser viewport consistently across themes", () => {
+  const css = read("public/style.css");
+  assert.match(css, /main\s*\{[^}]*display:\s*flex;[^}]*width:\s*100%;[^}]*min-height:\s*100dvh;[^}]*flex-direction:\s*column;[^}]*max-width:\s*none/);
+  assert.match(css, /\.canvas-frame\s*\{[^}]*display:\s*flex;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto/);
+  assert.match(css, /#viewport\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*440px;[^}]*flex:\s*1 1 auto/);
+  assert.doesNotMatch(css, /#viewport\s*\{[^}]*(?:height:\s*(?:min\([^}]*vh|[0-9]+vh)|900px|960px)/);
+  assert.doesNotMatch(css, /body\[data-theme="studio"\]\s+#viewport\s*\{[^}]*height:/);
+  assert.match(css, /@media \(max-width:\s*620px\)\s*\{[\s\S]*?#viewport\s*\{\s*min-height:\s*380px;\s*\}/);
+});
+
 test("PNG export crops to all ink with one tile of padding", () => {
   const html = read("public/index.html"), app = read("public/app.js"), ink = functionSource(app, "exportInkBounds"), region = functionSource(app, "exportRegion"), render = functionSource(app, "renderExportCanvas"), run = functionSource(app, "exportCanvasPng");
   assert.match(ink, /inkBox\(tileCanvas/);
@@ -575,7 +704,10 @@ test("PNG export crops to all ink with one tile of padding", () => {
 
 test("Auto AI exposes a persisted zero-to-ten-second delay control", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css");
-  assert.match(html, /id="autoDelayRange"[^>]*min="0"[^>]*max="10"[^>]*step="0\.1"/);
+  assert.match(html, /id="autoLabel">Auto \(5s\)<\/span>/);
+  assert.match(html, /id="autoDelayRange"[^>]*min="0"[^>]*max="10"[^>]*step="0\.1"[^>]*value="5"/);
+  assert.match(app, /DEFAULT_AUTO_DELAY = 5000/);
+  assert.match(app, /autoEnabled:\s*"Auto \(\{delay\}s\)"/);
   assert.match(app, /penecho-auto-delay-ms/);
   assert.match(app, /penecho-auto-ai/);
   assert.match(app, /setTimeout\(hideAutoDelayControl,\s*5000\)/);
@@ -600,7 +732,7 @@ test("Auto AI waits for unsettled toolboxes while manual actions remain availabl
   assert.match(schedule, /setTimeout\(\(\) =>/);
   assert.doesNotMatch(createText, /clearTimeout\(state\.timer\)/);
   assert.match(createText, /if \(!state\.timer && state\.auto && state\.dirty && state\.autoEligible\) schedule\(\)/);
-  assert.match(manual, /requestAI\(action\)/);
+  assert.match(manual, /requestAI\(action,/);
   assert.doesNotMatch(manual, /hasUnsettledToolbox|autoToolboxPending/);
   assert.match(app, /autoToolboxPending:/);
   assert.match(zh, /autoToolboxPending:/);
@@ -608,8 +740,13 @@ test("Auto AI waits for unsettled toolboxes while manual actions remain availabl
 
 test("toolbar exposes a fixed clickable reasoning menu before the drawing tools", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
-  const auto = html.indexOf('id="autoControl"'), effort = html.indexOf('id="effortControl"'), grid = html.indexOf('id="gridToggle"'), font = html.indexOf('id="aiFont"'), pen = html.indexOf('data-mode="pen"');
-  assert.ok(auto < effort && effort < grid && grid < font && font < pen);
+  const section = html.indexOf('id="aiToolsSection"'), auto = html.indexOf('id="autoControl"'), effort = html.indexOf('id="effortControl"'), font = html.indexOf('id="aiFont"'), pen = html.indexOf('data-mode="pen"'), fullscreen = html.indexOf('id="fullscreenBtn"'), grid = html.indexOf('id="gridToggle"');
+  assert.ok(section < auto && auto < effort && effort < font && font < pen);
+  assert.ok(pen < fullscreen && fullscreen < grid);
+  assert.match(html, /id="aiToolsSection"[^>]*data-i18n-aria="aiTools"[\s\S]*?class="ai-section-label"[^>]*>AI<\/span>/);
+  assert.match(html, /<label><span data-i18n="font">Font<\/span>[\s\S]*?id="aiFont"/);
+  assert.match(css, /\.ai-tools-section\s*\{/);
+  assert.match(css, /\.view-tools\s*\{/);
   assert.match(html, /id="aiEffortButton"[^>]*aria-haspopup="listbox"/);
   assert.match(html, /id="effortPopover"[^>]*hidden/);
   assert.equal((html.match(/class="effort-option"/g) || []).length, 6);
@@ -779,11 +916,33 @@ test("AI capture stays inside the current viewport when retained dirty ink is of
   const app = read("public/app.js"), capture = functionSource(app, "captureRectFor"), build = functionSource(app, "buildViewportImage"), request = functionSource(app, "requestAI");
   assert.match(capture, /return visible/);
   assert.doesNotMatch(capture, /Math\.max\(3200|Math\.max\(2200/);
-  assert.match(build, /const latestVisible = intersection\(latestBox, sourceRect\)/);
+  assert.match(build, /latestVisible = captureCurrentViewport \? \{ \.\.\.sourceRect \} : intersection\(latestBox, sourceRect\)/);
   assert.match(build, /changedBox: latestVisible/);
   assert.doesNotMatch(build, /containsRect\(sourceRect, latestBox\)/);
   assert.match(request, /const requestBox = packed\.changedBox/);
   assert.match(request, /rawCommands = Array\.isArray\(data\.commands\)[\s\S]*?normalizeCommandPlacements\(validate\(rawCommands, aiColor\), packed, requestBox\)/);
+});
+
+test("manual Answer sends the complete current viewport without requiring dirty input", () => {
+  const app = read("public/app.js"),
+    manual = functionSource(app, "invokeAIAction"),
+    request = functionSource(app, "requestAI"),
+    build = functionSource(app, "buildViewportImage"),
+    automatic = functionSource(app, "launchAutomaticAI"),
+    selection = functionSource(app, "requestSelectionAI");
+  assert.match(manual, /requestAI\(action, null, action === "answer" \? \{ captureCurrentViewport: true \} : null\)/);
+  assert.match(request, /captureCurrentViewport = Boolean\(requestOptions\.captureCurrentViewport\)/);
+  assert.match(request, /captureCurrentViewport \? buildViewportImage\([\s\S]{0,160}?, null, true\) : latestBox \? buildViewportImage/);
+  assert.match(build, /if \(!captureCurrentViewport && !ink\) return null/);
+  assert.match(build, /left = captureCurrentViewport \? captureRect\.x/);
+  assert.match(build, /right = captureCurrentViewport \? captureRect\.x \+ captureRect\.w/);
+  assert.match(build, /latestVisible = captureCurrentViewport \? \{ \.\.\.sourceRect \} : intersection\(latestBox, sourceRect\)/);
+  assert.match(build, /scope: captureCurrentViewport \? "current-viewport" : "visible-content"/);
+  assert.match(automatic, /if \(!state\.auto \|\| !state\.dirty \|\| !state\.autoEligible \|\| state\.drawing\) return/);
+  assert.match(automatic, /requestAI\("auto"\)/);
+  assert.doesNotMatch(automatic, /captureCurrentViewport/);
+  assert.match(selection, /requestAI\(action, packed, \{ isolatedSelection: true, selection, selectionRequestToken: token \}\)/);
+  assert.doesNotMatch(selection, /captureCurrentViewport/);
 });
 
 test("the retained focus inset implementation is inactive", () => {
@@ -863,7 +1022,7 @@ test("selection edits never schedule or send AI requests", () => {
     assert.doesNotMatch(source, /\b(?:schedule|requestAI)\s*\(/, `${name} must stay local`);
   }
   assert.match(functionSource(app, "finishDrawing"), /schedule\(\)/);
-  assert.match(functionSource(app, "invokeAIAction"), /requestAI\(action\)/);
+  assert.match(functionSource(app, "invokeAIAction"), /requestAI\(action,/);
 });
 
 test("manual actions and pen-down use non-blocking latest-request-wins cancellation", () => {
@@ -872,7 +1031,7 @@ test("manual actions and pen-down use non-blocking latest-request-wins cancellat
     supersede = functionSource(app, "supersedeActiveAI"),
     request = functionSource(app, "requestAI"),
     guard = functionSource(app, "checkAI");
-  assert.ok(manual.indexOf('supersedeActiveAI("manual-action")') < manual.indexOf("requestAI(action)"));
+  assert.ok(manual.indexOf('supersedeActiveAI("manual-action")') < manual.indexOf("requestAI(action,"));
   assert.match(app, /if \(!valid\(p\)\)[\s\S]*?return;\s*}\s*supersedeActiveAI\("user-input-started"\);\s*clearTimeout\(state\.timer\)/);
   assert.match(supersede, /active\.superseded = true;[\s\S]*?active\.controller\.abort\(\)/);
   assert.doesNotMatch(supersede, /discardPendingForNewAI\(\)/);

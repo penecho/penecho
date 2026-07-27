@@ -17,6 +17,7 @@ const {
   resolveConfiguration,
   runClaudePreflight,
   runCodexPreflight,
+  runKimiPreflight,
   runDoctor,
   saveConfiguration,
   testApiConnection,
@@ -71,6 +72,7 @@ function expectedArgs(overrides = {}) {
 test("parses commands, provider overrides, and explicit config files", () => {
   assert.deepEqual(parseArgs(["--api", "--port", "4000"]), expectedArgs({ provider:"api", port:4000 }));
   assert.deepEqual(parseArgs(["doctor", "--codex", "--port=0"]), expectedArgs({ command:"doctor", provider:"codex-cli", port:0 }));
+  assert.deepEqual(parseArgs(["doctor", "--kimi"]), expectedArgs({ command:"doctor", provider:"kimi-cli" }));
   assert.deepEqual(parseArgs(["configure"]), expectedArgs({ command:"configure" }));
   assert.deepEqual(parseArgs(["configure", "--claude", "--config", "team.env"]), expectedArgs({ command:"configure", provider:"claude-cli", config:"team.env" }));
   assert.deepEqual(parseArgs(["--codex", "--model", "gpt-5.6-sol", "--effort=xhigh", "--config=custom.env"]), expectedArgs({ provider:"codex-cli", model:"gpt-5.6-sol", effort:"xhigh", config:"custom.env" }));
@@ -114,7 +116,7 @@ test("CLI model and effort override saved configuration", () => {
   assert.equal(codex.provider, "codex-cli");
   assert.equal(codex.env.CODEX_CLI_MODEL, "gpt-5.6-sol");
   assert.equal(codex.env.AI_EFFORT, "xhigh");
-  assert.throws(() => isolatedConfiguration(parseArgs(["--api", "--effort", "low"]), { AI_PROVIDER:"api" }), /only supported with Codex or Claude/);
+  assert.throws(() => isolatedConfiguration(parseArgs(["--api", "--effort", "low"]), { AI_PROVIDER:"api" }), /only supported with Kimi, Codex, or Claude/);
 });
 
 test("canonical save creates global defaults and removes legacy names", () => {
@@ -127,7 +129,7 @@ test("canonical save creates global defaults and removes legacy names", () => {
   assert.match(saved, /^PENECHO_AI_IMAGE_FORMAT=webp$/m);
   assert.match(saved, /^AI_API_URL=https:\/\/example\.test\/v1$/m);
   assert.match(saved, /^PENECHO_REQUEST_TRACE=false$/m);
-  assert.match(saved, /^AUTO_AI_DELAY_SECONDS=1\.2$/m);
+  assert.match(saved, /^AUTO_AI_DELAY_SECONDS=5$/m);
   assert.match(saved, /^CUSTOM_SETTING=keep$/m);
   assert.doesNotMatch(saved, /OPENAI_|CODEX_CLI_TIMEOUT_SECONDS/);
   assert.equal(configuration.provider, "api");
@@ -226,16 +228,17 @@ test("Anthropic API configure saves none as an explicit thinking-disabled effort
   assert.match(saved, /^AI_EFFORT=none$/m);
 });
 
-test("Codex and Claude are supported by configure and save their model choices", async () => {
+test("Kimi, Codex, and Claude are supported by configure and save their model choices", async () => {
   for (const scenario of [
+    { flag:"--kimi", selections:["__manual__", "high", "save"], inputs:["kimi-code/kimi-for-coding"], field:"KIMI_CLI_MODEL", model:"kimi-code/kimi-for-coding" },
     { flag:"--codex", selections:["gpt-5.6-sol", "xhigh", "save"], field:"CODEX_CLI_MODEL", model:"gpt-5.6-sol", caller:"codexCaller" },
     { flag:"--claude", selections:["opus", "max", "save"], field:"CLAUDE_CLI_MODEL", model:"opus", caller:"claudeCaller" },
   ]) {
     const directory = temporaryDirectory(), home = path.join(directory, "home"), cwd = path.join(directory, "cwd");
     fs.mkdirSync(home, { recursive:true }); fs.mkdirSync(cwd, { recursive:true });
-    const ui = scriptedUi({ selections:scenario.selections });
+    const ui = scriptedUi({ selections:scenario.selections, inputs:scenario.inputs || [] });
     const options = {
-      env:{ PATH:process.env.PATH, CODEX_CLI_PATH:process.execPath, CLAUDE_CLI_PATH:process.execPath }, home, cwd, packageRoot:ROOT, ui, output:capture().stream, errorOutput:capture().stream,
+      env:{ PATH:process.env.PATH, KIMI_CLI_PATH:process.execPath, CODEX_CLI_PATH:process.execPath, CLAUDE_CLI_PATH:process.execPath }, home, cwd, packageRoot:ROOT, ui, output:capture().stream, errorOutput:capture().stream,
       runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "test cli\n" : args[0] === "debug" ? JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }) : "logged in\n", stderr:"" }),
       claudeCaller:async () => "OK",
     };
@@ -315,12 +318,29 @@ test("Codex bundled-model query uses the offline catalog command", async () => {
   assert.deepEqual(models, ["gpt-test"]);
 });
 
-test("Codex and Claude preflight inspect version and login only", async () => {
-  const codex = isolatedConfiguration(parseArgs(["--codex"]), { AI_PROVIDER:"codex-cli", CODEX_CLI_PATH:process.execPath, PATH:process.env.PATH }), claude = isolatedConfiguration(parseArgs(["--claude"]), { AI_PROVIDER:"claude-cli", CLAUDE_CLI_PATH:process.execPath, PATH:process.env.PATH }), calls=[];
+test("Kimi, Codex, and Claude preflight use only their documented offline checks", async () => {
+  const kimi = isolatedConfiguration(parseArgs(["--kimi"]), { AI_PROVIDER:"kimi-cli", KIMI_CLI_PATH:process.execPath, PATH:process.env.PATH }), codex = isolatedConfiguration(parseArgs(["--codex"]), { AI_PROVIDER:"codex-cli", CODEX_CLI_PATH:process.execPath, PATH:process.env.PATH }), claude = isolatedConfiguration(parseArgs(["--claude"]), { AI_PROVIDER:"claude-cli", CLAUDE_CLI_PATH:process.execPath, PATH:process.env.PATH }), calls=[];
   const runner = async (_launch, args) => { calls.push(args.join(" ")); return { code:0, stdout:args[0] === "--version" ? "test cli\n" : "logged in\n", stderr:"" }; };
+  assert.equal((await runKimiPreflight(kimi, { runner })).ok, true);
   assert.equal((await runCodexPreflight(codex, { runner })).ok, true);
   assert.equal((await runClaudePreflight(claude, { runner })).ok, true);
-  assert.deepEqual(calls, ["--version", "login status", "--version", "auth status"]);
+  assert.deepEqual(calls, ["--version", "--version", "login status", "--version", "auth status"]);
+});
+
+test("Kimi startup identifies the provider and prints manual installation guidance", async () => {
+  const directory = temporaryDirectory(), output = capture(), errorOutput = capture();
+  const code = await main(["--kimi"], {
+    env:{ AI_PROVIDER:"kimi-cli", KIMI_CLI_PATH:process.execPath, PATH:process.env.PATH }, home:directory, cwd:directory, packageRoot:ROOT,
+    output:output.stream, errorOutput:errorOutput.stream,
+    runner:async () => ({ code:0, stdout:"kimi-code 0.test\n", stderr:"" }),
+    startServer:async () => ({ listening:true, close() {} }),
+    updateScheduler:() => {},
+  });
+  assert.equal(code, 0, errorOutput.text());
+  assert.match(output.text(), /using Kimi CLI/);
+  assert.match(output.text(), /code\.kimi\.com\/kimi-code\/install\.sh/);
+  assert.match(output.text(), /kimi login/);
+  assert.match(output.text(), /github\.com\/MoonshotAI\/kimi-code/);
 });
 
 test("doctor is diagnostic-only and reports the unified timeout", async () => {
@@ -362,4 +382,6 @@ test("help documents configure, global config, explicit config, and transient ov
   assert.match(help, /--config/);
   assert.match(help, /--model/);
   assert.match(help, /--effort/);
+  assert.match(help, /--kimi/);
+  assert.match(help, /MoonshotAI\/kimi-code/);
 });

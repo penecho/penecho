@@ -95,8 +95,8 @@ test("weather demo is a concise capability contract without an HTML template", (
   assert.match(parsed.document, /credentials:"omit"/);
 });
 
-test("plugin directory contains the general HTML plugin and eight concise built-in data contracts", () => {
-  const builtIns = ["earthquakes.md", "exchange-rates.md", "general.md", "github-pulse.md", "natural-events.md", "space-weather.md", "stocks.md", "tech-news.md", "weather.md"];
+test("plugin directory contains the general, flowchart, image, and built-in data contracts", () => {
+  const builtIns = ["earthquakes.md", "exchange-rates.md", "flowchart.md", "general.md", "github-pulse.md", "image-search.md", "natural-events.md", "space-weather.md", "stocks.md", "tech-news.md", "weather.md"];
   assert.deepEqual(pluginFiles.filter((file) => builtIns.includes(file)), builtIns);
   const allParsed = pluginFiles.map((file) => plugins.parse(fs.readFileSync(path.join(pluginDirectory, file), "utf8"))),
     parsed = builtIns.map((file) => plugins.parse(fs.readFileSync(path.join(pluginDirectory, file), "utf8")));
@@ -122,6 +122,30 @@ test("plugin directory contains the general HTML plugin and eight concise built-
   assert.deepEqual([...general.connect], []);
   assert.match(general.document, /五颜六色的钟/);
   assert.match(general.document, /browser-native HTML, CSS, JavaScript, timers, SVG, and canvas/);
+  const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
+  assert.deepEqual([...flowchart.connect], []);
+  assert.match(flowchart.document, /Mermaid is the portable professional source format/);
+  assert.match(flowchart.document, /copyText/);
+  assert.match(flowchart.document, /copyLabel:"Copy Mermaid"/);
+  const imageSearch = parsed.find((plugin) => plugin.id === "image-search");
+  assert.equal(imageSearch.name, "Show Real Photos Online");
+  assert.equal(imageSearch.nameZh, "显示网络真实照片");
+  assert.deepEqual([...imageSearch.connect], ["https://commons.wikimedia.org", "https://upload.wikimedia.org", "https://api.openverse.org"]);
+  assert.match(imageSearch.document, /visibly show the actual images/);
+  assert.match(imageSearch.document, /Default to exactly 1 image/);
+  assert.match(imageSearch.document, /page_size=<count>/);
+  assert.match(imageSearch.document, /Api-User-Agent/);
+  assert.match(imageSearch.document, /Retry-After/);
+  assert.match(imageSearch.document, /at most one Openverse search request/);
+  assert.match(imageSearch.document, /do not load raw `url`/);
+  assert.match(imageSearch.document, /<img>/);
+  assert.match(imageSearch.document, /URLSearchParams/);
+  assert.match(imageSearch.document, /filetype:bitmap/);
+  assert.match(imageSearch.document, /descriptionurl/);
+  assert.match(imageSearch.document, /crossorigin="anonymous"/);
+  assert.match(imageSearch.document, /two distinct candidates: `thumburl` first and `url` second/);
+  assert.match(imageSearch.document, /switch once from `thumburl` to `url`/);
+  assert.match(imageSearch.document, /saved thumbnails and exports contain pixels/);
   assert.equal(parsed.find((plugin) => plugin.id === "stocks").name, "Stocks");
   assert.match(parsed.find((plugin) => plugin.id === "stocks").document, /^# Stocks$/m);
 });
@@ -129,10 +153,11 @@ test("plugin directory contains the general HTML plugin and eight concise built-
 test("personal plugin storage is ignored and separated from built-in contracts", () => {
   const ignore = fs.readFileSync(path.join(ROOT, ".gitignore"), "utf8"),
     app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"),
-    server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8");
+    server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8");
   assert.match(ignore, /^public\/plugins\/private\/$/m);
   assert.match(app, /plugins\\\/\(\?:private\\\//);
-  assert.match(server, /path\.join\(PLUGIN_DIRECTORY, "private"\)/);
+  assert.match(server, /PENECHO_PRIVATE_PLUGIN_DIR/);
+  assert.match(server, /STATE_DIRECTORY[\s\S]*?path\.join\(STATE_DIRECTORY, "plugins", "private"\)/);
   assert.match(server, /plugins\/private/);
 });
 
@@ -157,7 +182,7 @@ test("plugin parser accepts an explicitly empty connect list", () => {
 });
 
 test("plugin model output extraction accepts commentary, fences, and common YAML lists", () => {
-  const server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8"),
+  const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     document = fs.readFileSync(path.join(pluginDirectory, "general.md"), "utf8")
       .replace("connect:\nrecommended-refresh-seconds", "connect: []\nrecommended-refresh-seconds"),
     extract = vm.runInNewContext(`(${functionSource(server, "pluginDocumentFromModel")})`, { PLUGIN_FORMAT:plugins });
@@ -168,12 +193,14 @@ test("plugin model output extraction accepts commentary, fences, and common YAML
 test("widget host keeps generated HTML in an opaque inner frame and snapshots it cooperatively", () => {
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
     html = fs.readFileSync(path.join(ROOT, "public", "widget-host.html"), "utf8"),
-    server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8"),
+    server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
+    flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
   assert.match(host, /setAttribute\("sandbox", "allow-scripts"\)/);
   assert.doesNotMatch(host, /allow-same-origin/);
   assert.match(host, /connect-src \$\{origins\}/);
+  assert.match(host, /img-src \$\{images\}/);
   assert.match(host, /connect\.length \? connect\.join\(" "\) : "'none'"/);
   assert.match(host, /querySelectorAll\("base, iframe, object, embed, form[\s\S]*?script\[src\]/);
   assert.match(host, /script-src 'unsafe-inline' \$\{rendererUrl\}/);
@@ -182,6 +209,9 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /globalThis\.html2canvas\(document\.documentElement/);
   assert.match(host, /foreignObjectRendering:false/);
   assert.match(host, /penechoDirectRendering:true/);
+  assert.match(host, /useCORS:true/);
+  assert.doesNotMatch(host, /useCORS:false/);
+  assert.match(host, /imageTimeout:10000/);
   assert.match(renderer, /html2canvas 1\.4\.1/);
   assert.match(renderer, /penechoDirectRendering/);
   assert.match(rendererLicense, /Copyright \(c\) 2012 Niklas von Hertzen/);
@@ -204,6 +234,21 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /touchCount\(\) >= 2[\s\S]*?cancelAllHoldsForNavigation/);
   assert.match(host, /hit:"resize"[\s\S]*?hit:"width"[\s\S]*?hit:"height"/);
   assert.match(host, /penecho-widget-state/);
+  assert.match(host, /document\.execCommand\?\.\("copy"\)/);
+  assert.match(host, /nativeCopy = navigator\.clipboard\?\.writeText \? navigator\.clipboard\.writeText\(copySourceText\)/);
+  assert.ok(host.indexOf("nativeCopy = navigator.clipboard") < host.indexOf('document.execCommand?.("copy")'));
+  assert.match(host, /penecho-widget-copy-source-result/);
+  assert.match(host, /function updateCopySourceScale\(\)[\s\S]*?1 \/ scaleX[\s\S]*?1 \/ scaleY/);
+  assert.match(host, /widgetState = \{ selected:message\.selected, scaleX:message\.scaleX, scaleY:message\.scaleY \};\s*updateCopySourceScale\(\)/);
+  assert.match(host, /MAX_COPY_TEXT_LENGTH = 16000/);
+  assert.match(html, /id="widgetCopySource"/);
+  assert.match(html, /#widgetCopySource \{[^}]*transform-origin: top right/);
+  assert.match(host, /function inlineSvgComputedStyles\(\)/);
+  assert.match(host, /"fill"[\s\S]*?"stroke"[\s\S]*?"font-family"[\s\S]*?"font-size"/);
+  assert.match(host, /element\.setAttribute\(property, value\)/);
+  assert.match(host, /data-penecho-snapshot-background/);
+  assert.match(host, /finally\s*\{\s*restoreSvgStyles\(\)/);
+  assert.match(flowchart, /presentation attributes[\s\S]*?directly on the relevant SVG elements/);
   assert.match(host, /if \(press\.active\)[\s\S]*?event\.preventDefault/);
   assert.match(host, /penecho-widget-dragging[\s\S]*?user-select:none/);
   assert.match(host, /html,body\{background:transparent!important;color-scheme:light!important/);

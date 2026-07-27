@@ -1,6 +1,6 @@
 "use strict";
 
-const PROVIDERS = new Set(["api", "kimi", "codex-cli", "claude-cli"]);
+const PROVIDERS = new Set(["api", "kimi", "kimi-cli", "codex-cli", "claude-cli"]);
 const FORMATS = new Set(["openai", "anthropic"]);
 const KIMI_PRODUCTS = new Set(["code", "platform"]);
 const KIMI_REGIONS = new Set(["global", "china"]);
@@ -45,7 +45,7 @@ function normalizeSettings(input, options = {}) {
   if (!["127.0.0.1", "0.0.0.0"].includes(host)) throw new Error("Choose local-only or LAN listening.");
   const port = number(input.port ?? 3888, "Port", 0, 65535, true);
   const timeout = number(input.timeout ?? 180, "Model timeout", 10, 600, true);
-  const autoDelay = number(input.autoDelay ?? 1.2, "Auto AI delay", 0, 10);
+  const autoDelay = number(input.autoDelay ?? 5, "Auto AI delay", 0, 10);
   const traceLimit = number(input.traceLimit ?? 100, "Request record limit", 1, 1000, true);
   const updates = {
     AI_PROVIDER:provider === "kimi" ? "api" : provider,
@@ -58,6 +58,7 @@ function normalizeSettings(input, options = {}) {
     PORT:String(port),
     PENECHO_REQUEST_TRACE:input.requestTrace === true ? "true" : "false",
     PENECHO_REQUEST_TRACE_LIMIT:String(traceLimit),
+    KIMI_CLI_TIMEOUT_SECONDS:null,
     CODEX_CLI_TIMEOUT_SECONDS:null,
     CLAUDE_CLI_TIMEOUT_SECONDS:null,
   };
@@ -79,6 +80,11 @@ function normalizeSettings(input, options = {}) {
       AI_API_URL:endpoint(input.apiUrl),
       AI_API_MODEL:text(input.apiModel, "API model", 256),
       AI_API_KEY:null,
+    });
+  } else if (provider === "kimi-cli") {
+    Object.assign(updates, {
+      KIMI_CLI_MODEL:text(input.kimiCliModel ?? "", "Kimi model", 256, true),
+      KIMI_CLI_PATH:text(input.kimiCliPath ?? "", "Kimi executable", 1024, true) || null,
     });
   } else if (provider === "codex-cli") {
     Object.assign(updates, {
@@ -108,6 +114,8 @@ function publicSettings(configuration, options = {}) {
     apiKeySaved:options.hasSavedApiKey === true,
     kimiProduct,
     kimiRegion:String(env.PENECHO_KIMI_REGION || "global"),
+    kimiCliModel:String(env.KIMI_CLI_MODEL || ""),
+    kimiCliPath:String(env.KIMI_CLI_PATH || ""),
     codexModel:String(env.CODEX_CLI_MODEL || "gpt-5.6-sol"),
     codexPath:String(env.CODEX_CLI_PATH || ""),
     claudeModel:String(env.CLAUDE_CLI_MODEL || "opus"),
@@ -115,7 +123,7 @@ function publicSettings(configuration, options = {}) {
     effort:String(env.AI_EFFORT || "xhigh"),
     timeout:String(env.AI_TIMEOUT_SECONDS || "180"),
     imageFormat:String(env.PENECHO_AI_IMAGE_FORMAT || "webp"),
-    autoDelay:String(env.AUTO_AI_DELAY_SECONDS || "1.2"),
+    autoDelay:String(env.AUTO_AI_DELAY_SECONDS || "5"),
     host:String(env.HOST || "0.0.0.0"),
     port:String(env.PORT || "3888"),
     requestTrace:/^(?:1|true|yes|on)$/i.test(String(env.PENECHO_REQUEST_TRACE || "false")),

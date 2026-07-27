@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { buildCodexArgs, callCodexCli, prepareIsolatedRuntime, sanitizeCodexEnv } = require("../codex-cli.js");
+const { buildCodexArgs, callCodexCli, prepareIsolatedRuntime, sanitizeCodexEnv } = require("../src/providers/codex-cli.js");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const WEBP = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==";

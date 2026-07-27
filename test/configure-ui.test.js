@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { discoverConfiguredModel, runConfigureMenu } = require("../configure-ui.js");
+const { discoverConfiguredModel, runConfigureMenu } = require("../src/cli/configure-ui.js");
 
 function temporaryDirectory() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-configure-ui-"));
@@ -57,6 +57,8 @@ test("main menu provides LLM source and Settings navigation with a parent return
   assert.equal(saved[0].PORT, "3999");
   assert.equal(saved[0].AUTO_AI_DELAY_SECONDS, "5.3");
   assert.ok(ui.headers.some(item => item.title === "LLM source"));
+  const sourcePrompt = ui.selects.find(item => item.message === "Select an LLM source");
+  assert.equal(sourcePrompt.choices[0].value, "kimi-cli");
   assert.ok(ui.headers.some(item => item.title === "Settings" && /logs.*requests/.test(item.detail)));
   assert.ok(ui.notes.some(item => /canvas/.test(item.message)));
 });
@@ -75,6 +77,17 @@ test("provider pages include the requested model quality guidance", async () => 
   assert.match(codexUi.headers[0].detail, /GPT-5\.5 or newer/);
   assert.match(codexUi.headers[0].detail, /gpt-5\.6-sol/);
   assert.match(codexUi.headers[0].detail, /xhigh/);
+
+  const kimiUi = uiScript({ selections:["__manual__", "high", "cancel"], inputs:["kimi-code/k3"] });
+  await runConfigureMenu(configuration, { ui:kimiUi, directProvider:"kimi-cli", save:async () => {}, test:async () => "ok" });
+  assert.match(kimiUi.headers[0].detail, /does not install or log in/);
+  assert.match(kimiUi.headers[0].detail, /code\.kimi\.com\/kimi-code\/install\.sh/);
+  assert.match(kimiUi.headers[0].detail, /github\.com\/MoonshotAI\/kimi-code/);
+  const kimiModelPrompt = kimiUi.selects.find(item => item.message === "Model");
+  assert.ok(kimiModelPrompt.choices.every(choice => !/recommended/i.test(choice.name)));
+  assert.ok(kimiModelPrompt.choices.some(choice => choice.value === "__manual__"));
+  const kimiEffortPrompt = kimiUi.selects.find(item => item.message === "Reasoning effort");
+  assert.deepEqual(kimiEffortPrompt.choices.filter(choice => ["none","low","medium","high","xhigh","max"].includes(choice.value)).map(choice => choice.value), ["low","high","max"]);
 });
 
 test("Claude CLI configuration offers none alongside explicit thinking effort levels", async () => {
@@ -107,8 +120,11 @@ test("configured CLI models are discovered when local settings expose them", () 
   const home = temporaryDirectory();
   fs.mkdirSync(path.join(home, ".codex"), { recursive:true });
   fs.mkdirSync(path.join(home, ".claude"), { recursive:true });
+  fs.mkdirSync(path.join(home, ".kimi-code"), { recursive:true });
   fs.writeFileSync(path.join(home, ".codex", "config.toml"), 'model = "gpt-detected"\n');
   fs.writeFileSync(path.join(home, ".claude", "settings.json"), JSON.stringify({ model:"claude-detected" }));
+  fs.writeFileSync(path.join(home, ".kimi-code", "config.toml"), 'default_model = "kimi-detected"\n');
+  assert.equal(discoverConfiguredModel("kimi-cli", { home }), "kimi-detected");
   assert.equal(discoverConfiguredModel("codex-cli", { home }), "gpt-detected");
   assert.equal(discoverConfiguredModel("claude-cli", { home }), "claude-detected");
 });

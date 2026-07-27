@@ -39,8 +39,9 @@
         <fieldset class="provider-fieldset">
           <legend data-i18n="providerLegend">AI provider</legend>
           <div class="provider-grid">
+            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi-cli"><span class="provider-icon">K</span><span><strong>Kimi CLI</strong><small data-i18n="kimiCliDescription">Use your local Kimi Code login</small></span></label>
             <label class="provider-card recommended"><input type="radio" name="provider" value="api" checked><span class="provider-icon">API</span><span><strong data-i18n="apiTitle">API</strong><small data-i18n="apiDescription">Recommended · no CLI installation</small></span><em data-i18n="recommended">Recommended</em></label>
-            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi"><span class="provider-icon">K</span><span><strong>Kimi</strong><small data-i18n="kimiDescription">Official partner · Kimi K3</small></span></label>
+            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi"><span class="provider-icon">K</span><span><strong>Kimi API</strong><small data-i18n="kimiDescription">Official partner · Kimi K3</small></span></label>
             <label class="provider-card"><input type="radio" name="provider" value="codex-cli"><span class="provider-icon">C</span><span><strong>Codex CLI</strong><small data-i18n="codexDescription">Install automatically or use your account</small></span></label>
             <label class="provider-card"><input type="radio" name="provider" value="claude-cli"><span class="provider-icon">A</span><span><strong>Claude CLI</strong><small data-i18n="claudeDescription">Install automatically or use your account</small></span></label>
           </div>
@@ -62,6 +63,14 @@
           </div>
           <label><span data-i18n="baseUrl">API base URL</span><input name="apiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1"></label>
           <label><span data-i18n="apiKey">API key</span><span class="input-with-badge"><input name="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"><small id="savedKeyBadge" hidden data-i18n="savedSecurely">Saved securely</small></span><small class="field-help" data-i18n="apiKeyHelp">Stored with operating-system encryption and never exposed to the canvas page.</small></label>
+        </section>
+
+        <section class="provider-section" data-provider-panel="kimi-cli" hidden>
+          <div class="cli-notice"><span class="cli-notice-copy"><strong data-i18n="kimiCliRequired">Use your existing Kimi Code CLI login.</strong><span data-i18n="kimiCliInstallHelp">PenEcho can install the official Kimi Code CLI, then use its existing login session.</span></span><span class="cli-actions"><button class="inline-primary" type="button" data-install-cli="kimi-cli" data-i18n="install">Install</button><a class="inline-secondary" href="https://github.com/MoonshotAI/kimi-code" target="_blank" rel="noreferrer" data-i18n="installGuide">Install guide</a></span></div>
+          <div class="field-row two-column">
+            <label><span data-i18n="modelOptional">Model (optional)</span><input name="kimiCliModel" autocomplete="off" spellcheck="false" placeholder="Use Kimi CLI default"></label>
+            <label><span data-i18n="pathOptional">Executable path (optional)</span><input name="kimiCliPath" autocomplete="off" spellcheck="false" placeholder="kimi"></label>
+          </div>
         </section>
 
         <section class="provider-section" data-provider-panel="codex-cli" hidden>

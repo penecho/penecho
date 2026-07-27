@@ -10,7 +10,7 @@ const {
   maybeUpdateOnStart,
   runNpmGlobalUpdate,
   updateCheckAllowed,
-} = require("../update.js");
+} = require("../src/cli/update.js");
 
 function capture() {
   let value = "";

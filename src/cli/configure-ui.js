@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const PROVIDERS = {
+  kimi: "kimi-cli",
   claude: "claude-cli",
   codex: "codex-cli",
   api: "api",
@@ -49,6 +50,13 @@ function discoverConfiguredModel(provider, configuration) {
   }
   if (provider === PROVIDERS.claude) {
     return readJsonModel(path.join(home, ".claude", "settings.json")) || readJsonModel(path.join(home, ".claude.json"));
+  }
+  if (provider === PROVIDERS.kimi) {
+    try {
+      const text = fs.readFileSync(path.join(home, ".kimi-code", "config.toml"), "utf8"),
+        match = text.match(/^\s*default_model\s*=\s*["']([^"']+)["']/m);
+      return cleanText(match?.[1]);
+    } catch { return ""; }
   }
   return "";
 }
@@ -107,9 +115,16 @@ function numberValidator(label, minimum, maximum, integer = false) {
 
 async function chooseModel(ui, provider, configuration) {
   const env = configuration.env,
-    current = cleanText(provider === PROVIDERS.codex ? env.CODEX_CLI_MODEL : env.CLAUDE_CLI_MODEL),
+    current = cleanText(provider === PROVIDERS.kimi ? env.KIMI_CLI_MODEL : provider === PROVIDERS.codex ? env.CODEX_CLI_MODEL : env.CLAUDE_CLI_MODEL),
     detected = discoverConfiguredModel(provider, configuration);
-  const choices = provider === PROVIDERS.codex
+  const choices = provider === PROVIDERS.kimi
+    ? [
+        { name:"Use the Kimi Code CLI default", value:"", description:"Do not pass an explicit model." },
+        ...(current ? [{ name:`Current PenEcho model: ${current}`, value:current }] : []),
+        ...(detected ? [{ name:`Detected Kimi model: ${detected}`, value:detected, description:"Read from ~/.kimi-code/config.toml." }] : []),
+        { name:"Enter a model manually…", value:"__manual__", description:"Use any model alias supported by your installed Kimi CLI." },
+      ]
+    : provider === PROVIDERS.codex
     ? [
         { name:"Use the Codex CLI default", value:"", description:"Do not pass an explicit model." },
         ...(current ? [{ name:`Current PenEcho model: ${current}`, value:current }] : []),
@@ -133,17 +148,19 @@ async function chooseModel(ui, provider, configuration) {
 }
 
 async function chooseEffort(ui, provider, current, format = "") {
-  const isCodex = provider === PROVIDERS.codex, isClaude = provider === PROVIDERS.claude,
-    defaultValue = current || (format === "anthropic" ? "medium" : isClaude ? "max" : "xhigh");
+  const isKimi = provider === PROVIDERS.kimi, isCodex = provider === PROVIDERS.codex, isClaude = provider === PROVIDERS.claude,
+    defaultValue = current || (format === "anthropic" ? "medium" : isKimi ? "high" : isClaude ? "max" : "xhigh");
   const levels = isCodex
     ? [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (maximum for Codex)"]]
-    : isClaude
+    : isKimi
+      ? [["low","Low"],["high","High (recommended)"],["max","Max"]]
+      : isClaude
       ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium"],["high","High"],["max","Max"]]
       : format === "anthropic"
         ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended)"],["high","High"],["max","Max"]]
         : [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (OpenAI-compatible maximum)"],["max","Max"]];
   const choices = [
-    ...((isCodex || isClaude) ? [{ name:`Use the ${isCodex ? "Codex" : "Claude"} CLI default`, value:"", description:"Do not pass an explicit effort." }] : []),
+    ...((isKimi || isCodex || isClaude) ? [{ name:`Use the ${isKimi ? "Kimi" : isCodex ? "Codex" : "Claude"} CLI default`, value:"", description:"Do not pass an explicit effort." }] : []),
     ...levels.map(([value, name]) => ({ name, value })),
     ...(current && !levels.some(([value]) => value === current) ? [{ name:`Current custom value: ${current}`, value:current }] : []),
     { name:"Enter a value manually…", value:"__manual__", description:"For model-specific or future effort levels." },
@@ -154,9 +171,9 @@ async function chooseEffort(ui, provider, current, format = "") {
 }
 
 async function finishProviderConfiguration(ui, configuration, values, options) {
-  const isCodex = values.AI_PROVIDER === PROVIDERS.codex;
+  const isCli = [PROVIDERS.kimi, PROVIDERS.codex, PROVIDERS.claude].includes(values.AI_PROVIDER);
   const action = await ui.select("Action", [
-    { name:"Test & Save", value:"save", description:isCodex ? "Save, then quickly verify the CLI login and selected model without inference." : "Save first, then send one small real model request." },
+    { name:"Test & Save", value:"save", description:isCli ? "Save, then verify the local CLI executable without making a model request." : "Save first, then send one small real model request." },
     { name:"Cancel", value:"cancel", description:"Discard these changes and return." },
   ], "save");
   if (action === "cancel") return false;
@@ -180,6 +197,18 @@ async function configureClaude(ui, configuration, options) {
   return finishProviderConfiguration(ui, configuration, {
     AI_PROVIDER:PROVIDERS.claude,
     CLAUDE_CLI_MODEL:model,
+    AI_EFFORT:effort,
+  }, options);
+}
+
+async function configureKimi(ui, configuration, options) {
+  ui.header("Kimi CLI", "Main menu  ›  LLM source  ›  Kimi CLI",
+    "Kimi Code CLI runs locally. PenEcho does not install or log in for you.\nmacOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\nWindows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\nThen run: kimi --version; kimi login\nOfficial guide: https://github.com/MoonshotAI/kimi-code");
+  const model = await chooseModel(ui, PROVIDERS.kimi, configuration),
+    effort = await chooseEffort(ui, PROVIDERS.kimi, cleanText(configuration.env.AI_EFFORT));
+  return finishProviderConfiguration(ui, configuration, {
+    AI_PROVIDER:PROVIDERS.kimi,
+    KIMI_CLI_MODEL:model,
     AI_EFFORT:effort,
   }, options);
 }
@@ -240,7 +269,7 @@ async function configureSettings(ui, configuration, options) {
     timeout = cleanText(await ui.input("Unified model timeout in seconds", cleanText(env.AI_TIMEOUT_SECONDS) || legacyTimeout || "180", numberValidator("Timeout", 10, 600, true))),
     currentImageFormat = ["webp","png"].includes(cleanText(env.PENECHO_AI_IMAGE_FORMAT).toLowerCase()) ? cleanText(env.PENECHO_AI_IMAGE_FORMAT).toLowerCase() : "webp",
     imageFormat = await ui.select("Image format sent to the model", [
-      { name:"WebP (recommended, default)", value:"webp", description:"Lossless and usually much smaller; applies to API, Codex CLI, and Claude CLI." },
+      { name:"WebP (recommended, default)", value:"webp", description:"Lossless and usually much smaller; applies to API, Kimi CLI, Codex CLI, and Claude CLI." },
       { name:"PNG", value:"png", description:"Send the original lossless canvas image without conversion." },
     ], currentImageFormat),
     trace = await ui.confirm("Record complete AI request details", /^(?:1|true|yes|on)$/i.test(cleanText(env.PENECHO_REQUEST_TRACE))),
@@ -254,7 +283,7 @@ async function configureSettings(ui, configuration, options) {
     ]), currentHost),
     host = hostChoice === "__manual__" ? cleanText(await ui.input("Host or interface address", currentHost, textValidator("Host"))) : hostChoice,
     port = cleanText(await ui.input("Listening port", cleanText(env.PORT) || "3888", numberValidator("Port", 0, 65535, true))),
-    autoDelay = cleanText(await ui.input("Initial Auto AI delay in seconds", cleanText(env.AUTO_AI_DELAY_SECONDS) || "1.2", numberValidator("Auto AI delay", 0, 10)));
+    autoDelay = cleanText(await ui.input("Initial Auto AI delay in seconds", cleanText(env.AUTO_AI_DELAY_SECONDS) || "5", numberValidator("Auto AI delay", 0, 10)));
   ui.note("Auto AI delay", "This is the startup value. It can also be changed directly on the canvas.");
   const action = await ui.select("Action", [
     { name:"Save settings", value:"save" },
@@ -284,6 +313,7 @@ async function llmSourceMenu(ui, configuration, options, directProvider = "") {
       ui.header("LLM source", "Main menu  ›  LLM source",
         `Current source: ${configuration.env.AI_PROVIDER || "not configured"}`);
       requested = await ui.select("Select an LLM source", [
+        { name:"Kimi CLI", value:PROVIDERS.kimi, description:"Use your authenticated local Kimi Code CLI installation." },
         { name:"Claude CLI", value:PROVIDERS.claude, description:"Use your authenticated Claude Code installation." },
         { name:"Codex CLI", value:PROVIDERS.codex, description:"Use your authenticated OpenAI Codex CLI installation." },
         { name:"API", value:PROVIDERS.api, description:"Use an OpenAI- or Anthropic-compatible HTTP API." },
@@ -291,7 +321,8 @@ async function llmSourceMenu(ui, configuration, options, directProvider = "") {
       ], configuration.env.AI_PROVIDER || PROVIDERS.codex);
     }
     if (requested === "__back__") return;
-    if (requested === PROVIDERS.claude) await configureClaude(ui, configuration, options);
+    if (requested === PROVIDERS.kimi) await configureKimi(ui, configuration, options);
+    else if (requested === PROVIDERS.claude) await configureClaude(ui, configuration, options);
     else if (requested === PROVIDERS.codex) await configureCodex(ui, configuration, options);
     else if (requested === PROVIDERS.api) await configureApi(ui, configuration, options);
     if (directProvider) return;
@@ -311,7 +342,7 @@ async function runConfigureMenu(configuration, options = {}) {
     ui.header("Main menu", "Main menu",
       `Configuration file: ${configuration.configFile}\nCurrent LLM source: ${configuration.env.AI_PROVIDER || "not configured"}`);
     const action = await ui.select("Choose a section", [
-      { name:"LLM source", value:"llm", description:"Configure Claude CLI, Codex CLI, or an HTTP API." },
+      { name:"LLM source", value:"llm", description:"Configure Kimi CLI, Claude CLI, Codex CLI, or an HTTP API." },
       { name:"Settings", value:"settings", description:"Timeout, model image format, request recording, network, port, and Auto AI delay." },
       { name:"Exit", value:"exit" },
     ], "llm");

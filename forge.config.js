@@ -2,9 +2,22 @@
 
 const path = require("node:path");
 const pkg = require("./package.json");
+const desktopTools = require("./tools/electron/package.json");
 
 const ROOT = __dirname;
 const ICON = path.join(ROOT, "build", "icons", "penecho");
+const DESKTOP_TOOLS = path.join(ROOT, "tools", "electron");
+const ELECTRON_VERSION = desktopTools.devDependencies.electron;
+const desktopModule = name => {
+  try {
+    return require.resolve(name, { paths:[DESKTOP_TOOLS] });
+  } catch (error) {
+    if (error && error.code === "MODULE_NOT_FOUND") {
+      throw new Error(`Desktop build dependencies are missing. Run "npm run desktop:deps" before packaging. (${name})`);
+    }
+    throw error;
+  }
+};
 const hasAppleNotarization = Boolean(
   process.env.MAC_CODESIGN_IDENTITY && process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID,
 ), hasWindowsCertificate = Boolean(process.env.WINDOWS_CERTIFICATE_FILE && process.env.WINDOWS_CERTIFICATE_PASSWORD),
@@ -52,6 +65,7 @@ module.exports = {
     ignore:[
       /^\/\.git(?:\/|$)/,
       /^\/\.github(?:\/|$)/,
+      /^\/tools(?:\/|$)/,
       /^\/out(?:\/|$)/,
       /^\/release(?:\/|$)/,
       /^\/coverage(?:\/|$)/,
@@ -61,9 +75,15 @@ module.exports = {
     ],
   },
   rebuildConfig:{ force:true },
+  hooks:{
+    readPackageJson:(_forgeConfig, packageJson) => ({
+      ...packageJson,
+      devDependencies:{ ...packageJson.devDependencies, electron:ELECTRON_VERSION },
+    }),
+  },
   makers:[
     {
-      name:"@electron-forge/maker-dmg",
+      name:desktopModule("@electron-forge/maker-dmg"),
       platforms:["darwin"],
       config:{
         name:`PenEcho-${pkg.version}`,
@@ -73,12 +93,12 @@ module.exports = {
       },
     },
     {
-      name:"@electron-forge/maker-zip",
+      name:desktopModule("@electron-forge/maker-zip"),
       platforms:["darwin"],
       config:{},
     },
     {
-      name:"@electron-forge/maker-squirrel",
+      name:desktopModule("@electron-forge/maker-squirrel"),
       platforms:["win32"],
       config:{
         name:"penecho",

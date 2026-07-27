@@ -48,15 +48,31 @@
         <button id="tourReplayBtn" class="tour-replay-button" type="button" data-i18n-aria="tourReplay" aria-label="Feature tour" data-i18n-title="tourReplay" title="Feature tour">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z"/></svg>
         </button>
+        <span id="canvasFileActions" class="canvas-file-actions">
+          <button id="newCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="newCanvas" aria-label="New canvas" data-i18n-title="newCanvas" title="New canvas">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg>
+          </button>
+          <button id="saveCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="saveCanvas" aria-label="Save canvas" data-i18n-title="saveCanvas" title="Save canvas">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
+          </button>
+          <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
+          </button>
+          <button id="historyBtn" class="icon-button" type="button" data-i18n-aria="history" aria-label="Local history" data-i18n-title="history" title="Local history" aria-expanded="false" aria-controls="historyPanel">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
+          </button>
+        </span>
       </header>
 
       <nav class="toolbar" data-i18n-aria="boardTools" aria-label="Board tools">
         <div class="tool-group primary-tools">
+          <div id="aiToolsSection" class="ai-tools-section" role="group" data-i18n-aria="aiTools" aria-label="AI tools">
+            <span class="ai-section-label" aria-hidden="true">AI</span>
           <div id="autoControl" class="auto-control">
-            <button id="auto" class="active" type="button" aria-pressed="true" aria-expanded="false" aria-controls="autoDelayPopover" data-i18n-aria="autoAI" aria-label="Auto AI" data-i18n-title="autoAI" title="Auto AI"><span id="autoLabel">Auto AI (1.2s)</span></button>
+            <button id="auto" class="active" type="button" aria-pressed="true" aria-expanded="false" aria-controls="autoDelayPopover" data-i18n-aria="autoAI" aria-label="Auto AI" data-i18n-title="autoAI" title="Auto AI"><span id="autoLabel">Auto (5s)</span></button>
             <div id="autoDelayPopover" class="auto-delay-popover" hidden>
-              <label for="autoDelayRange"><span data-i18n="autoDelay">Auto AI delay</span><output id="autoDelayValue" for="autoDelayRange">1.2 s</output></label>
-              <input id="autoDelayRange" type="range" min="0" max="10" step="0.1" value="1.2" data-i18n-aria="autoDelay" aria-label="Auto AI delay">
+              <label for="autoDelayRange"><span data-i18n="autoDelay">Auto AI delay</span><output id="autoDelayValue" for="autoDelayRange">5 s</output></label>
+              <input id="autoDelayRange" type="range" min="0" max="10" step="0.1" value="5" data-i18n-aria="autoDelay" aria-label="Auto AI delay">
             </div>
           </div>
           <div id="effortControl" class="effort-control" data-effort="medium">
@@ -82,10 +98,7 @@
               <span data-i18n="plugins">Plugins</span>
             </button>
           </div>
-          <button id="gridToggle" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="grid" aria-label="Canvas grid" data-i18n-title="grid" title="Canvas grid">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4Z"/><path d="M4 10h16M10 4v16M16 4v16M4 16h16"/></svg>
-          </button>
-          <label><span data-i18n="aiFont">AI font</span>
+          <label><span data-i18n="font">Font</span>
             <select id="aiFont" data-i18n-aria="aiFont" aria-label="AI font">
               <option value="ui-rounded, system-ui, sans-serif" data-i18n="fontRounded">Rounded</option>
               <option value="Segoe Print, Comic Sans MS, cursive" data-i18n="fontHand">Handwritten</option>
@@ -93,17 +106,21 @@
               <option value="system-ui, sans-serif" data-i18n="fontSans">Sans serif</option>
             </select>
           </label>
+          </div>
           <div class="mode-tools">
-            <button data-mode="pen" class="active icon-button" data-i18n-aria="pen" aria-label="Pen" data-i18n-title="pen" title="Pen">
+            <button data-mode="hand" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="hand" aria-label="Hand tool: move canvas and objects" data-i18n-title="hand" title="Hand tool: move canvas and objects">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v8"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M6 13.5 5.9 12a2 2 0 0 0-4 0c0 .7.1 1.5.2 2l.8 5a6 6 0 0 0 6 5h2a8 8 0 0 0 8-8v-5a2 2 0 1 0-4 0v1"/></svg>
+            </button>
+            <button data-mode="pen" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="pen" aria-label="Pen" data-i18n-title="pen" title="Pen">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
             </button>
-            <button data-mode="eraser" class="icon-button" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
+            <button data-mode="eraser" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
             </button>
-            <button id="lassoToolBtn" data-mode="select" class="icon-button" data-i18n-aria="select" aria-label="Lasso select" data-i18n-title="select" title="Lasso select">
+            <button id="lassoToolBtn" data-mode="select" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="select" aria-label="Lasso select" data-i18n-title="select" title="Lasso select">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 5.5c3.2 3.1-.8 7.5-5.1 8.8-4.9 1.5-11.2-.1-10.2-4.5.8-3.8 6.6-5.7 11.2-4.6 4.1 1 6.4 5 4.4 8.5-1.4 2.5-4.8 3.8-7.8 4.1"/><path d="m8 16 3 1.8-2.3 2.6"/></svg>
             </button>
-            <button id="textToolBtn" data-mode="text" class="icon-button" data-i18n-aria="text" aria-label="Text input" data-i18n-title="text" title="Text input">
+            <button id="textToolBtn" data-mode="text" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="text" aria-label="Text input" data-i18n-title="text" title="Text input">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 8h8M12 8v8M9 16h6"/></svg>
             </button>
             <button id="imagePickerBtn" class="icon-button" type="button" data-i18n-aria="addImage" aria-label="Add image or photo" data-i18n-title="addImage" title="Add image or photo">
@@ -147,27 +164,21 @@
           <button data-action="redo" class="icon-button" data-i18n-aria="redo" aria-label="Redo" data-i18n-title="redo" title="Redo">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"/><path d="M20 12h-9a6 6 0 0 0-6 6"/></svg>
           </button>
-          <button id="fullscreenBtn" class="icon-button" type="button" data-i18n-aria="fullscreen" aria-label="Fullscreen" data-i18n-title="fullscreen" title="Fullscreen" aria-pressed="false">
-            <svg class="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
-            <svg class="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8H3V3M16 8h5V3M8 16H3v5M16 16h5v5"/></svg>
-          </button>
+          <span class="view-tools">
+            <button id="fullscreenBtn" class="icon-button" type="button" data-i18n-aria="fullscreen" aria-label="Fullscreen" data-i18n-title="fullscreen" title="Fullscreen" aria-pressed="false">
+              <svg class="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+              <svg class="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8H3V3M16 8h5V3M8 16H3v5M16 16h5v5"/></svg>
+            </button>
+            <button id="gridToggle" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="grid" aria-label="Canvas grid" data-i18n-title="grid" title="Canvas grid">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4Z"/><path d="M4 10h16M10 4v16M16 4v16M4 16h16"/></svg>
+            </button>
+          </span>
           <button id="clearCanvasBtn" data-action="clear" class="danger icon-button utility-icon" type="button" data-i18n-aria="clear" aria-label="Clear" data-i18n-title="clear" title="Clear">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
           </button>
           <button id="debugBtn" class="icon-button utility-icon" type="button" data-i18n-aria="debug" aria-label="Debug" data-i18n-title="debug" title="Debug" aria-expanded="false" aria-controls="debugPanel">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8v6a4 4 0 0 1-8 0V9Z"/><path d="M9 9V7a3 3 0 0 1 6 0v2M4 11h4M16 11h4M5 17l3-1M16 16l3 1M10 5 8 3M14 5l2-2"/></svg>
           </button>
-          <span id="canvasFileActions" class="canvas-file-actions">
-            <button id="newCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="newCanvas" aria-label="New canvas" data-i18n-title="newCanvas" title="New canvas">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg>
-            </button>
-            <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
-            </button>
-            <button id="historyBtn" class="icon-button" type="button" data-i18n-aria="history" aria-label="Local history" data-i18n-title="history" title="Local history" aria-expanded="false" aria-controls="historyPanel">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
-            </button>
-          </span>
         </div>
       </nav>
     </section>
@@ -181,7 +192,8 @@
       <p data-i18n="historyDescription">Stores confirmed canvas content only. Unconfirmed AI drafts are excluded.</p>
       <div class="history-save-row">
         <input id="historyName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)" data-i18n-aria="snapshotName" aria-label="Snapshot name">
-        <button id="historySave" type="button" data-i18n="saveSnapshot">Save canvas</button>
+        <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
+        <button id="historySave" type="button" data-i18n="saveSnapshot">Save New</button>
         <button id="historyNew" type="button" data-i18n="newCanvas">New</button>
         <div id="historyNotice" class="history-notice" role="status" aria-live="polite" aria-atomic="true"></div>
       </div>
@@ -290,7 +302,7 @@
             <button type="button" role="menuitem" class="radial-action radial-plot" data-ai-action="plot" data-i18n="plot" data-i18n-aria="plot" aria-label="Plot">Plot</button>
           </div>
         </div>
-        <div id="tip" data-i18n="tip">Stylus writes · finger pans · pinch zooms · wheel zooms · middle or Alt drag pans</div>
+        <div id="tip" data-i18n="tip">Pan: middle-mouse drag, Hand tool, or one finger · Zoom: wheel or pinch</div>
       </section>
     </section>
 

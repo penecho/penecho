@@ -189,6 +189,9 @@ PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where i
 - **Images and photos on the canvas.** Add pictures through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.
 - **Long-press editing with clear actions.** Long-press an image to move or resize it again, then choose Place, Merge, or Delete. Place keeps the image floating under your ink so you can draw over it; Merge turns it into real strokes you can erase.
 - **No surprise AI requests.** Images never start AI requests on their own; if you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images participate in undo and redo, local snapshots, and PNG export.
+- **Direct canvas navigation.** The Hand tool pans the canvas and moves images, animations, and live widgets without starting an AI request.
+- **Copyable professional flowcharts.** The Flowchart plugin renders process, decision, architecture, sequence, and state diagrams, with a trusted toolbar button that copies portable Mermaid source.
+- **Visible online image results.** The Image Search plugin finds up to five relevant images from Wikimedia Commons by default and displays the actual images in a responsive layout with source and license context.
 
 ## What's new in 0.7.0
 

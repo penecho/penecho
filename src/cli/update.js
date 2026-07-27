@@ -2,7 +2,7 @@
 
 const readline = require("readline/promises");
 const { spawn } = require("child_process");
-const PACKAGE_JSON = require("./package.json");
+const PACKAGE_JSON = require("../../package.json");
 
 const UPDATE_CHECK_TIMEOUT_MS = 3500;
 const UPDATE_SKIP_ENV = "PENECHO_SKIP_UPDATE_CHECK";

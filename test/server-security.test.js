@@ -186,7 +186,7 @@ function weatherPluginDescriptor() {
 }
 
 test("server uses applied global configuration and one timeout for every executor", () => {
-  const server = fs.readFileSync(path.join(ROOT, "server.js"), "utf8"), packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"), packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.doesNotMatch(server, /loadEnv\(path\.join\(ROOT, ["']\.env["']\)\)/);
   assert.match(server, /process\.env\.AI_TIMEOUT_SECONDS/);
   assert.match(server, /MODEL_TIMEOUT_MS/);
@@ -195,8 +195,9 @@ test("server uses applied global configuration and one timeout for every executo
   assert.doesNotMatch(server, /offerWindowsLanAccess|listenErrorMessage/);
   assert.doesNotMatch(packageJson.files.join("\n"), /^\.env(?:\.|$)/m);
   assert.equal(packageJson.scripts.start, "node cli.js");
-  assert.ok(packageJson.files.includes("typeset.js"));
-  assert.ok(packageJson.files.includes("update.js"));
+  assert.ok(packageJson.files.includes("src/"));
+  assert.equal(fs.existsSync(path.join(ROOT, "src", "server", "typeset.js")), true);
+  assert.equal(fs.existsSync(path.join(ROOT, "src", "cli", "update.js")), true);
 });
 
 test("Codex CLI mode starts with no extra access or model-provider settings", { timeout: 10000 }, async () => {
@@ -230,6 +231,26 @@ test("Claude CLI mode sends the canvas to the authenticated local CLI with the s
     assert.equal(configuredResponse.status,200);
     const configured=JSON.parse(await fs.promises.readFile(record,"utf8"));
     assert.equal(configured.args[configured.args.indexOf("--effort")+1],"max");
+  } finally {
+    await stopServer(child);
+    await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and temporary canvas reference", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-server-kimi-")),fakeCli=path.join(directory,"fake-kimi.js"),record=path.join(directory,"record.json");
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],image=/@(canvas\\.(?:png|webp))/.exec(prompt)?.[1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,imageExists:Boolean(image&&fs.existsSync(path.join(process.cwd(),image))),agent:fs.readFileSync(agentFile,"utf8")}));process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"answer","observedText":"hi","message":"hello","commands":[]}'}]})+"\\n");\n`);
+  const {child,origin}=await startServer(serverEnv({AI_PROVIDER:"kimi-cli",KIMI_CLI_PATH:fakeCli,KIMI_CLI_MODEL:"kimi-code/k3",AI_EFFORT:"medium"}));
+  try {
+    const page=await fetch(origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0],response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(validPayload())}),body=await response.json(),saved=JSON.parse(await fs.promises.readFile(record,"utf8"));
+    assert.equal(response.status,200);
+    assert.equal(body.message,"hello");
+    assert.equal(saved.imageExists,true);
+    assert.equal(saved.args[saved.args.indexOf("--output-format")+1],"stream-json");
+    assert.ok(saved.args.includes("--agent-file"));
+    assert.match(saved.agent,/tools: \[\]/);
+    assert.match(saved.agent,/subagents: \[\]/);
+    assert.equal(saved.args[saved.args.indexOf("--model")+1],"kimi-code/k3");
   } finally {
     await stopServer(child);
     await fs.promises.rm(directory,{recursive:true,force:true});
@@ -318,6 +339,9 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.match(request.system,/within approximately 4096 tokens/);
     assert.match(request.system,/no more than roughly 7000 tokens/);
     assert.match(request.system,/Reserve sufficient output budget for one complete valid JSON response/);
+    const schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
+    assert.ok(schemaStart > request.system.indexOf("Reserve sufficient output budget"));
+    assert.doesNotThrow(() => JSON.parse(request.system.slice(schemaStart)));
   } finally { await stopServer(anthropicServer.child); await new Promise(resolve=>anthropic.server.close(resolve)); }
 
   const disabled=await startApiServer(undefined,{format:"anthropic"}),disabledServer=await startServer(apiServerEnv(disabled.origin,{AI_API_FORMAT:"anthropic",AI_API_URL:disabled.origin,AI_EFFORT:"max"}));
@@ -546,6 +570,7 @@ test("widget host CSP contains only exact declared HTTPS origins", { timeout:100
     const response = await fetch(`${origin}/widget-host.html?${query}`), policy = response.headers.get("content-security-policy");
     assert.equal(response.status, 200);
     assert.match(policy, /connect-src https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
+    assert.match(policy, /img-src data: blob: https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
     assert.match(policy, /frame-ancestors 'self'/);
     assert.doesNotMatch(policy, /connect-src[^;]*\*/);
     const offlinePolicy = (await fetch(`${origin}/widget-host.html`)).headers.get("content-security-policy");
@@ -573,14 +598,15 @@ test("widget host CSP contains only exact declared HTTPS origins", { timeout:100
 });
 
 test("local plugin discovery is constrained and widget prompting is conditional", () => {
-  const source = fs.readFileSync(path.join(ROOT, "server.js"), "utf8"),
+  const source = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const ACTIVE_SYSTEM_PROMPT_BASE/.exec(source)?.[1] || "";
   assert.doesNotMatch(basePrompt, /html_widget|enabledPlugins/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin documents/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_SYSTEM_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
   assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?\^\[a-z0-9\][\s\S]*?MAX_LOCAL_PLUGINS/);
-  assert.match(source, /const PRIVATE_PLUGIN_DIRECTORY = path\.join\(PLUGIN_DIRECTORY, "private"\)/);
+  assert.match(source, /process\.env\.PENECHO_PRIVATE_PLUGIN_DIR[\s\S]*?path\.resolve\(process\.env\.PENECHO_PRIVATE_PLUGIN_DIR\)/);
+  assert.match(source, /STATE_DIRECTORY[\s\S]*?path\.join\(STATE_DIRECTORY, "plugins", "private"\)/);
   assert.match(source, /function localPluginCatalog\(\)[\s\S]*?PRIVATE_PLUGIN_DIRECTORY[\s\S]*?plugins\/private/);
   assert.match(source, /function saveLocalPluginDocument\([\s\S]*?BUILTIN_PLUGIN_IDS\.has\(manifest\.id\)[\s\S]*?mkdirSync\(PRIVATE_PLUGIN_DIRECTORY/);
   assert.match(source, /function deleteLocalPlugin\([\s\S]*?path\.join\(PRIVATE_PLUGIN_DIRECTORY/);
@@ -588,6 +614,42 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document\)/);
   assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 3000 UTF-8 bytes/);
   assert.match(source, /url\.pathname === "\/api\/plugins\/improve"[\s\S]*?improvePluginDocument/);
+});
+
+test("personal plugins use the writable desktop directory and remain fetchable", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),
+    privateDirectory=path.join(stateDir,"desktop-plugins","private"),
+    upstream=await startApiServer(),
+    running=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:stateDir,PENECHO_PRIVATE_PLUGIN_DIR:privateDirectory})),
+    document=fs.readFileSync(path.join(ROOT,"public","plugins","general.md"),"utf8")
+      .replace(/^id: general$/m,"id: desktop-private-test")
+      .replace(/^name: General HTML$/m,"name: Desktop Private Test")
+      .replace(/^# General HTML$/m,"# Desktop Private Test");
+  try {
+    assert.equal(fs.existsSync(privateDirectory),false);
+    const response=await fetch(`${running.origin}/api/plugins`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:JSON.stringify({document}),
+    }),body=await response.json();
+    assert.equal(response.status,201);
+    assert.equal(body.plugin.path,"plugins/private/desktop-private-test.md");
+    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test.md"),"utf8").trim(),document.trim());
+
+    const catalog=await fetch(`${running.origin}/api/plugins`).then(value=>value.json()),
+      entry=catalog.plugins.find(plugin=>plugin.path==="plugins/private/desktop-private-test.md");
+    assert.equal(entry?.builtIn,false);
+    const served=await fetch(`${running.origin}/${entry.path}`);
+    assert.equal(served.status,200);
+    assert.equal((await served.text()).trim(),document.trim());
+
+    const removed=await fetch(`${running.origin}/api/plugins/desktop-private-test`,{method:"DELETE",headers:{Origin:running.origin}});
+    assert.equal(removed.status,200);
+    assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test.md")),false);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
 });
 
 test("Studio client persona is accepted and exact-match enforced", { timeout:20000 }, async () => {
@@ -787,6 +849,8 @@ test("Anthropic API mode labels the lossless WebP payload with its matching medi
     const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,200);
     assert.equal(body.attempts,1);
+    assert.equal(body.commands[0]?.tool,"write_text");
+    assert.equal(body.commands[0]?.text,"hello");
     assert.equal(upstream.requests.length,1);
     const outbound=JSON.parse(upstream.requests[0]),image=outbound.messages[0].content.find(part=>part.type==="image");
     assert.equal(image.source.media_type,"image/webp");
@@ -1077,15 +1141,6 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
   await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path");let input="";process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>{fs.writeFileSync(path.join(__dirname,"prompt.txt"),input);const at=process.argv.indexOf("-o");fs.writeFileSync(process.argv[at+1],'{"intent":"none","commands":[]}');});\n`);
   const { child, origin, stateDir } = await startServer(serverEnv({ PENECHO_DEBUG_ARTIFACTS: "true", CODEX_CLI_PATH: fakeCli }));
   try {
-    const events = [
-      { event: "ai-response", details: { requestId: "10000000-0000-4000-8000-000000000001", intent: "answer", rawCount: 1, attempts: 1, observedText: marker, text: marker, latex: marker } },
-      { event: "ai-error", details: { requestId: "10000000-0000-4000-8000-000000000002", action: "answer", error: marker, nested: { value: marker } } },
-      { event: "tool-error", details: { requestId: "10000000-0000-4000-8000-000000000003", tool: "write_text", error: marker } },
-    ];
-    for (const event of events) {
-      const response = await fetch(`${origin}/api/debug/client`, { method: "POST", headers: { "Content-Type": "application/json", Origin:origin }, body: JSON.stringify(event) });
-      assert.equal(response.status, 204);
-    }
     const page = await fetch(origin), cookie = page.headers.get("set-cookie")?.split(";", 1)[0], malformed = validPayload();
     malformed.userAction = { value: marker };
     const malformedResponse = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookie }, body: JSON.stringify(malformed) });
@@ -1120,7 +1175,6 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
     assert.equal(atlasMetadata.includes(marker), false);
     const log = await fetch(`${origin}/api/debug/log`), text = await log.text();
     assert.equal(log.status, 200);
-    assert.match(text, /10000000-0000-4000-8000-000000000001/);
     assert.equal(text.includes(marker), false);
   } finally {
     await stopServer(child);
@@ -1129,7 +1183,7 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
 });
 
 test("static page keeps strict styles while allowing the pinned MathJax CDN", () => {
-  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"server.js"),"utf8");
+  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
   assert.doesNotMatch(html, /\sstyle=/i);
   assert.match(css, /\.color-blue\s*\{/);
   assert.doesNotMatch(app, /\.style\.|setAttribute\(\s*["']style["']/);
@@ -1137,21 +1191,30 @@ test("static page keeps strict styles while allowing the pinned MathJax CDN", ()
   assert.match(html, /integrity="sha384-KKWa9jJ1MZvssLeOoXG6FiOAZfAgmzsIIfw8BXwI9\+kYm0lPCbC6yTQPBC00F1\/L"/);
   assert.match(html, /crossorigin="anonymous"/);
   assert.match(config, /fontCache:\s*"none"/);
+  assert.doesNotMatch(config, /renderActions/);
   assert.match(app, /MathJax\?\.tex2svgPromise/);
   assert.match(server, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
+  for (const hash of [
+    "sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=",
+    "sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=",
+    "sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA=",
+  ]) assert.ok(server.includes(`'${hash}'`), hash);
+  assert.doesNotMatch(server, /style-src 'self' 'unsafe-inline'/);
   assert.doesNotMatch(app, /newClientRequestId|X-PenEcho-Client-Request|X-PenEcho-Replaces/);
+  assert.doesNotMatch(app, /\/api\/debug\/client|stroke-summary|stroke-outside-canvas/);
+  assert.doesNotMatch(server, /\/api\/debug\/client/);
   assert.doesNotMatch(server, /activeCliRequests|pendingCli|cliBusyError|MAX_CONCURRENCY|X-PenEcho-Replaces/);
 });
 
 test("API mode uses one configured key without probes or fallback credentials", () => {
-  const server=fs.readFileSync(path.join(ROOT,"server.js"),"utf8"),cli=fs.readFileSync(path.join(ROOT,"cli.js"),"utf8"),configure=fs.readFileSync(path.join(ROOT,"configure-ui.js"),"utf8");
+  const server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"),cli=fs.readFileSync(path.join(ROOT,"src","cli","main.js"),"utf8"),configure=fs.readFileSync(path.join(ROOT,"src","cli","configure-ui.js"),"utf8");
   for(const source of [server,cli,configure])assert.doesNotMatch(source,/OPENAI_PRO_API_KEY/);
   assert.doesNotMatch(server,/api-health|api-selection|api-runtime-failure|refreshApiConfig|testApiKey|HEALTH_INTERVAL|HEALTH_TIMEOUT/);
   assert.match(server,/providerRequest\(API_KEY,MODEL,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled\)/);
 });
 
 test("client and server contain no aggregate draft rejection budget", () => {
-  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),draw=fs.readFileSync(path.join(ROOT,"public","draw.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"server.js"),"utf8");
+  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),draw=fs.readFileSync(path.join(ROOT,"public","draw.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
   for(const source of [app,draw,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
   assert.doesNotMatch(server,/padded union bounds may total at most|intersect at most 64/);
 });

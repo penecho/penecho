@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const MAX_HTML_LENGTH = 40000,
+    MAX_COPY_TEXT_LENGTH = 16000,
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
     MAX_SNAPSHOT_DATA_URL_LENGTH = 28 * 1024 * 1024,
@@ -8,18 +9,66 @@
     parentOrigin = location.origin,
     rendererUrl = new URL("widget-renderer.js", location.href).href,
     connect = new URL(location.href).searchParams.getAll("connect"),
-    inner = document.createElement("iframe");
+    inner = document.createElement("iframe"),
+    copySourceButton = document.querySelector("#widgetCopySource");
   let initialized = false,
     lastUpdate = 0,
     forwardedDragPointer = null,
     queuedDragMove = null,
     dragMoveFrame = 0,
-    widgetState = { selected:false, scaleX:1, scaleY:1 };
+    widgetState = { selected:false, scaleX:1, scaleY:1 },
+    copySourceText = "";
   const pendingSnapshots = new Map();
 
   inner.setAttribute("sandbox", "allow-scripts");
   inner.setAttribute("title", "Dynamic canvas widget");
   document.body.append(inner);
+  copySourceButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+  copySourceButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!copySourceText) return;
+    let nativeCopy = null;
+    try {
+      nativeCopy = navigator.clipboard?.writeText ? navigator.clipboard.writeText(copySourceText) : null;
+    } catch {}
+    const field = document.createElement("textarea");
+    field.value = copySourceText;
+    field.setAttribute("readonly", "");
+    field.setAttribute("tabindex", "-1");
+    Object.assign(field.style, { position:"fixed", left:"-10000px", top:"0", opacity:"0" });
+    document.body.append(field);
+    try {
+      field.focus({ preventScroll:true });
+    } catch {
+      field.focus();
+    }
+    field.select();
+    field.setSelectionRange(0, field.value.length);
+    let copied = false;
+    try {
+      copied = Boolean(document.execCommand?.("copy"));
+    } catch {}
+    field.remove();
+    try {
+      copySourceButton.focus({ preventScroll:true });
+    } catch {
+      copySourceButton.focus();
+    }
+    if (nativeCopy) {
+      try {
+        await nativeCopy;
+        copied = true;
+      } catch {}
+    }
+    parent.postMessage({ type:"penecho-widget-copy-source-result", copied }, parentOrigin);
+  });
+
+  function updateCopySourceScale() {
+    const scaleX = Math.max(.0001, Number(widgetState.scaleX) || 1),
+      scaleY = Math.max(.0001, Number(widgetState.scaleY) || 1);
+    copySourceButton.style.transform = `scale(${1 / scaleX},${1 / scaleY})`;
+  }
 
   function runtime() {
     const UPDATED = "penecho-widget-updated",
@@ -203,12 +252,61 @@
     function notifyReady() {
       parent.postMessage({ type: UPDATED }, "*");
     }
+    function inlineSvgComputedStyles() {
+      const properties = [
+          "fill", "fill-opacity", "fill-rule",
+          "stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
+          "color", "opacity", "visibility", "display",
+          "font-family", "font-size", "font-style", "font-weight",
+          "text-anchor", "dominant-baseline", "paint-order",
+          "marker-start", "marker-mid", "marker-end",
+          "stop-color", "stop-opacity",
+        ],
+        records = [],
+        backgrounds = [];
+      for (const svg of document.querySelectorAll("svg")) {
+        const background = getComputedStyle(svg).backgroundColor;
+        if (background && background !== "transparent" && !/^rgba\([^)]*,\s*0(?:\.0+)?\s*\)$/.test(background) && !/\/\s*0(?:\.0+)?\s*\)$/.test(background)) {
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("data-penecho-snapshot-background", "");
+          rect.setAttribute("x", "0");
+          rect.setAttribute("y", "0");
+          rect.setAttribute("width", "100%");
+          rect.setAttribute("height", "100%");
+          rect.setAttribute("fill", background);
+          svg.insertBefore(rect, svg.firstChild);
+          backgrounds.push(rect);
+        }
+        for (const element of [svg, ...svg.querySelectorAll("*")]) {
+          const computed = getComputedStyle(element),
+            attributes = [];
+          for (const property of properties) {
+            const value = computed.getPropertyValue(property).trim();
+            if (!value) continue;
+            attributes.push([property, element.hasAttribute(property), element.getAttribute(property)]);
+            element.setAttribute(property, value);
+          }
+          if (attributes.length) records.push([element, attributes]);
+        }
+      }
+      return () => {
+        for (const [element, attributes] of records) {
+          for (const [property, present, value] of attributes) {
+            if (present) element.setAttribute(property, value);
+            else element.removeAttribute(property);
+          }
+        }
+        for (const background of backgrounds) background.remove();
+      };
+    }
     async function snapshot(message) {
+      let restoreSvgStyles = () => {};
       try {
         const requestedWidth = Math.max(1, Number(message.width) || document.documentElement.clientWidth || 1),
           requestedHeight = Math.max(1, Number(message.height) || document.documentElement.clientHeight || 1),
           scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight)));
         if (typeof globalThis.html2canvas !== "function") throw Error("Widget renderer is unavailable");
+        restoreSvgStyles = inlineSvgComputedStyles();
         const canvas = await globalThis.html2canvas(document.documentElement, {
           backgroundColor:null,
           width:requestedWidth,
@@ -219,16 +317,18 @@
           scrollY:0,
           scale,
           logging:false,
-          useCORS:false,
+          useCORS:true,
           allowTaint:false,
           foreignObjectRendering:false,
           penechoDirectRendering:true,
-          imageTimeout:2000,
+          imageTimeout:10000,
         });
         parent.postMessage({ type:"penecho-widget-snapshot", requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height }, "*");
         canvas.width = canvas.height = 1;
       } catch (error) {
         parent.postMessage({ type: "penecho-widget-snapshot-error", requestId: message.requestId, error: error.message }, "*");
+      } finally {
+        restoreSvgStyles();
       }
     }
     addEventListener("message", (event) => {
@@ -250,7 +350,8 @@
 
   function csp() {
     const origins = connect.length ? connect.join(" ") : "'none'";
-    return `default-src 'none'; script-src 'unsafe-inline' ${rendererUrl}; style-src 'unsafe-inline'; connect-src ${origins}; img-src data: blob:; font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    const images = connect.length ? `data: blob: ${connect.join(" ")}` : "data: blob:";
+    return `default-src 'none'; script-src 'unsafe-inline' ${rendererUrl}; style-src 'unsafe-inline'; connect-src ${origins}; img-src ${images}; font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function widgetDocument(html) {
@@ -324,12 +425,23 @@
     if (event.source === parent && event.origin === parentOrigin) {
       if (message?.type === "penecho-widget-init") {
         if (initialized || typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
+        if (message.copyText !== undefined && (typeof message.copyText !== "string" || !message.copyText.trim() || message.copyText.length > MAX_COPY_TEXT_LENGTH)) return;
+        if (message.copyLabel !== undefined && (typeof message.copyLabel !== "string" || !message.copyLabel.trim() || message.copyLabel.length > 80)) return;
         initialized = true;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
+        copySourceText = typeof message.copyText === "string" ? message.copyText.trim() : "";
+        copySourceButton.hidden = !copySourceText;
+        if (copySourceText) {
+          copySourceButton.textContent = String(message.copyLabel || "Copy source").trim();
+          copySourceButton.setAttribute("aria-label", copySourceButton.textContent);
+          copySourceButton.title = copySourceButton.textContent;
+          updateCopySourceScale();
+        }
         inner.srcdoc = widgetDocument(message.html);
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
         widgetState = { selected:message.selected, scaleX:message.scaleX, scaleY:message.scaleY };
+        updateCopySourceScale();
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-snapshot-request" && initialized) {
         const requestedWidth = Number(message.width), requestedHeight = Number(message.height);

@@ -1,6 +1,6 @@
 {
   "name": "penecho",
-  "version": "0.7.1",
+  "version": "0.6.0",
   "description": "Think with AI on a shared canvas for handwriting, equations, and diagrams",
   "productName": "PenEcho",
   "main": "desktop/main.js",
@@ -18,12 +18,8 @@
   "files": [
     "cli.js",
     "server.js",
-    "typeset.js",
-    "update.js",
-    "api-config.js",
-    "configure-ui.js",
-    "codex-cli.js",
-    "claude-cli.js",
+    "src/",
+    "scripts/build-client.js",
     "public/index.html",
     "public/app.js",
     "public/draw.js",
@@ -61,15 +57,22 @@
   "scripts": {
     "start": "node cli.js",
     "dev": "node server.js",
-    "check": "node --check cli.js && node --check server.js && node --check typeset.js && node --check update.js && node --check api-config.js && node --check configure-ui.js && node --check codex-cli.js && node --check claude-cli.js && node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/secret-store.js && node --check desktop/settings-contract.js && node --check desktop/settings/settings.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/widget-host.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
-    "test": "node --test",
+    "build:client": "node scripts/build-client.js",
+    "check:client": "node scripts/build-client.js --check",
+    "prepack": "npm run build:client",
+    "check": "npm run check:client && node --check cli.js && node --check server.js && node --check scripts/build-client.js && node --check src/cli/main.js && node --check src/cli/configure-ui.js && node --check src/cli/update.js && node --check src/server/main.js && node --check src/server/api-config.js && node --check src/server/typeset.js && node --check src/providers/kimi-cli.js && node --check src/providers/kimi-acp.js && node --check src/providers/codex-cli.js && node --check src/providers/claude-cli.js && node --check tools/electron/run-forge.js && node --check tools/mobile/build-mobile.js && node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/secret-store.js && node --check desktop/settings-contract.js && node --check desktop/settings/settings.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/widget-host.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test test",
+    "test": "node --test test",
     "icons": "node scripts/generate-icons.js",
-    "desktop": "electron-forge start",
+    "desktop": "node tools/electron/run-forge.js start",
     "predesktop": "npm run icons",
-    "desktop:package": "npm run icons && electron-forge package",
-    "desktop:make": "npm run icons && electron-forge make",
-    "desktop:make:mac": "npm run icons && electron-forge make --platform=darwin",
-    "desktop:make:windows": "npm run icons && electron-forge make --platform=win32",
+    "desktop:deps": "npm ci --prefix tools/electron",
+    "mobile:deps": "npm ci --prefix tools/mobile",
+    "mobile:apk": "node tools/mobile/build-mobile.js android",
+    "mobile:ipa": "node tools/mobile/build-mobile.js ios",
+    "desktop:package": "npm run icons && node tools/electron/run-forge.js package",
+    "desktop:make": "npm run icons && node tools/electron/run-forge.js make",
+    "desktop:make:mac": "npm run icons && node tools/electron/run-forge.js make --platform=darwin",
+    "desktop:make:windows": "npm run icons && node tools/electron/run-forge.js make --platform=win32",
     "desktop:collect": "node scripts/collect-artifacts.js"
   },
   "engines": {
@@ -80,11 +83,6 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "@electron-forge/cli": "7.11.2",
-    "@electron-forge/maker-dmg": "7.11.2",
-    "@electron-forge/maker-squirrel": "7.11.2",
-    "@electron-forge/maker-zip": "7.11.2",
-    "electron": "43.2.0",
     "png2icons": "2.0.1"
   }
 }

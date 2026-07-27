@@ -9,6 +9,15 @@ const MAX_OUTPUT_BYTES = 256 * 1024;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 const DEFINITIONS = Object.freeze({
+  "kimi-cli":Object.freeze({
+    label:"Kimi Code",
+    urls:Object.freeze({
+      darwin:"https://code.kimi.com/kimi-code/install.sh",
+      win32:"https://code.kimi.com/kimi-code/install.ps1",
+    }),
+    marker:"KIMI_BINARY_BASE",
+    executable:"kimi",
+  }),
   "codex-cli":Object.freeze({
     label:"Codex CLI",
     urls:Object.freeze({
@@ -31,7 +40,7 @@ const DEFINITIONS = Object.freeze({
 
 function definition(provider, platform = process.platform) {
   const result = DEFINITIONS[provider];
-  if (!result) throw new Error("Choose Codex CLI or Claude CLI.");
+  if (!result) throw new Error("Choose Kimi CLI, Codex CLI, or Claude CLI.");
   if (!result.urls[platform]) throw new Error(`${result.label} automatic installation is available on macOS and Windows.`);
   return result;
 }
@@ -48,6 +57,9 @@ function managedCliPath(provider, options = {}) {
   if (!home || !stateDir) throw new Error("Desktop application paths are unavailable.");
   if (provider === "codex-cli") {
     return path.join(stateDir, "tools", "codex", "bin", executableName(item.executable, platform));
+  }
+  if (provider === "kimi-cli") {
+    return path.join(stateDir, "tools", "kimi", "bin", executableName(item.executable, platform));
   }
   return path.join(home, ".local", "bin", executableName(item.executable, platform));
 }
@@ -138,6 +150,10 @@ function installInvocation(provider, script, options = {}) {
     env.CODEX_NON_INTERACTIVE = "1";
     env.CODEX_INSTALL_DIR = path.dirname(managedCliPath(provider, { platform, home, stateDir }));
   }
+  if (provider === "kimi-cli") {
+    env.KIMI_INSTALL_DIR = path.dirname(path.dirname(managedCliPath(provider, { platform, home, stateDir })));
+    env.KIMI_NO_MODIFY_PATH = "1";
+  }
   if (platform === "win32") {
     return {
       command:powershellExecutable(env),
@@ -147,7 +163,7 @@ function installInvocation(provider, script, options = {}) {
     };
   }
   return {
-    command:provider === "claude-cli" ? "/bin/bash" : "/bin/sh",
+    command:["kimi-cli", "claude-cli"].includes(provider) ? "/bin/bash" : "/bin/sh",
     args:[script, ...(provider === "claude-cli" ? ["stable"] : [])],
     env,
     item,
