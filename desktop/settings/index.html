@@ -38,21 +38,28 @@
       <form id="settingsForm" novalidate>
         <fieldset class="provider-fieldset">
           <legend data-i18n="providerLegend">AI provider</legend>
-          <div class="provider-grid">
-            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi-cli"><span class="provider-icon">K</span><span><strong>Kimi CLI</strong><small data-i18n="kimiCliDescription">Use your local Kimi Code login</small></span></label>
-            <label class="provider-card recommended"><input type="radio" name="provider" value="api" checked><span class="provider-icon">API</span><span><strong data-i18n="apiTitle">API</strong><small data-i18n="apiDescription">Recommended · no CLI installation</small></span><em data-i18n="recommended">Recommended</em></label>
-            <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi"><span class="provider-icon">K</span><span><strong>Kimi API</strong><small data-i18n="kimiDescription">Official partner · Kimi K3</small></span></label>
-            <label class="provider-card"><input type="radio" name="provider" value="codex-cli"><span class="provider-icon">C</span><span><strong>Codex CLI</strong><small data-i18n="codexDescription">Install automatically or use your account</small></span></label>
-            <label class="provider-card"><input type="radio" name="provider" value="claude-cli"><span class="provider-icon">A</span><span><strong>Claude CLI</strong><small data-i18n="claudeDescription">Install automatically or use your account</small></span></label>
-          </div>
+          <section class="provider-group kimi-provider-group" aria-labelledby="kimiProviderGroupTitle">
+            <div class="provider-group-heading">
+              <strong id="kimiProviderGroupTitle">Kimi</strong>
+              <span data-i18n="kimiPartnerTitle">PenEcho is a Kimi 2026 Open Source Partner</span>
+              <span class="partner-links"><a href="https://www.kimi.com/code?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiCodeLink">Kimi Code</a><a href="https://platform.kimi.com?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiChinaLink">Mainland China</a><a href="https://platform.kimi.ai?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiGlobalLink">Global</a></span>
+            </div>
+            <div class="provider-grid kimi-provider-grid">
+              <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi"><span class="provider-icon">K</span><span><strong>Kimi API</strong><small data-i18n="kimiDescription">2026 open source partner · Kimi K3</small></span></label>
+              <label class="provider-card kimi-card"><input type="radio" name="provider" value="kimi-cli"><span class="provider-icon">K</span><span><strong>Kimi CLI</strong><small data-i18n="kimiCliDescription">Use your local Kimi Code login</small></span></label>
+            </div>
+          </section>
+          <section class="provider-group" aria-labelledby="otherProviderGroupTitle">
+            <div class="provider-group-heading"><strong id="otherProviderGroupTitle" data-i18n="otherProviders">Other providers</strong></div>
+            <div class="provider-grid other-provider-grid">
+              <label class="provider-card recommended"><input type="radio" name="provider" value="api" checked><span class="provider-icon">API</span><span><strong data-i18n="apiTitle">API</strong><small data-i18n="apiDescription">Recommended · no CLI installation</small></span><em data-i18n="recommended">Recommended</em></label>
+              <label class="provider-card"><input type="radio" name="provider" value="codex-cli"><span class="provider-icon">C</span><span><strong>Codex CLI</strong><small data-i18n="codexDescription">Install automatically or use your account</small></span></label>
+              <label class="provider-card"><input type="radio" name="provider" value="claude-cli"><span class="provider-icon">A</span><span><strong>Claude CLI</strong><small data-i18n="claudeDescription">Install automatically or use your account</small></span></label>
+            </div>
+          </section>
         </fieldset>
 
         <section class="provider-section" data-provider-panel="api kimi">
-          <div class="kimi-partner" data-kimi-only hidden>
-            <span class="partner-medal" aria-hidden="true">K</span>
-            <span class="partner-message"><strong data-i18n="kimiFriendTitle">Official Kimi Open Source Friend</strong><small data-i18n="kimiFriendBody">PenEcho is supported by Moonshot AI, with Kimi K3 recommended for demanding visual work.</small></span>
-            <span class="partner-links"><a href="https://www.kimi.com/code?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiCodeLink">Kimi Code</a><a href="https://platform.kimi.com?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiChinaLink">Mainland China</a><a href="https://platform.kimi.ai?aff=penecho" target="_blank" rel="noreferrer" data-i18n="kimiGlobalLink">Global</a></span>
-          </div>
           <div class="field-row two-column" data-kimi-only hidden>
             <label><span data-i18n="kimiOffering">Kimi service</span><select name="kimiProduct"><option value="code" data-i18n="kimiCodeOption">Kimi Code · subscription</option><option value="platform" data-i18n="kimiPlatformOption">Open Platform · pay as you go</option></select></label>
             <label><span data-i18n="kimiRegion">Access region</span><select name="kimiRegion"><option value="global" data-i18n="globalOption">Global</option><option value="china" data-i18n="chinaOption">Mainland China</option></select></label>
@@ -66,7 +73,7 @@
         </section>
 
         <section class="provider-section" data-provider-panel="kimi-cli" hidden>
-          <div class="cli-notice"><span class="cli-notice-copy"><strong data-i18n="kimiCliRequired">Use your existing Kimi Code CLI login.</strong><span data-i18n="kimiCliInstallHelp">PenEcho can install the official Kimi Code CLI, then use its existing login session.</span></span><span class="cli-actions"><button class="inline-primary" type="button" data-install-cli="kimi-cli" data-i18n="install">Install</button><a class="inline-secondary" href="https://github.com/MoonshotAI/kimi-code" target="_blank" rel="noreferrer" data-i18n="installGuide">Install guide</a></span></div>
+          <div class="cli-notice"><span class="cli-notice-copy"><strong data-i18n="kimiCliRequired">Use your existing Kimi Code CLI login.</strong><span data-i18n="kimiCliInstallHelp">PenEcho can install the official Kimi Code CLI, then use its existing login session.</span></span><span class="cli-actions"><button class="inline-primary" type="button" data-install-cli="kimi-cli" data-i18n="install">Install</button><a class="inline-secondary" href="https://github.com/MoonshotAI/kimi-code" target="_blank" rel="noreferrer" data-i18n="installGuide">Guide</a></span></div>
           <div class="field-row two-column">
             <label><span data-i18n="modelOptional">Model (optional)</span><input name="kimiCliModel" autocomplete="off" spellcheck="false" placeholder="Use Kimi CLI default"></label>
             <label><span data-i18n="pathOptional">Executable path (optional)</span><input name="kimiCliPath" autocomplete="off" spellcheck="false" placeholder="kimi"></label>

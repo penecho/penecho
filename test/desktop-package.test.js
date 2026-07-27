@@ -2,14 +2,16 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { EventEmitter } = require("node:events");
-const { normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
+const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
 const { readSecret, writeSecret } = require("../desktop/secret-store.js");
 const { installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
-const { createUpdateManager, updateFeedUrl } = require("../desktop/update-manager.js");
+const {
+  RELEASE_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
+} = require("../desktop/update-manager.js");
 const { isPrivateIpv4, lanHosts, lanUrls } = require("../desktop/network-access.js");
 const { desktopConfigurationEnvironment } = require("../desktop/config-environment.js");
 const { parseArgs, resolveConfiguration } = require("../cli.js");
@@ -65,22 +67,98 @@ test("desktop settings expose Kimi as a global partner preset over the API provi
   assert.equal(kimi.updates.PENECHO_DESKTOP_PROVIDER, "kimi");
   assert.equal(kimi.updates.PENECHO_KIMI_PRODUCT, "code");
   assert.equal(kimi.updates.PENECHO_KIMI_REGION, "global");
+  const repaired = normalizeSettings(base({
+    provider:"kimi", apiFormat:"openai", apiUrl:"https://api.kimi.com/coding/v1", apiModel:"k3", kimiProduct:"platform", kimiRegion:"china",
+  }));
+  assert.equal(repaired.updates.AI_API_URL, "https://api.moonshot.cn/v1");
+  assert.equal(repaired.updates.AI_API_MODEL, "kimi-k3");
+  const custom = normalizeSettings(base({
+    provider:"kimi", apiFormat:"openai", apiUrl:"https://gateway.example.com/kimi", apiModel:"custom-kimi", kimiProduct:"platform", kimiRegion:"china",
+  }));
+  assert.equal(custom.updates.AI_API_URL, "https://gateway.example.com/kimi");
+  assert.equal(custom.updates.AI_API_MODEL, "custom-kimi");
   assert.throws(() => normalizeSettings(base({
     provider:"kimi", apiFormat:"anthropic", apiUrl:"https://api.moonshot.ai/v1", apiModel:"k3", kimiProduct:"platform", kimiRegion:"global",
   })), /OpenAI-compatible/);
   const visible = publicSettings({
     configExists:true, provider:"api", configFile:"/config.env", stateDir:"/state",
-    env:{ PENECHO_DESKTOP_PROVIDER:"kimi", PENECHO_KIMI_PRODUCT:"platform", PENECHO_KIMI_REGION:"china", AI_API_MODEL:"k3" },
+    env:{
+      PENECHO_DESKTOP_PROVIDER:"kimi", PENECHO_KIMI_PRODUCT:"platform", PENECHO_KIMI_REGION:"china",
+      AI_API_URL:"https://api.kimi.com/coding/v1", AI_API_MODEL:"k3",
+    },
   });
   assert.equal(visible.provider, "kimi");
   assert.equal(visible.kimiProduct, "platform");
   assert.equal(visible.kimiRegion, "china");
+  assert.equal(visible.apiFormat, "openai");
+  assert.equal(visible.apiUrl, "https://api.moonshot.cn/v1");
+  assert.equal(visible.apiModel, "kimi-k3");
+  const visibleCustom = publicSettings({
+    provider:"api",
+    env:{
+      PENECHO_DESKTOP_PROVIDER:"kimi", PENECHO_KIMI_PRODUCT:"platform", PENECHO_KIMI_REGION:"china",
+      AI_API_URL:"https://gateway.example.com/kimi", AI_API_MODEL:"custom-kimi",
+    },
+  });
+  assert.equal(visibleCustom.apiUrl, "https://gateway.example.com/kimi");
+  assert.equal(visibleCustom.apiModel, "custom-kimi");
   assert.equal(publicSettings({
     provider:"api", env:{ PENECHO_DESKTOP_PROVIDER:"kimi", PENECHO_KIMI_PRODUCT:"code" },
   }).apiModel, "k3");
   assert.equal(publicSettings({
     provider:"api", env:{ PENECHO_DESKTOP_PROVIDER:"kimi", PENECHO_KIMI_PRODUCT:"platform" },
   }).apiModel, "kimi-k3");
+});
+
+test("every Kimi service, region, and format preset resolves to its matching endpoint", () => {
+  const presets = [
+    { product:"code", region:"global", format:"openai", url:"https://api.kimi.com/coding/v1", model:"k3" },
+    { product:"code", region:"china", format:"openai", url:"https://api.kimi.com/coding/v1", model:"k3" },
+    { product:"code", region:"global", format:"anthropic", url:"https://api.kimi.com/coding", model:"k3" },
+    { product:"code", region:"china", format:"anthropic", url:"https://api.kimi.com/coding", model:"k3" },
+    { product:"platform", region:"global", format:"openai", url:"https://api.moonshot.ai/v1", model:"kimi-k3" },
+    { product:"platform", region:"china", format:"openai", url:"https://api.moonshot.cn/v1", model:"kimi-k3" },
+  ];
+  for (const preset of presets) {
+    const normalized = normalizeSettings(base({
+      provider:"kimi",
+      apiFormat:preset.format,
+      apiUrl:"https://api.moonshot.ai/v1",
+      apiModel:"k3",
+      kimiProduct:preset.product,
+      kimiRegion:preset.region,
+    }));
+    assert.equal(normalized.updates.AI_API_URL, preset.url, `${preset.product}/${preset.region}/${preset.format}`);
+    assert.equal(normalized.updates.AI_API_MODEL, preset.model, `${preset.product}/${preset.region}/${preset.format}`);
+  }
+});
+
+test("desktop startup repairs stale built-in Kimi presets before starting the API service", () => {
+  const stale = {
+    provider:"api",
+    env:{
+      PENECHO_DESKTOP_PROVIDER:"kimi",
+      PENECHO_KIMI_PRODUCT:"platform",
+      PENECHO_KIMI_REGION:"china",
+      AI_API_FORMAT:"anthropic",
+      AI_API_URL:"https://api.kimi.com/coding/v1",
+      AI_API_MODEL:"k3",
+    },
+  };
+  assert.deepEqual(kimiPresetUpdates(stale), {
+    AI_API_FORMAT:"openai",
+    AI_API_URL:"https://api.moonshot.cn/v1",
+    AI_API_MODEL:"kimi-k3",
+  });
+  assert.deepEqual(kimiPresetUpdates({
+    provider:"api",
+    env:{
+      ...stale.env,
+      AI_API_FORMAT:"openai",
+      AI_API_URL:"https://gateway.example.com/kimi",
+      AI_API_MODEL:"custom-kimi",
+    },
+  }), {});
 });
 
 test("desktop LAN addresses prefer physical private IPv4 interfaces", () => {
@@ -136,6 +214,8 @@ test("desktop secret store round-trips only encrypted bytes", () => {
 test("desktop shell and Forge config keep the renderer isolated and package native assets", () => {
   const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8"),
     preload = fs.readFileSync(path.join(ROOT, "desktop", "preload.js"), "utf8"),
+    canvasPreload = fs.readFileSync(path.join(ROOT, "desktop", "canvas-preload.js"), "utf8"),
+    updateCss = fs.readFileSync(path.join(ROOT, "public", "desktop-update.css"), "utf8"),
     forge = fs.readFileSync(path.join(ROOT, "forge.config.js"), "utf8"),
     html = fs.readFileSync(path.join(ROOT, "desktop", "settings", "index.html"), "utf8"),
     settings = fs.readFileSync(path.join(ROOT, "desktop", "settings", "settings.js"), "utf8"),
@@ -144,20 +224,41 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /nodeIntegration:false/);
   assert.match(main, /sandbox:true/);
   assert.match(main, /PENECHO_PRIVATE_PLUGIN_DIR/);
+  assert.match(main, /Object\.assign\(configuration\.env, kimiPresetUpdates\(configuration\)\)/);
   assert.match(main, /desktopConfigurationEnvironment\(process\.env, paths\.stateDir\)/);
   assert.match(main, /configuration\.env\.HOST\) configuration\.env\.HOST = "0\.0\.0\.0"/);
   assert.match(main, /createUpdateManager/);
   assert.match(main, /updateManager\.start\(\)/);
   assert.match(main, /Check for Updates/);
+  assert.match(main, /macUpdateMenu/);
+  assert.match(main, /Install Update/);
+  assert.match(main, /--squirrel-\(\?:install\|updated\|uninstall\|obsolete\)/);
+  assert.match(main, /state\.progress === null \? 2 : Math\.max/);
+  assert.doesNotMatch(main, /\bautoUpdater\b/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(preload, /installCli/);
   assert.doesNotMatch(preload, /loginCli/);
   assert.match(preload, /copyText/);
+  assert.match(canvasPreload, /penechoDesktopUpdate/);
+  assert.match(canvasPreload, /process\.platform !== "win32"/);
+  assert.match(canvasPreload, /What's new/);
+  assert.match(canvasPreload, /desktop-update-progress/);
+  assert.match(updateCss, /\.desktop-update-banner/);
+  assert.match(updateCss, /\.desktop-update-notes/);
   assert.match(main, /\["api", "kimi"\]\.includes\(normalized\.provider\)/);
-  assert.match(main, /settingsReadyToLaunch = true;\s*return \{ ok:false, saved:true/);
+  assert.match(main, /settingsReadyToLaunch = true;[\s\S]*?ok:false,[\s\S]*?saved:true/);
+  assert.match(main, /SETTINGS_TEST_TIMEOUT_MS = 30_000/);
+  assert.match(main, /Promise\.race\(\[[\s\S]*?testConfiguredProvider\(loaded\.configuration\)[\s\S]*?PENECHO_SETTINGS_TEST_TIMEOUT/);
+  assert.match(main, /timedOut:error\.code === "PENECHO_SETTINGS_TEST_TIMEOUT"/);
   assert.match(settings, /Launch anyway/);
+  assert.match(settings, /result\.timedOut[\s\S]*?Connection test timed out[\s\S]*?still launch PenEcho and enter the canvas/);
+  assert.match(settings, /连接测试超过 30 秒，你仍然可以启动 PenEcho 进入画布/);
   assert.match(settings, /KIMI_MODELS = Object\.freeze\(\{ code:"k3", platform:"kimi-k3" \}\)/);
   assert.match(settings, /kimiProduct\.addEventListener\("change", \(\) => updateKimiEndpoint\(true, true\)\)/);
+  assert.match(settings, /if \(activeProvider === "kimi"\) repairKimiPreset\(\)/);
+  assert.match(settings, /activeProvider = settings\.provider;[\s\S]*?repairKimiPreset\(\);[\s\S]*?captureApiDraft\(activeProvider\)/);
+  assert.match(settings, /provider\(\) === "kimi" && value\("kimiProduct"\) === "platform"/);
+  assert.match(settings, /anthropicOption\.disabled = kimiPlatform/);
   assert.match(forge, /node_modules\/\{sharp,@img\}/);
   assert.match(forge, /readPackageJson/);
   assert.match(forge, /\^\\\/tools/);
@@ -166,14 +267,30 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(html, /Test, save &amp; launch/);
   assert.match(html, />Install<\/button>/);
   assert.doesNotMatch(html, /Sign in|data-login-cli/);
-  assert.match(html, /Official Kimi Open Source Friend/);
+  assert.match(html, /PenEcho is a Kimi 2026 Open Source Partner/);
+  assert.match(settings, /PenEcho 是 Kimi 2026 开源合作伙伴/);
   assert.match(html, /value="kimi-cli"/);
-  assert.equal(html.match(/name="provider" value="([^"]+)"/)?.[1], "kimi-cli");
+  assert.equal(html.match(/name="provider" value="([^"]+)"/)?.[1], "kimi");
+  const kimiGroup = html.match(/<section class="provider-group kimi-provider-group"[\s\S]*?<\/section>/)?.[0] || "",
+    otherGroup = html.match(/<section class="provider-group" aria-labelledby="otherProviderGroupTitle"[\s\S]*?<\/section>/)?.[0] || "";
+  assert.match(kimiGroup, /value="kimi"/);
+  assert.match(kimiGroup, /value="kimi-cli"/);
+  assert.match(otherGroup, /value="api"/);
+  assert.match(otherGroup, /value="codex-cli"/);
+  assert.match(otherGroup, /value="claude-cli"/);
+  assert.ok(html.indexOf("kimi-provider-group") < html.indexOf("otherProviderGroupTitle"));
+  assert.equal(rootPackage.version, "0.6.0");
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
+  assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
+  assert.match(fs.readFileSync(path.join(ROOT, "desktop", "settings", "settings.css"), "utf8"), /\.inline-primary,\.inline-secondary\{[^}]*display:inline-flex[^}]*text-decoration:none/);
   assert.match(settings, /\["kimi-cli", "codex-cli", "claude-cli"\]\.includes\(selected\)/);
   assert.match(settings, /"kimi-cli":"kimiCliPath"/);
   assert.ok(rootPackage.files.includes("src/"));
+  for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
+    assert.ok(rootPackage.files.includes(asset), asset);
+  }
+  assert.ok(rootPackage.files.includes("public/desktop-update.css"));
   assert.match(html, /value="0\.0\.0\.0" selected/);
   assert.match(html, /platform\.kimi\.com\?aff=penecho/);
   assert.match(html, /platform\.kimi\.ai\?aff=penecho/);
@@ -207,27 +324,228 @@ test("desktop build dependencies are isolated from normal root installs", () => 
 });
 
 test("desktop updates resolve published GitHub Releases for each packaged target", async () => {
-  assert.equal(updateFeedUrl({ platform:"darwin", arch:"arm64", version:"0.7.0" }), "https://update.electronjs.org/penecho/penecho/darwin-arm64/0.7.0");
-  assert.equal(updateFeedUrl({ platform:"win32", arch:"x64", version:"0.7.0" }), "https://update.electronjs.org/penecho/penecho/win32-x64/0.7.0");
-  assert.equal(updateFeedUrl({ platform:"linux", arch:"x64", version:"0.7.0" }), null);
-  class FakeUpdater extends EventEmitter {
-    setFeedURL(value) { this.feed = value; }
-    quitAndInstall() { this.installed = true; }
-    async checkForUpdates() { this.emit("checking-for-update"); this.emit("update-not-available"); }
-  }
-  const updater = new FakeUpdater(), messages = [], manager = createUpdateManager({
-    app:{ isPackaged:true, getVersion:() => "0.7.0" }, autoUpdater:updater,
-    dialog:{ showMessageBox:async value => { messages.push(value); return { response:0 }; } },
-    platform:"darwin", arch:"arm64", logger:{ warn:() => {} },
+  assert.equal(expectedAssetName("darwin", "arm64", "0.7.1"), "PenEcho-0.7.1-mac-arm64.zip");
+  assert.equal(expectedAssetName("win32", "x64", "0.7.1"), "PenEcho-Setup-0.7.1-win-x64.exe");
+  const states = [], requests = [], downloads = [], installs = [], manager = createUpdateManager({
+    app:{ getVersion:() => "0.6.0", getPath:name => name === "temp" ? "/tmp" : "" },
+    platform:"darwin",
+    arch:"arm64",
+    logger:{ warn:() => {} },
+    onStateChange:state => states.push(state),
+    fetchImpl:async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok:true,
+        status:200,
+        json:async () => ({
+          tag_name:"v0.7.1",
+          name:"PenEcho 0.7.1",
+          body:"## What's new\n- Silent update notifications\n- Update progress",
+          published_at:"2026-07-01T00:00:00Z",
+          html_url:"https://github.com/penecho/penecho/releases/tag/v0.7.1",
+          assets:[{
+            name:"PenEcho-0.7.1-mac-arm64.zip",
+            size:123456,
+            browser_download_url:"https://github.com/penecho/penecho/releases/download/v0.7.1/PenEcho-0.7.1-mac-arm64.zip",
+            digest:"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          }],
+        }),
+      };
+    },
+    downloadImpl:async input => {
+      downloads.push(input);
+      input.onProgress(47.2);
+      input.onProgress(100);
+      return input.destination;
+    },
+    installImpl:async input => { installs.push(input); },
   });
+
+  await manager.check(false);
+  assert.equal(requests[0].url, RELEASE_API_URL);
+  assert.equal(requests[0].options.headers["User-Agent"], "PenEcho/0.6.0");
+  assert.equal(downloads.length, 0, "metadata checks must not start a download");
+  assert.equal(manager.getState().status, "available");
+  assert.equal(manager.getState().version, "0.7.1");
+  assert.match(manager.getState().notes, /Silent update notifications/);
+
+  assert.equal(manager.dismiss(), true);
+  assert.equal(manager.getState().status, "dismissed");
+  assert.equal(manager.getState().visible, false);
+  assert.equal(await manager.check(false), false);
+  assert.equal(requests.length, 1, "dismissal lasts for the current app process");
+
   await manager.check(true);
-  assert.equal(updater.feed.url, "https://update.electronjs.org/penecho/penecho/darwin-arm64/0.7.0");
-  assert.equal(messages[0].title, "PenEcho is up to date");
-  updater.emit("update-downloaded", {}, "Release notes", "PenEcho 0.7.1");
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(messages[1].title, "PenEcho update ready");
-  assert.equal(updater.installed, true);
+  assert.equal(requests.length, 2);
+  assert.equal(await manager.download(), true);
+  assert.equal(downloads[0].asset.name, "PenEcho-0.7.1-mac-arm64.zip");
+  assert.equal(downloads[0].destination, "/tmp/penecho-updates/PenEcho-0.7.1-mac-arm64.zip");
+  assert.ok(states.some(state => state.status === "downloading" && state.progress === 47.2));
+  assert.equal(manager.getState().status, "ready");
+  assert.equal(await manager.install(), true);
+  assert.equal(installs[0].platform, "darwin");
+  assert.equal(installs[0].version, "0.7.1");
+
+  const source = fs.readFileSync(path.join(ROOT, "desktop", "update-manager.js"), "utf8");
+  assert.doesNotMatch(source, /autoUpdater|quitAndInstall|checkForUpdates|setFeedURL/);
+  assert.doesNotMatch(source, /update\.electronjs\.org/);
+  assert.match(source, /CFBundleIdentifier/);
+  assert.match(source, /sha256/);
+  assert.equal(manager.start(), true);
   manager.stop();
+});
+
+test("desktop update checks stay silent when current and reset dismissal on a new process", async () => {
+  const release = async () => ({
+    ok:true,
+    status:200,
+    json:async () => ({
+      tag_name:"v0.6.0",
+      name:"PenEcho 0.6.0",
+      body:"Current release",
+      assets:[{
+        name:"PenEcho-Setup-0.6.0-win-x64.exe",
+        browser_download_url:"https://github.com/penecho/penecho/releases/download/v0.6.0/PenEcho-Setup-0.6.0-win-x64.exe",
+      }],
+    }),
+  });
+  const firstStates = [], first = createUpdateManager({
+    app:{ getVersion:() => "0.6.0", getPath:() => "/tmp" }, platform:"win32", arch:"x64",
+    fetchImpl:release, onStateChange:state => firstStates.push(state), logger:{ warn:() => {} },
+  });
+  await first.check(false);
+  assert.equal(first.getState().status, "up-to-date");
+  assert.equal(first.getState().visible, false);
+  await first.check(true);
+  assert.equal(first.getState().visible, true);
+  first.dismiss();
+  assert.equal(first.getState().visible, false);
+
+  const second = createUpdateManager({
+    app:{ getVersion:() => "0.5.0", getPath:() => "/tmp" }, platform:"win32", arch:"x64",
+    fetchImpl:release, logger:{ warn:() => {} },
+  });
+  await second.check(false);
+  assert.equal(second.getState().status, "available");
+  assert.equal(second.getState().visible, true);
+  assert.ok(firstStates.some(state => state.status === "up-to-date"));
+});
+
+test("unsigned desktop updater accepts only exact PenEcho release assets", () => {
+  const release = {
+    version:"0.7.2",
+    assets:[
+      { name:"PenEcho-0.7.2-mac-arm64.zip", url:"https://example.com/PenEcho.zip" },
+      { name:"PenEcho-Setup-0.7.2-win-x64.exe", url:"https://github.com/penecho/penecho/releases/download/v0.7.2/PenEcho-Setup-0.7.2-win-x64.exe" },
+    ],
+  };
+  assert.equal(releaseAsset(release, "darwin", "arm64"), null);
+  assert.equal(releaseAsset(release, "win32", "x64").name, "PenEcho-Setup-0.7.2-win-x64.exe");
+  assert.equal(macBundlePath("/Applications/PenEcho.app/Contents/MacOS/PenEcho"), "/Applications/PenEcho.app");
+  assert.equal(macBundlePath("/tmp/PenEcho"), "");
+});
+
+test("unsigned desktop update download reports progress and verifies GitHub SHA-256", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-update-download-")),
+    destination = path.join(directory, "PenEcho-0.7.2-mac-arm64.zip"),
+    content = Buffer.from("unsigned PenEcho update"),
+    digest = crypto.createHash("sha256").update(content).digest("hex"),
+    progress = [];
+  try {
+    await downloadReleaseAsset({
+      asset:{
+        name:path.basename(destination),
+        url:"https://github.com/penecho/penecho/releases/download/v0.7.2/PenEcho-0.7.2-mac-arm64.zip",
+        size:content.length,
+        digest:`sha256:${digest}`,
+      },
+      destination,
+      userAgent:"PenEcho/0.6.0",
+      signal:new AbortController().signal,
+      onProgress:value => progress.push(value),
+      fetchImpl:async () => new Response(content, {
+        status:200,
+        headers:{ "content-length":String(content.length) },
+      }),
+    });
+    assert.deepEqual(fs.readFileSync(destination), content);
+    assert.equal(progress.at(-1), 100);
+    await assert.rejects(downloadReleaseAsset({
+      asset:{
+        name:path.basename(destination),
+        url:"https://github.com/penecho/penecho/releases/download/v0.7.2/PenEcho-0.7.2-mac-arm64.zip",
+        digest:`sha256:${"0".repeat(64)}`,
+      },
+      destination,
+      userAgent:"PenEcho/0.6.0",
+      signal:new AbortController().signal,
+      onProgress:() => {},
+      fetchImpl:async () => new Response(content, { status:200 }),
+    }), /SHA-256/);
+  } finally {
+    fs.rmSync(directory, { recursive:true, force:true });
+  }
+});
+
+test("unsigned macOS updater validates the extracted app and schedules an atomic replacement", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-mac-install-")),
+    target = path.join(directory, "Applications", "PenEcho.app"),
+    executable = path.join(target, "Contents", "MacOS", "PenEcho"),
+    archive = path.join(directory, "PenEcho-0.7.2-mac-arm64.zip"),
+    commands = [],
+    spawns = [],
+    app = {
+      getPath:name => name === "exe" ? executable : "",
+      quit:() => { app.quitCalled = true; },
+    };
+  fs.mkdirSync(path.dirname(executable), { recursive:true });
+  fs.writeFileSync(executable, "");
+  fs.writeFileSync(archive, "test archive");
+  try {
+    assert.equal(await installDownloadedUpdate({
+      app,
+      platform:"darwin",
+      version:"0.7.2",
+      downloadedPath:archive,
+      runCommand:async (command, args) => {
+        commands.push({ command, args });
+        if (command === "/usr/bin/ditto") {
+          fs.mkdirSync(path.join(args[3], "PenEcho.app", "Contents"), { recursive:true });
+          return "";
+        }
+        return args[1] === "CFBundleIdentifier" ? "app.penecho.desktop" : "0.7.2";
+      },
+      spawnImpl:(command, args, options) => {
+        spawns.push({ command, args, options });
+        return { unref:() => {} };
+      },
+    }), true);
+    assert.equal(commands[0].command, "/usr/bin/ditto");
+    assert.equal(spawns[0].command, "/bin/sh");
+    assert.equal(spawns[0].args[1], target);
+    assert.equal(spawns[0].options.detached, true);
+    assert.match(fs.readFileSync(spawns[0].args[0], "utf8"), /if \[ -d "\$backup" \].*\/bin\/mv "\$backup" "\$target"/);
+    assert.equal(app.quitCalled, true);
+  } finally {
+    fs.rmSync(directory, { recursive:true, force:true });
+  }
+});
+
+test("unsigned Windows updater launches the downloaded Squirrel Setup silently", async () => {
+  const calls = [], app = { quit:() => { app.quitCalled = true; } };
+  assert.equal(await installDownloadedUpdate({
+    app,
+    platform:"win32",
+    downloadedPath:"C:\\Temp\\PenEcho-Setup-0.7.2-win-x64.exe",
+    spawnImpl:(command, args, options) => {
+      calls.push({ command, args, options });
+      return { unref:() => {} };
+    },
+  }), true);
+  assert.deepEqual(calls[0].args, ["--silent"]);
+  assert.equal(calls[0].options.detached, true);
+  assert.equal(calls[0].options.windowsHide, true);
+  assert.equal(app.quitCalled, true);
 });
 
 test("desktop CLI setup uses official installers without requiring npm", () => {

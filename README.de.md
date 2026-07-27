@@ -74,6 +74,12 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Speichere Schnappschüsse lokal im Browser und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
+## Neu in Version 0.7.2
+
+- **Integrierte echte Fotos und professionelle Flussdiagramme.** Real Photo Search zeigt Bilder aus dem Web samt Quelle direkt auf der Leinwand, standardmäßig ein Ergebnis und bei einem Fehler eine alternative Quelle. Flowchart erstellt Prozess-, Entscheidungs-, Architektur-, Sequenz- und Zustandsdiagramme mit kopierbarem Mermaid-Quelltext.
+- **Zuverlässigeres Bearbeiten, Speichern und Exportieren.** Mit Hand lassen sich Bilder, Animationen und von der KI zurückgegebene Widgets direkt verschieben und ohne künstliche Obergrenze skalieren. Speichern aktualisiert standardmäßig den geladenen Schnappschuss, Speichern unter bleibt verfügbar, und externe Bilder bleiben in Vorschaubildern und PNG-Exporten erhalten.
+- **Lokaler Zugriff und bessere Desktop-Integration.** Ein gemeinsamer sechsstelliger Code kann den Browserzugriff im lokalen Netz schützen, ohne Modellanfragen nach dem Entsperren zu verändern. Die Desktop-Einrichtung unterstützt Kimi API und Kimi CLI neben allgemeiner API, Codex CLI und Claude CLI sowie verbesserte Updates und Pakete.
+
 ## Neu in Version 0.7.1
 
 - **Bilder und Fotos auf der Leinwand.** Fügen Sie Bilder über die Systemauswahl hinzu – Foto-Mediathek oder Kamera auf Smartphones und Tablets, Bilddateien auf dem Desktop. Große Bilder werden automatisch verkleinert und komprimiert, damit Leinwände und Schnappschüsse leicht bleiben.

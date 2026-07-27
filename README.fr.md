@@ -74,6 +74,12 @@ npm start
 - Enregistrez des instantanés localement dans le navigateur et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
+## Nouveautés de la version 0.7.2
+
+- **Photos réelles et organigrammes professionnels intégrés.** Real Photo Search affiche directement sur le canevas des images du Web avec leur source, un seul résultat par défaut et une source de secours si la principale échoue. Flowchart crée des diagrammes de processus, décision, architecture, séquence et état avec une source Mermaid copiable.
+- **Édition, enregistrement et export plus fiables.** Hand déplace directement les images, animations et widgets renvoyés par l'IA, sans limite maximale artificielle de redimensionnement. Enregistrer met à jour par défaut l'instantané chargé, Enregistrer comme nouveau reste disponible, et les images distantes sont conservées dans les miniatures et les exports PNG.
+- **Accès local et meilleure intégration au bureau.** Un code partagé à six chiffres peut protéger l'accès des navigateurs locaux et du réseau sans modifier les requêtes au modèle après déverrouillage. La configuration de bureau prend en charge Kimi API et Kimi CLI, ainsi que l'API générique, Codex CLI et Claude CLI, avec de meilleures mises à jour et une meilleure création de paquets.
+
 ## Nouveautés de la version 0.7.1
 
 - **Images et photos sur le canevas.** Ajoutez des images via le sélecteur système — photothèque ou appareil photo sur mobiles et tablettes, fichiers image sur ordinateur. Les grandes images sont automatiquement réduites et compressées pour garder canevas et instantanés légers.

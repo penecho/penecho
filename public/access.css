@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light;
+  --ink: #20242b;
+  --muted: #68717d;
+  --line: #d7dce3;
+  --panel: #fff;
+  --page: #eef1f4;
+  --accent: #176c50;
+  --accent-dark: #10513c;
+  --warning: #9a5b10;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body { color: var(--ink); background: var(--page); }
+button, a { font: inherit; }
+button { letter-spacing: 0; }
+.access-topbar { display: flex; align-items: center; justify-content: space-between; min-height: 66px; padding: 10px clamp(16px, 4vw, 44px); border-bottom: 1px solid var(--line); background: #fff; }
+.access-brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.access-brand img { width: 34px; height: 34px; object-fit: contain; }
+.access-brand span { display: grid; line-height: 1.15; }
+.access-brand strong { font-size: 15px; }
+.access-brand small { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.access-language { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #f6f7f9; }
+.access-language button { min-width: 38px; min-height: 30px; padding: 4px 8px; color: var(--muted); border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.access-language button[aria-pressed="true"] { color: var(--ink); background: #fff; box-shadow: 0 1px 3px #1c25301a; font-weight: 700; }
+.access-shell { display: grid; place-items: center; min-height: calc(100vh - 66px); min-height: calc(100dvh - 66px); padding: 24px 16px max(24px, env(safe-area-inset-bottom)); }
+.access-panel { width: min(100%, 430px); padding: clamp(22px, 5vw, 34px); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 18px 48px #27313d1a; }
+.access-heading { display: grid; gap: 8px; margin-bottom: 24px; }
+.access-kicker { color: var(--accent); font-size: 10px; font-weight: 800; }
+.access-heading h1 { margin: 0; font-size: clamp(24px, 6vw, 32px); line-height: 1.12; letter-spacing: 0; }
+.access-heading p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.access-loading { display: flex; align-items: center; gap: 11px; min-height: 52px; color: var(--muted); }
+.access-loading span { width: 18px; height: 18px; border: 2px solid #c9ced5; border-top-color: var(--accent); border-radius: 50%; animation: access-spin .8s linear infinite; }
+@keyframes access-spin { to { transform: rotate(360deg); } }
+.access-view { display: grid; gap: 14px; }
+.access-view[hidden], .access-loading[hidden], .access-error[hidden], #accessRetry[hidden] { display: none; }
+.access-scope-note { padding: 12px 13px; border: 1px solid #b8d4c8; border-radius: 7px; background: #f2f8f5; }
+.access-scope-note strong { color: var(--accent-dark); font-size: 13px; }
+.access-scope-note p { margin: 5px 0 0; color: #43584f; font-size: 12px; line-height: 1.5; }
+.access-choice-list { display: grid; gap: 10px; }
+.access-choice { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 12px; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; background: #fff; text-align: left; cursor: pointer; }
+.access-choice:hover, .access-choice:focus-visible { border-color: #aeb6c0; background: #f8f9fa; }
+.access-choice-primary { border-color: #91baa9; background: #f4faf7; }
+.access-choice-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 6px; color: var(--accent); background: #e5f1eb; font-size: 20px; font-weight: 800; }
+.access-choice span:last-child { display: grid; gap: 3px; }
+.access-choice strong { font-size: 14px; }
+.access-choice small { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.access-restart-note { margin: 4px 0 0; padding: 11px 12px; color: var(--muted); border-left: 3px solid #b8c0ca; background: #f5f6f8; font-size: 11.5px; line-height: 1.5; }
+.access-restart-note b { color: var(--ink); }
+.access-pin { justify-items: center; }
+.access-pin-dots { display: grid; grid-template-columns: repeat(6, 18px); gap: 10px; justify-content: center; min-height: 24px; }
+.access-pin-dots i { width: 14px; height: 14px; align-self: center; border: 1.5px solid #aab2bc; border-radius: 50%; background: #fff; }
+.access-pin-dots i.filled { border-color: var(--accent); background: var(--accent); }
+.access-pin-step { min-height: 18px; margin: -5px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
+.access-keypad { display: grid; grid-template-columns: repeat(3, 68px); gap: 9px; width: max-content; }
+.access-keypad button { width: 68px; height: 56px; padding: 0; color: var(--ink); border: 1px solid #d3d8de; border-radius: 7px; background: #f8f9fa; font-size: 22px; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.access-keypad button:hover, .access-keypad button:focus-visible { border-color: #91baa9; background: #edf6f1; }
+.access-keypad button:active { background: #dcece4; transform: translateY(1px); }
+.access-keypad .access-key-action { color: var(--muted); font-size: 18px; font-weight: 600; }
+.access-primary { width: 100%; min-height: 44px; padding: 10px 14px; color: #fff; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); font-weight: 750; cursor: pointer; }
+.access-primary:hover:not(:disabled) { border-color: var(--accent-dark); background: var(--accent-dark); }
+.access-primary:disabled { cursor: not-allowed; opacity: .45; }
+.access-text-button { min-height: 34px; padding: 6px 12px; color: var(--muted); border: 0; background: transparent; cursor: pointer; }
+.access-warning { padding: 14px; border: 1px solid #e7c99d; border-radius: 7px; background: #fff9ef; }
+.access-warning strong { color: #77440c; font-size: 14px; }
+.access-warning p { margin: 7px 0 0; color: #775b39; font-size: 12.5px; line-height: 1.55; }
+.access-error { margin-top: 14px; padding: 10px 12px; color: #9e3030; border: 1px solid #edc2c2; border-radius: 6px; background: #fff5f5; font-size: 12px; line-height: 1.45; }
+button:focus-visible, a:focus-visible { outline: 3px solid #65a98e66; outline-offset: 2px; }
+@media (max-width: 420px) {
+  .access-shell { align-items: start; padding-top: 14px; }
+  .access-panel { padding: 21px 17px; }
+  .access-heading { margin-bottom: 19px; }
+  .access-keypad { grid-template-columns: repeat(3, 64px); }
+  .access-keypad button { width: 64px; height: 52px; }
+}
+@media (prefers-reduced-motion: reduce) { .access-loading span { animation: none; } }

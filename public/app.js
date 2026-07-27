@@ -284,8 +284,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourDone: "Finish",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourPluginsTitle: "Choose which plugins AI can use",
-      tourPluginsBody: "Only checked plugins are included in the next LLM request, so the model can use their declared capabilities and return the matching widget. Unchecked plugins are completely omitted: they add no prompt, hooks, or runtime behavior. Create your own local plugin from a template, or download community plugins when the marketplace opens.",
+      tourPluginsTitle: "Real photos and flowcharts",
+      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Flowchart is off by default and creates diagrams with copyable Mermaid source. Manage both in Plugins.",
+      tourHandTitle: "Move objects with the Hand tool",
+      tourHandBody: "Choose Hand, then drag anything outlined by a thin blue dashed box: images, animations, and HTML widgets returned by AI. Content merged into canvas ink has no outline; use the lasso to move it. Drag empty space to pan the canvas.",
       tourStudioThemeTitle: "Try the new Studio theme",
       tourStudioThemeBody: "Open Theme to switch the canvas's visual style and the AI's response emphasis. The new Studio theme uses a clean, focused interface and favors concise, well-structured, practical answers. You can switch themes at any time.",
       tourLassoTitle: "Work with exactly the content you select",
@@ -307,15 +309,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Images and photos, right on the canvas",
-      changelogIntro: "Version 0.7.1 adds images and photos: keep them floating under your ink, draw over them, or merge them into erasable strokes.",
-      changelogImages: "Add images or photos through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.",
-      changelogImageEdit: "Long-press an image to move or resize it, with clear Place, Merge, and Delete actions. Place keeps it floating under your ink; Merge turns it into real strokes you can erase.",
-      changelogImageAi: "Images never start AI requests on their own. If you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images are included in undo and redo, local snapshots, and PNG export.",
+      changelogTitle: "Real photos, flowcharts, and smoother canvas work",
+      changelogIntro: "Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.",
+      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images and Flowchart for professional diagrams with copyable Mermaid source.",
+      changelogCanvasWorkflow: "Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.",
+      changelogDesktopAccess: "Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.",
       changelogEarlierTitle: "Earlier highlights",
+      changelogImagesSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, and PNG export.",
       changelogPluginsSummary: "0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.",
       changelogAnimation: "0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.",
-      changelogFoundation: "0.5.x added lasso editing and Typeset, Markdown and LaTeX text, reasoning controls, PNG export, the Studio theme, and the feature tour.",
       changelogDone: "Got it",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
@@ -544,11 +546,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
     configuredAiTimeout = Number(window.PENECHO_CONFIG?.aiRequestTimeoutMs),
     configuredAiEffort = String(window.PENECHO_CONFIG?.aiEffort || "").trim().toLowerCase(),
+    configuredAccessSession = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || ""),
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
+  function authenticatedApiHeaders(headers = {}) {
+    return configuredAccessSession ? { ...headers, "X-PenEcho-Session":configuredAccessSession } : { ...headers };
+  }
   const tiles = new Map(),
     state = {
       mode: "pen",
@@ -663,11 +669,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.7.1";
+  const CHANGELOG_VERSION = "0.7.2";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
-    { id: "plugins-v2", targets: ["#pluginButton"], titleKey: "tourPluginsTitle", bodyKey: "tourPluginsBody", placement: "bottom", radius: 8 },
+    { id: "plugins-v3", targets: ["#pluginButton"], titleKey: "tourPluginsTitle", bodyKey: "tourPluginsBody", placement: "bottom", radius: 8 },
+    { id: "hand-v1", targets: ["#handToolBtn"], titleKey: "tourHandTitle", bodyKey: "tourHandBody", placement: "bottom", radius: 7 },
     { id: "studio-theme-v1", targets: ["#theme"], titleKey: "tourStudioThemeTitle", bodyKey: "tourStudioThemeBody", placement: "bottom", radius: 8 },
     { id: "core-lasso-v1", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
     { id: "core-text-v1", targets: ["#textToolBtn"], titleKey: "tourTextTitle", bodyKey: "tourTextBody", placement: "bottom", radius: 7 },
@@ -1531,7 +1538,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const response = await fetch("/api/plugins/improve", {
         method:"POST",
         credentials:"same-origin",
-        headers:{ "Content-Type":"application/json" },
+        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ document, reasoningEffort:state.reasoningEffort }),
       }), body = await pluginJsonResponse(response);
       if (typeof body?.document !== "string") throw Error("The AI response did not contain a plugin document");
@@ -1558,7 +1565,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const response = await fetch("/api/plugins", {
         method:"POST",
         credentials:"same-origin",
-        headers:{ "Content-Type":"application/json" },
+        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ document:validation.document }),
       }), body = await pluginJsonResponse(response), savedId = body?.plugin?.id;
       if (typeof savedId !== "string" || !await loadPluginDocuments() || !setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
@@ -1592,7 +1599,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pluginCatalogNotice = { key:"pluginDeleting", values:{ name } };
     updatePluginControl();
     try {
-      const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}`, { method:"DELETE", credentials:"same-origin" });
+      const response = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}`, { method:"DELETE", credentials:"same-origin", headers:authenticatedApiHeaders() });
       await pluginJsonResponse(response);
       forgetPluginSetting(pluginId);
       state.pluginCatalogNotice = { key:"pluginDeleted", values:{ name }, type:"success" };
@@ -1855,7 +1862,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     supersedeActiveAI("manual-action");
-    requestAI(action, null, action === "answer" ? { captureCurrentViewport: true } : null);
+    requestAI(action, null, { captureCurrentViewport: true });
   }
   function openRadialMenu() {
     clearTimeout(state.radialCloseTimer);
@@ -2369,7 +2376,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       html: widget.html,
-      ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
   function recordWidgetsBefore() {
@@ -2384,8 +2391,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!Number.isFinite(contentW) || contentW < 300 || contentW > MAX_WIDGET_CONTENT_DIMENSION
       || !Number.isFinite(contentH) || contentH < 200 || contentH > MAX_WIDGET_CONTENT_DIMENSION) return null;
     if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !n(item.refreshSeconds, 60, 86400)) return null;
-    if (item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
-    if (item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    const allowCopy = item.pluginId !== "image-search";
+    if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
+    if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
       pluginId: item.pluginId,
@@ -2398,8 +2406,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
       html: item.html,
-      copyText: typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
+      copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
+      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -2514,7 +2522,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       type:"penecho-widget-init",
       title:widget.title,
       html:widget.html,
-      ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }, location.origin);
   }
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
@@ -5559,7 +5567,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           signal: controller.signal,
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
+          headers: authenticatedApiHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             ...packed,
             trigger: automatic ? "user_paused" : "manual",
@@ -6065,7 +6073,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           animationSlots--;
         }
         if (c.tool === "html_widget") {
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
+          const allowCopy = c.pluginId !== "image-search";
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
@@ -6076,7 +6085,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
-            ...(typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
+            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
           };
           widgetSlots--;
         }

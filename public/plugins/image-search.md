@@ -24,7 +24,7 @@ Use for real photos or illustrations; visibly show the actual images. Default to
 
 ## Output
 
-Return one `html_widget` and no prose, with inline HTML/CSS/JS, `pluginId:"image-search"`, `refreshSeconds:86400`, and a localized title.
+Return one `html_widget` and no prose, with inline HTML/CSS/JS, `pluginId:"image-search"`, `refreshSeconds:86400`, and a localized title. Do not return `copyText` or `copyLabel`; image search has no copy-source toolbar action.
 
 ## Sources
 

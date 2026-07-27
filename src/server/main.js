@@ -13,6 +13,7 @@ const { callClaudeCli } = require("../providers/claude-cli.js");
 const { callKimiCli } = require("../providers/kimi-cli.js");
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
+const DRAW = require("../../public/draw.js");
 let sharp = null;
 try { sharp = require("sharp"); } catch {}
 
@@ -113,6 +114,22 @@ const LOCAL_CLI = AI_PROVIDER === "kimi-cli"
 const AI_REQUEST_TIMEOUT_MS = MODEL_TIMEOUT_MS * 2 + 20000;
 const AI_SESSION_COOKIE_PREFIX = "penecho_ai_session";
 const AI_SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
+const LOCAL_ACCESS_PIN_PATTERN = /^\d{6}$/;
+const LOCAL_ACCESS_FAILURE_WINDOW_MS = 5 * 60_000;
+const LOCAL_ACCESS_CLIENT_FAILURE_LIMIT = 5;
+const LOCAL_ACCESS_GLOBAL_FAILURE_LIMIT = 30;
+const LOCAL_ACCESS_CLIENT_COOLDOWN_MS = 30_000;
+const LOCAL_ACCESS_GLOBAL_COOLDOWN_MS = 60_000;
+let localAccessMode = process.env.NODE_ENV === "test" && process.env.PENECHO_TEST_OPEN_ACCESS === "1" ? "open" : "undecided";
+let localAccessPinSalt = null;
+let localAccessPinHash = null;
+let localAccessRevision = 0;
+let localAccessDecisionPending = false;
+let localAccessVerificationCount = 0;
+let localAccessGlobalFailures = [];
+let localAccessGlobalBlockedUntil = 0;
+const localAccessClientFailures = new Map();
+const localAccessVerificationClients = new Set();
 let activeLocalRequest = null;
 
 function firstNonEmpty(...values) {
@@ -268,7 +285,7 @@ const THEME_PERSONAS = {
   studio: "Minimal, well-organized general-purpose studio assistant. Prioritize clear structure, legible formatting, concise step-by-step reasoning, and practical actionable answers. Keep visual output clean and uncluttered; avoid decorative flourishes.",
 };
 
-function send(res, code, data, type = "application/json; charset=utf-8") { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" }); res.end(typeof data === "string" ? data : JSON.stringify(data)); }
+function send(res, code, data, type = "application/json; charset=utf-8", extraHeaders = {}) { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", ...extraHeaders }); res.end(typeof data === "string" ? data : JSON.stringify(data)); }
 function readJson(req, limit = MAX_BODY) { return new Promise((resolve, reject) => { let size = 0, chunks = []; req.on("data", c => { size += c.length; if (size > limit) { reject(new Error("Request too large")); req.destroy(); } else chunks.push(c); }); req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new Error("Invalid JSON")); } }); req.on("error", reject); }); }
 function log(entry) { try { fs.mkdirSync(LOG_DIR, { recursive:true }); if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= MAX_LOG) { try { fs.renameSync(LOG_FILE, `${LOG_FILE}.1`); } catch { fs.truncateSync(LOG_FILE, 0); } } fs.appendFileSync(LOG_FILE, JSON.stringify({ time:new Date().toISOString(), ...entry }) + "\n"); } catch (error) { console.error("PenEcho log error:", error.message); } }
 function short(value, length = 20000) { return typeof value === "string" ? value.slice(0, length) : value; }
@@ -493,28 +510,95 @@ function aiSessionCookieName(req) {
   if (!host) return null;
   return `${AI_SESSION_COOKIE_PREFIX}_${crypto.createHash("sha256").update(host).digest("hex").slice(0, 12)}`;
 }
+function matchesAiSessionToken(value) {
+  if (typeof value !== "string") return false;
+  const actual = Buffer.from(value), expected = Buffer.from(AI_SESSION_TOKEN);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
 function hasAiSession(req) {
+  const header = req.headers["x-penecho-session"];
+  if (!Array.isArray(header) && matchesAiSessionToken(header)) return true;
   const name = aiSessionCookieName(req);
   if (!name) return false;
   const cookie = String(req.headers.cookie || "").split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`));
   if (!cookie) return false;
-  const value = cookie.slice(name.length + 1), actual = Buffer.from(value), expected = Buffer.from(AI_SESSION_TOKEN);
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+  return matchesAiSessionToken(cookie.slice(name.length + 1));
 }
-function browserRequestError(req, requireSession = true) {
+function browserRequestError(req) {
   const host = requestHost(req), expectedOrigin = canonicalRequestOrigin(req), originText = typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
   if (!expectedOrigin) return "AI requests require the configured PenEcho host.";
   let origin;
-  try { origin = new URL(originText); } catch { return "AI requests require a same-origin PenEcho browser session."; }
+  try { origin = new URL(originText); } catch { return "AI requests require the PenEcho page origin."; }
   const sameOrigin = isLoopbackHostname(host.hostname) ? isLoopbackHostname(origin.hostname) && hostMatchesOrigin(host, origin) : origin.origin === expectedOrigin.origin;
-  if (!sameOrigin || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || requireSession && !hasAiSession(req)) return "AI requests require a same-origin PenEcho browser session.";
+  if (!sameOrigin || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) return "AI requests require the PenEcho page origin.";
+  if (localAccessMode !== "open" && !hasAiSession(req)) return "PenEcho access has expired. Refresh the page and unlock it again.";
+  return null;
+}
+function localAccessRequestError(req, requireOrigin = false) {
+  const host=requestHost(req),expectedOrigin=canonicalRequestOrigin(req);
+  if(!expectedOrigin||!isLanClient(req.socket.remoteAddress)||!isAllowedCliHost(host?.hostname))return"This PenEcho server is not available from this address.";
+  if(!requireOrigin)return null;
+  const originText=typeof req.headers.origin==="string"?req.headers.origin.trim():"";
+  let origin;
+  try { origin=new URL(originText); } catch { return"Refresh this PenEcho page and try again."; }
+  if(origin.origin!==expectedOrigin.origin||origin.username||origin.password||origin.pathname!=="/"||origin.search||origin.hash)return"Refresh this PenEcho page and try again.";
   return null;
 }
 function aiSessionCookie(req) {
   const name = aiSessionCookieName(req);
   if (!name) return null;
   const secure = canonicalRequestOrigin(req)?.protocol === "https:" ? "; Secure" : "";
-  return `${name}=${AI_SESSION_TOKEN}; Path=/api/; HttpOnly; SameSite=Strict${secure}`;
+  return `${name}=${AI_SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Strict${secure}`;
+}
+function localAccessClientKey(req) {
+  return normalizedIp(req.socket.remoteAddress) || "unknown";
+}
+function activeFailureTimes(values, now=Date.now()) {
+  return values.filter(value=>Number.isFinite(value)&&now-value<LOCAL_ACCESS_FAILURE_WINDOW_MS);
+}
+function localAccessCooldown(req, now=Date.now()) {
+  localAccessGlobalFailures=activeFailureTimes(localAccessGlobalFailures,now);
+  const key=localAccessClientKey(req),entry=localAccessClientFailures.get(key);
+  if(entry) {
+    entry.failures=activeFailureTimes(entry.failures,now);
+    if(!entry.failures.length&&entry.blockedUntil<=now)localAccessClientFailures.delete(key);
+  }
+  const blockedUntil=Math.max(localAccessGlobalBlockedUntil,entry?.blockedUntil||0);
+  return blockedUntil>now?Math.ceil((blockedUntil-now)/1000):0;
+}
+function registerLocalAccessFailure(req, now=Date.now()) {
+  const key=localAccessClientKey(req),entry=localAccessClientFailures.get(key)||{failures:[],blockedUntil:0};
+  entry.failures=activeFailureTimes(entry.failures,now);
+  entry.failures.push(now);
+  if(entry.failures.length>=LOCAL_ACCESS_CLIENT_FAILURE_LIMIT)entry.blockedUntil=Math.max(entry.blockedUntil,now+LOCAL_ACCESS_CLIENT_COOLDOWN_MS);
+  localAccessClientFailures.set(key,entry);
+  localAccessGlobalFailures=activeFailureTimes(localAccessGlobalFailures,now);
+  localAccessGlobalFailures.push(now);
+  if(localAccessGlobalFailures.length>=LOCAL_ACCESS_GLOBAL_FAILURE_LIMIT)localAccessGlobalBlockedUntil=Math.max(localAccessGlobalBlockedUntil,now+LOCAL_ACCESS_GLOBAL_COOLDOWN_MS);
+  return localAccessCooldown(req,now);
+}
+function clearLocalAccessFailures(req) {
+  localAccessClientFailures.delete(localAccessClientKey(req));
+}
+function deriveLocalAccessPin(pin, salt) {
+  return new Promise((resolve,reject)=>crypto.scrypt(pin,salt,32,{N:16384,r:8,p:1,maxmem:32*1024*1024},(error,value)=>error?reject(error):resolve(value)));
+}
+function localAccessStatus(req) {
+  const unlocked=localAccessMode==="open"||hasAiSession(req);
+  return {
+    mode:localAccessMode,
+    setupRequired:localAccessMode==="undecided",
+    unlocked,
+    cooldownSeconds:localAccessMode==="pin"&&!unlocked?localAccessCooldown(req):0,
+    resetsOnRestart:true,
+  };
+}
+function localAccessResponse(req,res,code,data) {
+  const cookie=aiSessionCookie(req);
+  return send(res,code,{...data,accessSessionToken:AI_SESSION_TOKEN},"application/json; charset=utf-8",cookie?{"Set-Cookie":cookie}:{});
+}
+function isJsonRequest(req) {
+  return String(req.headers["content-type"]||"").split(";",1)[0].trim().toLowerCase()==="application/json";
 }
 function supersedeLocalRequest(next) {
   const previous = activeLocalRequest;
@@ -851,14 +935,15 @@ function filterPluginCommands(commands, plugins = []) {
       accepted.push(command);
       continue;
     }
+    const allowCopy = command.pluginId !== "image-search";
     if (!pluginIds.has(command.pluginId) || !Number.isFinite(command.x) || !Number.isFinite(command.y) || !Number.isFinite(command.w) || !Number.isFinite(command.h)
       || command.x < 0 || command.y < 0 || command.x >= CANVAS_SIZE || command.y >= CANVAS_SIZE
       || command.w < 300 || command.w > 5000 || command.h < 200 || command.h > 4000 || command.w * command.h > 12000000
       || typeof command.title !== "string" || !command.title.trim() || command.title.length > 120
       || !Number.isFinite(command.refreshSeconds) || command.refreshSeconds < 60 || command.refreshSeconds > 86400
       || typeof command.html !== "string" || !command.html.trim() || command.html.length > MAX_WIDGET_HTML_LENGTH
-      || command.copyText !== undefined && (typeof command.copyText !== "string" || !command.copyText.trim() || command.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)
-      || command.copyLabel !== undefined && (typeof command.copyLabel !== "string" || !command.copyLabel.trim() || command.copyLabel.length > 80)) continue;
+      || allowCopy && command.copyText !== undefined && (typeof command.copyText !== "string" || !command.copyText.trim() || command.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)
+      || allowCopy && command.copyLabel !== undefined && (typeof command.copyLabel !== "string" || !command.copyLabel.trim() || command.copyLabel.length > 80)) continue;
     const x=Math.round(command.x),y=Math.round(command.y),
       w=Math.min(Math.round(command.w),CANVAS_SIZE-x),
       h=Math.min(Math.round(command.h),CANVAS_SIZE-y);
@@ -870,7 +955,7 @@ function filterPluginCommands(commands, plugins = []) {
       title:command.title.trim(),
       refreshSeconds:Math.round(command.refreshSeconds),
       html:command.html,
-      ...(typeof command.copyText === "string" ? { copyText:command.copyText.trim(), copyLabel:String(command.copyLabel || "Copy source").trim() } : {}),
+      ...(allowCopy && typeof command.copyText === "string" ? { copyText:command.copyText.trim(), copyLabel:String(command.copyLabel || "Copy source").trim() } : {}),
     });
   }
   const widget = accepted.find(command => command?.tool === "html_widget");
@@ -938,6 +1023,12 @@ function normalizeCommandPlacements(commands,payload){
   return[next];
 }
 function hasInvalidTextLayout(result){return result.commands.some(command=>{const tool=command?.tool||command?.type||command?.name;return tool==="write_text"&&(!Number.isFinite(command.x)||!Number.isFinite(command.y)||!Number.isFinite(command.maxWidth))})}
+function hasInvalidDrawCommand(result){
+  return result.commands.some(command=>(command?.tool||command?.type||command?.name)==="draw"&&!DRAW.normalize(command,CANVAS_SIZE));
+}
+function filterInvalidDrawCommands(commands){
+  return commands.filter(command=>command?.tool!=="draw"||DRAW.normalize(command,CANVAS_SIZE));
+}
 function hasVisualCommand(result){
   return result.commands.some(command=>["plot_function","draw","animate_scene","html_widget"].includes(command?.tool||command?.type||command?.name));
 }
@@ -1068,8 +1159,95 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
   if (LOCAL_CLI && !canonicalRequestOrigin(req)) return send(res, 421, { error:"Request Host does not match the configured PenEcho origin." });
+  if (req.method === "GET" && url.pathname === "/api/local-access/status") {
+    const accessError=localAccessRequestError(req);
+    if(accessError)return send(res,403,{error:accessError});
+    const status=localAccessStatus(req);
+    return status.mode==="open"?localAccessResponse(req,res,200,status):send(res,200,status);
+  }
+  if (url.pathname.startsWith("/api/local-access/")) {
+    const accessError=localAccessRequestError(req,true);
+    if(accessError)return send(res,403,{error:accessError});
+    if(req.method!=="POST")return send(res,405,{error:"Method Not Allowed"});
+    if(!isJsonRequest(req))return send(res,415,{error:"Use application/json for this request."});
+    try {
+      if(url.pathname==="/api/local-access/setup-pin") {
+        if(localAccessMode!=="undecided"&&!hasAiSession(req))return send(res,409,{error:"Unlock PenEcho before changing its access mode."});
+        if(localAccessDecisionPending)return send(res,409,{error:"Local access is already being configured. Refresh this page."});
+        localAccessDecisionPending=true;
+        const accessRevision=localAccessRevision;
+        try {
+          const body=await readJson(req,4096),pin=String(body?.pin||""),confirmation=String(body?.confirmation||"");
+          if(!LOCAL_ACCESS_PIN_PATTERN.test(pin)||pin!==confirmation)return send(res,400,{error:"Enter a valid six-digit security code."});
+          const salt=crypto.randomBytes(16),hash=await deriveLocalAccessPin(pin,salt);
+          if(accessRevision!==localAccessRevision)return send(res,409,{error:"Local access was already configured. Refresh this page."});
+          localAccessPinSalt=salt;
+          localAccessPinHash=hash;
+          localAccessMode="pin";
+          localAccessRevision++;
+          localAccessGlobalFailures=[];
+          localAccessGlobalBlockedUntil=0;
+          localAccessClientFailures.clear();
+          return localAccessResponse(req,res,200,{...localAccessStatus(req),unlocked:true,cooldownSeconds:0});
+        } finally { localAccessDecisionPending=false; }
+      }
+      if(url.pathname==="/api/local-access/open") {
+        if(localAccessMode!=="undecided"&&!hasAiSession(req))return send(res,409,{error:"Unlock PenEcho before changing its access mode."});
+        if(localAccessDecisionPending)return send(res,409,{error:"Local access is already being configured. Refresh this page."});
+        localAccessDecisionPending=true;
+        const accessRevision=localAccessRevision;
+        try {
+          const body=await readJson(req,4096);
+          if(body?.acknowledgeRisk!==true)return send(res,400,{error:"Confirm the local-network access risk before continuing."});
+          if(accessRevision!==localAccessRevision)return send(res,409,{error:"Local access was already configured. Refresh this page."});
+          localAccessMode="open";
+          localAccessPinSalt=null;
+          localAccessPinHash=null;
+          localAccessRevision++;
+          localAccessGlobalFailures=[];
+          localAccessGlobalBlockedUntil=0;
+          localAccessClientFailures.clear();
+          return localAccessResponse(req,res,200,localAccessStatus(req));
+        } finally { localAccessDecisionPending=false; }
+      }
+      if(url.pathname==="/api/local-access/unlock") {
+        if(localAccessMode==="open")return localAccessResponse(req,res,200,localAccessStatus(req));
+        if(localAccessMode!=="pin"||!localAccessPinSalt||!localAccessPinHash)return send(res,409,{error:"Choose how this PenEcho server should be protected first."});
+        const cooldown=localAccessCooldown(req);
+        if(cooldown)return send(res,429,{error:"Too many attempts. Try again shortly.",cooldownSeconds:cooldown});
+        const body=await readJson(req,4096),pin=String(body?.pin||"");
+        const accessRevision=localAccessRevision,pinSalt=localAccessPinSalt,pinHash=localAccessPinHash;
+        if(localAccessMode!=="pin"||!Buffer.isBuffer(pinSalt)||!Buffer.isBuffer(pinHash))return send(res,409,{error:"Local access changed. Refresh this page."});
+        let valid=false;
+        if(LOCAL_ACCESS_PIN_PATTERN.test(pin)) {
+          const clientKey=localAccessClientKey(req);
+          if(localAccessVerificationClients.has(clientKey)||localAccessVerificationCount>=4)return send(res,429,{error:"Another security-code check is already running. Try again shortly.",cooldownSeconds:1});
+          localAccessVerificationClients.add(clientKey);
+          localAccessVerificationCount++;
+          let actual;
+          try { actual=await deriveLocalAccessPin(pin,pinSalt); }
+          finally { localAccessVerificationClients.delete(clientKey);localAccessVerificationCount=Math.max(0,localAccessVerificationCount-1); }
+          if(accessRevision!==localAccessRevision||pinSalt!==localAccessPinSalt||pinHash!==localAccessPinHash)return send(res,409,{error:"Local access changed. Refresh this page."});
+          valid=actual.length===pinHash.length&&crypto.timingSafeEqual(actual,pinHash);
+        }
+        if(!valid) {
+          const wait=registerLocalAccessFailure(req);
+          return send(res,wait?429:401,{error:wait?"Too many attempts. Try again shortly.":"That security code is not correct.",cooldownSeconds:wait});
+        }
+        clearLocalAccessFailures(req);
+        return localAccessResponse(req,res,200,{...localAccessStatus(req),unlocked:true,cooldownSeconds:0});
+      }
+    } catch(error) {
+      return send(res,400,{error:error.message||"Could not update local access."});
+    }
+    return send(res,404,{error:"Not found"});
+  }
   if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort() });
-  if (req.method === "GET" && url.pathname === "/api/config.js") return send(res, 200, `window.PENECHO_CONFIG=${JSON.stringify({ autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort() })};`, "application/javascript; charset=utf-8");
+  if (req.method === "GET" && url.pathname === "/api/config.js") {
+    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort()};
+    if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
+    return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
+  }
   if (req.method === "GET" && url.pathname === "/api/plugins") return send(res, 200, { plugins:localPluginCatalog() });
   const privatePluginMatch=/^\/plugins\/private\/([a-z0-9][a-z0-9-]{0,63}\.md)$/.exec(url.pathname);
   if ((req.method === "GET" || req.method === "HEAD") && privatePluginMatch) {
@@ -1083,7 +1261,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === "DELETE" && /^\/api\/plugins\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname)) {
     try {
-      const authorizationError = browserRequestError(req, Boolean(LOCAL_CLI));
+      const authorizationError = browserRequestError(req);
       if (authorizationError) return send(res, 403, { error:authorizationError });
       const id = decodeURIComponent(url.pathname.slice("/api/plugins/".length));
       return send(res, 200, { plugin:deleteLocalPlugin(id) });
@@ -1093,7 +1271,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === "POST" && url.pathname === "/api/plugins") {
     try {
-      const authorizationError = browserRequestError(req, Boolean(LOCAL_CLI));
+      const authorizationError = browserRequestError(req);
       if (authorizationError) return send(res, 403, { error:authorizationError });
       if (String(req.headers["content-type"] || "").split(";",1)[0].trim().toLowerCase() !== "application/json") return send(res, 415, { error:"Plugin creation requires application/json." });
       const body = await readJson(req, 8 * 1024);
@@ -1110,7 +1288,7 @@ const server = http.createServer(async (req, res) => {
     res.once("close", abort);
     try {
       if (LOCAL_CLI && !isLanClient(ip)) return send(res, 403, { error:`${LOCAL_CLI.label} requests are available only from this computer or its local network.`, requestId });
-      const authorizationError = browserRequestError(req, Boolean(LOCAL_CLI));
+      const authorizationError = browserRequestError(req);
       if (authorizationError) return send(res, 403, { error:authorizationError, requestId });
       if (String(req.headers["content-type"] || "").split(";",1)[0].trim().toLowerCase() !== "application/json") return send(res, 415, { error:"Plugin improvement requires application/json.", requestId });
       const body = await readJson(req, 16 * 1024), document = body?.document, instructions = body?.instructions ?? "", selectedEffort = body?.reasoningEffort ?? "config";
@@ -1150,20 +1328,20 @@ const server = http.createServer(async (req, res) => {
     return fs.createReadStream(WIDGET_RENDERER).pipe(res);
   }
   if (req.method === "GET" && url.pathname === "/api/debug/log") {
-    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
+    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname) || localAccessMode !== "open" && !hasAiSession(req)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
     if (!fs.existsSync(LOG_FILE)) return send(res, 200, "No debug log yet.\n", "text/plain; charset=utf-8");
     const text = fs.readFileSync(LOG_FILE, "utf8");
     return send(res, 200, text.slice(-MAX_LOG), "text/plain; charset=utf-8");
   }
   if (req.method === "GET" && url.pathname === "/api/debug/atlas") {
-    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
+    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname) || localAccessMode !== "open" && !hasAiSession(req)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
     const file = path.join(LOG_DIR, "latest-atlas.png");
     if (!fs.existsSync(file)) return send(res, 404, "No debug atlas yet.\n", "text/plain; charset=utf-8");
     res.writeHead(200, { "Content-Type":"image/png", "Cache-Control":"no-store" });
     return fs.createReadStream(file).pipe(res);
   }
   if (req.method === "GET" && url.pathname === "/api/debug/model") {
-    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
+    if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname) || localAccessMode !== "open" && !hasAiSession(req)) return send(res, 404, "Not found", "text/plain; charset=utf-8");
     const file = path.join(LOG_DIR, "latest-model.json");
     if (!fs.existsSync(file)) return send(res, 404, "No debug model exchange yet.\n", "text/plain; charset=utf-8");
     return send(res, 200, fs.readFileSync(file,"utf8"), "application/json; charset=utf-8");
@@ -1176,11 +1354,13 @@ const server = http.createServer(async (req, res) => {
     req.once("aborted", abortForDisconnect);
     res.once("close", abortForDisconnect);
     try {
+      if(LOCAL_CLI||localAccessMode!=="open") {
+        const authorizationError=browserRequestError(req);
+        if(authorizationError)return send(res,403,{error:authorizationError,requestId});
+      }
       if (LOCAL_CLI) {
         if (!isLanClient(ip)) return send(res, 403, { error:`${LOCAL_CLI.label} requests are available only from this computer or its local network.`, requestId });
-        const authorizationError = browserRequestError(req);
-        if (authorizationError) return send(res, 403, { error:authorizationError, requestId });
-        if (String(req.headers["content-type"] || "").split(";",1)[0].trim().toLowerCase() !== "application/json") return send(res, 415, { error:"AI requests require application/json.", requestId });
+        if (!isJsonRequest(req)) return send(res, 415, { error:"AI requests require application/json.", requestId });
       }
       const submittedPayload = await readJson(req);
       if (!validPayload(submittedPayload)) { log({ type:"ai", requestId, ip, status:400, error:"Invalid viewport-image payload." }); return send(res, 400, { error: "Invalid viewport-image payload.", requestId }); }
@@ -1253,11 +1433,11 @@ const server = http.createServer(async (req, res) => {
       if (LOCAL_CLI) ensureCurrentLocalRequest(localRun);
       saveLatestModelExchange(requestId,attempts,modelInput,"",model);
       model.result.commands=filterCapabilityCommands(normalizeCommands(model.result),payload.animationEnabled,payload.plugins);
-      const invalidTextLayout=hasInvalidTextLayout(model.result),manualEmpty=payload.userAction!=="auto"&&commandsForAction(model.result,payload.userAction).length===0,plotMissing=payload.userAction==="plot"&&!hasVisualCommand(model.result);
-      if(payload.userAction!=="normalize"&&(invalidTextLayout||manualEmpty||plotMissing)){
-        const reason=invalidTextLayout?"invalid-text-layout":manualEmpty?"empty-commands":"plot-without-visual";
+      const invalidTextLayout=hasInvalidTextLayout(model.result),invalidDraw=hasInvalidDrawCommand(model.result),manualEmpty=payload.userAction!=="auto"&&commandsForAction(model.result,payload.userAction).length===0,plotMissing=payload.userAction==="plot"&&!hasVisualCommand(model.result);
+      if(payload.userAction!=="normalize"&&(invalidTextLayout||invalidDraw||manualEmpty||plotMissing)){
+        const reason=invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
         log({type:"ai-retry",requestId,ip,action:payload.userAction,reason});
-        const retry=plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For other requested visuals, return one unified draw command. Do not answer with prose or draw_formula alone.":"Perform a second independent inspection. Use focusInset as the primary transcription view when present, especially for Chinese handwriting, then cross-check latestInput.imageRect. Inspect any box/circle-selected content and arrow chain it visually references outside that rectangle. Follow the final arrowhead as the intended destination. Every write_text command must include finite global x and y for its top-left start plus a finite maxWidth chosen from the available blank space.";
+        const retry=invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild the response once and verify every draw item before returning it: types and items must have equal lengths and matching indices; line and smooth need an even number of at least four coordinates; rect and ellipse need exactly four values; circle needs exactly three; arc needs exactly six; all values and origin coordinates must be integers and the resulting geometry must remain inside the 20000 by 20000 canvas. Return only commands that satisfy the unified draw syntax.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For other requested visuals, return one unified draw command. Do not answer with prose or draw_formula alone.":"Perform a second independent inspection. Use focusInset as the primary transcription view when present, especially for Chinese handwriting, then cross-check latestInput.imageRect. Inspect any box/circle-selected content and arrow chain it visually references outside that rectangle. Follow the final arrowhead as the intended destination. Every write_text command must include finite global x and y for its top-left start plus a finite maxWidth chosen from the available blank space.";
         model=await requestModel(retry);
         if (LOCAL_CLI) ensureCurrentLocalRequest(localRun);
         saveLatestModelExchange(requestId,attempts,modelInput,retry,model);
@@ -1265,6 +1445,9 @@ const server = http.createServer(async (req, res) => {
       }
       const result=model.result;
       result.commands=filterCapabilityCommands(commandsForAction(result,payload.userAction),payload.animationEnabled,payload.plugins);
+      const commandCountBeforeDrawValidation=result.commands.length;
+      result.commands=filterInvalidDrawCommands(result.commands);
+      if(result.commands.length!==commandCountBeforeDrawValidation)log({type:"ai-command-rejected",requestId,ip,reason:"invalid-draw-command",rejectedCount:commandCountBeforeDrawValidation-result.commands.length});
       if(payload.userAction==="plot"&&!hasVisualCommand(result)){
         const fallback=plotFallback(result,payload.changedBox);
         if(fallback){result.commands.push(fallback);log({type:"ai-plot-fallback",requestId,ip})}
@@ -1310,10 +1493,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method Not Allowed", "text/plain");
   let requested;
   try { requested = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
-  const file = path.resolve(PUBLIC, "." + requested);
+  const requestHostname=requestHost(req)?.hostname,
+    trustedLocalPage=isAllowedCliHost(requestHostname),
+    served=requested==="/index.html"&&(!trustedLocalPage||localAccessMode!=="open"&&!hasAiSession(req))?"/access.html":requested,
+    file=path.resolve(PUBLIC,"."+served);
   if (!file.startsWith(PUBLIC + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(res, 404, "Not found", "text/plain");
   const headers = { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control":"no-store", "Content-Security-Policy":"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=' 'sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=' 'sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA='; img-src 'self' blob: data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff", "Cross-Origin-Resource-Policy":"same-origin" };
-  if (LOCAL_CLI && requested === "/index.html") headers["Set-Cookie"] = aiSessionCookie(req);
+  if (requested === "/index.html" && trustedLocalPage && (localAccessMode === "open" || hasAiSession(req))) headers["Set-Cookie"] = aiSessionCookie(req);
   res.writeHead(200, headers);
   if (req.method === "HEAD") return res.end();
   fs.createReadStream(file).pipe(res);

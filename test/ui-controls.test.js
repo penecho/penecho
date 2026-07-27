@@ -118,7 +118,7 @@ test("hand tool moves the canvas and all movable objects without triggering AI",
     widgetHit = functionSource(app, "widgetPointerHit");
 
   assert.ok(handIndex >= 0 && handIndex < penIndex);
-  assert.match(html.slice(handIndex, penIndex), /aria-pressed="false"[\s\S]*?data-i18n-aria="hand"/);
+  assert.match(html, /id="handToolBtn"[^>]*data-mode="hand"[^>]*aria-pressed="false"[^>]*data-i18n-aria="hand"/);
   assert.match(app, /mode:\s*"pen"/);
   assert.match(app, /hand:\s*"Hand tool: move canvas and objects"/);
   assert.match(zh, /hand:\s*"小手：移动画布和对象"/);
@@ -135,6 +135,7 @@ test("hand tool moves the canvas and all movable objects without triggering AI",
   assert.match(pointerDown, /handMode && valid\(point\)[\s\S]*?animationPointerHit\(point, e\.pointerType\)/);
   assert.match(widgetHit, /includeUnselected[\s\S]*?visibleWidgets\(\)[\s\S]*?hit:"move"/);
   assert.match(handOutlines, /visibleImages\(\)[\s\S]*?visibleAnimations\(\)[\s\S]*?visibleWidgets\(\)/);
+  assert.match(handOutlines, /globalAlpha = 0\.42[\s\S]*?lineWidth = unit[\s\S]*?setLineDash\(\[4 \* unit, 5 \* unit\]\)/);
   assert.match(functionSource(app, "renderInteractionLayer"), /drawHandModeOutlines\(interactionCtx\)/);
   assert.match(css, /#viewport\.hand-mode \.canvas-widget-frame\s*\{\s*pointer-events:\s*none/);
   for (const name of ["acceptImageEdit", "cancelImageEdit", "deleteImage", "mergeImage"]) {
@@ -231,6 +232,9 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
   assert.match(app, /applyTheme\(state\.theme\);\s*loadPluginDocuments\(\)\.catch/);
   assert.match(app, /function pluginRequestPayload\(\)/);
   assert.match(app, /\.\.\.pluginRequestPayload\(\)/);
+  assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
+  assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:authenticatedApiHeaders/);
+  assert.match(app, /fetch\("\/api\/ai\/command"[\s\S]*?headers:\s*authenticatedApiHeaders/);
   assert.match(functionSource(app, "validate"), /acceptedTools = pluginEnabled\("animation"\)/);
   assert.match(functionSource(app, "animate"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
   assert.match(functionSource(app, "preparePendingItem"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
@@ -302,7 +306,7 @@ test("plugin creator offers one air-quality template, AI title completion, delet
 });
 
 test("disabled data plugins send no plugin payload and detach widget runtime hooks", () => {
-  const app = read("public/app.js"), html = read("public/index.html"), requestPayload = functionSource(app, "pluginRequestPayload"), syncRuntime = functionSource(app, "syncWidgetRuntime"), pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"'));
+  const app = read("public/app.js"), html = read("public/index.html"), requestPayload = functionSource(app, "pluginRequestPayload"), syncRuntime = functionSource(app, "syncWidgetRuntime"), pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')), validate = functionSource(app, "validate");
   assert.match(html, /id="widgetLayer"[^>]*\shidden(?:\s|>)/);
   assert.match(requestPayload, /if \(plugins\.length\) payload\.plugins = plugins/);
   assert.match(functionSource(app, "enabledPluginDescriptors"), /filter\(\(plugin\) => pluginEnabled\(plugin\.id\)\)/);
@@ -312,7 +316,8 @@ test("disabled data plugins send no plugin payload and detach widget runtime hoo
   assert.match(functionSource(app, "positionWidgets"), /if \(!widgetRuntimeEnabled\(\)\) return/);
   assert.match(functionSource(app, "drawWidgetChrome"), /if \(!widgetRuntimeEnabled\(\)\) return/);
   assert.match(pointerDown, /widgetRuntimeEnabled\(\) && valid\(point\) \? widgetPointerHit/);
-  assert.match(functionSource(app, "validate"), /if \(widgetPluginIds\.size\) acceptedTools\.push\("html_widget"\)/);
+  assert.match(validate, /if \(widgetPluginIds\.size\) acceptedTools\.push\("html_widget"\)/);
+  assert.match(validate, /allowCopy = c\.pluginId !== "image-search"[\s\S]*?allowCopy && typeof c\.copyText === "string"/);
 });
 
 test("AI completion always leaves a user-visible result or diagnostic", () => {
@@ -484,8 +489,11 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(frameRule, /color-scheme:\s*light/);
   assert.match(frameRule, /background:\s*transparent/);
   assert.match(functionSource(app, "serializedWidgets"), /contentW:\s*widget\.contentW[\s\S]*?contentH:\s*widget\.contentH/);
-  assert.match(functionSource(app, "serializedWidgets"), /copyText:widget\.copyText[\s\S]*?copyLabel:widget\.copyLabel/);
-  assert.match(functionSource(app, "widgetRecord"), /contentW = item\.contentW \?\? item\.w[\s\S]*?contentH = item\.contentH \?\? item\.h/);
+  assert.match(functionSource(app, "serializedWidgets"), /widget\.pluginId !== "image-search"[\s\S]*?copyText:widget\.copyText[\s\S]*?copyLabel:widget\.copyLabel/);
+  const widgetRecord = functionSource(app, "widgetRecord");
+  assert.match(widgetRecord, /contentW = item\.contentW \?\? item\.w[\s\S]*?contentH = item\.contentH \?\? item\.h/);
+  assert.match(widgetRecord, /allowCopy = item\.pluginId !== "image-search"[\s\S]*?copyText: allowCopy[\s\S]*?copyLabel: allowCopy/);
+  assert.match(functionSource(app, "sendWidgetInit"), /widget\.pluginId !== "image-search"[\s\S]*?copyText:widget\.copyText/);
   assert.doesNotMatch(functionSource(app, "resizeWidgetBox"), /5000|4000|12000000|maximumArea/);
   assert.doesNotMatch(functionSource(app, "widgetRecord"), /pluginManifests\.has/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /width:widget\.contentW, height:widget\.contentH/);
@@ -923,14 +931,17 @@ test("AI capture stays inside the current viewport when retained dirty ink is of
   assert.match(request, /rawCommands = Array\.isArray\(data\.commands\)[\s\S]*?normalizeCommandPlacements\(validate\(rawCommands, aiColor\), packed, requestBox\)/);
 });
 
-test("manual Answer sends the complete current viewport without requiring dirty input", () => {
+test("every manual magic action sends the complete current viewport without requiring dirty input", () => {
   const app = read("public/app.js"),
+    html = read("public/index.html"),
     manual = functionSource(app, "invokeAIAction"),
     request = functionSource(app, "requestAI"),
     build = functionSource(app, "buildViewportImage"),
     automatic = functionSource(app, "launchAutomaticAI"),
     selection = functionSource(app, "requestSelectionAI");
-  assert.match(manual, /requestAI\(action, null, action === "answer" \? \{ captureCurrentViewport: true \} : null\)/);
+  for (const action of ["answer", "hint", "continue", "explain", "plot"]) assert.match(html, new RegExp(`data-ai-action="${action}"`));
+  assert.match(manual, /requestAI\(action, null, \{ captureCurrentViewport: true \}\)/);
+  assert.doesNotMatch(manual, /action === "answer"|state\.dirty/);
   assert.match(request, /captureCurrentViewport = Boolean\(requestOptions\.captureCurrentViewport\)/);
   assert.match(request, /captureCurrentViewport \? buildViewportImage\([\s\S]{0,160}?, null, true\) : latestBox \? buildViewportImage/);
   assert.match(build, /if \(!captureCurrentViewport && !ink\) return null/);

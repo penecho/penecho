@@ -133,6 +133,7 @@ test("plugin directory contains the general, flowchart, image, and built-in data
   assert.deepEqual([...imageSearch.connect], ["https://commons.wikimedia.org", "https://upload.wikimedia.org", "https://api.openverse.org"]);
   assert.match(imageSearch.document, /visibly show the actual images/);
   assert.match(imageSearch.document, /Default to exactly 1 image/);
+  assert.match(imageSearch.document, /Do not return `copyText` or `copyLabel`/);
   assert.match(imageSearch.document, /page_size=<count>/);
   assert.match(imageSearch.document, /Api-User-Agent/);
   assert.match(imageSearch.document, /Retry-After/);

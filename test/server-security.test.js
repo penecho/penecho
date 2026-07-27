@@ -36,6 +36,8 @@ function serverEnv(overrides = {}) {
     CODEX_HOME: TEST_CODEX_HOME,
     CODEX_CLI_TIMEOUT_SECONDS: "",
     AI_EFFORT: "",
+    NODE_ENV: "test",
+    PENECHO_TEST_OPEN_ACCESS: "1",
     PENECHO_STATE_DIR: testStateDir(overrides),
     ...overrides,
   };
@@ -51,6 +53,8 @@ function apiServerEnv(origin, overrides = {}) {
     AI_API_URL: `${origin}/v1`,
     AI_API_MODEL: "test-model",
     AI_EFFORT: "",
+    NODE_ENV: "test",
+    PENECHO_TEST_OPEN_ACCESS: "1",
     PENECHO_STATE_DIR: testStateDir(overrides),
     ...overrides,
   };
@@ -66,6 +70,8 @@ function claudeServerEnv(fakeCli, overrides = {}) {
     CLAUDE_CLI_MODEL:"sonnet",
     CLAUDE_CLI_TIMEOUT_SECONDS:"",
     AI_EFFORT:"",
+    NODE_ENV:"test",
+    PENECHO_TEST_OPEN_ACCESS:"1",
     PENECHO_STATE_DIR:testStateDir(overrides),
     ...overrides,
   };
@@ -185,6 +191,17 @@ function weatherPluginDescriptor() {
   };
 }
 
+function builtInPluginDescriptor(id, connect = []) {
+  return {
+    id,
+    name:id,
+    version:"1",
+    connect,
+    recommendedRefreshSeconds:86400,
+    document:fs.readFileSync(path.join(ROOT, "public", "plugins", `${id}.md`), "utf8").trim(),
+  };
+}
+
 test("server uses applied global configuration and one timeout for every executor", () => {
   const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"), packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.doesNotMatch(server, /loadEnv\(path\.join\(ROOT, ["']\.env["']\)\)/);
@@ -209,6 +226,135 @@ test("Codex CLI mode starts with no extra access or model-provider settings", { 
     const config=await fetch(`${origin}/api/config`).then(response=>response.json());
     assert.equal(config.aiEffort,"config");
   } finally { await stopServer(child); }
+});
+
+test("process-lifetime PIN gates the Canvas and local APIs, then clears on restart", { timeout:30000 }, async () => {
+  const stateDir=testStateDir({}),
+    env=serverEnv({PENECHO_STATE_DIR:stateDir,PENECHO_TEST_OPEN_ACCESS:"0"});
+  let running=await startServer(env);
+  try {
+    const firstPage=await fetch(running.origin),firstHtml=await firstPage.text();
+    assert.equal(firstPage.headers.get("set-cookie"),null);
+    assert.match(firstHtml,/Set a 6-digit security code/);
+    assert.match(firstHtml,/Instance-wide protection/);
+
+    const initial=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
+    assert.equal(initial.mode,"undecided");
+    assert.equal(initial.setupRequired,true);
+    assert.equal(initial.unlocked,false);
+    const lockedConfigScript=await fetch(`${running.origin}/api/config.js`).then(response=>response.text());
+    assert.doesNotMatch(lockedConfigScript,/accessSessionToken/);
+
+    const lockedPluginWrite=await fetch(`${running.origin}/api/plugins`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:JSON.stringify({document:"invalid"}),
+    });
+    assert.equal(lockedPluginWrite.status,403);
+
+    const setup=await fetch(`${running.origin}/api/local-access/setup-pin`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:JSON.stringify({pin:"271828",confirmation:"271828"}),
+    });
+    const setupBody=await setup.json();
+    assert.equal(setup.status,200,JSON.stringify(setupBody));
+    assert.match(setupBody.accessSessionToken,/^[A-Za-z0-9_-]{40,}$/);
+    const setupCookie=setup.headers.get("set-cookie");
+    assert.match(setupCookie,/; Path=\/;/);
+    assert.match(setupCookie,/; HttpOnly;/);
+    assert.match(setupCookie,/; SameSite=Strict/);
+    const browserACookie=setupCookie?.split(";",1)[0];
+    assert.ok(browserACookie);
+    const unlockedConfigScript=await fetch(`${running.origin}/api/config.js`,{headers:{Cookie:browserACookie}}).then(response=>response.text());
+    assert.match(unlockedConfigScript,new RegExp(setupBody.accessSessionToken));
+    const pinModeRequest=await fetch(`${running.origin}/api/ai/command`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:"{}",
+    });
+    assert.equal(pinModeRequest.status,403);
+    const authenticatedPinRequest=await fetch(`${running.origin}/api/ai/command`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin,"X-PenEcho-Session":setupBody.accessSessionToken},
+      body:"{}",
+    });
+    assert.equal(authenticatedPinRequest.status,400);
+
+    const unlockedPage=await fetch(running.origin,{headers:{Cookie:browserACookie}});
+    assert.match(await unlockedPage.text(),/Handwritten AI Canvas/);
+    const browserBStatus=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
+    assert.equal(browserBStatus.mode,"pin");
+    assert.equal(browserBStatus.unlocked,false);
+
+    const unlock=await fetch(`${running.origin}/api/local-access/unlock`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:JSON.stringify({pin:"271828"}),
+    });
+    assert.equal(unlock.status,200,await unlock.text());
+    assert.ok(unlock.headers.get("set-cookie"));
+
+    for(let attempt=1;attempt<=5;attempt++) {
+      const wrong=await fetch(`${running.origin}/api/local-access/unlock`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json",Origin:running.origin},
+        body:JSON.stringify({pin:"000000"}),
+      });
+      assert.equal(wrong.status,attempt===5?429:401);
+    }
+  } finally {
+    await stopServer(running.child);
+  }
+
+  running=await startServer(env);
+  try {
+    const restarted=await fetch(`${running.origin}/api/local-access/status`).then(response=>response.json());
+    assert.equal(restarted.mode,"undecided");
+    assert.equal(restarted.unlocked,false);
+    const open=await fetch(`${running.origin}/api/local-access/open`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin},
+      body:JSON.stringify({acknowledgeRisk:true}),
+    });
+    const openBody=await open.json();
+    assert.equal(open.status,200,JSON.stringify(openBody));
+    assert.match(openBody.accessSessionToken,/^[A-Za-z0-9_-]{40,}$/);
+    assert.ok(open.headers.get("set-cookie"));
+    const authenticatedOpenRequest=await fetch(`${running.origin}/api/ai/command`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:running.origin,"X-PenEcho-Session":openBody.accessSessionToken},
+      body:"{}",
+    });
+    assert.equal(authenticatedOpenRequest.status,400);
+    const laterPage=await fetch(running.origin),laterHtml=await laterPage.text();
+    assert.ok(laterPage.headers.get("set-cookie"));
+    assert.match(laterHtml,/Handwritten AI Canvas/);
+  } finally {
+    await stopServer(running.child);
+  }
+});
+
+test("concurrent first-run PIN choices cannot overwrite each other", { timeout:20000 }, async () => {
+  const {child,origin}=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"}));
+  try {
+    const submit=pin=>fetch(`${origin}/api/local-access/setup-pin`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:origin},
+      body:JSON.stringify({pin,confirmation:pin}),
+    });
+    const pins=["135790","246802"],responses=await Promise.all(pins.map(submit)),statuses=responses.map(response=>response.status);
+    assert.deepEqual([...statuses].sort((a,b)=>a-b),[200,409]);
+    const winnerIndex=statuses.indexOf(200);
+    const unlock=await fetch(`${origin}/api/local-access/unlock`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:origin},
+      body:JSON.stringify({pin:pins[winnerIndex]}),
+    });
+    assert.equal(unlock.status,200,await unlock.text());
+  } finally {
+    await stopServer(child);
+  }
 });
 
 test("Claude CLI mode sends the canvas to the authenticated local CLI with the selected model and effort", { timeout:20000 }, async () => {
@@ -441,7 +587,7 @@ test("typed canvas text is validated and passed as authoritative model context",
   }
 });
 
-test("Codex process launches require a same-origin session and do not retain failed processes", { timeout: 20000 }, async () => {
+test("open Codex mode keeps its original same-origin request behavior", { timeout: 20000 }, async () => {
   const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-server-test-"));
   const fakeCli = path.join(directory, "fake-codex.js");
   await fs.promises.writeFile(fakeCli, "process.stderr.write('expected test failure'); process.exit(2);\n");
@@ -464,7 +610,10 @@ test("Codex process launches require a same-origin session and do not retain fai
     assert.equal(debugAtlas.status, 404);
 
     const withoutSession = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: "{}" });
-    assert.equal(withoutSession.status, 403);
+    assert.equal(withoutSession.status, 400);
+
+    const withoutOrigin = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(withoutOrigin.status, 403);
 
     const wrongType = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "text/plain", Cookie: cookie, Origin: origin }, body: "{}" });
     assert.equal(wrongType.status, 415);
@@ -474,6 +623,9 @@ test("Codex process launches require a same-origin session and do not retain fai
 
     const authorizedInvalid = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie, Origin: origin }, body: "{}" });
     assert.equal(authorizedInvalid.status, 400);
+    const accessStatus=await fetch(`${origin}/api/local-access/status`).then(response=>response.json());
+    const headerAuthorized=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,"X-PenEcho-Session":accessStatus.accessSessionToken},body:"{}"});
+    assert.equal(headerAuthorized.status,400);
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await fetch(`${origin}/api/ai/command`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie, Origin: origin }, body: JSON.stringify(validPayload()) });
@@ -492,17 +644,25 @@ test("Codex process launches require a same-origin session and do not retain fai
   }
 });
 
-test("API mode preserves unrestricted remote request behavior", { timeout: 20000 }, async () => {
-  const upstream = await startApiServer(), { child, origin } = await startServer(apiServerEnv(upstream.origin));
+test("PIN authentication leaves the API provider request behavior unchanged", { timeout: 20000 }, async () => {
+  const upstream = await startApiServer(), { child, origin } = await startServer(apiServerEnv(upstream.origin,{PENECHO_TEST_OPEN_ACCESS:"0"}));
   try {
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.equal(upstream.requests.length, 0);
+    const setup=await fetch(`${origin}/api/local-access/setup-pin`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Origin:origin},
+      body:JSON.stringify({pin:"271828",confirmation:"271828"}),
+    });
+    const setupBody=await setup.json();
+    assert.equal(setup.status,200,JSON.stringify(setupBody));
     const page = await httpRequest(origin,{headers:{Host:"my-pc:3888"}}), before = upstream.requests.length, body=JSON.stringify(validPayload());
     assert.equal(page.status,200);
     assert.equal(page.headers["set-cookie"],undefined);
-    const remote = await httpRequest(origin,{method:"POST",pathText:"/api/ai/command",headers:{Host:"my-pc:3888",Origin:"https://unrelated.example","Content-Type":"text/plain","Content-Length":Buffer.byteLength(body)},body});
+    const remote = await httpRequest(origin,{method:"POST",pathText:"/api/ai/command",headers:{Host:"my-pc:3888",Origin:"http://my-pc:3888","X-PenEcho-Session":setupBody.accessSessionToken,"Content-Type":"text/plain","Content-Length":Buffer.byteLength(body)},body});
     assert.equal(remote.status,200);
     assert.equal(upstream.requests.length, before + 1);
+    assert.doesNotMatch(upstream.requests[0],new RegExp(setupBody.accessSessionToken));
   } finally {
     await stopServer(child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -511,7 +671,7 @@ test("API mode preserves unrestricted remote request behavior", { timeout: 20000
 
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : command() }) }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { copyText:"flowchart TD\nA-->B", copyLabel:"Copy Mermaid" }) : command() }) }),
     {child,origin} = await startServer(apiServerEnv(upstream.origin));
   try {
     const descriptor = weatherPluginDescriptor(), enabled = validPayload();
@@ -546,6 +706,24 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal(edgeResponse.status, 200);
     assert.deepEqual({ x:edge.commands[0].x, y:edge.commands[0].y, w:edge.commands[0].w, h:edge.commands[0].h }, { x:17900, y:19300, w:2100, h:700 });
 
+    const imagePayload = validPayload();
+    imagePayload.plugins = [builtInPluginDescriptor("image-search", ["https://commons.wikimedia.org", "https://upload.wikimedia.org", "https://api.openverse.org"])];
+    const imageResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(imagePayload) }),
+      imageBody = await imageResponse.json();
+    assert.equal(imageResponse.status, 200);
+    assert.equal(imageBody.commands[0].pluginId, "image-search");
+    assert.equal("copyText" in imageBody.commands[0], false);
+    assert.equal("copyLabel" in imageBody.commands[0], false);
+
+    const flowchartPayload = validPayload();
+    flowchartPayload.plugins = [builtInPluginDescriptor("flowchart")];
+    const flowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
+      flowchartBody = await flowchartResponse.json();
+    assert.equal(flowchartResponse.status, 200);
+    assert.equal(flowchartBody.commands[0].pluginId, "flowchart");
+    assert.equal(flowchartBody.commands[0].copyText, "flowchart TD\nA-->B");
+    assert.equal(flowchartBody.commands[0].copyLabel, "Copy Mermaid");
+
     const malformed = validPayload();
     malformed.plugins = [{ ...descriptor, connect:["https://*.open-meteo.com"] }];
     const rejected = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(malformed) });
@@ -554,7 +732,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     oversized.plugins = [{ ...descriptor, document:"x".repeat(3001) }];
     const oversizedResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(oversized) });
     assert.equal(oversizedResponse.status, 400);
-    assert.equal(upstream.requests.length, 5);
+    assert.equal(upstream.requests.length, 7);
   } finally {
     await stopServer(child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -627,9 +805,11 @@ test("personal plugins use the writable desktop directory and remain fetchable",
       .replace(/^# General HTML$/m,"# Desktop Private Test");
   try {
     assert.equal(fs.existsSync(privateDirectory),false);
+    const page=await fetch(running.origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0];
+    assert.ok(cookie);
     const response=await fetch(`${running.origin}/api/plugins`,{
       method:"POST",
-      headers:{"Content-Type":"application/json",Origin:running.origin},
+      headers:{"Content-Type":"application/json",Origin:running.origin,Cookie:cookie},
       body:JSON.stringify({document}),
     }),body=await response.json();
     assert.equal(response.status,201);
@@ -643,7 +823,7 @@ test("personal plugins use the writable desktop directory and remain fetchable",
     assert.equal(served.status,200);
     assert.equal((await served.text()).trim(),document.trim());
 
-    const removed=await fetch(`${running.origin}/api/plugins/desktop-private-test`,{method:"DELETE",headers:{Origin:running.origin}});
+    const removed=await fetch(`${running.origin}/api/plugins/desktop-private-test`,{method:"DELETE",headers:{Origin:running.origin,Cookie:cookie}});
     assert.equal(removed.status,200);
     assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test.md")),false);
   } finally {
@@ -695,7 +875,8 @@ test("Studio client persona is accepted and exact-match enforced", { timeout:200
 test("debug mode captures the raw model exchange and upstream request identifiers locally", { timeout: 20000 }, async () => {
   const observedText="debug-observed-text",responseContent=JSON.stringify({intent:"answer",observedText,message:"debug reply",commands:[]}),upstream=await startApiServer(responseContent),{child,origin,stateDir}=await startServer(apiServerEnv(upstream.origin,{PENECHO_DEBUG_ARTIFACTS:"true"}));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json(),file=path.join(stateDir,"logs","latest-model.json"),deadline=Date.now()+3000;
+    const page=await fetch(origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0],
+      response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json(),file=path.join(stateDir,"logs","latest-model.json"),deadline=Date.now()+3000;
     assert.equal(response.status,200);
     let exchange=null;
     while(Date.now()<deadline){try{exchange=JSON.parse(await fs.promises.readFile(file,"utf8"))}catch{}if(exchange?.requestId===body.requestId)break;await new Promise(resolve=>setTimeout(resolve,25))}
@@ -705,7 +886,7 @@ test("debug mode captures the raw model exchange and upstream request identifier
     assert.equal(exchange?.response?.upstream?.responseId,"test-response-id");
     assert.equal(exchange?.response?.upstream?.reportedModel,"test-upstream-model");
     assert.equal(exchange?.response?.upstream?.headers?.["x-request-id"],"test-upstream-request");
-    const local=await fetch(`${origin}/api/debug/model`),localBody=await local.json();
+    const local=await fetch(`${origin}/api/debug/model`,{headers:{Cookie:cookie}}),localBody=await local.json();
     assert.equal(local.status,200);
     assert.equal(localBody.requestId,body.requestId);
     const remote=await httpRequest(origin,{pathText:"/api/debug/model",headers:{Host:"my-pc:3888"}});
@@ -946,6 +1127,43 @@ test("API mode does not retry or reject a valid in-canvas draw because of aggreg
   }
 });
 
+test("API mode retries an invalid draw once and returns the corrected command", { timeout: 20000 }, async () => {
+  const invalid=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["circle","line"],items:[[0,0,100,200],[0,0,200]]}]}),
+    corrected=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["ellipse","circle"],items:[[0,0,100,200],[0,0,20]]}]}),
+    upstream=await startApiServer("",{response:({index})=>({body:index===0?invalid:corrected})}),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,2);
+    assert.equal(upstream.requests.length,2);
+    assert.equal(body.commands.length,1);
+    assert.deepEqual(body.commands[0].types,["ellipse","circle"]);
+    const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
+    assert.match(retryText,/previous response contained a draw command that PenEcho cannot render/);
+    assert.match(retryText,/circle needs exactly three/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("API mode never makes a second retry when the corrected draw is still invalid", { timeout: 20000 }, async () => {
+  const invalid=JSON.stringify({intent:"continue",commands:[{tool:"draw",origin:[1000,1000],types:["circle"],items:[[0,0,100,200]]}]}),
+    upstream=await startApiServer(invalid),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,2);
+    assert.equal(upstream.requests.length,2);
+    assert.deepEqual(body.commands,[]);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
 test("normalize action scopes the model request to a bounded lasso selection", { timeout: 20000 }, async () => {
   const responseContent=JSON.stringify({intent:"typeset",observedText:"clean",message:"",commands:[{tool:"write_text",x:10,y:10,text:"clean",fontSize:80,maxWidth:400,lineHeight:1.35}]}),upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
@@ -1173,7 +1391,7 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
     }
     assert.match(atlasMetadata, new RegExp(extraBody.requestId));
     assert.equal(atlasMetadata.includes(marker), false);
-    const log = await fetch(`${origin}/api/debug/log`), text = await log.text();
+    const log = await fetch(`${origin}/api/debug/log`, { headers:{ Cookie:cookie } }), text = await log.text();
     assert.equal(log.status, 200);
     assert.equal(text.includes(marker), false);
   } finally {

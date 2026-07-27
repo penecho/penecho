@@ -74,6 +74,12 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Salve instantâneos localmente no navegador e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
 
+## Novidades da versão 0.7.2
+
+- **Fotos reais e fluxogramas profissionais integrados.** O Real Photo Search mostra imagens da Web com a fonte diretamente na tela, um resultado por padrão e uma fonte alternativa se a principal falhar. O Flowchart cria diagramas de processo, decisão, arquitetura, sequência e estado com código Mermaid copiável.
+- **Edição, salvamento e exportação mais confiáveis.** O Hand move diretamente imagens, animações e widgets retornados pela IA e permite redimensioná-los sem um máximo artificial. Salvar atualiza por padrão o instantâneo carregado, Salvar como novo continua disponível e imagens remotas permanecem nas miniaturas e exportações PNG.
+- **Acesso local e melhor integração com o desktop.** Um código compartilhado de seis dígitos pode proteger a entrada de navegadores locais e da rede sem alterar as solicitações ao modelo após o desbloqueio. A configuração do desktop aceita Kimi API e Kimi CLI, além de API genérica, Codex CLI e Claude CLI, com melhorias em atualizações e empacotamento.
+
 ## Novidades da versão 0.7.1
 
 - **Imagens e fotos na tela.** Adicione imagens pelo seletor do sistema — biblioteca de fotos ou câmera em celulares e tablets, arquivos de imagem no desktop. Imagens grandes são reduzidas e compactadas automaticamente, mantendo telas e snapshots leves.

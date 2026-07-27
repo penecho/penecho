@@ -68,6 +68,7 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
+- [What's new in 0.7.2](#whats-new-in-072)
 - [What's new in 0.7.1](#whats-new-in-071)
 - [What's new in 0.7.0](#whats-new-in-070)
 - [Earlier releases](#earlier-releases)
@@ -168,7 +169,9 @@ penecho
 
 `npm link` creates the local command link; it does not publish the package. There is no separate build step.
 
-Open [http://localhost:3888](http://localhost:3888). With the default `0.0.0.0` listener, startup also prints the machine's concrete LAN URLs on the following lines. Open one of those URLs on another device; if it cannot connect, allow the configured inbound TCP port in the host operating system's firewall or applicable routing policy.
+Open [http://localhost:3888](http://localhost:3888). On each PenEcho start, the first browser must either create a shared six-digit security code or explicitly keep the process open to the local network. The code is stored only as a salted in-memory hash and is cleared when PenEcho restarts; Canvas files and settings are not affected.
+
+With the default `0.0.0.0` listener, startup also prints the machine's concrete LAN URLs on the following lines. Open one of those URLs on another device and enter the same security code; if it cannot connect, allow the configured inbound TCP port in the host operating system's firewall or applicable routing policy.
 
 ## Think on the canvas
 
@@ -183,6 +186,12 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 - Export confirmed canvas ink as a cropped PNG with one `512`-pixel tile of paper margin on every side.
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
+
+## What's new in 0.7.2
+
+- **Built-in real photos and professional flowcharts.** Real Photo Search displays sourced web images directly on the canvas, using one result by default and an alternate source when the primary image fails. Flowchart creates process, decision, architecture, sequence, and state diagrams with copyable Mermaid source.
+- **Reliable canvas editing, saving, and export.** Hand moves images, animations, and AI-returned widgets directly; images and widgets can be resized without an artificial maximum. Saving updates the loaded snapshot by default, while Save New remains available, and remote images are preserved in thumbnails and PNG exports.
+- **Local access and stronger desktop integration.** A shared six-digit code can protect local and LAN browser entry without changing model requests after unlock. Desktop setup supports Kimi API and Kimi CLI alongside generic API, Codex CLI, and Claude CLI, with improved update and packaging behavior.
 
 ## What's new in 0.7.1
 
@@ -256,10 +265,10 @@ If you sign in to Codex with ChatGPT, PenEcho uses the Codex usage included with
 
 ## Safe deployment
 
-PenEcho listens on `0.0.0.0:3888` by default so localhost and trusted-LAN access work immediately. Choose the deployment boundary that matches your executor:
+PenEcho listens on `0.0.0.0:3888` by default so localhost and trusted-LAN access work immediately. Each process starts in an undecided local-access state: choose a shared six-digit code to protect the Canvas, or explicitly acknowledge the risk and continue without one. A browser receives an `HttpOnly`, same-site process-lifetime session only after setting or entering the code. Repeated failures are rate-limited. This code is a practical trusted-LAN guard, not Internet-grade authentication.
 
-- **Codex CLI and Claude CLI modes:** use them only on the local machine or a trusted, directly connected LAN. A valid request starts a local CLI process, so do not expose either mode directly to the public internet or an untrusted reverse proxy. Both work immediately from localhost and LAN addresses without a public-origin setting. PenEcho checks the Host, client network, exact Origin, process-lifetime session cookie, and JSON content type before launching the selected CLI. Each valid new request immediately supersedes the prior request; it never waits in a queue or returns a busy response.
-- **API mode:** local, LAN, proxy, and remote requests are intentionally accepted without PenEcho-level Host or Origin restrictions. If you expose it publicly, place it behind HTTPS, authentication, rate limiting, and request-size controls. Keep the selected configuration file and provider keys private; credentials remain in the Node.js process and are never sent to browser code.
+- **Kimi CLI, Codex CLI, and Claude CLI modes:** use them only on the local machine or a trusted, directly connected LAN. A valid request starts a local CLI process, so do not expose these modes directly to the public internet or an untrusted reverse proxy. PenEcho checks the Host, client network, exact Origin, process-lifetime session cookie, and JSON content type before launching the selected CLI. Each valid new request immediately supersedes the prior request; it never waits in a queue or returns a busy response.
+- **API mode:** the six-digit-code choice protects browser access and AI requests while it is active. If the operator explicitly continues without a code, API requests retain the previous unrestricted remote behavior. For any public exposure, place PenEcho behind HTTPS, stronger authentication, rate limiting, and request-size controls. Keep the selected configuration file and provider keys private; credentials remain in the Node.js process and are never sent to browser code.
 
 For either mode, keep debug artifacts and request tracing disabled in production unless you are actively diagnosing a problem, and never publish configuration files, logs, screenshots, or saved requests containing private content. When request recording is enabled in `Settings`, each valid AI request is stored under `~/.penecho/logs/requests` by default, including the source `atlas.png`, the outbound image, credential-redacted request body, raw and parsed responses, fallback details, and final status. The UI also displays this path and configures retention.
 

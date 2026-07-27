@@ -457,7 +457,7 @@
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       html: widget.html,
-      ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
   function recordWidgetsBefore() {
@@ -472,8 +472,9 @@
     if (!Number.isFinite(contentW) || contentW < 300 || contentW > MAX_WIDGET_CONTENT_DIMENSION
       || !Number.isFinite(contentH) || contentH < 200 || contentH > MAX_WIDGET_CONTENT_DIMENSION) return null;
     if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !n(item.refreshSeconds, 60, 86400)) return null;
-    if (item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
-    if (item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    const allowCopy = item.pluginId !== "image-search";
+    if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
+    if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
       pluginId: item.pluginId,
@@ -486,8 +487,8 @@
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
       html: item.html,
-      copyText: typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
+      copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
+      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -602,7 +603,7 @@
       type:"penecho-widget-init",
       title:widget.title,
       html:widget.html,
-      ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }, location.origin);
   }
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {

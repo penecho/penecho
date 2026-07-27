@@ -30,15 +30,16 @@ test("the browser application is maintained as five ordered source sections", ()
   assert.equal(generated, compiledSource());
 });
 
-test("server, provider, and CLI implementations live under src without main-only features", () => {
+test("server, provider, and CLI implementations live under src without unrelated main-only features", () => {
   for (const source of [
     "src/server/main.js", "src/server/api-config.js", "src/server/typeset.js",
     "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
     "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/update.js",
+    "public/access.html", "public/access.css", "public/access.js",
   ]) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
   for (const excluded of [
     "src/server/cloud-connector.js", "src/desktop/launcher.js", "src/desktop/update.js",
-    "public/cloud-library.js", "public/access.js", "setup/setup.js",
+    "public/cloud-library.js", "setup/setup.js",
   ]) assert.equal(fs.existsSync(path.join(ROOT, excluded)), false, excluded);
 });
 

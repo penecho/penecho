@@ -1,6 +1,6 @@
 # PenEcho desktop packaging
 
-This directory is a self-contained desktop-packaging snapshot of PenEcho 0.7.1. It keeps the existing browser canvas and CLI while adding an Electron shell for macOS and Windows.
+This directory is a self-contained desktop-packaging snapshot of PenEcho 0.7.2. It keeps the existing browser canvas and CLI while adding an Electron shell for macOS and Windows.
 
 End users do **not** need Node.js or Python. Electron bundles its own Chromium and Node.js runtime. API mode is the recommended beginner path. Codex CLI and Claude Code can also be installed from the setup page without opening a terminal.
 
@@ -8,8 +8,8 @@ End users do **not** need Node.js or Python. Electron bundles its own Chromium a
 
 1. PenEcho opens the graphical setup page.
 2. The user chooses API, Kimi, Codex CLI, or Claude CLI.
-3. `Test, save & launch` validates the fields, encrypts any API key through Electron `safeStorage`, and tests the provider.
-4. After a successful test, the app restarts and opens the local PenEcho canvas automatically.
+3. `Test, save & launch` validates the fields, encrypts any API key through Electron `safeStorage`, and tests the provider for up to 30 seconds.
+4. After a successful test, the app restarts and opens the local PenEcho canvas automatically. If the test fails or times out, the saved configuration can still be launched.
 5. Later launches open the canvas directly. `Settings…` remains available from the application menu.
 
 Codex CLI and Claude Code selections include `Install & sign in`. PenEcho downloads only the providers' official installer scripts, validates the response, installs without administrator access, opens the official browser login, and then resumes the connection test. This path does not require npm or a separately installed Node.js runtime.
@@ -91,27 +91,30 @@ Azure Artifact Signing can replace the PFX path later if the publisher account i
 
 ## GitHub Releases
 
-Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v0.7.1`.
+Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v0.7.2`.
 
 The workflow can be run manually for private testing. When triggered by a `v*` tag, it creates a **draft** GitHub Release and uploads the installers. Test every installer before publishing the draft.
 
-Packaged apps check for updates shortly after launch and every six hours. `Help -> Check for Updates…` also provides a manual check. The feed is fixed to `penecho/penecho` through Electron's GitHub Releases update service:
+Packaged apps check for updates shortly after launch and every six hours. `Help -> Check for Updates…` also provides a manual check. PenEcho reads the latest published release directly from the public GitHub Releases API, shows the release notes, and waits for the user to approve the download.
 
-```text
-https://update.electronjs.org/penecho/penecho/<platform>-<arch>/<current-version>
-```
+Only published GitHub Releases are offered. Drafts and prereleases are not installed as normal updates. The updater accepts only the exact asset name for the current platform and architecture, only downloads it from the `penecho/penecho` GitHub Release path over HTTPS, and checks GitHub's SHA-256 digest when it is available.
 
-Only published GitHub Releases are offered. Drafts and prereleases are not installed as normal updates. PenEcho downloads an available update in the background and asks before restarting to install it. macOS automatic replacement requires a consistently signed and notarized app; Windows automatic replacement requires the installed Squirrel build.
+Unsigned builds can update during the pre-signing release phase:
+
+- macOS downloads the matching ZIP, validates its PenEcho bundle ID and version, then replaces the installed `.app` after the running process exits. PenEcho must be installed in a user-writable location.
+- Windows downloads the matching Squirrel Setup executable and starts its silent installed-app upgrade path. Squirrel install/update events update the shortcut and exit without opening the canvas.
+
+These paths intentionally do not invoke Electron's native `autoUpdater`, because macOS Squirrel requires a valid Apple code signature even when both releases are intentionally unsigned. Signing and notarization can still be added later without changing the release asset contract.
 
 Recommended public assets:
 
-- `PenEcho-0.7.1-mac-arm64.dmg`
-- `PenEcho-0.7.1-mac-x64.dmg`
-- `PenEcho-0.7.1-mac-arm64.zip`
-- `PenEcho-0.7.1-mac-x64.zip`
-- `PenEcho-Setup-0.7.1-win-x64.exe`
+- `PenEcho-0.7.2-mac-arm64.dmg`
+- `PenEcho-0.7.2-mac-x64.dmg`
+- `PenEcho-0.7.2-mac-arm64.zip`
+- `PenEcho-0.7.2-mac-x64.zip`
+- `PenEcho-Setup-0.7.2-win-x64.exe`
 - `RELEASES`
-- `penecho-0.7.1-full.nupkg`
+- `penecho-0.7.2-full.nupkg`
 - `SHA256SUMS-<platform>-<arch>.txt`
 
-The DMG and Setup executable are the visible installers. Electron uses the macOS ZIP and the Windows `RELEASES`/`.nupkg` assets for in-app updates, so those assets must remain attached when the draft is published.
+The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP and Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.

@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const { Writable } = require("node:stream");
 const { EventEmitter } = require("node:events");
 const {
+  UPDATE_CHECK_TIMEOUT_MS,
   compareVersions,
   fetchLatestNpmVersion,
   maybeUpdateOnStart,
@@ -21,6 +22,7 @@ function capture() {
 }
 
 test("semantic version comparison handles stable and prerelease npm versions", () => {
+  assert.equal(UPDATE_CHECK_TIMEOUT_MS, 30000);
   assert.equal(compareVersions("0.5.2", "0.5.1"), 1);
   assert.equal(compareVersions("0.5.1", "0.5.1"), 0);
   assert.equal(compareVersions("0.5.0", "0.5.1"), -1);
@@ -41,10 +43,26 @@ test("npm latest-version lookup uses the registry latest endpoint and validates 
   assert.equal(latest, "0.6.0");
   assert.equal(calls[0].url, "https://registry.npmjs.org/penecho/latest");
   assert.equal(calls[0].options.redirect, "error");
+  assert.equal(calls[0].options.headers["User-Agent"], "penecho/0.6.0");
   await assert.rejects(
-    fetchLatestNpmVersion("penecho", { timeoutMs:1000, fetchImpl:async () => ({ ok:true, status:200, json:async () => ({ version:"invalid" }) }) }),
+    fetchLatestNpmVersion("penecho", { timeoutMs:1000, attempts:1, fetchImpl:async () => ({ ok:true, status:200, json:async () => ({ version:"invalid" }) }) }),
     /invalid PenEcho version/,
   );
+});
+
+test("npm latest-version lookup retries one transient failure", async () => {
+  let calls = 0;
+  const latest = await fetchLatestNpmVersion("penecho", {
+    timeoutMs:1000,
+    retryDelayMs:1,
+    fetchImpl:async () => {
+      calls++;
+      if (calls === 1) throw new Error("temporary DNS failure");
+      return { ok:true, status:200, json:async () => ({ version:"0.7.1" }) };
+    },
+  });
+  assert.equal(latest, "0.7.1");
+  assert.equal(calls, 2);
 });
 
 test("update checks run for interactive starts but skip noninteractive and explicitly disabled checks", () => {
@@ -149,4 +167,5 @@ test("offline or invalid update checks never block startup", async () => {
   assert.deepEqual(result, { checked:false, restarted:false });
   assert.match(output.text(), /Checking latest PenEcho version/);
   assert.match(output.text(), /check unavailable/);
+  assert.match(output.text(), /offline/);
 });

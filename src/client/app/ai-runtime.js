@@ -118,7 +118,7 @@
           signal: controller.signal,
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
+          headers: authenticatedApiHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             ...packed,
             trigger: automatic ? "user_paused" : "manual",
@@ -624,7 +624,8 @@
           animationSlots--;
         }
         if (c.tool === "html_widget") {
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
+          const allowCopy = c.pluginId !== "image-search";
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
@@ -635,7 +636,7 @@
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
-            ...(typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
+            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
           };
           widgetSlots--;
         }

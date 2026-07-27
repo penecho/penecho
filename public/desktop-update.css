@@ -1,0 +1,85 @@
+.desktop-update-banner {
+  position: relative;
+  z-index: 100000;
+  width: 100%;
+  color: #172033;
+  border-bottom: 1px solid #c9d8ef;
+  background: #edf5ff;
+  font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 1px 4px #18324f1f;
+}
+.desktop-update-banner[hidden] { display: none; }
+.desktop-update-row {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 10px 5px 14px;
+}
+.desktop-update-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+}
+.desktop-update-title { flex: 0 0 auto; font-size: 13px; }
+.desktop-update-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: #53637a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-update-progress { width: min(220px, 26vw); height: 8px; accent-color: #315efb; }
+.desktop-update-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.desktop-update-actions button {
+  min-height: 28px;
+  padding: 4px 10px;
+  color: #26344b;
+  border: 1px solid #afc2dc;
+  border-radius: 6px;
+  background: #fff;
+  font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.desktop-update-actions button:hover, .desktop-update-actions button:focus-visible { border-color: #315efb; outline: none; }
+.desktop-update-actions .desktop-update-primary { color: #fff; border-color: #315efb; background: #315efb; }
+.desktop-update-actions .desktop-update-close {
+  width: 28px;
+  padding: 0;
+  color: #53637a;
+  border-color: transparent;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 400;
+}
+.desktop-update-notes {
+  max-height: 132px;
+  padding: 8px 14px 10px;
+  overflow: auto;
+  color: #34445d;
+  border-top: 1px solid #d8e4f3;
+  white-space: pre-wrap;
+}
+.desktop-update-notes[hidden] { display: none; }
+body.penecho-desktop-update-visible main { min-height: calc(100vh - 38px); min-height: calc(100dvh - 38px); }
+body[data-theme="arcane"] .desktop-update-banner,
+body[data-theme="scifi"] .desktop-update-banner {
+  color: #edf3ff;
+  border-bottom-color: #435678;
+  background: #172238;
+}
+body[data-theme="arcane"] .desktop-update-detail,
+body[data-theme="scifi"] .desktop-update-detail,
+body[data-theme="arcane"] .desktop-update-notes,
+body[data-theme="scifi"] .desktop-update-notes { color: #c1cee2; }
+body[data-theme="arcane"] .desktop-update-notes,
+body[data-theme="scifi"] .desktop-update-notes { border-top-color: #435678; }
+@media (max-width: 720px) {
+  .desktop-update-row { align-items: flex-start; gap: 6px; }
+  .desktop-update-copy { display: grid; gap: 1px; }
+  .desktop-update-progress { width: min(260px, 55vw); }
+  .desktop-update-secondary { display: none; }
+}

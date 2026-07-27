@@ -26,24 +26,29 @@ const apiDrafts = {
   kimi:{ apiFormat:"openai", apiUrl:"https://api.kimi.com/coding/v1", apiModel:"k3", apiKey:"" },
 };
 const KIMI_ENDPOINTS = Object.freeze({
-  code:Object.freeze({ openai:"https://api.kimi.com/coding/v1", anthropic:"https://api.kimi.com/coding/" }),
+  code:Object.freeze({ openai:"https://api.kimi.com/coding/v1", anthropic:"https://api.kimi.com/coding" }),
   platform:Object.freeze({ china:"https://api.moonshot.cn/v1", global:"https://api.moonshot.ai/v1" }),
 });
 const KIMI_MODELS = Object.freeze({ code:"k3", platform:"kimi-k3" });
+const KIMI_PRESET_ENDPOINTS = new Set([
+  ...Object.values(KIMI_ENDPOINTS.code),
+  ...Object.values(KIMI_ENDPOINTS.platform),
+]);
+const KIMI_PRESET_MODELS = new Set(Object.values(KIMI_MODELS));
 
 const translations = {
   zh:{
     eyebrow:"几分钟内连接 AI 画布", title:"设置你的 AI 连接", subtitle:"PenEcho 在本机运行。选择 AI 模型来源，测试一次，然后就可以开始创作。",
     stepOneTitle:"选择模型来源", stepOneBody:"对大多数用户，API 是最简单的选择。", stepTwoTitle:"安全测试", stepTwoBody:"API Key 由 macOS 或 Windows 加密保存。", stepThreeTitle:"在画布上创作", stepThreeBody:"书写或绘画，让 AI 直接以视觉内容回应。",
     localTitle:"本地桌面服务", localBody:"画布保留在你的电脑中，模型请求只发送给你选择的服务商。", configuration:"配置", settingsTitle:"连接你的模型", providerLegend:"AI 模型来源",
-    apiTitle:"API", apiDescription:"推荐 · 无需安装命令行工具", recommended:"推荐", kimiDescription:"官方合作伙伴 · Kimi K3", kimiCliDescription:"使用本机 Kimi Code 登录", codexDescription:"自动安装或使用已有账户", claudeDescription:"自动安装或使用已有账户",
-    kimiFriendTitle:"Kimi Open Source Friends 官方成员", kimiFriendBody:"PenEcho 获 Moonshot AI 支持，推荐 Kimi K3 处理高要求的视觉创作。", kimiCodeLink:"Kimi Code", kimiChinaLink:"中国大陆", kimiGlobalLink:"全球", kimiOffering:"Kimi 服务", kimiRegion:"访问区域", kimiCodeOption:"Kimi Code · 订阅制", kimiPlatformOption:"开放平台 · 按量付费", globalOption:"全球", chinaOption:"中国大陆",
+    apiTitle:"API", apiDescription:"推荐 · 无需安装命令行工具", recommended:"推荐", kimiDescription:"2026 开源合作伙伴 · Kimi K3", kimiCliDescription:"使用本机 Kimi Code 登录", codexDescription:"自动安装或使用已有账户", claudeDescription:"自动安装或使用已有账户",
+    kimiPartnerTitle:"PenEcho 是 Kimi 2026 开源合作伙伴", otherProviders:"其他模型来源", kimiCodeLink:"Kimi Code", kimiChinaLink:"中国大陆", kimiGlobalLink:"全球", kimiOffering:"Kimi 服务", kimiRegion:"访问区域", kimiCodeOption:"Kimi Code · 订阅制", kimiPlatformOption:"开放平台 · 按量付费", globalOption:"全球", chinaOption:"中国大陆",
     apiType:"API 类型", model:"模型", baseUrl:"API 地址", apiKey:"API Key", savedSecurely:"已安全保存", apiKeyHelp:"使用操作系统加密保存，不会暴露给画布页面。",
     kimiCliRequired:"使用你已有的 Kimi Code CLI 登录状态。", kimiCliInstallHelp:"PenEcho 可以安装官方 Kimi Code CLI，并使用它已有的登录状态。", installGuide:"安装说明", codexRequired:"通过 Codex CLI 使用你现有的 ChatGPT 登录状态。", codexInstallHelp:"PenEcho 会安装官方 CLI，并直接使用你已有的登录状态。", claudeRequired:"通过 Claude Code 使用你现有的 Anthropic 登录状态。", claudeInstallHelp:"PenEcho 会安装官方稳定版 CLI，并直接使用你已有的登录状态。", install:"安装", modelOptional:"模型（可选）", pathOptional:"可执行文件路径（可选）",
     effort:"推理强度", imageFormat:"画布图片格式", advanced:"高级设置", advancedHelp:"网络、超时和诊断", timeout:"模型超时（秒）", autoDelay:"自动 AI 延迟（秒）", port:"本地端口", network:"网络访问",
     lanAccessTitle:"在其他设备上打开 PenEcho", lanAccessHelp:"在连接同一可信网络的设备上使用以下地址，并保持 PenEcho 运行。", lanDynamicPort:"启动后系统会选择端口，并显示最终的局域网地址。", noLanAddress:"暂未检测到局域网地址。连接网络后，启动时会显示最终地址。", copyAddress:"复制地址",
     recordRequests:"记录完整 AI 请求详情", recordWarning:"用于调试，记录中可能包含私密画布内容。", keepRecords:"保留", records:"条", help:"设置帮助", submit:"测试、保存并启动", settingsStored:"设置文件：",
-    testing:"正在测试连接", testingBody:"正在安全保存设置并检查模型连接……", installing:"正在安装", installingBody:"正在从官方来源下载并校验，请稍候……", installed:"安装完成", checkingExistingSession:"正在检查现有账户登录状态……", installFailed:"自动安装未完成", success:"连接成功", launching:"PenEcho 即将启动。", savedTestFailed:"设置已保存，但连接测试失败", launchAnyway:"仍然启动", launchingSaved:"正在使用已保存的设置启动 PenEcho……", failed:"尚未连接", unexpected:"无法打开桌面设置接口。",
+    testing:"正在测试连接", testingBody:"正在安全保存设置并检查模型连接……", testTimedOut:"连接测试已超时", testTimedOutBody:"设置已保存。连接测试超过 30 秒，你仍然可以启动 PenEcho 进入画布。", installing:"正在安装", installingBody:"正在从官方来源下载并校验，请稍候……", installed:"安装完成", checkingExistingSession:"正在检查现有账户登录状态……", installFailed:"自动安装未完成", success:"连接成功", launching:"PenEcho 即将启动。", savedTestFailed:"设置已保存，但连接测试失败", launchAnyway:"仍然启动", launchingSaved:"正在使用已保存的设置启动 PenEcho……", failed:"尚未连接", unexpected:"无法打开桌面设置接口。",
   },
 };
 
@@ -81,6 +86,7 @@ function updateProviderPanels() {
   const selected = provider();
   for (const panel of document.querySelectorAll("[data-provider-panel]")) panel.hidden = !panel.dataset.providerPanel.split(/\s+/).includes(selected);
   for (const element of document.querySelectorAll("[data-kimi-only]")) element.hidden = selected !== "kimi";
+  updateApiFormatAvailability();
 }
 
 function updateLanAccessHint() {
@@ -129,16 +135,27 @@ function restoreApiDraft(name) {
   for (const field of API_FIELDS) assign(field, draft[field]);
 }
 
+function updateApiFormatAvailability() {
+  const anthropicOption = form.elements.apiFormat.querySelector('option[value="anthropic"]'),
+    kimiPlatform = provider() === "kimi" && value("kimiProduct") === "platform";
+  anthropicOption.disabled = kimiPlatform;
+  if (kimiPlatform && value("apiFormat") === "anthropic") assign("apiFormat", "openai");
+}
+
 function updateKimiEndpoint(updateUrl = true, updateModel = false) {
-  const product = value("kimiProduct") || "code", region = value("kimiRegion") || "global",
-    format = value("apiFormat") || "openai", anthropicOption = form.elements.apiFormat.querySelector('option[value="anthropic"]');
-  anthropicOption.disabled = product === "platform";
-  if (product === "platform" && format === "anthropic") assign("apiFormat", "openai");
+  const product = value("kimiProduct") || "code", region = value("kimiRegion") || "global";
+  updateApiFormatAvailability();
   if (updateUrl) {
     const endpoint = product === "code" ? KIMI_ENDPOINTS.code[value("apiFormat") || "openai"] : KIMI_ENDPOINTS.platform[region];
     assign("apiUrl", endpoint);
   }
   if (updateModel) assign("apiModel", KIMI_MODELS[product]);
+}
+
+function repairKimiPreset() {
+  const currentUrl = value("apiUrl").trim().replace(/\/+$/, ""),
+    currentModel = value("apiModel").trim();
+  updateKimiEndpoint(!currentUrl || KIMI_PRESET_ENDPOINTS.has(currentUrl), !currentModel || KIMI_PRESET_MODELS.has(currentModel));
 }
 
 function changeProvider() {
@@ -147,7 +164,7 @@ function changeProvider() {
   activeProvider = selected;
   if (["api", "kimi"].includes(selected)) restoreApiDraft(selected);
   updateProviderPanels();
-  if (selected === "kimi") updateKimiEndpoint(false);
+  if (selected === "kimi") repairKimiPreset();
 }
 
 async function initialize() {
@@ -169,9 +186,9 @@ async function initialize() {
     savedKeyBadge.hidden = !settings.apiKeySaved;
     form.elements.apiKey.placeholder = settings.apiKeySaved ? "Leave blank to keep saved key" : "Paste your API key";
     activeProvider = settings.provider;
-    if (["api", "kimi"].includes(activeProvider)) captureApiDraft(activeProvider);
     updateProviderPanels();
-    if (activeProvider === "kimi") updateKimiEndpoint(false);
+    if (activeProvider === "kimi") repairKimiPreset();
+    if (["api", "kimi"].includes(activeProvider)) captureApiDraft(activeProvider);
     updateLanAccessHint();
   } catch (error) {
     setStatus("error", "Setup could not load", error.message || String(error));
@@ -205,6 +222,13 @@ async function testAndLaunch() {
         action = missingCli
           ? { label:translations[currentLanguage]?.install || "Install", handler:() => installProvider(selected) }
           : result.saved ? { label:translations[currentLanguage]?.launchAnyway || "Launch anyway", handler:launchSavedSettings } : null;
+      if (result.timedOut) {
+        setStatus("warning",
+          translations[currentLanguage]?.testTimedOut || "Connection test timed out",
+          translations[currentLanguage]?.testTimedOutBody || "Settings were saved. The connection test exceeded 30 seconds; you can still launch PenEcho and enter the canvas.",
+          action);
+        return;
+      }
       setStatus(result.saved ? "warning" : "error", result.saved
         ? (translations[currentLanguage]?.savedTestFailed || "Settings saved; connection test failed")
         : (translations[currentLanguage]?.failed || "Connection needs attention"), result.error || "Connection test failed.", action);

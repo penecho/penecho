@@ -4,7 +4,9 @@ const readline = require("readline/promises");
 const { spawn } = require("child_process");
 const PACKAGE_JSON = require("../../package.json");
 
-const UPDATE_CHECK_TIMEOUT_MS = 3500;
+const UPDATE_CHECK_TIMEOUT_MS = 30000;
+const UPDATE_CHECK_ATTEMPTS = 2;
+const UPDATE_RETRY_DELAY_MS = 250;
 const UPDATE_SKIP_ENV = "PENECHO_SKIP_UPDATE_CHECK";
 
 function parsedVersion(value) {
@@ -36,21 +38,44 @@ function compareVersions(left, right) {
 async function fetchLatestNpmVersion(packageName = PACKAGE_JSON.name, options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new Error("This Node.js version does not provide fetch().");
-  const controller = new AbortController(), timeoutMs = options.timeoutMs || UPDATE_CHECK_TIMEOUT_MS,
-    timer = setTimeout(() => controller.abort(), timeoutMs),
-    url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
-  try {
-    const response = await fetchImpl(url, { headers:{ Accept:"application/json" }, redirect:"error", signal:controller.signal });
-    if (!response.ok) throw new Error(`npm registry returned HTTP ${response.status}.`);
-    const latest = String((await response.json())?.version || "").trim();
-    if (!parsedVersion(latest)) throw new Error("npm registry returned an invalid PenEcho version.");
-    return latest.replace(/^v/, "");
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error(`npm update check timed out after ${timeoutMs} ms.`);
-    throw error;
-  } finally {
-    clearTimeout(timer);
+  const timeoutMs = options.timeoutMs || UPDATE_CHECK_TIMEOUT_MS,
+    attempts = Math.max(1, Number(options.attempts) || UPDATE_CHECK_ATTEMPTS),
+    retryDelayMs = Math.max(0, Number(options.retryDelayMs) || UPDATE_RETRY_DELAY_MS),
+    url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
+    deadline = Date.now() + timeoutMs;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      lastError = new Error(`npm update check timed out after ${timeoutMs} ms.`);
+      break;
+    }
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), remainingMs);
+    try {
+      const response = await fetchImpl(url, {
+        headers:{ Accept:"application/json", "User-Agent":`penecho/${PACKAGE_JSON.version}` },
+        redirect:"error",
+        signal:controller.signal,
+      });
+      if (!response.ok) throw new Error(`npm registry returned HTTP ${response.status}.`);
+      const latest = String((await response.json())?.version || "").trim();
+      if (!parsedVersion(latest)) throw new Error("npm registry returned an invalid PenEcho version.");
+      return latest.replace(/^v/, "");
+    } catch (error) {
+      lastError = controller.signal.aborted ? new Error(`npm update check timed out after ${timeoutMs} ms.`) : error;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < attempts && retryDelayMs) {
+      const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
+  throw lastError || new Error("npm update check failed.");
+}
+
+function updateCheckErrorMessage(error) {
+  return String(error?.message || error || "unknown error").replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
 async function confirmUpdate(message, options = {}) {
@@ -123,8 +148,8 @@ async function maybeUpdateOnStart(argv, options = {}) {
       output.write(`PenEcho v${PACKAGE_JSON.version} is the latest version.\n`);
       return { checked:true, latest, restarted:false };
     }
-  } catch {
-    output.write("Latest PenEcho version check unavailable; continuing with the running service.\n");
+  } catch (error) {
+    output.write(`Latest PenEcho version check unavailable (${updateCheckErrorMessage(error)}); continuing with the running service.\n`);
     return { checked:false, restarted:false };
   }
 
@@ -159,6 +184,7 @@ async function maybeUpdateOnStart(argv, options = {}) {
 }
 
 module.exports = {
+  UPDATE_CHECK_TIMEOUT_MS,
   compareVersions,
   fetchLatestNpmVersion,
   maybeUpdateOnStart,

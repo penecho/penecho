@@ -2,14 +2,15 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
+const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const {
-  app, autoUpdater, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell,
+  app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell,
 } = require("electron");
 const {
   apiConfigurationIssues, parseArgs, resolveConfiguration, saveConfiguration, testConfiguredProvider,
 } = require("../cli.js");
-const { normalizeSettings, publicSettings } = require("./settings-contract.js");
+const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("./settings-contract.js");
 const { readSecret, writeSecret } = require("./secret-store.js");
 const { installCli, managedCliPath } = require("./cli-installer.js");
 const { createUpdateManager } = require("./update-manager.js");
@@ -19,14 +20,46 @@ const pkg = require("../package.json");
 
 app.setName("PenEcho");
 
-const gotLock = app.requestSingleInstanceLock();
+function handleSquirrelStartup() {
+  if (process.platform !== "win32") return false;
+  const event = process.argv.find(value => /^--squirrel-(?:install|updated|uninstall|obsolete)$/.test(value));
+  if (!event) return false;
+  if (event === "--squirrel-obsolete") {
+    app.quit();
+    return true;
+  }
+  const updateExe = path.resolve(path.dirname(process.execPath), "..", "Update.exe"),
+    operation = event === "--squirrel-uninstall" ? "--removeShortcut" : "--createShortcut",
+    timeout = setTimeout(() => app.quit(), 1500);
+  try {
+    const child = spawn(updateExe, [operation, path.basename(process.execPath)], { detached:true, stdio:"ignore", windowsHide:true });
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      app.quit();
+    });
+    child.once("error", () => {
+      clearTimeout(timeout);
+      app.quit();
+    });
+    child.unref();
+  } catch {
+    clearTimeout(timeout);
+    app.quit();
+  }
+  return true;
+}
+
+const squirrelStartup = handleSquirrelStartup(),
+  gotLock = !squirrelStartup && app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 
 const ROOT = path.resolve(__dirname, ".."),
   SETTINGS_FILE = path.join(__dirname, "settings", "index.html"),
   PRELOAD = path.join(__dirname, "preload.js"),
+  CANVAS_PRELOAD = path.join(__dirname, "canvas-preload.js"),
   WINDOW_ICON = path.join(ROOT, "build", "icons", "penecho.png"),
-  HELP_URL = "https://github.com/penecho/penecho#quick-start";
+  HELP_URL = "https://github.com/penecho/penecho#quick-start",
+  SETTINGS_TEST_TIMEOUT_MS = 30_000;
 
 let mainWindow = null,
   settingsWindow = null,
@@ -60,6 +93,7 @@ function loadConfiguration() {
     apiKey = readSecret(paths.secretFile, safeStorage);
   configuration.stateDir = paths.stateDir;
   configuration.configFile = paths.configFile;
+  Object.assign(configuration.env, kimiPresetUpdates(configuration));
   configuration.env.PENECHO_STATE_DIR = paths.stateDir;
   configuration.env.PENECHO_PRIVATE_PLUGIN_DIR = paths.privatePlugins;
   if (!configuration.env.HOST) configuration.env.HOST = "0.0.0.0";
@@ -155,11 +189,13 @@ function createMainWindow(url) {
     minWidth:820,
     minHeight:620,
     title:"PenEcho",
+    webPreferences:{ preload:CANVAS_PRELOAD },
   }));
   restrictNavigation(mainWindow, candidate => {
     try { return new URL(candidate).origin === origin; } catch { return false; }
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.webContents.once("did-finish-load", () => sendUpdateState(mainWindow));
   mainWindow.on("closed", () => { mainWindow = null; });
   void mainWindow.loadURL(url);
   return mainWindow;
@@ -205,8 +241,100 @@ function startServer(configuration) {
   });
 }
 
+function updateNoteLines(notes) {
+  return String(notes || "").split(/\r?\n/)
+    .map(line => line
+      .replace(/^\s*(?:#{1,6}|\*|-|\+|\d+\.)\s*/, "")
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/[*_`~]/g, "")
+      .trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .map(line => line.length > 84 ? `${line.slice(0, 81)}...` : line);
+}
+
+function macUpdateMenu(state) {
+  if (process.platform !== "darwin" || !state?.visible) return [];
+  const version = state.version ? ` v${state.version}` : "",
+    noteItems = updateNoteLines(state.notes).map(label => ({ label, enabled:false }));
+  if (state.status === "available") {
+    return [{
+      label:`Update${version}`,
+      submenu:[
+        { label:`PenEcho${version} is available`, enabled:false },
+        ...noteItems,
+        ...(noteItems.length ? [{ type:"separator" }] : []),
+        { label:"Upgrade", click:() => void updateManager?.download() },
+        { label:"Dismiss until next launch", click:() => updateManager?.dismiss() },
+      ],
+    }];
+  }
+  if (state.status === "downloading") {
+    return [{
+      label:`Updating${version}...`,
+      submenu:[
+        { label:`Downloading PenEcho${version}...`, enabled:false },
+        { label:state.progress === null ? "Download in progress" : `${Math.round(state.progress)}% downloaded`, enabled:false },
+      ],
+    }];
+  }
+  if (state.status === "ready") {
+    return [{
+      label:"Install Update",
+      submenu:[
+        { label:`PenEcho${version} is ready`, enabled:false },
+        ...noteItems,
+        ...(noteItems.length ? [{ type:"separator" }] : []),
+        { label:"Install and restart", click:() => void updateManager?.install() },
+        { label:"Later", click:() => updateManager?.dismiss() },
+      ],
+    }];
+  }
+  if (state.status === "installing") return [{ label:`Installing${version}...`, enabled:false }];
+  if (state.status === "checking") return [{ label:"Checking for Updates...", enabled:false }];
+  if (state.status === "up-to-date") {
+    return [{
+      label:"PenEcho is up to date",
+      submenu:[
+        { label:`Current version: v${state.currentVersion}`, enabled:false },
+        { label:"Dismiss", click:() => updateManager?.dismiss() },
+      ],
+    }];
+  }
+  if (state.status === "error") {
+    return [{
+      label:"Update Failed",
+      submenu:[
+        { label:String(state.error || "Try again later.").slice(0, 100), enabled:false },
+        { type:"separator" },
+        { label:state.ready ? "Retry Install" : "Try Again", click:() => void (state.ready ? updateManager?.install() : updateManager?.check(true)) },
+        { label:"Dismiss", click:() => updateManager?.dismiss() },
+      ],
+    }];
+  }
+  return [];
+}
+
+function sendUpdateState(window) {
+  if (!window || window.isDestroyed() || !updateManager) return;
+  window.webContents.send("penecho:update-state", updateManager.getState());
+}
+
+function updateDesktopUpdateUi(state) {
+  const progress = state.status === "downloading"
+    ? state.progress === null ? 2 : Math.max(0, Math.min(1, state.progress / 100))
+    : -1;
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.setProgressBar(progress, { mode:state.progress === null ? "indeterminate" : "normal" });
+  }
+  sendUpdateState(mainWindow);
+  installMenu();
+}
+
 function installMenu() {
-  const template = [
+  const updateState = updateManager?.getState(),
+    template = [
     ...(process.platform === "darwin" ? [{
       label:"PenEcho",
       submenu:[
@@ -233,9 +361,11 @@ function installMenu() {
       ? currentLanUrls.map(url => ({ label:url, click:() => { clipboard.writeText(url); void shell.openExternal(url); } }))
       : [{ label:"Enable local network access in Settings", enabled:false }],
     },
+    ...macUpdateMenu(updateState),
     { label:"Help", submenu:[
       { label:"Getting started", click:() => void shell.openExternal(HELP_URL) },
       { type:"separator" },
+      ...(updateState?.ready ? [{ label:"Install Downloaded Update...", click:() => void updateManager?.install() }] : []),
       { label:"Check for Updates…", click:() => void updateManager?.check(true) },
     ] },
   ];
@@ -243,6 +373,12 @@ function installMenu() {
 }
 
 function registerIpc() {
+  const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+  ipcMain.handle("penecho:get-update-state", event => fromCanvas(event) ? updateManager?.getState() : null);
+  ipcMain.handle("penecho:update-check", event => fromCanvas(event) ? updateManager?.check(true) : false);
+  ipcMain.handle("penecho:update-download", event => fromCanvas(event) ? updateManager?.download() : false);
+  ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);
+  ipcMain.handle("penecho:update-install", event => fromCanvas(event) ? updateManager?.install() : false);
   ipcMain.handle("penecho:get-settings", () => {
     const loaded = loadConfiguration();
     const settings = publicSettings(loaded.configuration, { version:pkg.version, hasSavedApiKey:Boolean(loaded.apiKey) }),
@@ -288,10 +424,26 @@ function registerIpc() {
       currentConfiguration = loaded.configuration;
       let diagnostic;
       try {
-        diagnostic = await testConfiguredProvider(loaded.configuration);
+        let timer;
+        diagnostic = await Promise.race([
+          testConfiguredProvider(loaded.configuration),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => {
+              const error = new Error("Connection test timed out after 30 seconds.");
+              error.code = "PENECHO_SETTINGS_TEST_TIMEOUT";
+              reject(error);
+            }, SETTINGS_TEST_TIMEOUT_MS);
+            timer.unref?.();
+          }),
+        ]).finally(() => clearTimeout(timer));
       } catch (error) {
         settingsReadyToLaunch = true;
-        return { ok:false, saved:true, error:error.message || "Connection test failed." };
+        return {
+          ok:false,
+          saved:true,
+          timedOut:error.code === "PENECHO_SETTINGS_TEST_TIMEOUT",
+          error:error.message || "Connection test failed.",
+        };
       }
       settingsReadyToLaunch = true;
       return { ok:true, saved:true, message:diagnostic };
@@ -312,7 +464,11 @@ function registerIpc() {
 }
 
 async function bootstrap() {
-  updateManager = createUpdateManager({ app, autoUpdater, dialog });
+  updateManager = createUpdateManager({
+    app,
+    fetchImpl:(url, options) => net.fetch(url, options),
+    onStateChange:updateDesktopUpdateUi,
+  });
   installMenu();
   registerIpc();
   updateManager.start();

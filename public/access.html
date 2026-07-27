@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f1f3f6">
+  <title>Local access | PenEcho</title>
+  <link rel="stylesheet" href="access.css">
+</head>
+<body>
+  <header class="access-topbar">
+    <a class="access-brand" href="/" aria-label="PenEcho local Canvas">
+      <img src="penecho-mark.png" alt="">
+      <span><strong>PenEcho</strong><small data-copy="localCanvas">Local Canvas</small></span>
+    </a>
+    <div class="access-language" role="group" aria-label="Language">
+      <button type="button" data-language="en" aria-pressed="true">EN</button>
+      <button type="button" data-language="zh" aria-pressed="false">中</button>
+    </div>
+  </header>
+
+  <main class="access-shell">
+    <section class="access-panel" aria-live="polite">
+      <div class="access-heading">
+        <span class="access-kicker" data-copy="kicker">LOCAL ACCESS</span>
+        <h1 id="accessTitle" data-copy="checkingTitle">Checking this PenEcho server</h1>
+        <p id="accessDescription" data-copy="checkingBody">Confirming how this Canvas is protected.</p>
+      </div>
+
+      <div id="accessLoading" class="access-loading" role="status">
+        <span aria-hidden="true"></span><b data-copy="checking">Checking access...</b>
+      </div>
+
+      <section id="accessSetup" class="access-view" hidden>
+        <div class="access-scope-note">
+          <strong data-copy="scopeTitle">Instance-wide protection</strong>
+          <p data-copy="scopeBody">This is not a code for only this browser. Once set, the same code is required by every browser and device that opens this running PenEcho instance.</p>
+        </div>
+        <div class="access-choice-list">
+          <button id="accessChoosePin" class="access-choice access-choice-primary" type="button">
+            <span class="access-choice-icon" aria-hidden="true">#</span>
+            <span><strong data-copy="setCode">Set a 6-digit security code</strong><small data-copy="setCodeHelp">Recommended when other people or devices share this network.</small></span>
+          </button>
+          <button id="accessChooseOpen" class="access-choice" type="button">
+            <span class="access-choice-icon" aria-hidden="true">&#8594;</span>
+            <span><strong data-copy="continueOpen">Continue without a code</strong><small data-copy="continueOpenHelp">Anyone on this local network may be able to open this Canvas.</small></span>
+          </button>
+        </div>
+        <p class="access-restart-note"><b data-copy="forgotLead">A forgotten code is not a problem.</b> <span data-copy="restartHelp">Restart PenEcho to clear it. Your Canvas files and settings are not affected.</span></p>
+      </section>
+
+      <section id="accessPin" class="access-view access-pin" hidden>
+        <div id="accessPinDots" class="access-pin-dots" aria-label="Security code" aria-live="off">
+          <i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <p id="accessPinStep" class="access-pin-step"></p>
+        <div id="accessKeypad" class="access-keypad" aria-label="Numeric keypad">
+          <button type="button" data-digit="1">1</button><button type="button" data-digit="2">2</button><button type="button" data-digit="3">3</button>
+          <button type="button" data-digit="4">4</button><button type="button" data-digit="5">5</button><button type="button" data-digit="6">6</button>
+          <button type="button" data-digit="7">7</button><button type="button" data-digit="8">8</button><button type="button" data-digit="9">9</button>
+          <button type="button" data-action="backspace" class="access-key-action" aria-label="Backspace" title="Backspace">&#9003;</button>
+          <button type="button" data-digit="0">0</button>
+          <button type="button" data-action="clear" class="access-key-action" data-copy-aria="clear" data-copy-title="clear" aria-label="Clear" title="Clear">C</button>
+        </div>
+        <button id="accessPinBack" class="access-text-button" type="button" data-copy="back" hidden>Back</button>
+        <p class="access-restart-note"><b data-copy="forgotCode">Forgot the code?</b> <span data-copy="restartHelp">Restart PenEcho to clear it. Your Canvas files and settings are not affected.</span></p>
+      </section>
+
+      <section id="accessRisk" class="access-view" hidden>
+        <div class="access-warning">
+          <strong data-copy="openRiskTitle">This Canvas will be open on your local network</strong>
+          <p data-copy="openRiskBody">Other people on the same network may be able to open the Canvas, use its configured AI provider, and manage local plugins.</p>
+        </div>
+        <button id="accessConfirmOpen" class="access-primary" type="button" data-copy="confirmOpen">Keep open on this LAN</button>
+        <button id="accessRiskBack" class="access-text-button" type="button" data-copy="back">Back</button>
+      </section>
+
+      <div id="accessError" class="access-error" role="alert" hidden></div>
+      <button id="accessRetry" class="access-primary" type="button" data-copy="retry" hidden>Retry</button>
+    </section>
+  </main>
+  <script src="access.js"></script>
+</body>
+</html>
