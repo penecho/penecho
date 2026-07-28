@@ -279,7 +279,7 @@ test("declarative scenes and widgets render below the dedicated ink and interact
   assert.ok(restoreState.nextAnimationId >= 21);
 });
 
-test("plugin manager is a centered dynamic catalog with built-in animation and local Markdown plugins", () => {
+test("plugin manager is a centered dynamic catalog with built-in animation and bundled local plugins", () => {
   const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js");
   const css = read("public/style.css");
   for (const id of ["pluginControl", "pluginButton", "pluginPopover", "pluginOptions", "pluginClose", "pluginRefresh", "pluginLocalTab", "pluginCreateTab", "pluginServerTab", "pluginLocalPanel", "pluginCreatePanel", "pluginServerPanel"]) assert.match(html, new RegExp(`id="${id}"`));
@@ -311,7 +311,8 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
   assert.match(functionSource(app, "renderPluginOptions"), /detailDocument[\s\S]*?pluginBuiltInRuntime[\s\S]*?dataset\.pluginDetail[\s\S]*?manifest\?\.document[\s\S]*?dataset\.pluginCopy/);
   assert.match(functionSource(app, "togglePluginDetails"), /detail\.hidden[\s\S]*?aria-expanded/);
   assert.match(functionSource(app, "copyPluginMarkdown"), /writeClipboardText\(document\)[\s\S]*?pluginMarkdownCopied[\s\S]*?pluginMarkdownCopyFailed/);
-  assert.match(app, /plugins\\\/\(\?:private\\\//);
+  assert.match(functionSource(app, "validPluginCatalogPath"), /plugin\\{2}\.md|plugin\\\\\.md/);
+  assert.match(functionSource(app, "validPluginCatalogPath"), /styles\\{2}\.css|styles\\\\\.css/);
   assert.match(css, /\.plugin-option-section-title\s*\{/);
   assert.match(css, /\.plugin-option-detail\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(zh, /pluginDetails:\s*"详情"/);
@@ -338,7 +339,7 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
 
 test("plugin creator offers one air-quality template, AI title completion, deletion, and local save-and-enable", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js"), server = read("src/server/main.js");
-  for (const id of ["pluginCreateForm", "pluginSimpleTemplate", "pluginTitle", "pluginDocumentEditor", "pluginDocumentBytes", "pluginDocumentStatus", "pluginImprove", "pluginSave"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["pluginCreateForm", "pluginSimpleTemplate", "pluginTitle", "pluginDocumentEditor", "pluginDocumentBytes", "pluginStylesEditor", "pluginStylesUploadButton", "pluginStylesUpload", "pluginStylesBytes", "pluginStylesPreview", "pluginDocumentStatus", "pluginImprove", "pluginSave"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /id="pluginApiTemplate"|id="pluginImproveInstructions"/);
   assert.match(html, /data-i18n="sharePluginComing"[^>]*disabled|disabled[^>]*data-i18n="sharePluginComing"/);
   assert.match(html, /id="pluginCreateTab"[\s\S]*?class="plugin-preview"[\s\S]*?data-i18n="pluginPreview"/);
@@ -348,22 +349,25 @@ test("plugin creator offers one air-quality template, AI title completion, delet
   assert.match(app, /simple: `[\s\S]*?我需要根据地点, 显示空气质量\.[\s\S]*?## One-shot example[\s\S]*?html_widget/);
   assert.doesNotMatch(app, /pluginApiTemplate|pluginImproveInstructions/);
   assert.match(functionSource(app, "pluginDraftValidation"), /PLUGINS\.parse[\s\S]*?pluginIdReserved[\s\S]*?pluginIdExists/);
-  assert.match(functionSource(app, "improvePluginDraft"), /fetch\("\/api\/plugins\/improve"[\s\S]*?pluginDocumentEditor\.value = body\.document[\s\S]*?syncPluginTitleFromDocument/);
+  assert.match(functionSource(app, "importPluginStylesFile"), /\.css\$[\s\S]*?file\.size > 32000[\s\S]*?file\.text\(\)[\s\S]*?pluginStylesEditor\.value = styles[\s\S]*?pluginStylesImported/);
+  assert.match(functionSource(app, "improvePluginDraft"), /body:JSON\.stringify\(\{ document, styles[\s\S]*?pluginDocumentEditor\.value = body\.document[\s\S]*?pluginStylesEditor\.value = body\.styles[\s\S]*?syncPluginTitleFromDocument/);
   assert.match(functionSource(app, "savePluginDraft"), /fetch\("\/api\/plugins"[\s\S]*?loadPluginDocuments\(\)[\s\S]*?setPluginEnabled\(savedId, true\)[\s\S]*?setPluginTab\("local"\)/);
   assert.match(functionSource(app, "deleteLocalPlugin"), /plugin\.builtIn !== false[\s\S]*?method:"DELETE"[\s\S]*?forgetPluginSetting[\s\S]*?loadPluginDocuments/);
   assert.match(functionSource(app, "renderPluginOptions"), /plugin\.builtIn === false[\s\S]*?data-plugin-delete|plugin\.builtIn === false[\s\S]*?dataset\.pluginDelete/);
   assert.match(functionSource(app, "setPluginTab"), /\["local", "create", "server"\]/);
+  assert.match(functionSource(app, "setPluginTab"), /panel\.hidden = !active[\s\S]*?if \(active\) panel\.scrollTop = 0/);
   assert.match(css, /\.plugin-template-switch\s*\{[^}]*grid-template-columns:\s*1fr/);
+  assert.match(css, /\.plugin-css-import\s*\{/);
   assert.match(css, /\.plugin-delete-button\s*\{/);
   assert.match(css, /\.plugin-create-actions\s*\{[^}]*grid-template-columns/);
-  for (const key of ["createPlugin", "pluginSimpleTemplate", "pluginTitleLabel", "improvePluginWithAi", "saveAndEnablePlugin", "pluginMarketplaceNote", "pluginNoNetwork", "deletePlugin"]) {
+  for (const key of ["createPlugin", "pluginSimpleTemplate", "pluginTitleLabel", "pluginStylesImport", "pluginStylesImported", "improvePluginWithAi", "saveAndEnablePlugin", "pluginMarketplaceNote", "pluginNoNetwork", "deletePlugin"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
-  assert.match(server, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 3000 UTF-8 bytes[\s\S]*?do not include a full HTML example/);
-  assert.match(functionSource(server, "pluginDocumentFromModel"), /matchAll[\s\S]*?candidates[\s\S]*?PLUGIN_FORMAT\.parse/);
-  assert.match(functionSource(server, "improvePluginDocument"), /requestPluginAuthoringModel[\s\S]*?pluginDocumentFromModel[\s\S]*?pluginAuthoringRepairPrompt[\s\S]*?requestPluginAuthoringModel[\s\S]*?still failed validation/);
-  assert.match(server, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document\)/);
+  assert.match(server, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?JSON object with exactly two string fields[\s\S]*?under 12000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
+  assert.match(functionSource(server, "pluginBundleFromModel"), /matchAll[\s\S]*?JSON\.parse[\s\S]*?PLUGIN_FORMAT\.parse/);
+  assert.match(functionSource(server, "improvePluginDocument"), /requestPluginAuthoringModel[\s\S]*?pluginBundleFromModel[\s\S]*?pluginAuthoringRepairPrompt[\s\S]*?requestPluginAuthoringModel[\s\S]*?still failed validation/);
+  assert.match(server, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document, body\.styles \|\| ""\)/);
   assert.match(server, /url\.pathname === "\/api\/plugins\/improve"[\s\S]*?improvePluginDocument/);
   assert.match(server, /BUILTIN_PLUGIN_IDS[\s\S]*?function deleteLocalPlugin[\s\S]*?Built-in plugins cannot be deleted/);
   assert.match(server, /req\.method === "DELETE"[\s\S]*?deleteLocalPlugin\(id\)/);
@@ -567,7 +571,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(functionSource(app, "requestWidgetSnapshot"), /if \(widget\.snapshotPromise\) return widget\.snapshotPromise[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
   assert.match(messageHandler, /penecho-widget-updated[\s\S]*?widget\.contentReady = true/);
   assert.doesNotMatch(messageHandler, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
-  assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 2);
+  assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 3);
   assert.match(functionSource(app, "snapshotVisibleWidgets"), /requestWidgetSnapshot\(widget\)/);
   assert.doesNotMatch(finishWidgetGesture, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
   assert.match(finishWidgetGesture, /state\.widgetGesture = null[\s\S]*?positionWidget\(gesture\.widget\)/);
@@ -575,6 +579,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     updateWidgetRenderVisibility = vm.runInNewContext(`(${functionSource(app, "updateWidgetRenderVisibility")})`, {
       state:visibilityState,
       view:{ clientWidth:1000, clientHeight:700 },
+      sendWidgetInit() {},
     }),
     visibilityClasses = new Set(),
     visibilityWidget = {
@@ -641,6 +646,52 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.doesNotMatch(frameRule, /box-shadow|border-radius/);
   assert.doesNotMatch(css, /canvas-widget-toolbar/);
   assert.match(read("src/server/main.js"), /Keep user-facing text natively selectable and do not globally disable text selection/);
+});
+
+test("widget AI refinement is discoverable near ink and replaces only its locked target", () => {
+  const app = read("public/app.js"),
+    server = read("src/server/main.js"),
+    candidate = functionSource(app, "currentWidgetRefineCandidate"),
+    dirtyProximity = functionSource(app, "widgetDirtyProximity"),
+    context = functionSource(app, "widgetEditContext"),
+    request = functionSource(app, "requestWidgetRefinement"),
+    validate = functionSource(app, "validate"),
+    start = functionSource(app, "startPendingWidgetReplacement"),
+    accept = functionSource(app, "acceptPendingWidget"),
+    reject = functionSource(app, "rejectPendingWidget"),
+    cancel = functionSource(app, "cancelWidgetRefinement"),
+    mode = functionSource(app, "setCanvasMode"),
+    snapshot = functionSource(app, "requestWidgetSnapshot"),
+    chrome = functionSource(app, "objectChromeSpecs"),
+    record = functionSource(app, "widgetRecord"),
+    serialize = functionSource(app, "serializedWidgets");
+
+  assert.match(candidate, /state\.mode === "hand"[\s\S]*?return null/);
+  assert.match(candidate, /for \(const widget of visibleWidgets\(\)\)/);
+  assert.doesNotMatch(candidate, /pluginId/);
+  assert.match(candidate, /widgetDirtyProximity\(widget\)[\s\S]*?hoverDistance[\s\S]*?widgetRefineFocusId/);
+  assert.match(dirtyProximity, /next <= 48[\s\S]*?distance <= 48/);
+  assert.match(chrome, /state\.mode !== "hand"[\s\S]*?kind:"refine"[\s\S]*?requestWidgetRefinement/);
+  assert.match(request, /await requestWidgetSnapshot\(widget\)[\s\S]*?state\.userRevision !== revision[\s\S]*?state\.widgets\.includes\(widget\)[\s\S]*?captureCurrentViewport:true[\s\S]*?widgetEditTarget:widget/);
+  assert.match(context, /professional \? \{ source:widget\.copyText \} : \{ html:widget\.html \}/);
+  assert.match(context, /!professional && widget\.copyText \? \{ source:widget\.copyText, copyLabel:widget\.copyLabel \}/);
+  assert.doesNotMatch(context, /\bid\b|targetId/);
+  assert.match(validate, /widgetEditTarget && c\.pluginId !== widgetEditTarget\.pluginId/);
+  assert.match(validate, /sourceFormat \? `Copy \$\{sourceFormat\}` : "Copy source"/);
+  assert.match(start, /state\.widgets\.includes\(target\)[\s\S]*?id:target\.id[\s\S]*?x:target\.x[\s\S]*?target\.hiddenForReplacement = true/);
+  assert.match(accept, /state\.widgets\.indexOf\(replacement\.target\)[\s\S]*?state\.widgets\.splice\(index, 1, widget\)/);
+  assert.match(reject, /replacement\.target\.hiddenForReplacement = false[\s\S]*?mountWidget\(replacement\.target\)/);
+  assert.match(cancel, /state\.activeAI\?\.widgetEdit[\s\S]*?state\.pendingWidgetReplacement[\s\S]*?rejectPendingWidget/);
+  assert.match(mode, /widget-refine-tool-change[\s\S]*?restoreMode:false/);
+  assert.match(snapshot, /try \{[\s\S]*?finally \{[\s\S]*?previousActive === false[\s\S]*?widget\.renderActive = false/);
+  for (const field of ["diagramKind", "sourceFormat", "frameworkVersion"]) {
+    assert.match(record, new RegExp(field));
+    assert.match(serialize, new RegExp(field));
+  }
+  assert.match(server, /widgetEditPolicy:"This is a one-shot replacement of exactly the supplied target/);
+  assert.match(functionSource(server, "filterWidgetEditCommands"), /commands\.length === 1[\s\S]*?widget\?\.tool === "html_widget"[\s\S]*?widget\.pluginId === widgetEdit\.pluginId/);
+  assert.match(server, /sourceFormat is an open string, never an enum/);
+  assert.doesNotMatch(server, /ALLOWED_(?:SOURCE_)?FORMATS|SOURCE_FORMATS\s*=\s*new Set/);
 });
 
 test("downsampled animation drafts clip against logical rather than raster dimensions", () => {
@@ -1016,7 +1067,7 @@ test("AI capture stays inside the current viewport when retained dirty ink is of
   assert.match(build, /changedBox: latestVisible/);
   assert.doesNotMatch(build, /containsRect\(sourceRect, latestBox\)/);
   assert.match(request, /const requestBox = packed\.changedBox/);
-  assert.match(request, /rawCommands = Array\.isArray\(data\.commands\)[\s\S]*?normalizeCommandPlacements\(validate\(rawCommands, aiColor\), packed, requestBox\)/);
+  assert.match(request, /rawCommands = Array\.isArray\(data\.commands\)[\s\S]*?normalizeCommandPlacements\(validate\(rawCommands, aiColor, widgetEditTarget\), packed, requestBox\)/);
 });
 
 test("every manual magic action sends the complete current viewport without requiring dirty input", () => {
@@ -1131,7 +1182,7 @@ test("manual actions and pen-down use non-blocking latest-request-wins cancellat
     request = functionSource(app, "requestAI"),
     guard = functionSource(app, "checkAI");
   assert.ok(manual.indexOf('supersedeActiveAI("manual-action")') < manual.indexOf("requestAI(action,"));
-  assert.match(app, /if \(!valid\(p\)\)[\s\S]*?return;\s*}\s*supersedeActiveAI\("user-input-started"\);\s*clearTimeout\(state\.timer\)/);
+  assert.match(app, /if \(!valid\(p\)\)[\s\S]*?return;\s*}\s*supersedeActiveAI\("user-input-started"\);\s*clearWidgetRefineCandidate\(\);\s*clearTimeout\(state\.timer\)/);
   assert.match(supersede, /active\.superseded = true;[\s\S]*?active\.controller\.abort\(\)/);
   assert.doesNotMatch(supersede, /discardPendingForNewAI\(\)/);
   assert.match(app, /appendPendingItems\(state\.pending, items, revision, meta, resolve\)/);

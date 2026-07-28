@@ -45,6 +45,11 @@
     pluginTitle = document.querySelector("#pluginTitle"),
     pluginDocumentEditor = document.querySelector("#pluginDocumentEditor"),
     pluginDocumentBytes = document.querySelector("#pluginDocumentBytes"),
+    pluginStylesEditor = document.querySelector("#pluginStylesEditor"),
+    pluginStylesUploadButton = document.querySelector("#pluginStylesUploadButton"),
+    pluginStylesUpload = document.querySelector("#pluginStylesUpload"),
+    pluginStylesBytes = document.querySelector("#pluginStylesBytes"),
+    pluginStylesPreview = document.querySelector("#pluginStylesPreview"),
     pluginDocumentStatus = document.querySelector("#pluginDocumentStatus"),
     pluginImprove = document.querySelector("#pluginImprove"),
     pluginSave = document.querySelector("#pluginSave"),
@@ -153,6 +158,7 @@ The generated HTML must fetch data directly in the user's browser, own its refre
 
 User writes “我需要根据地点, 显示空气质量”, names a place, and points to an empty area. Produce one html_widget there that uses that place in its API requests and displays the resulting air-quality information in large readable type.`,
   });
+  const PLUGIN_TEMPLATE_STYLES = Object.freeze({ simple:"" });
   const I18N = {
     en: {
       title: "PenEcho | Handwritten AI Canvas",
@@ -283,8 +289,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourDone: "Finish",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourPluginsTitle: "Real photos and flowcharts",
-      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Flowchart is off by default and creates diagrams with copyable Mermaid source. Manage both in Plugins.",
+      tourPluginsTitle: "Real photos and professional diagrams",
+      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is off by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
       tourHandBody: "Choose Hand, then use the small top handle to move outlined images, animations, and AI HTML widgets. Hand also lets you click inside HTML widgets; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
@@ -308,9 +314,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Real photos, flowcharts, and smoother canvas work",
+      changelogTitle: "Real photos, professional diagrams, and smoother canvas work",
       changelogIntro: "Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.",
-      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images and Flowchart for professional diagrams with copyable Mermaid source.",
+      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images or Professional Diagrams for expert visuals with copyable source formats.",
       changelogCanvasWorkflow: "Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.",
       changelogDesktopAccess: "Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.",
       changelogEarlierTitle: "Earlier highlights",
@@ -444,11 +450,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pluginTitleLabel: "Plugin title",
       pluginTitlePlaceholder: "Filled automatically by Improve with AI, or enter your own",
       pluginDocumentLabel: "Plugin Markdown",
-      pluginDocumentHint: "Prefer Improve with AI before saving. The final document needs frontmatter, an exact One-shot example, and no more than 3000 UTF-8 bytes.",
+      pluginDocumentHint: "Prefer Improve with AI before saving. The final document needs frontmatter and an exact One-shot example.",
+      pluginStylesLabel: "Plugin CSS (optional)",
+      pluginStylesHint: "Saved CSS is injected only when this plugin's widget is mounted; it does not load at canvas startup. Edit here or import a .css file. Put external JS/CSS URLs in generated widget HTML.",
+      pluginStylesImport: "Import .css",
+      pluginStylesImported: "Imported {name}. Review the preview before saving.",
+      pluginStylesFileType: "Choose a .css file",
+      pluginStylesFileTooLarge: "CSS file must be 32000 bytes or smaller",
+      pluginStylesReadFailed: "CSS file could not be read: {error}",
+      pluginStylesPreview: "Plugin CSS preview",
       improvePluginWithAi: "Improve with AI",
       saveAndEnablePlugin: "Save and enable",
       pluginMarketplaceNote: "The future marketplace will support free or points-priced downloads. Authors will be able to share plugins and earn points.",
-      pluginBytes: "{bytes} / 3000 bytes",
+      pluginBytes: "{bytes} / 12000 bytes",
+      pluginStylesBytes: "{bytes} / 32000 bytes",
       pluginDraftValid: "Ready to save as {name}",
       pluginDraftInvalid: "Fix the plugin document: {error}",
       pluginIdExists: "Plugin id {id} already exists",
@@ -483,6 +498,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDeleted: "Widget deleted",
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
+      widgetRefine: "AI Refine",
+      widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
+      widgetRefining: "AI is refining this widget",
+      widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
       widgetPluginUnavailable: "The plugin document could not be loaded",
       widgetLimitReached: "Live widget limit reached (20). Delete a widget before adding another.",
@@ -583,11 +602,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgets: [],
       nextWidgetId: 1,
       pendingWidget: null,
+      pendingWidgetReplacement: null,
       selectedWidgetId: null,
       widgetEdit: null,
       widgetGesture: null,
       widgetHostPan: null,
       widgetHistoryBefore: null,
+      widgetRefineCandidate: null,
+      widgetRefinePointer: null,
+      widgetRefineFocusId: null,
+      widgetRefineGraceUntil: 0,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -1183,6 +1207,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         connect: [...manifest.connect],
         recommendedRefreshSeconds: manifest.recommendedRefreshSeconds,
         document: manifest.document,
+        styles: manifest.styles,
       }));
   }
   function pluginRequestPayload() {
@@ -1191,8 +1216,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (plugins.length) payload.plugins = plugins;
     return payload;
   }
-  function validPluginCatalogPath(value) {
-    return typeof value === "string" && /^plugins\/(?:private\/)?[a-z0-9][a-z0-9-]{0,63}\.md$/.test(value) ? value : null;
+  function validPluginCatalogPath(value, extension) {
+    if (typeof value !== "string") return null;
+    const suffix = extension === "css" ? "styles\\.css" : "plugin\\.md",
+      legacy = extension === "md" ? "|[a-z0-9][a-z0-9-]{0,63}\\.md" : "";
+    return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})$`).test(value) ? value : null;
   }
   async function loadPluginDocuments() {
     if (state.pluginCatalogLoading) return false;
@@ -1204,15 +1232,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const response = await fetch("/api/plugins", { credentials:"same-origin", cache:"no-store" });
       if (!response.ok) throw Error(`HTTP ${response.status}`);
       const catalog = await response.json(), entries = (Array.isArray(catalog?.plugins) ? catalog.plugins : [])
-        .map((entry) => ({ path:validPluginCatalogPath(entry?.path), builtIn:entry?.builtIn !== false }))
+        .map((entry) => ({
+          path:validPluginCatalogPath(entry?.path, "md"),
+          stylePath:entry?.stylePath ? validPluginCatalogPath(entry.stylePath, "css") : null,
+          builtIn:entry?.builtIn !== false,
+          error:typeof entry?.error === "string" ? entry.error : "",
+        }))
         .filter((entry) => entry.path), uniqueEntries = [...new Map(entries.map((entry) => [entry.path, entry])).values()];
-      const loaded = await Promise.all(uniqueEntries.map(async ({ path:documentPath, builtIn }) => {
+      const loaded = await Promise.all(uniqueEntries.map(async ({ path:documentPath, stylePath, builtIn, error:catalogError }) => {
+        if (catalogError) return { documentPath, error:catalogError };
         try {
-          const documentResponse = await fetch(documentPath, { credentials:"same-origin", cache:"no-store" });
+          const [documentResponse, styleResponse] = await Promise.all([
+            fetch(documentPath, { credentials:"same-origin", cache:"no-store" }),
+            stylePath ? fetch(stylePath, { credentials:"same-origin", cache:"no-store" }) : null,
+          ]);
           if (!documentResponse.ok) throw Error(`HTTP ${documentResponse.status}`);
-          const manifest = PLUGINS?.parse(await documentResponse.text());
+          if (styleResponse && !styleResponse.ok) throw Error(`CSS HTTP ${styleResponse.status}`);
+          const [document, styles] = await Promise.all([documentResponse.text(), styleResponse ? styleResponse.text() : ""]),
+            manifest = PLUGINS?.parse(document, styles);
           if (!manifest) throw Error("Plugin parser is unavailable");
-          return { documentPath, manifest, builtIn };
+          return { documentPath, stylePath, manifest, builtIn };
         } catch (error) {
           return { documentPath, error:error.message };
         }
@@ -1231,6 +1270,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         definitions.push(Object.freeze({
           id:item.manifest.id,
           documentPath:item.documentPath,
+          stylePath:item.stylePath,
           builtIn:item.builtIn,
           defaultEnabled:["general", "image-search", "weather"].includes(item.manifest.id),
         }));
@@ -1241,6 +1281,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         fixedDefinitionIds = new Set(["general", ...promotedDefinitions.map((definition) => definition.id)]),
         remainingDefinitions = definitions.filter((definition) => !fixedDefinitionIds.has(definition.id)),
         previousIds = new Set(dataPluginDefinitions().map((plugin) => plugin.id)), nextIds = new Set(definitions.map((plugin) => plugin.id));
+      if (state.activeAI?.widgetEdit || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
       for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) unmountWidget(widget);
       PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
       pluginManifests.clear();
@@ -1345,7 +1386,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         help.textContent = plugin.id === "general" ? t("generalPluginRecommendedHelp") : plugin.helpKey ? t(plugin.helpKey) : localizedManifestValue(manifest, "description") || t("pluginNoDescription");
         meta.className = "plugin-option-meta";
         if (plugin.documentPath && manifest) {
-          const bytes = new TextEncoder().encode(manifest.document).length,
+          const bytes = new TextEncoder().encode(`${manifest.document}\n${manifest.styles || ""}`).length,
             tokens = Math.ceil(bytes / 4),
             source = manifest.source || manifest.connect.map((origin) => new URL(origin).hostname).join(", "),
             sourceItem = document.createElement("span"),
@@ -1477,16 +1518,33 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function pluginDraftValidation() {
     const document = pluginDocumentWithTitle(pluginDocumentEditor.value),
-      bytes = new TextEncoder().encode(document).length;
+      styles = pluginStylesEditor?.value || "",
+      bytes = new TextEncoder().encode(document).length,
+      styleBytes = new TextEncoder().encode(styles).length;
     try {
       if (!PLUGINS?.parse) throw Error("Plugin parser is unavailable");
-      const manifest = PLUGINS.parse(document);
+      const manifest = PLUGINS.parse(document, styles);
       if (PLUGIN_DEFINITIONS.some((plugin) => plugin.id === manifest.id && plugin.builtIn !== false) || ["animation", "general"].includes(manifest.id)) throw Error(t("pluginIdReserved").replace("{id}", manifest.id));
       if (pluginManifests.has(manifest.id)) throw Error(t("pluginIdExists").replace("{id}", manifest.id));
-      return { bytes, manifest, document, error:"" };
+      return { bytes, styleBytes, manifest, document, styles:manifest.styles, error:"" };
     } catch (error) {
-      return { bytes, manifest:null, error:error.message || String(error) };
+      return { bytes, styleBytes, manifest:null, error:error.message || String(error) };
     }
+  }
+  function updatePluginStylesPreview(validation) {
+    if (!pluginStylesPreview) return;
+    const css = validation?.manifest?.styles || "",
+      escaped = css.replace(/<\/style/gi, "<\\/style");
+    pluginStylesPreview.srcdoc = `<!doctype html><meta charset="utf-8"><style>
+      *{box-sizing:border-box}body{margin:0;padding:22px;background:#fff;color:#172033;font:16px/1.45 system-ui,sans-serif}
+      .plugin-css-preview{display:grid;gap:16px}.preview-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+      .preview-node{padding:12px 16px;border:2px solid #64748b;border-radius:6px;background:#f8fafc;font-weight:700}
+      .preview-muted{color:#64748b}.preview-accent{color:#2563eb}
+    </style><style>${escaped}</style><main class="plugin-css-preview pd-root" data-pd-palette="standard" data-pd-density="comfortable">
+      <h2 class="pd-title">Plugin style preview</h2><p class="pd-subtitle preview-muted">Typography, semantic nodes, labels and palette variables</p>
+      <div class="preview-row pd-stage"><span class="preview-node pd-node pd-node--service">Service</span><span class="pd-edge-label">request</span><span class="preview-node pd-node pd-node--database">Database</span></div>
+      <div class="preview-row"><span class="pd-badge pd-badge--info preview-accent">Info</span><span class="pd-badge pd-badge--success">Success</span><span class="pd-badge pd-badge--warning">Warning</span><span class="pd-badge pd-badge--danger">Error</span></div>
+    </main>`;
   }
   function updatePluginAuthoringUi() {
     const validation = pluginDraftValidation(),
@@ -1500,14 +1558,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.disabled = state.pluginAuthoringBusy;
     }
     pluginDocumentBytes.textContent = t("pluginBytes").replace("{bytes}", String(validation.bytes));
-    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 3000);
+    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 12000);
+    pluginStylesBytes.textContent = t("pluginStylesBytes").replace("{bytes}", String(validation.styleBytes));
+    pluginStylesBytes.classList.toggle("invalid", validation.styleBytes > 32000);
     pluginDocumentStatus.textContent = pluginAuthoringText(status);
     pluginDocumentStatus.className = status.type || "";
     pluginTitle.disabled = state.pluginAuthoringBusy;
     pluginDocumentEditor.disabled = state.pluginAuthoringBusy;
+    pluginStylesEditor.disabled = state.pluginAuthoringBusy;
+    pluginStylesUploadButton.disabled = state.pluginAuthoringBusy;
+    pluginStylesUpload.disabled = state.pluginAuthoringBusy;
     pluginImprove.disabled = state.pluginAuthoringBusy || !pluginDocumentEditor.value.trim() || validation.bytes > 12000;
     pluginSave.disabled = state.pluginAuthoringBusy || state.pluginCatalogLoading || !validation.manifest;
     for (const tab of [pluginLocalTab, pluginCreateTab, pluginServerTab]) tab.disabled = state.pluginAuthoringBusy;
+    updatePluginStylesPreview(validation);
     return validation;
   }
   function setPluginAuthoringStatus(key, type = "", values = {}, raw = "") {
@@ -1519,9 +1583,44 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pluginAuthoringTemplate = template;
     state.pluginAuthoringStatus = null;
     pluginDocumentEditor.value = PLUGIN_TEMPLATE_DOCUMENTS[template];
+    pluginStylesEditor.value = PLUGIN_TEMPLATE_STYLES[template] || "";
     syncPluginTitleFromDocument(pluginDocumentEditor.value);
     updatePluginAuthoringUi();
     return true;
+  }
+  async function importPluginStylesFile(file) {
+    if (!(file instanceof Blob) || state.pluginAuthoringBusy) return false;
+    const name = String(file.name || "styles.css"),
+      isCss = /\.css$/i.test(name) || file.type === "text/css";
+    if (!isCss) {
+      setPluginAuthoringStatus("pluginStylesFileType", "error");
+      return false;
+    }
+    if (file.size > 32000) {
+      setPluginAuthoringStatus("pluginStylesFileTooLarge", "error");
+      return false;
+    }
+    try {
+      const styles = await file.text();
+      if (new TextEncoder().encode(styles).length > 32000) {
+        setPluginAuthoringStatus("pluginStylesFileTooLarge", "error");
+        return false;
+      }
+      pluginStylesEditor.value = styles;
+      state.pluginAuthoringStatus = null;
+      const validation = pluginDraftValidation();
+      if (!validation.manifest) {
+        setPluginAuthoringStatus("pluginDraftInvalid", "error", { error:validation.error });
+        return false;
+      }
+      setPluginAuthoringStatus("pluginStylesImported", "success", { name });
+      return true;
+    } catch (error) {
+      setPluginAuthoringStatus("pluginStylesReadFailed", "error", { error:error.message || String(error) });
+      return false;
+    } finally {
+      pluginStylesUpload.value = "";
+    }
   }
   async function pluginJsonResponse(response) {
     let body = null;
@@ -1531,8 +1630,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function improvePluginDraft() {
     if (state.pluginAuthoringBusy) return false;
-    const document = pluginDocumentWithTitle(pluginDocumentEditor.value);
-    if (!document.trim() || new TextEncoder().encode(document).length > 12000) return false;
+    const document = pluginDocumentWithTitle(pluginDocumentEditor.value),
+      styles = pluginStylesEditor.value;
+    if (!document.trim() || new TextEncoder().encode(document).length > 12000 || new TextEncoder().encode(styles).length > 32000) return false;
     state.pluginAuthoringBusy = true;
     setPluginAuthoringStatus("pluginImproving");
     try {
@@ -1540,10 +1640,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-        body:JSON.stringify({ document, reasoningEffort:state.reasoningEffort }),
+        body:JSON.stringify({ document, styles, reasoningEffort:state.reasoningEffort }),
       }), body = await pluginJsonResponse(response);
-      if (typeof body?.document !== "string") throw Error("The AI response did not contain a plugin document");
+      if (typeof body?.document !== "string" || typeof body?.styles !== "string") throw Error("The AI response did not contain a complete plugin bundle");
+      PLUGINS.parse(body.document, body.styles);
       pluginDocumentEditor.value = body.document;
+      pluginStylesEditor.value = body.styles;
       syncPluginTitleFromDocument(body.document);
       state.pluginAuthoringStatus = { key:"pluginImproved", type:"success", values:{} };
       return true;
@@ -1567,7 +1669,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-        body:JSON.stringify({ document:validation.document }),
+        body:JSON.stringify({ document:validation.document, styles:validation.styles }),
       }), body = await pluginJsonResponse(response), savedId = body?.plugin?.id;
       if (typeof savedId !== "string" || !await loadPluginDocuments() || !setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
       state.pluginAuthoringStatus = { key:"pluginSaved", type:"success", values:{ name:localizedManifestValue(validation.manifest, "name") || validation.manifest.name } };
@@ -1633,6 +1735,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
       panel.hidden = !active;
+      if (active) panel.scrollTop = 0;
     }
     if (selected === "create") updatePluginAuthoringUi();
   }
@@ -1690,6 +1793,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function applyWidgetPluginState(pluginId, enabled) {
+    if (!enabled && state.activeAI?.widgetEdit?.pluginId === pluginId) cancelWidgetRefinement("widget-plugin-disabled");
     if (!enabled && state.pendingWidget?.pluginId === pluginId) rejectPendingWidget();
     if (!enabled && selectedWidget()?.pluginId === pluginId) acceptWidgetEdit();
     for (const widget of state.widgets) {
@@ -1854,6 +1958,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function invokeAIAction(action) {
+    cancelWidgetRefinement("manual-action");
     if (state.selection?.phase === "active") {
       const selection = state.selection,
         packed = buildSelectionTypesetRequest(selection);
@@ -2283,6 +2388,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function addImageFile(file) {
     if (state.imageImporting) return;
+    cancelWidgetRefinement("image-import-started");
     if (state.images.length >= MAX_VISIBLE_IMAGES) {
       setStatusKey("imageLimitReached");
       return;
@@ -2299,7 +2405,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const prepared = await prepareImportedImage(file);
       if (expectedIdentityGeneration !== canvasIdentityGeneration()) return;
       if (state.pending) acceptPending();
-      if (state.pendingWidget) acceptPendingWidget();
+      if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED);
+      else if (state.pendingWidget) acceptPendingWidget();
       if (state.images.length >= MAX_VISIBLE_IMAGES) throw imageImportError("imageLimitReached");
       if (state.selection) commitSelection();
       if (state.selection) {
@@ -2339,7 +2446,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function visibleWidgets(region = null) {
     if (!widgetRuntimeEnabled()) return [];
-    return state.widgets.filter((widget) => pluginEnabled(widget.pluginId) && pluginManifests.has(widget.pluginId) && (!region || intersection(widgetBox(widget), region)));
+    return state.widgets.filter((widget) => !widget.hiddenForReplacement && pluginEnabled(widget.pluginId) && pluginManifests.has(widget.pluginId) && (!region || intersection(widgetBox(widget), region)));
   }
   function serializedWidgets() {
     return state.widgets.map((widget) => ({
@@ -2354,6 +2461,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       html: widget.html,
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
@@ -2370,6 +2480,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       || !Number.isFinite(contentH) || contentH < 200 || contentH > MAX_WIDGET_CONTENT_DIMENSION) return null;
     if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !n(item.refreshSeconds, 60, 86400)) return null;
     const allowCopy = item.pluginId !== "image-search";
+    const diagramKind = typeof item.diagramKind === "string" ? item.diagramKind.trim() : "",
+      inferredSourceFormat = item.pluginId === "flowchart" && item.copyText && item.sourceFormat === undefined ? "mermaid" : "",
+      sourceFormat = typeof item.sourceFormat === "string" ? item.sourceFormat.trim() : inferredSourceFormat,
+      frameworkVersion = typeof item.frameworkVersion === "string" ? item.frameworkVersion.trim() : "";
+    if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
     if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
     if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
@@ -2384,8 +2499,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
       html: item.html,
+      diagramKind,
+      sourceFormat,
+      frameworkVersion,
       copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
+      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -2393,6 +2511,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   function restoreWidgets(items) {
+    if (state.activeAI?.widgetEdit) supersedeActiveAI("widgets-restored");
+    if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
+    state.pendingWidgetReplacement = null;
+    clearWidgetRefineCandidate();
     for (const widget of state.widgets) unmountWidget(widget);
     state.widgets = [];
     state.selectedWidgetId = null;
@@ -2421,17 +2543,31 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       frame = document.createElement("iframe");
     shell.className = `canvas-widget${widget.pending ? " pending" : ""}`;
     shell.dataset.widgetId = widget.id;
+    shell.tabIndex = widget.pending ? -1 : 0;
+    shell.setAttribute("aria-label", `${widget.title}. ${t("widgetRefineHint")}`);
     shell.classList.add(`canvas-widget-instance-${widget.id.replace(/[^a-z0-9-]/g, "")}`);
     frame.className = "canvas-widget-frame";
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
+    shell.addEventListener("focusin", () => {
+      if (state.mode === "hand" || widget.pending) return;
+      state.widgetRefineFocusId = widget.id;
+      requestInteractionLayerRender();
+    });
+    shell.addEventListener("focusout", (event) => {
+      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
+      if (state.widgetRefineFocusId === widget.id) state.widgetRefineFocusId = null;
+      state.widgetRefineGraceUntil = Date.now() + 420;
+      setTimeout(() => requestInteractionLayerRender(), 440);
+    });
     shell.append(frame);
     widgetLayer.append(shell);
     widget.shell = shell;
     widget.frame = frame;
     widget.initialized = false;
     widget.hostReady = false;
+    widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
     widget.hostStateKey = null;
     widget.contentReady = false;
     widget.readyPromise = new Promise((resolve) => (widget.resolveReady = resolve));
@@ -2449,6 +2585,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widget.frame = null;
     widget.initialized = false;
     widget.hostReady = false;
+    widget.resolveHostReady = null;
+    widget.hostReadyPromise = null;
     widget.contentReady = false;
     widget.resolveReady = null;
     widget.readyPromise = null;
@@ -2490,6 +2628,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       active = dragging || intersectsViewport;
     widget.renderActive = active;
     widget.shell.classList.toggle("widget-offscreen", !active);
+    if (active) sendWidgetInit(widget);
     return active;
   }
   function positionWidget(widget) {
@@ -2515,12 +2654,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) positionWidget(widget);
   }
   function sendWidgetInit(widget) {
-    if (!widget.frame?.contentWindow || !widget.hostReady || widget.initialized) return;
+    if (!widget.frame?.contentWindow || !widget.hostReady || widget.initialized || widget.renderActive === false) return;
+    const manifest = pluginManifests.get(widget.pluginId);
+    if (!manifest) return;
     widget.initialized = true;
     widget.frame.contentWindow.postMessage({
       type:"penecho-widget-init",
       title:widget.title,
       html:widget.html,
+      pluginStyles:manifest.styles || "",
       ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }, location.origin);
   }
@@ -2555,17 +2697,34 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function requestWidgetSnapshot(widget) {
     if (widget.snapshotPromise) return widget.snapshotPromise;
     const snapshotPromise = (async () => {
-      await waitForWidgetContent(widget);
-      if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
-      const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          widgetSnapshotRequests.delete(requestId);
-          reject(Error(t("widgetExportFailed")));
-        }, WIDGET_SNAPSHOT_TIMEOUT_MS);
-        widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-        widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
-      });
+      const previousActive = widget.renderActive;
+      try {
+        if (!widget.hostReady && widget.hostReadyPromise) await Promise.race([
+          widget.hostReadyPromise,
+          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+        ]);
+        if (!widget.initialized) {
+          widget.renderActive = true;
+          sendWidgetInit(widget);
+          sendWidgetHostState(widget, undefined, undefined, true);
+        }
+        await waitForWidgetContent(widget);
+        if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
+        const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        return await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            widgetSnapshotRequests.delete(requestId);
+            reject(Error(t("widgetExportFailed")));
+          }, WIDGET_SNAPSHOT_TIMEOUT_MS);
+          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
+        });
+      } finally {
+        if (previousActive === false) {
+          widget.renderActive = false;
+          sendWidgetHostState(widget, undefined, undefined, true);
+        }
+      }
     })();
     widget.snapshotPromise = snapshotPromise;
     try {
@@ -2581,6 +2740,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const message = event.data;
     if (message.type === "penecho-widget-host-ready") {
       widget.hostReady = true;
+      widget.resolveHostReady?.();
+      widget.resolveHostReady = null;
       sendWidgetInit(widget);
       sendWidgetHostState(widget, undefined, undefined, true);
       return;
@@ -2996,6 +3157,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const restoreMode = options?.restoreMode !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
+    const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
     if (widget.revision !== state.userRevision) {
       rejectPendingWidget(AI_CANCELLED);
@@ -3004,14 +3166,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     recordWidgetsBefore();
     state.pendingWidget = null;
+    state.pendingWidgetReplacement = null;
     widget.pending = false;
     const resolve = widget.resolve;
     widget.resolve = null;
     unmountWidget(widget);
-    state.widgets.push(widget);
+    if (replacement) {
+      const index = state.widgets.indexOf(replacement.target);
+      if (index < 0 || replacement.target.id !== widget.id || replacement.target.pluginId !== widget.pluginId) {
+        replacement.target.hiddenForReplacement = false;
+        mountWidget(replacement.target);
+        resolve?.(AI_CANCELLED);
+        state.widgetHistoryBefore = null;
+        if (restoreMode) finishAIDraftHandMode();
+        return;
+      }
+      state.widgets.splice(index, 1, widget);
+    } else state.widgets.push(widget);
     mountWidget(widget);
     const historyEntry = save();
-    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
+    if (!replacement) recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     requestInteractionLayerRender();
     setStatusKey("merged");
     resolve?.(true);
@@ -3019,17 +3193,37 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function rejectPendingWidget(result = AI_REJECTED, options) {
     options ||= {};
-    const restoreMode = options?.restoreMode !== false;
+    const restoreMode = options?.restoreMode !== false,
+      updateStatus = options?.status !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
     state.pendingWidget = null;
+    const replacement = state.pendingWidgetReplacement;
+    state.pendingWidgetReplacement = null;
     const resolve = widget.resolve;
     widget.resolve = null;
     unmountWidget(widget);
+    if (replacement?.target && state.widgets.includes(replacement.target)) {
+      replacement.target.hiddenForReplacement = false;
+      mountWidget(replacement.target);
+    }
     requestInteractionLayerRender();
-    setStatusKey(result === AI_CANCELLED ? "canvasChanged" : "draftRejected");
+    if (updateStatus) setStatusKey(result === AI_CANCELLED ? "canvasChanged" : "draftRejected");
     resolve?.(result);
     if (restoreMode) finishAIDraftHandMode();
+  }
+  function cancelWidgetRefinement(reason = "widget-refine-cancelled", options) {
+    let cancelled = false;
+    if (state.activeAI?.widgetEdit) {
+      supersedeActiveAI(reason);
+      cancelled = true;
+    }
+    if (state.pendingWidgetReplacement) {
+      rejectPendingWidget(AI_CANCELLED, options);
+      cancelled = true;
+    }
+    clearWidgetRefineCandidate();
+    return cancelled;
   }
   function startPendingWidget(command, revision) {
     if (state.pendingWidget || state.widgets.length >= MAX_VISIBLE_WIDGETS) return Promise.resolve(false);
@@ -3042,6 +3236,31 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     mountWidget(widget);
     requestInteractionLayerRender();
     setStatusKey("draftReady");
+    return new Promise((resolve) => (widget.resolve = resolve));
+  }
+  function startPendingWidgetReplacement(command, target, revision) {
+    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
+    const widget = widgetRecord({
+      ...command,
+      id:target.id,
+      x:target.x,
+      y:target.y,
+      w:target.w,
+      h:target.h,
+      contentW:target.contentW,
+      contentH:target.contentH,
+    });
+    if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
+    widget.pending = true;
+    widget.revision = revision;
+    target.hiddenForReplacement = true;
+    unmountWidget(target);
+    state.pendingWidget = widget;
+    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
+    enterAIDraftHandMode();
+    mountWidget(widget);
+    requestInteractionLayerRender();
+    setStatusKey("widgetReplacementReady");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
   function widgetBounds(region = null) {
@@ -3711,11 +3930,111 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.stroke();
     context.restore();
   }
+  function pointDistanceToWidget(point, widget) {
+    const box = widgetBox(widget),
+      dx = point.x < box.x ? box.x - point.x : point.x > box.x + box.w ? point.x - box.x - box.w : 0,
+      dy = point.y < box.y ? box.y - point.y : point.y > box.y + box.h ? point.y - box.y - box.h : 0;
+    return Math.hypot(dx, dy);
+  }
+  function widgetDirtyProximity(widget) {
+    if (!state.dirty || !state.hotspotTrail.length) return null;
+    let distance = Infinity,
+      hits = 0;
+    for (const point of state.hotspotTrail) {
+      const next = pointDistanceToWidget(point, widget) * state.scale;
+      distance = Math.min(distance, next);
+      if (next <= 48) hits++;
+    }
+    return distance <= 48 ? { distance, hits } : null;
+  }
+  function clearWidgetRefineCandidate({ clearPointer = true } = {}) {
+    state.widgetRefineCandidate = null;
+    state.widgetRefineFocusId = null;
+    state.widgetRefineGraceUntil = 0;
+    if (clearPointer) state.widgetRefinePointer = null;
+    requestInteractionLayerRender();
+  }
+  function updateWidgetRefinePointer(event) {
+    if (state.mode === "hand" || event.pointerType === "touch" || state.drawing) return;
+    const point = clientPoint(event);
+    if (!valid(point)) return;
+    state.widgetRefinePointer = { point, pointerId:event.pointerId, at:Date.now() };
+    requestInteractionLayerRender();
+  }
+  function leaveWidgetRefinePointer() {
+    state.widgetRefinePointer = null;
+    state.widgetRefineGraceUntil = Date.now() + 420;
+    setTimeout(() => requestInteractionLayerRender(), 440);
+  }
+  function currentWidgetRefineCandidate() {
+    if (state.mode === "hand" || state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement) {
+      state.widgetRefineCandidate = null;
+      return null;
+    }
+    const pointer = state.widgetRefinePointer?.point || null,
+      previous = state.widgetRefineCandidate,
+      candidates = [];
+    for (const widget of visibleWidgets()) {
+      if (!widget.shell || widget.renderActive === false || widget.pending) continue;
+      const dirty = widgetDirtyProximity(widget),
+        hoverDistance = pointer ? pointDistanceToWidget(pointer, widget) * state.scale : Infinity,
+        focused = state.widgetRefineFocusId === widget.id,
+        grace = previous?.widgetId === widget.id && Date.now() < state.widgetRefineGraceUntil;
+      if (!dirty && hoverDistance > 24 && !focused && !grace) continue;
+      candidates.push({
+        widget,
+        widgetId:widget.id,
+        instructionMode:dirty ? "nearby-dirty" : "implicit-polish",
+        priority:dirty ? 0 : focused ? 1 : 2,
+        distance:dirty?.distance ?? hoverDistance,
+        hits:dirty?.hits || 0,
+      });
+    }
+    candidates.sort((a, b) => a.priority - b.priority || a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
+    state.widgetRefineCandidate = candidates[0] || null;
+    return state.widgetRefineCandidate;
+  }
+  function widgetEditContext(widget, instructionMode) {
+    const professional = widget.pluginId === "flowchart";
+    return {
+      mode:"replace",
+      pluginId:widget.pluginId,
+      title:widget.title,
+      instructionMode,
+      box:widgetBox(widget),
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
+      ...(professional ? { source:widget.copyText } : { html:widget.html }),
+      ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+    };
+  }
+  async function requestWidgetRefinement(widget, instructionMode) {
+    if (!widget || state.mode === "hand" || !state.widgets.includes(widget) || widget.hiddenForReplacement || state.pendingWidget || state.pendingWidgetReplacement) return false;
+    const revision = state.userRevision;
+    clearWidgetRefineCandidate();
+    supersedeActiveAI("widget-refine");
+    setStatusKey("widgetRefining");
+    try {
+      await requestWidgetSnapshot(widget);
+    } catch (error) {
+      if (state.userRevision === revision) setStatus(`${t("aiError")}${error.message}`);
+      return false;
+    }
+    if (state.userRevision !== revision || !state.widgets.includes(widget) || widget.hiddenForReplacement) return false;
+    void requestAI("answer", null, {
+      captureCurrentViewport:true,
+      widgetEditTarget:widget,
+      widgetEditContext:widgetEditContext(widget, instructionMode),
+    });
+    return true;
+  }
   const OBJECT_CHROME_ICONS = Object.freeze({
     move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+    refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
   });
   function screenObjectBox(box) {
     return {
@@ -3726,8 +4045,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   function objectChromePosition(box, kind) {
-    const width = kind === "move" ? 62 : 36,
-      height = 34,
+    const width = kind === "move" ? 62 : kind === "refine" ? 112 : 36,
+      height = kind === "refine" ? 38 : 34,
       viewportWidth = view.clientWidth,
       viewportHeight = view.clientHeight,
       screenBox = screenObjectBox(box),
@@ -3738,6 +4057,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
       above = screenBox.top - height - 7,
       y = clampY(above >= 6 ? above : screenBox.top + 7);
+    if (kind === "refine") {
+      const gap = 8,
+        positions = [
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:screenBox.top - height - gap },
+          { x:right + gap, y:screenBox.top },
+          { x:right + gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + gap },
+          { x:screenBox.left - width - gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
+        ].map(position => ({ x:clampX(position.x), y:clampY(position.y) })),
+        viewRect = view.getBoundingClientRect(),
+        obstacles = [...document.querySelectorAll(".animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor")].map(element => {
+          const rect = element.getBoundingClientRect();
+          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
+        }),
+        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + width + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + height + 5 > obstacle.y);
+      return positions.find(position => !overlapsObstacle(position)) || positions[0];
+    }
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
     else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
@@ -3749,6 +4085,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (kind === "accept") return t("widgetAccept");
     if (kind === "cancel") return t("cancel");
     if (kind === "copy") return t("copyText");
+    if (kind === "refine") return t("widgetRefine");
     return t("hand");
   }
   function beginObjectChromeMove(event, spec) {
@@ -3788,7 +4125,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = kind === "refine" ? `${OBJECT_CHROME_ICONS[kind]}<span>${t("widgetRefine")}</span>` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -3801,6 +4138,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       event.stopPropagation();
       if (kind !== "move") button.penechoSpec?.activate?.();
     });
+    if (kind === "refine") {
+      button.addEventListener("pointerenter", () => {
+        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+      });
+      button.addEventListener("pointerleave", () => {
+        state.widgetRefineFocusId = null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+        setTimeout(() => requestInteractionLayerRender(), 440);
+      });
+      button.addEventListener("focus", () => {
+        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
+      });
+      button.addEventListener("blur", () => {
+        state.widgetRefineFocusId = null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+        setTimeout(() => requestInteractionLayerRender(), 440);
+      });
+    }
     objectChromeLayer.append(button);
     objectChromeButtons.set(key, button);
     return button;
@@ -3842,7 +4198,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else add("pending", draftBounds(pending));
   }
   function objectChromeSpecs() {
-    if (state.mode !== "hand") return [];
+    if (state.mode !== "hand") {
+      const candidate = currentWidgetRefineCandidate();
+      return candidate ? [{
+        key:`widget:${candidate.widget.id}:refine`,
+        kind:"refine",
+        box:widgetBox(candidate.widget),
+        widget:candidate.widget,
+        priority:6,
+        activate:() => void requestWidgetRefinement(candidate.widget, candidate.instructionMode),
+      }] : [];
+    }
     const specs = [];
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
     for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
@@ -3885,7 +4251,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.setAttribute("aria-label", label);
-      button.title = label;
+      button.title = spec.kind === "refine" ? t("widgetRefineHint") : label;
+      if (spec.kind === "refine") button.querySelector("span").textContent = label;
       declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
       declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
       declaration?.setProperty("z-index", String(spec.priority || 1));
@@ -5315,6 +5682,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title:widget.title,
       refreshSeconds:widget.refreshSeconds,
       html:widget.html,
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
       revision:widget.revision,
     };
@@ -5337,8 +5707,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const returnMode = state.aiDraftReturnMode;
     state.pending = null;
     state.pendingGesture = null;
-    if (state.pendingWidget) unmountWidget(state.pendingWidget);
-    state.pendingWidget = null;
+    if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
+    state.pendingWidgetReplacement = null;
     state.pendingHistoryRestored = false;
     state.aiDraftReturnMode = null;
     hideAnimationControls();
@@ -5877,6 +6247,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.statusKey !== "autoToolboxPending") setStatusKey("autoToolboxPending");
       return;
     }
+    clearWidgetRefineCandidate();
     supersedeActiveAI(reason);
     requestAI("auto");
   }
@@ -5923,6 +6294,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       isolatedSelection = Boolean(requestOptions.isolatedSelection),
       oneShotInput = Boolean(requestOptions.oneShotInput),
       captureCurrentViewport = Boolean(requestOptions.captureCurrentViewport),
+      widgetEditTarget = requestOptions.widgetEditTarget || null,
+      widgetEditContext = requestOptions.widgetEditContext || null,
       revision = state.userRevision,
       recognitionGeneration = state.recognitionGeneration,
       aiColor = state.aiColor,
@@ -5960,7 +6333,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const controller = new AbortController(),
       // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
     state.activeAI = run;
     setBusy(true);
     setStatusKey(isolatedSelection && action === "normalize" ? "selectionTypesetting" : "observing");
@@ -5977,6 +6350,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             userAction: action,
             ...(state.reasoningEffort === "config" ? {} : { reasoningEffort: state.reasoningEffort }),
             ...pluginRequestPayload(),
+            ...(widgetEditContext ? { widgetEdit:widgetEditContext } : {}),
             ...(typedInput ? { typedInput } : {}),
             canvasSize: { w: SIZE, h: SIZE },
             uiTheme: state.theme,
@@ -5999,8 +6373,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
         animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
-        widgetLimitReached = state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
-        commands = normalizeCommandPlacements(validate(rawCommands, aiColor), packed, requestBox),
+        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
+        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
         for (let index = commands.length - 1; index >= 0; index--)
@@ -6230,6 +6604,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
     drawImagesToContext(q, sourceRect);
+    drawWidgetsToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
     drawAnimationsToContext(q, sourceRect, captureTime);
@@ -6239,6 +6614,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
     drawImagesToContext(q, latestVisible);
+    drawWidgetsToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
     drawAnimationsToContext(q, latestVisible, captureTime);
@@ -6417,11 +6793,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (next.tool === "write_text") next.maxWidth = Math.max(next.fontSize, Math.min(next.maxWidth, SIZE - next.x));
     return [next];
   }
-  function validate(cmds, aiColor = state.aiColor) {
+  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
       animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
-      widgetSlots = Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
+      widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
     const acceptedTools = pluginEnabled("animation")
       ? ["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "erase"]
@@ -6476,19 +6852,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           animationSlots--;
         }
         if (c.tool === "html_widget") {
-          const allowCopy = c.pluginId !== "image-search";
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80)) return null;
+          const allowCopy = c.pluginId !== "image-search",
+            diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "",
+            sourceFormat = typeof c.sourceFormat === "string" ? c.sourceFormat.trim() : "",
+            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "";
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
-            x:Math.round(c.x),
-            y:Math.round(c.y),
-            w:Math.round(c.w),
-            h:Math.round(c.h),
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : c.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : c.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : c.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : c.h),
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
-            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || "Copy source").trim() } : {}),
+            ...(diagramKind ? { diagramKind } : {}),
+            ...(sourceFormat ? { sourceFormat } : {}),
+            ...(frameworkVersion ? { frameworkVersion } : {}),
+            ...(allowCopy && typeof c.copyText === "string" ? { copyText:c.copyText.trim(), copyLabel:String(c.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() } : {}),
           };
           widgetSlots--;
         }
@@ -6507,8 +6889,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         return c;
       })
       .filter(Boolean);
-    const widget = validated.find((command) => command.tool === "html_widget");
-    return widget ? [widget] : validated;
+    const widgets = validated.filter((command) => command.tool === "html_widget");
+    if (widgetEditTarget) return widgets.length === 1 ? widgets : [];
+    return widgets.length ? [widgets[0]] : validated;
   }
   function point(v) {
     return Array.isArray(v) && v.length === 2 && n(v[0]) && n(v[1]);
@@ -6538,7 +6921,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error(AI_REJECTED);
       if (c.tool === "html_widget") {
         if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error(AI_REJECTED);
-        const accepted = await startPendingWidget(c, revision);
+        const target = run?.widgetEdit?.target,
+          accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);
         if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
         if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
         if (!accepted) throw Error(AI_REJECTED);
@@ -8388,6 +8772,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.autoEligible ||= shouldRequest;
     if (shouldRequest && state.autoEligible) schedule();
     save();
+    requestInteractionLayerRender();
     if (shouldRequest) setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }
 // Pointer and control bindings, portable snapshots, and application startup.
@@ -8455,6 +8840,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     supersedeActiveAI("user-input-started");
+    clearWidgetRefineCandidate();
     clearTimeout(state.timer);
     state.timer = 0;
     state.latestTypedInput = null;
@@ -8558,6 +8944,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     updateCanvasPointerPreview(e);
+    updateWidgetRefinePointer(e);
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -8694,6 +9081,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    leaveWidgetRefinePointer();
     if (state.drawing || !state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
@@ -8723,13 +9111,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
+    if (mode !== state.mode && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
+    }
     const leavingDraftHand = state.mode === "hand" && mode !== "hand" && !options.skipDraftFinalize && (state.pending || state.pendingWidget);
     let deferredSelectionCommit = false;
     if (leavingDraftHand) {
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
       if (state.pending) acceptPending({ restoreMode:false });
-      if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+      if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED, { restoreMode:false });
+      else if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     }
     if (!options.preserveSelection && mode !== "select" && state.selection && (state.mode === "select" || leavingDraftHand)) {
       if (selectionAIBusy(state.selection)) {
@@ -8746,6 +9140,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.animationEdit) acceptAnimationEdit();
     }
     state.mode = mode;
+    if (mode === "hand") clearWidgetRefineCandidate();
     if (mode !== "eraser") state.pointerPreview = null;
     if (mode !== "select") deselectAnimation();
     view.classList.toggle("hand-mode", mode === "hand");
@@ -8905,6 +9300,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   pluginDocumentEditor.addEventListener("input", () => {
     state.pluginAuthoringStatus = null;
     updatePluginAuthoringUi();
+  });
+  pluginStylesEditor.addEventListener("input", () => {
+    state.pluginAuthoringStatus = null;
+    updatePluginAuthoringUi();
+  });
+  pluginStylesUploadButton.onclick = () => {
+    if (state.pluginAuthoringBusy) return;
+    pluginStylesUpload.value = "";
+    pluginStylesUpload.click();
+  };
+  pluginStylesUpload.addEventListener("change", () => {
+    const file = pluginStylesUpload.files?.[0];
+    if (file) void importPluginStylesFile(file);
+    else pluginStylesUpload.value = "";
   });
   pluginImprove.onclick = () => void improvePluginDraft();
   pluginCreateForm.addEventListener("submit", (event) => void savePluginDraft(event));
@@ -9176,6 +9585,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (e.key === "Escape" && state.pendingWidget) {
       rejectPendingWidget();
+      return;
+    }
+    if (e.key === "Escape" && state.activeAI?.widgetEdit) {
+      cancelWidgetRefinement();
+      setStatusKey("ready");
       return;
     }
     if (e.key === "Escape" && state.imageEdit) {

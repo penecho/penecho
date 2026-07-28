@@ -2,6 +2,7 @@
 (() => {
   const MAX_HTML_LENGTH = 40000,
     MAX_COPY_TEXT_LENGTH = 16000,
+    MAX_PLUGIN_STYLES_LENGTH = 32000,
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
     MAX_SNAPSHOT_DATA_URL_LENGTH = 28 * 1024 * 1024,
@@ -478,14 +479,41 @@
   }
 
   function csp() {
-    const origins = connect.length ? connect.join(" ") : "'none'";
-    const images = connect.length ? `data: blob: ${connect.join(" ")}` : "data: blob:";
-    return `default-src 'none'; script-src 'unsafe-inline' ${rendererUrl}; style-src 'unsafe-inline'; connect-src ${origins}; img-src ${images}; font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    return `default-src 'none'; script-src 'unsafe-inline' https: ${rendererUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
-  function widgetDocument(html) {
+  function safeHttpsResource(element, attribute) {
+    const value = element.getAttribute(attribute);
+    if (!value) return false;
+    try {
+      const url = new URL(value, location.href);
+      if (url.protocol !== "https:" || url.username || url.password) return false;
+      element.setAttribute(attribute, url.href);
+      element.setAttribute("referrerpolicy", "no-referrer");
+      if (["SCRIPT", "LINK", "IMG", "VIDEO", "AUDIO", "SOURCE"].includes(element.tagName)) element.setAttribute("crossorigin", "anonymous");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function widgetDocument(html, pluginStyles = "") {
     const parsed = new DOMParser().parseFromString(html, "text/html");
-    parsed.querySelectorAll("base, iframe, object, embed, form, link[rel='stylesheet'], meta[http-equiv], script[src]").forEach((element) => element.remove());
+    parsed.querySelectorAll("base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
+    parsed.querySelectorAll("script[src]").forEach((element) => {
+      if (!safeHttpsResource(element, "src")) element.remove();
+    });
+    parsed.querySelectorAll("link").forEach((element) => {
+      if (String(element.getAttribute("rel") || "").toLowerCase() !== "stylesheet" || !safeHttpsResource(element, "href")) element.remove();
+    });
+    parsed.querySelectorAll("img[src],video[src],audio[src],source[src]").forEach((element) => {
+      const value = element.getAttribute("src") || "";
+      if (/^(?:data:|blob:)/i.test(value)) {
+        element.setAttribute("referrerpolicy", "no-referrer");
+        return;
+      }
+      if (!safeHttpsResource(element, "src")) element.removeAttribute("src");
+    });
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
     policy.content = csp();
@@ -494,6 +522,12 @@
     viewport.name = "viewport";
     viewport.content = "width=device-width,initial-scale=1";
     parsed.head.prepend(viewport);
+    if (pluginStyles) {
+      const pluginStyle = parsed.createElement("style");
+      pluginStyle.dataset.penechoPluginStyles = "";
+      pluginStyle.textContent = pluginStyles;
+      parsed.head.append(pluginStyle);
+    }
     const bridgeStyle = parsed.createElement("style");
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     parsed.head.append(bridgeStyle);
@@ -561,6 +595,7 @@
     if (event.source === parent && event.origin === parentOrigin) {
       if (message?.type === "penecho-widget-init") {
         if (initialized || typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
+        if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         if (message.copyText !== undefined && (typeof message.copyText !== "string" || !message.copyText.trim() || message.copyText.length > MAX_COPY_TEXT_LENGTH)) return;
         if (message.copyLabel !== undefined && (typeof message.copyLabel !== "string" || !message.copyLabel.trim() || message.copyLabel.length > 80)) return;
         initialized = true;
@@ -573,7 +608,7 @@
           copySourceButton.title = copySourceButton.textContent;
           updateCopySourceScale();
         }
-        inner.srcdoc = widgetDocument(message.html);
+        inner.srcdoc = widgetDocument(message.html, message.pluginStyles || "");
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
         widgetState = { selected:message.selected, active:message.active, scaleX:message.scaleX, scaleY:message.scaleY };

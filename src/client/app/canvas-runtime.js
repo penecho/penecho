@@ -364,6 +364,7 @@
   }
   async function addImageFile(file) {
     if (state.imageImporting) return;
+    cancelWidgetRefinement("image-import-started");
     if (state.images.length >= MAX_VISIBLE_IMAGES) {
       setStatusKey("imageLimitReached");
       return;
@@ -380,7 +381,8 @@
       const prepared = await prepareImportedImage(file);
       if (expectedIdentityGeneration !== canvasIdentityGeneration()) return;
       if (state.pending) acceptPending();
-      if (state.pendingWidget) acceptPendingWidget();
+      if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED);
+      else if (state.pendingWidget) acceptPendingWidget();
       if (state.images.length >= MAX_VISIBLE_IMAGES) throw imageImportError("imageLimitReached");
       if (state.selection) commitSelection();
       if (state.selection) {
@@ -420,7 +422,7 @@
   }
   function visibleWidgets(region = null) {
     if (!widgetRuntimeEnabled()) return [];
-    return state.widgets.filter((widget) => pluginEnabled(widget.pluginId) && pluginManifests.has(widget.pluginId) && (!region || intersection(widgetBox(widget), region)));
+    return state.widgets.filter((widget) => !widget.hiddenForReplacement && pluginEnabled(widget.pluginId) && pluginManifests.has(widget.pluginId) && (!region || intersection(widgetBox(widget), region)));
   }
   function serializedWidgets() {
     return state.widgets.map((widget) => ({
@@ -435,6 +437,9 @@
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       html: widget.html,
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
@@ -451,6 +456,11 @@
       || !Number.isFinite(contentH) || contentH < 200 || contentH > MAX_WIDGET_CONTENT_DIMENSION) return null;
     if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !n(item.refreshSeconds, 60, 86400)) return null;
     const allowCopy = item.pluginId !== "image-search";
+    const diagramKind = typeof item.diagramKind === "string" ? item.diagramKind.trim() : "",
+      inferredSourceFormat = item.pluginId === "flowchart" && item.copyText && item.sourceFormat === undefined ? "mermaid" : "",
+      sourceFormat = typeof item.sourceFormat === "string" ? item.sourceFormat.trim() : inferredSourceFormat,
+      frameworkVersion = typeof item.frameworkVersion === "string" ? item.frameworkVersion.trim() : "";
+    if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
     if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
     if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
@@ -465,8 +475,11 @@
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
       html: item.html,
+      diagramKind,
+      sourceFormat,
+      frameworkVersion,
       copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || "Copy source").trim() : "",
+      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -474,6 +487,10 @@
     };
   }
   function restoreWidgets(items) {
+    if (state.activeAI?.widgetEdit) supersedeActiveAI("widgets-restored");
+    if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
+    state.pendingWidgetReplacement = null;
+    clearWidgetRefineCandidate();
     for (const widget of state.widgets) unmountWidget(widget);
     state.widgets = [];
     state.selectedWidgetId = null;
@@ -502,17 +519,31 @@
       frame = document.createElement("iframe");
     shell.className = `canvas-widget${widget.pending ? " pending" : ""}`;
     shell.dataset.widgetId = widget.id;
+    shell.tabIndex = widget.pending ? -1 : 0;
+    shell.setAttribute("aria-label", `${widget.title}. ${t("widgetRefineHint")}`);
     shell.classList.add(`canvas-widget-instance-${widget.id.replace(/[^a-z0-9-]/g, "")}`);
     frame.className = "canvas-widget-frame";
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
+    shell.addEventListener("focusin", () => {
+      if (state.mode === "hand" || widget.pending) return;
+      state.widgetRefineFocusId = widget.id;
+      requestInteractionLayerRender();
+    });
+    shell.addEventListener("focusout", (event) => {
+      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
+      if (state.widgetRefineFocusId === widget.id) state.widgetRefineFocusId = null;
+      state.widgetRefineGraceUntil = Date.now() + 420;
+      setTimeout(() => requestInteractionLayerRender(), 440);
+    });
     shell.append(frame);
     widgetLayer.append(shell);
     widget.shell = shell;
     widget.frame = frame;
     widget.initialized = false;
     widget.hostReady = false;
+    widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
     widget.hostStateKey = null;
     widget.contentReady = false;
     widget.readyPromise = new Promise((resolve) => (widget.resolveReady = resolve));
@@ -530,6 +561,8 @@
     widget.frame = null;
     widget.initialized = false;
     widget.hostReady = false;
+    widget.resolveHostReady = null;
+    widget.hostReadyPromise = null;
     widget.contentReady = false;
     widget.resolveReady = null;
     widget.readyPromise = null;
@@ -571,6 +604,7 @@
       active = dragging || intersectsViewport;
     widget.renderActive = active;
     widget.shell.classList.toggle("widget-offscreen", !active);
+    if (active) sendWidgetInit(widget);
     return active;
   }
   function positionWidget(widget) {
@@ -596,12 +630,15 @@
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) positionWidget(widget);
   }
   function sendWidgetInit(widget) {
-    if (!widget.frame?.contentWindow || !widget.hostReady || widget.initialized) return;
+    if (!widget.frame?.contentWindow || !widget.hostReady || widget.initialized || widget.renderActive === false) return;
+    const manifest = pluginManifests.get(widget.pluginId);
+    if (!manifest) return;
     widget.initialized = true;
     widget.frame.contentWindow.postMessage({
       type:"penecho-widget-init",
       title:widget.title,
       html:widget.html,
+      pluginStyles:manifest.styles || "",
       ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }, location.origin);
   }
@@ -636,17 +673,34 @@
   async function requestWidgetSnapshot(widget) {
     if (widget.snapshotPromise) return widget.snapshotPromise;
     const snapshotPromise = (async () => {
-      await waitForWidgetContent(widget);
-      if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
-      const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          widgetSnapshotRequests.delete(requestId);
-          reject(Error(t("widgetExportFailed")));
-        }, WIDGET_SNAPSHOT_TIMEOUT_MS);
-        widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-        widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
-      });
+      const previousActive = widget.renderActive;
+      try {
+        if (!widget.hostReady && widget.hostReadyPromise) await Promise.race([
+          widget.hostReadyPromise,
+          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+        ]);
+        if (!widget.initialized) {
+          widget.renderActive = true;
+          sendWidgetInit(widget);
+          sendWidgetHostState(widget, undefined, undefined, true);
+        }
+        await waitForWidgetContent(widget);
+        if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
+        const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        return await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            widgetSnapshotRequests.delete(requestId);
+            reject(Error(t("widgetExportFailed")));
+          }, WIDGET_SNAPSHOT_TIMEOUT_MS);
+          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
+        });
+      } finally {
+        if (previousActive === false) {
+          widget.renderActive = false;
+          sendWidgetHostState(widget, undefined, undefined, true);
+        }
+      }
     })();
     widget.snapshotPromise = snapshotPromise;
     try {
@@ -662,6 +716,8 @@
     const message = event.data;
     if (message.type === "penecho-widget-host-ready") {
       widget.hostReady = true;
+      widget.resolveHostReady?.();
+      widget.resolveHostReady = null;
       sendWidgetInit(widget);
       sendWidgetHostState(widget, undefined, undefined, true);
       return;
@@ -1077,6 +1133,7 @@
     const restoreMode = options?.restoreMode !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
+    const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
     if (widget.revision !== state.userRevision) {
       rejectPendingWidget(AI_CANCELLED);
@@ -1085,14 +1142,26 @@
     }
     recordWidgetsBefore();
     state.pendingWidget = null;
+    state.pendingWidgetReplacement = null;
     widget.pending = false;
     const resolve = widget.resolve;
     widget.resolve = null;
     unmountWidget(widget);
-    state.widgets.push(widget);
+    if (replacement) {
+      const index = state.widgets.indexOf(replacement.target);
+      if (index < 0 || replacement.target.id !== widget.id || replacement.target.pluginId !== widget.pluginId) {
+        replacement.target.hiddenForReplacement = false;
+        mountWidget(replacement.target);
+        resolve?.(AI_CANCELLED);
+        state.widgetHistoryBefore = null;
+        if (restoreMode) finishAIDraftHandMode();
+        return;
+      }
+      state.widgets.splice(index, 1, widget);
+    } else state.widgets.push(widget);
     mountWidget(widget);
     const historyEntry = save();
-    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
+    if (!replacement) recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     requestInteractionLayerRender();
     setStatusKey("merged");
     resolve?.(true);
@@ -1100,17 +1169,37 @@
   }
   function rejectPendingWidget(result = AI_REJECTED, options) {
     options ||= {};
-    const restoreMode = options?.restoreMode !== false;
+    const restoreMode = options?.restoreMode !== false,
+      updateStatus = options?.status !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
     state.pendingWidget = null;
+    const replacement = state.pendingWidgetReplacement;
+    state.pendingWidgetReplacement = null;
     const resolve = widget.resolve;
     widget.resolve = null;
     unmountWidget(widget);
+    if (replacement?.target && state.widgets.includes(replacement.target)) {
+      replacement.target.hiddenForReplacement = false;
+      mountWidget(replacement.target);
+    }
     requestInteractionLayerRender();
-    setStatusKey(result === AI_CANCELLED ? "canvasChanged" : "draftRejected");
+    if (updateStatus) setStatusKey(result === AI_CANCELLED ? "canvasChanged" : "draftRejected");
     resolve?.(result);
     if (restoreMode) finishAIDraftHandMode();
+  }
+  function cancelWidgetRefinement(reason = "widget-refine-cancelled", options) {
+    let cancelled = false;
+    if (state.activeAI?.widgetEdit) {
+      supersedeActiveAI(reason);
+      cancelled = true;
+    }
+    if (state.pendingWidgetReplacement) {
+      rejectPendingWidget(AI_CANCELLED, options);
+      cancelled = true;
+    }
+    clearWidgetRefineCandidate();
+    return cancelled;
   }
   function startPendingWidget(command, revision) {
     if (state.pendingWidget || state.widgets.length >= MAX_VISIBLE_WIDGETS) return Promise.resolve(false);
@@ -1123,6 +1212,31 @@
     mountWidget(widget);
     requestInteractionLayerRender();
     setStatusKey("draftReady");
+    return new Promise((resolve) => (widget.resolve = resolve));
+  }
+  function startPendingWidgetReplacement(command, target, revision) {
+    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
+    const widget = widgetRecord({
+      ...command,
+      id:target.id,
+      x:target.x,
+      y:target.y,
+      w:target.w,
+      h:target.h,
+      contentW:target.contentW,
+      contentH:target.contentH,
+    });
+    if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
+    widget.pending = true;
+    widget.revision = revision;
+    target.hiddenForReplacement = true;
+    unmountWidget(target);
+    state.pendingWidget = widget;
+    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
+    enterAIDraftHandMode();
+    mountWidget(widget);
+    requestInteractionLayerRender();
+    setStatusKey("widgetReplacementReady");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
   function widgetBounds(region = null) {
@@ -1792,11 +1906,111 @@
     context.stroke();
     context.restore();
   }
+  function pointDistanceToWidget(point, widget) {
+    const box = widgetBox(widget),
+      dx = point.x < box.x ? box.x - point.x : point.x > box.x + box.w ? point.x - box.x - box.w : 0,
+      dy = point.y < box.y ? box.y - point.y : point.y > box.y + box.h ? point.y - box.y - box.h : 0;
+    return Math.hypot(dx, dy);
+  }
+  function widgetDirtyProximity(widget) {
+    if (!state.dirty || !state.hotspotTrail.length) return null;
+    let distance = Infinity,
+      hits = 0;
+    for (const point of state.hotspotTrail) {
+      const next = pointDistanceToWidget(point, widget) * state.scale;
+      distance = Math.min(distance, next);
+      if (next <= 48) hits++;
+    }
+    return distance <= 48 ? { distance, hits } : null;
+  }
+  function clearWidgetRefineCandidate({ clearPointer = true } = {}) {
+    state.widgetRefineCandidate = null;
+    state.widgetRefineFocusId = null;
+    state.widgetRefineGraceUntil = 0;
+    if (clearPointer) state.widgetRefinePointer = null;
+    requestInteractionLayerRender();
+  }
+  function updateWidgetRefinePointer(event) {
+    if (state.mode === "hand" || event.pointerType === "touch" || state.drawing) return;
+    const point = clientPoint(event);
+    if (!valid(point)) return;
+    state.widgetRefinePointer = { point, pointerId:event.pointerId, at:Date.now() };
+    requestInteractionLayerRender();
+  }
+  function leaveWidgetRefinePointer() {
+    state.widgetRefinePointer = null;
+    state.widgetRefineGraceUntil = Date.now() + 420;
+    setTimeout(() => requestInteractionLayerRender(), 440);
+  }
+  function currentWidgetRefineCandidate() {
+    if (state.mode === "hand" || state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement) {
+      state.widgetRefineCandidate = null;
+      return null;
+    }
+    const pointer = state.widgetRefinePointer?.point || null,
+      previous = state.widgetRefineCandidate,
+      candidates = [];
+    for (const widget of visibleWidgets()) {
+      if (!widget.shell || widget.renderActive === false || widget.pending) continue;
+      const dirty = widgetDirtyProximity(widget),
+        hoverDistance = pointer ? pointDistanceToWidget(pointer, widget) * state.scale : Infinity,
+        focused = state.widgetRefineFocusId === widget.id,
+        grace = previous?.widgetId === widget.id && Date.now() < state.widgetRefineGraceUntil;
+      if (!dirty && hoverDistance > 24 && !focused && !grace) continue;
+      candidates.push({
+        widget,
+        widgetId:widget.id,
+        instructionMode:dirty ? "nearby-dirty" : "implicit-polish",
+        priority:dirty ? 0 : focused ? 1 : 2,
+        distance:dirty?.distance ?? hoverDistance,
+        hits:dirty?.hits || 0,
+      });
+    }
+    candidates.sort((a, b) => a.priority - b.priority || a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
+    state.widgetRefineCandidate = candidates[0] || null;
+    return state.widgetRefineCandidate;
+  }
+  function widgetEditContext(widget, instructionMode) {
+    const professional = widget.pluginId === "flowchart";
+    return {
+      mode:"replace",
+      pluginId:widget.pluginId,
+      title:widget.title,
+      instructionMode,
+      box:widgetBox(widget),
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
+      ...(professional ? { source:widget.copyText } : { html:widget.html }),
+      ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+    };
+  }
+  async function requestWidgetRefinement(widget, instructionMode) {
+    if (!widget || state.mode === "hand" || !state.widgets.includes(widget) || widget.hiddenForReplacement || state.pendingWidget || state.pendingWidgetReplacement) return false;
+    const revision = state.userRevision;
+    clearWidgetRefineCandidate();
+    supersedeActiveAI("widget-refine");
+    setStatusKey("widgetRefining");
+    try {
+      await requestWidgetSnapshot(widget);
+    } catch (error) {
+      if (state.userRevision === revision) setStatus(`${t("aiError")}${error.message}`);
+      return false;
+    }
+    if (state.userRevision !== revision || !state.widgets.includes(widget) || widget.hiddenForReplacement) return false;
+    void requestAI("answer", null, {
+      captureCurrentViewport:true,
+      widgetEditTarget:widget,
+      widgetEditContext:widgetEditContext(widget, instructionMode),
+    });
+    return true;
+  }
   const OBJECT_CHROME_ICONS = Object.freeze({
     move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+    refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
   });
   function screenObjectBox(box) {
     return {
@@ -1807,8 +2021,8 @@
     };
   }
   function objectChromePosition(box, kind) {
-    const width = kind === "move" ? 62 : 36,
-      height = 34,
+    const width = kind === "move" ? 62 : kind === "refine" ? 112 : 36,
+      height = kind === "refine" ? 38 : 34,
       viewportWidth = view.clientWidth,
       viewportHeight = view.clientHeight,
       screenBox = screenObjectBox(box),
@@ -1819,6 +2033,23 @@
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
       above = screenBox.top - height - 7,
       y = clampY(above >= 6 ? above : screenBox.top + 7);
+    if (kind === "refine") {
+      const gap = 8,
+        positions = [
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:screenBox.top - height - gap },
+          { x:right + gap, y:screenBox.top },
+          { x:right + gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + gap },
+          { x:screenBox.left - width - gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
+        ].map(position => ({ x:clampX(position.x), y:clampY(position.y) })),
+        viewRect = view.getBoundingClientRect(),
+        obstacles = [...document.querySelectorAll(".animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor")].map(element => {
+          const rect = element.getBoundingClientRect();
+          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
+        }),
+        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + width + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + height + 5 > obstacle.y);
+      return positions.find(position => !overlapsObstacle(position)) || positions[0];
+    }
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
     else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
@@ -1830,6 +2061,7 @@
     if (kind === "accept") return t("widgetAccept");
     if (kind === "cancel") return t("cancel");
     if (kind === "copy") return t("copyText");
+    if (kind === "refine") return t("widgetRefine");
     return t("hand");
   }
   function beginObjectChromeMove(event, spec) {
@@ -1869,7 +2101,7 @@
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = kind === "refine" ? `${OBJECT_CHROME_ICONS[kind]}<span>${t("widgetRefine")}</span>` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -1882,6 +2114,25 @@
       event.stopPropagation();
       if (kind !== "move") button.penechoSpec?.activate?.();
     });
+    if (kind === "refine") {
+      button.addEventListener("pointerenter", () => {
+        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+      });
+      button.addEventListener("pointerleave", () => {
+        state.widgetRefineFocusId = null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+        setTimeout(() => requestInteractionLayerRender(), 440);
+      });
+      button.addEventListener("focus", () => {
+        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
+      });
+      button.addEventListener("blur", () => {
+        state.widgetRefineFocusId = null;
+        state.widgetRefineGraceUntil = Date.now() + 420;
+        setTimeout(() => requestInteractionLayerRender(), 440);
+      });
+    }
     objectChromeLayer.append(button);
     objectChromeButtons.set(key, button);
     return button;
@@ -1923,7 +2174,17 @@
     else add("pending", draftBounds(pending));
   }
   function objectChromeSpecs() {
-    if (state.mode !== "hand") return [];
+    if (state.mode !== "hand") {
+      const candidate = currentWidgetRefineCandidate();
+      return candidate ? [{
+        key:`widget:${candidate.widget.id}:refine`,
+        kind:"refine",
+        box:widgetBox(candidate.widget),
+        widget:candidate.widget,
+        priority:6,
+        activate:() => void requestWidgetRefinement(candidate.widget, candidate.instructionMode),
+      }] : [];
+    }
     const specs = [];
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
     for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
@@ -1966,7 +2227,8 @@
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.setAttribute("aria-label", label);
-      button.title = label;
+      button.title = spec.kind === "refine" ? t("widgetRefineHint") : label;
+      if (spec.kind === "refine") button.querySelector("span").textContent = label;
       declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
       declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
       declaration?.setProperty("z-index", String(spec.priority || 1));

@@ -63,6 +63,7 @@
       return;
     }
     supersedeActiveAI("user-input-started");
+    clearWidgetRefineCandidate();
     clearTimeout(state.timer);
     state.timer = 0;
     state.latestTypedInput = null;
@@ -166,6 +167,7 @@
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     updateCanvasPointerPreview(e);
+    updateWidgetRefinePointer(e);
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -302,6 +304,7 @@
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    leaveWidgetRefinePointer();
     if (state.drawing || !state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
@@ -331,13 +334,19 @@
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
+    if (mode !== state.mode && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
+    }
     const leavingDraftHand = state.mode === "hand" && mode !== "hand" && !options.skipDraftFinalize && (state.pending || state.pendingWidget);
     let deferredSelectionCommit = false;
     if (leavingDraftHand) {
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
       if (state.pending) acceptPending({ restoreMode:false });
-      if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+      if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED, { restoreMode:false });
+      else if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     }
     if (!options.preserveSelection && mode !== "select" && state.selection && (state.mode === "select" || leavingDraftHand)) {
       if (selectionAIBusy(state.selection)) {
@@ -354,6 +363,7 @@
       if (state.animationEdit) acceptAnimationEdit();
     }
     state.mode = mode;
+    if (mode === "hand") clearWidgetRefineCandidate();
     if (mode !== "eraser") state.pointerPreview = null;
     if (mode !== "select") deselectAnimation();
     view.classList.toggle("hand-mode", mode === "hand");
@@ -513,6 +523,20 @@
   pluginDocumentEditor.addEventListener("input", () => {
     state.pluginAuthoringStatus = null;
     updatePluginAuthoringUi();
+  });
+  pluginStylesEditor.addEventListener("input", () => {
+    state.pluginAuthoringStatus = null;
+    updatePluginAuthoringUi();
+  });
+  pluginStylesUploadButton.onclick = () => {
+    if (state.pluginAuthoringBusy) return;
+    pluginStylesUpload.value = "";
+    pluginStylesUpload.click();
+  };
+  pluginStylesUpload.addEventListener("change", () => {
+    const file = pluginStylesUpload.files?.[0];
+    if (file) void importPluginStylesFile(file);
+    else pluginStylesUpload.value = "";
   });
   pluginImprove.onclick = () => void improvePluginDraft();
   pluginCreateForm.addEventListener("submit", (event) => void savePluginDraft(event));
@@ -784,6 +808,11 @@
     }
     if (e.key === "Escape" && state.pendingWidget) {
       rejectPendingWidget();
+      return;
+    }
+    if (e.key === "Escape" && state.activeAI?.widgetEdit) {
+      cancelWidgetRefinement();
+      setStatusKey("ready");
       return;
     }
     if (e.key === "Escape" && state.imageEdit) {

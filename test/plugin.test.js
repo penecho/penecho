@@ -10,6 +10,10 @@ const ROOT = path.resolve(__dirname, ".."),
   source = fs.readFileSync(path.join(ROOT, "public", "plugins.js"), "utf8"),
   pluginDirectory = path.join(ROOT, "public", "plugins"),
   pluginFiles = fs.readdirSync(pluginDirectory).filter((file) => file.endsWith(".md")).sort(),
+  pluginBundles = fs.readdirSync(pluginDirectory, { withFileTypes:true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(pluginDirectory, entry.name, "plugin.md")))
+    .map((entry) => `${entry.name}/plugin.md`),
+  pluginDocuments = [...pluginFiles, ...pluginBundles].sort(),
   weather = fs.readFileSync(path.join(ROOT, "public", "plugins", "weather.md"), "utf8"),
   context = { window:{}, URL };
 vm.runInNewContext(source, context);
@@ -24,6 +28,13 @@ function functionSource(input, name) {
     else if (input[index] === "}" && --depth === 0) return input.slice(start, index + 1);
   }
   assert.fail(`unterminated function ${name}`);
+}
+
+function parsePlugin(relativePath) {
+  const documentPath = path.join(pluginDirectory, relativePath),
+    stylePath = path.join(path.dirname(documentPath), "styles.css"),
+    styles = relativePath.includes("/") && fs.existsSync(stylePath) ? fs.readFileSync(stylePath, "utf8") : "";
+  return plugins.parse(fs.readFileSync(documentPath, "utf8"), styles);
 }
 
 function widgetRuntimeHarness() {
@@ -118,13 +129,13 @@ test("weather demo is a concise capability contract without an HTML template", (
 });
 
 test("plugin directory contains the general, flowchart, image, and built-in data contracts", () => {
-  const builtIns = ["earthquakes.md", "exchange-rates.md", "flowchart.md", "general.md", "github-pulse.md", "image-search.md", "natural-events.md", "space-weather.md", "stocks.md", "tech-news.md", "weather.md"];
-  assert.deepEqual(pluginFiles.filter((file) => builtIns.includes(file)), builtIns);
-  const allParsed = pluginFiles.map((file) => plugins.parse(fs.readFileSync(path.join(pluginDirectory, file), "utf8"))),
-    parsed = builtIns.map((file) => plugins.parse(fs.readFileSync(path.join(pluginDirectory, file), "utf8")));
+  const builtIns = ["earthquakes.md", "exchange-rates.md", "flowchart/plugin.md", "general.md", "github-pulse.md", "image-search.md", "natural-events.md", "space-weather.md", "stocks.md", "tech-news.md", "weather.md"];
+  assert.deepEqual(pluginDocuments.filter((file) => builtIns.includes(file)), builtIns);
+  const allParsed = pluginDocuments.map(parsePlugin),
+    parsed = builtIns.map(parsePlugin);
   assert.equal(new Set(allParsed.map((plugin) => plugin.id)).size, allParsed.length);
   for (const plugin of parsed) {
-    assert.ok(Buffer.byteLength(plugin.document, "utf8") <= 3000, plugin.id);
+    assert.ok(Buffer.byteLength(plugin.document, "utf8") <= 12000, plugin.id);
     assert.ok(plugin.nameZh, plugin.id);
     assert.ok(plugin.description, plugin.id);
     assert.ok(plugin.descriptionZh, plugin.id);
@@ -134,7 +145,6 @@ test("plugin directory contains the general, flowchart, image, and built-in data
     assert.match(plugin.document, /^## One-shot example$/m, plugin.id);
     assert.match(plugin.document, /`html_widget`/, plugin.id);
     if (plugin.connect.length) assert.match(plugin.document, /credentials:"omit"/, plugin.id);
-    else assert.match(plugin.document, /no network access/i, plugin.id);
     assert.match(plugin.document, /penecho-widget-updated/, plugin.id);
     assert.doesNotMatch(plugin.document, /```html/i, plugin.id);
   }
@@ -146,9 +156,13 @@ test("plugin directory contains the general, flowchart, image, and built-in data
   assert.match(general.document, /browser-native HTML, CSS, JavaScript, timers, SVG, and canvas/);
   const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
   assert.deepEqual([...flowchart.connect], []);
-  assert.match(flowchart.document, /Mermaid is the portable professional source format/);
+  assert.match(flowchart.document, /sourceFormat` is open, not an enum or whitelist/);
+  assert.match(flowchart.document, /BPMN XML, draw\.io XML, D2, Structurizr DSL/);
   assert.match(flowchart.document, /copyText/);
-  assert.match(flowchart.document, /copyLabel:"Copy Mermaid"/);
+  assert.match(flowchart.document, /copyLabel:"Copy <format>"/);
+  assert.match(flowchart.styles, /\.pd-root/);
+  assert.match(flowchart.styles, /\.pd-lifeline/);
+  assert.match(flowchart.styles, /\.pd-class/);
   const imageSearch = parsed.find((plugin) => plugin.id === "image-search");
   assert.equal(imageSearch.name, "Show Real Photos Online");
   assert.equal(imageSearch.nameZh, "显示网络真实照片");
@@ -178,14 +192,15 @@ test("personal plugin storage is ignored and separated from built-in contracts",
     app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"),
     server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8");
   assert.match(ignore, /^public\/plugins\/private\/$/m);
-  assert.match(app, /plugins\\\/\(\?:private\\\//);
+  assert.match(app, /function validPluginCatalogPath\(value, extension\)/);
+  assert.match(app, /styles\\{2}\.css|styles\\\\\.css/);
   assert.match(server, /PENECHO_PRIVATE_PLUGIN_DIR/);
   assert.match(server, /STATE_DIRECTORY[\s\S]*?path\.join\(STATE_DIRECTORY, "plugins", "private"\)/);
   assert.match(server, /plugins\/private/);
 });
 
 test("plugin parser rejects oversized contracts, unsafe origins, and missing one-shots", () => {
-  assert.throws(() => plugins.parse(`${weather}\n${"x".repeat(3000)}`), /1000-token budget/);
+  assert.throws(() => plugins.parse(`${weather}\n${"x".repeat(12000)}`), /12000 UTF-8 bytes/);
   assert.throws(() => plugins.parse(weather.replace("https://api.open-meteo.com", "https://*.open-meteo.com")), /invalid or duplicate origin/);
   assert.throws(() => plugins.parse(weather.replace("https://api.open-meteo.com", "https://api.open-meteo.com/v1")), /invalid or duplicate origin/);
   assert.throws(() => plugins.parse(weather.replace("## One-shot example", "## Usage example")), /one-shot example/);
@@ -193,6 +208,14 @@ test("plugin parser rejects oversized contracts, unsafe origins, and missing one
   assert.throws(() => plugins.parse(weather.replace(/^description:.*\n/m, "")), /description is required/);
   assert.throws(() => plugins.parse(weather.replace(/^category:.*\n/m, "")), /category is required/);
   assert.throws(() => plugins.parse(weather.replace(/^source:.*\n/m, "")), /source is required/);
+});
+
+test("plugin parser validates optional isolated CSS without constraining widget libraries", () => {
+  const parsed = plugins.parse(weather, ".weather-root { color: var(--accent); }");
+  assert.equal(parsed.styles, ".weather-root { color: var(--accent); }");
+  assert.throws(() => plugins.parse(weather, '@import "https://cdn.example/theme.css";'), /cannot load external resources/);
+  assert.throws(() => plugins.parse(weather, ".x { background:url(https://cdn.example/a.png) }"), /cannot load external resources/);
+  assert.throws(() => plugins.parse(weather, ".x { color:red"), /unmatched opening brace/);
 });
 
 test("plugin parser accepts an explicitly empty connect list", () => {
@@ -204,29 +227,32 @@ test("plugin parser accepts an explicitly empty connect list", () => {
   assert.deepEqual([...inlineList.connect], []);
 });
 
-test("plugin model output extraction accepts commentary, fences, and common YAML lists", () => {
+test("plugin model output extraction accepts a complete Markdown and CSS bundle", () => {
   const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     document = fs.readFileSync(path.join(pluginDirectory, "general.md"), "utf8")
       .replace("connect:\nrecommended-refresh-seconds", "connect: []\nrecommended-refresh-seconds"),
-    extract = vm.runInNewContext(`(${functionSource(server, "pluginDocumentFromModel")})`, { PLUGIN_FORMAT:plugins });
-  const extracted = extract(`Here is the revised contract:\n\n\`\`\`markdown\n${document}\n\`\`\``);
-  assert.equal(plugins.parse(extracted).id, "general");
+    extract = vm.runInNewContext(`(${functionSource(server, "pluginBundleFromModel")})`, { PLUGIN_FORMAT:plugins });
+  const extracted = extract(JSON.stringify({ document, styles:".general-root { color: #123456; }" }));
+  assert.equal(plugins.parse(extracted.document, extracted.styles).id, "general");
+  assert.equal(extracted.styles, ".general-root { color: #123456; }");
 });
 
 test("widget host keeps generated HTML in an opaque inner frame and snapshots it cooperatively", () => {
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
     html = fs.readFileSync(path.join(ROOT, "public", "widget-host.html"), "utf8"),
     server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
-    flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart.md"), "utf8"),
+    flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart", "plugin.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
   assert.match(host, /setAttribute\("sandbox", "allow-scripts"\)/);
   assert.doesNotMatch(host, /allow-same-origin/);
-  assert.match(host, /connect-src \$\{origins\}/);
-  assert.match(host, /img-src \$\{images\}/);
-  assert.match(host, /connect\.length \? connect\.join\(" "\) : "'none'"/);
-  assert.match(host, /querySelectorAll\("base, iframe, object, embed, form[\s\S]*?script\[src\]/);
-  assert.match(host, /script-src 'unsafe-inline' \$\{rendererUrl\}/);
+  assert.match(host, /script-src 'unsafe-inline' https: \$\{rendererUrl\}/);
+  assert.match(host, /connect-src https:/);
+  assert.match(host, /img-src data: blob: https:/);
+  assert.match(host, /querySelectorAll\("script\[src\]"\)[\s\S]*?safeHttpsResource/);
+  assert.match(host, /querySelectorAll\("link"\)[\s\S]*?stylesheet[\s\S]*?safeHttpsResource/);
+  assert.match(host, /pluginStyle\.dataset\.penechoPluginStyles/);
+  assert.ok(host.indexOf("pluginStyle.textContent = pluginStyles") < host.indexOf('bridgeStyle.textContent = "html,body'));
   assert.match(server, /path\.join\(PUBLIC, "vendor", "penecho-dom-renderer\.js"\)/);
   assert.match(server, /url\.pathname === "\/widget-renderer\.js"[\s\S]*?Cross-Origin-Resource-Policy":"cross-origin"/);
   assert.match(host, /globalThis\.html2canvas\(document\.documentElement/);
@@ -281,7 +307,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /element\.setAttribute\(property, value\)/);
   assert.match(host, /data-penecho-snapshot-background/);
   assert.match(host, /finally\s*\{\s*restoreSvgStyles\(\)/);
-  assert.match(flowchart, /presentation attributes[\s\S]*?directly on the relevant SVG elements/);
+  assert.match(flowchart, /injected `penecho-professional-diagrams-v1` CSS classes/);
   assert.match(host, /if \(press\.active\)[\s\S]*?event\.preventDefault/);
   assert.match(host, /penecho-widget-dragging[\s\S]*?user-select:none/);
   assert.match(host, /html,body\{background:transparent!important;color-scheme:light!important/);

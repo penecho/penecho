@@ -257,15 +257,22 @@ body.plugin-open { overflow: hidden; }
 .plugin-editor-field { display: grid; min-width: 0; }
 .plugin-editor-field textarea, .plugin-editor-field input { box-sizing: border-box; width: 100%; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 74%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 76%, transparent); }
 .plugin-editor-field textarea { min-height: 285px; resize: vertical; padding: 12px; tab-size: 2; font: .68rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.plugin-editor-field textarea.plugin-styles-editor { min-height: 180px; }
 .plugin-editor-field input { min-height: 36px; padding: 7px 10px; font: .72rem/1.3 system-ui, sans-serif; }
 .plugin-editor-field textarea:focus, .plugin-editor-field input:focus { border-color: var(--gold-bright); outline: 2px solid color-mix(in srgb, var(--gold-bright) 24%, transparent); outline-offset: 1px; }
 .plugin-editor-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; color: var(--muted); font: .62rem/1.4 system-ui, sans-serif; }
 .plugin-editor-meta output { flex: 0 0 auto; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .plugin-editor-meta output.invalid { color: #d96b64; }
+.plugin-styles-help { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.plugin-css-import { display: inline-flex; min-height: 30px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 5px 9px; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 75%, transparent); border-radius: 5px; background: transparent; font: 700 .63rem/1 system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+.plugin-css-import svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.plugin-css-import:hover, .plugin-css-import:focus-visible { color: var(--gold-bright); border-color: var(--gold-bright); }
+.plugin-css-import:disabled { cursor: wait; opacity: .58; }
 .plugin-create-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
 .plugin-create-actions [role="status"] { min-width: 0; color: var(--muted); font: .66rem/1.35 system-ui, sans-serif; overflow-wrap: anywhere; }
 .plugin-create-actions [role="status"].success { color: #55a76a; }
 .plugin-create-actions [role="status"].error { color: #d96b64; }
+.plugin-styles-preview { box-sizing: border-box; width: 100%; min-height: 210px; border: 1px solid color-mix(in srgb, var(--line) 74%, transparent); border-radius: 6px; background: #fff; }
 .plugin-primary-action, .plugin-secondary-action { min-height: 34px; padding: 7px 12px; border-radius: 6px; font: 750 .69rem/1 system-ui, sans-serif; cursor: pointer; }
 .plugin-primary-action { color: #17120c; border: 1px solid var(--gold-bright); background: var(--gold-bright); }
 .plugin-secondary-action { color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 75%, transparent); background: transparent; }
@@ -442,6 +449,9 @@ body.changelog-open { overflow: hidden; }
 .object-chrome-button.accept { color: var(--confirm); }
 .object-chrome-button.cancel { color: var(--danger); }
 .object-chrome-button.copy { color: #60a5fa; }
+.object-chrome-button.refine { display: flex; width: 112px; height: 38px; gap: 7px; padding: 0 12px; justify-content: center; color: #2563eb; border-style: solid; border-color: color-mix(in srgb, #2563eb 55%, var(--line)); background: color-mix(in srgb, var(--panel-raised) 88%, transparent); opacity: .76; font: 720 13px/1 system-ui, sans-serif; white-space: nowrap; }
+.object-chrome-button.refine:hover, .object-chrome-button.refine:focus-visible { opacity: 1; }
+.object-chrome-button.refine svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .animation-controls { position: absolute; z-index: 5; top: 0; left: 0; display: flex; gap: 4px; padding: 4px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.3); transform: translate3d(var(--animation-controls-x, 8px), var(--animation-controls-y, 8px), 0); }
 .animation-controls[hidden] { display: none; }
 .animation-controls button { min-height: 26px; padding: 4px 8px; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 78%, transparent); border-radius: 4px; background: var(--panel-raised); font: 700 .67rem/1 system-ui, sans-serif; cursor: pointer; }
@@ -661,6 +671,7 @@ body[data-theme="research"] footer, body[data-theme="research"] #coords { color:
   .plugin-share-button { justify-self: start; }
   .plugin-editor-field textarea { min-height: 250px; }
   .plugin-editor-meta { display: grid; gap: 4px; }
+  .plugin-styles-help { align-items: flex-start; flex-direction: column; }
   .plugin-create-actions { grid-template-columns: 1fr 1fr; }
   .plugin-create-actions [role="status"] { grid-column: 1 / -1; }
   .tour-card { width: calc(var(--tour-viewport-width, 100vw) - 16px); border-radius: 10px; }

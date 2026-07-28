@@ -717,6 +717,9 @@
       title:widget.title,
       refreshSeconds:widget.refreshSeconds,
       html:widget.html,
+      ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
       revision:widget.revision,
     };
@@ -739,8 +742,8 @@
     const returnMode = state.aiDraftReturnMode;
     state.pending = null;
     state.pendingGesture = null;
-    if (state.pendingWidget) unmountWidget(state.pendingWidget);
-    state.pendingWidget = null;
+    if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
+    state.pendingWidgetReplacement = null;
     state.pendingHistoryRestored = false;
     state.aiDraftReturnMode = null;
     hideAnimationControls();

@@ -188,17 +188,23 @@ function weatherPluginDescriptor() {
     connect:["https://geocoding-api.open-meteo.com", "https://api.open-meteo.com"],
     recommendedRefreshSeconds:900,
     document:fs.readFileSync(path.join(ROOT, "public", "plugins", "weather.md"), "utf8").trim(),
+    styles:"",
   };
 }
 
 function builtInPluginDescriptor(id, connect = []) {
+  const bundleDirectory = path.join(ROOT, "public", "plugins", id),
+    bundled = fs.existsSync(path.join(bundleDirectory, "plugin.md")),
+    documentPath = bundled ? path.join(bundleDirectory, "plugin.md") : path.join(ROOT, "public", "plugins", `${id}.md`),
+    stylesPath = path.join(bundleDirectory, "styles.css");
   return {
     id,
     name:id,
     version:"1",
     connect,
     recommendedRefreshSeconds:86400,
-    document:fs.readFileSync(path.join(ROOT, "public", "plugins", `${id}.md`), "utf8").trim(),
+    document:fs.readFileSync(documentPath, "utf8").trim(),
+    ...(bundled && fs.existsSync(stylesPath) ? { styles:fs.readFileSync(stylesPath, "utf8").trim() } : {}),
   };
 }
 
@@ -482,7 +488,7 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.equal(request.max_tokens,16384);
     assert.match(request.system,/Treat the canvas as an existing document to extend/);
     assert.match(request.system,/place only `5` immediately after the equals sign/);
-    assert.match(request.system,/within approximately 4096 tokens/);
+    assert.match(request.system,/within approximately 6144 tokens/);
     assert.match(request.system,/no more than roughly 7000 tokens/);
     assert.match(request.system,/Reserve sufficient output budget for one complete valid JSON response/);
     const schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
@@ -671,7 +677,7 @@ test("PIN authentication leaves the API provider request behavior unchanged", { 
 
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { copyText:"flowchart TD\nA-->B", copyLabel:"Copy Mermaid" }) : command() }) }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : command() }) }),
     {child,origin} = await startServer(apiServerEnv(upstream.origin));
   try {
     const descriptor = weatherPluginDescriptor(), enabled = validPayload();
@@ -721,15 +727,16 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
       flowchartBody = await flowchartResponse.json();
     assert.equal(flowchartResponse.status, 200);
     assert.equal(flowchartBody.commands[0].pluginId, "flowchart");
-    assert.equal(flowchartBody.commands[0].copyText, "flowchart TD\nA-->B");
-    assert.equal(flowchartBody.commands[0].copyLabel, "Copy Mermaid");
+    assert.equal(flowchartBody.commands[0].sourceFormat, "bpmn-xml");
+    assert.equal(flowchartBody.commands[0].copyText, '<?xml version="1.0"?><definitions />');
+    assert.equal(flowchartBody.commands[0].copyLabel, "Copy bpmn-xml");
 
     const malformed = validPayload();
     malformed.plugins = [{ ...descriptor, connect:["https://*.open-meteo.com"] }];
     const rejected = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(malformed) });
     assert.equal(rejected.status, 400);
     const oversized = validPayload();
-    oversized.plugins = [{ ...descriptor, document:"x".repeat(3001) }];
+    oversized.plugins = [{ ...descriptor, document:"x".repeat(12001) }];
     const oversizedResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(oversized) });
     assert.equal(oversizedResponse.status, 400);
     assert.equal(upstream.requests.length, 7);
@@ -739,7 +746,75 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
   }
 });
 
-test("widget host CSP contains only exact declared HTTPS origins", { timeout:10000 }, async () => {
+test("custom plugin widget refinement preserves its bundle and rejects ambiguous replacements", { timeout:20000 }, async () => {
+  const replacement = {
+      tool:"html_widget",
+      pluginId:"custom-diagram",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Custom architecture",
+      refreshSeconds:86400,
+      html:"<!doctype html><main class=\"custom-node\">Updated</main>",
+      diagramKind:"architecture",
+      sourceFormat:"d2",
+      copyText:"client -> api -> database",
+    },
+    response = commands => JSON.stringify({ intent:"answer", commands }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 0 ? response([replacement]) : response([replacement, { ...replacement, title:"Ambiguous second widget" }]) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    plugin = {
+      id:"custom-diagram",
+      name:"Custom Diagram",
+      version:"1",
+      connect:[],
+      recommendedRefreshSeconds:86400,
+      document:"---\npenecho-plugin: 1\nid: custom-diagram\nname: Custom Diagram\nversion: 1\n---\n# Custom Diagram\n\n## One-shot example\nReturn one html_widget.",
+      styles:".custom-node { color: #123456; }",
+    },
+    payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [plugin];
+  payload.widgetEdit = {
+    mode:"replace",
+    pluginId:plugin.id,
+    title:"Existing custom architecture",
+    instructionMode:"implicit-polish",
+    box:{ x:120, y:240, w:1200, h:700 },
+    html:"<!doctype html><main class=\"custom-node\">Existing</main>",
+    targetId:"client-only-widget-id",
+  };
+  try {
+    const acceptedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      accepted = await acceptedResponse.json();
+    assert.equal(acceptedResponse.status, 200);
+    assert.equal(accepted.commands.length, 1);
+    assert.equal(accepted.commands[0].pluginId, plugin.id);
+    assert.equal(accepted.commands[0].sourceFormat, "d2");
+    assert.equal(accepted.commands[0].copyLabel, "Copy d2");
+
+    const outbound = JSON.parse(upstream.requests[0]),
+      modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
+    assert.equal(modelInput.enabledPlugins[0].styles, plugin.styles);
+    assert.equal(modelInput.widgetEdit.pluginId, plugin.id);
+    assert.equal(modelInput.widgetEdit.html, payload.widgetEdit.html);
+    assert.equal("targetId" in modelInput.widgetEdit, false);
+    assert.match(modelInput.widgetEditPolicy, /one-shot replacement of exactly the supplied target/);
+
+    const ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      ambiguous = await ambiguousResponse.json();
+    assert.equal(ambiguousResponse.status, 200);
+    assert.deepEqual(ambiguous.commands, []);
+    assert.equal(upstream.requests.length, 3);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("widget host CSP permits on-demand HTTPS resources inside the isolated widget", { timeout:10000 }, async () => {
   const {child,origin} = await startServer(serverEnv());
   try {
     const query = new URLSearchParams();
@@ -747,12 +822,13 @@ test("widget host CSP contains only exact declared HTTPS origins", { timeout:100
     query.append("connect", "https://api.open-meteo.com");
     const response = await fetch(`${origin}/widget-host.html?${query}`), policy = response.headers.get("content-security-policy");
     assert.equal(response.status, 200);
-    assert.match(policy, /connect-src https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
-    assert.match(policy, /img-src data: blob: https:\/\/geocoding-api\.open-meteo\.com https:\/\/api\.open-meteo\.com;/);
+    assert.match(policy, /script-src 'self' 'unsafe-inline' https:/);
+    assert.match(policy, /style-src 'unsafe-inline' https:/);
+    assert.match(policy, /connect-src https:/);
+    assert.match(policy, /img-src data: blob: https:/);
     assert.match(policy, /frame-ancestors 'self'/);
-    assert.doesNotMatch(policy, /connect-src[^;]*\*/);
     const offlinePolicy = (await fetch(`${origin}/widget-host.html`)).headers.get("content-security-policy");
-    assert.match(offlinePolicy, /connect-src 'none';/);
+    assert.match(offlinePolicy, /connect-src https:/);
     const renderer = await fetch(`${origin}/widget-renderer.js`);
     assert.equal(renderer.status, 200);
     assert.match(renderer.headers.get("content-type"), /^application\/javascript/);
@@ -779,18 +855,18 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   const source = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const ACTIVE_SYSTEM_PROMPT_BASE/.exec(source)?.[1] || "";
   assert.doesNotMatch(basePrompt, /html_widget|enabledPlugins/);
-  assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin documents/);
+  assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_SYSTEM_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
-  assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?\^\[a-z0-9\][\s\S]*?MAX_LOCAL_PLUGINS/);
+  assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);
   assert.match(source, /process\.env\.PENECHO_PRIVATE_PLUGIN_DIR[\s\S]*?path\.resolve\(process\.env\.PENECHO_PRIVATE_PLUGIN_DIR\)/);
   assert.match(source, /STATE_DIRECTORY[\s\S]*?path\.join\(STATE_DIRECTORY, "plugins", "private"\)/);
   assert.match(source, /function localPluginCatalog\(\)[\s\S]*?PRIVATE_PLUGIN_DIRECTORY[\s\S]*?plugins\/private/);
   assert.match(source, /function saveLocalPluginDocument\([\s\S]*?BUILTIN_PLUGIN_IDS\.has\(manifest\.id\)[\s\S]*?mkdirSync\(PRIVATE_PLUGIN_DIRECTORY/);
   assert.match(source, /function deleteLocalPlugin\([\s\S]*?path\.join\(PRIVATE_PLUGIN_DIRECTORY/);
   assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?localPluginCatalog\(\)/);
-  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document\)/);
-  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 3000 UTF-8 bytes/);
+  assert.match(source, /url\.pathname === "\/api\/plugins"[\s\S]*?saveLocalPluginDocument\(body\.document, body\.styles \|\| ""\)/);
+  assert.match(source, /const PLUGIN_AUTHORING_SYSTEM = `[\s\S]*?under 12000 UTF-8 bytes[\s\S]*?under 32000 UTF-8 bytes/);
   assert.match(source, /url\.pathname === "\/api\/plugins\/improve"[\s\S]*?improvePluginDocument/);
 });
 
@@ -810,22 +886,28 @@ test("personal plugins use the writable desktop directory and remain fetchable",
     const response=await fetch(`${running.origin}/api/plugins`,{
       method:"POST",
       headers:{"Content-Type":"application/json",Origin:running.origin,Cookie:cookie},
-      body:JSON.stringify({document}),
+      body:JSON.stringify({document,styles:".desktop-private-test { color: #123456; }"}),
     }),body=await response.json();
     assert.equal(response.status,201);
-    assert.equal(body.plugin.path,"plugins/private/desktop-private-test.md");
-    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test.md"),"utf8").trim(),document.trim());
+    assert.equal(body.plugin.path,"plugins/private/desktop-private-test/plugin.md");
+    assert.equal(body.plugin.stylePath,"plugins/private/desktop-private-test/styles.css");
+    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test","plugin.md"),"utf8").trim(),document.trim());
+    assert.equal(fs.readFileSync(path.join(privateDirectory,"desktop-private-test","styles.css"),"utf8").trim(),".desktop-private-test { color: #123456; }");
 
     const catalog=await fetch(`${running.origin}/api/plugins`).then(value=>value.json()),
-      entry=catalog.plugins.find(plugin=>plugin.path==="plugins/private/desktop-private-test.md");
+      entry=catalog.plugins.find(plugin=>plugin.path==="plugins/private/desktop-private-test/plugin.md");
     assert.equal(entry?.builtIn,false);
+    assert.equal(entry?.stylePath,"plugins/private/desktop-private-test/styles.css");
     const served=await fetch(`${running.origin}/${entry.path}`);
     assert.equal(served.status,200);
     assert.equal((await served.text()).trim(),document.trim());
+    const servedStyles=await fetch(`${running.origin}/${entry.stylePath}`);
+    assert.equal(servedStyles.status,200);
+    assert.equal((await servedStyles.text()).trim(),".desktop-private-test { color: #123456; }");
 
     const removed=await fetch(`${running.origin}/api/plugins/desktop-private-test`,{method:"DELETE",headers:{Origin:running.origin,Cookie:cookie}});
     assert.equal(removed.status,200);
-    assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test.md")),false);
+    assert.equal(fs.existsSync(path.join(privateDirectory,"desktop-private-test")),false);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve=>upstream.server.close(resolve));

@@ -371,9 +371,25 @@
             <textarea id="pluginDocumentEditor" rows="18" spellcheck="false" aria-describedby="pluginDocumentHint pluginDocumentStatus"></textarea>
           </label>
           <div class="plugin-editor-meta">
-            <span id="pluginDocumentHint" data-i18n="pluginDocumentHint">Prefer Improve with AI before saving. The final document needs frontmatter, an exact One-shot example, and no more than 3000 UTF-8 bytes.</span>
-            <output id="pluginDocumentBytes" for="pluginDocumentEditor">0 / 3000 bytes</output>
+            <span id="pluginDocumentHint" data-i18n="pluginDocumentHint">Prefer Improve with AI before saving. The final document needs frontmatter and an exact One-shot example.</span>
+            <output id="pluginDocumentBytes" for="pluginDocumentEditor">0 / 12000 bytes</output>
           </div>
+          <label class="plugin-editor-field" for="pluginStylesEditor">
+            <span data-i18n="pluginStylesLabel">Plugin CSS (optional)</span>
+            <textarea id="pluginStylesEditor" class="plugin-styles-editor" rows="10" spellcheck="false" aria-describedby="pluginStylesHint pluginDocumentStatus"></textarea>
+          </label>
+          <div class="plugin-editor-meta plugin-styles-meta">
+            <div class="plugin-styles-help">
+              <button id="pluginStylesUploadButton" class="plugin-css-import" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 15v4h14v-4"/></svg>
+                <span data-i18n="pluginStylesImport">Import .css</span>
+              </button>
+              <input id="pluginStylesUpload" type="file" accept=".css,text/css" hidden>
+              <span id="pluginStylesHint" data-i18n="pluginStylesHint">Saved CSS is injected only when this plugin's widget is mounted; it does not load at canvas startup. Edit here or import a .css file. Put external JS/CSS URLs in generated widget HTML.</span>
+            </div>
+            <output id="pluginStylesBytes" for="pluginStylesEditor pluginStylesUpload">0 / 32000 bytes</output>
+          </div>
+          <iframe id="pluginStylesPreview" class="plugin-styles-preview" title="Plugin CSS preview" data-i18n-title="pluginStylesPreview" sandbox></iframe>
           <div class="plugin-create-actions">
             <span id="pluginDocumentStatus" role="status" aria-live="polite"></span>
             <button id="pluginImprove" class="plugin-secondary-action" type="button" data-i18n="improvePluginWithAi">Improve with AI</button>

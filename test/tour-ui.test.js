@@ -150,9 +150,9 @@ test("feature tour copy is complete in English and Chinese", () => {
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
   assert.match(zh, /闭合套索/);
-  assert.match(app, /tourPluginsBody:[\s\S]*Real Photos[\s\S]*Flowchart[\s\S]*Mermaid/);
+  assert.match(app, /tourPluginsBody:[\s\S]*Real Photos[\s\S]*Professional Diagrams[\s\S]*copyable source/);
   assert.match(zh, /显示网络真实照片.*一张/);
-  assert.match(zh, /专业流程图.*Mermaid/);
+  assert.match(zh, /专业图示.*专业源码/);
   assert.match(app, /tourHandBody:[\s\S]*small top handle[\s\S]*HTML widgets[\s\S]*click inside HTML widgets/);
   assert.match(zh, /上方的小把手.*AI HTML 控件/);
   assert.match(zh, /直接点击 HTML 控件内部/);

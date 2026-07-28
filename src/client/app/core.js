@@ -44,6 +44,11 @@
     pluginTitle = document.querySelector("#pluginTitle"),
     pluginDocumentEditor = document.querySelector("#pluginDocumentEditor"),
     pluginDocumentBytes = document.querySelector("#pluginDocumentBytes"),
+    pluginStylesEditor = document.querySelector("#pluginStylesEditor"),
+    pluginStylesUploadButton = document.querySelector("#pluginStylesUploadButton"),
+    pluginStylesUpload = document.querySelector("#pluginStylesUpload"),
+    pluginStylesBytes = document.querySelector("#pluginStylesBytes"),
+    pluginStylesPreview = document.querySelector("#pluginStylesPreview"),
     pluginDocumentStatus = document.querySelector("#pluginDocumentStatus"),
     pluginImprove = document.querySelector("#pluginImprove"),
     pluginSave = document.querySelector("#pluginSave"),
@@ -152,6 +157,7 @@ The generated HTML must fetch data directly in the user's browser, own its refre
 
 User writes “我需要根据地点, 显示空气质量”, names a place, and points to an empty area. Produce one html_widget there that uses that place in its API requests and displays the resulting air-quality information in large readable type.`,
   });
+  const PLUGIN_TEMPLATE_STYLES = Object.freeze({ simple:"" });
   const I18N = {
     en: {
       title: "PenEcho | Handwritten AI Canvas",
@@ -282,8 +288,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourDone: "Finish",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourPluginsTitle: "Real photos and flowcharts",
-      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Flowchart is off by default and creates diagrams with copyable Mermaid source. Manage both in Plugins.",
+      tourPluginsTitle: "Real photos and professional diagrams",
+      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is off by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
       tourHandBody: "Choose Hand, then use the small top handle to move outlined images, animations, and AI HTML widgets. Hand also lets you click inside HTML widgets; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
@@ -307,9 +313,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Real photos, flowcharts, and smoother canvas work",
+      changelogTitle: "Real photos, professional diagrams, and smoother canvas work",
       changelogIntro: "Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.",
-      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images and Flowchart for professional diagrams with copyable Mermaid source.",
+      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images or Professional Diagrams for expert visuals with copyable source formats.",
       changelogCanvasWorkflow: "Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.",
       changelogDesktopAccess: "Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.",
       changelogEarlierTitle: "Earlier highlights",
@@ -443,11 +449,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pluginTitleLabel: "Plugin title",
       pluginTitlePlaceholder: "Filled automatically by Improve with AI, or enter your own",
       pluginDocumentLabel: "Plugin Markdown",
-      pluginDocumentHint: "Prefer Improve with AI before saving. The final document needs frontmatter, an exact One-shot example, and no more than 3000 UTF-8 bytes.",
+      pluginDocumentHint: "Prefer Improve with AI before saving. The final document needs frontmatter and an exact One-shot example.",
+      pluginStylesLabel: "Plugin CSS (optional)",
+      pluginStylesHint: "Saved CSS is injected only when this plugin's widget is mounted; it does not load at canvas startup. Edit here or import a .css file. Put external JS/CSS URLs in generated widget HTML.",
+      pluginStylesImport: "Import .css",
+      pluginStylesImported: "Imported {name}. Review the preview before saving.",
+      pluginStylesFileType: "Choose a .css file",
+      pluginStylesFileTooLarge: "CSS file must be 32000 bytes or smaller",
+      pluginStylesReadFailed: "CSS file could not be read: {error}",
+      pluginStylesPreview: "Plugin CSS preview",
       improvePluginWithAi: "Improve with AI",
       saveAndEnablePlugin: "Save and enable",
       pluginMarketplaceNote: "The future marketplace will support free or points-priced downloads. Authors will be able to share plugins and earn points.",
-      pluginBytes: "{bytes} / 3000 bytes",
+      pluginBytes: "{bytes} / 12000 bytes",
+      pluginStylesBytes: "{bytes} / 32000 bytes",
       pluginDraftValid: "Ready to save as {name}",
       pluginDraftInvalid: "Fix the plugin document: {error}",
       pluginIdExists: "Plugin id {id} already exists",
@@ -482,6 +497,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDeleted: "Widget deleted",
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
+      widgetRefine: "AI Refine",
+      widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
+      widgetRefining: "AI is refining this widget",
+      widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
       widgetPluginUnavailable: "The plugin document could not be loaded",
       widgetLimitReached: "Live widget limit reached (20). Delete a widget before adding another.",
@@ -582,11 +601,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgets: [],
       nextWidgetId: 1,
       pendingWidget: null,
+      pendingWidgetReplacement: null,
       selectedWidgetId: null,
       widgetEdit: null,
       widgetGesture: null,
       widgetHostPan: null,
       widgetHistoryBefore: null,
+      widgetRefineCandidate: null,
+      widgetRefinePointer: null,
+      widgetRefineFocusId: null,
+      widgetRefineGraceUntil: 0,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -1182,6 +1206,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         connect: [...manifest.connect],
         recommendedRefreshSeconds: manifest.recommendedRefreshSeconds,
         document: manifest.document,
+        styles: manifest.styles,
       }));
   }
   function pluginRequestPayload() {
@@ -1190,8 +1215,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (plugins.length) payload.plugins = plugins;
     return payload;
   }
-  function validPluginCatalogPath(value) {
-    return typeof value === "string" && /^plugins\/(?:private\/)?[a-z0-9][a-z0-9-]{0,63}\.md$/.test(value) ? value : null;
+  function validPluginCatalogPath(value, extension) {
+    if (typeof value !== "string") return null;
+    const suffix = extension === "css" ? "styles\\.css" : "plugin\\.md",
+      legacy = extension === "md" ? "|[a-z0-9][a-z0-9-]{0,63}\\.md" : "";
+    return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})$`).test(value) ? value : null;
   }
   async function loadPluginDocuments() {
     if (state.pluginCatalogLoading) return false;
@@ -1203,15 +1231,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const response = await fetch("/api/plugins", { credentials:"same-origin", cache:"no-store" });
       if (!response.ok) throw Error(`HTTP ${response.status}`);
       const catalog = await response.json(), entries = (Array.isArray(catalog?.plugins) ? catalog.plugins : [])
-        .map((entry) => ({ path:validPluginCatalogPath(entry?.path), builtIn:entry?.builtIn !== false }))
+        .map((entry) => ({
+          path:validPluginCatalogPath(entry?.path, "md"),
+          stylePath:entry?.stylePath ? validPluginCatalogPath(entry.stylePath, "css") : null,
+          builtIn:entry?.builtIn !== false,
+          error:typeof entry?.error === "string" ? entry.error : "",
+        }))
         .filter((entry) => entry.path), uniqueEntries = [...new Map(entries.map((entry) => [entry.path, entry])).values()];
-      const loaded = await Promise.all(uniqueEntries.map(async ({ path:documentPath, builtIn }) => {
+      const loaded = await Promise.all(uniqueEntries.map(async ({ path:documentPath, stylePath, builtIn, error:catalogError }) => {
+        if (catalogError) return { documentPath, error:catalogError };
         try {
-          const documentResponse = await fetch(documentPath, { credentials:"same-origin", cache:"no-store" });
+          const [documentResponse, styleResponse] = await Promise.all([
+            fetch(documentPath, { credentials:"same-origin", cache:"no-store" }),
+            stylePath ? fetch(stylePath, { credentials:"same-origin", cache:"no-store" }) : null,
+          ]);
           if (!documentResponse.ok) throw Error(`HTTP ${documentResponse.status}`);
-          const manifest = PLUGINS?.parse(await documentResponse.text());
+          if (styleResponse && !styleResponse.ok) throw Error(`CSS HTTP ${styleResponse.status}`);
+          const [document, styles] = await Promise.all([documentResponse.text(), styleResponse ? styleResponse.text() : ""]),
+            manifest = PLUGINS?.parse(document, styles);
           if (!manifest) throw Error("Plugin parser is unavailable");
-          return { documentPath, manifest, builtIn };
+          return { documentPath, stylePath, manifest, builtIn };
         } catch (error) {
           return { documentPath, error:error.message };
         }
@@ -1230,6 +1269,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         definitions.push(Object.freeze({
           id:item.manifest.id,
           documentPath:item.documentPath,
+          stylePath:item.stylePath,
           builtIn:item.builtIn,
           defaultEnabled:["general", "image-search", "weather"].includes(item.manifest.id),
         }));
@@ -1240,6 +1280,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         fixedDefinitionIds = new Set(["general", ...promotedDefinitions.map((definition) => definition.id)]),
         remainingDefinitions = definitions.filter((definition) => !fixedDefinitionIds.has(definition.id)),
         previousIds = new Set(dataPluginDefinitions().map((plugin) => plugin.id)), nextIds = new Set(definitions.map((plugin) => plugin.id));
+      if (state.activeAI?.widgetEdit || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
       for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) unmountWidget(widget);
       PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
       pluginManifests.clear();
@@ -1344,7 +1385,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         help.textContent = plugin.id === "general" ? t("generalPluginRecommendedHelp") : plugin.helpKey ? t(plugin.helpKey) : localizedManifestValue(manifest, "description") || t("pluginNoDescription");
         meta.className = "plugin-option-meta";
         if (plugin.documentPath && manifest) {
-          const bytes = new TextEncoder().encode(manifest.document).length,
+          const bytes = new TextEncoder().encode(`${manifest.document}\n${manifest.styles || ""}`).length,
             tokens = Math.ceil(bytes / 4),
             source = manifest.source || manifest.connect.map((origin) => new URL(origin).hostname).join(", "),
             sourceItem = document.createElement("span"),
@@ -1476,16 +1517,33 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function pluginDraftValidation() {
     const document = pluginDocumentWithTitle(pluginDocumentEditor.value),
-      bytes = new TextEncoder().encode(document).length;
+      styles = pluginStylesEditor?.value || "",
+      bytes = new TextEncoder().encode(document).length,
+      styleBytes = new TextEncoder().encode(styles).length;
     try {
       if (!PLUGINS?.parse) throw Error("Plugin parser is unavailable");
-      const manifest = PLUGINS.parse(document);
+      const manifest = PLUGINS.parse(document, styles);
       if (PLUGIN_DEFINITIONS.some((plugin) => plugin.id === manifest.id && plugin.builtIn !== false) || ["animation", "general"].includes(manifest.id)) throw Error(t("pluginIdReserved").replace("{id}", manifest.id));
       if (pluginManifests.has(manifest.id)) throw Error(t("pluginIdExists").replace("{id}", manifest.id));
-      return { bytes, manifest, document, error:"" };
+      return { bytes, styleBytes, manifest, document, styles:manifest.styles, error:"" };
     } catch (error) {
-      return { bytes, manifest:null, error:error.message || String(error) };
+      return { bytes, styleBytes, manifest:null, error:error.message || String(error) };
     }
+  }
+  function updatePluginStylesPreview(validation) {
+    if (!pluginStylesPreview) return;
+    const css = validation?.manifest?.styles || "",
+      escaped = css.replace(/<\/style/gi, "<\\/style");
+    pluginStylesPreview.srcdoc = `<!doctype html><meta charset="utf-8"><style>
+      *{box-sizing:border-box}body{margin:0;padding:22px;background:#fff;color:#172033;font:16px/1.45 system-ui,sans-serif}
+      .plugin-css-preview{display:grid;gap:16px}.preview-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+      .preview-node{padding:12px 16px;border:2px solid #64748b;border-radius:6px;background:#f8fafc;font-weight:700}
+      .preview-muted{color:#64748b}.preview-accent{color:#2563eb}
+    </style><style>${escaped}</style><main class="plugin-css-preview pd-root" data-pd-palette="standard" data-pd-density="comfortable">
+      <h2 class="pd-title">Plugin style preview</h2><p class="pd-subtitle preview-muted">Typography, semantic nodes, labels and palette variables</p>
+      <div class="preview-row pd-stage"><span class="preview-node pd-node pd-node--service">Service</span><span class="pd-edge-label">request</span><span class="preview-node pd-node pd-node--database">Database</span></div>
+      <div class="preview-row"><span class="pd-badge pd-badge--info preview-accent">Info</span><span class="pd-badge pd-badge--success">Success</span><span class="pd-badge pd-badge--warning">Warning</span><span class="pd-badge pd-badge--danger">Error</span></div>
+    </main>`;
   }
   function updatePluginAuthoringUi() {
     const validation = pluginDraftValidation(),
@@ -1499,14 +1557,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.disabled = state.pluginAuthoringBusy;
     }
     pluginDocumentBytes.textContent = t("pluginBytes").replace("{bytes}", String(validation.bytes));
-    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 3000);
+    pluginDocumentBytes.classList.toggle("invalid", validation.bytes > 12000);
+    pluginStylesBytes.textContent = t("pluginStylesBytes").replace("{bytes}", String(validation.styleBytes));
+    pluginStylesBytes.classList.toggle("invalid", validation.styleBytes > 32000);
     pluginDocumentStatus.textContent = pluginAuthoringText(status);
     pluginDocumentStatus.className = status.type || "";
     pluginTitle.disabled = state.pluginAuthoringBusy;
     pluginDocumentEditor.disabled = state.pluginAuthoringBusy;
+    pluginStylesEditor.disabled = state.pluginAuthoringBusy;
+    pluginStylesUploadButton.disabled = state.pluginAuthoringBusy;
+    pluginStylesUpload.disabled = state.pluginAuthoringBusy;
     pluginImprove.disabled = state.pluginAuthoringBusy || !pluginDocumentEditor.value.trim() || validation.bytes > 12000;
     pluginSave.disabled = state.pluginAuthoringBusy || state.pluginCatalogLoading || !validation.manifest;
     for (const tab of [pluginLocalTab, pluginCreateTab, pluginServerTab]) tab.disabled = state.pluginAuthoringBusy;
+    updatePluginStylesPreview(validation);
     return validation;
   }
   function setPluginAuthoringStatus(key, type = "", values = {}, raw = "") {
@@ -1518,9 +1582,44 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pluginAuthoringTemplate = template;
     state.pluginAuthoringStatus = null;
     pluginDocumentEditor.value = PLUGIN_TEMPLATE_DOCUMENTS[template];
+    pluginStylesEditor.value = PLUGIN_TEMPLATE_STYLES[template] || "";
     syncPluginTitleFromDocument(pluginDocumentEditor.value);
     updatePluginAuthoringUi();
     return true;
+  }
+  async function importPluginStylesFile(file) {
+    if (!(file instanceof Blob) || state.pluginAuthoringBusy) return false;
+    const name = String(file.name || "styles.css"),
+      isCss = /\.css$/i.test(name) || file.type === "text/css";
+    if (!isCss) {
+      setPluginAuthoringStatus("pluginStylesFileType", "error");
+      return false;
+    }
+    if (file.size > 32000) {
+      setPluginAuthoringStatus("pluginStylesFileTooLarge", "error");
+      return false;
+    }
+    try {
+      const styles = await file.text();
+      if (new TextEncoder().encode(styles).length > 32000) {
+        setPluginAuthoringStatus("pluginStylesFileTooLarge", "error");
+        return false;
+      }
+      pluginStylesEditor.value = styles;
+      state.pluginAuthoringStatus = null;
+      const validation = pluginDraftValidation();
+      if (!validation.manifest) {
+        setPluginAuthoringStatus("pluginDraftInvalid", "error", { error:validation.error });
+        return false;
+      }
+      setPluginAuthoringStatus("pluginStylesImported", "success", { name });
+      return true;
+    } catch (error) {
+      setPluginAuthoringStatus("pluginStylesReadFailed", "error", { error:error.message || String(error) });
+      return false;
+    } finally {
+      pluginStylesUpload.value = "";
+    }
   }
   async function pluginJsonResponse(response) {
     let body = null;
@@ -1530,8 +1629,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function improvePluginDraft() {
     if (state.pluginAuthoringBusy) return false;
-    const document = pluginDocumentWithTitle(pluginDocumentEditor.value);
-    if (!document.trim() || new TextEncoder().encode(document).length > 12000) return false;
+    const document = pluginDocumentWithTitle(pluginDocumentEditor.value),
+      styles = pluginStylesEditor.value;
+    if (!document.trim() || new TextEncoder().encode(document).length > 12000 || new TextEncoder().encode(styles).length > 32000) return false;
     state.pluginAuthoringBusy = true;
     setPluginAuthoringStatus("pluginImproving");
     try {
@@ -1539,10 +1639,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-        body:JSON.stringify({ document, reasoningEffort:state.reasoningEffort }),
+        body:JSON.stringify({ document, styles, reasoningEffort:state.reasoningEffort }),
       }), body = await pluginJsonResponse(response);
-      if (typeof body?.document !== "string") throw Error("The AI response did not contain a plugin document");
+      if (typeof body?.document !== "string" || typeof body?.styles !== "string") throw Error("The AI response did not contain a complete plugin bundle");
+      PLUGINS.parse(body.document, body.styles);
       pluginDocumentEditor.value = body.document;
+      pluginStylesEditor.value = body.styles;
       syncPluginTitleFromDocument(body.document);
       state.pluginAuthoringStatus = { key:"pluginImproved", type:"success", values:{} };
       return true;
@@ -1566,7 +1668,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-        body:JSON.stringify({ document:validation.document }),
+        body:JSON.stringify({ document:validation.document, styles:validation.styles }),
       }), body = await pluginJsonResponse(response), savedId = body?.plugin?.id;
       if (typeof savedId !== "string" || !await loadPluginDocuments() || !setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
       state.pluginAuthoringStatus = { key:"pluginSaved", type:"success", values:{ name:localizedManifestValue(validation.manifest, "name") || validation.manifest.name } };
@@ -1632,6 +1734,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
       panel.hidden = !active;
+      if (active) panel.scrollTop = 0;
     }
     if (selected === "create") updatePluginAuthoringUi();
   }
@@ -1689,6 +1792,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function applyWidgetPluginState(pluginId, enabled) {
+    if (!enabled && state.activeAI?.widgetEdit?.pluginId === pluginId) cancelWidgetRefinement("widget-plugin-disabled");
     if (!enabled && state.pendingWidget?.pluginId === pluginId) rejectPendingWidget();
     if (!enabled && selectedWidget()?.pluginId === pluginId) acceptWidgetEdit();
     for (const widget of state.widgets) {
@@ -1853,6 +1957,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function invokeAIAction(action) {
+    cancelWidgetRefinement("manual-action");
     if (state.selection?.phase === "active") {
       const selection = state.selection,
         packed = buildSelectionTypesetRequest(selection);
