@@ -378,6 +378,7 @@ test("disabled data plugins send no plugin payload and detach widget runtime hoo
   assert.match(html, /id="widgetLayer"[^>]*\shidden(?:\s|>)/);
   assert.match(requestPayload, /if \(plugins\.length\) payload\.plugins = plugins/);
   assert.match(functionSource(app, "enabledPluginDescriptors"), /filter\(\(plugin\) => pluginEnabled\(plugin\.id\)\)/);
+  assert.match(functionSource(app, "enabledPluginDescriptors"), /sort\(\(a, b\) => a\.id === "general"/);
   assert.match(syncRuntime, /dataPluginDefinitions\(\)\.some[\s\S]*?widgetLayer\.hidden = !enabled[\s\S]*?addEventListener[\s\S]*?removeEventListener/);
   assert.doesNotMatch(app, /window\.addEventListener\("message", handleWidgetMessage\)/);
   assert.match(functionSource(app, "visibleWidgets"), /if \(!widgetRuntimeEnabled\(\)\) return \[\]/);
@@ -669,8 +670,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(candidate, /state\.mode === "hand"[\s\S]*?return null/);
   assert.match(candidate, /for \(const widget of visibleWidgets\(\)\)/);
   assert.doesNotMatch(candidate, /pluginId/);
-  assert.match(candidate, /widgetDirtyProximity\(widget\)[\s\S]*?hoverDistance[\s\S]*?widgetRefineFocusId/);
-  assert.match(dirtyProximity, /next <= 48[\s\S]*?distance <= 48/);
+  assert.match(candidate, /widgetDirtyProximity\(widget\)[\s\S]*?hoverDistance[\s\S]*?widgetRefineFocusId[\s\S]*?widgetRefineHoverId/);
+  assert.match(dirtyProximity, /widgetRefineDismissedDirty[\s\S]*?next <= 48[\s\S]*?distance <= 48/);
   assert.match(chrome, /state\.mode !== "hand"[\s\S]*?kind:"refine"[\s\S]*?requestWidgetRefinement/);
   assert.match(request, /await requestWidgetSnapshot\(widget\)[\s\S]*?state\.userRevision !== revision[\s\S]*?state\.widgets\.includes\(widget\)[\s\S]*?captureCurrentViewport:true[\s\S]*?widgetEditTarget:widget/);
   assert.match(context, /professional \? \{ source:widget\.copyText \} : \{ html:widget\.html \}/);
@@ -692,6 +693,11 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(functionSource(server, "filterWidgetEditCommands"), /commands\.length === 1[\s\S]*?widget\?\.tool === "html_widget"[\s\S]*?widget\.pluginId === widgetEdit\.pluginId/);
   assert.match(server, /sourceFormat is an open string, never an enum/);
   assert.doesNotMatch(server, /ALLOWED_(?:SOURCE_)?FORMATS|SOURCE_FORMATS\s*=\s*new Set/);
+  assert.match(functionSource(app, "dismissWidgetRefineCandidate"), /state\.widgetRefineDismissedDirty = state\.dirty/);
+  assert.match(functionSource(app, "mountWidget"), /shell\.addEventListener\("pointerenter"[\s\S]*?widgetRefineHoverId/);
+  assert.match(functionSource(app, "objectChromePosition"), /y:bottom - height/);
+  assert.match(functionSource(app, "objectChromePosition"), /ignoreKey[\s\S]*?\.object-chrome-button/);
+  assert.match(functionSource(app, "syncObjectChrome"), /objectChromePosition\(spec\.box, spec\.kind, spec\.key\)/);
 });
 
 test("downsampled animation drafts clip against logical rather than raster dimensions", () => {
@@ -888,10 +894,10 @@ test("Auto AI waits for unsettled toolboxes while manual actions remain availabl
 test("toolbar exposes a fixed clickable reasoning menu before the drawing tools", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
   const section = html.indexOf('id="aiToolsSection"'), auto = html.indexOf('id="autoControl"'), effort = html.indexOf('id="effortControl"'), font = html.indexOf('id="aiFont"'), pen = html.indexOf('data-mode="pen"'), fullscreen = html.indexOf('id="fullscreenBtn"'), grid = html.indexOf('id="gridToggle"');
-  assert.ok(section < auto && auto < effort && effort < font && font < pen);
+  assert.ok(section < auto && auto < effort && effort < pen && pen < font);
   assert.ok(pen < fullscreen && fullscreen < grid);
   assert.match(html, /id="aiToolsSection"[^>]*data-i18n-aria="aiTools"[\s\S]*?class="ai-section-label"[^>]*>AI<\/span>/);
-  assert.match(html, /<label><span data-i18n="font">Font<\/span>[\s\S]*?id="aiFont"/);
+  assert.match(html, /<label[^>]*class="settings-row"[^>]*>[\s\S]*?<span data-i18n="aiFont">AI font<\/span>[\s\S]*?id="aiFont"/);
   assert.match(css, /\.ai-tools-section\s*\{/);
   assert.match(css, /\.view-tools\s*\{/);
   assert.match(html, /id="aiEffortButton"[^>]*aria-haspopup="listbox"/);

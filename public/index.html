@@ -62,6 +62,9 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
           </button>
         </span>
+        <button id="settingsBtn" class="icon-button utility-icon" type="button" data-i18n-aria="settingsTitle" aria-label="Settings" data-i18n-title="settingsTitle" title="Settings" aria-expanded="false" aria-controls="settingsPanel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7.7 7.7 0 0 0 7 6l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.5Z"/></svg>
+        </button>
       </header>
 
       <nav class="toolbar" data-i18n-aria="boardTools" aria-label="Board tools">
@@ -98,14 +101,6 @@
               <span data-i18n="plugins">Plugins</span>
             </button>
           </div>
-          <label><span data-i18n="font">Font</span>
-            <select id="aiFont" data-i18n-aria="aiFont" aria-label="AI font">
-              <option value="ui-rounded, system-ui, sans-serif" data-i18n="fontRounded">Rounded</option>
-              <option value="Segoe Print, Comic Sans MS, cursive" data-i18n="fontHand">Handwritten</option>
-              <option value="Georgia, serif" data-i18n="fontSerif">Classic serif</option>
-              <option value="system-ui, sans-serif" data-i18n="fontSans">Sans serif</option>
-            </select>
-          </label>
           </div>
           <div class="mode-tools">
             <button id="handToolBtn" data-mode="hand" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="hand" aria-label="Hand tool: move canvas and objects" data-i18n-title="hand" title="Hand tool: move canvas and objects">
@@ -284,6 +279,7 @@
           </div>
         </div>
         <div id="textEditorLayer" class="text-editor-layer" aria-live="polite"></div>
+        <div id="summonLayer" class="summon-layer" hidden aria-hidden="true"></div>
         <div id="textInputHint" class="text-input-hint" hidden><kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd> <span data-i18n="textConfirmHint">to confirm</span></div>
         <div id="aiEmbodiment" class="ai-embodiment" data-theme="studio" role="group" data-i18n-aria="aiGuide" aria-label="AI knowledge guide" aria-busy="false">
           <div class="orb-aura" aria-hidden="true"></div>
@@ -405,6 +401,59 @@
       </section>
     </section>
   </div>
+  <div id="settingsLayer" class="settings-layer" hidden aria-hidden="true">
+    <div id="settingsBackdrop" class="settings-backdrop"></div>
+    <section id="settingsPanel" class="settings-panel" role="dialog" data-i18n-aria="settingsTitle" aria-label="Settings" aria-labelledby="settingsTitle" tabindex="-1">
+      <header>
+        <h2 id="settingsTitle" data-i18n="settingsTitle">Settings</h2>
+        <button id="settingsClose" class="settings-close" type="button" data-i18n-aria="settingsClose" aria-label="Close settings" data-i18n-title="settingsClose" title="Close settings">×</button>
+      </header>
+      <div class="settings-scroll">
+        <section class="settings-group" aria-labelledby="settingsAiHeading">
+          <h3 id="settingsAiHeading" data-i18n="settingsAISection">AI</h3>
+          <div class="settings-row">
+            <span id="settingsAutoLabel" data-i18n="autoAI">Auto AI</span>
+            <button id="settingsAutoToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="settingsAutoLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
+          </div>
+          <label class="settings-row" for="aiFont">
+            <span data-i18n="aiFont">AI font</span>
+            <select id="aiFont" data-i18n-aria="aiFont" aria-label="AI font">
+              <option value="ui-rounded, system-ui, sans-serif" data-i18n="fontRounded">Rounded</option>
+              <option value="Segoe Print, Comic Sans MS, cursive" data-i18n="fontHand">Handwritten</option>
+              <option value="Georgia, serif" data-i18n="fontSerif">Classic serif</option>
+              <option value="system-ui, sans-serif" data-i18n="fontSans">Sans serif</option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-group" aria-labelledby="settingsSummonHeading">
+          <h3 id="settingsSummonHeading" data-i18n="settingsSummonSection">Summoning effect</h3>
+          <div class="settings-row">
+            <span id="summonToggleLabel" data-i18n="settingsSummonEnabled">Show while AI works</span>
+            <button id="summonToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="summonToggleLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
+          </div>
+          <div id="summonEffectList" class="summon-effect-list" role="radiogroup" data-i18n-aria="settingsSummonSection" aria-label="Summoning effect">
+            <button type="button" class="summon-effect-option active" data-effect="rift" role="radio" aria-checked="true"><span class="fx-preview fx-preview-rift" aria-hidden="true"></span><span data-i18n="summonFxRift">Void Rift</span></button>
+            <button type="button" class="summon-effect-option" data-effect="vortex" role="radio" aria-checked="false"><span class="fx-preview fx-preview-vortex" aria-hidden="true"></span><span data-i18n="summonFxVortex">Star Vortex</span></button>
+            <button type="button" class="summon-effect-option" data-effect="array" role="radio" aria-checked="false"><span class="fx-preview fx-preview-array" aria-hidden="true"></span><span data-i18n="summonFxArray">Glyph Array</span></button>
+            <button type="button" class="summon-effect-option" data-effect="script" role="radio" aria-checked="false"><span class="fx-preview fx-preview-script" aria-hidden="true"></span><span data-i18n="summonFxScript">Flowing Glyphs</span></button>
+            <button type="button" class="summon-effect-option" data-effect="flame" role="radio" aria-checked="false"><span class="fx-preview fx-preview-flame" aria-hidden="true"></span><span data-i18n="summonFxFlame">Spirit Flame</span></button>
+          </div>
+        </section>
+        <section class="settings-group" aria-labelledby="settingsHelpHeading">
+          <h3 id="settingsHelpHeading" data-i18n="settingsHelpSection">Help &amp; about</h3>
+          <div class="settings-actions">
+            <button id="settingsTourBtn" type="button" data-i18n="tourReplay">Feature tour</button>
+            <button id="settingsChangelogBtn" type="button" data-i18n="settingsChangelog">What's new</button>
+          </div>
+          <div class="settings-links">
+            <a href="https://github.com/penecho/penecho/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="settingsDownloadMac">Download for macOS</a>
+            <a href="https://github.com/penecho/penecho/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="settingsDownloadWin">Download for Windows</a>
+            <a href="https://github.com/penecho/penecho" target="_blank" rel="noopener noreferrer" data-i18n="settingsGitHub">GitHub repository</a>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
   <div id="tourLayer" class="tour-layer" hidden aria-hidden="true">
     <div id="tourHighlight" class="tour-highlight" aria-hidden="true"></div>
     <section id="tourCard" class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourBody" tabindex="-1">
@@ -469,6 +518,7 @@
   <script src="mixed-text.js"></script>
   <script src="animation.js"></script>
   <script src="plugins.js"></script>
+  <script src="summon.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

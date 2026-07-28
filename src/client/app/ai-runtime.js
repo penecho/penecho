@@ -113,6 +113,7 @@
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
       run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
     state.activeAI = run;
+    state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
     setBusy(true);
     setStatusKey(isolatedSelection && action === "normalize" ? "selectionTypesetting" : "observing");
     const timeout = setTimeout(() => controller.abort(), state.aiRequestTimeoutMs);
@@ -283,6 +284,7 @@
         state.activeAI = null;
         setBusy(false);
       }
+      if (!state.activeAI) state.summonAnchor = null;
     }
   }
   function viewportRect() {

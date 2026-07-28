@@ -526,6 +526,18 @@
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
+    shell.addEventListener("pointerenter", () => {
+      if (state.mode === "hand" || widget.pending) return;
+      state.widgetRefineHoverId = widget.id;
+      state.widgetRefineGraceUntil = Date.now() + 420;
+      requestInteractionLayerRender();
+    });
+    shell.addEventListener("pointerleave", (event) => {
+      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
+      if (state.widgetRefineHoverId === widget.id) state.widgetRefineHoverId = null;
+      state.widgetRefineGraceUntil = Date.now() + 420;
+      setTimeout(() => requestInteractionLayerRender(), 440);
+    });
     shell.addEventListener("focusin", () => {
       if (state.mode === "hand" || widget.pending) return;
       state.widgetRefineFocusId = widget.id;
@@ -1913,7 +1925,7 @@
     return Math.hypot(dx, dy);
   }
   function widgetDirtyProximity(widget) {
-    if (!state.dirty || !state.hotspotTrail.length) return null;
+    if (!state.dirty || state.dirty === state.widgetRefineDismissedDirty || !state.hotspotTrail.length) return null;
     let distance = Infinity,
       hits = 0;
     for (const point of state.hotspotTrail) {
@@ -1926,9 +1938,14 @@
   function clearWidgetRefineCandidate({ clearPointer = true } = {}) {
     state.widgetRefineCandidate = null;
     state.widgetRefineFocusId = null;
+    state.widgetRefineHoverId = null;
     state.widgetRefineGraceUntil = 0;
     if (clearPointer) state.widgetRefinePointer = null;
     requestInteractionLayerRender();
+  }
+  function dismissWidgetRefineCandidate() {
+    state.widgetRefineDismissedDirty = state.dirty;
+    clearWidgetRefineCandidate();
   }
   function updateWidgetRefinePointer(event) {
     if (state.mode === "hand" || event.pointerType === "touch" || state.drawing) return;
@@ -1955,13 +1972,14 @@
       const dirty = widgetDirtyProximity(widget),
         hoverDistance = pointer ? pointDistanceToWidget(pointer, widget) * state.scale : Infinity,
         focused = state.widgetRefineFocusId === widget.id,
+        hovered = state.widgetRefineHoverId === widget.id,
         grace = previous?.widgetId === widget.id && Date.now() < state.widgetRefineGraceUntil;
-      if (!dirty && hoverDistance > 24 && !focused && !grace) continue;
+      if (!dirty && hoverDistance > 24 && !focused && !hovered && !grace) continue;
       candidates.push({
         widget,
         widgetId:widget.id,
         instructionMode:dirty ? "nearby-dirty" : "implicit-polish",
-        priority:dirty ? 0 : focused ? 1 : 2,
+        priority:dirty ? 0 : focused ? 1 : hovered ? 2 : 3,
         distance:dirty?.distance ?? hoverDistance,
         hits:dirty?.hits || 0,
       });
@@ -2020,7 +2038,7 @@
       height:box.h * state.scale,
     };
   }
-  function objectChromePosition(box, kind) {
+  function objectChromePosition(box, kind, ignoreKey = "") {
     const width = kind === "move" ? 62 : kind === "refine" ? 112 : 36,
       height = kind === "refine" ? 38 : 34,
       viewportWidth = view.clientWidth,
@@ -2039,11 +2057,14 @@
           { x:screenBox.left + screenBox.width / 2 - width / 2, y:screenBox.top - height - gap },
           { x:right + gap, y:screenBox.top },
           { x:right + gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
+          { x:right + gap, y:bottom - height },
           { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + gap },
           { x:screenBox.left - width - gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
         ].map(position => ({ x:clampX(position.x), y:clampY(position.y) })),
         viewRect = view.getBoundingClientRect(),
-        obstacles = [...document.querySelectorAll(".animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor")].map(element => {
+        obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
+          .filter(element => element.dataset.objectChromeKey !== ignoreKey)
+          .map(element => {
           const rect = element.getBoundingClientRect();
           return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
         }),
@@ -2116,11 +2137,11 @@
     });
     if (kind === "refine") {
       button.addEventListener("pointerenter", () => {
-        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
+        state.widgetRefineHoverId = button.penechoSpec?.widget?.id || null;
         state.widgetRefineGraceUntil = Date.now() + 420;
       });
       button.addEventListener("pointerleave", () => {
-        state.widgetRefineFocusId = null;
+        state.widgetRefineHoverId = null;
         state.widgetRefineGraceUntil = Date.now() + 420;
         setTimeout(() => requestInteractionLayerRender(), 440);
       });
@@ -2219,11 +2240,11 @@
     if (!objectChromeLayer) return;
     const active = new Set();
     for (const spec of objectChromeSpecs()) {
-      const position = objectChromePosition(spec.box, spec.kind);
+      const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
+        position = objectChromePosition(spec.box, spec.kind, spec.key);
       if (!position) continue;
       active.add(spec.key);
-      const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
-        label = objectChromeLabel(spec.kind),
+      const label = objectChromeLabel(spec.kind),
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.setAttribute("aria-label", label);

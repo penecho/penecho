@@ -89,7 +89,18 @@
     changelogLayer = document.querySelector("#changelogLayer"),
     changelogDialog = document.querySelector("#changelogDialog"),
     changelogCloseButton = document.querySelector("#changelogClose"),
-    changelogDoneButton = document.querySelector("#changelogDone");
+    changelogDoneButton = document.querySelector("#changelogDone"),
+    summonLayer = document.querySelector("#summonLayer"),
+    settingsLayer = document.querySelector("#settingsLayer"),
+    settingsBackdrop = document.querySelector("#settingsBackdrop"),
+    settingsPanel = document.querySelector("#settingsPanel"),
+    settingsButton = document.querySelector("#settingsBtn"),
+    settingsCloseButton = document.querySelector("#settingsClose"),
+    settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    summonToggle = document.querySelector("#summonToggle"),
+    summonEffectList = document.querySelector("#summonEffectList"),
+    settingsTourButton = document.querySelector("#settingsTourBtn"),
+    settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
   const DRAW = window.PENECHO_DRAW;
   const SELECT = window.PENECHO_SELECTION;
@@ -97,6 +108,7 @@
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;
   const ANIMATION = window.PENECHO_ANIMATION;
   const PLUGINS = window.PENECHO_PLUGINS;
+  const SUMMON = window.PENECHO_SUMMON;
   const EFFORT_LEVELS = ["none", "low", "medium", "high", "max"],
     EFFORT_OPTIONS = ["config", ...EFFORT_LEVELS],
     TEXT_EDITOR_DEFAULT_WIDTH = 320,
@@ -323,6 +335,39 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogPluginsSummary: "0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.",
       changelogAnimation: "0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.",
       changelogDone: "Got it",
+      settingsTitle: "Settings",
+      settingsClose: "Close settings",
+      settingsAISection: "AI",
+      settingsSummonSection: "Summoning effect",
+      settingsSummonEnabled: "Show while AI works",
+      settingsChangelog: "What's new",
+      settingsHelpSection: "Help & about",
+      settingsDownloadMac: "Download for macOS",
+      settingsDownloadWin: "Download for Windows",
+      settingsGitHub: "GitHub repository",
+      summonFxRift: "Void Rift - the canvas tears open",
+      summonFxVortex: "Star Vortex - a swirling little galaxy",
+      summonFxArray: "Glyph Array - a rotating summoning circle",
+      summonFxScript: "Flowing Glyphs - rising mystic script",
+      summonFxFlame: "Spirit Flame - a cold violet fire",
+      summonPhrase1: "Gathering spiritual ink - the answer is about to burst forth...",
+      summonPhrase2: "Summoning the answer spirit, hold on...",
+      summonPhrase3: "The AI is cultivating in seclusion, emerging soon...",
+      summonPhrase4: "A quick divination says: results any moment now...",
+      summonPhrase5: "The inspiration furnace is lit, brewing words...",
+      summonPhrase6: "Deep in the void, something is responding...",
+      summonPhrase7: "Negotiating friendly terms with the knowledge spirit...",
+      summonPhrase8: "The summoning circle works fine - just waiting on the answer...",
+      summonTip1: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
+      summonTip2: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
+      summonTip3: "Tip: circle content with the lasso and AI will work only on that selection.",
+      summonTip4: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
+      summonTip5: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
+      summonTip6: "Tip: raise the Reasoning effort in the toolbar for harder problems.",
+      summonTip7: "Tip: the plugin panel hides live widgets - flowcharts and photo search can join your canvas.",
+      summonTip8: "Tip: the history panel saves canvas snapshots you can return to anytime.",
+      summonTip9: "Tip: zoom with the wheel, pan with the middle mouse button - the canvas spans twenty thousand squares.",
+      summonTip10: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
       history: "Local history",
@@ -553,6 +598,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedResearchGrid = localStorage.getItem("penecho-research-grid"),
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
+    storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedSummonEffect = localStorage.getItem("penecho-summon-effect"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
@@ -567,6 +614,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
+    initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialSummonEffect = SUMMON?.EFFECTS?.includes(storedSummonEffect) ? storedSummonEffect : "rift",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function authenticatedApiHeaders(headers = {}) {
@@ -610,7 +659,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetRefineCandidate: null,
       widgetRefinePointer: null,
       widgetRefineFocusId: null,
+      widgetRefineHoverId: null,
       widgetRefineGraceUntil: 0,
+      widgetRefineDismissedDirty: null,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -644,6 +695,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selectionGesture: null,
       hotspotTrail: [],
       auto: initialAutoEnabled,
+      summonEnabled: initialSummonEnabled,
+      summonEffect: initialSummonEffect,
+      summonAnchor: null,
       timer: 0,
       autoPopoverTimer: 0,
       effortPopoverTimer: 0,
@@ -739,6 +793,82 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   };
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
+  const summonFX = SUMMON?.create({
+    layer: summonLayer,
+    t,
+    toScreen: (wx, wy) => ({ x: wx * state.scale + state.panX, y: wy * state.scale + state.panY }),
+  });
+  summonFX?.setEffect(state.summonEffect);
+  function summonInkOverlap(box) {
+    let overlap = 0;
+    for (const [k, c] of tiles) {
+      const [tx, ty] = k.split(",").map(Number),
+        tileBox = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
+      if (!intersection(tileBox, box)) continue;
+      let ink = state.inkBounds.get(k);
+      if (ink === undefined) {
+        ink = c ? inkBox(c, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
+        state.inkBounds.set(k, ink);
+      }
+      if (!ink) continue;
+      const found = intersection({ x: tileBox.x + ink.x, y: tileBox.y + ink.y, w: ink.w, h: ink.h }, box);
+      if (found) overlap += found.w * found.h;
+    }
+    return overlap;
+  }
+  function summonPlacement() {
+    const visible = viewportRect();
+    if (!visible) return null;
+    const w = Math.min(280 / state.scale, visible.w * 0.9),
+      h = Math.min(215 / state.scale, visible.h * 0.85),
+      gap = 26 / state.scale,
+      margin = 10 / state.scale,
+      clampBox = (cx, cy) => ({
+        x: Math.min(Math.max(cx - w / 2, visible.x + margin), visible.x + visible.w - margin - w),
+        y: Math.min(Math.max(cy - h / 2, visible.y + margin), visible.y + visible.h - margin - h),
+        w,
+        h,
+      }),
+      candidates = [],
+      anchor = state.summonAnchor;
+    if (anchor) {
+      const acx = anchor.x + anchor.w / 2,
+        acy = anchor.y + anchor.h / 2;
+      candidates.push(
+        clampBox(anchor.x + anchor.w + gap + w / 2, acy),
+        clampBox(acx, anchor.y + anchor.h + gap + h / 2),
+        clampBox(anchor.x - gap - w / 2, acy),
+        clampBox(acx, anchor.y - gap - h / 2),
+      );
+    }
+    const ccx = visible.x + visible.w / 2,
+      ccy = visible.y + visible.h / 2;
+    candidates.push(clampBox(ccx, ccy));
+    for (const [dx, dy] of [[0.24, 0], [-0.24, 0], [0, 0.22], [0, -0.22], [0.24, 0.22], [-0.24, -0.22], [0.24, -0.22], [-0.24, 0.22]])
+      candidates.push(clampBox(ccx + visible.w * dx, ccy + visible.h * dy));
+    let best = candidates[0],
+      bestScore = Infinity;
+    for (const candidate of candidates) {
+      const score = summonInkOverlap(candidate);
+      if (score === 0) {
+        best = candidate;
+        break;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+    return { x: best.x + best.w / 2, y: best.y + best.h / 2 };
+  }
+  function showSummon() {
+    if (!summonFX || !state.summonEnabled) return;
+    const spot = summonPlacement();
+    if (spot) summonFX.show(spot);
+  }
+  function hideSummon() {
+    summonFX?.hide();
+  }
   function readFeatureTourProgress() {
     try {
       const stored = TOUR.parseProgress(localStorage.getItem(FEATURE_TOUR_STORAGE_KEY));
@@ -1062,8 +1192,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION);
     } catch {}
   }
-  function maybeShowChangelog() {
-    if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || changelogSeen()) return false;
+  function maybeShowChangelog(force = false) {
+    if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
     hideAutoDelayControl();
     hideEffortControl();
     hidePluginControl();
@@ -1111,6 +1241,58 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     focusable[next]?.focus();
     return true;
   }
+  const settings = { open: false, restoreFocus: null };
+  function updateSettingsPanel() {
+    if (!settingsPanel) return;
+    settingsAutoToggle.classList.toggle("on", state.auto);
+    settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    summonToggle.classList.toggle("on", state.summonEnabled);
+    summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
+    summonEffectList.classList.toggle("effects-disabled", !state.summonEnabled);
+    summonEffectList.querySelectorAll(".summon-effect-option").forEach((option) => {
+      const active = option.dataset.effect === state.summonEffect;
+      option.classList.toggle("active", active);
+      option.setAttribute("aria-checked", String(active));
+    });
+  }
+  function openSettings() {
+    if (settings.open || !settingsLayer) return false;
+    hideAutoDelayControl();
+    hideEffortControl();
+    hidePluginControl();
+    closeRadialMenu();
+    settings.open = true;
+    settings.restoreFocus = document.activeElement?.isConnected && document.activeElement !== document.body ? document.activeElement : settingsButton;
+    settingsLayer.hidden = false;
+    settingsLayer.setAttribute("aria-hidden", "false");
+    settingsButton.setAttribute("aria-expanded", "true");
+    updateSettingsPanel();
+    requestAnimationFrame(() => settingsPanel.focus({ preventScroll: true }));
+    return true;
+  }
+  function closeSettings(restore = true) {
+    if (!settings.open) return false;
+    settings.open = false;
+    settingsLayer.hidden = true;
+    settingsLayer.setAttribute("aria-hidden", "true");
+    settingsButton.setAttribute("aria-expanded", "false");
+    if (restore) requestAnimationFrame(() => settings.restoreFocus?.focus({ preventScroll: true }));
+    settings.restoreFocus = null;
+    return true;
+  }
+  function setSummonEnabled(enabled) {
+    state.summonEnabled = Boolean(enabled);
+    localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
+    if (!state.summonEnabled) hideSummon();
+    updateSettingsPanel();
+  }
+  function setSummonEffect(id) {
+    if (!SUMMON?.EFFECTS?.includes(id)) return;
+    state.summonEffect = id;
+    localStorage.setItem("penecho-summon-effect", id);
+    summonFX?.setEffect(id);
+    updateSettingsPanel();
+  }
   function maybeStartOnboarding() {
     if (!maybeStartFeatureTour()) maybeShowChangelog();
   }
@@ -1127,6 +1309,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     document.querySelector("#autoLabel").textContent = state.auto ? t("autoEnabled").replace("{delay}", autoDelayText()) : t("autoDisabled");
     range.value = String(state.autoDelayMs / 1000);
     value.textContent = `${autoDelayText()} s`;
+    if (settingsAutoToggle) {
+      settingsAutoToggle.classList.toggle("on", state.auto);
+      settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    }
   }
   function updateEffortControl() {
     if (!EFFORT_OPTIONS.includes(state.reasoningEffort)) state.reasoningEffort = "config";
@@ -1199,6 +1385,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return dataPluginDefinitions().filter((plugin) => pluginEnabled(plugin.id))
       .map((plugin) => pluginManifests.get(plugin.id))
       .filter(Boolean)
+      .sort((a, b) => a.id === "general" ? b.id === "general" ? 0 : -1 : b.id === "general" ? 1 : a.id.localeCompare(b.id))
       .map((manifest) => ({
         id: manifest.id,
         name: manifest.name,
@@ -1862,6 +2049,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.statusKey) status.textContent = t(state.statusKey);
     updateSelectionToolbar();
     updateFeatureTourLanguage();
+    summonFX?.refreshText();
     positionAnimationControls();
     requestInteractionLayerRender();
   }
@@ -1918,6 +2106,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.busy = Boolean(value);
     embodiment.classList.toggle("working", state.busy);
     embodiment.setAttribute("aria-busy", String(state.busy));
+    if (state.busy) showSummon();
+    else hideSummon();
   }
   function setNavigating(value) {
     clearTimeout(state.navigationTimer);

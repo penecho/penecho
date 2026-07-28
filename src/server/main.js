@@ -422,7 +422,9 @@ function validPayload(p) {
 }
 function canonicalPayload(p) {
   const box = value => ({ x:value.x, y:value.y, w:value.w, h:value.h });
-  const plugins = (p.plugins||[]).map(plugin=>({ id:plugin.id, name:plugin.name.trim(), version:plugin.version, connect:[...plugin.connect], recommendedRefreshSeconds:plugin.recommendedRefreshSeconds, document:plugin.document, styles:typeof plugin.styles === "string" ? plugin.styles : "" }));
+  const plugins = (p.plugins||[])
+    .map(plugin=>({ id:plugin.id, name:plugin.name.trim(), version:plugin.version, connect:[...plugin.connect], recommendedRefreshSeconds:plugin.recommendedRefreshSeconds, document:plugin.document, styles:typeof plugin.styles === "string" ? plugin.styles : "" }))
+    .sort((a,b)=>a.id==="general"?b.id==="general"?0:-1:b.id==="general"?1:a.id.localeCompare(b.id));
   return {
     atlasImage:p.atlasImage,
     atlasSize:{ w:p.atlasSize.w, h:p.atlasSize.h },

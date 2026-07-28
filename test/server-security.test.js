@@ -187,7 +187,7 @@ function weatherPluginDescriptor() {
     version:"1",
     connect:["https://geocoding-api.open-meteo.com", "https://api.open-meteo.com"],
     recommendedRefreshSeconds:900,
-    document:fs.readFileSync(path.join(ROOT, "public", "plugins", "weather.md"), "utf8").trim(),
+    document:fs.readFileSync(path.join(ROOT, "public", "plugins", "weather", "plugin.md"), "utf8").trim(),
     styles:"",
   };
 }
@@ -875,7 +875,7 @@ test("personal plugins use the writable desktop directory and remain fetchable",
     privateDirectory=path.join(stateDir,"desktop-plugins","private"),
     upstream=await startApiServer(),
     running=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:stateDir,PENECHO_PRIVATE_PLUGIN_DIR:privateDirectory})),
-    document=fs.readFileSync(path.join(ROOT,"public","plugins","general.md"),"utf8")
+    document=fs.readFileSync(path.join(ROOT,"public","plugins","general","plugin.md"),"utf8")
       .replace(/^id: general$/m,"id: desktop-private-test")
       .replace(/^name: General HTML$/m,"name: Desktop Private Test")
       .replace(/^# General HTML$/m,"# Desktop Private Test");

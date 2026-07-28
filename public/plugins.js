@@ -2,8 +2,6 @@
 (() => {
   const MAX_DOCUMENT_BYTES = 12000,
     MAX_STYLES_BYTES = 32000,
-    MAX_STYLE_RULES = 600,
-    MAX_SELECTOR_LENGTH = 512,
     MAX_CONNECT_ORIGINS = 8,
     PLUGIN_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -72,33 +70,6 @@
   function validateStyles(value = "") {
     if (value === undefined || value === null || value === "") return "";
     if (typeof value !== "string" || utf8Bytes(value) > MAX_STYLES_BYTES) throw Error("Plugin CSS exceeds 32000 UTF-8 bytes");
-    if (/<\/?style\b/i.test(value)) throw Error("Plugin CSS must not contain style tags");
-    const scrubbed = value
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '""');
-    if (/\/\*/.test(scrubbed)) throw Error("Plugin CSS has an unterminated comment");
-    if (/@import\b/i.test(scrubbed) || /\burl\s*\(/i.test(scrubbed)) throw Error("Plugin CSS cannot load external resources");
-    let depth = 0,
-      rules = 0,
-      selectorStart = 0;
-    for (let index = 0; index < scrubbed.length; index++) {
-      const character = scrubbed[index];
-      if (character === "{") {
-        if (depth === 0) {
-          const selector = scrubbed.slice(selectorStart, index).trim();
-          if (!selector || selector.length > MAX_SELECTOR_LENGTH) throw Error("Plugin CSS contains an invalid or overly complex selector");
-          rules++;
-          if (rules > MAX_STYLE_RULES) throw Error(`Plugin CSS exceeds ${MAX_STYLE_RULES} rules`);
-        }
-        depth++;
-      } else if (character === "}") {
-        depth--;
-        if (depth < 0) throw Error("Plugin CSS has an unmatched closing brace");
-        if (depth === 0) selectorStart = index + 1;
-      }
-    }
-    if (depth) throw Error("Plugin CSS has an unmatched opening brace");
-    if (scrubbed.slice(selectorStart).trim()) throw Error("Plugin CSS contains text outside a rule");
     return value.trim();
   }
 

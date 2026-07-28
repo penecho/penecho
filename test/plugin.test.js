@@ -14,7 +14,7 @@ const ROOT = path.resolve(__dirname, ".."),
     .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(pluginDirectory, entry.name, "plugin.md")))
     .map((entry) => `${entry.name}/plugin.md`),
   pluginDocuments = [...pluginFiles, ...pluginBundles].sort(),
-  weather = fs.readFileSync(path.join(ROOT, "public", "plugins", "weather.md"), "utf8"),
+  weather = fs.readFileSync(path.join(ROOT, "public", "plugins", "weather", "plugin.md"), "utf8"),
   context = { window:{}, URL };
 vm.runInNewContext(source, context);
 const plugins = context.window.PENECHO_PLUGINS;
@@ -128,8 +128,8 @@ test("weather demo is a concise capability contract without an HTML template", (
   assert.match(parsed.document, /credentials:"omit"/);
 });
 
-test("plugin directory contains the general, flowchart, image, and built-in data contracts", () => {
-  const builtIns = ["earthquakes.md", "exchange-rates.md", "flowchart/plugin.md", "general.md", "github-pulse.md", "image-search.md", "natural-events.md", "space-weather.md", "stocks.md", "tech-news.md", "weather.md"];
+test("every built-in plugin uses a directory bundle", () => {
+  const builtIns = ["earthquakes/plugin.md", "exchange-rates/plugin.md", "flowchart/plugin.md", "general/plugin.md", "github-pulse/plugin.md", "image-search/plugin.md", "natural-events/plugin.md", "space-weather/plugin.md", "stocks/plugin.md", "tech-news/plugin.md", "weather/plugin.md"];
   assert.deepEqual(pluginDocuments.filter((file) => builtIns.includes(file)), builtIns);
   const allParsed = pluginDocuments.map(parsePlugin),
     parsed = builtIns.map(parsePlugin);
@@ -210,16 +210,16 @@ test("plugin parser rejects oversized contracts, unsafe origins, and missing one
   assert.throws(() => plugins.parse(weather.replace(/^source:.*\n/m, "")), /source is required/);
 });
 
-test("plugin parser validates optional isolated CSS without constraining widget libraries", () => {
+test("plugin parser keeps optional plugin CSS open for specialized resources", () => {
   const parsed = plugins.parse(weather, ".weather-root { color: var(--accent); }");
   assert.equal(parsed.styles, ".weather-root { color: var(--accent); }");
-  assert.throws(() => plugins.parse(weather, '@import "https://cdn.example/theme.css";'), /cannot load external resources/);
-  assert.throws(() => plugins.parse(weather, ".x { background:url(https://cdn.example/a.png) }"), /cannot load external resources/);
-  assert.throws(() => plugins.parse(weather, ".x { color:red"), /unmatched opening brace/);
+  assert.equal(plugins.parse(weather, '@import "https://cdn.example/theme.css";').styles, '@import "https://cdn.example/theme.css";');
+  assert.equal(plugins.parse(weather, ".x { background:url(https://cdn.example/a.png) }").styles, ".x { background:url(https://cdn.example/a.png) }");
+  assert.equal(plugins.parse(weather, ".x { color:red").styles, ".x { color:red");
 });
 
 test("plugin parser accepts an explicitly empty connect list", () => {
-  const document = fs.readFileSync(path.join(pluginDirectory, "general.md"), "utf8"),
+  const document = fs.readFileSync(path.join(pluginDirectory, "general", "plugin.md"), "utf8"),
     blockList = plugins.parse(document),
     inlineList = plugins.parse(document.replace("connect:\nrecommended-refresh-seconds", "connect: []\nrecommended-refresh-seconds"));
   assert.equal(blockList.id, "general");
@@ -229,7 +229,7 @@ test("plugin parser accepts an explicitly empty connect list", () => {
 
 test("plugin model output extraction accepts a complete Markdown and CSS bundle", () => {
   const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
-    document = fs.readFileSync(path.join(pluginDirectory, "general.md"), "utf8")
+    document = fs.readFileSync(path.join(pluginDirectory, "general", "plugin.md"), "utf8")
       .replace("connect:\nrecommended-refresh-seconds", "connect: []\nrecommended-refresh-seconds"),
     extract = vm.runInNewContext(`(${functionSource(server, "pluginBundleFromModel")})`, { PLUGIN_FORMAT:plugins });
   const extracted = extract(JSON.stringify({ document, styles:".general-root { color: #123456; }" }));

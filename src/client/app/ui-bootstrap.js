@@ -795,6 +795,34 @@
     if (event.target === changelogLayer) closeChangelog();
   });
   changelogLayer.addEventListener("keydown", handleChangelogKeydown);
+  settingsButton.addEventListener("click", () => {
+    if (settings.open) closeSettings();
+    else openSettings();
+  });
+  settingsCloseButton.addEventListener("click", () => closeSettings());
+  settingsBackdrop.addEventListener("pointerdown", () => closeSettings());
+  settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
+  summonEffectList.addEventListener("click", (event) => {
+    const option = event.target.closest(".summon-effect-option");
+    if (option) setSummonEffect(option.dataset.effect);
+  });
+  settingsTourButton.addEventListener("click", () => {
+    closeSettings(false);
+    replayFeatureTour();
+  });
+  settingsChangelogButton.addEventListener("click", () => {
+    closeSettings(false);
+    maybeShowChangelog(true);
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && settings.open) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettings();
+    }
+  }, true);
   window.addEventListener("keydown", handleFeatureTourKeydown, true);
   window.addEventListener("resize", handleFeatureTourViewportChange);
   window.addEventListener("scroll", scheduleFeatureTourPosition, true);
@@ -813,6 +841,10 @@
     if (e.key === "Escape" && state.activeAI?.widgetEdit) {
       cancelWidgetRefinement();
       setStatusKey("ready");
+      return;
+    }
+    if (e.key === "Escape" && state.widgetRefineCandidate) {
+      dismissWidgetRefineCandidate();
       return;
     }
     if (e.key === "Escape" && state.imageEdit) {
