@@ -680,8 +680,112 @@
     ctx.lineTo(s.b.x, s.b.y);
     ctx.stroke();
   }
+  function clonePendingHistoryItem(item) {
+    if (!item) return null;
+    return {
+      ...item,
+      command:item.command ? { ...item.command } : item.command,
+      textCommand:item.textCommand ? { ...item.textCommand } : item.textCommand,
+      animationPlayback:item.animationPlayback ? { ...item.animationPlayback } : item.animationPlayback,
+      bounds:item.bounds ? { ...item.bounds } : item.bounds,
+    };
+  }
+  function clonePendingHistoryDraft(pending) {
+    if (!pending) return null;
+    const clone = {
+      ...pending,
+      command:pending.command ? { ...pending.command } : pending.command,
+      textCommand:pending.textCommand ? { ...pending.textCommand } : pending.textCommand,
+      animationPlayback:pending.animationPlayback ? { ...pending.animationPlayback } : pending.animationPlayback,
+      resolves:[],
+      resolve:null,
+    };
+    if (pending.items) clone.items = pending.items.map(clonePendingHistoryItem);
+    return clone;
+  }
+  function pendingWidgetHistoryRecord(widget) {
+    if (!widget) return null;
+    return {
+      id:widget.id,
+      pluginId:widget.pluginId,
+      x:widget.x,
+      y:widget.y,
+      w:widget.w,
+      h:widget.h,
+      contentW:widget.contentW,
+      contentH:widget.contentH,
+      title:widget.title,
+      refreshSeconds:widget.refreshSeconds,
+      html:widget.html,
+      ...(widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      revision:widget.revision,
+    };
+  }
+  function capturePendingHistoryState() {
+    if (!state.pending && !state.pendingWidget) return null;
+    return {
+      pending:clonePendingHistoryDraft(state.pending),
+      pendingWidget:pendingWidgetHistoryRecord(state.pendingWidget),
+      returnMode:state.aiDraftReturnMode,
+    };
+  }
+  function recordPendingHistory(entry, before, after = null) {
+    if (!entry || !before) return;
+    entry.pendingBefore = before;
+    entry.pendingAfter = after;
+    entry.aiDraftReturnMode = before.returnMode;
+  }
+  function clearPendingHistoryState() {
+    const returnMode = state.aiDraftReturnMode;
+    state.pending = null;
+    state.pendingGesture = null;
+    if (state.pendingWidget) unmountWidget(state.pendingWidget);
+    state.pendingWidget = null;
+    state.pendingHistoryRestored = false;
+    state.aiDraftReturnMode = null;
+    hideAnimationControls();
+    updateBatchActions();
+    return returnMode;
+  }
+  function restorePendingHistoryState(entry, side) {
+    const returnMode = clearPendingHistoryState(),
+      hasPendingTransition = !Array.isArray(entry) && Object.prototype.hasOwnProperty.call(entry || {}, "pendingBefore");
+    if (!hasPendingTransition) {
+      if (returnMode && state.mode === "hand") setCanvasMode(returnMode, { preserveSelection:true, skipDraftFinalize:true });
+      return;
+    }
+    const snapshot = side === "before" ? entry.pendingBefore : entry.pendingAfter;
+    if (!snapshot) {
+      const mode = entry.aiDraftReturnMode;
+      if (mode && state.mode === "hand") setCanvasMode(mode, { preserveSelection:true, skipDraftFinalize:true });
+      return;
+    }
+    state.aiDraftReturnMode = snapshot.returnMode;
+    if (snapshot.pending) {
+      state.pending = clonePendingHistoryDraft(snapshot.pending);
+      state.pending.revision = state.userRevision;
+      state.pending.latestUserRevision = state.userRevision;
+    }
+    if (snapshot.pendingWidget) {
+      const widget = widgetRecord(snapshot.pendingWidget);
+      if (widget) {
+        widget.pending = true;
+        widget.revision = state.userRevision;
+        const numbered = /^widget-(\d+)$/.exec(widget.id);
+        if (numbered) state.nextWidgetId = Math.max(state.nextWidgetId, Number(numbered[1]) + 1);
+        state.pendingWidget = widget;
+        mountWidget(widget);
+      }
+    }
+    state.pendingHistoryRestored = Boolean(state.pending || state.pendingWidget);
+    if (state.pendingHistoryRestored) {
+      setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true });
+      updateBatchActions();
+      setStatusKey(state.pending?.items ? "batchDraftReady" : "draftReady");
+    }
+  }
   function save() {
-    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore) return;
+    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore) return null;
     const changes = [];
     const animationsBefore = state.animationHistoryBefore,
       animationsAfter = animationsBefore ? serializedAnimations() : null,
@@ -704,12 +808,14 @@
       changes.push({ k, before, after: cloneCanvas(current) });
     }
     state.historyBefore.clear();
-    state.history.push({ tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter });
+    const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter };
+    state.history.push(entry);
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
     state.imageHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
+    return entry;
   }
   function applyHistory(entry, side) {
     const changes = Array.isArray(entry) ? entry : entry?.tiles || [];
@@ -725,6 +831,7 @@
     if (widgetState) restoreWidgets(widgetState);
     const imageState = !Array.isArray(entry) ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
+    restorePendingHistoryState(entry, side);
     clearSharpOverlays();
     requestAnimationLayerRender();
     render();

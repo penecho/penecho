@@ -153,9 +153,9 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(app, /tourPluginsBody:[\s\S]*Real Photos[\s\S]*Flowchart[\s\S]*Mermaid/);
   assert.match(zh, /显示网络真实照片.*一张/);
   assert.match(zh, /专业流程图.*Mermaid/);
-  assert.match(app, /tourHandBody:[\s\S]*thin blue dashed box[\s\S]*HTML widgets[\s\S]*merged into canvas ink/);
-  assert.match(zh, /蓝色细虚线框.*AI 返回的 HTML 控件/);
-  assert.match(zh, /融合成画布笔迹.*套索/);
+  assert.match(app, /tourHandBody:[\s\S]*small top handle[\s\S]*HTML widgets[\s\S]*click inside HTML widgets/);
+  assert.match(zh, /上方的小把手.*AI HTML 控件/);
+  assert.match(zh, /直接点击 HTML 控件内部/);
   assert.doesNotMatch(app, /tourAnimationPlugin/);
   assert.doesNotMatch(zh, /控制动态图讲解/);
   assert.match(zh, /Studio 主题/);

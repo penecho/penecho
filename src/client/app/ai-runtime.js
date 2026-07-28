@@ -1205,7 +1205,6 @@
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.setLineDash([]);
     ctx.restore();
-    drawDraftActions(ctx, b, s, pendingCopyable(p), true);
     ctx.save();
     ctx.strokeStyle = "#2679b8";
     ctx.lineWidth = 1.8 / state.scale;
@@ -1264,7 +1263,6 @@
       ctx.setLineDash(index === p.selectedIndex ? [] : [6 * unit, 6 * unit]);
       ctx.strokeRect(box.x, box.y, box.w, box.h);
       ctx.restore();
-      drawDraftActions(ctx, box, s, pendingCopyable(item));
       drawCopyFeedback(ctx, box, s, item);
     }
     ctx.save();
@@ -1564,9 +1562,12 @@
     }, COPY_FEEDBACK_MS + 30);
     return true;
   }
-  function acceptPending() {
+  function acceptPending(options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     const p = state.pending;
     if (!p) return;
+    const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
     if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
       rejectPending();
@@ -1591,15 +1592,18 @@
     state.pendingGesture = null;
     hideAnimationControls();
     updateBatchActions();
-    save();
+    const historyEntry = save();
+    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     render();
     setStatusKey("merged");
     resolvePending(p, p.items ? { acceptedCount } : true);
+    if (restoreMode) finishAIDraftHandMode();
   }
   function acceptPendingItem(index) {
     const p = state.pending,
       item = p?.items?.[index];
     if (!item) return;
+    const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
     if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
       rejectPending();
@@ -1610,8 +1614,9 @@
     p.acceptedItems = (p.acceptedItems || 0) + 1;
     consumePendingInput(p);
     removePendingItem(p, index);
-    save();
+    const historyEntry = save();
     finishPendingItemAction(p, "itemAccepted");
+    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
   }
   function rejectPendingItem(index) {
     const p = state.pending;
@@ -1664,8 +1669,11 @@
     const accepted = Boolean(p.acceptedItems);
     setStatusKey(accepted ? "merged" : "draftRejected");
     resolvePending(p, p.acceptedItems ? { acceptedCount: p.acceptedItems } : false);
+    finishAIDraftHandMode();
   }
-  function rejectPending() {
+  function rejectPending(options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     if (!state.pending) return;
     blockCanvasInput();
     const p = state.pending;
@@ -1677,6 +1685,7 @@
     const accepted = Boolean(p.acceptedItems);
     setStatusKey(accepted ? "merged" : "draftRejected");
     resolvePending(p, p.items && p.acceptedItems ? { acceptedCount: p.acceptedItems } : false);
+    if (restoreMode) finishAIDraftHandMode();
   }
   function notePendingContinuedInput(drawing) {
     const p = state.pending;
@@ -1694,6 +1703,7 @@
     updateBatchActions();
     render();
     resolvePending(p, AI_CANCELLED);
+    finishAIDraftHandMode();
   }
   function resolvePending(p, result) {
     if (!p) return;
@@ -1756,6 +1766,7 @@
   }
   function startPending(image, x, y, revision, meta, command) {
     return new Promise((resolve) => {
+      enterAIDraftHandMode();
       const textCommand = command.tool === "write_text" ? { ...command } : null,
         animationScene = command.tool === "animate_scene" ? command : null,
         copyText = copyTextForCommand(command),
@@ -1812,6 +1823,7 @@
   }
   function startPendingBatch(items, revision, meta) {
     return new Promise((resolve) => {
+      enterAIDraftHandMode();
       if (state.pending) {
         appendPendingItems(state.pending, items, revision, meta, resolve);
         return;
@@ -1872,7 +1884,7 @@
     if (!gesture?.copy || gesture.id !== event.pointerId) return false;
     const shouldCopy = event.type !== "pointercancel" && gesture.armed && pendingCopyMatches(gesture, event);
     state.pendingGesture = null;
-    setCanvasCursor(state.mode === "hand" ? "grab" : "crosshair");
+    resetCanvasCursor();
     if (shouldCopy) void copyPendingText(gesture.itemIndex);
     return true;
   }
@@ -2504,43 +2516,12 @@
     requestInteractionLayerRender();
     return true;
   }
-  function cancelAnimationTouchHold(pointerId = null) {
-    const hold = state.animationTouchHold;
-    if (!hold || pointerId !== null && hold.id !== pointerId) return false;
-    clearTimeout(hold.timer);
-    state.animationTouchHold = null;
-    return true;
-  }
-  function beginAnimationTouchHold(event, point, result) {
-    cancelAnimationTouchHold();
-    const hold = {
-      id: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      point,
-      result,
-      timer: 0,
-    };
-    hold.timer = setTimeout(() => {
-      if (state.animationTouchHold !== hold) return;
-      state.animationTouchHold = null;
-      if (state.touches.size !== 1 || !state.touches.has(hold.id) || !state.animations.includes(result.animation)) return;
-      state.panGesture = null;
-      setNavigating(false);
-      beginAnimationGesture({ pointerId: hold.id }, hold.point, hold.result);
-    }, ANIMATION_TOUCH_HOLD_MS);
-    state.animationTouchHold = hold;
-    return true;
-  }
   function deselectAnimation() {
     if (!state.selectedAnimationId) return;
     acceptAnimationEdit();
   }
   function isMousePan(e) {
     return e.pointerType === "mouse" && (e.button === 1 || e.altKey);
-  }
-  function isAnimationActivationPointer(event) {
-    return (event.pointerType === "mouse" || event.pointerType === "pen") && event.button === 0;
   }
   function finishDrawing(pointerType) {
     if (!state.drawing) return;

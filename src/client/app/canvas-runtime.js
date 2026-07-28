@@ -1,4 +1,6 @@
 // Canvas tiles, widgets, animations, rendering, navigation, and text editing.
+  const objectChromeButtons = new Map();
+  let nextObjectChromeStyleId = 1;
   function tile(tx, ty, create = true) {
     const k = key(tx, ty);
     if (!tiles.has(k) && create) {
@@ -109,7 +111,6 @@
     state.selectedImageId = null;
     state.imageEdit = null;
     state.imageGesture = null;
-    cancelImageTouchHold();
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : []) {
       const record = imageRecord(item);
       if (!record || state.images.some((existing) => existing.id === record.id)) continue;
@@ -264,29 +265,6 @@
     resetCanvasCursor();
     if (gesture.changed && state.imageEdit?.id === gesture.image.id) state.imageEdit.changed = true;
     requestInteractionLayerRender();
-    return true;
-  }
-  function cancelImageTouchHold(pointerId = null) {
-    const hold = state.imageTouchHold;
-    if (!hold || pointerId !== null && hold.id !== pointerId) return false;
-    clearTimeout(hold.timer);
-    state.imageTouchHold = null;
-    return true;
-  }
-  function beginImageTouchHold(event, point, item) {
-    cancelImageTouchHold();
-    const hold = { id:event.pointerId, pointerType:event.pointerType, startX:event.clientX, startY:event.clientY, point, image:item, downEvent:event, timer:0 };
-    hold.timer = setTimeout(() => {
-      if (state.imageTouchHold !== hold) return;
-      state.imageTouchHold = null;
-      if (!state.pointers.has(hold.id)) return;
-      if (hold.pointerType === "touch" && (state.touches.size !== 1 || !state.touches.has(hold.id))) return;
-      if (!state.images.includes(item)) return;
-      state.panGesture = null;
-      setNavigating(false);
-      beginImageGesture({ pointerId:hold.id }, hold.point, { image:item, hit:"move" });
-    }, IMAGE_TOUCH_HOLD_MS);
-    state.imageTouchHold = hold;
     return true;
   }
   function deleteImage(item) {
@@ -542,8 +520,10 @@
     positionWidget(widget);
   }
   function unmountWidget(widget) {
-    clearTimeout(widget.snapshotTimer);
-    widget.snapshotTimer = 0;
+    if (state.widgetHostPan?.widget === widget) {
+      state.widgetHostPan = null;
+      setNavigating(false);
+    }
     removeWidgetStyleRule(widget);
     widget.shell?.remove();
     widget.shell = null;
@@ -579,6 +559,20 @@
     }
     widget.styleRule = null;
   }
+  function updateWidgetRenderVisibility(widget, screenX, screenY) {
+    if (!widget.shell) return;
+    const viewportWidth = view.clientWidth,
+      viewportHeight = view.clientHeight,
+      displayWidth = widget.w * state.scale,
+      displayHeight = widget.h * state.scale,
+      dragging = state.widgetGesture?.widget === widget,
+      intersectsViewport = viewportWidth <= 0 || viewportHeight <= 0
+        || (screenX < viewportWidth && screenY < viewportHeight && screenX + displayWidth > 0 && screenY + displayHeight > 0),
+      active = dragging || intersectsViewport;
+    widget.renderActive = active;
+    widget.shell.classList.toggle("widget-offscreen", !active);
+    return active;
+  }
   function positionWidget(widget) {
     if (!widget.shell) return;
     const screenX = state.panX + widget.x * state.scale,
@@ -587,9 +581,14 @@
       scaleY = state.scale * widget.h / widget.contentH,
       declaration = widget.styleRule?.style;
     if (!declaration) return;
-    declaration.width = `${widget.contentW}px`;
-    declaration.height = `${widget.contentH}px`;
+    const sizeKey = `${widget.contentW}x${widget.contentH}`;
+    if (widget.styleSizeKey !== sizeKey) {
+      widget.styleSizeKey = sizeKey;
+      declaration.width = `${widget.contentW}px`;
+      declaration.height = `${widget.contentH}px`;
+    }
     declaration.transform = `translate3d(${screenX}px,${screenY}px,0) scale(${scaleX},${scaleY})`;
+    updateWidgetRenderVisibility(widget, screenX, screenY);
     sendWidgetHostState(widget, scaleX, scaleY);
   }
   function positionWidgets() {
@@ -609,10 +608,11 @@
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const selected = widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id),
-      key = `${selected ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
+      active = widget.renderActive !== false,
+      key = `${selected ? 1 : 0}:${active ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, scaleX, scaleY }, location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, location.origin);
   }
   function syncWidgetHostStates() {
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) sendWidgetHostState(widget);
@@ -655,10 +655,6 @@
       if (widget.snapshotPromise === snapshotPromise) widget.snapshotPromise = null;
     }
   }
-  function scheduleWidgetSnapshot(widget) {
-    clearTimeout(widget.snapshotTimer);
-    widget.snapshotTimer = setTimeout(() => requestWidgetSnapshot(widget).catch(() => {}), 350);
-  }
   async function handleWidgetMessage(event) {
     if (event.origin !== location.origin || !event.data || typeof event.data !== "object") return;
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])].find((item) => item.frame?.contentWindow === event.source);
@@ -684,11 +680,14 @@
       else finishWidgetHostTouch(widget, message);
       return;
     }
+    if (validWidgetHostNavigation(message)) {
+      handleWidgetHostNavigation(widget, message);
+      return;
+    }
     if (message.type === "penecho-widget-updated") {
       widget.contentReady = true;
       widget.resolveReady?.();
       widget.resolveReady = null;
-      scheduleWidgetSnapshot(widget);
       return;
     }
     if (message.type === "penecho-widget-copy-source-result") {
@@ -859,7 +858,7 @@
     return message && ["penecho-widget-drag-start", "penecho-widget-drag-move", "penecho-widget-drag-end"].includes(message.type)
       && Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff
       && ["mouse", "pen", "touch"].includes(message.pointerType)
-      && ["move", "width", "height", "resize"].includes(message.hit)
+      && ["width", "height", "resize"].includes(message.hit)
       && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
   function validWidgetHostTouch(message) {
@@ -867,6 +866,13 @@
       && Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff
       && message.pointerType === "touch"
       && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
+  }
+  function validWidgetHostNavigation(message) {
+    if (!message || !["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end", "penecho-widget-wheel"].includes(message.type)) return false;
+    if (message.type === "penecho-widget-wheel")
+      return [message.localX, message.localY, message.deltaY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
+    return Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff && message.pointerType === "mouse"
+      && [message.localX, message.localY, message.screenX, message.screenY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
   function widgetHostPointerId(widget, pointerId) {
     return `widget-host:${widget.id}:${pointerId}`;
@@ -918,7 +924,6 @@
     state.touches.set(id, point);
     widgetHostPointerAnchors.set(id, { clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY });
     if (state.touches.size < 2) return true;
-    cancelAnimationTouchHold();
     state.textTap = null;
     if (state.pendingGesture) state.pendingGesture = null;
     if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
@@ -960,6 +965,44 @@
       state.panGesture = { id:remainingId, last:point };
     } else state.panGesture = null;
     if (!state.touches.size) setNavigating(false);
+    return true;
+  }
+  function handleWidgetHostNavigation(widget, message) {
+    if (!validWidgetHostNavigation(message)) return false;
+    if (message.type === "penecho-widget-wheel") {
+      const point = widgetHostViewportPoint(widget, message);
+      if (!point) return false;
+      zoomCanvasAt(point.x, point.y, message.deltaY);
+      return true;
+    }
+    const id = widgetHostPointerId(widget, message.pointerId);
+    if (message.type === "penecho-widget-pan-start") {
+      const point = widgetHostViewportPoint(widget, message);
+      if (!point || state.widgetHostPan) return false;
+      if (state.selectedImageId) acceptImageEdit();
+      if (state.selectedWidgetId) acceptWidgetEdit();
+      if (state.selectedAnimationId) acceptAnimationEdit();
+      state.widgetHostPan = {
+        id,
+        widget,
+        last:point,
+        anchor:{ clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY },
+      };
+      setNavigating(true);
+      return true;
+    }
+    const pan = state.widgetHostPan;
+    if (!pan || pan.id !== id || pan.widget !== widget) return false;
+    if (message.type === "penecho-widget-pan-move") {
+      const point = widgetHostTrackedPoint(pan.anchor, message) || widgetHostViewportPoint(widget, message);
+      if (!point) return false;
+      moveCanvas(point.x - pan.last.x, point.y - pan.last.y);
+      pan.last = point;
+      setNavigating(true);
+      return true;
+    }
+    state.widgetHostPan = null;
+    setNavigating(false);
     return true;
   }
   function beginWidgetHostDrag(widget, message) {
@@ -1009,7 +1052,7 @@
     state.widgetGesture = null;
     resetCanvasCursor();
     if (gesture.changed && !gesture.pending && state.widgetEdit?.id === gesture.widget.id) state.widgetEdit.changed = true;
-    if (gesture.changed && (gesture.hit === "width" || gesture.hit === "height")) scheduleWidgetSnapshot(gesture.widget);
+    positionWidget(gesture.widget);
     requestInteractionLayerRender();
     return true;
   }
@@ -1029,9 +1072,12 @@
     setStatusKey("widgetDeleted");
     return true;
   }
-  function acceptPendingWidget() {
+  function acceptPendingWidget(options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
+    const pendingBefore = capturePendingHistoryState();
     if (widget.revision !== state.userRevision) {
       rejectPendingWidget(AI_CANCELLED);
       setStatusKey("canvasChanged");
@@ -1045,12 +1091,16 @@
     unmountWidget(widget);
     state.widgets.push(widget);
     mountWidget(widget);
-    save();
+    const historyEntry = save();
+    recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     requestInteractionLayerRender();
     setStatusKey("merged");
     resolve?.(true);
+    if (restoreMode) finishAIDraftHandMode();
   }
-  function rejectPendingWidget(result = AI_REJECTED) {
+  function rejectPendingWidget(result = AI_REJECTED, options) {
+    options ||= {};
+    const restoreMode = options?.restoreMode !== false;
     const widget = state.pendingWidget;
     if (!widget) return;
     state.pendingWidget = null;
@@ -1060,6 +1110,7 @@
     requestInteractionLayerRender();
     setStatusKey(result === AI_CANCELLED ? "canvasChanged" : "draftRejected");
     resolve?.(result);
+    if (restoreMode) finishAIDraftHandMode();
   }
   function startPendingWidget(command, revision) {
     if (state.pendingWidget || state.widgets.length >= MAX_VISIBLE_WIDGETS) return Promise.resolve(false);
@@ -1068,6 +1119,7 @@
     widget.pending = true;
     widget.revision = revision;
     state.pendingWidget = widget;
+    enterAIDraftHandMode();
     mountWidget(widget);
     requestInteractionLayerRender();
     setStatusKey("draftReady");
@@ -1547,6 +1599,8 @@
     screen.height = Math.round(r.height * d);
     animationLayer.width = screen.width;
     animationLayer.height = screen.height;
+    inkLayer.width = screen.width;
+    inkLayer.height = screen.height;
     interactionLayer.width = screen.width;
     interactionLayer.height = screen.height;
     state.animationFullRedraw = true;
@@ -1558,6 +1612,28 @@
     }
     updateCoordinates();
     requestRender();
+  }
+  function renderInkLayer(region = null) {
+    const d = devicePixelRatio || 1,
+      r = view.getBoundingClientRect(),
+      visible = region || {
+        x:Math.max(0, -state.panX / state.scale),
+        y:Math.max(0, -state.panY / state.scale),
+        w:Math.min(SIZE, (r.width - state.panX) / state.scale) - Math.max(0, -state.panX / state.scale),
+        h:Math.min(SIZE, (r.height - state.panY) / state.scale) - Math.max(0, -state.panY / state.scale),
+      };
+    inkCtx.setTransform(d, 0, 0, d, 0, 0);
+    inkCtx.clearRect(0, 0, r.width, r.height);
+    if (visible.w <= 0 || visible.h <= 0) return;
+    inkCtx.save();
+    inkCtx.translate(state.panX, state.panY);
+    inkCtx.scale(state.scale, state.scale);
+    inkCtx.beginPath();
+    inkCtx.rect(0, 0, SIZE, SIZE);
+    inkCtx.clip();
+    forTiles(visible.x, visible.y, visible.w, visible.h, (canvas, tx, ty) => inkCtx.drawImage(canvas, tx * TILE, ty * TILE), false);
+    drawSharpOverlays(inkCtx, visible);
+    inkCtx.restore();
   }
   function updateCoordinates() {
     const r = view.getBoundingClientRect(),
@@ -1600,13 +1676,12 @@
       ctx.stroke();
     }
     drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
-    forTiles(l, t, rr - l, b - t, (c, tx, ty) => ctx.drawImage(c, tx * TILE, ty * TILE), false);
-    drawSharpOverlays(ctx, { x: l, y: t, w: rr - l, h: b - t });
     ctx.restore();
     ctx.strokeStyle = state.paint.border;
     ctx.lineWidth = 2 / state.scale;
     ctx.strokeRect(0, 0, SIZE, SIZE);
     ctx.restore();
+    renderInkLayer({ x:l, y:t, w:rr - l, h:b - t });
     renderInteractionLayer();
     positionWidgets();
     positionTextEditors();
@@ -1624,7 +1699,6 @@
     context.setLineDash([7 * unit, 6 * unit]);
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.setLineDash([]);
-    drawDraftActions(context, box, handle, false, true);
     context.beginPath();
     drawResizeHandle(context, box, handle);
     context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
@@ -1664,7 +1738,6 @@
     context.setLineDash([7 * unit, 6 * unit]);
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.setLineDash([]);
-    drawDraftActions(context, box, handle, false, true);
     context.beginPath();
     drawResizeHandle(context, box, handle);
     context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
@@ -1719,6 +1792,214 @@
     context.stroke();
     context.restore();
   }
+  const OBJECT_CHROME_ICONS = Object.freeze({
+    move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
+    accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
+    cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  });
+  function screenObjectBox(box) {
+    return {
+      left:state.panX + box.x * state.scale,
+      top:state.panY + box.y * state.scale,
+      width:box.w * state.scale,
+      height:box.h * state.scale,
+    };
+  }
+  function objectChromePosition(box, kind) {
+    const width = kind === "move" ? 62 : 36,
+      height = 34,
+      viewportWidth = view.clientWidth,
+      viewportHeight = view.clientHeight,
+      screenBox = screenObjectBox(box),
+      right = screenBox.left + screenBox.width,
+      bottom = screenBox.top + screenBox.height;
+    if (viewportWidth <= 0 || viewportHeight <= 0 || right < -8 || bottom < -8 || screenBox.left > viewportWidth + 8 || screenBox.top > viewportHeight + 8) return null;
+    const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
+      clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
+      above = screenBox.top - height - 7,
+      y = clampY(above >= 6 ? above : screenBox.top + 7);
+    let x;
+    if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
+    else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
+    else if (kind === "accept") x = clampX(right + 7);
+    else x = clampX(screenBox.left + screenBox.width / 2 + 38);
+    return { x, y };
+  }
+  function objectChromeLabel(kind) {
+    if (kind === "accept") return t("widgetAccept");
+    if (kind === "cancel") return t("cancel");
+    if (kind === "copy") return t("copyText");
+    return t("hand");
+  }
+  function beginObjectChromeMove(event, spec) {
+    if (state.mode !== "hand" || Number(event.button) !== 0) return false;
+    const point = clientPoint(event);
+    let started = false;
+    if (spec.target === "pending") {
+      beginPendingGesture(event, "move", spec.itemIndex);
+      started = true;
+    } else if (spec.target === "pending-widget") {
+      started = beginWidgetGesture(event, point, { widget:spec.object, hit:"move", pending:true });
+    } else if (spec.target === "widget") {
+      started = beginWidgetGesture(event, point, { widget:spec.object, hit:"move", pending:false });
+    } else if (spec.target === "image") {
+      started = beginImageGesture(event, point, { image:spec.object, hit:"move" });
+    } else if (spec.target === "animation") {
+      started = beginAnimationGesture(event, point, { animation:spec.object, hit:"move" });
+    }
+    if (!started) return false;
+    try { objectChromeLayer.setPointerCapture(event.pointerId); } catch {}
+    return true;
+  }
+  function finishObjectChromeGesture(event) {
+    if (state.pendingGesture?.id === event.pointerId && !state.pendingGesture.copy) {
+      state.pendingGesture = null;
+      resetCanvasCursor();
+      requestRender();
+      return true;
+    }
+    if (state.widgetGesture?.id === event.pointerId) return finishWidgetGesture(event);
+    if (state.imageGesture?.id === event.pointerId) return finishImageGesture(event);
+    if (state.animationGesture?.id === event.pointerId) return finishAnimationGesture(event);
+    return false;
+  }
+  function createObjectChromeButton(key, kind) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `object-chrome-button ${kind}`;
+    button.dataset.objectChromeKey = key;
+    button.innerHTML = OBJECT_CHROME_ICONS[kind];
+    ensureObjectChromeStyleRule(button);
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      if (kind !== "move") return;
+      event.preventDefault();
+      beginObjectChromeMove(event, button.penechoSpec);
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (kind !== "move") button.penechoSpec?.activate?.();
+    });
+    objectChromeLayer.append(button);
+    objectChromeButtons.set(key, button);
+    return button;
+  }
+  function ensureObjectChromeStyleRule(button) {
+    if (!button || button.penechoStyleRule) return button?.penechoStyleRule || null;
+    const sheet = textEditorStyleSheet(),
+      className = button.penechoStyleClass || `object-chrome-position-${nextObjectChromeStyleId++}`;
+    button.penechoStyleClass = className;
+    button.classList.add(className);
+    if (!sheet) return null;
+    try {
+      sheet.insertRule(`.${className} { --object-control-x: 0px; --object-control-y: 0px; z-index: 1; }`, sheet.cssRules.length);
+      button.penechoStyleRule = [...sheet.cssRules].find((rule) => rule.selectorText === `.${className}`) || null;
+    } catch {
+      button.penechoStyleRule = null;
+    }
+    return button.penechoStyleRule;
+  }
+  function removeObjectChromeStyleRule(button) {
+    const rule = button?.penechoStyleRule,
+      sheet = textEditorStyleSheet();
+    if (!rule || !sheet) return;
+    const index = [...sheet.cssRules].indexOf(rule);
+    if (index >= 0) {
+      try { sheet.deleteRule(index); } catch {}
+    }
+    button.penechoStyleRule = null;
+  }
+  function pendingChromeSpecs(specs, pending) {
+    if (!pending) return;
+    const add = (key, box, itemIndex = null, target = pending) => {
+      specs.push({ key:`${key}:move`, kind:"move", box, target:"pending", itemIndex, object:target, priority:4 });
+      specs.push({ key:`${key}:cancel`, kind:"cancel", box, activate:() => itemIndex === null ? rejectPending() : rejectPendingItem(itemIndex), priority:5 });
+      specs.push({ key:`${key}:accept`, kind:"accept", box, activate:() => itemIndex === null ? acceptPending() : acceptPendingItem(itemIndex), priority:5 });
+      if (pendingCopyable(target)) specs.push({ key:`${key}:copy`, kind:"copy", box, activate:() => void copyPendingText(itemIndex), priority:5 });
+    };
+    if (pending.items) pending.items.forEach((item, index) => add(`pending-item:${index}`, pendingItemBounds(item), index, item));
+    else add("pending", draftBounds(pending));
+  }
+  function objectChromeSpecs() {
+    if (state.mode !== "hand") return [];
+    const specs = [];
+    for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
+    for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
+    for (const widget of visibleWidgets()) specs.push({ key:`widget:${widget.id}:move`, kind:"move", box:widgetBox(widget), target:"widget", object:widget, priority:2 });
+    if (state.animationEdit) {
+      const animation = selectedAnimation();
+      if (animation) {
+        const box = animationBox(animation);
+        specs.push({ key:`animation:${animation.id}:cancel`, kind:"cancel", box, activate:cancelAnimationEdit, priority:3 });
+        specs.push({ key:`animation:${animation.id}:accept`, kind:"accept", box, activate:acceptAnimationEdit, priority:3 });
+      }
+    }
+    if (state.widgetEdit) {
+      const widget = selectedWidget();
+      if (widget) {
+        const box = widgetBox(widget);
+        specs.push({ key:`widget:${widget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(widget), priority:3 });
+        specs.push({ key:`widget:${widget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
+      }
+    }
+    pendingChromeSpecs(specs, state.pending);
+    if (state.pendingWidget) {
+      const widget = state.pendingWidget,
+        box = widgetBox(widget);
+      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
+      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:acceptPendingWidget, priority:5 });
+    }
+    return specs;
+  }
+  function syncObjectChrome() {
+    if (!objectChromeLayer) return;
+    const active = new Set();
+    for (const spec of objectChromeSpecs()) {
+      const position = objectChromePosition(spec.box, spec.kind);
+      if (!position) continue;
+      active.add(spec.key);
+      const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
+        label = objectChromeLabel(spec.kind),
+        declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
+      button.penechoSpec = spec;
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
+      declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
+      declaration?.setProperty("z-index", String(spec.priority || 1));
+    }
+    for (const [key, button] of objectChromeButtons) {
+      if (active.has(key)) continue;
+      removeObjectChromeStyleRule(button);
+      button.remove();
+      objectChromeButtons.delete(key);
+    }
+  }
+  objectChromeLayer?.addEventListener("pointermove", (event) => {
+    if (state.pendingGesture?.id === event.pointerId) updatePendingGesture(event);
+    else if (state.widgetGesture?.id === event.pointerId) updateWidgetGesture(event);
+    else if (state.imageGesture?.id === event.pointerId) updateImageGesture(event);
+    else if (state.animationGesture?.id === event.pointerId) updateAnimationGesture(event);
+  });
+  objectChromeLayer?.addEventListener("pointerup", finishObjectChromeGesture);
+  objectChromeLayer?.addEventListener("pointercancel", finishObjectChromeGesture);
+  function drawPointerPreview(context) {
+    const preview = state.pointerPreview;
+    if (!preview || state.mode !== "eraser" || !valid(preview)) return;
+    const radius = logicalWidth(state.eraser) / 2,
+      unit = 1 / state.scale;
+    context.save();
+    context.strokeStyle = `${state.inkColor}cc`;
+    context.lineWidth = 1.2 * unit;
+    context.setLineDash([3.5 * unit, 3 * unit]);
+    context.beginPath();
+    context.arc(preview.x, preview.y, radius, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  }
   function renderInteractionLayer() {
     const d = devicePixelRatio || 1,
       r = view.getBoundingClientRect();
@@ -1731,6 +2012,7 @@
     interactionCtx.rect(0, 0, SIZE, SIZE);
     interactionCtx.clip();
     if (state.drawing?.preview) drawPreview(state.drawing.preview, interactionCtx);
+    drawPointerPreview(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
     drawHandModeOutlines(interactionCtx);
     drawSelectedAnimation(interactionCtx);
@@ -1745,6 +2027,7 @@
     interactionCtx.restore();
     positionAnimationControls();
     positionImageEditBar();
+    syncObjectChrome();
   }
   function clientPoint(e) {
     const r = view.getBoundingClientRect();
@@ -2274,11 +2557,11 @@
     return editor;
   }
   function setCanvasCursor(cursor) {
-    screen.classList.remove("cursor-crosshair", "cursor-grab", "cursor-grabbing", "cursor-nwse-resize", "cursor-ew-resize", "cursor-ns-resize");
+    screen.classList.remove("cursor-crosshair", "cursor-pen", "cursor-eraser", "cursor-grab", "cursor-grabbing", "cursor-nwse-resize", "cursor-ew-resize", "cursor-ns-resize");
     screen.classList.add(`cursor-${cursor}`);
   }
   function resetCanvasCursor() {
-    setCanvasCursor(state.mode === "hand" ? "grab" : "crosshair");
+    setCanvasCursor(state.mode === "hand" ? "grab" : state.mode === "pen" ? "pen" : state.mode === "eraser" ? "eraser" : "crosshair");
   }
   function beginTouchGesture() {
     if (state.touches.size < 2) return;
@@ -2324,6 +2607,19 @@
     state.panY += dy;
     updateCoordinates();
     requestRender();
+  }
+  function zoomCanvasAt(clientX, clientY, deltaY) {
+    const rect = view.getBoundingClientRect(),
+      factor = deltaY < 0 ? 1.12 : 0.89,
+      next = Math.max(0.03, Math.min(2, state.scale * factor)),
+      px = clientX - rect.left,
+      py = clientY - rect.top;
+    state.panX = px - ((px - state.panX) * next) / state.scale;
+    state.panY = py - ((py - state.panY) * next) / state.scale;
+    state.scale = next;
+    updateCoordinates();
+    requestRender();
+    wheelNavigating();
   }
   function valid(p) {
     return p.x >= 0 && p.x <= SIZE && p.y >= 0 && p.y <= SIZE;

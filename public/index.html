@@ -251,7 +251,9 @@
         <canvas id="screen"></canvas>
         <canvas id="animationLayer" class="animation-layer" aria-hidden="true"></canvas>
         <div id="widgetLayer" class="widget-layer" hidden aria-live="polite"></div>
+        <canvas id="inkLayer" class="ink-layer" aria-hidden="true"></canvas>
         <canvas id="interactionLayer" class="interaction-layer" aria-hidden="true"></canvas>
+        <div id="objectChromeLayer" class="object-chrome-layer"></div>
         <div id="animationControls" class="animation-controls" hidden role="toolbar" data-i18n-aria="animationControls" aria-label="Animation controls">
           <button id="animationPlayPause" type="button" data-i18n="animationPause">Pause</button>
           <button id="animationRestart" type="button" data-i18n="animationRestart">Restart</button>
@@ -260,7 +262,7 @@
         <div id="imageEditBar" class="image-edit-bar" hidden role="toolbar" data-i18n-aria="imageEditBarLabel" aria-label="Image actions">
           <button id="imagePlaceBtn" class="image-action primary" type="button">
             <span class="image-action-title" data-i18n="imagePlace">Place image</span>
-            <span class="image-action-hint" data-i18n="imagePlaceHint">Keep it as an image; long-press to edit again</span>
+            <span class="image-action-hint" data-i18n="imagePlaceHint">Keep it as an image; use Hand and its top handle to edit again</span>
           </button>
           <button id="imageMergeBtn" class="image-action merge" type="button">
             <span class="image-action-title" data-i18n="imageMerge">Merge into ink</span>

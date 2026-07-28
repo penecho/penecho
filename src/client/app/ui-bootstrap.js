@@ -1,4 +1,13 @@
 // Pointer and control bindings, portable snapshots, and application startup.
+  function updateCanvasPointerPreview(event) {
+    const next = state.mode === "eraser" && event.pointerType !== "touch" ? clientPoint(event) : null,
+      preview = next && valid(next) ? next : null,
+      changed = Boolean(preview) !== Boolean(state.pointerPreview)
+        || preview && (!state.pointerPreview || Math.abs(preview.x - state.pointerPreview.x) > 0.01 || Math.abs(preview.y - state.pointerPreview.y) > 0.01);
+    if (!changed) return;
+    state.pointerPreview = preview;
+    requestInteractionLayerRender();
+  }
   function beginCanvasPointerAction(e, point) {
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -89,8 +98,6 @@
     if (e.pointerType === "touch") {
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (state.touches.size >= 2) {
-        cancelAnimationTouchHold();
-        cancelImageTouchHold();
         state.textTap = null;
         if (state.pendingGesture) state.pendingGesture = null;
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
@@ -116,76 +123,37 @@
       setNavigating(true);
       return;
     }
+    if (state.mode !== "hand") {
+      beginCanvasPointerAction(e, clientPoint(e));
+      return;
+    }
     if (state.pending) {
       const result = pendingHit(state.pending, e, state.pending.revealProgress < 1),
         hit = typeof result === "string" ? result : result?.hit,
         itemIndex = result && typeof result === "object" ? result.itemIndex : null;
-      if (hit) {
-        if (hit === "copy" || hit === "item-copy") {
-          armPendingCopy(e, hit, itemIndex);
-          return;
-        }
-        if (hit === "accept") return acceptPending();
-        if (hit === "cancel") return rejectPending();
-        if (hit === "item-accept") return acceptPendingItem(itemIndex);
-        if (hit === "item-cancel") return rejectPendingItem(itemIndex);
+      if (["resize", "width", "height", "batch-resize"].includes(hit)) {
         beginPendingGesture(e, hit, itemIndex);
         return;
       }
     }
     const point = clientPoint(e);
-    const handMode = state.mode === "hand",
-      widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType, handMode) : null;
-    if (widgetResult) {
+    const widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType, false) : null;
+    if (widgetResult && ["resize", "width", "height"].includes(widgetResult.hit)) {
       beginWidgetGesture(e, point, widgetResult);
       return;
     }
     if (state.selectedWidgetId) acceptWidgetEdit();
-    const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType, handMode) : null;
-    if (selectedImageResult) {
+    const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType, false) : null;
+    if (selectedImageResult && selectedImageResult.hit !== "move") {
       if (state.selectedAnimationId) acceptAnimationEdit();
-      if (!handMode && e.pointerType === "touch" && selectedImageResult.hit === "move") {
-        beginImageTouchHold(e, point, selectedImageResult.image);
-        return;
-      }
       beginImageGesture(e, point, selectedImageResult);
       return;
     }
     if (state.selectedImageId) acceptImageEdit();
-    if (handMode && valid(point)) {
+    if (valid(point)) {
       const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
+      if (animationResult && animationResult.hit !== "move") {
         beginAnimationGesture(e, point, animationResult);
-        return;
-      }
-    }
-    if (e.pointerType === "touch" && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationTouchHold(e, point, animationResult);
-        return;
-      }
-    }
-    if (isAnimationActivationPointer(e) && valid(point)) {
-      const animationResult = animationPointerHit(point, e.pointerType);
-      if (animationResult) {
-        beginAnimationGesture(e, point, animationResult);
-        return;
-      }
-    }
-    if (e.pointerType === "touch" && valid(point)) {
-      const item = imageAtPoint(point);
-      if (item) {
-        if (state.selectedAnimationId) acceptAnimationEdit();
-        beginImageTouchHold(e, point, item);
-        return;
-      }
-    }
-    if (isAnimationActivationPointer(e) && valid(point)) {
-      const item = imageAtPoint(point);
-      if (item) {
-        if (state.selectedAnimationId) acceptAnimationEdit();
-        beginImageTouchHold(e, point, item);
         return;
       }
     }
@@ -197,6 +165,7 @@
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    updateCanvasPointerPreview(e);
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -227,24 +196,6 @@
         state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY } };
         setNavigating(true);
       } else return;
-    }
-    if (state.imageTouchHold?.id === e.pointerId) {
-      const hold = state.imageTouchHold,
-        distance = Math.hypot(e.clientX - hold.startX, e.clientY - hold.startY);
-      if (distance <= IMAGE_TOUCH_HOLD_MOVE_PX) return;
-      cancelImageTouchHold(e.pointerId);
-      if (hold.pointerType === "touch") {
-        state.panGesture = { id:e.pointerId, last:old || { x:hold.startX, y:hold.startY } };
-        setNavigating(true);
-      } else beginCanvasPointerAction(hold.downEvent, hold.point);
-    }
-    if (state.animationTouchHold?.id === e.pointerId) {
-      const hold = state.animationTouchHold,
-        distance = Math.hypot(e.clientX - hold.startX, e.clientY - hold.startY);
-      if (distance <= ANIMATION_TOUCH_HOLD_MOVE_PX) return;
-      cancelAnimationTouchHold(e.pointerId);
-      state.panGesture = { id: e.pointerId, last: old || { x: hold.startX, y: hold.startY } };
-      setNavigating(true);
     }
     if (e.pointerType === "touch") {
       if (state.touches.size >= 2) {
@@ -291,10 +242,6 @@
   function end(e) {
     state.pointers.delete(e.pointerId);
     if (e.pointerType === "touch") state.touches.delete(e.pointerId);
-    cancelAnimationTouchHold(e.pointerId);
-    const imageTapHold = state.imageTouchHold?.id === e.pointerId ? state.imageTouchHold : null;
-    cancelImageTouchHold(e.pointerId);
-    if (imageTapHold && imageTapHold.pointerType !== "touch" && e.type !== "pointercancel") beginCanvasPointerAction(imageTapHold.downEvent, imageTapHold.point);
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
       return;
@@ -354,34 +301,52 @@
   }
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
+  screen.addEventListener("pointerleave", () => {
+    if (state.drawing || !state.pointerPreview) return;
+    state.pointerPreview = null;
+    requestInteractionLayerRender();
+  });
   screen.addEventListener("contextmenu", (e) => e.preventDefault());
   view.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault();
-      const r = view.getBoundingClientRect(),
-        factor = e.deltaY < 0 ? 1.12 : 0.89,
-        n = Math.max(0.03, Math.min(2, state.scale * factor)),
-        px = e.clientX - r.left,
-        py = e.clientY - r.top;
-      state.panX = px - ((px - state.panX) * n) / state.scale;
-      state.panY = py - ((py - state.panY) * n) / state.scale;
-      state.scale = n;
-      updateCoordinates();
-      requestRender();
-      wheelNavigating();
+      zoomCanvasAt(e.clientX, e.clientY, e.deltaY);
     },
     { passive: false },
   );
-  function setCanvasMode(mode) {
+  function enterAIDraftHandMode() {
+    if (state.mode !== "hand" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
+    state.pendingHistoryRestored = false;
+    if (state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true });
+  }
+  function finishAIDraftHandMode() {
+    if (state.pending || state.pendingWidget) return;
+    const returnMode = state.aiDraftReturnMode;
+    state.aiDraftReturnMode = null;
+    state.pendingHistoryRestored = false;
+    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, { preserveSelection:true, skipDraftFinalize:true });
+  }
+  function setCanvasMode(mode, options) {
+    options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    if (state.mode === "select" && mode !== "select" && state.selection) {
+    const leavingDraftHand = state.mode === "hand" && mode !== "hand" && !options.skipDraftFinalize && (state.pending || state.pendingWidget);
+    let deferredSelectionCommit = false;
+    if (leavingDraftHand) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      if (state.pending) acceptPending({ restoreMode:false });
+      if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+    }
+    if (!options.preserveSelection && mode !== "select" && state.selection && (state.mode === "select" || leavingDraftHand)) {
       if (selectionAIBusy(state.selection)) {
-        setStatusKey(selectionAIStatusKey(state.selection));
-        return;
-      }
-      commitSelection();
+        if (leavingDraftHand) deferredSelectionCommit = true;
+        else {
+          setStatusKey(selectionAIStatusKey(state.selection));
+          return;
+        }
+      } else commitSelection();
     }
     if (state.mode === "hand" && mode !== "hand") {
       if (state.widgetEdit) acceptWidgetEdit();
@@ -389,6 +354,7 @@
       if (state.animationEdit) acceptAnimationEdit();
     }
     state.mode = mode;
+    if (mode !== "eraser") state.pointerPreview = null;
     if (mode !== "select") deselectAnimation();
     view.classList.toggle("hand-mode", mode === "hand");
     document.querySelectorAll("[data-mode]").forEach((item) => {
@@ -398,6 +364,9 @@
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
+    if (deferredSelectionCommit) queueMicrotask(() => {
+      if (state.mode === mode && state.selection && !selectionAIBusy(state.selection)) commitSelection();
+    });
   }
   document.querySelectorAll("[data-mode]").forEach((button) => {
     button.onclick = () => setCanvasMode(button.dataset.mode);
@@ -671,7 +640,7 @@
           setStatusKey(selectionAIStatusKey());
           return;
         }
-        if ((state.pending || state.pendingWidget) && a !== "clear") {
+        if ((state.pending || state.pendingWidget) && a !== "clear" && !(state.pendingHistoryRestored && (a === "undo" || a === "redo"))) {
           setStatusKey("pendingConfirm");
           return;
         }
@@ -868,6 +837,7 @@
   setPluginTemplate("simple");
   applyLanguage();
   applyTheme(state.theme);
+  resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
   refreshSnapshots().catch(() => {});
   fit();

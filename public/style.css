@@ -427,16 +427,27 @@ body.changelog-open { overflow: hidden; }
 #screen { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .animation-layer { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .widget-layer { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }
-.canvas-widget { position: absolute; top: 0; left: 0; pointer-events: none; transform-origin: 0 0; }
-.canvas-widget-frame { display: block; width: 100%; height: 100%; pointer-events: auto; color-scheme: light; touch-action: none; border: 0; background: transparent; }
-#viewport.hand-mode .canvas-widget-frame { pointer-events: none; }
-.interaction-layer { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.animation-controls { position: absolute; z-index: 4; top: 0; left: 0; display: flex; gap: 4px; padding: 4px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.3); transform: translate3d(var(--animation-controls-x, 8px), var(--animation-controls-y, 8px), 0); }
+.canvas-widget { position: absolute; top: 0; left: 0; contain: layout paint style; pointer-events: none; transform-origin: 0 0; }
+.canvas-widget.widget-offscreen { visibility: hidden; }
+.canvas-widget-frame { display: block; width: 100%; height: 100%; pointer-events: none; color-scheme: light; touch-action: none; border: 0; background: transparent; }
+#viewport.hand-mode .canvas-widget-frame { pointer-events: auto; cursor: default; }
+.ink-layer { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.interaction-layer { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.object-chrome-layer { position: absolute; z-index: 4; inset: 0; overflow: hidden; pointer-events: none; }
+.object-chrome-button { position: absolute; top: 0; left: 0; display: grid; width: 36px; height: 34px; padding: 0; place-items: center; pointer-events: auto; color: color-mix(in srgb, var(--ink) 88%, #2679b8); border: 1px dashed color-mix(in srgb, #2679b8 72%, var(--line)); border-radius: 5px; background: color-mix(in srgb, var(--panel) 86%, transparent); box-shadow: 0 3px 12px rgba(0,0,0,.2); backdrop-filter: blur(5px); cursor: pointer; touch-action: none; transform: translate3d(var(--object-control-x, 0), var(--object-control-y, 0), 0); }
+.object-chrome-button:hover, .object-chrome-button:focus-visible { color: var(--gold-bright); border-style: solid; border-color: currentColor; background: color-mix(in srgb, var(--panel-raised) 94%, transparent); outline: none; }
+.object-chrome-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.object-chrome-button.move { width: 62px; cursor: grab; }
+.object-chrome-button.move:active { cursor: grabbing; }
+.object-chrome-button.accept { color: var(--confirm); }
+.object-chrome-button.cancel { color: var(--danger); }
+.object-chrome-button.copy { color: #60a5fa; }
+.animation-controls { position: absolute; z-index: 5; top: 0; left: 0; display: flex; gap: 4px; padding: 4px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.3); transform: translate3d(var(--animation-controls-x, 8px), var(--animation-controls-y, 8px), 0); }
 .animation-controls[hidden] { display: none; }
 .animation-controls button { min-height: 26px; padding: 4px 8px; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 78%, transparent); border-radius: 4px; background: var(--panel-raised); font: 700 .67rem/1 system-ui, sans-serif; cursor: pointer; }
 .animation-controls button:hover, .animation-controls button:focus-visible { color: var(--gold-bright); border-color: var(--gold-bright); outline: none; }
 .animation-controls button.danger { color: var(--danger); }
-.image-edit-bar { position: absolute; z-index: 5; top: 0; left: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 10px 28px rgba(0,0,0,.34); transform: translate3d(var(--image-edit-bar-x, 8px), var(--image-edit-bar-y, 8px), 0); }
+.image-edit-bar { position: absolute; z-index: 6; top: 0; left: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 10px 28px rgba(0,0,0,.34); transform: translate3d(var(--image-edit-bar-x, 8px), var(--image-edit-bar-y, 8px), 0); }
 .image-edit-bar[hidden] { display: none; }
 .image-action { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 172px; min-height: 52px; padding: 9px 12px; text-align: left; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 78%, transparent); border-radius: 9px; background: var(--panel-raised); cursor: pointer; }
 .image-action:hover, .image-action:focus-visible { border-color: var(--gold-bright); outline: none; }
@@ -446,6 +457,8 @@ body.changelog-open { overflow: hidden; }
 .image-action.merge .image-action-title { color: var(--gold-bright); }
 .image-action.danger .image-action-title { color: var(--danger); }
 #screen.cursor-crosshair { cursor: crosshair; }
+#screen.cursor-pen { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M21.4 3.2a2.5 2.5 0 0 0-3.6 0L5.1 15.9 3.4 22.6l6.7-1.7L22.8 8.2a2.5 2.5 0 0 0 0-3.6Z' fill='%23fff' stroke='%23111827' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='m15.8 5.2 5 5M5.1 15.9l5 5M3.4 22.6l3.2-3.2' fill='none' stroke='%23111827' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") 3 23, crosshair; }
+#screen.cursor-eraser { cursor: none; }
 #screen.cursor-grab { cursor: grab; }
 #screen.cursor-grabbing { cursor: grabbing; }
 #screen.cursor-nwse-resize { cursor: nwse-resize; }

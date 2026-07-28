@@ -52,12 +52,11 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(app, /MAX_VISIBLE_IMAGES = 20/);
   assert.match(app, /MAX_IMAGE_DIMENSION = 2048/);
   assert.match(prepareImportedImage, /scale = Math\.min\(1, MAX_IMAGE_DIMENSION \/ sourceW, MAX_IMAGE_DIMENSION \/ sourceH/);
-  assert.match(app, /IMAGE_TOUCH_HOLD_MS = 500/);
   assert.match(app, /function canvasIdentityGeneration\(\)/);
   assert.match(app, /function beginCanvasPointerAction\(e, point\)/);
-  assert.match(app, /isAnimationActivationPointer\(e\) && valid\(point\)\) \{\s*const item = imageAtPoint\(point\);[\s\S]{0,220}?beginImageTouchHold\(e, point, item\)/);
-  assert.match(app, /hold\.pointerType === "touch"[\s\S]{0,200}?beginCanvasPointerAction\(hold\.downEvent, hold\.point\)/);
-  assert.match(app, /imageTapHold && imageTapHold\.pointerType !== "touch"[\s\S]{0,80}?beginCanvasPointerAction\(imageTapHold\.downEvent, imageTapHold\.point\)/);
+  assert.doesNotMatch(app, /beginImageTouchHold|imageTouchHold|IMAGE_TOUCH_HOLD/);
+  assert.match(app, /state\.mode !== "hand"[\s\S]{0,120}?beginCanvasPointerAction\(e, clientPoint\(e\)\)/);
+  assert.match(functionSource(app, "objectChromeSpecs"), /target:"image"/);
   const mergeImage = functionSource(app, "mergeImage"),
     beginImageGesture = functionSource(app, "beginImageGesture"),
     addImageFile = functionSource(app, "addImageFile"),
@@ -94,9 +93,9 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(loadSnapshot, /decodeStoredImages\(item\.images\)/);
   assert.match(loadSnapshot, /restoreImages\(images\)/);
   assert.match(startBlankCanvas, /restoreImages\(\[\]\)/);
-  assert.match(save, /imagesBefore[\s\S]*?imagesAfter[\s\S]*?state\.history\.push\(\{[^}]*imagesBefore, imagesAfter/);
+  assert.match(save, /imagesBefore[\s\S]*?imagesAfter[\s\S]*?const entry = \{[^}]*imagesBefore, imagesAfter[^}]*\}[\s\S]*?state\.history\.push\(entry\)/);
   assert.match(renderExportCanvas, /drawImagesToContext\(context, region\)/);
-  assert.ok(end.indexOf("cancelImageTouchHold") < end.indexOf("state.widgetGesture"));
+  assert.doesNotMatch(end, /imageTouchHold|cancelImageTouchHold/);
   assert.ok(end.indexOf("state.imageGesture") < end.indexOf("state.pendingGesture"));
   assert.equal((app.match(/imagePickerButton\.addEventListener\("click"/g) || []).length, 1);
   for (const key of ["addImage", "imageAdded", "imageSelected", "imageDeleted", "imageMerged", "imageEditBarLabel", "imagePlace", "imagePlaceHint", "imageMerge", "imageMergeHint", "imageDelete", "imageDeleteHint", "snapshotImages"]) {
@@ -105,7 +104,7 @@ test("canvas photos use one picker, editable image records, side action bar, and
   }
 });
 
-test("hand tool moves the canvas and all movable objects without triggering AI", () => {
+test("hand is the only object interaction mode and uses dedicated, clamped move handles", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -115,7 +114,13 @@ test("hand tool moves the canvas and all movable objects without triggering AI",
     pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
     mode = functionSource(app, "setCanvasMode"),
     handOutlines = functionSource(app, "drawHandModeOutlines"),
-    widgetHit = functionSource(app, "widgetPointerHit");
+    chromeSpecs = functionSource(app, "objectChromeSpecs"),
+    chromeMove = functionSource(app, "beginObjectChromeMove"),
+    chromePosition = vm.runInNewContext(`(${functionSource(app, "objectChromePosition")})`, {
+      state:{ panX:0, panY:-180, scale:1 },
+      view:{ clientWidth:900, clientHeight:600 },
+      screenObjectBox:(box) => ({ left:box.x, top:box.y - 180, width:box.w, height:box.h }),
+    });
 
   assert.ok(handIndex >= 0 && handIndex < penIndex);
   assert.match(html, /id="handToolBtn"[^>]*data-mode="hand"[^>]*aria-pressed="false"[^>]*data-i18n-aria="hand"/);
@@ -128,22 +133,76 @@ test("hand tool moves the canvas and all movable objects without triggering AI",
   );
   assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
   assert.match(mode, /requestInteractionLayerRender\(\)/);
+  assert.match(mode, /leavingDraftHand[\s\S]*?acceptPending\(\{ restoreMode:false \}\)/);
   assert.match(functionSource(app, "beginCanvasPointerAction"), /state\.mode === "hand"[\s\S]*?state\.panGesture[\s\S]*?setCanvasCursor\("grabbing"\)/);
-  assert.match(pointerDown, /widgetPointerHit\(point, e\.pointerType, handMode\)/);
-  assert.match(pointerDown, /imagePointerHit\(point, e\.pointerType, handMode\)/);
-  assert.match(pointerDown, /!handMode && e\.pointerType === "touch"[\s\S]*?beginImageTouchHold/);
-  assert.match(pointerDown, /handMode && valid\(point\)[\s\S]*?animationPointerHit\(point, e\.pointerType\)/);
-  assert.match(widgetHit, /includeUnselected[\s\S]*?visibleWidgets\(\)[\s\S]*?hit:"move"/);
+  assert.ok(pointerDown.indexOf('state.mode !== "hand"') < pointerDown.indexOf("widgetPointerHit(point"));
+  assert.match(pointerDown, /widgetPointerHit\(point, e\.pointerType, false\)/);
+  assert.match(pointerDown, /imagePointerHit\(point, e\.pointerType, false\)/);
+  assert.match(pointerDown, /selectedImageResult\.hit !== "move"/);
+  assert.match(pointerDown, /animationResult && animationResult\.hit !== "move"/);
+  assert.doesNotMatch(pointerDown, /beginImageTouchHold|beginAnimationTouchHold/);
+  for (const target of ["image", "animation", "widget", "pending-widget"]) assert.match(chromeSpecs, new RegExp(`target:"${target}"`));
+  assert.match(functionSource(app, "pendingChromeSpecs"), /target:"pending"/);
+  assert.match(chromeMove, /beginPendingGesture[\s\S]*?beginWidgetGesture[\s\S]*?beginImageGesture[\s\S]*?beginAnimationGesture/);
+  assert.equal(chromePosition({ x:100, y:100, w:300, h:260 }, "move").y, 6);
   assert.match(handOutlines, /visibleImages\(\)[\s\S]*?visibleAnimations\(\)[\s\S]*?visibleWidgets\(\)/);
   assert.match(handOutlines, /globalAlpha = 0\.42[\s\S]*?lineWidth = unit[\s\S]*?setLineDash\(\[4 \* unit, 5 \* unit\]\)/);
   assert.match(functionSource(app, "renderInteractionLayer"), /drawHandModeOutlines\(interactionCtx\)/);
-  assert.match(css, /#viewport\.hand-mode \.canvas-widget-frame\s*\{\s*pointer-events:\s*none/);
+  assert.match(html, /id="objectChromeLayer" class="object-chrome-layer"/);
+  assert.match(css, /\.canvas-widget-frame\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(css, /#viewport\.hand-mode \.canvas-widget-frame\s*\{[^}]*pointer-events:\s*auto[^}]*cursor:\s*default/);
+  assert.match(css, /\.object-chrome-button\.move\s*\{[^}]*width:\s*62px[^}]*cursor:\s*grab/);
   for (const name of ["acceptImageEdit", "cancelImageEdit", "deleteImage", "mergeImage"]) {
     assert.match(functionSource(app, name), /state\.mode !== "hand"/);
   }
   assert.doesNotMatch(functionSource(app, "updateImageGesture"), /schedule|requestAI/);
   assert.doesNotMatch(functionSource(app, "updateWidgetGesturePoint"), /schedule\(\)|requestAI/);
   assert.doesNotMatch(functionSource(app, "updateAnimationGesture"), /schedule|requestAI/);
+});
+
+test("AI drafts temporarily enter Hand, restore the prior tool, and undo back to an unconfirmed draft", () => {
+  const app = read("public/app.js"),
+    enter = functionSource(app, "enterAIDraftHandMode"),
+    finish = functionSource(app, "finishAIDraftHandMode"),
+    mode = functionSource(app, "setCanvasMode"),
+    accept = functionSource(app, "acceptPending"),
+    acceptItem = functionSource(app, "acceptPendingItem"),
+    acceptWidget = functionSource(app, "acceptPendingWidget"),
+    restore = functionSource(app, "restorePendingHistoryState"),
+    applyHistory = functionSource(app, "applyHistory");
+  assert.match(enter, /aiDraftReturnMode === null[\s\S]*?state\.aiDraftReturnMode = state\.mode/);
+  assert.match(enter, /setCanvasMode\("hand", \{ preserveSelection:true, skipDraftFinalize:true \}\)/);
+  assert.match(finish, /returnMode[\s\S]*?setCanvasMode\(returnMode, \{ preserveSelection:true, skipDraftFinalize:true \}\)/);
+  assert.match(functionSource(app, "startPending"), /enterAIDraftHandMode\(\)/);
+  assert.match(functionSource(app, "startPendingBatch"), /enterAIDraftHandMode\(\)/);
+  assert.match(functionSource(app, "startPendingWidget"), /enterAIDraftHandMode\(\)/);
+  assert.match(mode, /leavingDraftHand[\s\S]*?acceptPending\(\{ restoreMode:false \}\)[\s\S]*?acceptPendingWidget\(\{ restoreMode:false \}\)/);
+  assert.match(accept, /capturePendingHistoryState\(\)[\s\S]*?recordPendingHistory\(historyEntry, pendingBefore/);
+  assert.match(acceptItem, /capturePendingHistoryState\(\)[\s\S]*?recordPendingHistory\(historyEntry, pendingBefore/);
+  assert.match(acceptWidget, /capturePendingHistoryState\(\)[\s\S]*?recordPendingHistory\(historyEntry, pendingBefore/);
+  assert.match(restore, /side === "before" \? entry\.pendingBefore : entry\.pendingAfter/);
+  assert.match(restore, /state\.pendingHistoryRestored = Boolean\(state\.pending \|\| state\.pendingWidget\)/);
+  assert.match(restore, /setCanvasMode\("hand", \{ preserveSelection:true, skipDraftFinalize:true \}\)/);
+  assert.match(applyHistory, /restorePendingHistoryState\(entry, side\)/);
+  assert.match(app, /state\.pendingHistoryRestored && \(a === "undo" \|\| a === "redo"\)/);
+});
+
+test("pen ink stays above widgets and the eraser exposes a dashed footprint", () => {
+  const html = read("public/index.html"),
+    app = read("public/app.js"),
+    css = read("public/style.css"),
+    interaction = functionSource(app, "renderInteractionLayer"),
+    preview = functionSource(app, "drawPointerPreview"),
+    cursor = functionSource(app, "resetCanvasCursor");
+  assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="inkLayer"'));
+  assert.match(css, /\.widget-layer\s*\{[^}]*z-index:\s*1/);
+  assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
+  assert.match(css, /#screen\.cursor-pen\s*\{[^}]*data:image\/svg\+xml/);
+  assert.match(css, /#screen\.cursor-eraser\s*\{\s*cursor:\s*none/);
+  assert.match(cursor, /state\.mode === "pen" \? "pen"[\s\S]*?state\.mode === "eraser" \? "eraser"/);
+  assert.match(interaction, /drawPointerPreview\(interactionCtx\)/);
+  assert.match(preview, /state\.mode !== "eraser"[\s\S]*?context\.setLineDash\(\[3\.5 \* unit, 3 \* unit\]\)[\s\S]*?context\.arc/);
+  assert.match(functionSource(app, "updateCanvasPointerPreview"), /state\.mode === "eraser"[\s\S]*?requestInteractionLayerRender\(\)/);
 });
 
 test("canvas navigation guidance emphasizes middle-mouse panning for at least ten seconds", () => {
@@ -164,16 +223,21 @@ test("canvas navigation guidance emphasizes middle-mouse panning for at least te
   assert.match(css, /#viewport\.is-navigating #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
 });
 
-test("declarative animation scenes use persistent, interaction, and dirty-region canvas layers", () => {
+test("declarative scenes and widgets render below the dedicated ink and interaction layers", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css");
   assert.ok(html.indexOf('src="animation.js"') < html.indexOf('src="app.js"'));
-  for (const id of ["animationLayer", "interactionLayer", "animationControls", "animationPlayPause", "animationRestart", "animationDelete"]) {
+  for (const id of ["animationLayer", "inkLayer", "interactionLayer", "objectChromeLayer", "animationControls", "animationPlayPause", "animationRestart", "animationDelete"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.ok(html.indexOf('id="screen"') < html.indexOf('id="animationLayer"'));
+  assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="inkLayer"'));
+  assert.ok(html.indexOf('id="inkLayer"') < html.indexOf('id="interactionLayer"'));
   assert.ok(html.indexOf('id="animationLayer"') < html.indexOf('id="interactionLayer"'));
   assert.match(css, /\.animation-layer\s*\{[^}]*z-index:\s*1/);
-  assert.match(css, /\.interaction-layer\s*\{[^}]*z-index:\s*2/);
+  assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
+  assert.match(css, /\.interaction-layer\s*\{[^}]*z-index:\s*3/);
+  assert.match(functionSource(app, "renderInkLayer"), /forTiles[\s\S]*?drawSharpOverlays/);
+  assert.doesNotMatch(functionSource(app, "render"), /forTiles\(l, t/);
   assert.match(app, /acceptedTools\.includes\(c\.tool\)/);
   assert.match(app, /animations = serializedAnimations\(\),[\s\S]*?animationCount: animations\.length,[\s\S]*?animations,/);
   assert.match(app, /captureTime = performance\.now\(\)/);
@@ -229,7 +293,7 @@ test("plugin manager is a centered dynamic catalog with built-in animation and l
   assert.doesNotMatch(loadPluginDocuments, /defaultEnabled:\[[^\]]*"flowchart"/);
   assert.match(app, /localStorage\.setItem\(PLUGIN_STORAGE_KEY, JSON\.stringify/);
   assert.match(app, /if \(!state\.pluginCatalogLoaded\) void loadPluginDocuments\(\)/);
-  assert.match(app, /applyTheme\(state\.theme\);\s*loadPluginDocuments\(\)\.catch/);
+  assert.match(app, /applyTheme\(state\.theme\);\s*resetCanvasCursor\(\);\s*loadPluginDocuments\(\)\.catch/);
   assert.match(app, /function pluginRequestPayload\(\)/);
   assert.match(app, /\.\.\.pluginRequestPayload\(\)/);
   assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
@@ -425,7 +489,8 @@ test("animation drafts play immediately and share playback controls with confirm
   assert.match(start, /animationScene\)[\s\S]*?showAnimationControls\(\)[\s\S]*?requestAnimationLayerRender\(\)/);
   assert.match(functionSource(app, "animationControlTarget"), /pendingAnimationControlTarget\(\)[\s\S]*?kind:\s*"confirmed"/);
   assert.match(functionSource(app, "toggleSelectedAnimationPlayback"), /animationControlTarget\(\)/);
-  assert.match(selected, /drawDraftActions\(context, box, handle, false, true\)/);
+  assert.doesNotMatch(selected, /drawDraftActions/);
+  assert.match(functionSource(app, "objectChromeSpecs"), /animation:\$\{animation\.id\}:cancel[\s\S]*?cancelAnimationEdit[\s\S]*?animation:\$\{animation\.id\}:accept[\s\S]*?acceptAnimationEdit/);
   assert.match(hit, /draftActionPoints\(box, handle, false, true\)/);
   for (const control of ["width", "height", "resize"]) assert.match(hit, new RegExp(`hit: "${control}"`));
   assert.match(functionSource(app, "beginAnimationGesture"), /result\.hit === "accept"[\s\S]*?acceptAnimationEdit\(\)[\s\S]*?result\.hit === "cancel"[\s\S]*?cancelAnimationEdit\(\)/);
@@ -456,8 +521,10 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     updatePoint = functionSource(app, "updateWidgetGesturePoint"),
     pointerHit = functionSource(app, "widgetPointerHit"),
     messageHandler = functionSource(app, "handleWidgetMessage"),
+    finishWidgetGesture = functionSource(app, "finishWidgetGesture"),
     positionWidget = vm.runInNewContext(`(${functionSource(app, "positionWidget")})`, {
       state:{ panX:10, panY:20, scale:0.2 },
+      updateWidgetRenderVisibility() {},
       sendWidgetHostState() {},
     }),
     pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
@@ -498,7 +565,35 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.doesNotMatch(functionSource(app, "widgetRecord"), /pluginManifests\.has/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /width:widget\.contentW, height:widget\.contentH/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /if \(widget\.snapshotPromise\) return widget\.snapshotPromise[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
-  assert.match(chrome, /drawDraftActions\(context, box, handle, false, true\)/);
+  assert.match(messageHandler, /penecho-widget-updated[\s\S]*?widget\.contentReady = true/);
+  assert.doesNotMatch(messageHandler, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
+  assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 2);
+  assert.match(functionSource(app, "snapshotVisibleWidgets"), /requestWidgetSnapshot\(widget\)/);
+  assert.doesNotMatch(finishWidgetGesture, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
+  assert.match(finishWidgetGesture, /state\.widgetGesture = null[\s\S]*?positionWidget\(gesture\.widget\)/);
+  const visibilityState = { scale:1, widgetGesture:null },
+    updateWidgetRenderVisibility = vm.runInNewContext(`(${functionSource(app, "updateWidgetRenderVisibility")})`, {
+      state:visibilityState,
+      view:{ clientWidth:1000, clientHeight:700 },
+    }),
+    visibilityClasses = new Set(),
+    visibilityWidget = {
+      w:300,
+      h:200,
+      shell:{ classList:{ toggle(name, enabled) { if (enabled) visibilityClasses.add(name); else visibilityClasses.delete(name); } } },
+    };
+  assert.equal(updateWidgetRenderVisibility(visibilityWidget, 100, 100), true);
+  assert.equal(updateWidgetRenderVisibility(visibilityWidget, 1001, 100), false);
+  assert.equal(visibilityClasses.has("widget-offscreen"), true);
+  visibilityState.widgetGesture = { widget:visibilityWidget };
+  assert.equal(updateWidgetRenderVisibility(visibilityWidget, 1001, 100), true);
+  visibilityState.widgetGesture = null;
+  assert.equal(updateWidgetRenderVisibility(visibilityWidget, 1001, 100), false);
+  assert.match(functionSource(app, "sendWidgetHostState"), /active[\s\S]*?penecho-widget-state/);
+  assert.match(css, /\.canvas-widget\s*\{[^}]*contain:\s*layout paint style/);
+  assert.doesNotMatch(css, /\.canvas-widget\s*\{[^}]*will-change:\s*transform/);
+  assert.match(css, /\.canvas-widget\.widget-offscreen\s*\{[^}]*visibility:\s*hidden/);
+  assert.doesNotMatch(chrome, /drawDraftActions/);
   assert.match(chrome, /drawResizeHandle\(context, box, handle\)/);
   assert.match(hit, /draftActionPoints\(box, handle, false, true\)/);
   for (const control of ["width", "height", "resize"]) assert.match(hit, new RegExp(`hit:\\s*"${control}"`));
@@ -512,6 +607,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(pointerHit, /hit && hit !== "move"/);
   assert.match(messageHandler, /validWidgetHostDrag\(message\)[\s\S]*?beginWidgetHostDrag\(widget, message\)[\s\S]*?updateWidgetHostDrag\(widget, message\)[\s\S]*?updateWidgetHostTouch[\s\S]*?finishWidgetHostDrag\(widget, message\)/);
   assert.match(messageHandler, /validWidgetHostTouch\(message\)[\s\S]*?beginWidgetHostTouch\(widget, message\)[\s\S]*?updateWidgetHostTouch\(widget, message\)[\s\S]*?finishWidgetHostTouch\(widget, message\)/);
+  assert.match(messageHandler, /validWidgetHostNavigation\(message\)[\s\S]*?handleWidgetHostNavigation\(widget, message\)/);
   assert.match(messageHandler, /penecho-widget-copy-source-result[\s\S]*?typeof message\.copied !== "boolean"[\s\S]*?widgetSourceCopied/);
   assert.match(functionSource(app, "sendWidgetHostState"), /selected[\s\S]*?penecho-widget-state[\s\S]*?scaleX[\s\S]*?scaleY/);
   assert.match(functionSource(app, "beginWidgetHostDrag"), /state\.touches\.keys[\s\S]*?releaseWidgetHostTouch[\s\S]*?source:"widget-host"[\s\S]*?hit:message\.hit[\s\S]*?startPoint:clientPoint/);
@@ -537,7 +633,8 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(app, /state\.widgetGesture\?\.id === e\.pointerId[\s\S]*?finishWidgetGesture\(e\)/);
   assert.match(css, /\.widget-layer\s*\{[^}]*z-index:\s*1[^}]*pointer-events:\s*none/);
   assert.match(css, /\.canvas-widget\s*\{[^}]*pointer-events:\s*none/);
-  assert.match(frameRule, /pointer-events:\s*auto/);
+  assert.match(frameRule, /pointer-events:\s*none/);
+  assert.match(css, /#viewport\.hand-mode \.canvas-widget-frame\s*\{[^}]*pointer-events:\s*auto/);
   assert.match(frameRule, /touch-action:\s*none/);
   assert.match(frameRule, /border:\s*0/);
   assert.match(frameRule, /background:\s*transparent/);
@@ -583,31 +680,22 @@ test("downsampled animation drafts clip against logical rather than raster dimen
   ]);
 });
 
-test("mouse and pen select animations immediately while touch requires a one-second hold", () => {
+test("object bodies cannot activate editing outside Hand and long-press selection is removed", () => {
   const app = read("public/app.js"),
     pointerDownStart = app.indexOf('screen.addEventListener("pointerdown"'),
     pointerDownEnd = app.indexOf('screen.addEventListener("pointermove"', pointerDownStart),
-    pointerDown = app.slice(pointerDownStart, pointerDownEnd) + functionSource(app, "beginCanvasPointerAction"),
-    pointerMoveStart = pointerDownEnd,
-    pointerMoveEnd = app.indexOf("function end(e)", pointerMoveStart),
-    pointerMove = app.slice(pointerMoveStart, pointerMoveEnd),
-    activation = functionSource(app, "isAnimationActivationPointer"),
-    touchHold = functionSource(app, "beginAnimationTouchHold");
-  assert.doesNotMatch(activation, /pointerType === "touch"/);
-  assert.match(activation, /pointerType === "mouse"/);
-  assert.match(activation, /pointerType === "pen"/);
-  assert.match(activation, /button === 0/);
-  assert.match(app, /ANIMATION_TOUCH_HOLD_MS = 1000/);
-  assert.match(app, /ANIMATION_TOUCH_HOLD_MOVE_PX = 10/);
-  assert.match(touchHold, /setTimeout\([\s\S]*?beginAnimationGesture\([\s\S]*?ANIMATION_TOUCH_HOLD_MS/);
-  assert.match(pointerDown, /pointerType === "touch"[\s\S]*?animationPointerHit\(point, e\.pointerType\)[\s\S]*?beginAnimationTouchHold/);
-  assert.match(pointerMove, /animationTouchHold\?\.id === e\.pointerId[\s\S]*?ANIMATION_TOUCH_HOLD_MOVE_PX[\s\S]*?cancelAnimationTouchHold[\s\S]*?state\.panGesture/);
-  assert.ok(pointerDown.indexOf("animationPointerHit(point") < pointerDown.indexOf('state.mode === "text"'));
-  assert.ok(pointerDown.indexOf("animationPointerHit(point") < pointerDown.indexOf('if (e.pointerType === "touch")', pointerDown.indexOf('state.mode === "select"')));
-  assert.ok(pointerDown.indexOf("animationPointerHit(point") < pointerDown.indexOf("state.drawing ="));
-  assert.doesNotMatch(pointerDown, /state\.mode === "select"[\s\S]*?animationPointerHit/);
-  assert.match(pointerDown, /state\.animationGesture\) finishAnimationGesture/);
-  assert.ok(pointerDown.indexOf("if (state.selectedAnimationId) acceptAnimationEdit()") < pointerDown.indexOf('state.mode === "text"'));
+    pointerDown = app.slice(pointerDownStart, pointerDownEnd),
+    nonHand = pointerDown.indexOf('if (state.mode !== "hand")'),
+    widgetHit = pointerDown.indexOf("widgetPointerHit(point"),
+    imageHit = pointerDown.indexOf("imagePointerHit(point"),
+    animationHit = pointerDown.indexOf("animationPointerHit(point");
+  assert.ok(nonHand > 0 && nonHand < widgetHit && nonHand < imageHit && nonHand < animationHit);
+  assert.match(pointerDown, /beginCanvasPointerAction\(e, clientPoint\(e\)\);\s*return/);
+  assert.doesNotMatch(app, /beginAnimationTouchHold|animationTouchHold|ANIMATION_TOUCH_HOLD/);
+  assert.doesNotMatch(app, /beginImageTouchHold|imageTouchHold|IMAGE_TOUCH_HOLD/);
+  assert.match(functionSource(app, "beginObjectChromeMove"), /target === "animation"[\s\S]*?beginAnimationGesture/);
+  assert.match(functionSource(app, "handleWidgetHostNavigation"), /penecho-widget-wheel[\s\S]*?zoomCanvasAt/);
+  assert.match(functionSource(app, "handleWidgetHostNavigation"), /penecho-widget-pan-start[\s\S]*?moveCanvas/);
   assert.match(functionSource(app, "acceptAnimationEdit"), /selectedAnimationId = null[\s\S]*?requestInteractionLayerRender\(\)/);
 });
 
@@ -1053,43 +1141,17 @@ test("manual actions and pen-down use non-blocking latest-request-wins cancellat
   assert.match(request, /preparePendingItem\(c, revision, meta, run\)/);
 });
 
-test("AI draft bodies move directly without plus handles", () => {
+test("AI drafts move only from the dedicated Hand chrome", () => {
   const app = read("public/app.js"),
-    draw = functionSource(app, "drawPending"),
-    drawBatch = functionSource(app, "drawPendingBatch"),
-    hit = functionSource(app, "pendingHit"),
-    begin = functionSource(app, "beginPendingGesture"),
-    pendingHit = vm.runInNewContext(`(${hit})`, {
-      clientPoint: (event) => event,
-      draftBounds: (pending) => pending.box,
-      pendingItemBounds: (item) => item.box,
-      draftActionPoints: () => ({}),
-      pendingCopyable: () => false,
-      state: { scale: 1 },
-    }),
-    grouped = {
-      box: { x: 100, y: 100, w: 250, h: 200 },
-      selectedIndex: 1,
-      items: [
-        { box: { x: 100, y: 100, w: 60, h: 50 } },
-        { box: { x: 250, y: 200, w: 100, h: 100 } },
-      ],
-    };
-
-  assert.doesNotMatch(draw, /drawMoveHandle\(/);
-  assert.doesNotMatch(drawBatch, /drawMoveHandle\(|drawBatchMoveHandle\(/);
-  assert.doesNotMatch(hit, /move-handle|batchMovePoint/);
-  assert.match(hit, /frameOuter/);
-  assert.match(hit, /frameInner/);
-  assert.match(hit, /return \{ hit: "move", itemIndex: index \}/);
-  assert.match(begin, /armed:\s*true/);
-  assert.doesNotMatch(begin, /setTimeout\(/);
-  assert.doesNotMatch(app, /e\.pointerType === "pen" && hit === "move"/);
-  assert.deepEqual({ ...pendingHit(grouped, { x: 120, y: 120, pointerType: "mouse" }) }, { hit: "move", itemIndex: 0 });
-  assert.deepEqual({ ...pendingHit(grouped, { x: 105, y: 120, pointerType: "mouse" }) }, { hit: "move", itemIndex: 0 });
-  assert.deepEqual({ ...pendingHit(grouped, { x: 100, y: 120, pointerType: "mouse" }) }, { hit: "batch-move", itemIndex: null });
-  assert.deepEqual({ ...pendingHit(grouped, { x: 200, y: 175, pointerType: "mouse" }) }, { hit: "batch-move", itemIndex: null });
-  assert.deepEqual({ ...pendingHit(grouped, { x: 350, y: 300 }) }, { hit: "batch-resize", itemIndex: null });
+    pointerDownStart = app.indexOf('screen.addEventListener("pointerdown"'),
+    pointerDownEnd = app.indexOf('screen.addEventListener("pointermove"', pointerDownStart),
+    pointerDown = app.slice(pointerDownStart, pointerDownEnd),
+    specs = functionSource(app, "pendingChromeSpecs"),
+    begin = functionSource(app, "beginObjectChromeMove");
+  assert.match(specs, /kind:"move"[\s\S]*?target:"pending"/);
+  assert.match(begin, /spec\.target === "pending"[\s\S]*?beginPendingGesture\(event, "move", spec\.itemIndex\)/);
+  assert.match(pointerDown, /\["resize", "width", "height", "batch-resize"\]\.includes\(hit\)/);
+  assert.doesNotMatch(pointerDown, /beginPendingGesture\(e, "move"/);
 });
 
 test("AI write_text validates and rasterizes the same 1000 characters", () => {
@@ -1146,11 +1208,13 @@ test("AI text and formula drafts expose copy and axis-resize controls", () => {
   assert.ok(edge.copy.y > 0 && edge.copy.y >= radius);
   assert.ok(Object.values(edge).every((point) => point.x >= radius && point.x <= 20000 - radius));
   assert.match(draw, /if \(p\.textCommand\) drawTextDraftSurface\(ctx, b\)/);
-  assert.match(draw, /drawDraftActions\(ctx, b, s, pendingCopyable\(p\), true\)/);
+  assert.doesNotMatch(draw, /drawDraftActions/);
   assert.match(draw, /b\.x \+ b\.w \+ s \* 0\.08/);
   assert.match(draw, /b\.y \+ b\.h \+ s \* 0\.08/);
   assert.match(drawBatch, /if \(item\.textCommand\) drawTextDraftSurface\(ctx, box, index === p\.selectedIndex\)/);
-  assert.match(drawBatch, /drawDraftActions\(ctx, box, s, pendingCopyable\(item\)\)/);
+  assert.doesNotMatch(drawBatch, /drawDraftActions/);
+  assert.match(functionSource(app, "pendingChromeSpecs"), /kind:"move"[\s\S]*?kind:"cancel"[\s\S]*?kind:"accept"[\s\S]*?kind:"copy"/);
+  assert.match(functionSource(app, "pendingChromeSpecs"), /copyPendingText\(itemIndex\)/);
   assert.match(hit, /draftActionPoints\(box, s, pendingCopyable\(item\)\)/);
   assert.match(hit, /\.sort\(\(a, b\) => a\.distance - b\.distance \|\| b\.z - a\.z\)/);
   assert.match(start, /copyText = copyTextForCommand\(command\)/);
@@ -1158,7 +1222,7 @@ test("AI text and formula drafts expose copy and axis-resize controls", () => {
   assert.match(update, /p\.scaleX = p\.scaleY = next/);
   assert.match(update, /g\.hit === "width"[\s\S]*?p\.scaleX = Math\.max/);
   assert.match(update, /g\.hit === "height"[\s\S]*?p\.scaleY = Math\.max/);
-  assert.match(app, /hit === "copy" \|\| hit === "item-copy"/);
+  assert.match(functionSource(app, "pendingChromeSpecs"), /pendingCopyable\(target\)[\s\S]*?copyPendingText\(itemIndex\)/);
   assert.match(css, /\.clipboard-copy-fallback\s*\{[^}]*left:\s*-10000px/);
   for (const key of ["copyText", "textCopied", "textCopyFailed"]) {
     assert.match(app, new RegExp(`${key}:`));
@@ -1166,68 +1230,13 @@ test("AI text and formula drafts expose copy and axis-resize controls", () => {
   }
 });
 
-test("canvas copy gestures arm on pointerdown and run once on a matching pointerup", () => {
+test("pending copy is exposed as a direct DOM chrome action", () => {
   const app = read("public/app.js"),
-    pointerDownStart = app.indexOf('screen.addEventListener("pointerdown"'),
-    pointerDownEnd = app.indexOf('screen.addEventListener("pointermove"', pointerDownStart),
-    pointerDown = app.slice(pointerDownStart, pointerDownEnd),
-    end = functionSource(app, "end"),
-    armSource = functionSource(app, "armPendingCopy"),
-    matchesSource = functionSource(app, "pendingCopyMatches"),
-    finishSource = functionSource(app, "finishPendingCopy");
-
-  assert.match(pointerDown, /armPendingCopy\(e, hit, itemIndex\)/);
-  assert.doesNotMatch(pointerDown, /copyPendingText\(itemIndex\)/);
-  assert.match(end, /finishPendingCopy\(e\)/);
-
-  function harness() {
-    const pending = { copyText: "copy me" },
-      state = { pending, pendingGesture: null },
-      copied = [],
-      context = {
-        state,
-        clientPoint: (event) => ({ x: event.clientX, y: event.clientY }),
-        pendingHit: (_pending, event) => event.releaseHit ?? null,
-        copyPendingText: (itemIndex) => {
-          copied.push(itemIndex);
-          return Promise.resolve(true);
-        },
-        render: () => {},
-        requestRender: () => {},
-        setCanvasCursor: () => {},
-      };
-    context.pendingCopyMatches = vm.runInNewContext(`(${matchesSource})`, context);
-    return {
-      arm: vm.runInNewContext(`(${armSource})`, context),
-      copied,
-      finish: vm.runInNewContext(`(${finishSource})`, context),
-      pending,
-      state,
-    };
-  }
-
-  const matching = harness();
-  matching.arm({ pointerId: 7, clientX: 10, clientY: 20 }, "copy", null);
-  assert.deepEqual(matching.copied, []);
-  matching.finish({ pointerId: 7, type: "pointerup", clientX: 10, clientY: 20, releaseHit: "copy" });
-  matching.finish({ pointerId: 7, type: "pointerup", clientX: 10, clientY: 20, releaseHit: "copy" });
-  assert.deepEqual(matching.copied, [null]);
-
-  const cancelled = harness();
-  cancelled.arm({ pointerId: 8, clientX: 10, clientY: 20 }, "copy", null);
-  cancelled.finish({ pointerId: 8, type: "pointercancel", clientX: 10, clientY: 20, releaseHit: "copy" });
-  assert.deepEqual(cancelled.copied, []);
-
-  const outside = harness();
-  outside.arm({ pointerId: 9, clientX: 10, clientY: 20 }, "copy", null);
-  outside.finish({ pointerId: 9, type: "pointerup", clientX: 200, clientY: 220, releaseHit: null });
-  assert.deepEqual(outside.copied, []);
-
-  const replaced = harness();
-  replaced.arm({ pointerId: 10, clientX: 10, clientY: 20 }, "copy", null);
-  replaced.state.pending = { copyText: "replacement" };
-  replaced.finish({ pointerId: 10, type: "pointerup", clientX: 10, clientY: 20, releaseHit: "copy" });
-  assert.deepEqual(replaced.copied, []);
+    specs = functionSource(app, "pendingChromeSpecs"),
+    button = functionSource(app, "createObjectChromeButton");
+  assert.match(specs, /pendingCopyable\(target\)[\s\S]*?kind:"copy"[\s\S]*?copyPendingText\(itemIndex\)/);
+  assert.match(button, /kind !== "move"[\s\S]*?button\.penechoSpec\?\.activate\?\.\(\)/);
+  assert.match(functionSource(app, "objectChromeLabel"), /kind === "copy"[\s\S]*?t\("copyText"\)/);
 });
 
 test("AI text copy uses the original command with an insecure-context fallback and local feedback", () => {
@@ -1359,7 +1368,7 @@ test("AI text copy ignores stale clipboard completions and stale feedback timers
   assert.equal(current.pending.copyFeedbackGeneration, 2);
 });
 
-test("batch drafts paint every body before controls and keep selected controls on top", () => {
+test("batch drafts paint every body before selected feedback", () => {
   const source = functionSource(read("public/app.js"), "drawPendingBatch"),
     events = [],
     context = {
@@ -1383,7 +1392,6 @@ test("batch drafts paint every body before controls and keep selected controls o
       batchBounds: () => ({ x: 0, y: 0, w: 300, h: 180 }),
       ctx: context,
       drawCopyFeedback: (_ctx, box) => events.push(`feedback:${box.id}`),
-      drawDraftActions: (_ctx, box) => events.push(`actions:${box.id}`),
       drawResizeHandle: () => {},
       drawTextDraftSurface: (_ctx, box) => events.push(`surface:${box.id}`),
       pendingItemBounds: (item) => item.box,
@@ -1399,10 +1407,9 @@ test("batch drafts paint every body before controls and keep selected controls o
     };
 
   draw(pending);
-  const firstAction = Math.min(events.indexOf("actions:0"), events.indexOf("actions:1")),
+  const firstFeedback = Math.min(events.indexOf("feedback:0"), events.indexOf("feedback:1")),
     lastBody = Math.max(events.indexOf("body:0"), events.indexOf("body:1"));
-  assert.ok(firstAction > lastBody);
-  assert.ok(events.indexOf("actions:1") < events.indexOf("actions:0"));
+  assert.ok(firstFeedback > lastBody);
   assert.ok(events.indexOf("feedback:1") < events.indexOf("feedback:0"));
 });
 
