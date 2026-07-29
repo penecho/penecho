@@ -11,7 +11,8 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 test("feature tour exposes an accessible dialog and replay entry point", () => {
   const html = read("public/index.html"),
     layer = html.match(/<div id="tourLayer"[\s\S]*?<\/section>\s*<\/div>/)?.[0] || "";
-  assert.match(html, /id="tourReplayBtn"[^>]*data-i18n-aria="tourReplay"[^>]*data-i18n-title="tourReplay"/);
+  assert.doesNotMatch(html, /id="tourReplayBtn"/);
+  assert.match(html, /id="settingsTourBtn"[^>]*data-i18n="tourReplay"/);
   assert.match(layer, /class="tour-layer"[^>]*hidden[^>]*aria-hidden="true"/);
   assert.match(layer, /id="tourHighlight"[^>]*aria-hidden="true"/);
   assert.match(layer, /id="tourCard"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="tourTitle"[^>]*aria-describedby="tourBody"/);

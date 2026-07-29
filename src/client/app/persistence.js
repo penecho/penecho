@@ -295,12 +295,22 @@
       image.src = url;
     });
   }
+  async function finalizeCanvasForSnapshot() {
+    if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+    if (state.pending) acceptPending({ restoreMode:false });
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.imageEdit) acceptImageEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    for (const editor of [...state.textEditors.values()]) await confirmTextEditor(editor);
+    if (state.selection) commitSelection();
+    finishAIDraftHandMode();
+  }
   async function saveSnapshot({ overwriteId = null, name = null } = {}) {
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
     }
-    if (state.selection) commitSelection();
+    await finalizeCanvasForSnapshot();
     if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
@@ -454,6 +464,13 @@
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
     state.viewInitialized = false;
+    state.aiDraftReturnMode = null;
+    state.pendingHistoryRestored = false;
+    setCanvasMode("pen", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
     document.querySelector("#newSnapshotName").value = "";
     if (dialog.open) dialog.close();
     if (document.querySelector("#historyPanel").classList.contains("open")) closeHistoryPanel();

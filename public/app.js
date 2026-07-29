@@ -3,6 +3,7 @@
 (() => {
   const SIZE = 20000,
     TILE = 512,
+    INITIAL_VIEW_ZOOM = 1.5,
     EXPORT_MAX_DIMENSION = 16384,
     EXPORT_MAX_PIXELS = 64 * 1024 * 1024,
     MAX_ATLAS_WIDTH = 2048,
@@ -66,6 +67,7 @@
     selectionDeleteButton = document.querySelector("#selectionDeleteBtn"),
     selectionCancelButton = document.querySelector("#selectionCancelBtn"),
     imagePickerButton = document.querySelector("#imagePickerBtn"),
+    clipboardCopyButton = document.querySelector("#clipboardCopyBtn"),
     imagePickerInput = document.querySelector("#imagePickerInput"),
     imageEditBar = document.querySelector("#imageEditBar"),
     imagePlaceButton = document.querySelector("#imagePlaceBtn"),
@@ -74,7 +76,6 @@
     textEditorLayer = document.querySelector("#textEditorLayer"),
     textInputHint = document.querySelector("#textInputHint"),
     tourMain = document.querySelector("main"),
-    tourReplayButton = document.querySelector("#tourReplayBtn"),
     tourLayer = document.querySelector("#tourLayer"),
     tourHighlight = document.querySelector("#tourHighlight"),
     tourCard = document.querySelector("#tourCard"),
@@ -99,7 +100,6 @@
     settingsCloseButton = document.querySelector("#settingsClose"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
     summonToggle = document.querySelector("#summonToggle"),
-    summonEffectList = document.querySelector("#summonEffectList"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
@@ -211,6 +211,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textMixedModeError: "Mixed formatting was unavailable; plain text was inserted",
       textHelp: "Text formatting help",
       addImage: "Add image or photo",
+      copyFromClipboard: "Copy text or image from clipboard",
+      clipboardReading: "Reading clipboard...",
+      clipboardTextAdded: "Clipboard text added. Move or resize the text box, then confirm.",
+      clipboardUnsupported: "Clipboard format not supported. Copy plain text or an image.",
+      clipboardReadFailed: "Could not read the clipboard. Allow clipboard access or use Ctrl/Cmd+V.",
       imageLoading: "Preparing image...",
       imageAdded: "Image added",
       imageSelected: "Editing image: drag the top handle to move, use edge handles to resize, or choose a side action",
@@ -339,26 +344,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsAISection: "AI",
-      settingsSummonSection: "Summoning effect",
-      settingsSummonEnabled: "Show while AI works",
+      settingsSummonSection: "Thinking indicator",
+      settingsSummonEnabled: "Show while AI thinks",
+      settingsSummonDescription: "Each request draws a different animated mathematical form.",
       settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
       settingsDownloadWin: "Download for Windows",
       settingsGitHub: "GitHub repository",
-      summonFxRift: "Void Rift - the canvas tears open",
-      summonFxVortex: "Star Vortex - a swirling little galaxy",
-      summonFxArray: "Glyph Array - a rotating summoning circle",
-      summonFxScript: "Flowing Glyphs - rising mystic script",
-      summonFxFlame: "Spirit Flame - a cold violet fire",
-      summonPhrase1: "Gathering spiritual ink - the answer is about to burst forth...",
-      summonPhrase2: "Summoning the answer spirit, hold on...",
-      summonPhrase3: "The AI is cultivating in seclusion, emerging soon...",
-      summonPhrase4: "A quick divination says: results any moment now...",
-      summonPhrase5: "The inspiration furnace is lit, brewing words...",
-      summonPhrase6: "Deep in the void, something is responding...",
-      summonPhrase7: "Negotiating friendly terms with the knowledge spirit...",
-      summonPhrase8: "The summoning circle works fine - just waiting on the answer...",
+      summonPhrase1: "I’m following the trail your pen left behind...",
+      summonPhrase2: "Give me a moment—I’m fitting the pieces on the canvas together.",
+      summonPhrase3: "This deserves another look. I’m still thinking with you.",
+      summonPhrase4: "I’m turning the question around to see its other side...",
+      summonPhrase5: "No rush. The answer is beginning to take shape.",
+      summonPhrase6: "I’m looking for the most honest explanation between these lines.",
+      summonPhrase7: "Thinking is not waiting for an answer; it is making the question clearer.",
+      summonPhrase8: "The canvas keeps the marks; understanding gives them direction.",
+      summonPhrase9: "Every line is a question that has not quite finished speaking.",
+      summonPhrase10: "Intelligence may begin with calculation; understanding begins with attention.",
+      summonPhrase11: "Let’s turn this hazy idea into something we can both see.",
+      summonPhrase12: "An answer is not an ending. It is where the next stroke begins.",
       summonTip1: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
       summonTip2: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
       summonTip3: "Tip: circle content with the lasso and AI will work only on that selection.",
@@ -475,6 +480,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       copyPluginMarkdown: "Copy Markdown",
       pluginMarkdownCopied: "Copied",
       pluginMarkdownCopyFailed: "Copy failed",
+      duplicatePlugin: "Create editable copy",
+      pluginCopyName: "Copy of {name}",
+      pluginCopyDraftReady: "Editable copy of {name} is ready. Review and save it as your own plugin.",
       pluginBuiltInRuntime: "Built-in runtime capability",
       pluginDefaultState: "Default: {state}",
       pluginRequestField: "Request field: {field}",
@@ -600,7 +608,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
-    storedSummonEffect = localStorage.getItem("penecho-summon-effect"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
@@ -616,7 +623,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
-    initialSummonEffect = SUMMON?.EFFECTS?.includes(storedSummonEffect) ? storedSummonEffect : "rift",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function authenticatedApiHeaders(headers = {}) {
@@ -658,11 +664,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetHostPan: null,
       widgetHistoryBefore: null,
       widgetRefineCandidate: null,
-      widgetRefinePointer: null,
-      widgetRefineFocusId: null,
-      widgetRefineHoverId: null,
-      widgetRefineGraceUntil: 0,
-      widgetRefineDismissedDirty: null,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -682,7 +683,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       imageEdit: null,
       imageGesture: null,
       imageHistoryBefore: null,
+      imageHandReturnMode: null,
       imageImporting: false,
+      clipboardImporting: false,
       textInputBlockedUntil: 0,
       textTap: null,
       latestTypedInput: null,
@@ -697,7 +700,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
-      summonEffect: initialSummonEffect,
       summonAnchor: null,
       timer: 0,
       autoPopoverTimer: 0,
@@ -795,46 +797,83 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
   const summonFX = SUMMON?.create({
-    layer: summonLayer,
+    fxCanvas: summonLayer,
+    textLayer: document.querySelector("#summonTextLayer"),
     t,
-    toScreen: (wx, wy) => ({ x: wx * state.scale + state.panX, y: wy * state.scale + state.panY }),
+    getTransform: () => ({ scale: state.scale, panX: state.panX, panY: state.panY, width: view.clientWidth, height: view.clientHeight, dpr: devicePixelRatio || 1 }),
+    getContentRects: summonBlockers,
+    getHotspot: summonHotspot,
+    getAiColor: () => state.aiColor,
   });
-  summonFX?.setEffect(state.summonEffect);
-  function summonInkOverlap(box) {
-    let overlap = 0;
-    for (const [k, c] of tiles) {
-      const [tx, ty] = k.split(",").map(Number),
-        tileBox = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
-      if (!intersection(tileBox, box)) continue;
-      let ink = state.inkBounds.get(k);
-      if (ink === undefined) {
-        ink = c ? inkBox(c, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
-        state.inkBounds.set(k, ink);
+  function summonHotspot() {
+    const points = state.hotspotTrail
+        .filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({ x:point.x, y:point.y })),
+      point = points.at(-1),
+      box = state.summonAnchor;
+    if (!point && !box) return null;
+    return {
+      points,
+      point:point || null,
+      box:box ? { x:box.x, y:box.y, w:box.w, h:box.h } : null,
+    };
+  }
+  function summonBlockers() {
+    const visible = viewportRect(),
+      rects = [];
+    if (visible) {
+      for (const [k, c] of tiles) {
+        const [tx, ty] = k.split(",").map(Number),
+          tileBox = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
+        if (!intersection(tileBox, visible)) continue;
+        let ink = state.inkBounds.get(k);
+        if (ink === undefined) {
+          ink = c ? inkBox(c, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
+          state.inkBounds.set(k, ink);
+        }
+        if (ink) rects.push({ x: tileBox.x + ink.x, y: tileBox.y + ink.y, w: ink.w, h: ink.h });
       }
-      if (!ink) continue;
-      const found = intersection({ x: tileBox.x + ink.x, y: tileBox.y + ink.y, w: ink.w, h: ink.h }, box);
-      if (found) overlap += found.w * found.h;
     }
-    return overlap;
+    for (const widget of state.widgets) rects.push({ x: widget.x, y: widget.y, w: widget.w, h: widget.h });
+    for (const editor of state.textEditors.values()) {
+      const scale = Math.max(0.03, state.scale);
+      rects.push({ x: editor.x, y: editor.y, w: editor.widthCss / scale, h: editor.heightCss / scale });
+    }
+    for (const image of state.images)
+      if (Number.isFinite(image.x) && Number.isFinite(image.y)) rects.push({ x: image.x, y: image.y, w: image.logicalWidth || image.width || 0, h: image.logicalHeight || image.height || 0 });
+    for (const animation of state.animations)
+      if (Number.isFinite(animation.x)) rects.push({ x: animation.x, y: animation.y, w: animation.w, h: animation.h });
+    for (const item of state.pending?.items || [])
+      if (item && Number.isFinite(item.x)) rects.push({ x: item.x, y: item.y, w: item.layoutWidth || item.w || 0, h: item.layoutHeight || item.h || 0 });
+    return rects.filter((r) => r.w > 0 && r.h > 0);
   }
   function summonPlacement() {
     const visible = viewportRect();
     if (!visible) return null;
-    const w = Math.min(280 / state.scale, visible.w * 0.9),
-      h = Math.min(215 / state.scale, visible.h * 0.85),
-      gap = 26 / state.scale,
-      margin = 10 / state.scale,
+    const blockers = summonBlockers(),
+      anchor = state.summonAnchor,
+      w = visible.w * 0.36,
+      h = visible.h * 0.32,
+      margin = Math.min(visible.w, visible.h) * 0.02,
       clampBox = (cx, cy) => ({
         x: Math.min(Math.max(cx - w / 2, visible.x + margin), visible.x + visible.w - margin - w),
         y: Math.min(Math.max(cy - h / 2, visible.y + margin), visible.y + visible.h - margin - h),
         w,
         h,
       }),
-      candidates = [],
-      anchor = state.summonAnchor;
+      overlapArea = (box) => {
+        let area = 0;
+        for (const b of blockers) {
+          const hit = intersection(box, b);
+          if (hit) area += hit.w * hit.h;
+        }
+        return area;
+      },
+      candidates = [];
     if (anchor) {
       const acx = anchor.x + anchor.w / 2,
-        acy = anchor.y + anchor.h / 2;
+        acy = anchor.y + anchor.h / 2,
+        gap = Math.min(visible.w, visible.h) * 0.04;
       candidates.push(
         clampBox(anchor.x + anchor.w + gap + w / 2, acy),
         clampBox(acx, anchor.y + anchor.h + gap + h / 2),
@@ -850,7 +889,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     let best = candidates[0],
       bestScore = Infinity;
     for (const candidate of candidates) {
-      const score = summonInkOverlap(candidate);
+      const score = overlapArea(candidate);
       if (score === 0) {
         best = candidate;
         break;
@@ -1088,7 +1127,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (featureTour.active) return;
       if (options.changelog !== false && maybeShowChangelog()) return;
       if (restore) {
-        const target = restoreFocus?.isConnected && restoreFocus !== document.body ? restoreFocus : tourReplayButton;
+        const target = restoreFocus?.isConnected && restoreFocus !== document.body ? restoreFocus : settingsButton;
         target?.focus({ preventScroll: true });
       }
     });
@@ -1200,7 +1239,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     hidePluginControl();
     closeRadialMenu();
     const active = document.activeElement;
-    changelog.restoreFocus = active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : tourReplayButton;
+    changelog.restoreFocus = active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : settingsButton;
     changelog.active = true;
     tourMain.inert = true;
     document.body.classList.add("changelog-open");
@@ -1249,12 +1288,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
-    summonEffectList.classList.toggle("effects-disabled", !state.summonEnabled);
-    summonEffectList.querySelectorAll(".summon-effect-option").forEach((option) => {
-      const active = option.dataset.effect === state.summonEffect;
-      option.classList.toggle("active", active);
-      option.setAttribute("aria-checked", String(active));
-    });
   }
   function openSettings() {
     if (settings.open || !settingsLayer) return false;
@@ -1285,13 +1318,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.summonEnabled = Boolean(enabled);
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
-    updateSettingsPanel();
-  }
-  function setSummonEffect(id) {
-    if (!SUMMON?.EFFECTS?.includes(id)) return;
-    state.summonEffect = id;
-    localStorage.setItem("penecho-summon-effect", id);
-    summonFX?.setEffect(id);
     updateSettingsPanel();
   }
   function maybeStartOnboarding() {
@@ -1632,6 +1658,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           actions.append(detailButton);
           option.append(detail);
         }
+        if (plugin.documentPath && manifest?.document) {
+          const duplicateButton = document.createElement("button");
+          duplicateButton.className = "plugin-duplicate-button";
+          duplicateButton.type = "button";
+          duplicateButton.dataset.pluginDuplicate = plugin.id;
+          duplicateButton.disabled = state.pluginAuthoringBusy;
+          duplicateButton.setAttribute("aria-label", t("duplicatePlugin"));
+          duplicateButton.setAttribute("title", t("duplicatePlugin"));
+          duplicateButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="11" height="11" rx="1.5"/><path d="M15 14v5.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-9A1.5 1.5 0 0 1 4.5 9H9"/></svg>';
+          actions.append(duplicateButton);
+        }
         if (plugin.documentPath && plugin.builtIn === false) {
           const deleteButton = document.createElement("button");
           deleteButton.className = "plugin-delete-button";
@@ -1680,6 +1717,45 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button._copyResetTimer = setTimeout(() => {
       if (button.isConnected) button.textContent = original;
     }, 1800);
+  }
+  function nextPluginCopyId(pluginId) {
+    const taken = new Set(PLUGIN_DEFINITIONS.map((plugin) => plugin.id));
+    for (const id of pluginManifests.keys()) taken.add(id);
+    for (let index = 1; index < 10000; index++) {
+      const suffix = index === 1 ? "-copy" : `-copy-${index}`,
+        stem = pluginId.slice(0, Math.max(1, 64 - suffix.length)).replace(/-+$/, "") || "plugin",
+        candidate = `${stem}${suffix}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return "";
+  }
+  function replacePluginFrontmatterField(document, field, value) {
+    const line = `${field}: ${String(value).trim().replace(/[\r\n]/g, " ")}`,
+      pattern = new RegExp(`^${field}:[^\\r\\n]*$`, "m");
+    if (pattern.test(document)) return document.replace(pattern, line);
+    return document.replace(/^(name:[^\r\n]*\r?\n)/m, (match) => `${match}${line}\n`);
+  }
+  function createPluginCopy(pluginId) {
+    if (state.pluginAuthoringBusy) return false;
+    const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId),
+      manifest = pluginManifests.get(pluginId);
+    if (!plugin?.documentPath || !manifest?.document) return false;
+    const copyId = nextPluginCopyId(pluginId);
+    if (!copyId) return false;
+    const sourceName = localizedManifestValue(manifest, "name") || manifest.name || pluginId,
+      copyName = t("pluginCopyName").replace("{name}", sourceName),
+      escapedId = pluginId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      pluginIdPattern = new RegExp(`(pluginId\\s*:\\s*["'])${escapedId}(["'])`, "g");
+    let document = manifest.document.replace(/^id:[^\r\n]*$/m, `id: ${copyId}`);
+    document = document.replace(pluginIdPattern, `$1${copyId}$2`);
+    document = replacePluginFrontmatterField(document, state.language === "zh" ? "name-zh" : "name", copyName);
+    pluginTitle.value = copyName;
+    pluginDocumentEditor.value = document;
+    pluginStylesEditor.value = manifest.styles || "";
+    state.pluginAuthoringStatus = { key:"pluginCopyDraftReady", type:"success", values:{ name:sourceName } };
+    setPluginTab("create");
+    requestAnimationFrame(() => pluginTitle.focus({ preventScroll:true }));
+    return true;
   }
   function pluginAuthoringText(status) {
     if (!status) return "";
@@ -2325,6 +2401,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.selectedImageId = null;
     state.imageEdit = null;
     state.imageGesture = null;
+    state.imageHandReturnMode = null;
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : []) {
       const record = imageRecord(item);
       if (!record || state.images.some((existing) => existing.id === record.id)) continue;
@@ -2359,12 +2436,29 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function selectedImage() {
     return state.images.find((item) => item.id === state.selectedImageId) || null;
   }
+  function enterManualImageHandMode() {
+    if (state.mode !== "hand" && state.imageHandReturnMode === null) state.imageHandReturnMode = state.mode;
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
+  function finishManualImageHandMode() {
+    const returnMode = state.imageHandReturnMode;
+    state.imageHandReturnMode = null;
+    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
   function beginImageEdit(item) {
     if (!item || !state.images.includes(item)) return false;
     if (state.imageEdit?.id === item.id) return true;
     if (state.widgetEdit) acceptWidgetEdit();
     if (state.animationEdit) acceptAnimationEdit();
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     recordImagesBefore();
     state.selectedImageId = item.id;
     state.imageEdit = { id:item.id, before:imageLayout(item), changed:false };
@@ -2372,7 +2466,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("imageSelected");
     return true;
   }
-  function acceptImageEdit() {
+  function acceptImageEdit(options) {
+    options ||= {};
+    const restoreMode = options.restoreMode !== false;
     const edit = state.imageEdit;
     state.imageGesture = null;
     state.imageEdit = null;
@@ -2384,6 +2480,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (edit && state.mode !== "hand") schedule();
     requestRender();
     if (edit) setStatusKey("ready");
+    if (edit && restoreMode) finishManualImageHandMode();
+    else if (edit) state.imageHandReturnMode = null;
     return Boolean(edit);
   }
   function cancelImageEdit() {
@@ -2397,6 +2495,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (edit && state.mode !== "hand") schedule();
     requestRender();
     if (edit) setStatusKey("ready");
+    if (edit) finishManualImageHandMode();
     return Boolean(edit);
   }
   function imageControlHit(item, point, pointerType = "mouse") {
@@ -2483,6 +2582,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function deleteImage(item) {
     if (!item || !state.images.includes(item)) return false;
+    const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     state.images = state.images.filter((candidate) => candidate !== item);
     if (state.selectedImageId === item.id) {
@@ -2492,6 +2592,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     state.userRevision++;
     save();
+    if (edited) finishManualImageHandMode();
     if (state.mode !== "hand") schedule();
     requestRender();
     setStatusKey("imageDeleted");
@@ -2499,6 +2600,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function mergeImage(item) {
     if (!item || !state.images.includes(item)) return false;
+    const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     const box = imageBox(item);
     invalidateSharpOverlays(box);
@@ -2527,6 +2629,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.userRevision++;
     mergeDirty(box.x, box.y, 0);
     mergeDirty(box.x + box.w, box.y + box.h, 0);
+    if (edited) finishManualImageHandMode();
     if (state.mode !== "hand") {
       state.autoEligible = true;
       schedule();
@@ -2618,6 +2721,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.userRevision++;
       save();
       requestRender();
+      enterManualImageHandMode();
       beginImageEdit(item);
       setStatusKey("imageAdded");
     } catch (error) {
@@ -2697,6 +2801,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotImage: null,
       shell: null,
       frame: null,
+      hostOrigin: null,
       pending: false,
     };
   }
@@ -2722,6 +2827,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function widgetHostUrl(manifest) {
     const url = new URL("widget-host.html", location.href);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+      url.searchParams.set("parent-origin", location.origin);
+    } else if (url.hostname === "127.0.0.1") {
+      url.hostname = "localhost";
+      url.searchParams.set("parent-origin", location.origin);
+    }
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -2740,33 +2852,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
-    shell.addEventListener("pointerenter", () => {
-      if (state.mode === "hand" || widget.pending) return;
-      state.widgetRefineHoverId = widget.id;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      requestInteractionLayerRender();
-    });
-    shell.addEventListener("pointerleave", (event) => {
-      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
-      if (state.widgetRefineHoverId === widget.id) state.widgetRefineHoverId = null;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      setTimeout(() => requestInteractionLayerRender(), 440);
-    });
-    shell.addEventListener("focusin", () => {
-      if (state.mode === "hand" || widget.pending) return;
-      state.widgetRefineFocusId = widget.id;
-      requestInteractionLayerRender();
-    });
-    shell.addEventListener("focusout", (event) => {
-      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
-      if (state.widgetRefineFocusId === widget.id) state.widgetRefineFocusId = null;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      setTimeout(() => requestInteractionLayerRender(), 440);
-    });
     shell.append(frame);
     widgetLayer.append(shell);
     widget.shell = shell;
     widget.frame = frame;
+    widget.hostOrigin = new URL(frame.src).origin;
     widget.initialized = false;
     widget.hostReady = false;
     widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
@@ -2785,6 +2875,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widget.shell?.remove();
     widget.shell = null;
     widget.frame = null;
+    widget.hostOrigin = null;
     widget.initialized = false;
     widget.hostReady = false;
     widget.resolveHostReady = null;
@@ -2865,8 +2956,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title:widget.title,
       html:widget.html,
       pluginStyles:manifest.styles || "",
-      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
-    }, location.origin);
+    }, widget.hostOrigin || location.origin);
   }
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
@@ -2875,7 +2965,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       key = `${selected ? 1 : 0}:${active ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function syncWidgetHostStates() {
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) sendWidgetHostState(widget);
@@ -2919,7 +3009,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             reject(Error(t("widgetExportFailed")));
           }, WIDGET_SNAPSHOT_TIMEOUT_MS);
           widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
@@ -2936,9 +3026,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   async function handleWidgetMessage(event) {
-    if (event.origin !== location.origin || !event.data || typeof event.data !== "object") return;
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])].find((item) => item.frame?.contentWindow === event.source);
-    if (!widget) return;
+    if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
     const message = event.data;
     if (message.type === "penecho-widget-host-ready") {
       widget.hostReady = true;
@@ -2946,6 +3035,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widget.resolveHostReady = null;
       sendWidgetInit(widget);
       sendWidgetHostState(widget, undefined, undefined, true);
+      return;
+    }
+    if (message.type === "penecho-widget-activate") {
+      if (state.mode === "hand" && !widget.pending && state.widgets.includes(widget)) beginWidgetEdit(widget);
       return;
     }
     if (validWidgetHostDrag(message)) {
@@ -2972,11 +3065,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widget.resolveReady = null;
       return;
     }
-    if (message.type === "penecho-widget-copy-source-result") {
-      if (!widget.copyText || typeof message.copied !== "boolean") return;
-      setStatusKey(message.copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
-      return;
-    }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
     const pending = widgetSnapshotRequests.get(message.requestId);
     if (!pending || pending.widget !== widget) return;
@@ -2998,7 +3086,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function beginWidgetEdit(widget) {
     if (!widget || widget.pending) return false;
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     if (state.widgetEdit?.id === widget.id) return true;
     if (state.widgetEdit) acceptWidgetEdit();
     recordWidgetsBefore();
@@ -3261,7 +3349,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (message.type === "penecho-widget-pan-start") {
       const point = widgetHostViewportPoint(widget, message);
       if (!point || state.widgetHostPan) return false;
-      if (state.selectedImageId) acceptImageEdit();
+      if (state.selectedImageId) acceptImageEdit({ restoreMode:false });
       if (state.selectedWidgetId) acceptWidgetEdit();
       if (state.selectedAnimationId) acceptAnimationEdit();
       state.widgetHostPan = {
@@ -3577,7 +3665,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function beginAnimationEdit(animation) {
     if (!animation) return false;
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     if (state.animationEdit?.id === animation.id) return true;
     if (state.animationEdit) acceptAnimationEdit();
     const now = performance.now();
@@ -3945,7 +4033,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     interactionLayer.height = screen.height;
     state.animationFullRedraw = true;
     if (!state.viewInitialized && r.width > 0 && r.height > 0) {
-      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000));
+      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000 * INITIAL_VIEW_ZOOM));
       state.panX = (r.width - SIZE * state.scale) / 2;
       state.panY = (r.height - SIZE * state.scale) / 2;
       state.viewInitialized = true;
@@ -4138,69 +4226,61 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       dy = point.y < box.y ? box.y - point.y : point.y > box.y + box.h ? point.y - box.y - box.h : 0;
     return Math.hypot(dx, dy);
   }
-  function widgetDirtyProximity(widget) {
-    if (!state.dirty || state.dirty === state.widgetRefineDismissedDirty || !state.hotspotTrail.length) return null;
+  function strokeWidgetProximity(widget, drawing) {
+    if (!drawing || drawing.erase) return null;
+    const points = [...drawing.trail];
+    if (drawing.last && points.at(-1) !== drawing.last) points.push(drawing.last);
+    if (!points.length) return null;
     let distance = Infinity,
       hits = 0;
-    for (const point of state.hotspotTrail) {
+    for (const point of points) {
       const next = pointDistanceToWidget(point, widget) * state.scale;
       distance = Math.min(distance, next);
       if (next <= 48) hits++;
     }
     return distance <= 48 ? { distance, hits } : null;
   }
-  function clearWidgetRefineCandidate({ clearPointer = true } = {}) {
+  function clearWidgetRefineCandidate() {
     state.widgetRefineCandidate = null;
-    state.widgetRefineFocusId = null;
-    state.widgetRefineHoverId = null;
-    state.widgetRefineGraceUntil = 0;
-    if (clearPointer) state.widgetRefinePointer = null;
     requestInteractionLayerRender();
   }
   function dismissWidgetRefineCandidate() {
-    state.widgetRefineDismissedDirty = state.dirty;
     clearWidgetRefineCandidate();
   }
-  function updateWidgetRefinePointer(event) {
-    if (state.mode === "hand" || event.pointerType === "touch" || state.drawing) return;
-    const point = clientPoint(event);
-    if (!valid(point)) return;
-    state.widgetRefinePointer = { point, pointerId:event.pointerId, at:Date.now() };
-    requestInteractionLayerRender();
-  }
-  function leaveWidgetRefinePointer() {
-    state.widgetRefinePointer = null;
-    state.widgetRefineGraceUntil = Date.now() + 420;
-    setTimeout(() => requestInteractionLayerRender(), 440);
-  }
-  function currentWidgetRefineCandidate() {
-    if (state.mode === "hand" || state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement) {
-      state.widgetRefineCandidate = null;
-      return null;
-    }
-    const pointer = state.widgetRefinePointer?.point || null,
-      previous = state.widgetRefineCandidate,
-      candidates = [];
+  function latchWidgetRefineCandidate(drawing) {
+    if (state.widgetRefineCandidate || state.mode === "hand" || state.pending || state.pendingWidget || state.pendingWidgetReplacement) return state.widgetRefineCandidate;
+    const candidates = [];
     for (const widget of visibleWidgets()) {
       if (!widget.shell || widget.renderActive === false || widget.pending) continue;
-      const dirty = widgetDirtyProximity(widget),
-        hoverDistance = pointer ? pointDistanceToWidget(pointer, widget) * state.scale : Infinity,
-        focused = state.widgetRefineFocusId === widget.id,
-        hovered = state.widgetRefineHoverId === widget.id,
-        grace = previous?.widgetId === widget.id && Date.now() < state.widgetRefineGraceUntil;
-      if (!dirty && hoverDistance > 24 && !focused && !hovered && !grace) continue;
+      const dirty = strokeWidgetProximity(widget, drawing);
+      if (!dirty) continue;
       candidates.push({
         widget,
         widgetId:widget.id,
-        instructionMode:dirty ? "nearby-dirty" : "implicit-polish",
-        priority:dirty ? 0 : focused ? 1 : hovered ? 2 : 3,
-        distance:dirty?.distance ?? hoverDistance,
-        hits:dirty?.hits || 0,
+        instructionMode:"nearby-dirty",
+        distance:dirty.distance,
+        hits:dirty.hits,
       });
     }
-    candidates.sort((a, b) => a.priority - b.priority || a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
+    candidates.sort((a, b) => a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
     state.widgetRefineCandidate = candidates[0] || null;
+    if (state.widgetRefineCandidate) requestInteractionLayerRender();
     return state.widgetRefineCandidate;
+  }
+  function currentWidgetRefineCandidate() {
+    const candidate = state.widgetRefineCandidate;
+    if (!candidate || state.mode === "hand") return null;
+    if (!state.widgets.includes(candidate.widget) || candidate.widget.hiddenForReplacement || candidate.widget.pending || candidate.widget.renderActive === false) {
+      state.widgetRefineCandidate = null;
+      return null;
+    }
+    return candidate;
+  }
+  async function copyWidgetSource(widget) {
+    if (!widget || typeof widget.copyText !== "string" || !widget.copyText) return false;
+    const copied = await writeClipboardText(widget.copyText);
+    setStatusKey(copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
+    return copied;
   }
   function widgetEditContext(widget, instructionMode) {
     const professional = widget.pluginId === "flowchart";
@@ -4213,7 +4293,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      ...(professional ? { source:widget.copyText } : { html:widget.html }),
+      html:widget.html,
+      ...(professional ? { source:widget.copyText } : {}),
       ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
     };
   }
@@ -4238,7 +4319,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   const OBJECT_CHROME_ICONS = Object.freeze({
-    move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
+    move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9V3M9 6l3-3 3 3M12 15v6M9 18l3 3 3-3M9 12H3M6 9l-3 3 3 3M15 12h6M18 9l3 3-3 3"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
@@ -4252,47 +4333,106 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       height:box.h * state.scale,
     };
   }
-  function objectChromePosition(box, kind, ignoreKey = "") {
-    const width = kind === "move" ? 62 : kind === "refine" ? 112 : 36,
-      height = kind === "refine" ? 38 : 34,
+  function widgetToolLabelWidth(label, minimum = 108) {
+    return Math.max(minimum, Math.min(220, 44 + String(label || "").length * 7.2));
+  }
+  function addWidgetToolSpecs(specs, widget, options = {}) {
+    if (!widget) return;
+    const box = widgetBox(widget),
+      items = [];
+    if (options.copy && widget.copyText) items.push({
+      key:`widget:${widget.id}:tool-copy`,
+      kind:"copy",
+      label:widget.copyLabel || (widget.sourceFormat ? `Copy ${widget.sourceFormat}` : t("copyText")),
+      baseWidth:widgetToolLabelWidth(widget.copyLabel || `Copy ${widget.sourceFormat || "source"}`, 118),
+      activate:() => void copyWidgetSource(widget),
+    });
+    if (options.refine) items.push({
+      key:`widget:${widget.id}:tool-refine`,
+      kind:"refine",
+      label:t("widgetRefine"),
+      baseWidth:112,
+      activate:() => void requestWidgetRefinement(widget, options.refine.instructionMode),
+    });
+    if (!items.length) return;
+    const gap = 4,
+      groupBaseWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
+      controlScale = 1,
+      widgetToolGroup = `widget-${widget.id}`;
+    let groupOffset = 0;
+    for (const item of items) {
+      specs.push({
+        ...item,
+        box,
+        widget,
+        widgetTool:true,
+        widgetToolGroup,
+        groupBaseWidth,
+        groupOffset,
+        controlScale,
+        baseHeight:34,
+        priority:6,
+      });
+      groupOffset += item.baseWidth + gap;
+    }
+  }
+  function objectChromePosition(box, kind, ignoreKey = "", spec = null) {
+    const baseWidth = spec?.baseWidth || (kind === "move" ? 34 : kind === "refine" ? 112 : 36),
+      baseHeight = spec?.baseHeight || 34,
+      controlScale = spec?.controlScale || 1,
+      width = baseWidth * controlScale,
+      height = baseHeight * controlScale,
       viewportWidth = view.clientWidth,
       viewportHeight = view.clientHeight,
       screenBox = screenObjectBox(box),
       right = screenBox.left + screenBox.width,
-      bottom = screenBox.top + screenBox.height;
+      bottom = screenBox.top + screenBox.height,
+      chromeGap = 7;
     if (viewportWidth <= 0 || viewportHeight <= 0 || right < -8 || bottom < -8 || screenBox.left > viewportWidth + 8 || screenBox.top > viewportHeight + 8) return null;
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
-      above = screenBox.top - height - 7,
-      y = clampY(above >= 6 ? above : screenBox.top + 7);
-    if (kind === "refine") {
-      const gap = 8,
+      above = screenBox.top - height - chromeGap,
+      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
+    if (spec?.widgetTool) {
+      const groupWidth = spec.groupBaseWidth * controlScale,
+        groupHeight = height,
+        gap = chromeGap * controlScale,
+        clampGroupX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - groupWidth - 6), value)),
+        clampGroupY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - groupHeight - 6), value)),
         positions = [
-          { x:screenBox.left + screenBox.width / 2 - width / 2, y:screenBox.top - height - gap },
+          { x:right - groupWidth, y:screenBox.top - groupHeight - gap },
           { x:right + gap, y:screenBox.top },
-          { x:right + gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
-          { x:right + gap, y:bottom - height },
-          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + gap },
-          { x:screenBox.left - width - gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
-        ].map(position => ({ x:clampX(position.x), y:clampY(position.y) })),
+          { x:right + gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
+          { x:right - groupWidth, y:bottom + gap },
+          { x:screenBox.left, y:bottom + gap },
+          { x:screenBox.left - groupWidth - gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
+        ].map(position => ({ x:clampGroupX(position.x), y:clampGroupY(position.y) })),
         viewRect = view.getBoundingClientRect(),
         obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
-          .filter(element => element.dataset.objectChromeKey !== ignoreKey)
+          .filter(element => element.dataset.objectChromeKey !== ignoreKey && element.dataset.widgetToolGroup !== spec.widgetToolGroup)
           .map(element => {
           const rect = element.getBoundingClientRect();
           return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
         }),
-        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + width + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + height + 5 > obstacle.y);
-      return positions.find(position => !overlapsObstacle(position)) || positions[0];
+        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + groupWidth + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + groupHeight + 5 > obstacle.y),
+        groupPosition = positions.find(position => !overlapsObstacle(position)) || positions[0];
+      return {
+        x:groupPosition.x + spec.groupOffset * controlScale,
+        y:groupPosition.y,
+        scale:controlScale,
+        baseWidth,
+        baseHeight,
+      };
     }
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
     else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
     else if (kind === "accept") x = clampX(right + 7);
     else x = clampX(screenBox.left + screenBox.width / 2 + 38);
-    return { x, y };
+    return { x, y, scale:1, baseWidth, baseHeight };
   }
-  function objectChromeLabel(kind) {
+  function objectChromeLabel(kind, spec = null) {
+    if (spec?.label) return spec.label;
     if (kind === "accept") return t("widgetAccept");
     if (kind === "cancel") return t("cancel");
     if (kind === "copy") return t("copyText");
@@ -4336,7 +4476,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = kind === "refine" ? `${OBJECT_CHROME_ICONS[kind]}<span>${t("widgetRefine")}</span>` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span></span>` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -4349,25 +4489,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       event.stopPropagation();
       if (kind !== "move") button.penechoSpec?.activate?.();
     });
-    if (kind === "refine") {
-      button.addEventListener("pointerenter", () => {
-        state.widgetRefineHoverId = button.penechoSpec?.widget?.id || null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-      });
-      button.addEventListener("pointerleave", () => {
-        state.widgetRefineHoverId = null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-        setTimeout(() => requestInteractionLayerRender(), 440);
-      });
-      button.addEventListener("focus", () => {
-        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
-      });
-      button.addEventListener("blur", () => {
-        state.widgetRefineFocusId = null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-        setTimeout(() => requestInteractionLayerRender(), 440);
-      });
-    }
     objectChromeLayer.append(button);
     objectChromeButtons.set(key, button);
     return button;
@@ -4410,15 +4531,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function objectChromeSpecs() {
     if (state.mode !== "hand") {
-      const candidate = currentWidgetRefineCandidate();
-      return candidate ? [{
-        key:`widget:${candidate.widget.id}:refine`,
-        kind:"refine",
-        box:widgetBox(candidate.widget),
-        widget:candidate.widget,
-        priority:6,
-        activate:() => void requestWidgetRefinement(candidate.widget, candidate.instructionMode),
-      }] : [];
+      const specs = [],
+        candidate = currentWidgetRefineCandidate();
+      if (candidate) addWidgetToolSpecs(specs, candidate.widget, { refine:candidate });
+      return specs;
     }
     const specs = [];
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
@@ -4438,6 +4554,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         const box = widgetBox(widget);
         specs.push({ key:`widget:${widget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(widget), priority:3 });
         specs.push({ key:`widget:${widget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
+        addWidgetToolSpecs(specs, widget, { copy:true });
       }
     }
     pendingChromeSpecs(specs, state.pending);
@@ -4447,6 +4564,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
       specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
       specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:acceptPendingWidget, priority:5 });
+      addWidgetToolSpecs(specs, widget, { copy:true });
     }
     return specs;
   }
@@ -4455,17 +4573,24 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const active = new Set();
     for (const spec of objectChromeSpecs()) {
       const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
-        position = objectChromePosition(spec.box, spec.kind, spec.key);
+        position = objectChromePosition(spec.box, spec.kind, spec.key, spec);
       if (!position) continue;
       active.add(spec.key);
-      const label = objectChromeLabel(spec.kind),
+      const label = objectChromeLabel(spec.kind, spec),
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
+      button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
+      button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupBaseWidth === spec.baseWidth));
+      if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
+      else delete button.dataset.widgetToolGroup;
       button.setAttribute("aria-label", label);
       button.title = spec.kind === "refine" ? t("widgetRefineHint") : label;
-      if (spec.kind === "refine") button.querySelector("span").textContent = label;
+      if (["copy", "refine"].includes(spec.kind)) button.querySelector("span").textContent = label;
       declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
       declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
+      declaration?.setProperty("--object-control-scale", String(position.scale || 1));
+      declaration?.setProperty("--object-control-width", `${position.baseWidth}px`);
+      declaration?.setProperty("--object-control-height", `${position.baseHeight}px`);
       declaration?.setProperty("z-index", String(spec.priority || 1));
     }
     for (const [key, button] of objectChromeButtons) {
@@ -4845,68 +4970,90 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
 
   async function confirmTextEditor(editor) {
-    if (!editor || editor.committing) return;
+    if (!editor) return;
+    if (editor.commitPromise) return editor.commitPromise;
     const text = editor.textarea.value;
     if (!text.trim()) {
       setStatusKey("textEmpty");
       return;
     }
-    editor.committing = true;
-    editor.cancelled = false;
-    cancelTextEditorPreview(editor);
-    blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    setCanvasMode("pen");
-    supersedeActiveAI("text-input-confirmed");
-    clearTimeout(state.timer);
-    state.timer = 0;
-    editor.element.querySelectorAll("button").forEach((button) => (button.disabled = true));
-    const contentOffset = textEditorContentOffset(editor),
-      editorScale = Math.max(0.03, state.scale);
-    editor.x += contentOffset.x / editorScale;
-    editor.y += contentOffset.y / editorScale;
-    editor.mixedMode = true;
-    const fontSize = editor.fontCss / Math.max(0.03, state.scale),
-      maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
-      x = editor.x,
-      y = editor.y;
-    let image,
-      mixedFallback = false;
+    const commitPromise = (async () => {
+      editor.committing = true;
+      editor.cancelled = false;
+      cancelTextEditorPreview(editor);
+      blockCanvasInput(TEXT_INPUT_GUARD_MS);
+      if (!editor.returnMode && state.mode === "text") setCanvasMode("pen");
+      supersedeActiveAI("text-input-confirmed");
+      clearTimeout(state.timer);
+      state.timer = 0;
+      editor.element.querySelectorAll("button").forEach((button) => (button.disabled = true));
+      const contentOffset = textEditorContentOffset(editor),
+        editorScale = Math.max(0.03, state.scale);
+      editor.x += contentOffset.x / editorScale;
+      editor.y += contentOffset.y / editorScale;
+      editor.mixedMode = true;
+      const fontSize = editor.fontCss / Math.max(0.03, state.scale),
+        maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
+        x = editor.x,
+        y = editor.y;
+      let image,
+        mixedFallback = false;
+      try {
+        image = editor.mixedMode
+          ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
+          : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
+      } catch {
+        image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
+        mixedFallback = editor.mixedMode;
+      }
+      if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
+      const width = image.logicalWidth || image.width,
+        height = image.logicalHeight || image.height,
+        box = { x, y, w: width, h: height };
+      state.userRevision++;
+      blitSized(image, x, y, width, height);
+      retainSharpOverlay(image, box);
+      mergeDirtyBox(box);
+      state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
+      state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
+      if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
+      state.autoEligible = true;
+      removeTextEditor(editor);
+      blockCanvasInput(TEXT_INPUT_GUARD_MS);
+      restoreTextEditorMode(editor);
+      save();
+      render();
+      setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
+      if (state.auto) schedule(Math.max(1000, state.autoDelayMs));
+    })();
+    editor.commitPromise = commitPromise;
     try {
-      image = editor.mixedMode
-        ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
-        : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-    } catch {
-      image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-      mixedFallback = editor.mixedMode;
+      return await commitPromise;
+    } finally {
+      if (editor.commitPromise === commitPromise) editor.commitPromise = null;
     }
-    if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
-    const width = image.logicalWidth || image.width,
-      height = image.logicalHeight || image.height,
-      box = { x, y, w: width, h: height };
-    state.userRevision++;
-    blitSized(image, x, y, width, height);
-    retainSharpOverlay(image, box);
-    mergeDirtyBox(box);
-    state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
-    state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
-    if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
-    state.autoEligible = true;
-    removeTextEditor(editor);
-    blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    save();
-    render();
-    setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
-    if (state.auto) schedule(Math.max(1000, state.autoDelayMs));
+  }
+  function restoreTextEditorMode(editor) {
+    const returnMode = editor?.returnMode;
+    if (returnMode && state.mode === "hand") {
+      setCanvasMode(returnMode, {
+        preserveSelection:true,
+        skipDraftFinalize:true,
+        preserveWidgetRefinement:true,
+      });
+    } else if (!returnMode && state.mode === "text") setCanvasMode("pen");
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    setCanvasMode("pen");
+    if (editor.returnMode) restoreTextEditorMode(editor);
+    else setCanvasMode("pen");
     setStatusKey("ready");
     if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
-  function createTextEditor(point) {
+  function createTextEditor(point, options = null) {
+    options ||= {};
     supersedeActiveAI("text-input-started");
     if (!state.timer && state.auto && state.dirty && state.autoEligible) schedule();
     const viewport = textEditorViewportSize(),
@@ -4928,6 +5075,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         committing: false,
         cancelled: false,
         gesture: null,
+        returnMode:typeof options.returnMode === "string" ? options.returnMode : "",
       },
       root = document.createElement("section"),
       header = document.createElement("header"),
@@ -4978,6 +5126,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     textarea.dataset.i18nAria = "text";
     textarea.placeholder = t("textPlaceholder");
     textarea.setAttribute("aria-label", t("text"));
+    textarea.value = typeof options.text === "string" ? options.text.slice(0, TEXT_INPUT_MAX_LENGTH) : "";
     preview.className = "text-editor-preview";
     preview.hidden = true;
     preview.tabIndex = 0;
@@ -5471,12 +5620,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       image.src = url;
     });
   }
+  async function finalizeCanvasForSnapshot() {
+    if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+    if (state.pending) acceptPending({ restoreMode:false });
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.imageEdit) acceptImageEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    for (const editor of [...state.textEditors.values()]) await confirmTextEditor(editor);
+    if (state.selection) commitSelection();
+    finishAIDraftHandMode();
+  }
   async function saveSnapshot({ overwriteId = null, name = null } = {}) {
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
     }
-    if (state.selection) commitSelection();
+    await finalizeCanvasForSnapshot();
     if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
@@ -5630,6 +5789,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
     state.viewInitialized = false;
+    state.aiDraftReturnMode = null;
+    state.pendingHistoryRestored = false;
+    setCanvasMode("pen", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
     document.querySelector("#newSnapshotName").value = "";
     if (dialog.open) dialog.close();
     if (document.querySelector("#historyPanel").classList.contains("open")) closeHistoryPanel();
@@ -6501,6 +6667,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    clearWidgetRefineCandidate();
     const automatic = action === "auto",
       isolatedSelection = Boolean(requestOptions.isolatedSelection),
       oneShotInput = Boolean(requestOptions.oneShotInput),
@@ -6512,8 +6679,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiColor = state.aiColor,
       dirtySnapshot = state.dirty ? { ...state.dirty } : null,
       latestBox = dirtySnapshot || state.lastUserBox,
+      attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
-      packed = packedOverride || (captureCurrentViewport ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), null, true) : latestBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), latestBox) : null),
+      packed = packedOverride || (captureCurrentViewport || attentionBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport) : null),
       typedInput = isolatedSelection || (captureCurrentViewport && state.latestTypedInput && (!packed?.sourceRect || !intersection(state.latestTypedInput.box, packed.sourceRect))) ? null : state.latestTypedInput,
       preservedRecognition = isolatedSelection
         ? {
@@ -6582,11 +6750,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         error.status = res.status;
         throw error;
       }
+      // Draft confirmation is a separate interaction after the model request has ended.
+      if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
         animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
         widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
-        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget), packed, requestBox),
+        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
         for (let index = commands.length - 1; index >= 0; index--)
@@ -6781,7 +6951,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       columns,
       rows,
       order: "oldest-to-newest",
-      attention: "use only to refine reading order inside latestInput.imageRect",
+      attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect",
       hotspots: result.slice(-64),
     };
   }
@@ -6809,7 +6979,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       },
       out = offscreen(imageSize.w, imageSize.h),
       q = out.getContext("2d");
-    const latestVisible = captureCurrentViewport ? { ...sourceRect } : intersection(latestBox, sourceRect),
+    const latestVisible = latestBox ? intersection(latestBox, sourceRect) : captureCurrentViewport ? { ...sourceRect } : null,
       captureTime = performance.now();
     if (!latestVisible) return null;
     q.fillStyle = "#fff";
@@ -6901,7 +7071,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       imageScale,
       changedBox: { ...sourceRect },
       focusInset: null,
-      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "use only to refine reading order inside latestInput.imageRect", hotspots: [] },
+      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect", hotspots: [] },
       selectionContext: context,
     };
   }
@@ -7006,7 +7176,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (next.tool === "write_text") next.maxWidth = Math.max(next.fontSize, Math.min(next.maxWidth, SIZE - next.x));
     return [next];
   }
-  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null) {
+  function widgetGeometryForViewport(visibleRect) {
+    const bucket = (value) => Math.ceil(Math.min(SIZE, Math.max(1, Number(value) || 1)) / 1000) * 1000,
+      viewportW = bucket(visibleRect?.w), viewportH = bucket(visibleRect?.h);
+    return {
+      max:{ w:Math.max(300,Math.round(viewportW/2)), h:Math.max(200,Math.round(viewportH/2)) },
+    };
+  }
+  function fitWidgetGeometry(command, visibleRect) {
+    if (!command || ![command.x, command.y, command.w, command.h].every(Number.isFinite)) return null;
+    const target = widgetGeometryForViewport(visibleRect).max;
+    let x = Math.round(command.x), y = Math.round(command.y), w = Math.round(command.w), h = Math.round(command.h);
+    if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || w < 300 || h < 200) return null;
+    if (w > 10000 || h > 10000 || w * h > 40000000) {
+      const scale = Math.min(1, target.w / w, target.h / h, 10000 / w, 10000 / h, Math.sqrt(40000000 / (w * h)));
+      w = Math.floor(w * scale);
+      h = Math.floor(h * scale);
+      x = Math.min(x, SIZE - w);
+      y = Math.min(y, SIZE - h);
+    }
+    w = Math.min(w, SIZE - x);
+    h = Math.min(h, SIZE - y);
+    return w >= 300 && h >= 200 ? { x, y, w, h } : null;
+  }
+  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
       animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
@@ -7041,7 +7234,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           c.x = Math.min(c.x, Math.max(0, SIZE - estimatedWidth));
           c.y = Math.min(c.y, Math.max(0, SIZE - c.fontSize * 1.8));
         }
-        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || plotPixels + c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
+        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || 12000000 < plotPixels + c.w * c.h || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
         if (c.tool === "plot_function") {
           c.expression = normalizePlotExpression(c.expression);
           try {
@@ -7068,15 +7261,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           const allowCopy = c.pluginId !== "image-search",
             diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "",
             sourceFormat = typeof c.sourceFormat === "string" ? c.sourceFormat.trim() : "",
-            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "";
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
+            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "",
+            geometry = fitWidgetGeometry(c, visibleRect);
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
-            x:Math.round(widgetEditTarget ? widgetEditTarget.x : c.x),
-            y:Math.round(widgetEditTarget ? widgetEditTarget.y : c.y),
-            w:Math.round(widgetEditTarget ? widgetEditTarget.w : c.w),
-            h:Math.round(widgetEditTarget ? widgetEditTarget.h : c.h),
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
@@ -8980,6 +9174,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (shouldRequest) {
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
+      latchWidgetRefineCandidate(d);
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
@@ -8990,7 +9185,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
 // Pointer and control bindings, portable snapshots, and application startup.
   function updateCanvasPointerPreview(event) {
-    const next = state.mode === "eraser" && event.pointerType !== "touch" ? clientPoint(event) : null,
+    const drawing = state.drawing,
+      next = state.mode === "eraser"
+        && event.pointerType !== "touch"
+        && drawing?.erase
+        && drawing.id === event.pointerId
+        ? clientPoint(event)
+        : null,
       preview = next && valid(next) ? next : null,
       changed = Boolean(preview) !== Boolean(state.pointerPreview)
         || preview && (!state.pointerPreview || Math.abs(preview.x - state.pointerPreview.x) > 0.01 || Math.abs(preview.y - state.pointerPreview.y) > 0.01);
@@ -9053,7 +9254,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     supersedeActiveAI("user-input-started");
-    clearWidgetRefineCandidate();
     clearTimeout(state.timer);
     state.timer = 0;
     state.latestTypedInput = null;
@@ -9075,6 +9275,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       trail: [p],
       erase: erasing,
     };
+    updateCanvasPointerPreview(e);
     dot(p, erasing, size, !erasing);
     requestRender();
   }
@@ -9094,7 +9295,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
         if (state.selectedWidgetId) acceptWidgetEdit();
         if (state.imageGesture) finishImageGesture({ pointerId:state.imageGesture.id });
-        if (state.selectedImageId) acceptImageEdit();
         if (state.animationGesture) finishAnimationGesture({ pointerId: state.animationGesture.id });
         if (state.selectedAnimationId) acceptAnimationEdit();
         finishDrawing("pen");
@@ -9103,7 +9303,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
     }
     if (isMousePan(e)) {
-      if (state.selectedImageId) acceptImageEdit();
       if (state.selectedWidgetId) acceptWidgetEdit();
       if (state.selectedAnimationId) acceptAnimationEdit();
       state.panGesture = {
@@ -9140,7 +9339,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       beginImageGesture(e, point, selectedImageResult);
       return;
     }
-    if (state.selectedImageId) acceptImageEdit();
     if (valid(point)) {
       const animationResult = animationPointerHit(point, e.pointerType);
       if (animationResult && animationResult.hit !== "move") {
@@ -9157,7 +9355,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     updateCanvasPointerPreview(e);
-    updateWidgetRefinePointer(e);
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -9289,13 +9486,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setNavigating(false);
       return;
     }
-    if (state.drawing?.id === e.pointerId) finishDrawing(e.pointerType);
+    if (state.drawing?.id === e.pointerId) {
+      const wasErasing = state.drawing.erase;
+      finishDrawing(e.pointerType);
+      if (wasErasing && state.pointerPreview) {
+        state.pointerPreview = null;
+        requestInteractionLayerRender();
+      }
+    }
   }
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
-    leaveWidgetRefinePointer();
-    if (state.drawing || !state.pointerPreview) return;
+    if (!state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
   });
@@ -9311,20 +9514,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function enterAIDraftHandMode() {
     if (state.mode !== "hand" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
     state.pendingHistoryRestored = false;
-    if (state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true });
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
   }
   function finishAIDraftHandMode() {
-    if (state.pending || state.pendingWidget) return;
+    if (state.pending || state.pendingWidget || state.imageEdit) return;
     const returnMode = state.aiDraftReturnMode;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
-    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, { preserveSelection:true, skipDraftFinalize:true });
+    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
   }
   function setCanvasMode(mode, options) {
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    if (mode !== state.mode && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
+    if (mode !== state.mode && !options.preserveWidgetRefinement && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
       cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
@@ -9349,7 +9560,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (state.mode === "hand" && mode !== "hand") {
       if (state.widgetEdit) acceptWidgetEdit();
-      if (state.imageEdit) acceptImageEdit();
+      if (state.imageEdit) {
+        state.aiDraftReturnMode = null;
+        state.imageHandReturnMode = null;
+        acceptImageEdit();
+      }
       if (state.animationEdit) acceptAnimationEdit();
     }
     state.mode = mode;
@@ -9405,6 +9620,105 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const file = imagePickerInput.files?.[0];
     if (file) void addImageFile(file);
     else imagePickerInput.value = "";
+  });
+  function clipboardTextEditorPoint() {
+    const rect = view.getBoundingClientRect(),
+      scale = Math.max(0.03, state.scale),
+      width = Math.min(TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, rect.width - 24)),
+      height = Math.min(TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, rect.height - 24)),
+      center = clientPoint({ clientX:rect.left + rect.width / 2, clientY:rect.top + rect.height / 2 });
+    return {
+      x:Math.max(0, Math.min(SIZE - width / scale, center.x - width / scale / 2)),
+      y:Math.max(0, Math.min(SIZE - height / scale, center.y - height / scale / 2)),
+    };
+  }
+  function addClipboardText(text) {
+    const value = typeof text === "string" ? text.slice(0, TEXT_INPUT_MAX_LENGTH) : "";
+    if (!value.trim()) {
+      setStatusKey("clipboardUnsupported");
+      return false;
+    }
+    if (selectionAIBusy()) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.pending) acceptPending();
+    if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED);
+    else if (state.pendingWidget) acceptPendingWidget();
+    if (state.selection) commitSelection();
+    if (state.selection) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    if (state.imageEdit) acceptImageEdit();
+    const returnMode = state.mode;
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+    createTextEditor(clipboardTextEditorPoint(), { text:value, returnMode });
+    setStatusKey("clipboardTextAdded");
+    return true;
+  }
+  async function importClipboardPayload(payload) {
+    if (payload?.image instanceof Blob) {
+      await addImageFile(payload.image);
+      return true;
+    }
+    if (typeof payload?.text === "string" && payload.text.trim()) return addClipboardText(payload.text);
+    setStatusKey("clipboardUnsupported");
+    return false;
+  }
+  function clipboardPayloadFromDataTransfer(data) {
+    if (!data) return null;
+    const files = [...(data.files || [])],
+      itemImage = [...(data.items || [])].find((item) => String(item.type || "").toLowerCase().startsWith("image/")),
+      image = files.find((file) => String(file.type || "").toLowerCase().startsWith("image/")) || itemImage?.getAsFile?.() || null;
+    if (image) return { image };
+    const text = data.getData?.("text/plain") || "";
+    return text ? { text } : null;
+  }
+  async function navigatorClipboardPayload() {
+    if (navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = [...item.types].find((type) => String(type).toLowerCase().startsWith("image/"));
+        if (imageType) return { image:await item.getType(imageType) };
+      }
+      for (const item of items) {
+        if (item.types.includes("text/plain")) return { text:await (await item.getType("text/plain")).text() };
+      }
+      return null;
+    }
+    if (navigator.clipboard?.readText) return { text:await navigator.clipboard.readText() };
+    throw Error("Clipboard reading is unavailable");
+  }
+  async function copyFromSystemClipboard() {
+    if (state.clipboardImporting || state.imageImporting) return false;
+    state.clipboardImporting = true;
+    clipboardCopyButton.disabled = true;
+    setStatusKey("clipboardReading");
+    try {
+      return await importClipboardPayload(await navigatorClipboardPayload());
+    } catch {
+      setStatusKey("clipboardReadFailed");
+      return false;
+    } finally {
+      state.clipboardImporting = false;
+      clipboardCopyButton.disabled = false;
+    }
+  }
+  function editableClipboardTarget(target) {
+    return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"));
+  }
+  clipboardCopyButton.addEventListener("click", () => void copyFromSystemClipboard());
+  document.addEventListener("paste", (event) => {
+    if (editableClipboardTarget(event.target)) return;
+    event.preventDefault();
+    void importClipboardPayload(clipboardPayloadFromDataTransfer(event.clipboardData));
   });
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
@@ -9543,6 +9857,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       event.preventDefault();
       event.stopPropagation();
       void copyPluginMarkdown(copyButton.dataset.pluginCopy, copyButton);
+      return;
+    }
+    const duplicateButton = event.target.closest("button[data-plugin-duplicate]");
+    if (duplicateButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      createPluginCopy(duplicateButton.dataset.pluginDuplicate);
       return;
     }
     const deleteButton = event.target.closest("button[data-plugin-delete]");
@@ -9775,7 +10096,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       closeRadialMenu();
     });
   });
-  tourReplayButton.addEventListener("click", replayFeatureTour);
   tourBackButton.addEventListener("click", previousFeatureTourStep);
   tourNextButton.addEventListener("click", nextFeatureTourStep);
   tourSkipButton.addEventListener("click", skipFeatureTour);
@@ -9794,10 +10114,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
-  summonEffectList.addEventListener("click", (event) => {
-    const option = event.target.closest(".summon-effect-option");
-    if (option) setSummonEffect(option.dataset.effect);
-  });
   settingsTourButton.addEventListener("click", () => {
     closeSettings(false);
     replayFeatureTour();

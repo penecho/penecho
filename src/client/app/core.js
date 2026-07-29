@@ -2,6 +2,7 @@
 (() => {
   const SIZE = 20000,
     TILE = 512,
+    INITIAL_VIEW_ZOOM = 1.5,
     EXPORT_MAX_DIMENSION = 16384,
     EXPORT_MAX_PIXELS = 64 * 1024 * 1024,
     MAX_ATLAS_WIDTH = 2048,
@@ -65,6 +66,7 @@
     selectionDeleteButton = document.querySelector("#selectionDeleteBtn"),
     selectionCancelButton = document.querySelector("#selectionCancelBtn"),
     imagePickerButton = document.querySelector("#imagePickerBtn"),
+    clipboardCopyButton = document.querySelector("#clipboardCopyBtn"),
     imagePickerInput = document.querySelector("#imagePickerInput"),
     imageEditBar = document.querySelector("#imageEditBar"),
     imagePlaceButton = document.querySelector("#imagePlaceBtn"),
@@ -73,7 +75,6 @@
     textEditorLayer = document.querySelector("#textEditorLayer"),
     textInputHint = document.querySelector("#textInputHint"),
     tourMain = document.querySelector("main"),
-    tourReplayButton = document.querySelector("#tourReplayBtn"),
     tourLayer = document.querySelector("#tourLayer"),
     tourHighlight = document.querySelector("#tourHighlight"),
     tourCard = document.querySelector("#tourCard"),
@@ -98,7 +99,6 @@
     settingsCloseButton = document.querySelector("#settingsClose"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
     summonToggle = document.querySelector("#summonToggle"),
-    summonEffectList = document.querySelector("#summonEffectList"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
@@ -210,6 +210,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textMixedModeError: "Mixed formatting was unavailable; plain text was inserted",
       textHelp: "Text formatting help",
       addImage: "Add image or photo",
+      copyFromClipboard: "Copy text or image from clipboard",
+      clipboardReading: "Reading clipboard...",
+      clipboardTextAdded: "Clipboard text added. Move or resize the text box, then confirm.",
+      clipboardUnsupported: "Clipboard format not supported. Copy plain text or an image.",
+      clipboardReadFailed: "Could not read the clipboard. Allow clipboard access or use Ctrl/Cmd+V.",
       imageLoading: "Preparing image...",
       imageAdded: "Image added",
       imageSelected: "Editing image: drag the top handle to move, use edge handles to resize, or choose a side action",
@@ -338,26 +343,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsAISection: "AI",
-      settingsSummonSection: "Summoning effect",
-      settingsSummonEnabled: "Show while AI works",
+      settingsSummonSection: "Thinking indicator",
+      settingsSummonEnabled: "Show while AI thinks",
+      settingsSummonDescription: "Each request draws a different animated mathematical form.",
       settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
       settingsDownloadWin: "Download for Windows",
       settingsGitHub: "GitHub repository",
-      summonFxRift: "Void Rift - the canvas tears open",
-      summonFxVortex: "Star Vortex - a swirling little galaxy",
-      summonFxArray: "Glyph Array - a rotating summoning circle",
-      summonFxScript: "Flowing Glyphs - rising mystic script",
-      summonFxFlame: "Spirit Flame - a cold violet fire",
-      summonPhrase1: "Gathering spiritual ink - the answer is about to burst forth...",
-      summonPhrase2: "Summoning the answer spirit, hold on...",
-      summonPhrase3: "The AI is cultivating in seclusion, emerging soon...",
-      summonPhrase4: "A quick divination says: results any moment now...",
-      summonPhrase5: "The inspiration furnace is lit, brewing words...",
-      summonPhrase6: "Deep in the void, something is responding...",
-      summonPhrase7: "Negotiating friendly terms with the knowledge spirit...",
-      summonPhrase8: "The summoning circle works fine - just waiting on the answer...",
+      summonPhrase1: "I’m following the trail your pen left behind...",
+      summonPhrase2: "Give me a moment—I’m fitting the pieces on the canvas together.",
+      summonPhrase3: "This deserves another look. I’m still thinking with you.",
+      summonPhrase4: "I’m turning the question around to see its other side...",
+      summonPhrase5: "No rush. The answer is beginning to take shape.",
+      summonPhrase6: "I’m looking for the most honest explanation between these lines.",
+      summonPhrase7: "Thinking is not waiting for an answer; it is making the question clearer.",
+      summonPhrase8: "The canvas keeps the marks; understanding gives them direction.",
+      summonPhrase9: "Every line is a question that has not quite finished speaking.",
+      summonPhrase10: "Intelligence may begin with calculation; understanding begins with attention.",
+      summonPhrase11: "Let’s turn this hazy idea into something we can both see.",
+      summonPhrase12: "An answer is not an ending. It is where the next stroke begins.",
       summonTip1: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
       summonTip2: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
       summonTip3: "Tip: circle content with the lasso and AI will work only on that selection.",
@@ -474,6 +479,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       copyPluginMarkdown: "Copy Markdown",
       pluginMarkdownCopied: "Copied",
       pluginMarkdownCopyFailed: "Copy failed",
+      duplicatePlugin: "Create editable copy",
+      pluginCopyName: "Copy of {name}",
+      pluginCopyDraftReady: "Editable copy of {name} is ready. Review and save it as your own plugin.",
       pluginBuiltInRuntime: "Built-in runtime capability",
       pluginDefaultState: "Default: {state}",
       pluginRequestField: "Request field: {field}",
@@ -599,7 +607,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
-    storedSummonEffect = localStorage.getItem("penecho-summon-effect"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
@@ -615,7 +622,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
-    initialSummonEffect = SUMMON?.EFFECTS?.includes(storedSummonEffect) ? storedSummonEffect : "rift",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function authenticatedApiHeaders(headers = {}) {
@@ -657,11 +663,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetHostPan: null,
       widgetHistoryBefore: null,
       widgetRefineCandidate: null,
-      widgetRefinePointer: null,
-      widgetRefineFocusId: null,
-      widgetRefineHoverId: null,
-      widgetRefineGraceUntil: 0,
-      widgetRefineDismissedDirty: null,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -681,7 +682,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       imageEdit: null,
       imageGesture: null,
       imageHistoryBefore: null,
+      imageHandReturnMode: null,
       imageImporting: false,
+      clipboardImporting: false,
       textInputBlockedUntil: 0,
       textTap: null,
       latestTypedInput: null,
@@ -696,7 +699,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
-      summonEffect: initialSummonEffect,
       summonAnchor: null,
       timer: 0,
       autoPopoverTimer: 0,
@@ -794,46 +796,83 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
   const summonFX = SUMMON?.create({
-    layer: summonLayer,
+    fxCanvas: summonLayer,
+    textLayer: document.querySelector("#summonTextLayer"),
     t,
-    toScreen: (wx, wy) => ({ x: wx * state.scale + state.panX, y: wy * state.scale + state.panY }),
+    getTransform: () => ({ scale: state.scale, panX: state.panX, panY: state.panY, width: view.clientWidth, height: view.clientHeight, dpr: devicePixelRatio || 1 }),
+    getContentRects: summonBlockers,
+    getHotspot: summonHotspot,
+    getAiColor: () => state.aiColor,
   });
-  summonFX?.setEffect(state.summonEffect);
-  function summonInkOverlap(box) {
-    let overlap = 0;
-    for (const [k, c] of tiles) {
-      const [tx, ty] = k.split(",").map(Number),
-        tileBox = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
-      if (!intersection(tileBox, box)) continue;
-      let ink = state.inkBounds.get(k);
-      if (ink === undefined) {
-        ink = c ? inkBox(c, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
-        state.inkBounds.set(k, ink);
+  function summonHotspot() {
+    const points = state.hotspotTrail
+        .filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({ x:point.x, y:point.y })),
+      point = points.at(-1),
+      box = state.summonAnchor;
+    if (!point && !box) return null;
+    return {
+      points,
+      point:point || null,
+      box:box ? { x:box.x, y:box.y, w:box.w, h:box.h } : null,
+    };
+  }
+  function summonBlockers() {
+    const visible = viewportRect(),
+      rects = [];
+    if (visible) {
+      for (const [k, c] of tiles) {
+        const [tx, ty] = k.split(",").map(Number),
+          tileBox = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
+        if (!intersection(tileBox, visible)) continue;
+        let ink = state.inkBounds.get(k);
+        if (ink === undefined) {
+          ink = c ? inkBox(c, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
+          state.inkBounds.set(k, ink);
+        }
+        if (ink) rects.push({ x: tileBox.x + ink.x, y: tileBox.y + ink.y, w: ink.w, h: ink.h });
       }
-      if (!ink) continue;
-      const found = intersection({ x: tileBox.x + ink.x, y: tileBox.y + ink.y, w: ink.w, h: ink.h }, box);
-      if (found) overlap += found.w * found.h;
     }
-    return overlap;
+    for (const widget of state.widgets) rects.push({ x: widget.x, y: widget.y, w: widget.w, h: widget.h });
+    for (const editor of state.textEditors.values()) {
+      const scale = Math.max(0.03, state.scale);
+      rects.push({ x: editor.x, y: editor.y, w: editor.widthCss / scale, h: editor.heightCss / scale });
+    }
+    for (const image of state.images)
+      if (Number.isFinite(image.x) && Number.isFinite(image.y)) rects.push({ x: image.x, y: image.y, w: image.logicalWidth || image.width || 0, h: image.logicalHeight || image.height || 0 });
+    for (const animation of state.animations)
+      if (Number.isFinite(animation.x)) rects.push({ x: animation.x, y: animation.y, w: animation.w, h: animation.h });
+    for (const item of state.pending?.items || [])
+      if (item && Number.isFinite(item.x)) rects.push({ x: item.x, y: item.y, w: item.layoutWidth || item.w || 0, h: item.layoutHeight || item.h || 0 });
+    return rects.filter((r) => r.w > 0 && r.h > 0);
   }
   function summonPlacement() {
     const visible = viewportRect();
     if (!visible) return null;
-    const w = Math.min(280 / state.scale, visible.w * 0.9),
-      h = Math.min(215 / state.scale, visible.h * 0.85),
-      gap = 26 / state.scale,
-      margin = 10 / state.scale,
+    const blockers = summonBlockers(),
+      anchor = state.summonAnchor,
+      w = visible.w * 0.36,
+      h = visible.h * 0.32,
+      margin = Math.min(visible.w, visible.h) * 0.02,
       clampBox = (cx, cy) => ({
         x: Math.min(Math.max(cx - w / 2, visible.x + margin), visible.x + visible.w - margin - w),
         y: Math.min(Math.max(cy - h / 2, visible.y + margin), visible.y + visible.h - margin - h),
         w,
         h,
       }),
-      candidates = [],
-      anchor = state.summonAnchor;
+      overlapArea = (box) => {
+        let area = 0;
+        for (const b of blockers) {
+          const hit = intersection(box, b);
+          if (hit) area += hit.w * hit.h;
+        }
+        return area;
+      },
+      candidates = [];
     if (anchor) {
       const acx = anchor.x + anchor.w / 2,
-        acy = anchor.y + anchor.h / 2;
+        acy = anchor.y + anchor.h / 2,
+        gap = Math.min(visible.w, visible.h) * 0.04;
       candidates.push(
         clampBox(anchor.x + anchor.w + gap + w / 2, acy),
         clampBox(acx, anchor.y + anchor.h + gap + h / 2),
@@ -849,7 +888,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     let best = candidates[0],
       bestScore = Infinity;
     for (const candidate of candidates) {
-      const score = summonInkOverlap(candidate);
+      const score = overlapArea(candidate);
       if (score === 0) {
         best = candidate;
         break;
@@ -1087,7 +1126,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (featureTour.active) return;
       if (options.changelog !== false && maybeShowChangelog()) return;
       if (restore) {
-        const target = restoreFocus?.isConnected && restoreFocus !== document.body ? restoreFocus : tourReplayButton;
+        const target = restoreFocus?.isConnected && restoreFocus !== document.body ? restoreFocus : settingsButton;
         target?.focus({ preventScroll: true });
       }
     });
@@ -1199,7 +1238,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     hidePluginControl();
     closeRadialMenu();
     const active = document.activeElement;
-    changelog.restoreFocus = active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : tourReplayButton;
+    changelog.restoreFocus = active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : settingsButton;
     changelog.active = true;
     tourMain.inert = true;
     document.body.classList.add("changelog-open");
@@ -1248,12 +1287,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
-    summonEffectList.classList.toggle("effects-disabled", !state.summonEnabled);
-    summonEffectList.querySelectorAll(".summon-effect-option").forEach((option) => {
-      const active = option.dataset.effect === state.summonEffect;
-      option.classList.toggle("active", active);
-      option.setAttribute("aria-checked", String(active));
-    });
   }
   function openSettings() {
     if (settings.open || !settingsLayer) return false;
@@ -1284,13 +1317,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.summonEnabled = Boolean(enabled);
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
-    updateSettingsPanel();
-  }
-  function setSummonEffect(id) {
-    if (!SUMMON?.EFFECTS?.includes(id)) return;
-    state.summonEffect = id;
-    localStorage.setItem("penecho-summon-effect", id);
-    summonFX?.setEffect(id);
     updateSettingsPanel();
   }
   function maybeStartOnboarding() {
@@ -1631,6 +1657,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           actions.append(detailButton);
           option.append(detail);
         }
+        if (plugin.documentPath && manifest?.document) {
+          const duplicateButton = document.createElement("button");
+          duplicateButton.className = "plugin-duplicate-button";
+          duplicateButton.type = "button";
+          duplicateButton.dataset.pluginDuplicate = plugin.id;
+          duplicateButton.disabled = state.pluginAuthoringBusy;
+          duplicateButton.setAttribute("aria-label", t("duplicatePlugin"));
+          duplicateButton.setAttribute("title", t("duplicatePlugin"));
+          duplicateButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="11" height="11" rx="1.5"/><path d="M15 14v5.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-9A1.5 1.5 0 0 1 4.5 9H9"/></svg>';
+          actions.append(duplicateButton);
+        }
         if (plugin.documentPath && plugin.builtIn === false) {
           const deleteButton = document.createElement("button");
           deleteButton.className = "plugin-delete-button";
@@ -1679,6 +1716,45 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button._copyResetTimer = setTimeout(() => {
       if (button.isConnected) button.textContent = original;
     }, 1800);
+  }
+  function nextPluginCopyId(pluginId) {
+    const taken = new Set(PLUGIN_DEFINITIONS.map((plugin) => plugin.id));
+    for (const id of pluginManifests.keys()) taken.add(id);
+    for (let index = 1; index < 10000; index++) {
+      const suffix = index === 1 ? "-copy" : `-copy-${index}`,
+        stem = pluginId.slice(0, Math.max(1, 64 - suffix.length)).replace(/-+$/, "") || "plugin",
+        candidate = `${stem}${suffix}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return "";
+  }
+  function replacePluginFrontmatterField(document, field, value) {
+    const line = `${field}: ${String(value).trim().replace(/[\r\n]/g, " ")}`,
+      pattern = new RegExp(`^${field}:[^\\r\\n]*$`, "m");
+    if (pattern.test(document)) return document.replace(pattern, line);
+    return document.replace(/^(name:[^\r\n]*\r?\n)/m, (match) => `${match}${line}\n`);
+  }
+  function createPluginCopy(pluginId) {
+    if (state.pluginAuthoringBusy) return false;
+    const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId),
+      manifest = pluginManifests.get(pluginId);
+    if (!plugin?.documentPath || !manifest?.document) return false;
+    const copyId = nextPluginCopyId(pluginId);
+    if (!copyId) return false;
+    const sourceName = localizedManifestValue(manifest, "name") || manifest.name || pluginId,
+      copyName = t("pluginCopyName").replace("{name}", sourceName),
+      escapedId = pluginId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      pluginIdPattern = new RegExp(`(pluginId\\s*:\\s*["'])${escapedId}(["'])`, "g");
+    let document = manifest.document.replace(/^id:[^\r\n]*$/m, `id: ${copyId}`);
+    document = document.replace(pluginIdPattern, `$1${copyId}$2`);
+    document = replacePluginFrontmatterField(document, state.language === "zh" ? "name-zh" : "name", copyName);
+    pluginTitle.value = copyName;
+    pluginDocumentEditor.value = document;
+    pluginStylesEditor.value = manifest.styles || "";
+    state.pluginAuthoringStatus = { key:"pluginCopyDraftReady", type:"success", values:{ name:sourceName } };
+    setPluginTab("create");
+    requestAnimationFrame(() => pluginTitle.focus({ preventScroll:true }));
+    return true;
   }
   function pluginAuthoringText(status) {
     if (!status) return "";

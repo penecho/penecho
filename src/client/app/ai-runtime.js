@@ -68,6 +68,7 @@
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    clearWidgetRefineCandidate();
     const automatic = action === "auto",
       isolatedSelection = Boolean(requestOptions.isolatedSelection),
       oneShotInput = Boolean(requestOptions.oneShotInput),
@@ -79,8 +80,9 @@
       aiColor = state.aiColor,
       dirtySnapshot = state.dirty ? { ...state.dirty } : null,
       latestBox = dirtySnapshot || state.lastUserBox,
+      attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
-      packed = packedOverride || (captureCurrentViewport ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), null, true) : latestBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), latestBox) : null),
+      packed = packedOverride || (captureCurrentViewport || attentionBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport) : null),
       typedInput = isolatedSelection || (captureCurrentViewport && state.latestTypedInput && (!packed?.sourceRect || !intersection(state.latestTypedInput.box, packed.sourceRect))) ? null : state.latestTypedInput,
       preservedRecognition = isolatedSelection
         ? {
@@ -149,11 +151,13 @@
         error.status = res.status;
         throw error;
       }
+      // Draft confirmation is a separate interaction after the model request has ended.
+      if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
         animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
         widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
-        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget), packed, requestBox),
+        commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
         for (let index = commands.length - 1; index >= 0; index--)
@@ -348,7 +352,7 @@
       columns,
       rows,
       order: "oldest-to-newest",
-      attention: "use only to refine reading order inside latestInput.imageRect",
+      attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect",
       hotspots: result.slice(-64),
     };
   }
@@ -376,7 +380,7 @@
       },
       out = offscreen(imageSize.w, imageSize.h),
       q = out.getContext("2d");
-    const latestVisible = captureCurrentViewport ? { ...sourceRect } : intersection(latestBox, sourceRect),
+    const latestVisible = latestBox ? intersection(latestBox, sourceRect) : captureCurrentViewport ? { ...sourceRect } : null,
       captureTime = performance.now();
     if (!latestVisible) return null;
     q.fillStyle = "#fff";
@@ -468,7 +472,7 @@
       imageScale,
       changedBox: { ...sourceRect },
       focusInset: null,
-      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "use only to refine reading order inside latestInput.imageRect", hotspots: [] },
+      hotspotGrid: { columns: 8, rows: 8, order: "oldest-to-newest", attention: "newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect", hotspots: [] },
       selectionContext: context,
     };
   }
@@ -573,7 +577,30 @@
     if (next.tool === "write_text") next.maxWidth = Math.max(next.fontSize, Math.min(next.maxWidth, SIZE - next.x));
     return [next];
   }
-  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null) {
+  function widgetGeometryForViewport(visibleRect) {
+    const bucket = (value) => Math.ceil(Math.min(SIZE, Math.max(1, Number(value) || 1)) / 1000) * 1000,
+      viewportW = bucket(visibleRect?.w), viewportH = bucket(visibleRect?.h);
+    return {
+      max:{ w:Math.max(300,Math.round(viewportW/2)), h:Math.max(200,Math.round(viewportH/2)) },
+    };
+  }
+  function fitWidgetGeometry(command, visibleRect) {
+    if (!command || ![command.x, command.y, command.w, command.h].every(Number.isFinite)) return null;
+    const target = widgetGeometryForViewport(visibleRect).max;
+    let x = Math.round(command.x), y = Math.round(command.y), w = Math.round(command.w), h = Math.round(command.h);
+    if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || w < 300 || h < 200) return null;
+    if (w > 10000 || h > 10000 || w * h > 40000000) {
+      const scale = Math.min(1, target.w / w, target.h / h, 10000 / w, 10000 / h, Math.sqrt(40000000 / (w * h)));
+      w = Math.floor(w * scale);
+      h = Math.floor(h * scale);
+      x = Math.min(x, SIZE - w);
+      y = Math.min(y, SIZE - h);
+    }
+    w = Math.min(w, SIZE - x);
+    h = Math.min(h, SIZE - y);
+    return w >= 300 && h >= 200 ? { x, y, w, h } : null;
+  }
+  function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
       animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
@@ -608,7 +635,7 @@
           c.x = Math.min(c.x, Math.max(0, SIZE - estimatedWidth));
           c.y = Math.min(c.y, Math.max(0, SIZE - c.fontSize * 1.8));
         }
-        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || plotPixels + c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
+        if (c.tool === "plot_function" && (!n(c.x) || !n(c.y) || !n(c.w, 240, 6000) || !n(c.h, 180, 6000) || c.w * c.h > 8000000 || Math.max(c.w / c.h, c.h / c.w) > 6 || 12000000 < plotPixels + c.w * c.h || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.expression !== "string" || c.expression.length > 180)) return null;
         if (c.tool === "plot_function") {
           c.expression = normalizePlotExpression(c.expression);
           try {
@@ -635,15 +662,16 @@
           const allowCopy = c.pluginId !== "image-search",
             diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "",
             sourceFormat = typeof c.sourceFormat === "string" ? c.sourceFormat.trim() : "",
-            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "";
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !n(c.x) || !n(c.y) || !n(c.w, 300, 5000) || !n(c.h, 200, 4000) || c.w * c.h > 12000000 || c.x + c.w > SIZE || c.y + c.h > SIZE || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
+            frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "",
+            geometry = fitWidgetGeometry(c, visibleRect);
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
-            x:Math.round(widgetEditTarget ? widgetEditTarget.x : c.x),
-            y:Math.round(widgetEditTarget ? widgetEditTarget.y : c.y),
-            w:Math.round(widgetEditTarget ? widgetEditTarget.w : c.w),
-            h:Math.round(widgetEditTarget ? widgetEditTarget.h : c.h),
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
             title:c.title.trim(),
             refreshSeconds:Math.round(c.refreshSeconds),
             html:c.html,
@@ -2547,6 +2575,7 @@
     if (shouldRequest) {
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
+      latchWidgetRefineCandidate(d);
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;

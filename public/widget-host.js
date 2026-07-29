@@ -1,78 +1,42 @@
 "use strict";
 (() => {
   const MAX_HTML_LENGTH = 40000,
-    MAX_COPY_TEXT_LENGTH = 16000,
     MAX_PLUGIN_STYLES_LENGTH = 32000,
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
     MAX_SNAPSHOT_DATA_URL_LENGTH = 28 * 1024 * 1024,
     SNAPSHOT_REQUEST_TIMEOUT_MS = 15000,
     UPDATE_FORWARD_INTERVAL_MS = 2000,
-    parentOrigin = location.origin,
+    requestedParentOrigin = new URL(location.href).searchParams.get("parent-origin"),
+    parentOrigin = (() => {
+      try {
+        return new URL(requestedParentOrigin).origin === requestedParentOrigin ? requestedParentOrigin : location.origin;
+      } catch {
+        return location.origin;
+      }
+    })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
     connect = new URL(location.href).searchParams.getAll("connect"),
-    inner = document.createElement("iframe"),
-    copySourceButton = document.querySelector("#widgetCopySource");
+    inner = document.createElement("iframe");
   let initialized = false,
     lastUpdate = 0,
     forwardedDragPointer = null,
     queuedDragMove = null,
     dragMoveFrame = 0,
-    widgetState = { selected:false, active:true, scaleX:1, scaleY:1 },
-    copySourceText = "";
+    innerDocumentUrl = null,
+    widgetState = { selected:false, active:true, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
 
-  inner.setAttribute("sandbox", "allow-scripts");
+  inner.setAttribute("sandbox", parentOrigin === location.origin ? "allow-scripts" : "allow-scripts allow-same-origin");
   inner.setAttribute("title", "Dynamic canvas widget");
-  inner.addEventListener("load", forwardWidgetState);
-  document.body.append(inner);
-  copySourceButton.addEventListener("pointerdown", (event) => event.stopPropagation());
-  copySourceButton.addEventListener("click", async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!copySourceText) return;
-    let nativeCopy = null;
-    try {
-      nativeCopy = navigator.clipboard?.writeText ? navigator.clipboard.writeText(copySourceText) : null;
-    } catch {}
-    const field = document.createElement("textarea");
-    field.value = copySourceText;
-    field.setAttribute("readonly", "");
-    field.setAttribute("tabindex", "-1");
-    Object.assign(field.style, { position:"fixed", left:"-10000px", top:"0", opacity:"0" });
-    document.body.append(field);
-    try {
-      field.focus({ preventScroll:true });
-    } catch {
-      field.focus();
+  inner.addEventListener("load", () => {
+    if (innerDocumentUrl) {
+      URL.revokeObjectURL(innerDocumentUrl);
+      innerDocumentUrl = null;
     }
-    field.select();
-    field.setSelectionRange(0, field.value.length);
-    let copied = false;
-    try {
-      copied = Boolean(document.execCommand?.("copy"));
-    } catch {}
-    field.remove();
-    try {
-      copySourceButton.focus({ preventScroll:true });
-    } catch {
-      copySourceButton.focus();
-    }
-    if (nativeCopy) {
-      try {
-        await nativeCopy;
-        copied = true;
-      } catch {}
-    }
-    parent.postMessage({ type:"penecho-widget-copy-source-result", copied }, parentOrigin);
+    forwardWidgetState();
   });
-
-  function updateCopySourceScale() {
-    const scaleX = Math.max(.0001, Number(widgetState.scaleX) || 1),
-      scaleY = Math.max(.0001, Number(widgetState.scaleY) || 1);
-    copySourceButton.style.transform = `scale(${1 / scaleX},${1 / scaleY})`;
-  }
-
+  document.body.append(inner);
   function runtime() {
     const UPDATED = "penecho-widget-updated",
       DRAG_START = "penecho-widget-drag-start",
@@ -245,7 +209,10 @@
       }
       if (presses.has(event.pointerId) || Number(event.button) !== 0 || !["mouse", "pen", "touch"].includes(event.pointerType)) return;
       const hit = controlHit(Number(event.clientX), Number(event.clientY), event.pointerType);
-      if (event.pointerType !== "touch" && !hit) return;
+      if (event.pointerType !== "touch" && !hit) {
+        if (!widgetState.selected) parent.postMessage({ type:"penecho-widget-activate" }, "*");
+        return;
+      }
       const press = {
         pointerId:event.pointerId,
         pointerType:event.pointerType,
@@ -479,7 +446,7 @@
   }
 
   function csp() {
-    return `default-src 'none'; script-src 'unsafe-inline' https: ${rendererUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function safeHttpsResource(element, attribute) {
@@ -596,23 +563,14 @@
       if (message?.type === "penecho-widget-init") {
         if (initialized || typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
-        if (message.copyText !== undefined && (typeof message.copyText !== "string" || !message.copyText.trim() || message.copyText.length > MAX_COPY_TEXT_LENGTH)) return;
-        if (message.copyLabel !== undefined && (typeof message.copyLabel !== "string" || !message.copyLabel.trim() || message.copyLabel.length > 80)) return;
         initialized = true;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
-        copySourceText = typeof message.copyText === "string" ? message.copyText.trim() : "";
-        copySourceButton.hidden = !copySourceText;
-        if (copySourceText) {
-          copySourceButton.textContent = String(message.copyLabel || "Copy source").trim();
-          copySourceButton.setAttribute("aria-label", copySourceButton.textContent);
-          copySourceButton.title = copySourceButton.textContent;
-          updateCopySourceScale();
-        }
-        inner.srcdoc = widgetDocument(message.html, message.pluginStyles || "");
+        if (innerDocumentUrl) URL.revokeObjectURL(innerDocumentUrl);
+        innerDocumentUrl = URL.createObjectURL(new Blob([widgetDocument(message.html, message.pluginStyles || "")], { type:"text/html" }));
+        inner.src = innerDocumentUrl;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
         widgetState = { selected:message.selected, active:message.active, scaleX:message.scaleX, scaleY:message.scaleY };
-        updateCopySourceScale();
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-snapshot-request" && initialized) {
         const requestedWidth = Number(message.width), requestedHeight = Number(message.height);
@@ -642,6 +600,7 @@
         parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height }, parentOrigin);
       }
     } else if (message.type === "penecho-widget-snapshot-error" && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, "Widget content could not be rendered");
+    else if (message.type === "penecho-widget-activate") parent.postMessage({ type:message.type }, parentOrigin);
     else if (validDragMessage(message)) forwardDragMessage(message);
     else if (validTouchMessage(message)) parent.postMessage(message, parentOrigin);
     else if (validNavigationMessage(message)) parent.postMessage(message, parentOrigin);

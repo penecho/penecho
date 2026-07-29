@@ -121,6 +121,11 @@
   color: var(--pd-text);
   background: transparent;
 }
+.pd-svg :where(rect, circle, ellipse, polygon) {
+  fill: var(--pd-surface);
+  stroke: var(--pd-border-strong);
+  stroke-width: var(--pd-line);
+}
 .pd-legend {
   display: flex;
   flex-wrap: wrap;
@@ -289,6 +294,9 @@
   border: var(--pd-line) solid var(--pd-border-strong);
   border-radius: var(--pd-node-radius);
   background: var(--pd-surface);
+  fill: var(--pd-surface);
+  stroke: var(--pd-border-strong);
+  stroke-width: var(--pd-line);
   font-size: 24px;
   font-weight: 720;
 }

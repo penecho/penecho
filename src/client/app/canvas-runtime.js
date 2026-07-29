@@ -111,6 +111,7 @@
     state.selectedImageId = null;
     state.imageEdit = null;
     state.imageGesture = null;
+    state.imageHandReturnMode = null;
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : []) {
       const record = imageRecord(item);
       if (!record || state.images.some((existing) => existing.id === record.id)) continue;
@@ -145,12 +146,29 @@
   function selectedImage() {
     return state.images.find((item) => item.id === state.selectedImageId) || null;
   }
+  function enterManualImageHandMode() {
+    if (state.mode !== "hand" && state.imageHandReturnMode === null) state.imageHandReturnMode = state.mode;
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
+  function finishManualImageHandMode() {
+    const returnMode = state.imageHandReturnMode;
+    state.imageHandReturnMode = null;
+    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+  }
   function beginImageEdit(item) {
     if (!item || !state.images.includes(item)) return false;
     if (state.imageEdit?.id === item.id) return true;
     if (state.widgetEdit) acceptWidgetEdit();
     if (state.animationEdit) acceptAnimationEdit();
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     recordImagesBefore();
     state.selectedImageId = item.id;
     state.imageEdit = { id:item.id, before:imageLayout(item), changed:false };
@@ -158,7 +176,9 @@
     setStatusKey("imageSelected");
     return true;
   }
-  function acceptImageEdit() {
+  function acceptImageEdit(options) {
+    options ||= {};
+    const restoreMode = options.restoreMode !== false;
     const edit = state.imageEdit;
     state.imageGesture = null;
     state.imageEdit = null;
@@ -170,6 +190,8 @@
     if (edit && state.mode !== "hand") schedule();
     requestRender();
     if (edit) setStatusKey("ready");
+    if (edit && restoreMode) finishManualImageHandMode();
+    else if (edit) state.imageHandReturnMode = null;
     return Boolean(edit);
   }
   function cancelImageEdit() {
@@ -183,6 +205,7 @@
     if (edit && state.mode !== "hand") schedule();
     requestRender();
     if (edit) setStatusKey("ready");
+    if (edit) finishManualImageHandMode();
     return Boolean(edit);
   }
   function imageControlHit(item, point, pointerType = "mouse") {
@@ -269,6 +292,7 @@
   }
   function deleteImage(item) {
     if (!item || !state.images.includes(item)) return false;
+    const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     state.images = state.images.filter((candidate) => candidate !== item);
     if (state.selectedImageId === item.id) {
@@ -278,6 +302,7 @@
     }
     state.userRevision++;
     save();
+    if (edited) finishManualImageHandMode();
     if (state.mode !== "hand") schedule();
     requestRender();
     setStatusKey("imageDeleted");
@@ -285,6 +310,7 @@
   }
   function mergeImage(item) {
     if (!item || !state.images.includes(item)) return false;
+    const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     const box = imageBox(item);
     invalidateSharpOverlays(box);
@@ -313,6 +339,7 @@
     state.userRevision++;
     mergeDirty(box.x, box.y, 0);
     mergeDirty(box.x + box.w, box.y + box.h, 0);
+    if (edited) finishManualImageHandMode();
     if (state.mode !== "hand") {
       state.autoEligible = true;
       schedule();
@@ -404,6 +431,7 @@
       state.userRevision++;
       save();
       requestRender();
+      enterManualImageHandMode();
       beginImageEdit(item);
       setStatusKey("imageAdded");
     } catch (error) {
@@ -483,6 +511,7 @@
       snapshotImage: null,
       shell: null,
       frame: null,
+      hostOrigin: null,
       pending: false,
     };
   }
@@ -508,6 +537,13 @@
   }
   function widgetHostUrl(manifest) {
     const url = new URL("widget-host.html", location.href);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+      url.searchParams.set("parent-origin", location.origin);
+    } else if (url.hostname === "127.0.0.1") {
+      url.hostname = "localhost";
+      url.searchParams.set("parent-origin", location.origin);
+    }
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -526,33 +562,11 @@
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
-    shell.addEventListener("pointerenter", () => {
-      if (state.mode === "hand" || widget.pending) return;
-      state.widgetRefineHoverId = widget.id;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      requestInteractionLayerRender();
-    });
-    shell.addEventListener("pointerleave", (event) => {
-      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
-      if (state.widgetRefineHoverId === widget.id) state.widgetRefineHoverId = null;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      setTimeout(() => requestInteractionLayerRender(), 440);
-    });
-    shell.addEventListener("focusin", () => {
-      if (state.mode === "hand" || widget.pending) return;
-      state.widgetRefineFocusId = widget.id;
-      requestInteractionLayerRender();
-    });
-    shell.addEventListener("focusout", (event) => {
-      if (event.relatedTarget && shell.contains(event.relatedTarget)) return;
-      if (state.widgetRefineFocusId === widget.id) state.widgetRefineFocusId = null;
-      state.widgetRefineGraceUntil = Date.now() + 420;
-      setTimeout(() => requestInteractionLayerRender(), 440);
-    });
     shell.append(frame);
     widgetLayer.append(shell);
     widget.shell = shell;
     widget.frame = frame;
+    widget.hostOrigin = new URL(frame.src).origin;
     widget.initialized = false;
     widget.hostReady = false;
     widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
@@ -571,6 +585,7 @@
     widget.shell?.remove();
     widget.shell = null;
     widget.frame = null;
+    widget.hostOrigin = null;
     widget.initialized = false;
     widget.hostReady = false;
     widget.resolveHostReady = null;
@@ -651,8 +666,7 @@
       title:widget.title,
       html:widget.html,
       pluginStyles:manifest.styles || "",
-      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
-    }, location.origin);
+    }, widget.hostOrigin || location.origin);
   }
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
@@ -661,7 +675,7 @@
       key = `${selected ? 1 : 0}:${active ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function syncWidgetHostStates() {
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) sendWidgetHostState(widget);
@@ -705,7 +719,7 @@
             reject(Error(t("widgetExportFailed")));
           }, WIDGET_SNAPSHOT_TIMEOUT_MS);
           widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, location.origin);
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
@@ -722,9 +736,8 @@
     }
   }
   async function handleWidgetMessage(event) {
-    if (event.origin !== location.origin || !event.data || typeof event.data !== "object") return;
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])].find((item) => item.frame?.contentWindow === event.source);
-    if (!widget) return;
+    if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
     const message = event.data;
     if (message.type === "penecho-widget-host-ready") {
       widget.hostReady = true;
@@ -732,6 +745,10 @@
       widget.resolveHostReady = null;
       sendWidgetInit(widget);
       sendWidgetHostState(widget, undefined, undefined, true);
+      return;
+    }
+    if (message.type === "penecho-widget-activate") {
+      if (state.mode === "hand" && !widget.pending && state.widgets.includes(widget)) beginWidgetEdit(widget);
       return;
     }
     if (validWidgetHostDrag(message)) {
@@ -758,11 +775,6 @@
       widget.resolveReady = null;
       return;
     }
-    if (message.type === "penecho-widget-copy-source-result") {
-      if (!widget.copyText || typeof message.copied !== "boolean") return;
-      setStatusKey(message.copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
-      return;
-    }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
     const pending = widgetSnapshotRequests.get(message.requestId);
     if (!pending || pending.widget !== widget) return;
@@ -784,7 +796,7 @@
   }
   function beginWidgetEdit(widget) {
     if (!widget || widget.pending) return false;
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     if (state.widgetEdit?.id === widget.id) return true;
     if (state.widgetEdit) acceptWidgetEdit();
     recordWidgetsBefore();
@@ -1047,7 +1059,7 @@
     if (message.type === "penecho-widget-pan-start") {
       const point = widgetHostViewportPoint(widget, message);
       if (!point || state.widgetHostPan) return false;
-      if (state.selectedImageId) acceptImageEdit();
+      if (state.selectedImageId) acceptImageEdit({ restoreMode:false });
       if (state.selectedWidgetId) acceptWidgetEdit();
       if (state.selectedAnimationId) acceptAnimationEdit();
       state.widgetHostPan = {
@@ -1363,7 +1375,7 @@
   }
   function beginAnimationEdit(animation) {
     if (!animation) return false;
-    if (state.imageEdit) acceptImageEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     if (state.animationEdit?.id === animation.id) return true;
     if (state.animationEdit) acceptAnimationEdit();
     const now = performance.now();
@@ -1731,7 +1743,7 @@
     interactionLayer.height = screen.height;
     state.animationFullRedraw = true;
     if (!state.viewInitialized && r.width > 0 && r.height > 0) {
-      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000));
+      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000 * INITIAL_VIEW_ZOOM));
       state.panX = (r.width - SIZE * state.scale) / 2;
       state.panY = (r.height - SIZE * state.scale) / 2;
       state.viewInitialized = true;
@@ -1924,69 +1936,61 @@
       dy = point.y < box.y ? box.y - point.y : point.y > box.y + box.h ? point.y - box.y - box.h : 0;
     return Math.hypot(dx, dy);
   }
-  function widgetDirtyProximity(widget) {
-    if (!state.dirty || state.dirty === state.widgetRefineDismissedDirty || !state.hotspotTrail.length) return null;
+  function strokeWidgetProximity(widget, drawing) {
+    if (!drawing || drawing.erase) return null;
+    const points = [...drawing.trail];
+    if (drawing.last && points.at(-1) !== drawing.last) points.push(drawing.last);
+    if (!points.length) return null;
     let distance = Infinity,
       hits = 0;
-    for (const point of state.hotspotTrail) {
+    for (const point of points) {
       const next = pointDistanceToWidget(point, widget) * state.scale;
       distance = Math.min(distance, next);
       if (next <= 48) hits++;
     }
     return distance <= 48 ? { distance, hits } : null;
   }
-  function clearWidgetRefineCandidate({ clearPointer = true } = {}) {
+  function clearWidgetRefineCandidate() {
     state.widgetRefineCandidate = null;
-    state.widgetRefineFocusId = null;
-    state.widgetRefineHoverId = null;
-    state.widgetRefineGraceUntil = 0;
-    if (clearPointer) state.widgetRefinePointer = null;
     requestInteractionLayerRender();
   }
   function dismissWidgetRefineCandidate() {
-    state.widgetRefineDismissedDirty = state.dirty;
     clearWidgetRefineCandidate();
   }
-  function updateWidgetRefinePointer(event) {
-    if (state.mode === "hand" || event.pointerType === "touch" || state.drawing) return;
-    const point = clientPoint(event);
-    if (!valid(point)) return;
-    state.widgetRefinePointer = { point, pointerId:event.pointerId, at:Date.now() };
-    requestInteractionLayerRender();
-  }
-  function leaveWidgetRefinePointer() {
-    state.widgetRefinePointer = null;
-    state.widgetRefineGraceUntil = Date.now() + 420;
-    setTimeout(() => requestInteractionLayerRender(), 440);
-  }
-  function currentWidgetRefineCandidate() {
-    if (state.mode === "hand" || state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement) {
-      state.widgetRefineCandidate = null;
-      return null;
-    }
-    const pointer = state.widgetRefinePointer?.point || null,
-      previous = state.widgetRefineCandidate,
-      candidates = [];
+  function latchWidgetRefineCandidate(drawing) {
+    if (state.widgetRefineCandidate || state.mode === "hand" || state.pending || state.pendingWidget || state.pendingWidgetReplacement) return state.widgetRefineCandidate;
+    const candidates = [];
     for (const widget of visibleWidgets()) {
       if (!widget.shell || widget.renderActive === false || widget.pending) continue;
-      const dirty = widgetDirtyProximity(widget),
-        hoverDistance = pointer ? pointDistanceToWidget(pointer, widget) * state.scale : Infinity,
-        focused = state.widgetRefineFocusId === widget.id,
-        hovered = state.widgetRefineHoverId === widget.id,
-        grace = previous?.widgetId === widget.id && Date.now() < state.widgetRefineGraceUntil;
-      if (!dirty && hoverDistance > 24 && !focused && !hovered && !grace) continue;
+      const dirty = strokeWidgetProximity(widget, drawing);
+      if (!dirty) continue;
       candidates.push({
         widget,
         widgetId:widget.id,
-        instructionMode:dirty ? "nearby-dirty" : "implicit-polish",
-        priority:dirty ? 0 : focused ? 1 : hovered ? 2 : 3,
-        distance:dirty?.distance ?? hoverDistance,
-        hits:dirty?.hits || 0,
+        instructionMode:"nearby-dirty",
+        distance:dirty.distance,
+        hits:dirty.hits,
       });
     }
-    candidates.sort((a, b) => a.priority - b.priority || a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
+    candidates.sort((a, b) => a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
     state.widgetRefineCandidate = candidates[0] || null;
+    if (state.widgetRefineCandidate) requestInteractionLayerRender();
     return state.widgetRefineCandidate;
+  }
+  function currentWidgetRefineCandidate() {
+    const candidate = state.widgetRefineCandidate;
+    if (!candidate || state.mode === "hand") return null;
+    if (!state.widgets.includes(candidate.widget) || candidate.widget.hiddenForReplacement || candidate.widget.pending || candidate.widget.renderActive === false) {
+      state.widgetRefineCandidate = null;
+      return null;
+    }
+    return candidate;
+  }
+  async function copyWidgetSource(widget) {
+    if (!widget || typeof widget.copyText !== "string" || !widget.copyText) return false;
+    const copied = await writeClipboardText(widget.copyText);
+    setStatusKey(copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
+    return copied;
   }
   function widgetEditContext(widget, instructionMode) {
     const professional = widget.pluginId === "flowchart";
@@ -1999,7 +2003,8 @@
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      ...(professional ? { source:widget.copyText } : { html:widget.html }),
+      html:widget.html,
+      ...(professional ? { source:widget.copyText } : {}),
       ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
     };
   }
@@ -2024,7 +2029,7 @@
     return true;
   }
   const OBJECT_CHROME_ICONS = Object.freeze({
-    move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
+    move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9V3M9 6l3-3 3 3M12 15v6M9 18l3 3 3-3M9 12H3M6 9l-3 3 3 3M15 12h6M18 9l3 3-3 3"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
@@ -2038,47 +2043,106 @@
       height:box.h * state.scale,
     };
   }
-  function objectChromePosition(box, kind, ignoreKey = "") {
-    const width = kind === "move" ? 62 : kind === "refine" ? 112 : 36,
-      height = kind === "refine" ? 38 : 34,
+  function widgetToolLabelWidth(label, minimum = 108) {
+    return Math.max(minimum, Math.min(220, 44 + String(label || "").length * 7.2));
+  }
+  function addWidgetToolSpecs(specs, widget, options = {}) {
+    if (!widget) return;
+    const box = widgetBox(widget),
+      items = [];
+    if (options.copy && widget.copyText) items.push({
+      key:`widget:${widget.id}:tool-copy`,
+      kind:"copy",
+      label:widget.copyLabel || (widget.sourceFormat ? `Copy ${widget.sourceFormat}` : t("copyText")),
+      baseWidth:widgetToolLabelWidth(widget.copyLabel || `Copy ${widget.sourceFormat || "source"}`, 118),
+      activate:() => void copyWidgetSource(widget),
+    });
+    if (options.refine) items.push({
+      key:`widget:${widget.id}:tool-refine`,
+      kind:"refine",
+      label:t("widgetRefine"),
+      baseWidth:112,
+      activate:() => void requestWidgetRefinement(widget, options.refine.instructionMode),
+    });
+    if (!items.length) return;
+    const gap = 4,
+      groupBaseWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
+      controlScale = 1,
+      widgetToolGroup = `widget-${widget.id}`;
+    let groupOffset = 0;
+    for (const item of items) {
+      specs.push({
+        ...item,
+        box,
+        widget,
+        widgetTool:true,
+        widgetToolGroup,
+        groupBaseWidth,
+        groupOffset,
+        controlScale,
+        baseHeight:34,
+        priority:6,
+      });
+      groupOffset += item.baseWidth + gap;
+    }
+  }
+  function objectChromePosition(box, kind, ignoreKey = "", spec = null) {
+    const baseWidth = spec?.baseWidth || (kind === "move" ? 34 : kind === "refine" ? 112 : 36),
+      baseHeight = spec?.baseHeight || 34,
+      controlScale = spec?.controlScale || 1,
+      width = baseWidth * controlScale,
+      height = baseHeight * controlScale,
       viewportWidth = view.clientWidth,
       viewportHeight = view.clientHeight,
       screenBox = screenObjectBox(box),
       right = screenBox.left + screenBox.width,
-      bottom = screenBox.top + screenBox.height;
+      bottom = screenBox.top + screenBox.height,
+      chromeGap = 7;
     if (viewportWidth <= 0 || viewportHeight <= 0 || right < -8 || bottom < -8 || screenBox.left > viewportWidth + 8 || screenBox.top > viewportHeight + 8) return null;
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
-      above = screenBox.top - height - 7,
-      y = clampY(above >= 6 ? above : screenBox.top + 7);
-    if (kind === "refine") {
-      const gap = 8,
+      above = screenBox.top - height - chromeGap,
+      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
+    if (spec?.widgetTool) {
+      const groupWidth = spec.groupBaseWidth * controlScale,
+        groupHeight = height,
+        gap = chromeGap * controlScale,
+        clampGroupX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - groupWidth - 6), value)),
+        clampGroupY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - groupHeight - 6), value)),
         positions = [
-          { x:screenBox.left + screenBox.width / 2 - width / 2, y:screenBox.top - height - gap },
+          { x:right - groupWidth, y:screenBox.top - groupHeight - gap },
           { x:right + gap, y:screenBox.top },
-          { x:right + gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
-          { x:right + gap, y:bottom - height },
-          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + gap },
-          { x:screenBox.left - width - gap, y:screenBox.top + screenBox.height / 2 - height / 2 },
-        ].map(position => ({ x:clampX(position.x), y:clampY(position.y) })),
+          { x:right + gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
+          { x:right - groupWidth, y:bottom + gap },
+          { x:screenBox.left, y:bottom + gap },
+          { x:screenBox.left - groupWidth - gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
+        ].map(position => ({ x:clampGroupX(position.x), y:clampGroupY(position.y) })),
         viewRect = view.getBoundingClientRect(),
         obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
-          .filter(element => element.dataset.objectChromeKey !== ignoreKey)
+          .filter(element => element.dataset.objectChromeKey !== ignoreKey && element.dataset.widgetToolGroup !== spec.widgetToolGroup)
           .map(element => {
           const rect = element.getBoundingClientRect();
           return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
         }),
-        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + width + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + height + 5 > obstacle.y);
-      return positions.find(position => !overlapsObstacle(position)) || positions[0];
+        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + groupWidth + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + groupHeight + 5 > obstacle.y),
+        groupPosition = positions.find(position => !overlapsObstacle(position)) || positions[0];
+      return {
+        x:groupPosition.x + spec.groupOffset * controlScale,
+        y:groupPosition.y,
+        scale:controlScale,
+        baseWidth,
+        baseHeight,
+      };
     }
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
     else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
     else if (kind === "accept") x = clampX(right + 7);
     else x = clampX(screenBox.left + screenBox.width / 2 + 38);
-    return { x, y };
+    return { x, y, scale:1, baseWidth, baseHeight };
   }
-  function objectChromeLabel(kind) {
+  function objectChromeLabel(kind, spec = null) {
+    if (spec?.label) return spec.label;
     if (kind === "accept") return t("widgetAccept");
     if (kind === "cancel") return t("cancel");
     if (kind === "copy") return t("copyText");
@@ -2122,7 +2186,7 @@
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = kind === "refine" ? `${OBJECT_CHROME_ICONS[kind]}<span>${t("widgetRefine")}</span>` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span></span>` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -2135,25 +2199,6 @@
       event.stopPropagation();
       if (kind !== "move") button.penechoSpec?.activate?.();
     });
-    if (kind === "refine") {
-      button.addEventListener("pointerenter", () => {
-        state.widgetRefineHoverId = button.penechoSpec?.widget?.id || null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-      });
-      button.addEventListener("pointerleave", () => {
-        state.widgetRefineHoverId = null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-        setTimeout(() => requestInteractionLayerRender(), 440);
-      });
-      button.addEventListener("focus", () => {
-        state.widgetRefineFocusId = button.penechoSpec?.widget?.id || null;
-      });
-      button.addEventListener("blur", () => {
-        state.widgetRefineFocusId = null;
-        state.widgetRefineGraceUntil = Date.now() + 420;
-        setTimeout(() => requestInteractionLayerRender(), 440);
-      });
-    }
     objectChromeLayer.append(button);
     objectChromeButtons.set(key, button);
     return button;
@@ -2196,15 +2241,10 @@
   }
   function objectChromeSpecs() {
     if (state.mode !== "hand") {
-      const candidate = currentWidgetRefineCandidate();
-      return candidate ? [{
-        key:`widget:${candidate.widget.id}:refine`,
-        kind:"refine",
-        box:widgetBox(candidate.widget),
-        widget:candidate.widget,
-        priority:6,
-        activate:() => void requestWidgetRefinement(candidate.widget, candidate.instructionMode),
-      }] : [];
+      const specs = [],
+        candidate = currentWidgetRefineCandidate();
+      if (candidate) addWidgetToolSpecs(specs, candidate.widget, { refine:candidate });
+      return specs;
     }
     const specs = [];
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
@@ -2224,6 +2264,7 @@
         const box = widgetBox(widget);
         specs.push({ key:`widget:${widget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(widget), priority:3 });
         specs.push({ key:`widget:${widget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
+        addWidgetToolSpecs(specs, widget, { copy:true });
       }
     }
     pendingChromeSpecs(specs, state.pending);
@@ -2233,6 +2274,7 @@
       specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
       specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
       specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:acceptPendingWidget, priority:5 });
+      addWidgetToolSpecs(specs, widget, { copy:true });
     }
     return specs;
   }
@@ -2241,17 +2283,24 @@
     const active = new Set();
     for (const spec of objectChromeSpecs()) {
       const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
-        position = objectChromePosition(spec.box, spec.kind, spec.key);
+        position = objectChromePosition(spec.box, spec.kind, spec.key, spec);
       if (!position) continue;
       active.add(spec.key);
-      const label = objectChromeLabel(spec.kind),
+      const label = objectChromeLabel(spec.kind, spec),
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
+      button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
+      button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupBaseWidth === spec.baseWidth));
+      if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
+      else delete button.dataset.widgetToolGroup;
       button.setAttribute("aria-label", label);
       button.title = spec.kind === "refine" ? t("widgetRefineHint") : label;
-      if (spec.kind === "refine") button.querySelector("span").textContent = label;
+      if (["copy", "refine"].includes(spec.kind)) button.querySelector("span").textContent = label;
       declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
       declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
+      declaration?.setProperty("--object-control-scale", String(position.scale || 1));
+      declaration?.setProperty("--object-control-width", `${position.baseWidth}px`);
+      declaration?.setProperty("--object-control-height", `${position.baseHeight}px`);
       declaration?.setProperty("z-index", String(spec.priority || 1));
     }
     for (const [key, button] of objectChromeButtons) {
@@ -2631,68 +2680,90 @@
   }
 
   async function confirmTextEditor(editor) {
-    if (!editor || editor.committing) return;
+    if (!editor) return;
+    if (editor.commitPromise) return editor.commitPromise;
     const text = editor.textarea.value;
     if (!text.trim()) {
       setStatusKey("textEmpty");
       return;
     }
-    editor.committing = true;
-    editor.cancelled = false;
-    cancelTextEditorPreview(editor);
-    blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    setCanvasMode("pen");
-    supersedeActiveAI("text-input-confirmed");
-    clearTimeout(state.timer);
-    state.timer = 0;
-    editor.element.querySelectorAll("button").forEach((button) => (button.disabled = true));
-    const contentOffset = textEditorContentOffset(editor),
-      editorScale = Math.max(0.03, state.scale);
-    editor.x += contentOffset.x / editorScale;
-    editor.y += contentOffset.y / editorScale;
-    editor.mixedMode = true;
-    const fontSize = editor.fontCss / Math.max(0.03, state.scale),
-      maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
-      x = editor.x,
-      y = editor.y;
-    let image,
-      mixedFallback = false;
+    const commitPromise = (async () => {
+      editor.committing = true;
+      editor.cancelled = false;
+      cancelTextEditorPreview(editor);
+      blockCanvasInput(TEXT_INPUT_GUARD_MS);
+      if (!editor.returnMode && state.mode === "text") setCanvasMode("pen");
+      supersedeActiveAI("text-input-confirmed");
+      clearTimeout(state.timer);
+      state.timer = 0;
+      editor.element.querySelectorAll("button").forEach((button) => (button.disabled = true));
+      const contentOffset = textEditorContentOffset(editor),
+        editorScale = Math.max(0.03, state.scale);
+      editor.x += contentOffset.x / editorScale;
+      editor.y += contentOffset.y / editorScale;
+      editor.mixedMode = true;
+      const fontSize = editor.fontCss / Math.max(0.03, state.scale),
+        maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
+        x = editor.x,
+        y = editor.y;
+      let image,
+        mixedFallback = false;
+      try {
+        image = editor.mixedMode
+          ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
+          : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
+      } catch {
+        image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
+        mixedFallback = editor.mixedMode;
+      }
+      if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
+      const width = image.logicalWidth || image.width,
+        height = image.logicalHeight || image.height,
+        box = { x, y, w: width, h: height };
+      state.userRevision++;
+      blitSized(image, x, y, width, height);
+      retainSharpOverlay(image, box);
+      mergeDirtyBox(box);
+      state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
+      state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
+      if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
+      state.autoEligible = true;
+      removeTextEditor(editor);
+      blockCanvasInput(TEXT_INPUT_GUARD_MS);
+      restoreTextEditorMode(editor);
+      save();
+      render();
+      setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
+      if (state.auto) schedule(Math.max(1000, state.autoDelayMs));
+    })();
+    editor.commitPromise = commitPromise;
     try {
-      image = editor.mixedMode
-        ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
-        : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-    } catch {
-      image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-      mixedFallback = editor.mixedMode;
+      return await commitPromise;
+    } finally {
+      if (editor.commitPromise === commitPromise) editor.commitPromise = null;
     }
-    if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
-    const width = image.logicalWidth || image.width,
-      height = image.logicalHeight || image.height,
-      box = { x, y, w: width, h: height };
-    state.userRevision++;
-    blitSized(image, x, y, width, height);
-    retainSharpOverlay(image, box);
-    mergeDirtyBox(box);
-    state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
-    state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
-    if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
-    state.autoEligible = true;
-    removeTextEditor(editor);
-    blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    save();
-    render();
-    setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
-    if (state.auto) schedule(Math.max(1000, state.autoDelayMs));
+  }
+  function restoreTextEditorMode(editor) {
+    const returnMode = editor?.returnMode;
+    if (returnMode && state.mode === "hand") {
+      setCanvasMode(returnMode, {
+        preserveSelection:true,
+        skipDraftFinalize:true,
+        preserveWidgetRefinement:true,
+      });
+    } else if (!returnMode && state.mode === "text") setCanvasMode("pen");
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
-    setCanvasMode("pen");
+    if (editor.returnMode) restoreTextEditorMode(editor);
+    else setCanvasMode("pen");
     setStatusKey("ready");
     if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
-  function createTextEditor(point) {
+  function createTextEditor(point, options = null) {
+    options ||= {};
     supersedeActiveAI("text-input-started");
     if (!state.timer && state.auto && state.dirty && state.autoEligible) schedule();
     const viewport = textEditorViewportSize(),
@@ -2714,6 +2785,7 @@
         committing: false,
         cancelled: false,
         gesture: null,
+        returnMode:typeof options.returnMode === "string" ? options.returnMode : "",
       },
       root = document.createElement("section"),
       header = document.createElement("header"),
@@ -2764,6 +2836,7 @@
     textarea.dataset.i18nAria = "text";
     textarea.placeholder = t("textPlaceholder");
     textarea.setAttribute("aria-label", t("text"));
+    textarea.value = typeof options.text === "string" ? options.text.slice(0, TEXT_INPUT_MAX_LENGTH) : "";
     preview.className = "text-editor-preview";
     preview.hidden = true;
     preview.tabIndex = 0;

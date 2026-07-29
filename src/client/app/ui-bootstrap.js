@@ -1,6 +1,12 @@
 // Pointer and control bindings, portable snapshots, and application startup.
   function updateCanvasPointerPreview(event) {
-    const next = state.mode === "eraser" && event.pointerType !== "touch" ? clientPoint(event) : null,
+    const drawing = state.drawing,
+      next = state.mode === "eraser"
+        && event.pointerType !== "touch"
+        && drawing?.erase
+        && drawing.id === event.pointerId
+        ? clientPoint(event)
+        : null,
       preview = next && valid(next) ? next : null,
       changed = Boolean(preview) !== Boolean(state.pointerPreview)
         || preview && (!state.pointerPreview || Math.abs(preview.x - state.pointerPreview.x) > 0.01 || Math.abs(preview.y - state.pointerPreview.y) > 0.01);
@@ -63,7 +69,6 @@
       return;
     }
     supersedeActiveAI("user-input-started");
-    clearWidgetRefineCandidate();
     clearTimeout(state.timer);
     state.timer = 0;
     state.latestTypedInput = null;
@@ -85,6 +90,7 @@
       trail: [p],
       erase: erasing,
     };
+    updateCanvasPointerPreview(e);
     dot(p, erasing, size, !erasing);
     requestRender();
   }
@@ -104,7 +110,6 @@
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
         if (state.selectedWidgetId) acceptWidgetEdit();
         if (state.imageGesture) finishImageGesture({ pointerId:state.imageGesture.id });
-        if (state.selectedImageId) acceptImageEdit();
         if (state.animationGesture) finishAnimationGesture({ pointerId: state.animationGesture.id });
         if (state.selectedAnimationId) acceptAnimationEdit();
         finishDrawing("pen");
@@ -113,7 +118,6 @@
       }
     }
     if (isMousePan(e)) {
-      if (state.selectedImageId) acceptImageEdit();
       if (state.selectedWidgetId) acceptWidgetEdit();
       if (state.selectedAnimationId) acceptAnimationEdit();
       state.panGesture = {
@@ -150,7 +154,6 @@
       beginImageGesture(e, point, selectedImageResult);
       return;
     }
-    if (state.selectedImageId) acceptImageEdit();
     if (valid(point)) {
       const animationResult = animationPointerHit(point, e.pointerType);
       if (animationResult && animationResult.hit !== "move") {
@@ -167,7 +170,6 @@
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     updateCanvasPointerPreview(e);
-    updateWidgetRefinePointer(e);
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -299,13 +301,19 @@
       setNavigating(false);
       return;
     }
-    if (state.drawing?.id === e.pointerId) finishDrawing(e.pointerType);
+    if (state.drawing?.id === e.pointerId) {
+      const wasErasing = state.drawing.erase;
+      finishDrawing(e.pointerType);
+      if (wasErasing && state.pointerPreview) {
+        state.pointerPreview = null;
+        requestInteractionLayerRender();
+      }
+    }
   }
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
-    leaveWidgetRefinePointer();
-    if (state.drawing || !state.pointerPreview) return;
+    if (!state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
   });
@@ -321,20 +329,28 @@
   function enterAIDraftHandMode() {
     if (state.mode !== "hand" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
     state.pendingHistoryRestored = false;
-    if (state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true });
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
   }
   function finishAIDraftHandMode() {
-    if (state.pending || state.pendingWidget) return;
+    if (state.pending || state.pendingWidget || state.imageEdit) return;
     const returnMode = state.aiDraftReturnMode;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
-    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, { preserveSelection:true, skipDraftFinalize:true });
+    if (returnMode && state.mode === "hand") setCanvasMode(returnMode, {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
   }
   function setCanvasMode(mode, options) {
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    if (mode !== state.mode && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
+    if (mode !== state.mode && !options.preserveWidgetRefinement && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
       cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
@@ -359,7 +375,11 @@
     }
     if (state.mode === "hand" && mode !== "hand") {
       if (state.widgetEdit) acceptWidgetEdit();
-      if (state.imageEdit) acceptImageEdit();
+      if (state.imageEdit) {
+        state.aiDraftReturnMode = null;
+        state.imageHandReturnMode = null;
+        acceptImageEdit();
+      }
       if (state.animationEdit) acceptAnimationEdit();
     }
     state.mode = mode;
@@ -415,6 +435,105 @@
     const file = imagePickerInput.files?.[0];
     if (file) void addImageFile(file);
     else imagePickerInput.value = "";
+  });
+  function clipboardTextEditorPoint() {
+    const rect = view.getBoundingClientRect(),
+      scale = Math.max(0.03, state.scale),
+      width = Math.min(TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, rect.width - 24)),
+      height = Math.min(TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, rect.height - 24)),
+      center = clientPoint({ clientX:rect.left + rect.width / 2, clientY:rect.top + rect.height / 2 });
+    return {
+      x:Math.max(0, Math.min(SIZE - width / scale, center.x - width / scale / 2)),
+      y:Math.max(0, Math.min(SIZE - height / scale, center.y - height / scale / 2)),
+    };
+  }
+  function addClipboardText(text) {
+    const value = typeof text === "string" ? text.slice(0, TEXT_INPUT_MAX_LENGTH) : "";
+    if (!value.trim()) {
+      setStatusKey("clipboardUnsupported");
+      return false;
+    }
+    if (selectionAIBusy()) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.pending) acceptPending();
+    if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED);
+    else if (state.pendingWidget) acceptPendingWidget();
+    if (state.selection) commitSelection();
+    if (state.selection) {
+      setStatusKey(selectionAIStatusKey());
+      return false;
+    }
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.animationEdit) acceptAnimationEdit();
+    if (state.imageEdit) acceptImageEdit();
+    const returnMode = state.mode;
+    if (state.mode !== "hand") setCanvasMode("hand", {
+      preserveSelection:true,
+      skipDraftFinalize:true,
+      preserveWidgetRefinement:true,
+    });
+    createTextEditor(clipboardTextEditorPoint(), { text:value, returnMode });
+    setStatusKey("clipboardTextAdded");
+    return true;
+  }
+  async function importClipboardPayload(payload) {
+    if (payload?.image instanceof Blob) {
+      await addImageFile(payload.image);
+      return true;
+    }
+    if (typeof payload?.text === "string" && payload.text.trim()) return addClipboardText(payload.text);
+    setStatusKey("clipboardUnsupported");
+    return false;
+  }
+  function clipboardPayloadFromDataTransfer(data) {
+    if (!data) return null;
+    const files = [...(data.files || [])],
+      itemImage = [...(data.items || [])].find((item) => String(item.type || "").toLowerCase().startsWith("image/")),
+      image = files.find((file) => String(file.type || "").toLowerCase().startsWith("image/")) || itemImage?.getAsFile?.() || null;
+    if (image) return { image };
+    const text = data.getData?.("text/plain") || "";
+    return text ? { text } : null;
+  }
+  async function navigatorClipboardPayload() {
+    if (navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = [...item.types].find((type) => String(type).toLowerCase().startsWith("image/"));
+        if (imageType) return { image:await item.getType(imageType) };
+      }
+      for (const item of items) {
+        if (item.types.includes("text/plain")) return { text:await (await item.getType("text/plain")).text() };
+      }
+      return null;
+    }
+    if (navigator.clipboard?.readText) return { text:await navigator.clipboard.readText() };
+    throw Error("Clipboard reading is unavailable");
+  }
+  async function copyFromSystemClipboard() {
+    if (state.clipboardImporting || state.imageImporting) return false;
+    state.clipboardImporting = true;
+    clipboardCopyButton.disabled = true;
+    setStatusKey("clipboardReading");
+    try {
+      return await importClipboardPayload(await navigatorClipboardPayload());
+    } catch {
+      setStatusKey("clipboardReadFailed");
+      return false;
+    } finally {
+      state.clipboardImporting = false;
+      clipboardCopyButton.disabled = false;
+    }
+  }
+  function editableClipboardTarget(target) {
+    return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"));
+  }
+  clipboardCopyButton.addEventListener("click", () => void copyFromSystemClipboard());
+  document.addEventListener("paste", (event) => {
+    if (editableClipboardTarget(event.target)) return;
+    event.preventDefault();
+    void importClipboardPayload(clipboardPayloadFromDataTransfer(event.clipboardData));
   });
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
@@ -553,6 +672,13 @@
       event.preventDefault();
       event.stopPropagation();
       void copyPluginMarkdown(copyButton.dataset.pluginCopy, copyButton);
+      return;
+    }
+    const duplicateButton = event.target.closest("button[data-plugin-duplicate]");
+    if (duplicateButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      createPluginCopy(duplicateButton.dataset.pluginDuplicate);
       return;
     }
     const deleteButton = event.target.closest("button[data-plugin-delete]");
@@ -785,7 +911,6 @@
       closeRadialMenu();
     });
   });
-  tourReplayButton.addEventListener("click", replayFeatureTour);
   tourBackButton.addEventListener("click", previousFeatureTourStep);
   tourNextButton.addEventListener("click", nextFeatureTourStep);
   tourSkipButton.addEventListener("click", skipFeatureTour);
@@ -804,10 +929,6 @@
   settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
-  summonEffectList.addEventListener("click", (event) => {
-    const option = event.target.closest(".summon-effect-option");
-    if (option) setSummonEffect(option.dataset.effect);
-  });
   settingsTourButton.addEventListener("click", () => {
     closeSettings(false);
     replayFeatureTour();

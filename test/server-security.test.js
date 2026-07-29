@@ -677,7 +677,7 @@ test("PIN authentication leaves the API provider request behavior unchanged", { 
 
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : command() }) }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(40001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : index === 7 ? command("flowchart", undefined, { w:7800, h:2100 }) : index === 8 ? command("flowchart", undefined, { w:10000, h:20000 }) : index === 9 ? command("flowchart", undefined, { w:8000, h:6000 }) : command() }) }),
     {child,origin} = await startServer(apiServerEnv(upstream.origin));
   try {
     const descriptor = weatherPluginDescriptor(), enabled = validPayload();
@@ -690,9 +690,17 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     const outbound = JSON.parse(upstream.requests[0]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
     assert.deepEqual(modelInput.enabledPlugins, [descriptor]);
-    assert.match(modelInput.widgetRenderingPolicy, /most important information/);
-    assert.match(modelInput.widgetRenderingPolicy, /180-240px/);
-    assert.match(modelInput.widgetRenderingPolicy, /remove secondary detail instead of shrinking text/);
+    assert.equal(Object.keys(modelInput).at(-1), "widgetGeometry");
+    assert.deepEqual(modelInput.widgetGeometry.viewportBucket, { w:1000, h:1000, rounding:"ceil-to-1000-before-halving" });
+    assert.deepEqual(modelInput.widgetGeometry.max, { w:500, h:500 });
+    assert.match(modelInput.widgetRenderingPolicy, /Layout and typography must be designed together/);
+    assert.match(modelInput.widgetRenderingPolicy, /clamp\(\) with container- or viewport-relative units/);
+    assert.match(modelInput.widgetRenderingPolicy, /prominent without crowding[\s\S]*comfortably readable/);
+    assert.match(modelInput.widgetRenderingPolicy, /Do not fix overflow by making text excessively small[\s\S]*do not use oversized text/);
+    assert.match(modelInput.widgetRenderingPolicy, /reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size/);
+    assert.match(modelInput.widgetRenderingPolicy, /verify the longest labels and every section at the actual widget dimensions/);
+    assert.match(modelInput.widgetRenderingPolicy, /For SVG, size text relative to its viewBox, not browser defaults/);
+    assert.doesNotMatch(modelInput.widgetRenderingPolicy, /180-240px|at least 100px|at least 80px/);
     assert.match(modelInput.widgetRenderingPolicy, /transparent[\s\S]*no outer background, border, corner radius, or box shadow/);
 
     const disabledResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(validPayload()) }),
@@ -722,6 +730,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal("copyLabel" in imageBody.commands[0], false);
 
     const flowchartPayload = validPayload();
+    flowchartPayload.visibleRect = { x:0, y:0, w:10000, h:10000 };
     flowchartPayload.plugins = [builtInPluginDescriptor("flowchart")];
     const flowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
       flowchartBody = await flowchartResponse.json();
@@ -731,6 +740,33 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal(flowchartBody.commands[0].copyText, '<?xml version="1.0"?><definitions />');
     assert.equal(flowchartBody.commands[0].copyLabel, "Copy bpmn-xml");
 
+    const wideFlowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
+      wideFlowchart = await wideFlowchartResponse.json(),
+      wideOutbound = JSON.parse(upstream.requests[7]),
+      wideModelInput = JSON.parse(wideOutbound.messages[1].content.find(part => part.type === "text").text);
+    assert.equal(wideFlowchartResponse.status, 200);
+    assert.deepEqual({ w:wideFlowchart.commands[0].w, h:wideFlowchart.commands[0].h }, { w:7800, h:2100 });
+    assert.deepEqual(wideModelInput.widgetGeometry.max, { w:5000, h:5000 });
+    assert.equal(wideOutbound.messages[0].content, outbound.messages[0].content);
+    assert.match(wideOutbound.messages[0].content, /Follow the request-specific min and max dimensions in modelInput\.widgetGeometry/);
+    assert.match(wideOutbound.messages[0].content, /bounds are not size targets[\s\S]*?do not make a widget large[\s\S]*?do not minimize it/);
+    assert.match(wideOutbound.messages[0].content, /semantic source[\s\S]*?appropriate browser library loaded on demand inside that widget/);
+    assert.match(wideOutbound.messages[0].content, /following any matching plugin renderer contract first/);
+    assert.match(wideOutbound.messages[0].content, /mature, fixed, documented browser entries[\s\S]*?never use latest tags[\s\S]*?guess internal \/lib or \/dist paths[\s\S]*?invent library APIs/);
+    assert.match(wideOutbound.messages[0].content, /never clear a successful render because a non-rendering follow-up fails/);
+
+    const oversizedFlowchartResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(flowchartPayload) }),
+      oversizedFlowchart = await oversizedFlowchartResponse.json();
+    assert.equal(oversizedFlowchartResponse.status, 200);
+    assert.deepEqual({ w:oversizedFlowchart.commands[0].w, h:oversizedFlowchart.commands[0].h }, { w:2500, h:5000 });
+
+    const areaPayload = { ...flowchartPayload, visibleRect:{ x:0, y:0, w:20000, h:20000 } },
+      areaResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(areaPayload) }),
+      areaBody = await areaResponse.json();
+    assert.equal(areaResponse.status, 200);
+    assert.deepEqual({ w:areaBody.commands[0].w, h:areaBody.commands[0].h }, { w:7302, h:5477 });
+    assert.ok(areaBody.commands[0].w * areaBody.commands[0].h <= 40000000);
+
     const malformed = validPayload();
     malformed.plugins = [{ ...descriptor, connect:["https://*.open-meteo.com"] }];
     const rejected = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(malformed) });
@@ -739,7 +775,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     oversized.plugins = [{ ...descriptor, document:"x".repeat(12001) }];
     const oversizedResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(oversized) });
     assert.equal(oversizedResponse.status, 400);
-    assert.equal(upstream.requests.length, 7);
+    assert.equal(upstream.requests.length, 10);
   } finally {
     await stopServer(child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -822,7 +858,7 @@ test("widget host CSP permits on-demand HTTPS resources inside the isolated widg
     query.append("connect", "https://api.open-meteo.com");
     const response = await fetch(`${origin}/widget-host.html?${query}`), policy = response.headers.get("content-security-policy");
     assert.equal(response.status, 200);
-    assert.match(policy, /script-src 'self' 'unsafe-inline' https:/);
+    assert.match(policy, /script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:/);
     assert.match(policy, /style-src 'unsafe-inline' https:/);
     assert.match(policy, /connect-src https:/);
     assert.match(policy, /img-src data: blob: https:/);
@@ -1230,6 +1266,43 @@ test("API mode retries an invalid draw once and returns the corrected command", 
   }
 });
 
+test("manual empty responses preserve full reinspection guidance with a domain-neutral supplement", { timeout: 20000 }, async () => {
+  const empty=JSON.stringify({intent:"none",observedText:"h₁",commands:[]}),
+    corrected=JSON.stringify({intent:"answer",observedText:"hi",commands:[{tool:"write_text",x:0,y:0,text:"Hi!",fontSize:80,maxWidth:400,lineHeight:1.35}]}),
+    upstream=await startApiServer("",{response:({index})=>({body:index===0?empty:corrected})}),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload=validPayload();
+    payload.trigger="manual";
+    payload.userAction="answer";
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
+      body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,2);
+    assert.equal(body.commands[0]?.tool,"write_text");
+    assert.equal(body.commands[0]?.text,"Hi!");
+    assert.equal(upstream.requests.length,2);
+    const firstRequest=JSON.parse(upstream.requests[0]),
+      retryRequest=JSON.parse(upstream.requests[1]),
+      systemText=firstRequest.messages[0].content,
+      retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"",
+      retryInstruction=retryText.split("\n\n").at(-1);
+    assert.doesNotMatch(systemText,/short standalone Latin|dotted lowercase|ambiguous marks alone/);
+    assert.match(retryInstruction,/Perform a second independent inspection/);
+    assert.match(retryInstruction,/Use focusInset as the primary transcription view/);
+    assert.match(retryInstruction,/Inspect any box\/circle-selected content and arrow chain/);
+    assert.match(retryInstruction,/Follow the final arrowhead as the intended destination/);
+    assert.match(retryInstruction,/Every write_text command must include finite global x and y/);
+    assert.match(retryInstruction,/prior transcription may be wrong/);
+    assert.match(retryInstruction,/fulfill modelInput\.userAction with at least one renderable command/);
+    assert.ok(retryInstruction.length<800,`manual empty retry grew to ${retryInstruction.length} characters`);
+    assert.doesNotMatch(retryInstruction,/\b(?:hi|hello|hey|yo)\b|h₁|subscript/i);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
 test("API mode never makes a second retry when the corrected draw is still invalid", { timeout: 20000 }, async () => {
   const invalid=JSON.stringify({intent:"continue",commands:[{tool:"draw",origin:[1000,1000],types:["circle"],items:[[0,0,100,200]]}]}),
     upstream=await startApiServer(invalid),
@@ -1493,7 +1566,7 @@ test("static page keeps strict styles while allowing the pinned MathJax CDN", ()
   assert.match(config, /fontCache:\s*"none"/);
   assert.doesNotMatch(config, /renderActions/);
   assert.match(app, /MathJax\?\.tex2svgPromise/);
-  assert.match(server, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(server, /script-src 'self' 'sha256-kJFQjoSTIuIH88LzbK\+kHly3ksHSd\/lrxjgaUNRGq\/A=' https:\/\/cdn\.jsdelivr\.net/);
   for (const hash of [
     "sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=",
     "sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=",

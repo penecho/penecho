@@ -45,9 +45,6 @@
               <option value="studio" data-i18n="themeStudio" selected>Studio</option>
           </select>
         </label>
-        <button id="tourReplayBtn" class="tour-replay-button" type="button" data-i18n-aria="tourReplay" aria-label="Feature tour" data-i18n-title="tourReplay" title="Feature tour">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z"/></svg>
-        </button>
         <span id="canvasFileActions" class="canvas-file-actions">
           <button id="newCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="newCanvas" aria-label="New canvas" data-i18n-title="newCanvas" title="New canvas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M9 14h6M12 11v6"/></svg>
@@ -63,7 +60,7 @@
           </button>
         </span>
         <button id="settingsBtn" class="icon-button utility-icon" type="button" data-i18n-aria="settingsTitle" aria-label="Settings" data-i18n-title="settingsTitle" title="Settings" aria-expanded="false" aria-controls="settingsPanel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7.7 7.7 0 0 0 7 6l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.5Z"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/></svg>
         </button>
       </header>
 
@@ -120,6 +117,9 @@
             </button>
             <button id="imagePickerBtn" class="icon-button" type="button" data-i18n-aria="addImage" aria-label="Add image or photo" data-i18n-title="addImage" title="Add image or photo">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
+            </button>
+            <button id="clipboardCopyBtn" class="icon-button" type="button" data-i18n-aria="copyFromClipboard" aria-label="Copy from clipboard" data-i18n-title="copyFromClipboard" title="Copy from clipboard">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h6M9 14h6M9 18h4"/></svg>
             </button>
             <input id="imagePickerInput" type="file" accept="image/*" hidden>
           </div>
@@ -246,9 +246,11 @@
         <canvas id="screen"></canvas>
         <canvas id="animationLayer" class="animation-layer" aria-hidden="true"></canvas>
         <div id="widgetLayer" class="widget-layer" hidden aria-live="polite"></div>
+        <canvas id="summonLayer" class="summon-layer" hidden aria-hidden="true"></canvas>
         <canvas id="inkLayer" class="ink-layer" aria-hidden="true"></canvas>
         <canvas id="interactionLayer" class="interaction-layer" aria-hidden="true"></canvas>
         <div id="objectChromeLayer" class="object-chrome-layer"></div>
+        <div id="summonTextLayer" class="summon-text-layer" aria-hidden="true"></div>
         <div id="animationControls" class="animation-controls" hidden role="toolbar" data-i18n-aria="animationControls" aria-label="Animation controls">
           <button id="animationPlayPause" type="button" data-i18n="animationPause">Pause</button>
           <button id="animationRestart" type="button" data-i18n="animationRestart">Restart</button>
@@ -279,7 +281,6 @@
           </div>
         </div>
         <div id="textEditorLayer" class="text-editor-layer" aria-live="polite"></div>
-        <div id="summonLayer" class="summon-layer" hidden aria-hidden="true"></div>
         <div id="textInputHint" class="text-input-hint" hidden><kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd> <span data-i18n="textConfirmHint">to confirm</span></div>
         <div id="aiEmbodiment" class="ai-embodiment" data-theme="studio" role="group" data-i18n-aria="aiGuide" aria-label="AI knowledge guide" aria-busy="false">
           <div class="orb-aura" aria-hidden="true"></div>
@@ -426,18 +427,12 @@
           </label>
         </section>
         <section class="settings-group" aria-labelledby="settingsSummonHeading">
-          <h3 id="settingsSummonHeading" data-i18n="settingsSummonSection">Summoning effect</h3>
+          <h3 id="settingsSummonHeading" data-i18n="settingsSummonSection">Thinking indicator</h3>
           <div class="settings-row">
-            <span id="summonToggleLabel" data-i18n="settingsSummonEnabled">Show while AI works</span>
+            <span id="summonToggleLabel" data-i18n="settingsSummonEnabled">Show while AI thinks</span>
             <button id="summonToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="summonToggleLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
           </div>
-          <div id="summonEffectList" class="summon-effect-list" role="radiogroup" data-i18n-aria="settingsSummonSection" aria-label="Summoning effect">
-            <button type="button" class="summon-effect-option active" data-effect="rift" role="radio" aria-checked="true"><span class="fx-preview fx-preview-rift" aria-hidden="true"></span><span data-i18n="summonFxRift">Void Rift</span></button>
-            <button type="button" class="summon-effect-option" data-effect="vortex" role="radio" aria-checked="false"><span class="fx-preview fx-preview-vortex" aria-hidden="true"></span><span data-i18n="summonFxVortex">Star Vortex</span></button>
-            <button type="button" class="summon-effect-option" data-effect="array" role="radio" aria-checked="false"><span class="fx-preview fx-preview-array" aria-hidden="true"></span><span data-i18n="summonFxArray">Glyph Array</span></button>
-            <button type="button" class="summon-effect-option" data-effect="script" role="radio" aria-checked="false"><span class="fx-preview fx-preview-script" aria-hidden="true"></span><span data-i18n="summonFxScript">Flowing Glyphs</span></button>
-            <button type="button" class="summon-effect-option" data-effect="flame" role="radio" aria-checked="false"><span class="fx-preview fx-preview-flame" aria-hidden="true"></span><span data-i18n="summonFxFlame">Spirit Flame</span></button>
-          </div>
+          <p class="settings-note" data-i18n="settingsSummonDescription">Each request draws a different animated mathematical form.</p>
         </section>
         <section class="settings-group" aria-labelledby="settingsHelpHeading">
           <h3 id="settingsHelpHeading" data-i18n="settingsHelpSection">Help &amp; about</h3>
