@@ -42,6 +42,7 @@
     "public/locales/",
     "public/plugins/**/*.md",
     "public/plugins/**/*.css",
+    "public/plugins/flowchart/runtime.js",
     "public/vendor/",
     "docs/architecture.md",
     "README.md",

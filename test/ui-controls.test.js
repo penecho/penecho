@@ -651,10 +651,10 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(frameRule, /color-scheme:\s*light/);
   assert.match(frameRule, /background:\s*transparent/);
   assert.match(functionSource(app, "serializedWidgets"), /contentW:\s*widget\.contentW[\s\S]*?contentH:\s*widget\.contentH/);
-  assert.match(functionSource(app, "serializedWidgets"), /widget\.pluginId !== "image-search"[\s\S]*?copyText:widget\.copyText[\s\S]*?copyLabel:widget\.copyLabel/);
+  assert.match(functionSource(app, "serializedWidgets"), /widget\.widgetType !== "diagram_source"[\s\S]*?widget\.pluginId !== "image-search"[\s\S]*?copyText:widget\.copyText[\s\S]*?copyLabel:widget\.copyLabel/);
   const widgetRecord = functionSource(app, "widgetRecord");
   assert.match(widgetRecord, /contentW = item\.contentW \?\? item\.w[\s\S]*?contentH = item\.contentH \?\? item\.h/);
-  assert.match(widgetRecord, /allowCopy = item\.pluginId !== "image-search"[\s\S]*?copyText: allowCopy[\s\S]*?copyLabel: allowCopy/);
+  assert.match(widgetRecord, /copyText: widgetType === "diagram_source" \? source[\s\S]*?allowCopy[\s\S]*?copyLabel: widgetType === "diagram_source" \? runtime\?\.copyLabel/);
   assert.match(functionSource(app, "sendWidgetInit"), /html:widget\.html[\s\S]*?pluginStyles:manifest\.styles/);
   assert.doesNotMatch(functionSource(app, "sendWidgetInit"), /copyText|copyLabel/);
   assert.doesNotMatch(functionSource(app, "resizeWidgetBox"), /5000|4000|12000000|maximumArea/);
@@ -773,8 +773,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(chrome, /state\.widgetEdit[\s\S]*?addWidgetToolSpecs\(specs, widget, \{ copy:true \}\)/);
   assert.match(chrome, /state\.pendingWidget[\s\S]*?addWidgetToolSpecs\(specs, widget, \{ copy:true \}\)/);
   assert.match(request, /await requestWidgetSnapshot\(widget\)[\s\S]*?state\.userRevision !== revision[\s\S]*?state\.widgets\.includes\(widget\)[\s\S]*?captureCurrentViewport:true[\s\S]*?widgetEditTarget:widget/);
-  assert.match(context, /html:widget\.html[\s\S]*?professional \? \{ source:widget\.copyText \}/);
-  assert.match(context, /!professional && widget\.copyText \? \{ source:widget\.copyText, copyLabel:widget\.copyLabel \}/);
+  assert.match(context, /widget\.widgetType === "diagram_source" \? \{ source:widget\.source \} : \{ html:widget\.html \}/);
+  assert.match(context, /widget\.widgetType !== "diagram_source" && widget\.copyText \? \{ source:widget\.copyText, copyLabel:widget\.copyLabel \}/);
   assert.doesNotMatch(context, /\bid\b|targetId/);
   assert.match(validate, /widgetEditTarget && c\.pluginId !== widgetEditTarget\.pluginId/);
   assert.match(validate, /sourceFormat \? `Copy \$\{sourceFormat\}` : "Copy source"/);
@@ -790,8 +790,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
     assert.match(record, new RegExp(field));
     assert.match(serialize, new RegExp(field));
   }
-  assert.match(server, /widgetEditPolicy:"This is a one-shot replacement of exactly the supplied target/);
-  assert.match(functionSource(server, "filterWidgetEditCommands"), /commands\.length === 1[\s\S]*?widget\?\.tool === "html_widget"[\s\S]*?widget\.pluginId === widgetEdit\.pluginId/);
+  assert.match(server, /widgetEditPolicy:payload\.widgetEdit\.widgetType === "diagram_source"/);
+  assert.match(functionSource(server, "filterWidgetEditCommands"), /commands\.length === 1[\s\S]*?widget\?\.tool === widgetEdit\.widgetType[\s\S]*?widget\.pluginId === widgetEdit\.pluginId/);
   assert.match(server, /sourceFormat is an open string, never an enum/);
   assert.doesNotMatch(server, /ALLOWED_(?:SOURCE_)?FORMATS|SOURCE_FORMATS\s*=\s*new Set/);
   assert.match(functionSource(app, "dismissWidgetRefineCandidate"), /clearWidgetRefineCandidate\(\)/);

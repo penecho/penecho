@@ -136,6 +136,7 @@
     MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
     MAX_WIDGET_HTML_LENGTH = 40000,
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
+    MAX_DIAGRAM_SOURCE_BYTES = 20000,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
@@ -567,6 +568,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     zh: ZH,
   };
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
+    DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
+    DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
     BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([
       Object.freeze({
         id: "animation",
@@ -586,6 +589,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetSnapshotRequests = new Map(),
     widgetHostPointerAnchors = new Map(),
     screenCalibration = new Map();
+  let diagramRuntimePromise = null;
   let screenClientRatio = 1;
   function storedPluginSettings() {
     let stored = {};
@@ -1395,6 +1399,39 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function pluginEnabled(pluginId) {
     return state.plugins[pluginId] === true;
   }
+  function diagramRuntime() {
+    return window.PENECHO_DIAGRAM_RUNTIME || null;
+  }
+  function canonicalStoredDiagramFormat(value) {
+    const format = String(value || "").trim().toLowerCase();
+    return DIAGRAM_SOURCE_FORMATS.has(format) ? format : "";
+  }
+  function diagramSourceFits(value) {
+    return typeof value === "string" && value.trim() && new TextEncoder().encode(value).length <= MAX_DIAGRAM_SOURCE_BYTES;
+  }
+  function loadDiagramRuntime() {
+    if (diagramRuntime()) return Promise.resolve(diagramRuntime());
+    if (diagramRuntimePromise) return diagramRuntimePromise;
+    diagramRuntimePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "plugins/flowchart/runtime.js";
+      script.async = true;
+      script.onload = () => {
+        const runtime = diagramRuntime();
+        if (runtime) resolve(runtime);
+        else reject(Error("Professional diagram runtime did not initialize"));
+      };
+      script.onerror = () => reject(Error("Professional diagram runtime could not be loaded"));
+      document.head.append(script);
+    }).catch((error) => {
+      diagramRuntimePromise = null;
+      throw error;
+    });
+    return diagramRuntimePromise;
+  }
+  function ensurePluginRuntime(pluginId) {
+    return pluginId === "flowchart" ? loadDiagramRuntime() : Promise.resolve(null);
+  }
   function dataPluginDefinitions() {
     return PLUGIN_DEFINITIONS.filter((plugin) => plugin.documentPath);
   }
@@ -1504,6 +1541,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const stored = storedPluginSettings();
       for (const definition of definitions) if (typeof state.plugins[definition.id] !== "boolean") state.plugins[definition.id] = stored[definition.id];
       for (const id of previousIds) if (!nextIds.has(id)) state.plugins[id] = false;
+      if (pluginEnabled("flowchart")) await ensurePluginRuntime("flowchart");
       if (state.pendingWidget && !pluginManifests.has(state.pendingWidget.pluginId)) rejectPendingWidget();
       if (state.widgetEdit && !pluginManifests.has(selectedWidget()?.pluginId)) acceptWidgetEdit();
       for (const widget of state.widgets) if (pluginEnabled(widget.pluginId)) mountWidget(widget);
@@ -1934,7 +1972,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ document:validation.document, styles:validation.styles }),
       }), body = await pluginJsonResponse(response), savedId = body?.plugin?.id;
-      if (typeof savedId !== "string" || !await loadPluginDocuments() || !setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
+      if (typeof savedId !== "string" || !await loadPluginDocuments() || !await setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
       state.pluginAuthoringStatus = { key:"pluginSaved", type:"success", values:{ name:localizedManifestValue(validation.manifest, "name") || validation.manifest.name } };
       setPluginTab("local");
       return true;
@@ -2067,10 +2105,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     syncWidgetRuntime();
     requestRender();
   }
-  function setPluginEnabled(pluginId, enabled) {
+  async function setPluginEnabled(pluginId, enabled) {
     const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId);
     if (!plugin) return false;
     if (enabled && plugin.documentPath && !pluginManifests.has(pluginId)) return false;
+    if (enabled) {
+      try { await ensurePluginRuntime(pluginId); }
+      catch (error) {
+        state.pluginCatalogError = error.message;
+        updatePluginControl();
+        return false;
+      }
+    }
     state.plugins[pluginId] = Boolean(enabled);
     persistPluginSettings();
     if (plugin.documentPath) applyWidgetPluginState(pluginId, state.plugins[pluginId]);
@@ -2745,6 +2791,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function serializedWidgets() {
     return state.widgets.map((widget) => ({
       id: widget.id,
+      widgetType: widget.widgetType,
       pluginId: widget.pluginId,
       x: widget.x,
       y: widget.y,
@@ -2754,19 +2801,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       contentH: widget.contentH,
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
-      html: widget.html,
+      ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
   function recordWidgetsBefore() {
     if (!state.widgetHistoryBefore) state.widgetHistoryBefore = serializedWidgets();
   }
   function widgetRecord(item) {
-    if (!item || typeof item !== "object" || typeof item.pluginId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) || item.pluginId.length > 64
-      || typeof item.html !== "string" || !item.html.trim() || item.html.length > MAX_WIDGET_HTML_LENGTH) return null;
+    if (!item || typeof item !== "object" || typeof item.pluginId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) || item.pluginId.length > 64) return null;
+    const runtime = diagramRuntime(),
+      widgetType = item.widgetType === "diagram_source" || item.tool === "diagram_source" ? "diagram_source" : "html_widget",
+      source = widgetType === "diagram_source" && diagramSourceFits(item.source) ? item.source : "",
+      normalizedSourceFormat = widgetType === "diagram_source" && source ? runtime?.normalizeFormat(item.sourceFormat) || canonicalStoredDiagramFormat(item.sourceFormat) : "",
+      html = widgetType === "diagram_source"
+        ? runtime?.documentFor({ sourceFormat:normalizedSourceFormat, source, title:item.title }) || ""
+        : typeof item.html === "string" ? item.html : "";
+    if (widgetType === "html_widget" && (!html.trim() || html.length > MAX_WIDGET_HTML_LENGTH)
+      || widgetType === "diagram_source" && (!source || !normalizedSourceFormat || html.length > MAX_WIDGET_HTML_LENGTH)) return null;
     if (!n(item.x) || !n(item.y) || !n(item.w, 300, SIZE) || !n(item.h, 200, SIZE) || item.x + item.w > SIZE || item.y + item.h > SIZE) return null;
     const contentW = item.contentW ?? item.w,
       contentH = item.contentH ?? item.h;
@@ -2779,10 +2834,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       sourceFormat = typeof item.sourceFormat === "string" ? item.sourceFormat.trim() : inferredSourceFormat,
       frameworkVersion = typeof item.frameworkVersion === "string" ? item.frameworkVersion.trim() : "";
     if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
-    if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
-    if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    if (widgetType !== "diagram_source" && allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
+    if (widgetType !== "diagram_source" && allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
+      widgetType,
       pluginId: item.pluginId,
       x: Math.round(item.x),
       y: Math.round(item.y),
@@ -2792,12 +2848,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       contentH: Math.round(contentH),
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
-      html: item.html,
+      html,
+      source,
       diagramKind,
-      sourceFormat,
-      frameworkVersion,
-      copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
+      sourceFormat: widgetType === "diagram_source" ? normalizedSourceFormat : sourceFormat,
+      frameworkVersion: widgetType === "diagram_source" ? runtime?.VERSION || DIAGRAM_RUNTIME_VERSION : frameworkVersion,
+      copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
+      copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -2841,6 +2898,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (widget.shell || !pluginEnabled(widget.pluginId)) return;
     const manifest = pluginManifests.get(widget.pluginId);
     if (!manifest) return;
+    if (widget.widgetType === "diagram_source") {
+      const runtime = diagramRuntime(),
+        html = runtime?.documentFor({ sourceFormat:widget.sourceFormat, source:widget.source, title:widget.title }) || "";
+      if (!html || html.length > MAX_WIDGET_HTML_LENGTH) return;
+      widget.html = html;
+      widget.frameworkVersion = runtime.VERSION;
+      widget.copyText = widget.source;
+      widget.copyLabel = runtime.copyLabel(widget.sourceFormat);
+    }
     const shell = document.createElement("section"),
       frame = document.createElement("iframe");
     shell.className = `canvas-widget${widget.pending ? " pending" : ""}`;
@@ -4283,9 +4349,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return copied;
   }
   function widgetEditContext(widget, instructionMode) {
-    const professional = widget.pluginId === "flowchart";
     return {
       mode:"replace",
+      widgetType:widget.widgetType,
       pluginId:widget.pluginId,
       title:widget.title,
       instructionMode,
@@ -4293,9 +4359,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      html:widget.html,
-      ...(professional ? { source:widget.copyText } : {}),
-      ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
+      ...(widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
     };
   }
   async function requestWidgetRefinement(widget, instructionMode) {
@@ -6058,7 +6123,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       contentH:widget.contentH,
       title:widget.title,
       refreshSeconds:widget.refreshSeconds,
-      html:widget.html,
+      widgetType:widget.widgetType,
+      ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
@@ -6692,6 +6758,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             latestTypedInput: state.latestTypedInput,
           }
         : null;
+    if (pluginEnabled("flowchart")) {
+      try { await ensurePluginRuntime("flowchart"); }
+      catch (error) {
+        setStatus(`${t("aiError")}${error.message}`);
+        return;
+      }
+    }
     if (!packed) {
       discardUncapturableInput(hotspotCount, Boolean(dirtySnapshot));
       if (preservedRecognition) {
@@ -6755,7 +6828,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
         animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
-        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
+        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => ["html_widget", "diagram_source"].includes(command?.tool || command?.type || command?.name)),
         commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
@@ -7209,6 +7282,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ? ["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "erase"]
       : ["write_text", "draw_formula", "plot_function", "draw", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
+    if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
       .slice(0, 16)
       .map((c) => (c && typeof c === "object" ? { ...c, tool: c.tool || c.type || c.name } : c))
@@ -7281,6 +7355,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           };
           widgetSlots--;
         }
+        if (c.tool === "diagram_source") {
+          const runtime = diagramRuntime();
+          const geometry = fitWidgetGeometry(c, visibleRect),
+            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || "",
+            diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "";
+          if (widgetSlots <= 0 || !widgetPluginIds.has("flowchart") || c.pluginId !== "flowchart"
+            || widgetEditTarget && (widgetEditTarget.pluginId !== "flowchart" || widgetEditTarget.widgetType !== "diagram_source")
+            || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120
+            || !sourceFormat || !diagramSourceFits(c.source)
+            || diagramKind.length > 80) return null;
+          c = {
+            tool:"diagram_source",
+            widgetType:"diagram_source",
+            pluginId:"flowchart",
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
+            title:c.title.trim(),
+            refreshSeconds:86400,
+            sourceFormat,
+            source:c.source,
+            ...(diagramKind ? { diagramKind } : {}),
+          };
+          widgetSlots--;
+        }
         if (c.tool === "erase") {
           if (c.mode === "path") {
             if (!Array.isArray(c.points) || c.points.length < 1 || c.points.length > 200 || !c.points.every(point)) return null;
@@ -7296,7 +7396,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         return c;
       })
       .filter(Boolean);
-    const widgets = validated.filter((command) => command.tool === "html_widget");
+    const widgets = validated.filter((command) => ["html_widget", "diagram_source"].includes(command.tool));
     if (widgetEditTarget) return widgets.length === 1 ? widgets : [];
     return widgets.length ? [widgets[0]] : validated;
   }
@@ -7326,7 +7426,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     try {
       checkAI(revision, run);
       if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error(AI_REJECTED);
-      if (c.tool === "html_widget") {
+      if (["html_widget", "diagram_source"].includes(c.tool)) {
         if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error(AI_REJECTED);
         const target = run?.widgetEdit?.target,
           accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);
@@ -9875,7 +9975,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   pluginOptions.addEventListener("change", (event) => {
     const input = event.target.closest("input[data-plugin-id]");
     if (!input) return;
-    setPluginEnabled(input.dataset.pluginId, input.checked);
+    void setPluginEnabled(input.dataset.pluginId, input.checked).then((enabled) => {
+      if (!enabled && input.isConnected) input.checked = pluginEnabled(input.dataset.pluginId);
+    });
   });
   pluginPopover.addEventListener("pointerdown", (event) => {
     if (event.target === pluginPopover) hidePluginControl();

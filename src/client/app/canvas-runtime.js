@@ -455,6 +455,7 @@
   function serializedWidgets() {
     return state.widgets.map((widget) => ({
       id: widget.id,
+      widgetType: widget.widgetType,
       pluginId: widget.pluginId,
       x: widget.x,
       y: widget.y,
@@ -464,19 +465,27 @@
       contentH: widget.contentH,
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
-      html: widget.html,
+      ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      ...(widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
     }));
   }
   function recordWidgetsBefore() {
     if (!state.widgetHistoryBefore) state.widgetHistoryBefore = serializedWidgets();
   }
   function widgetRecord(item) {
-    if (!item || typeof item !== "object" || typeof item.pluginId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) || item.pluginId.length > 64
-      || typeof item.html !== "string" || !item.html.trim() || item.html.length > MAX_WIDGET_HTML_LENGTH) return null;
+    if (!item || typeof item !== "object" || typeof item.pluginId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) || item.pluginId.length > 64) return null;
+    const runtime = diagramRuntime(),
+      widgetType = item.widgetType === "diagram_source" || item.tool === "diagram_source" ? "diagram_source" : "html_widget",
+      source = widgetType === "diagram_source" && diagramSourceFits(item.source) ? item.source : "",
+      normalizedSourceFormat = widgetType === "diagram_source" && source ? runtime?.normalizeFormat(item.sourceFormat) || canonicalStoredDiagramFormat(item.sourceFormat) : "",
+      html = widgetType === "diagram_source"
+        ? runtime?.documentFor({ sourceFormat:normalizedSourceFormat, source, title:item.title }) || ""
+        : typeof item.html === "string" ? item.html : "";
+    if (widgetType === "html_widget" && (!html.trim() || html.length > MAX_WIDGET_HTML_LENGTH)
+      || widgetType === "diagram_source" && (!source || !normalizedSourceFormat || html.length > MAX_WIDGET_HTML_LENGTH)) return null;
     if (!n(item.x) || !n(item.y) || !n(item.w, 300, SIZE) || !n(item.h, 200, SIZE) || item.x + item.w > SIZE || item.y + item.h > SIZE) return null;
     const contentW = item.contentW ?? item.w,
       contentH = item.contentH ?? item.h;
@@ -489,10 +498,11 @@
       sourceFormat = typeof item.sourceFormat === "string" ? item.sourceFormat.trim() : inferredSourceFormat,
       frameworkVersion = typeof item.frameworkVersion === "string" ? item.frameworkVersion.trim() : "";
     if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
-    if (allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
-    if (allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    if (widgetType !== "diagram_source" && allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
+    if (widgetType !== "diagram_source" && allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
+      widgetType,
       pluginId: item.pluginId,
       x: Math.round(item.x),
       y: Math.round(item.y),
@@ -502,12 +512,13 @@
       contentH: Math.round(contentH),
       title: item.title.trim(),
       refreshSeconds: Math.round(item.refreshSeconds),
-      html: item.html,
+      html,
+      source,
       diagramKind,
-      sourceFormat,
-      frameworkVersion,
-      copyText: allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
-      copyLabel: allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
+      sourceFormat: widgetType === "diagram_source" ? normalizedSourceFormat : sourceFormat,
+      frameworkVersion: widgetType === "diagram_source" ? runtime?.VERSION || DIAGRAM_RUNTIME_VERSION : frameworkVersion,
+      copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
+      copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
       shell: null,
       frame: null,
@@ -551,6 +562,15 @@
     if (widget.shell || !pluginEnabled(widget.pluginId)) return;
     const manifest = pluginManifests.get(widget.pluginId);
     if (!manifest) return;
+    if (widget.widgetType === "diagram_source") {
+      const runtime = diagramRuntime(),
+        html = runtime?.documentFor({ sourceFormat:widget.sourceFormat, source:widget.source, title:widget.title }) || "";
+      if (!html || html.length > MAX_WIDGET_HTML_LENGTH) return;
+      widget.html = html;
+      widget.frameworkVersion = runtime.VERSION;
+      widget.copyText = widget.source;
+      widget.copyLabel = runtime.copyLabel(widget.sourceFormat);
+    }
     const shell = document.createElement("section"),
       frame = document.createElement("iframe");
     shell.className = `canvas-widget${widget.pending ? " pending" : ""}`;
@@ -1993,9 +2013,9 @@
     return copied;
   }
   function widgetEditContext(widget, instructionMode) {
-    const professional = widget.pluginId === "flowchart";
     return {
       mode:"replace",
+      widgetType:widget.widgetType,
       pluginId:widget.pluginId,
       title:widget.title,
       instructionMode,
@@ -2003,9 +2023,8 @@
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
-      html:widget.html,
-      ...(professional ? { source:widget.copyText } : {}),
-      ...(!professional && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
+      ...(widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
     };
   }
   async function requestWidgetRefinement(widget, instructionMode) {

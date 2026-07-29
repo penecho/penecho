@@ -98,7 +98,7 @@
     if (!Number.isFinite(refreshSeconds) || refreshSeconds < 60 || refreshSeconds > 86400) throw Error("Plugin refresh interval must be between 60 seconds and one day");
     const oneShot = /^##[ \t]+One-shot example[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/im.exec(body);
     if (!oneShot) throw Error("Plugin needs a one-shot example");
-    if (!/\bhtml_widget\b/.test(oneShot[1])) throw Error("Plugin one-shot example must identify the expected output command");
+    if (!/\b(?:html_widget|diagram_source)\b/.test(oneShot[1])) throw Error("Plugin one-shot example must identify the expected output command");
     return Object.freeze({
       id: metadata.id,
       name: metadata.name.trim(),

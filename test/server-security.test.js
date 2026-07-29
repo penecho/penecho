@@ -782,6 +782,113 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
   }
 });
 
+test("professional diagrams accept local source renderers and keep unknown formats on html_widget", { timeout:20000 }, async () => {
+  const diagram = (sourceFormat, source = "flowchart LR\nA --> B") => ({
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Professional diagram",
+      diagramKind:"process",
+      sourceFormat,
+      source,
+    }),
+    response = command => JSON.stringify({ intent:"answer", commands:[command] }),
+    upstream = await startApiServer("", {
+      response:({index}) => ({
+        body:[
+          response(diagram("mermaid")),
+          response(diagram("Graphviz DOT", "digraph G { A -> B }")),
+          response(diagram("plantuml", "@startuml\nA -> B\n@enduml")),
+          response(diagram("mermaid", "flowchart LR\nA --> B --> C")),
+          response(diagram("dot", "digraph G { A -> B -> C }")),
+          response(diagram("dot", "digraph G { A -> B -> C }")),
+        ][index],
+      }),
+    }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = validPayload();
+  payload.plugins = [builtInPluginDescriptor("flowchart")];
+  try {
+    const first = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(first.commands[0], {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Professional diagram",
+      refreshSeconds:86400,
+      sourceFormat:"mermaid",
+      source:"flowchart LR\nA --> B",
+      diagramKind:"process",
+    });
+
+    const graphviz = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.equal(graphviz.commands[0].sourceFormat, "dot");
+
+    const unsupported = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(unsupported.commands, []);
+
+    const refinePayload = {
+      ...payload,
+      trigger:"manual",
+      userAction:"answer",
+      widgetEdit:{
+        mode:"replace",
+        widgetType:"diagram_source",
+        pluginId:"flowchart",
+        title:"Professional diagram",
+        instructionMode:"implicit-polish",
+        box:{ x:120, y:240, w:1200, h:700 },
+        diagramKind:"process",
+        sourceFormat:"mermaid",
+        source:"flowchart LR\nA --> B",
+      },
+    };
+    const refined = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(refinePayload),
+    }).then(value => value.json());
+    assert.equal(refined.commands[0].tool, "diagram_source");
+    assert.equal(refined.commands[0].sourceFormat, "mermaid");
+    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C");
+
+    const changedFormat = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(refinePayload),
+    }).then(value => value.json());
+    assert.deepEqual(changedFormat.commands, []);
+
+    const outbound = JSON.parse(upstream.requests[3]),
+      modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
+    assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
+    assert.equal(modelInput.widgetEdit.source, refinePayload.widgetEdit.source);
+    assert.equal("html" in modelInput.widgetEdit, false);
+    assert.match(modelInput.widgetEditPolicy, /same pluginId and sourceFormat[\s\S]*?never HTML/);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
 test("custom plugin widget refinement preserves its bundle and rejects ambiguous replacements", { timeout:20000 }, async () => {
   const replacement = {
       tool:"html_widget",
@@ -837,7 +944,7 @@ test("custom plugin widget refinement preserves its bundle and rejects ambiguous
     assert.equal(modelInput.widgetEdit.pluginId, plugin.id);
     assert.equal(modelInput.widgetEdit.html, payload.widgetEdit.html);
     assert.equal("targetId" in modelInput.widgetEdit, false);
-    assert.match(modelInput.widgetEditPolicy, /one-shot replacement of exactly the supplied target/);
+    assert.match(modelInput.widgetEditPolicy, /one-shot replacement of exactly the supplied html_widget target/);
 
     const ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
       ambiguous = await ambiguousResponse.json();
@@ -1566,7 +1673,7 @@ test("static page keeps strict styles while allowing the pinned MathJax CDN", ()
   assert.match(config, /fontCache:\s*"none"/);
   assert.doesNotMatch(config, /renderActions/);
   assert.match(app, /MathJax\?\.tex2svgPromise/);
-  assert.match(server, /script-src 'self' 'sha256-kJFQjoSTIuIH88LzbK\+kHly3ksHSd\/lrxjgaUNRGq\/A=' https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(server, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
   for (const hash of [
     "sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=",
     "sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=",

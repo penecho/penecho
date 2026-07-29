@@ -93,6 +93,13 @@
             latestTypedInput: state.latestTypedInput,
           }
         : null;
+    if (pluginEnabled("flowchart")) {
+      try { await ensurePluginRuntime("flowchart"); }
+      catch (error) {
+        setStatus(`${t("aiError")}${error.message}`);
+        return;
+      }
+    }
     if (!packed) {
       discardUncapturableInput(hotspotCount, Boolean(dirtySnapshot));
       if (preservedRecognition) {
@@ -156,7 +163,7 @@
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
         animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
-        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "html_widget"),
+        widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => ["html_widget", "diagram_source"].includes(command?.tool || command?.type || command?.name)),
         commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
       if (action === "normalize")
@@ -610,6 +617,7 @@
       ? ["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "erase"]
       : ["write_text", "draw_formula", "plot_function", "draw", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
+    if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
       .slice(0, 16)
       .map((c) => (c && typeof c === "object" ? { ...c, tool: c.tool || c.type || c.name } : c))
@@ -682,6 +690,32 @@
           };
           widgetSlots--;
         }
+        if (c.tool === "diagram_source") {
+          const runtime = diagramRuntime();
+          const geometry = fitWidgetGeometry(c, visibleRect),
+            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || "",
+            diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "";
+          if (widgetSlots <= 0 || !widgetPluginIds.has("flowchart") || c.pluginId !== "flowchart"
+            || widgetEditTarget && (widgetEditTarget.pluginId !== "flowchart" || widgetEditTarget.widgetType !== "diagram_source")
+            || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120
+            || !sourceFormat || !diagramSourceFits(c.source)
+            || diagramKind.length > 80) return null;
+          c = {
+            tool:"diagram_source",
+            widgetType:"diagram_source",
+            pluginId:"flowchart",
+            x:Math.round(widgetEditTarget ? widgetEditTarget.x : geometry.x),
+            y:Math.round(widgetEditTarget ? widgetEditTarget.y : geometry.y),
+            w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
+            h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
+            title:c.title.trim(),
+            refreshSeconds:86400,
+            sourceFormat,
+            source:c.source,
+            ...(diagramKind ? { diagramKind } : {}),
+          };
+          widgetSlots--;
+        }
         if (c.tool === "erase") {
           if (c.mode === "path") {
             if (!Array.isArray(c.points) || c.points.length < 1 || c.points.length > 200 || !c.points.every(point)) return null;
@@ -697,7 +731,7 @@
         return c;
       })
       .filter(Boolean);
-    const widgets = validated.filter((command) => command.tool === "html_widget");
+    const widgets = validated.filter((command) => ["html_widget", "diagram_source"].includes(command.tool));
     if (widgetEditTarget) return widgets.length === 1 ? widgets : [];
     return widgets.length ? [widgets[0]] : validated;
   }
@@ -727,7 +761,7 @@
     try {
       checkAI(revision, run);
       if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error(AI_REJECTED);
-      if (c.tool === "html_widget") {
+      if (["html_widget", "diagram_source"].includes(c.tool)) {
         if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error(AI_REJECTED);
         const target = run?.widgetEdit?.target,
           accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);

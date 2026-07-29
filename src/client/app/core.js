@@ -135,6 +135,7 @@
     MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
     MAX_WIDGET_HTML_LENGTH = 40000,
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
+    MAX_DIAGRAM_SOURCE_BYTES = 20000,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
@@ -566,6 +567,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     zh: ZH,
   };
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
+    DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
+    DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
     BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([
       Object.freeze({
         id: "animation",
@@ -585,6 +588,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetSnapshotRequests = new Map(),
     widgetHostPointerAnchors = new Map(),
     screenCalibration = new Map();
+  let diagramRuntimePromise = null;
   let screenClientRatio = 1;
   function storedPluginSettings() {
     let stored = {};
@@ -1394,6 +1398,39 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function pluginEnabled(pluginId) {
     return state.plugins[pluginId] === true;
   }
+  function diagramRuntime() {
+    return window.PENECHO_DIAGRAM_RUNTIME || null;
+  }
+  function canonicalStoredDiagramFormat(value) {
+    const format = String(value || "").trim().toLowerCase();
+    return DIAGRAM_SOURCE_FORMATS.has(format) ? format : "";
+  }
+  function diagramSourceFits(value) {
+    return typeof value === "string" && value.trim() && new TextEncoder().encode(value).length <= MAX_DIAGRAM_SOURCE_BYTES;
+  }
+  function loadDiagramRuntime() {
+    if (diagramRuntime()) return Promise.resolve(diagramRuntime());
+    if (diagramRuntimePromise) return diagramRuntimePromise;
+    diagramRuntimePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "plugins/flowchart/runtime.js";
+      script.async = true;
+      script.onload = () => {
+        const runtime = diagramRuntime();
+        if (runtime) resolve(runtime);
+        else reject(Error("Professional diagram runtime did not initialize"));
+      };
+      script.onerror = () => reject(Error("Professional diagram runtime could not be loaded"));
+      document.head.append(script);
+    }).catch((error) => {
+      diagramRuntimePromise = null;
+      throw error;
+    });
+    return diagramRuntimePromise;
+  }
+  function ensurePluginRuntime(pluginId) {
+    return pluginId === "flowchart" ? loadDiagramRuntime() : Promise.resolve(null);
+  }
   function dataPluginDefinitions() {
     return PLUGIN_DEFINITIONS.filter((plugin) => plugin.documentPath);
   }
@@ -1503,6 +1540,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const stored = storedPluginSettings();
       for (const definition of definitions) if (typeof state.plugins[definition.id] !== "boolean") state.plugins[definition.id] = stored[definition.id];
       for (const id of previousIds) if (!nextIds.has(id)) state.plugins[id] = false;
+      if (pluginEnabled("flowchart")) await ensurePluginRuntime("flowchart");
       if (state.pendingWidget && !pluginManifests.has(state.pendingWidget.pluginId)) rejectPendingWidget();
       if (state.widgetEdit && !pluginManifests.has(selectedWidget()?.pluginId)) acceptWidgetEdit();
       for (const widget of state.widgets) if (pluginEnabled(widget.pluginId)) mountWidget(widget);
@@ -1933,7 +1971,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ document:validation.document, styles:validation.styles }),
       }), body = await pluginJsonResponse(response), savedId = body?.plugin?.id;
-      if (typeof savedId !== "string" || !await loadPluginDocuments() || !setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
+      if (typeof savedId !== "string" || !await loadPluginDocuments() || !await setPluginEnabled(savedId, true)) throw Error("The plugin was saved, but the local catalog could not be refreshed");
       state.pluginAuthoringStatus = { key:"pluginSaved", type:"success", values:{ name:localizedManifestValue(validation.manifest, "name") || validation.manifest.name } };
       setPluginTab("local");
       return true;
@@ -2066,10 +2104,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     syncWidgetRuntime();
     requestRender();
   }
-  function setPluginEnabled(pluginId, enabled) {
+  async function setPluginEnabled(pluginId, enabled) {
     const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId);
     if (!plugin) return false;
     if (enabled && plugin.documentPath && !pluginManifests.has(pluginId)) return false;
+    if (enabled) {
+      try { await ensurePluginRuntime(pluginId); }
+      catch (error) {
+        state.pluginCatalogError = error.message;
+        updatePluginControl();
+        return false;
+      }
+    }
     state.plugins[pluginId] = Boolean(enabled);
     persistPluginSettings();
     if (plugin.documentPath) applyWidgetPluginState(pluginId, state.plugins[pluginId]);

@@ -690,7 +690,9 @@
   pluginOptions.addEventListener("change", (event) => {
     const input = event.target.closest("input[data-plugin-id]");
     if (!input) return;
-    setPluginEnabled(input.dataset.pluginId, input.checked);
+    void setPluginEnabled(input.dataset.pluginId, input.checked).then((enabled) => {
+      if (!enabled && input.isConnected) input.checked = pluginEnabled(input.dataset.pluginId);
+    });
   });
   pluginPopover.addEventListener("pointerdown", (event) => {
     if (event.target === pluginPopover) hidePluginControl();

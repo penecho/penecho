@@ -143,7 +143,7 @@ test("every built-in plugin uses a directory bundle", () => {
     assert.ok(plugin.categoryZh, plugin.id);
     assert.ok(plugin.source, plugin.id);
     assert.match(plugin.document, /^## One-shot example$/m, plugin.id);
-    assert.match(plugin.document, /`html_widget`/, plugin.id);
+    assert.match(plugin.document, plugin.id === "flowchart" ? /`diagram_source`/ : /`html_widget`/, plugin.id);
     if (plugin.connect.length) assert.match(plugin.document, /credentials:"omit"/, plugin.id);
     assert.match(plugin.document, /penecho-widget-updated/, plugin.id);
     assert.doesNotMatch(plugin.document, /```html/i, plugin.id);
@@ -156,43 +156,15 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /browser-native HTML, CSS, JavaScript, timers, SVG, and canvas/);
   const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
   assert.deepEqual([...flowchart.connect], []);
-  assert.match(flowchart.document, /sourceFormat` is open, not an enum or whitelist/);
-  assert.match(flowchart.document, /BPMN XML for BPMN[\s\S]*?draw\.io XML, D2, Structurizr DSL/);
-  assert.match(flowchart.document, /`copyText` is the primary artifact; HTML is its renderer/);
-  assert.match(flowchart.document, /Before writing HTML[\s\S]*?real, established, editable semantic source or interchange format/);
-  assert.match(flowchart.document, /Rendering convenience never justifies SVG, HTML, or Canvas as `sourceFormat`/);
-  assert.match(flowchart.document, /Never claim conformance to a notation or standard merely from the user's label[\s\S]*?actual symbols and semantics/);
-  assert.match(flowchart.document, /Select a domain-specific format only when its source syntax and a mature browser renderer are known to be reliable/);
-  assert.match(flowchart.document, /If no reliable domain renderer is known, choose a proven general semantic format or a shared-geometry native SVG/);
-  assert.match(flowchart.document, /when a matching browser renderer or layout engine exists[\s\S]*?MUST load it inside this widget/);
-  assert.match(flowchart.document, /Use its layout rather than separately hand-coding coordinates/);
-  assert.match(flowchart.document, /derive nodes, edges, and labels from one geometry model[\s\S]*?wrap labels inside containers/);
-  assert.match(flowchart.document, /Use mature fixed documented entries, never `latest`, guessed internals, or invented APIs/);
-  assert.match(flowchart.document, /Architecture, topology, dependencies and lineage: import named `instance` from `https:\/\/cdn\.jsdelivr\.net\/npm\/@viz-js\/viz@3\.9\.0\/lib\/viz-standalone\.mjs`/);
-  assert.match(flowchart.document, /General flow, sequence, UML, ER, timeline and Gantt: default-import Mermaid from `https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@10\.9\.1\/dist\/mermaid\.esm\.min\.mjs`/);
-  assert.match(flowchart.document, /initialize `\{startOnLoad:false,securityLevel:"strict"\}`, then await `render\(id, source\)`/);
-  assert.match(flowchart.document, /BPMN: load `https:\/\/cdn\.jsdelivr\.net\/npm\/bpmn-js@17\.11\.1\/dist\/bpmn-viewer\.development\.js`[\s\S]*?diagram-js\.css[\s\S]*?bpmn-font\/css\/bpmn\.css/);
-  assert.match(flowchart.document, /create global `BpmnJS` with the stage, await `importXML\(xml\)`, then fit the canvas/);
-  assert.match(flowchart.document, /import named `instance`[\s\S]*?await `instance\(\)`[\s\S]*?renderSVGElement\(dot\)/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/elkjs@0\.9\.3\/lib\/elk\.bundled\.js[\s\S]*?new ELK\(\)[\s\S]*?layout\(graph\)/);
-  assert.match(flowchart.document, /ELK only returns positions and routed edge sections[\s\S]*?never expect ELK to paint a diagram/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/jsxgraph@1\.10\.1\/distrib\/jsxgraphcore\.js[\s\S]*?JXG\.JSXGraph\.initBoard/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/smiles-drawer@2\.1\.7\/dist\/smiles-drawer\.min\.js[\s\S]*?SmilesDrawer\.parse/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/cytoscape@3\.30\.4\/dist\/cytoscape\.min\.js[\s\S]*?cytoscape\(\{container,elements,layout\}\)/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/vega-embed@6\.26\.0\/build\/vega-embed\.min\.js[\s\S]*?vegaEmbed\(target,spec,\{actions:false,renderer:"svg"\}\)/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/leaflet@1\.9\.4\/dist\/leaflet\.js[\s\S]*?L\.geoJSON[\s\S]*?GeoJSON-only view may intentionally have no tile layer/);
-  assert.match(flowchart.document, /https:\/\/cdn\.jsdelivr\.net\/npm\/@runiq\/renderer-schematic@1\.3\.0\/\+esm[\s\S]*?It is ESM[\s\S]*?renderSchematic\(profile, options\)[\s\S]*?simple horizontal or vertical sequencing[\s\S]*?not KiCad, SPICE, or another general interchange standard/);
-  assert.match(flowchart.document, /diagram outside these examples, do not force an unrelated listed library/);
-  assert.match(flowchart.document, /established format and documented renderer whose syntax\/API you know/);
-  assert.match(flowchart.document, /Never invent a format, renderer URL, or library API/);
-  assert.match(flowchart.document, /Do not add unverified mirrors or fallback paths/);
-  assert.match(flowchart.document, /preferred working contracts, not restrictions/);
-  assert.match(flowchart.document, /self-check source syntax, escaping, renderer API, dependency URL, and render lifecycle/);
-  assert.match(flowchart.document, /Preserve a successful render if font waiting, resize observation, or parent notification fails/);
-  assert.match(flowchart.document, /External loads can stall[\s\S]*?never leave the stage empty/);
-  assert.match(flowchart.document, /Render a complete native semantic fallback first[\s\S]*?replace it only after verified renderer success/);
-  assert.match(flowchart.document, /retain the last valid render or show a usable semantic fallback, never a blank stage/);
-  assert.match(flowchart.document, /If the supplied HTML or viewport is blank, clipped, misaligned, or renderer-failed[\s\S]*?before applying the user's instruction/);
+  assert.match(flowchart.document, /runtime capability list, not a whitelist of professional needs/);
+  assert.match(flowchart.document, /Prefer `diagram_source`[\s\S]*?PenEcho supplies the iframe, renderer, shared CSS, Copy button/);
+  assert.match(flowchart.document, /Use `html_widget` instead[\s\S]*?not locally rendered[\s\S]*?custom interaction/);
+  assert.match(flowchart.document, /PlantUML, DBML, draw\.io XML, D2, Structurizr DSL, Excalidraw JSON, KiCad, SPICE/);
+  for (const format of ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"])
+    assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
+  assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
+  assert.match(flowchart.document, /unlisted need[\s\S]*?return `html_widget`[\s\S]*?There is no library whitelist/);
+  assert.match(flowchart.document, /same tool and `sourceFormat`[\s\S]*?smallest complete modification/);
   assert.match(flowchart.document, /copyText/);
   assert.match(flowchart.document, /copyLabel:"Copy <format>"/);
   assert.match(flowchart.styles, /\.pd-root/);
@@ -281,9 +253,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
     flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart", "plugin.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
-  assert.match(host, /setAttribute\("sandbox", "allow-scripts"\)/);
-  assert.doesNotMatch(host, /allow-same-origin/);
-  assert.match(host, /script-src 'unsafe-inline' https: \$\{rendererUrl\}/);
+  assert.match(host, /setAttribute\("sandbox", parentOrigin === location\.origin \? "allow-scripts" : "allow-scripts allow-same-origin"\)/);
+  assert.match(host, /script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: \$\{rendererUrl\}/);
   assert.match(host, /connect-src https:/);
   assert.match(host, /img-src data: blob: https:/);
   assert.match(host, /querySelectorAll\("script\[src\]"\)[\s\S]*?safeHttpsResource/);
@@ -304,7 +275,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(rendererLicense, /Permission is hereby granted, free of charge/);
   assert.match(host, /MAX_SNAPSHOT_DATA_URL_LENGTH/);
   assert.doesNotMatch(host, /<foreignObject|penecho-widget-snapshot-markup/);
-  assert.doesNotMatch(host, /createObjectURL/);
+  assert.match(host, /createObjectURL\(new Blob\(\[widgetDocument/);
   assert.match(host, /toDataURL\("image\/png"\)/);
   assert.match(host, /penecho-widget-snapshot-request/);
   for (const type of [
@@ -321,7 +292,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /touchCount\(\) >= 2[\s\S]*?cancelAllHoldsForNavigation/);
   assert.match(host, /hit:"resize"[\s\S]*?hit:"width"[\s\S]*?hit:"height"/);
   assert.match(host, /penecho-widget-state/);
-  assert.match(host, /inner\.addEventListener\("load", forwardWidgetState\)/);
+  assert.match(host, /inner\.addEventListener\("load", \(\) => \{[\s\S]*?URL\.revokeObjectURL\(innerDocumentUrl\)[\s\S]*?forwardWidgetState\(\)/);
   assert.match(host, /function setRuntimeActive\(active\)/);
   assert.match(host, /document\.getAnimations\(\)/);
   assert.match(host, /pauseAnimations/);
@@ -339,7 +310,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /element\.setAttribute\(property, value\)/);
   assert.match(host, /data-penecho-snapshot-background/);
   assert.match(host, /finally\s*\{\s*restoreSvgStyles\(\)/);
-  assert.match(flowchart, /injected `penecho-professional-diagrams-v1` CSS classes/);
+  assert.match(flowchart, /injected CSS framework/);
   assert.match(host, /if \(press\.active\)[\s\S]*?event\.preventDefault/);
   assert.match(host, /penecho-widget-dragging[\s\S]*?user-select:none/);
   assert.match(host, /html,body\{background:transparent!important;color-scheme:light!important/);
