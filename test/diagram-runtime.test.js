@@ -57,10 +57,17 @@ test("each local format maps to one fixed on-demand renderer and unknown formats
   assert.match(geoJson, /\.pd-stage>canvas\{/);
   assert.doesNotMatch(geoJson, /\.pd-stage canvas\{/);
   const smiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Aspirin" });
-  assert.match(smiles, /\.draw\(tree, canvas, "light", false\)/);
-  assert.doesNotMatch(smiles, /penecho-smiles-canvas|\.draw\(tree, canvas\.id/);
+  assert.match(smiles, /new globalThis\.SmilesDrawer\.SvgDrawer/);
+  assert.match(smiles, /compactDrawing:config\.compactDrawing===true/);
+  assert.match(smiles, /"compactDrawing":false/);
+  assert.match(smiles, /\.draw\(tree,svg,"light",null,false,\[\]\)/);
+  assert.match(smiles, /preserveAspectRatio","xMidYMid meet"/);
+  assert.doesNotMatch(smiles, /new globalThis\.SmilesDrawer\.Drawer|createElement\("canvas"\)|resizeRender\s*=\s*draw/);
+  const compactSmiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Compact aspirin", diagramKind:"molecular-structure-compact" });
+  assert.match(compactSmiles, /"compactDrawing":true/);
   assert.equal(runtime.documentFor({ sourceFormat:"plantuml", source:"@startuml", title:"Unsupported" }), "");
-  assert.equal(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(20001), title:"Too large" }), "");
+  assert.ok(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(100 * 1024), title:"Large source" }));
+  assert.equal(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(100 * 1024 + 1), title:"Too large" }), "");
 });
 
 test("complex Mermaid phases reflow when the widget aspect ratio changes", () => {
@@ -97,10 +104,12 @@ test("diagram source is persisted canonically and regenerated through the widget
     build = read("scripts/build-client.js"),
     packageJson = JSON.parse(read("package.json"));
   assert.match(canvas, /widgetType === "diagram_source" \? \{ source:widget\.source \} : \{ html:widget\.html \}/);
-  assert.match(canvas, /runtime\?\.documentFor\(\{ sourceFormat:normalizedSourceFormat, source, title:item\.title \}\)/);
+  assert.match(canvas, /runtime\?\.documentFor\(\{ sourceFormat:normalizedSourceFormat, source, title:item\.title, diagramKind:item\.diagramKind \}\)/);
   assert.match(canvas, /copyText: widgetType === "diagram_source" \? source/);
   assert.match(persistence, /widgetType:widget\.widgetType[\s\S]*?widget\.widgetType === "diagram_source" \? \{ source:widget\.source \} : \{ html:widget\.html \}/);
   assert.match(core, /script\.src = "plugins\/flowchart\/runtime\.js"/);
+  assert.match(core, /MAX_DIAGRAM_SOURCE_BYTES = 100 \* 1024/);
+  assert.equal((canvas.match(/documentFor\(\{ sourceFormat:[^}]+diagramKind:/g) || []).length,2);
   assert.doesNotMatch(build, /diagram-runtime/);
   assert.doesNotMatch(read("public/app.js"), /mermaid@10\.9\.1|@viz-js\/viz@3\.9\.0|bpmn-js@17\.11\.1/);
   assert.ok(packageJson.files.includes(runtimePath));

@@ -105,10 +105,13 @@ test("0.8.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
   assert.match(css, /\.changelog-plugin-note\s*\{[^}]*color:\s*#111;[^}]*background:\s*#fff/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogPluginEnableNote", "changelogVisualPlugins", "changelogCanvasWorkflow", "changelogDesktopAccess", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogAnimation", "changelogDone"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogPluginEnableNote", "changelogVisualPlugins", "changelogCanvasWorkflow", "changelogPluginRefine", "changelogDesktopAccess", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogAnimation", "changelogDone"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
+  assert.match(layer, /data-i18n="changelogPluginRefine"/);
+  assert.match(app, /changelogPluginRefine:[^\n]*Refine button[^\n]*only to plugin widgets/);
+  assert.match(zh, /changelogPluginRefine:[^\n]*画笔[^\n]*AI 完善（Refine）[^\n]*仅适用于插件控件/);
 });
 
 test("feature tour copy is complete in English and Chinese", () => {

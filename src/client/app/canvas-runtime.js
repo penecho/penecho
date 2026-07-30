@@ -601,7 +601,7 @@
       source = widgetType === "diagram_source" && diagramSourceFits(item.source) ? item.source : "",
       normalizedSourceFormat = widgetType === "diagram_source" && source ? runtime?.normalizeFormat(item.sourceFormat) || canonicalStoredDiagramFormat(item.sourceFormat) : "",
       html = widgetType === "diagram_source"
-        ? runtime?.documentFor({ sourceFormat:normalizedSourceFormat, source, title:item.title }) || ""
+        ? runtime?.documentFor({ sourceFormat:normalizedSourceFormat, source, title:item.title, diagramKind:item.diagramKind }) || ""
         : typeof item.html === "string" ? item.html : "";
     if (widgetType === "html_widget" && (!html.trim() || html.length > MAX_WIDGET_HTML_LENGTH)
       || widgetType === "diagram_source" && (!source || !normalizedSourceFormat || html.length > MAX_WIDGET_HTML_LENGTH)) return null;
@@ -610,7 +610,7 @@
       contentH = item.contentH ?? item.h;
     if (!Number.isFinite(contentW) || contentW < 300 || contentW > MAX_WIDGET_CONTENT_DIMENSION
       || !Number.isFinite(contentH) || contentH < 200 || contentH > MAX_WIDGET_CONTENT_DIMENSION) return null;
-    if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !n(item.refreshSeconds, 60, 86400)) return null;
+    if (typeof item.title !== "string" || !item.title.trim() || item.title.length > 120 || !(item.refreshSeconds === 0 || n(item.refreshSeconds, 60, 86400))) return null;
     const allowCopy = item.pluginId !== "image-search";
     const diagramKind = typeof item.diagramKind === "string" ? item.diagramKind.trim() : "",
       inferredSourceFormat = item.pluginId === "flowchart" && item.copyText && item.sourceFormat === undefined ? "mermaid" : "",
@@ -683,7 +683,7 @@
     if (!manifest) return;
     if (widget.widgetType === "diagram_source") {
       const runtime = diagramRuntime(),
-        html = runtime?.documentFor({ sourceFormat:widget.sourceFormat, source:widget.source, title:widget.title }) || "";
+        html = runtime?.documentFor({ sourceFormat:widget.sourceFormat, source:widget.source, title:widget.title, diagramKind:widget.diagramKind }) || "";
       if (!html || html.length > MAX_WIDGET_HTML_LENGTH) return;
       widget.html = html;
       widget.frameworkVersion = runtime.VERSION;
@@ -1709,15 +1709,15 @@
       controlsWidth = animationControls.offsetWidth || 210,
       controlsHeight = animationControls.offsetHeight || 36,
       editControlsClearance = 28,
-      controlsStyle = Reflect.get(animationControls, "style"),
+      controlsStyle = runtimeElementStyle(animationControls, "animation-controls"),
       x = Math.max(8, Math.min(rect.width - controlsWidth - 8, left + width / 2 - controlsWidth / 2)),
       y = top - controlsHeight - editControlsClearance >= 8 ? top - controlsHeight - editControlsClearance : Math.min(rect.height - controlsHeight - 8, top + box.h * state.scale + editControlsClearance),
       nextX = Math.round(x) + "px",
       nextY = Math.round(y) + "px",
       nextLabel = t(target.playback.paused ? "animationPlay" : "animationPause");
     if (animationControls.hidden) animationControls.hidden = false;
-    if (controlsStyle.getPropertyValue("--animation-controls-x") !== nextX) controlsStyle.setProperty("--animation-controls-x", nextX);
-    if (controlsStyle.getPropertyValue("--animation-controls-y") !== nextY) controlsStyle.setProperty("--animation-controls-y", nextY);
+    if (controlsStyle?.getPropertyValue("--animation-controls-x") !== nextX) controlsStyle?.setProperty("--animation-controls-x", nextX);
+    if (controlsStyle?.getPropertyValue("--animation-controls-y") !== nextY) controlsStyle?.setProperty("--animation-controls-y", nextY);
     if (animationPlayPause.textContent !== nextLabel) animationPlayPause.textContent = nextLabel;
   }
   function animationScreenBox(animation, padding = 3) {
@@ -2042,13 +2042,13 @@
       barWidth = imageEditBar.offsetWidth || 200,
       barHeight = imageEditBar.offsetHeight || 210,
       gap = 12,
-      style = Reflect.get(imageEditBar, "style");
+      style = runtimeElementStyle(imageEditBar, "image-edit-bar");
     let x = left + width + gap;
     if (x + barWidth > rect.width - 8) x = left - barWidth - gap;
     if (x < 8) x = Math.max(8, Math.min(rect.width - barWidth - 8, left + width / 2 - barWidth / 2));
     const y = Math.max(8, Math.min(rect.height - barHeight - 8, top + height / 2 - barHeight / 2));
-    style.setProperty("--image-edit-bar-x", `${x.toFixed(1)}px`);
-    style.setProperty("--image-edit-bar-y", `${y.toFixed(1)}px`);
+    style?.setProperty("--image-edit-bar-x", `${x.toFixed(1)}px`);
+    style?.setProperty("--image-edit-bar-y", `${y.toFixed(1)}px`);
   }
   function drawImageChrome(context) {
     const item = state.imageEdit ? selectedImage() : null;

@@ -26,9 +26,9 @@
 
 > Esta tradução oferece uma visão geral do projeto. O [README em inglês](../../README.md) é a fonte oficial para as informações técnicas mais recentes e completas.
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Demonstração dos plugins do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Demonstração completa do PenEcho" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Demonstração de diagramas profissionais do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Demonstração completa do PenEcho" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Demonstração de diagramas profissionais do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Demonstração interativa da tela do PenEcho" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Demonstração dos plugins do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Demonstração interativa da tela do PenEcho" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -77,8 +77,8 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 ## Novidades da versão 0.8.0
 
 - **Diagramas profissionais além de fluxogramas.** Crie diagramas de arquitetura, UML, sequência, BPMN, dados, engenharia, ciência, medicina, finanças e geografia com fonte profissional editável. Formatos compatíveis são renderizados localmente sob demanda; formatos especializados podem continuar em HTML completo.
-- **Desativado por padrão.** Abra **Plugins** e ative **Professional Diagrams** quando precisar. Enquanto estiver desligado, seu prompt e as dependências de renderização não são carregados.
-- **Refine um resultado existente.** Desenhe sobre ou perto de um diagrama e escolha **AI Refine** para substituir apenas esse diagrama. Formato, layout, terminologia e linguagem visual são preservados, salvo quando a alteração solicitada exigir o contrário.
+- **Ativado por padrão com prompt mais leve.** **Professional Diagrams** fica disponível de imediato e pode ser desativado em **Plugins**. Só um guia compacto é enviado ao modelo; o CSS completo e os renderizadores permanecem locais e carregam sob demanda.
+- **Refine widgets de plugins desenhando sobre eles.** Use a caneta para desenhar ou escrever as alterações diretamente sobre um widget retornado por um plugin e clique no botão **AI Refine** que aparece para gerar uma versão aprimorada. Esse fluxo se aplica somente a widgets retornados por plugins.
 - **Armazenamento neste dispositivo ou no servidor PenEcho.** Salve a tela apenas no navegador atual ou no computador que executa o PenEcho para que outros dispositivos autorizados do mesmo servidor possam abri-la. Controles pendentes são confirmados antes do salvamento.
 - **Área de transferência, texto e plugins extensíveis.** Insira texto ou imagens da área de transferência do sistema, copie textos, fórmulas e fontes profissionais retornadas pela IA e reedite caixas de texto com Hand. Plugins integrados ou privados também podem ser copiados como plugins personalizados com CSS opcional carregado somente durante o uso.
 

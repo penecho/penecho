@@ -26,9 +26,9 @@
 
 > この翻訳はプロジェクトの概要を提供します。最新かつ完全な技術情報については、正本である [英語版 README](../../README.md) を参照してください。
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho プラグインのデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho の全体デモ" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho プロ向け図表のデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho の全体デモ" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho プロ向け図表のデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho インタラクティブキャンバスのデモ" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho プラグインのデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho インタラクティブキャンバスのデモ" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -77,8 +77,8 @@ npm start
 ## 0.8.0 の新機能
 
 - **フローチャートを超えるプロ向け図表。** アーキテクチャ、UML、シーケンス、BPMN、データ、工学、科学、医療、金融、地理などの図表を、編集可能な専門形式のソース付きで生成できます。対応形式は必要なときだけローカル描画し、特殊な形式は完全な HTML で表示できます。
-- **既定では無効。** 必要なときに **Plugins** を開き、**Professional Diagrams** を有効にしてください。無効時は専用 Prompt も描画依存関係も読み込まれません。
-- **既存の結果をそのまま改善。** 図表の上や近くに追記して **AI Refine** を選ぶと、その図表だけを置き換えます。変更上必要な場合を除き、形式、レイアウト、用語、視覚表現を維持します。
+- **既定で有効、Prompt は軽量化。** **Professional Diagrams** は最初から利用でき、**Plugins** で無効にできます。モデルには簡潔な機能ガイドだけを送り、完全な CSS と描画依存関係はローカルで必要時に読み込みます。
+- **プラグインのウィジェットに直接描いて改善。** プラグインが返したウィジェット上に、ペンで変更内容を描くか書き込みます。表示される **AI Refine** ボタンをクリックすると、改善された置換版を生成できます。この操作はプラグインが返したウィジェットだけに適用されます。
 - **この端末または PenEcho サーバーへ保存。** 現在のブラウザーだけに保存するか、PenEcho を実行するコンピューターに保存して、同じサーバーの認証済み端末から開けます。保存前に未確定のコントロールを自動確定します。
 - **クリップボード、テキスト、拡張可能なプラグイン。** システムのクリップボードから文字や画像を追加し、AI の文字、数式、専門図表ソースをコピーできます。Hand で Textbox を再編集でき、内蔵・非公開プラグインを、使用時のみ読み込む CSS とともにカスタムプラグインへコピーできます。
 

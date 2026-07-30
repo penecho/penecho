@@ -299,22 +299,22 @@
       }
       async function renderSmiles() {
         await loadScript("https://cdn.jsdelivr.net/npm/smiles-drawer@2.1.7/dist/smiles-drawer.min.js");
-        if (!globalThis.SmilesDrawer?.parse) throw Error("SMILES renderer did not initialize");
+        if (!globalThis.SmilesDrawer?.parse || typeof globalThis.SmilesDrawer.SvgDrawer !== "function") throw Error("SMILES renderer did not initialize");
         const tree = await new Promise((resolve, reject) => globalThis.SmilesDrawer.parse(source, resolve, reject)),
-          canvas = document.createElement("canvas");
-        stage.replaceChildren(canvas);
-        const draw = () => {
-          const width = Math.max(320, stage.clientWidth),
-            height = Math.max(220, stage.clientHeight),
-            ratio = Math.min(2, globalThis.devicePixelRatio || 1);
-          canvas.width = Math.round(width * ratio);
-          canvas.height = Math.round(height * ratio);
-          canvas.style.width = `${width}px`;
-          canvas.style.height = `${height}px`;
-          new globalThis.SmilesDrawer.Drawer({ width:canvas.width, height:canvas.height, bondThickness:2 * ratio, padding:30 * ratio }).draw(tree, canvas, "light", false);
-        };
-        draw();
-        resizeRender = draw;
+          svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"),
+          width = Math.max(320,stage.clientWidth),
+          height = Math.max(220,stage.clientHeight);
+        svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
+        svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+        new globalThis.SmilesDrawer.SvgDrawer({ width, height, bondThickness:2, padding:30, compactDrawing:config.compactDrawing===true })
+          .draw(tree,svg,"light",null,false,[]);
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.style.width="100%";
+        svg.style.height="100%";
+        svg.style.maxWidth="100%";
+        svg.style.maxHeight="100%";
+        stage.replaceChildren(svg);
       }
       async function renderCytoscape() {
         await loadScript("https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js");
@@ -362,13 +362,14 @@
         }).observe(stage);
       }
     }
-    function documentFor({ sourceFormat, source, title }) {
+    function documentFor({ sourceFormat, source, title, diagramKind }) {
       const format = formatRecord(sourceFormat);
-      if (!format || typeof source !== "string" || !source.trim() || new TextEncoder().encode(source).length > 20000) return "";
+      if (!format || typeof source !== "string" || !source.trim() || new TextEncoder().encode(source).length > 100 * 1024) return "";
       const config = {
         sourceFormat:format.id,
         label:format.label,
         sourceBase64:utf8Base64(source),
+        compactDrawing:format.id === "smiles" && String(diagramKind || "").trim().toLowerCase() === "molecular-structure-compact",
       };
       return `<!doctype html>
 <html lang="en">

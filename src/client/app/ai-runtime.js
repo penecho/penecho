@@ -618,18 +618,32 @@
   function fitWidgetGeometry(command, visibleRect) {
     if (!command || ![command.x, command.y, command.w, command.h].every(Number.isFinite)) return null;
     const target = widgetGeometryForViewport(visibleRect).max;
-    let x = Math.round(command.x), y = Math.round(command.y), w = Math.round(command.w), h = Math.round(command.h);
-    if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || w < 300 || h < 200) return null;
+    let x = Math.round(command.x), y = Math.round(command.y),
+      w = Math.round(command.w),
+      h = Math.round(command.h);
+    if (w <= 0 || h <= 0) {
+      w = 2400;
+      h = 1400;
+    } else if (w < 300 || h < 200) {
+      const scale = Math.max(300 / w, 200 / h);
+      w = Math.ceil(w * scale);
+      h = Math.ceil(h * scale);
+    }
     if (w > 10000 || h > 10000 || w * h > 40000000) {
       const scale = Math.min(1, target.w / w, target.h / h, 10000 / w, 10000 / h, Math.sqrt(40000000 / (w * h)));
       w = Math.floor(w * scale);
       h = Math.floor(h * scale);
-      x = Math.min(x, SIZE - w);
-      y = Math.min(y, SIZE - h);
     }
-    w = Math.min(w, SIZE - x);
-    h = Math.min(h, SIZE - y);
+    w = Math.max(300, w);
+    h = Math.max(200, h);
+    w = Math.min(w, SIZE);
+    h = Math.min(h, SIZE);
+    x = Math.max(0, Math.min(SIZE - w, x));
+    y = Math.max(0, Math.min(SIZE - h, y));
     return w >= 300 && h >= 200 ? { x, y, w, h } : null;
+  }
+  function validWidgetRefreshSeconds(value) {
+    return value === 0 || n(value, 60, 86400);
   }
   function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
@@ -696,7 +710,7 @@
             sourceFormat = typeof c.sourceFormat === "string" ? c.sourceFormat.trim() : "",
             frameworkVersion = typeof c.frameworkVersion === "string" ? c.frameworkVersion.trim() : "",
             geometry = fitWidgetGeometry(c, visibleRect);
-          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !n(c.refreshSeconds, 60, 86400) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
+          if (widgetSlots <= 0 || !widgetPluginIds.has(c.pluginId) || widgetEditTarget && c.pluginId !== widgetEditTarget.pluginId || !geometry || typeof c.title !== "string" || !c.title.trim() || c.title.length > 120 || !validWidgetRefreshSeconds(c.refreshSeconds) || typeof c.html !== "string" || !c.html.trim() || c.html.length > MAX_WIDGET_HTML_LENGTH || diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120 || allowCopy && c.copyText !== undefined && (typeof c.copyText !== "string" || !c.copyText.trim() || c.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH) || allowCopy && c.copyLabel !== undefined && (typeof c.copyLabel !== "string" || !c.copyLabel.trim() || c.copyLabel.length > 80) || c.pluginId === "flowchart" && (typeof c.copyText !== "string" || !c.copyText.trim() || !sourceFormat)) return null;
           c = {
             tool:"html_widget",
             pluginId:c.pluginId,
@@ -733,7 +747,7 @@
             w:Math.round(widgetEditTarget ? widgetEditTarget.w : geometry.w),
             h:Math.round(widgetEditTarget ? widgetEditTarget.h : geometry.h),
             title:c.title.trim(),
-            refreshSeconds:86400,
+            refreshSeconds:0,
             sourceFormat,
             source:c.source,
             ...(diagramKind ? { diagramKind } : {}),

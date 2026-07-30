@@ -464,6 +464,91 @@
     }
   }
 
+  function inlineScriptHasWindowBinding(source) {
+    const protectedNames = new Set([
+      "closed", "document", "event", "external", "frameElement", "frames", "history", "length",
+      "location", "name", "navigator", "opener", "origin", "parent", "self", "status", "top", "window",
+    ]);
+    let index = 0, parenDepth = 0, bracketDepth = 0, braceDepth = 0,
+      variableBase = null, expectsVariableName = false, expectsFunctionName = false;
+    const isIdentifierStart = char => /[A-Za-z_$]/.test(char),
+      isIdentifierPart = char => /[A-Za-z0-9_$]/.test(char);
+    while (index < source.length) {
+      const char = source[index], next = source[index + 1];
+      if (/\s/.test(char)) {
+        index++;
+        continue;
+      }
+      if (char === "/" && next === "/") {
+        index += 2;
+        while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index++;
+        continue;
+      }
+      if (char === "/" && next === "*") {
+        index += 2;
+        while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index++;
+        index = Math.min(source.length,index + 2);
+        continue;
+      }
+      if (char === "'" || char === '"' || char === "`") {
+        const quote = char;
+        index++;
+        while (index < source.length) {
+          if (source[index] === "\\") {
+            index += 2;
+            continue;
+          }
+          if (source[index++] === quote) break;
+        }
+        continue;
+      }
+      if (isIdentifierStart(char)) {
+        const start = index++;
+        while (index < source.length && isIdentifierPart(source[index])) index++;
+        const identifier = source.slice(start,index);
+        if (expectsFunctionName) {
+          if (protectedNames.has(identifier)) return true;
+          expectsFunctionName = false;
+        }
+        if (identifier === "function") {
+          expectsFunctionName = true;
+          continue;
+        }
+        if (identifier === "var") {
+          variableBase = { parenDepth, bracketDepth, braceDepth };
+          expectsVariableName = true;
+          continue;
+        }
+        if (variableBase && expectsVariableName) {
+          if (protectedNames.has(identifier)) return true;
+          expectsVariableName = false;
+        }
+        continue;
+      }
+      if (expectsFunctionName && char !== "*") expectsFunctionName = false;
+      if (char === "(") parenDepth++;
+      else if (char === ")") parenDepth = Math.max(0,parenDepth - 1);
+      else if (char === "[") bracketDepth++;
+      else if (char === "]") bracketDepth = Math.max(0,bracketDepth - 1);
+      else if (char === "{") braceDepth++;
+      else if (char === "}") braceDepth = Math.max(0,braceDepth - 1);
+      if (variableBase && parenDepth === variableBase.parenDepth && bracketDepth === variableBase.bracketDepth && braceDepth === variableBase.braceDepth) {
+        if (char === ",") expectsVariableName = true;
+        else if (char === ";") {
+          variableBase = null;
+          expectsVariableName = false;
+        }
+      }
+      index++;
+    }
+    return false;
+  }
+
+  function scopedInlineWidgetScript(source) {
+    const script = String(source || "");
+    return inlineScriptHasWindowBinding(script) ? `(() => {\n${script}\n})();` : script;
+  }
+
   function widgetDocument(html, pluginStyles = "") {
     const parsed = new DOMParser().parseFromString(html, "text/html");
     parsed.querySelectorAll("base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
@@ -472,6 +557,15 @@
     });
     parsed.querySelectorAll("link").forEach((element) => {
       if (String(element.getAttribute("rel") || "").toLowerCase() !== "stylesheet" || !safeHttpsResource(element, "href")) element.remove();
+    });
+    parsed.querySelectorAll("script:not([src])").forEach((element) => {
+      const type = String(element.getAttribute("type") || "").trim().toLowerCase().split(";",1)[0];
+      if (type && !["text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript"].includes(type)) return;
+      const original = element.textContent || "",
+        scoped = scopedInlineWidgetScript(original);
+      if (scoped === original) return;
+      element.textContent = scoped;
+      element.dataset.penechoScopedWindowBindings = "";
     });
     parsed.querySelectorAll("img[src],video[src],audio[src],source[src]").forEach((element) => {
       const value = element.getAttribute("src") || "";
@@ -561,7 +655,7 @@
     const message = event.data;
     if (event.source === parent && event.origin === parentOrigin) {
       if (message?.type === "penecho-widget-init") {
-        if (initialized || typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
+        if (typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         initialized = true;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);

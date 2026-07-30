@@ -270,7 +270,8 @@
       textLayer = options.textLayer,
       t = options.t,
       getTransform = options.getTransform,
-      getAiColor = options.getAiColor || (() => "#2563eb");
+      getAiColor = options.getAiColor || (() => "#2563eb"),
+      styleFor = options.styleFor || (() => null);
     let model = null,
       rafId = 0,
       startTime = 0,
@@ -280,6 +281,7 @@
       phraseIndex = 0,
       tipIndex = 0,
       copyEl = null,
+      copyStyle = null,
       captionEl = null,
       hintEl = null,
       lastType = "",
@@ -319,6 +321,7 @@
       textLayer.textContent = "";
       copyEl = document.createElement("div");
       copyEl.className = "summon-copy";
+      copyStyle = styleFor(copyEl);
       captionEl = document.createElement("div");
       captionEl.className = "summon-caption caption-swap";
       hintEl = document.createElement("div");
@@ -329,9 +332,9 @@
     }
 
     function placeText(screenX, screenY) {
-      if (!copyEl) return;
-      copyEl.style.left = `${screenX}px`;
-      copyEl.style.top = `${screenY + THINKING_LAYOUT.copyTop}px`;
+      if (!copyStyle) return;
+      copyStyle.left = `${screenX}px`;
+      copyStyle.top = `${screenY + THINKING_LAYOUT.copyTop}px`;
     }
 
     function drawLoader(elapsed, fade, screenX, screenY) {
@@ -354,6 +357,7 @@
       model = null;
       hideAt = 0;
       copyEl = null;
+      copyStyle = null;
       captionEl = null;
       hintEl = null;
       if (textLayer) textLayer.textContent = "";
@@ -389,7 +393,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawLoader(elapsed, fade, screenX, screenY);
-      if (copyEl) copyEl.style.opacity = String(fade);
+      if (copyStyle) copyStyle.opacity = String(fade);
       placeText(screenX, screenY);
     }
 

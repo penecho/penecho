@@ -19,7 +19,7 @@ Use when the user explicitly requests a live display, small interactive tool, cu
 
 ## Output contract
 
-Return exactly one `html_widget` command and no prose, with `pluginId:"general"`. Place it at the user's arrow or box destination, or nearby blank space. Choose dimensions for the actual request; a useful default is `w:2400`, `h:1400`, `refreshSeconds:60`. Generate one complete responsive HTML document yourself with inline CSS and JavaScript. Make the requested content prominent and readable. Keep the outer layout transparent with no enclosing card background, border, or shadow.
+Return exactly one `html_widget` command and no prose, with `pluginId:"general"`. Place it at the user's arrow or box destination, or nearby blank space. Choose dimensions for the actual request; a useful default is `w:2400`, `h:1400`, `refreshSeconds:0`. Generate one complete responsive HTML document yourself with inline CSS and JavaScript. Make the requested content prominent and readable. Keep the outer layout transparent with no enclosing card background, border, or shadow.
 
 ## Runtime rules
 

@@ -164,11 +164,16 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(flowchart.document, /Prefer `diagram_source`[\s\S]*?PenEcho supplies the iframe, renderer, shared CSS, Copy button/);
   assert.match(flowchart.document, /Use `html_widget` instead[\s\S]*?not locally rendered[\s\S]*?custom interaction/);
   assert.match(flowchart.document, /PlantUML, DBML, draw\.io XML, D2, Structurizr DSL, Excalidraw JSON, KiCad, SPICE/);
+  assert.match(flowchart.document, /### A\. Locally rendered source: `diagram_source`/);
+  assert.match(flowchart.document, /### B\. Directly rendered HTML: `html_widget`/);
+  assert.match(flowchart.document, /WaveDrom JSON[\s\S]*?digital timing diagrams/);
+  assert.match(flowchart.document, /examples above are not a whitelist[\s\S]*?describe, sketch or name any professional diagram/);
+  assert.match(flowchart.document, /most suitable locally rendered `diagram_source` or directly rendered `html_widget`/);
   for (const format of ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"])
     assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
   assert.match(flowchart.document, /unlisted need[\s\S]*?return `html_widget`[\s\S]*?There is no library whitelist/);
-  assert.match(flowchart.document, /ElectricalProfile JSON[\s\S]*?KiCad, SPICE/);
+  assert.match(flowchart.document, /teaching-only JSON[\s\S]*?KiCad, SPICE/);
   assert.match(flowchart.document, /more than about 10 nodes[\s\S]*?penecho:responsive/);
   assert.match(flowchart.document, /same tool and `sourceFormat`[\s\S]*?smallest complete modification/);
   assert.match(flowchart.document, /copyText/);
@@ -259,11 +264,30 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
     flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart", "plugin.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
+  const scopeInlineScript = vm.runInNewContext(`(() => {
+    ${functionSource(host, "inlineScriptHasWindowBinding")}
+    ${functionSource(host, "scopedInlineWidgetScript")}
+    return scopedInlineWidgetScript;
+  })()`);
+  const conflictingScript = "var xs=[160,340], coilX=900, top=70, gap=104; globalThis.renderHeight=top+gap;";
+  assert.match(scopeInlineScript(conflictingScript), /^\(\(\) => \{/);
+  const scopedContext = {};
+  vm.runInNewContext(scopeInlineScript(conflictingScript), scopedContext);
+  assert.equal(scopedContext.renderHeight,174);
+  for (const safeScript of [
+    "var topLabel='top'; var options={top:70};",
+    "let top=70; globalThis.renderHeight=top+104;",
+    "window.parent.postMessage({type:'updated'}, '*');",
+    "const source='var top=70';",
+  ]) assert.equal(scopeInlineScript(safeScript),safeScript);
+  assert.match(scopeInlineScript("function parent() {}"), /^\(\(\) => \{/);
   assert.match(host, /setAttribute\("sandbox", parentOrigin === location\.origin \? "allow-scripts" : "allow-scripts allow-same-origin"\)/);
   assert.match(host, /script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: \$\{rendererUrl\}/);
   assert.match(host, /connect-src https:/);
   assert.match(host, /img-src data: blob: https:/);
   assert.match(host, /querySelectorAll\("script\[src\]"\)[\s\S]*?safeHttpsResource/);
+  assert.match(host, /querySelectorAll\("script:not\(\[src\]\)"\)[\s\S]*?scopedInlineWidgetScript/);
+  assert.match(host, /penechoScopedWindowBindings/);
   assert.match(host, /querySelectorAll\("link"\)[\s\S]*?stylesheet[\s\S]*?safeHttpsResource/);
   assert.match(host, /pluginStyle\.dataset\.penechoPluginStyles/);
   assert.ok(host.indexOf("pluginStyle.textContent = pluginStyles") < host.indexOf('bridgeStyle.textContent = "html,body'));

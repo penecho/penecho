@@ -43,7 +43,7 @@ function anthropicEffortParameters(effort, enableThinking = true) {
 }
 
 function anthropicResponseMaxTokens(effort) {
-  return String(effort || "").trim().toLowerCase() === "max" ? 16384 : 8192;
+  return String(effort || "").trim().toLowerCase() === "max" ? 16384 : 12288;
 }
 
 module.exports = { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig };

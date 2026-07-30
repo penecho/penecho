@@ -1291,7 +1291,7 @@
     if (!active) return;
     const viewport = view.getBoundingClientRect(),
       box = selection.box,
-      toolbarStyle = Reflect.get(selectionToolbar, "style"),
+      toolbarStyle = runtimeElementStyle(selectionToolbar, "selection-toolbar"),
       selectionBusy = selectionAIBusy(selection),
       isTypesetting = selectionIsTypesetting(selection);
     selectionToolbar.hidden = false;
@@ -1312,8 +1312,8 @@
       preferredY = top - height - 8,
       y = preferredY >= 8 ? preferredY : bottom + 8,
       maxY = Math.max(8, viewport.height - height - 8);
-    toolbarStyle.setProperty("--selection-toolbar-x", `${x}px`);
-    toolbarStyle.setProperty("--selection-toolbar-y", `${Math.max(8, Math.min(maxY, y))}px`);
+    toolbarStyle?.setProperty("--selection-toolbar-x", `${x}px`);
+    toolbarStyle?.setProperty("--selection-toolbar-y", `${Math.max(8, Math.min(maxY, y))}px`);
   }
   function releaseSelectionAITransformLock(run = state.activeAI) {
     const selection = run?.isolatedSelection ? run.selection : null,

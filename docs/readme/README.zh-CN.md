@@ -26,9 +26,9 @@
 
 > 本译文提供项目概览。最新、最完整的技术信息以[英文 README](../../README.md) 为准。
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 插件演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 完整演示" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 专业图示演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 完整演示" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 专业图示演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 交互画布演示" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 插件演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 交互画布演示" width="49%"></p>
 
 ## Kimi 开源伙伴
 
@@ -77,8 +77,8 @@ npm start
 ## 0.8.0 新功能
 
 - **不止流程图的专业图示。** 可生成架构、UML、时序、BPMN、数据、工程、科学、医学、金融、地理等专业图示，并保留可编辑的专业源码。已支持的格式按需本地渲染；更专门的格式可继续用完整 HTML 展示。
-- **默认关闭，需要时手动开启。** 使用前请打开 **Plugins**，启用 **专业图示**。未启用时不会加入其 Prompt，也不会加载渲染依赖，不影响不需要专业图示的用户。
-- **在原图上继续完善。** 在现有图示上或附近补画后，点击 **AI 完善**，只整体替换该图示；除非修改要求确有需要，否则会尽量保持原专业格式、布局、术语和视觉风格。
+- **默认开启，同时缩小 Prompt 开销。** **专业图示**默认可用，也可在 **Plugins** 中关闭。只向模型发送精简的能力说明；完整 CSS 与渲染依赖保留在本地并按需加载。
+- **直接在插件控件上画出修改要求。** 用画笔在插件返回的控件上画出或写明需要修改的地方，然后点击出现的 **AI 完善（Refine）** 按钮，即可生成升级后的替换版本。此功能仅适用于插件返回的控件。
 - **本机或 PenEcho 服务器存储。** 画布可仅保存在当前浏览器，也可保存到运行 PenEcho 的电脑，让使用同一服务且通过验证的其他设备打开。保存前会自动确认未完成控件，确保 Textbox、图示和 Widget 被写入快照。
 - **剪贴板、文字与可扩展插件。** 可从系统剪贴板直接加入文字或图片，复制 AI 返回的文字、公式和专业图示源码，并用 Hand 重新选择和编辑 Textbox。内置或私有插件也可复制为自定义插件，并配置仅在使用时加载的 CSS。
 

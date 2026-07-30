@@ -402,7 +402,7 @@
             </div>
             <output id="pluginStylesBytes" for="pluginStylesEditor pluginStylesUpload">0 / 32000 bytes</output>
           </div>
-          <iframe id="pluginStylesPreview" class="plugin-styles-preview" title="Plugin CSS preview" data-i18n-title="pluginStylesPreview" sandbox></iframe>
+          <iframe id="pluginStylesPreview" class="plugin-styles-preview" title="Plugin CSS preview" data-i18n-title="pluginStylesPreview"></iframe>
           <div class="plugin-create-actions">
             <span id="pluginDocumentStatus" role="status" aria-live="polite"></span>
             <button id="pluginImprove" class="plugin-secondary-action" type="button" data-i18n="improvePluginWithAi">Improve with AI</button>
@@ -502,13 +502,14 @@
         <div class="changelog-demo">
           <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" loading="eager" decoding="async">
         </div>
-        <p class="changelog-plugin-note" data-i18n="changelogPluginEnableNote">Professional Diagrams is off by default. To use professional diagram features, open Plugins and enable Professional Diagrams.</p>
+        <p class="changelog-plugin-note" data-i18n="changelogPluginEnableNote">Professional Diagrams is on by default. You can turn it off at any time from Plugins.</p>
         <section class="changelog-release" aria-labelledby="changelogCurrentVersion">
           <h3 id="changelogCurrentVersion">0.8.0</h3>
           <ul>
             <li data-i18n="changelogVisualPlugins">Professional Diagrams chooses an appropriate editable domain format, renders supported formats locally, and preserves copyable professional source for specialized HTML diagrams.</li>
-            <li data-i18n="changelogCanvasWorkflow">Draw or describe a diagram, then add nearby ink and use AI Refine to update only that diagram while preserving its format, layout, terminology, and style.</li>
-            <li data-i18n="changelogDesktopAccess">Professional Diagrams is second in the plugin list but off by default; enabling it adds about 5.2k–5.5k prompt tokens per request, while renderers load only when needed.</li>
+            <li data-i18n="changelogCanvasWorkflow">Draw or describe the professional diagram you need; PenEcho chooses a suitable format and returns it as a canvas widget.</li>
+            <li data-i18n="changelogPluginRefine">Plugin-returned widgets can be refined directly: draw the requested changes over the widget with the Pen, then click the Refine button that appears. This workflow applies only to plugin widgets.</li>
+            <li data-i18n="changelogDesktopAccess">Professional Diagrams is second in the plugin list and on by default; its compact guide adds about 1.5k–2k prompt tokens per request, while full CSS and renderers stay local.</li>
           </ul>
         </section>
         <section class="changelog-release changelog-earlier" aria-labelledby="changelogEarlierTitle">

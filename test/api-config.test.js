@@ -27,7 +27,7 @@ test("Anthropic effort maps none to disabled thinking and other levels to adapti
     thinking:{ type:"adaptive" }, output_config:{ effort:"medium" },
   });
   assert.deepEqual(anthropicEffortParameters("high", false), { output_config:{ effort:"high" } });
-  assert.equal(anthropicResponseMaxTokens("medium"), 8192);
-  assert.equal(anthropicResponseMaxTokens("none"), 8192);
+  assert.equal(anthropicResponseMaxTokens("medium"), 12288);
+  assert.equal(anthropicResponseMaxTokens("none"), 12288);
   assert.equal(anthropicResponseMaxTokens("max"), 16384);
 });

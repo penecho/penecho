@@ -551,7 +551,7 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.deepEqual(request.thinking,{type:"disabled"});
     assert.equal(request.output_config,undefined);
     assert.equal(Object.hasOwn(request,"temperature"),false);
-    assert.equal(request.max_tokens,8192);
+    assert.equal(request.max_tokens,12288);
     assert.doesNotMatch(request.system,/no more than roughly 7000 tokens/);
   } finally { await stopServer(disabledServer.child); await new Promise(resolve=>disabled.server.close(resolve)); }
 });
@@ -615,7 +615,7 @@ test("Anthropic output exhaustion reports the real response limit instead of a J
   try {
     const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,502);
-    assert.match(body.error,/8192-token response allowance/);
+    assert.match(body.error,/12288-token response allowance/);
     assert.doesNotMatch(body.error,/Unexpected end of JSON input/);
   } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
 });
@@ -769,6 +769,76 @@ test("shared PenEcho server canvases support authorized metadata-first CRUD", { 
   }
 });
 
+test("shared PenEcho server canvases retain up to one hundred widgets, images, and animations", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),
+    {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    mutationHeaders={"Content-Type":"application/json",Origin:origin},
+    widgets=Array.from({length:100},(_,index)=>({id:`widget-${index + 1}`})),
+    animations=Array.from({length:100},(_,index)=>({id:`animation-${index + 1}`})),
+    images=Array.from({length:100},(_,index)=>({
+      id:`image-${index + 1}`,
+      x:0,
+      y:0,
+      w:80,
+      h:80,
+      naturalW:1,
+      naturalH:1,
+      sourceName:"",
+      data:PNG,
+    }));
+  try {
+    const widgetsAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now()}-123e4567-e89b-12d3-a456-426614174100`,{widgets})),
+      }),
+      widgetsAcceptedBody=await widgetsAccepted.json();
+    assert.equal(widgetsAccepted.status,201,JSON.stringify(widgetsAcceptedBody));
+    assert.equal(widgetsAcceptedBody.canvas.widgetCount,100);
+
+    const widgetsRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 1}-123e4567-e89b-12d3-a456-426614174101`,{widgets:[...widgets,{id:"widget-101"}]})),
+    });
+    assert.equal(widgetsRejected.status,400,await widgetsRejected.text());
+
+    const imagesAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now() + 2}-123e4567-e89b-12d3-a456-426614174102`,{images})),
+      }),
+      imagesAcceptedBody=await imagesAccepted.json();
+    assert.equal(imagesAccepted.status,201,JSON.stringify(imagesAcceptedBody));
+    assert.equal(imagesAcceptedBody.canvas.imageCount,100);
+
+    const imagesRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 3}-123e4567-e89b-12d3-a456-426614174103`,{images:[...images,{...images[0],id:"image-101"}]})),
+    });
+    assert.equal(imagesRejected.status,400,await imagesRejected.text());
+
+    const animationsAccepted=await fetch(`${origin}/api/canvases`,{
+        method:"POST",
+        headers:mutationHeaders,
+        body:JSON.stringify(validSharedCanvas(`${Date.now() + 4}-123e4567-e89b-12d3-a456-426614174104`,{animations})),
+      }),
+      animationsAcceptedBody=await animationsAccepted.json();
+    assert.equal(animationsAccepted.status,201,JSON.stringify(animationsAcceptedBody));
+    assert.equal(animationsAcceptedBody.canvas.animationCount,100);
+
+    const animationsRejected=await fetch(`${origin}/api/canvases`,{
+      method:"POST",
+      headers:mutationHeaders,
+      body:JSON.stringify(validSharedCanvas(`${Date.now() + 5}-123e4567-e89b-12d3-a456-426614174105`,{animations:[...animations,{id:"animation-101"}]})),
+    });
+    assert.equal(animationsRejected.status,400,await animationsRejected.text());
+  } finally {
+    await stopServer(child);
+  }
+});
+
 test("shared server canvases obey the process-lifetime PenEcho PIN session", { timeout:20000 }, async () => {
   const {child,origin}=await startServer(serverEnv({PENECHO_TEST_OPEN_ACCESS:"0"})),
     snapshot=validSharedCanvas();
@@ -795,7 +865,10 @@ test("shared server canvases obey the process-lifetime PenEcho PIN session", { t
 
 test("enabled plugin documents reach the model and gate html_widget commands", { timeout:20000 }, async () => {
   const command = (pluginId="weather", html="<!doctype html><title>Weather</title>", placement = {}) => JSON.stringify({ intent:"answer", commands:[{ tool:"html_widget", pluginId, x:100, y:200, w:1200, h:700, title:"Weather", refreshSeconds:900, html, ...placement }] }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 0 ? command("weather", "x".repeat(200000)) : index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(200001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : index === 7 ? command("flowchart", undefined, { w:7800, h:2100 }) : index === 8 ? command("flowchart", undefined, { w:10000, h:20000 }) : index === 9 ? command("flowchart", undefined, { w:8000, h:6000 }) : command() }) }),
+    upstream = await startApiServer("", { response:({index}) => {
+      const professional = placement => command("flowchart", undefined, { sourceFormat:"mermaid", copyText:"flowchart LR\nA --> B", ...placement });
+      return { body:index === 0 ? command("weather", "x".repeat(200000)) : index === 2 ? command("stocks") : index === 3 ? command("weather", "x".repeat(200001)) : index === 4 ? command("weather", undefined, { x:17900, y:19300, w:2400, h:1150 }) : index === 5 ? command("image-search", undefined, { copyText:"aurora", copyLabel:"Copy query" }) : index === 6 ? command("flowchart", undefined, { diagramKind:"process", sourceFormat:"bpmn-xml", frameworkVersion:"penecho-professional-diagrams-v1", copyText:'<?xml version="1.0"?><definitions />' }) : index === 7 ? professional({ w:7800, h:2100 }) : index === 8 ? professional({ w:10000, h:20000 }) : index === 9 ? professional({ w:8000, h:6000 }) : command() };
+    } }),
     {child,origin} = await startServer(apiServerEnv(upstream.origin));
   try {
     const descriptor = weatherPluginDescriptor(), enabled = validPayload();
@@ -808,7 +881,9 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.equal(accepted.commands[0].html.length, 200000);
     const outbound = JSON.parse(upstream.requests[0]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
-    assert.deepEqual(modelInput.enabledPlugins, [descriptor]);
+    const { styles:ignoredStyles, ...modelDescriptor } = descriptor;
+    assert.deepEqual(modelInput.enabledPlugins, [modelDescriptor]);
+    assert.equal("styles" in modelInput.enabledPlugins[0], false);
     assert.equal(Object.keys(modelInput).at(-1), "widgetGeometry");
     assert.deepEqual(modelInput.widgetGeometry.viewportBucket, { w:1000, h:1000, rounding:"ceil-to-1000-before-halving" });
     assert.deepEqual(modelInput.widgetGeometry.max, { w:500, h:500 });
@@ -837,7 +912,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     const edgeResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(enabled) }),
       edge = await edgeResponse.json();
     assert.equal(edgeResponse.status, 200);
-    assert.deepEqual({ x:edge.commands[0].x, y:edge.commands[0].y, w:edge.commands[0].w, h:edge.commands[0].h }, { x:17900, y:19300, w:2100, h:700 });
+    assert.deepEqual({ x:edge.commands[0].x, y:edge.commands[0].y, w:edge.commands[0].w, h:edge.commands[0].h }, { x:17600, y:18850, w:2400, h:1150 });
 
     const imagePayload = validPayload();
     imagePayload.plugins = [builtInPluginDescriptor("image-search", ["https://commons.wikimedia.org", "https://upload.wikimedia.org", "https://api.openverse.org"])];
@@ -901,6 +976,98 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
   }
 });
 
+test("html_widget commands fill required fields and discard invalid optional metadata", { timeout:20000 }, async () => {
+  const response = index => JSON.stringify({
+      intent:"answer",
+      commands:[{
+        tool:"html_widget",
+        pluginId:"general",
+        ...(index ? { x:30000, y:-500, w:2, h:3, title:"T".repeat(140), refreshSeconds:30 } : {
+          diagramKind:"D".repeat(100),
+          sourceFormat:"S".repeat(100),
+          frameworkVersion:"F".repeat(140),
+          copyText:"C".repeat(16001),
+          copyLabel:"L".repeat(100),
+        }),
+        html:"<!doctype html><title>Store Points Map</title>",
+      }],
+    }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:response(index) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    plugin = {
+      ...builtInPluginDescriptor("general"),
+      name:"General HTML",
+      recommendedRefreshSeconds:60,
+    },
+    payload = validPayload();
+  payload.visibleRect = { x:0, y:0, w:10000, h:10000 };
+  payload.plugins = [plugin];
+  try {
+    const resultResponse = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+      }),
+      result = await resultResponse.json();
+    assert.equal(resultResponse.status, 200);
+    assert.equal(result.commands.length, 1);
+    assert.deepEqual(
+      {
+        tool:result.commands[0].tool,
+        pluginId:result.commands[0].pluginId,
+        x:result.commands[0].x,
+        y:result.commands[0].y,
+        w:result.commands[0].w,
+        h:result.commands[0].h,
+        title:result.commands[0].title,
+        refreshSeconds:result.commands[0].refreshSeconds,
+      },
+      {
+        tool:"html_widget",
+        pluginId:"general",
+        x:0,
+        y:61,
+        w:2400,
+        h:1400,
+        title:"General HTML",
+        refreshSeconds:0,
+      },
+    );
+    assert.equal(result.commands[0].diagramKind, "D".repeat(80));
+    for (const field of ["sourceFormat", "frameworkVersion", "copyText", "copyLabel"])
+      assert.equal(field in result.commands[0], false, field);
+
+    const clampedResponse = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+      }),
+      clamped = await clampedResponse.json();
+    assert.equal(clampedResponse.status,200);
+    assert.deepEqual(
+      {
+        x:clamped.commands[0].x,
+        y:clamped.commands[0].y,
+        w:clamped.commands[0].w,
+        h:clamped.commands[0].h,
+        title:clamped.commands[0].title,
+        refreshSeconds:clamped.commands[0].refreshSeconds,
+      },
+      {
+        x:19700,
+        y:0,
+        w:300,
+        h:450,
+        title:"T".repeat(120),
+        refreshSeconds:60,
+      },
+    );
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
 test("professional diagrams accept local source renderers and keep unknown formats on html_widget", { timeout:20000 }, async () => {
   const diagram = (sourceFormat, source = "flowchart LR\nA --> B") => ({
       tool:"diagram_source",
@@ -924,6 +1091,7 @@ test("professional diagrams accept local source renderers and keep unknown forma
           response(diagram("mermaid", "flowchart LR\nA --> B --> C")),
           response(diagram("dot", "digraph G { A -> B -> C }")),
           response(diagram("dot", "digraph G { A -> B -> C }")),
+          response(diagram("mermaid", `%% ${"x".repeat(90 * 1024)}`)),
         ][index],
       }),
     }),
@@ -944,7 +1112,7 @@ test("professional diagrams accept local source renderers and keep unknown forma
       w:1200,
       h:700,
       title:"Professional diagram",
-      refreshSeconds:86400,
+      refreshSeconds:0,
       sourceFormat:"mermaid",
       source:"flowchart LR\nA --> B",
       diagramKind:"process",
@@ -996,6 +1164,15 @@ test("professional diagrams accept local source renderers and keep unknown forma
     }).then(value => value.json());
     assert.deepEqual(changedFormat.commands, []);
 
+    const largeSource = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.equal(largeSource.commands.length,1);
+    assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") > 20 * 1024);
+    assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") <= 100 * 1024);
+
     const outbound = JSON.parse(upstream.requests[3]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
     assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
@@ -1011,16 +1188,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
 test("custom plugin widget refinement preserves its bundle and rejects ambiguous replacements", { timeout:20000 }, async () => {
   const replacement = {
       tool:"html_widget",
-      pluginId:"custom-diagram",
-      x:120,
-      y:240,
-      w:1200,
-      h:700,
-      title:"Custom architecture",
-      refreshSeconds:86400,
       html:"<!doctype html><main class=\"custom-node\">Updated</main>",
       diagramKind:"architecture",
-      sourceFormat:"d2",
       copyText:"client -> api -> database",
     },
     response = commands => JSON.stringify({ intent:"answer", commands }),
@@ -1046,6 +1215,8 @@ test("custom plugin widget refinement preserves its bundle and rejects ambiguous
     instructionMode:"implicit-polish",
     box:{ x:120, y:240, w:1200, h:700 },
     html:"<!doctype html><main class=\"custom-node\">Existing</main>",
+    sourceFormat:"d2",
+    source:"client -> api -> database",
     targetId:"client-only-widget-id",
   };
   try {
@@ -1054,12 +1225,31 @@ test("custom plugin widget refinement preserves its bundle and rejects ambiguous
     assert.equal(acceptedResponse.status, 200);
     assert.equal(accepted.commands.length, 1);
     assert.equal(accepted.commands[0].pluginId, plugin.id);
+    assert.deepEqual(
+      {
+        x:accepted.commands[0].x,
+        y:accepted.commands[0].y,
+        w:accepted.commands[0].w,
+        h:accepted.commands[0].h,
+        title:accepted.commands[0].title,
+        refreshSeconds:accepted.commands[0].refreshSeconds,
+      },
+      {
+        x:payload.widgetEdit.box.x,
+        y:payload.widgetEdit.box.y,
+        w:payload.widgetEdit.box.w,
+        h:payload.widgetEdit.box.h,
+        title:payload.widgetEdit.title,
+        refreshSeconds:0,
+      },
+    );
     assert.equal(accepted.commands[0].sourceFormat, "d2");
     assert.equal(accepted.commands[0].copyLabel, "Copy d2");
 
     const outbound = JSON.parse(upstream.requests[0]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
-    assert.equal(modelInput.enabledPlugins[0].styles, plugin.styles);
+    assert.equal(modelInput.enabledPlugins[0].document, plugin.document);
+    assert.equal("styles" in modelInput.enabledPlugins[0], false);
     assert.equal(modelInput.widgetEdit.pluginId, plugin.id);
     assert.equal(modelInput.widgetEdit.html, payload.widgetEdit.html);
     assert.equal("targetId" in modelInput.widgetEdit, false);
@@ -1470,8 +1660,8 @@ test("Anthropic API mode labels the lossless WebP payload with its matching medi
     const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,200);
     assert.equal(body.attempts,1);
-    assert.equal(body.commands[0]?.tool,"write_text");
-    assert.equal(body.commands[0]?.text,"hello");
+    assert.deepEqual(body.commands,[]);
+    assert.equal(body.message,"hello");
     assert.equal(upstream.requests.length,1);
     const outbound=JSON.parse(upstream.requests[0]),image=outbound.messages[0].content.find(part=>part.type==="image");
     assert.equal(image.source.media_type,"image/webp");

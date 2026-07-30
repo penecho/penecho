@@ -38,12 +38,12 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
   <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="49%">
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
   <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
 </p>
 
@@ -191,8 +191,8 @@ PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where i
 ## What's new in 0.8.0
 
 - **Professional diagrams beyond flowcharts.** Create architecture, UML, sequence, BPMN, data, engineering, scientific, medical, financial, geographic, and other domain diagrams with editable professional source. Supported formats use on-demand local renderers; specialized formats can return complete HTML without forcing every request into one renderer.
-- **Off by default; enable it when needed.** Open **Plugins** and switch on **Professional Diagrams** before asking for these diagrams. Its prompt and renderer dependencies are otherwise not loaded, so users who do not need professional diagrams pay no extra startup or prompt cost.
-- **Refine without starting over.** Draw on or near an existing diagram and choose **AI Refine** to replace only that diagram. PenEcho sends its current source and asks the model to preserve the format, layout, terminology, and visual language unless the requested change requires otherwise.
+- **On by default, with a smaller prompt footprint.** **Professional Diagrams** starts enabled and can be turned off from **Plugins**. Only its compact capability guide is sent to the model; full CSS and renderer dependencies stay local and load on demand.
+- **Refine plugin widgets by drawing on them.** Use the Pen to draw or write the requested changes directly over a widget returned by a plugin, then click the **AI Refine** button that appears to generate its upgraded replacement. This workflow applies only to plugin-returned widgets.
 - **Device or PenEcho server storage.** Save canvases only in the current browser, or on the computer running PenEcho so other authorized devices using the same server can open them. Saving first confirms unfinished canvas controls so text boxes, diagrams, and widgets are included.
 - **Clipboard, text, and extensible plugins.** Read text or images from the system clipboard directly into native canvas controls, copy returned text, formulas, and professional diagram source, and reselect editable text boxes with Hand. Built-in and private plugins can be copied into a custom plugin, with optional CSS loaded only when that plugin is used.
 

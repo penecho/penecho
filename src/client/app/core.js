@@ -128,15 +128,15 @@
     ANIMATION_CONTROLS_VISIBLE_MS = 10000;
   const MAX_SHARP_OVERLAY_PIXELS = 8000000,
     MAX_SHARP_OVERLAY_ITEM_PIXELS = 2500000,
-    MAX_VISIBLE_ANIMATIONS = 20,
-    MAX_VISIBLE_WIDGETS = 20,
-    MAX_VISIBLE_IMAGES = 20,
+    MAX_VISIBLE_ANIMATIONS = 100,
+    MAX_VISIBLE_WIDGETS = 100,
+    MAX_VISIBLE_IMAGES = 100,
     MAX_IMAGE_SOURCE_BYTES = 32 * 1024 * 1024,
     MAX_IMAGE_DIMENSION = 2048,
     MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
     MAX_WIDGET_HTML_LENGTH = 200000,
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
-    MAX_DIAGRAM_SOURCE_BYTES = 20000,
+    MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
@@ -229,7 +229,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       imageDelete: "Delete image",
       imageDeleteHint: "Remove this image from the canvas",
       imageDeleted: "Image deleted",
-      imageLimitReached: "Image limit reached (20). Delete an image before adding another.",
+      imageLimitReached: "Image limit reached (100). Delete an image before adding another.",
       imageTooLarge: "The selected image is too large (32 MB maximum)",
       imageUnsupported: "This image format could not be opened",
       imageImportFailed: "The image could not be added",
@@ -308,7 +308,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
       tourPluginsTitle: "Real photos and professional diagrams",
-      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is off by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
+      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is also on by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
       tourHandBody: "Choose Hand, then use the small top handle to move outlined images, animations, and AI HTML widgets. Hand also lets you click inside HTML widgets; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
@@ -334,10 +334,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogBadge: "What's new",
       changelogTitle: "Professional diagrams, editable source, and precise refinement",
       changelogIntro: "Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.",
-      changelogPluginEnableNote: "Professional Diagrams is off by default. To use professional diagram features, open Plugins and enable Professional Diagrams.",
+      changelogPluginEnableNote: "Professional Diagrams is on by default. You can turn it off at any time from Plugins.",
       changelogVisualPlugins: "Professional Diagrams chooses an appropriate editable domain format. Supported formats render locally in the existing iframe; specialized or unlisted formats can use generated HTML while preserving copyable professional source.",
-      changelogCanvasWorkflow: "Draw or describe a diagram, then add nearby ink and use AI Refine to replace only that diagram while preserving its format, established layout, terminology, style, and copy action.",
-      changelogDesktopAccess: "Professional Diagrams is second in the plugin list but remains off by default. Enabling it adds about 5.2k–5.5k prompt tokens per AI request; renderers load only when needed and canvas display itself uses no model tokens.",
+      changelogCanvasWorkflow: "Draw or describe the professional diagram you need; PenEcho chooses a suitable format and returns it as a canvas widget.",
+      changelogPluginRefine: "Plugin-returned widgets can be refined directly: draw the requested changes over the widget with the Pen, then click the Refine button that appears. This workflow applies only to plugin widgets.",
+      changelogDesktopAccess: "Professional Diagrams is second in the plugin list and on by default. Its compact capability guide adds about 1.5k–2k prompt tokens per AI request; full renderer CSS and libraries stay local and load only when needed.",
       changelogEarlierTitle: "Earlier highlights",
       changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
       changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
@@ -371,7 +372,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonTip3: "Tip: add a few strokes beside a diagram, then use AI Refine to update only that diagram.",
       summonTip4: "Tip: AI Refine tries to preserve the diagram’s format, layout, terminology, and visual style.",
       summonTip5: "Tip: professional diagram renderers load only when needed; simply viewing them uses no model tokens.",
-      summonTip6: "Tip: Professional Diagrams is off by default—enable it from Plugins when you need it.",
+      summonTip6: "Tip: Professional Diagrams is on by default and can be turned off from Plugins.",
       summonTip7: "Tip: Real Photo Search places sourced web photos directly on the canvas.",
       summonTip8: "Tip: use Hand to move and freely resize images, animations, and AI widgets.",
       summonTip9: "Tip: remote images remain included when you save the canvas or export a PNG.",
@@ -562,7 +563,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       animationDelete: "Delete animation",
       animationSelected: "Editing animation; drag the top handle to move, resize with edge or corner handles, then confirm or cancel",
       animationDeleted: "Animation deleted",
-      animationLimitReached: "Animation limit reached (20). Delete an animation before adding another.",
+      animationLimitReached: "Animation limit reached (100). Delete an animation before adding another.",
       snapshotAnimations: "animations",
       widgetAccept: "Keep widget",
       widgetDiscard: "Discard widget",
@@ -578,7 +579,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
       widgetPluginUnavailable: "The plugin document could not be loaded",
-      widgetLimitReached: "Live widget limit reached (20). Delete a widget before adding another.",
+      widgetLimitReached: "Live widget limit reached (100). Delete a widget before adding another.",
       snapshotWidgets: "live widgets",
       clearConfirm: "Clear the whole canvas?",
       timeout: "Request timed out",
@@ -777,6 +778,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       statusKey: "ready",
     };
   let textHelpInvoker = null;
+  let pluginStylesPreviewReady = false,
+    pluginStylesPreviewPayload = null;
   const AI_CANCELLED = "AI_CANCELLED";
   const AI_REJECTED = "AI_REJECTED";
   const AI_SUPERSEDED = "AI_SUPERSEDED";
@@ -822,6 +825,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     restoreFocus: null,
   };
   const COLOR_CLASS = { "#2563eb": "color-blue", "#1f2937": "color-black", "#dc2626": "color-red", "#ea580c": "color-orange", "#ca8a04": "color-gold", "#16a34a": "color-green", "#0891b2": "color-cyan", "#9333ea": "color-purple" };
+  const runtimeStyleRules = new Map();
+  function runtimeElementStyle(element, key) {
+    if (!element || !key) return null;
+    let record = runtimeStyleRules.get(key);
+    if (!record) {
+      const className = `penecho-runtime-${String(key).replace(/[^a-z0-9_-]/gi, "-")}`,
+        sheet = textEditorStyleSheet();
+      if (!sheet) return null;
+      try {
+        const index = sheet.cssRules.length;
+        sheet.insertRule(`.${className} {}`, index);
+        record = { className, style:sheet.cssRules[index]?.style || null };
+        if (!record.style) return null;
+        runtimeStyleRules.set(key, record);
+      } catch {
+        return null;
+      }
+    }
+    element.classList.add(record.className);
+    return record.style;
+  }
   const setStatus = (text, key = null) => {
     status.textContent = text;
     state.statusKey = key;
@@ -834,6 +858,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     t,
     getTransform: () => ({ scale: state.scale, panX: state.panX, panY: state.panY, width: view.clientWidth, height: view.clientHeight, dpr: devicePixelRatio || 1 }),
     getAiColor: () => state.aiColor,
+    styleFor: (element) => runtimeElementStyle(element, "summon-copy"),
   });
   function summonBlockers() {
     const visible = viewportRect(),
@@ -1023,14 +1048,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       elements = featureTourElements(step),
       target = featureTourTargetRect(step, elements);
     if (!target) {
-      Reflect.get(tourHighlight, "style").setProperty("visibility", "hidden");
-      Reflect.get(tourCard, "style").setProperty("visibility", "hidden");
+      runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
+      runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
       showFeatureTourStep(featureTour.index + 1, 1);
       return;
     }
     featureTour.targets = elements;
     const viewport = featureTourViewport(),
-      layerStyle = Reflect.get(tourLayer, "style"),
+      layerStyle = runtimeElementStyle(tourLayer, "tour-layer"),
       padding = step.padding ?? 7,
       viewportRight = viewport.left + viewport.width,
       viewportBottom = viewport.top + viewport.height,
@@ -1038,25 +1063,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       top = Math.max(viewport.top + 2, target.top - padding),
       right = Math.min(viewportRight - 2, target.right + padding),
       bottom = Math.min(viewportBottom - 2, target.bottom + padding);
-    layerStyle.setProperty("--tour-viewport-width", `${Math.max(1, Math.floor(viewport.width))}px`);
-    layerStyle.setProperty("--tour-viewport-height", `${Math.max(1, Math.floor(viewport.height))}px`);
+    layerStyle?.setProperty("--tour-viewport-width", `${Math.max(1, Math.floor(viewport.width))}px`);
+    layerStyle?.setProperty("--tour-viewport-height", `${Math.max(1, Math.floor(viewport.height))}px`);
     tourCard.classList.toggle("tour-compact", viewport.width < 300);
-    const highlightStyle = Reflect.get(tourHighlight, "style"),
-      cardStyle = Reflect.get(tourCard, "style");
-    highlightStyle.setProperty("left", `${Math.round(left)}px`);
-    highlightStyle.setProperty("top", `${Math.round(top)}px`);
-    highlightStyle.setProperty("width", `${Math.max(2, Math.round(right - left))}px`);
-    highlightStyle.setProperty("height", `${Math.max(2, Math.round(bottom - top))}px`);
-    highlightStyle.setProperty("border-radius", `${step.radius ?? 10}px`);
+    const highlightStyle = runtimeElementStyle(tourHighlight, "tour-highlight"),
+      cardStyle = runtimeElementStyle(tourCard, "tour-card");
+    highlightStyle?.setProperty("left", `${Math.round(left)}px`);
+    highlightStyle?.setProperty("top", `${Math.round(top)}px`);
+    highlightStyle?.setProperty("width", `${Math.max(2, Math.round(right - left))}px`);
+    highlightStyle?.setProperty("height", `${Math.max(2, Math.round(bottom - top))}px`);
+    highlightStyle?.setProperty("border-radius", `${step.radius ?? 10}px`);
     const cardRect = tourCard.getBoundingClientRect(),
       coachmarkMargin = viewport.width <= 620 ? 8 : 12,
       position = TOUR.placeCoachmark(target, { width: cardRect.width, height: cardRect.height }, viewport, step.placement, { margin: coachmarkMargin, gap: 15, arrowMargin: 23 });
-    cardStyle.setProperty("left", `${Math.round(position.x)}px`);
-    cardStyle.setProperty("top", `${Math.round(position.y)}px`);
-    cardStyle.setProperty("--tour-arrow-offset", `${Math.round(position.arrowOffset)}px`);
+    cardStyle?.setProperty("left", `${Math.round(position.x)}px`);
+    cardStyle?.setProperty("top", `${Math.round(position.y)}px`);
+    cardStyle?.setProperty("--tour-arrow-offset", `${Math.round(position.arrowOffset)}px`);
     tourCard.dataset.placement = position.placement;
-    highlightStyle.setProperty("visibility", "visible");
-    cardStyle.setProperty("visibility", "visible");
+    highlightStyle?.setProperty("visibility", "visible");
+    cardStyle?.setProperty("visibility", "visible");
     if (!featureTour.shownIds.has(step.id)) {
       featureTour.shownIds.add(step.id);
       markFeatureTourStepsSeen([step]);
@@ -1079,7 +1104,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     tourProgressTrack.setAttribute("aria-label", t("tourProgress"));
     tourProgressTrack.setAttribute("aria-valuemax", String(total));
     tourProgressTrack.setAttribute("aria-valuenow", String(current));
-    Reflect.get(tourProgressBar, "style").setProperty("width", `${(current / total) * 100}%`);
+    runtimeElementStyle(tourProgressBar, "tour-progress")?.setProperty("width", `${(current / total) * 100}%`);
     tourCard.dataset.stepId = step.id;
     scheduleFeatureTourPosition();
   }
@@ -1097,8 +1122,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     featureTour.index = nextIndex;
     featureTour.targets = elements;
-    Reflect.get(tourCard, "style").setProperty("visibility", "hidden");
-    Reflect.get(tourHighlight, "style").setProperty("visibility", "hidden");
+    runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
+    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
     updateFeatureTourLanguage();
     const rect = featureTourTargetRect(featureTour.steps[nextIndex], elements);
     if (featureTourTargetNeedsScroll(rect)) elements[0].scrollIntoView({ block: featureTour.steps[nextIndex].placement === "center" ? "center" : "nearest", inline: "nearest", behavior: "auto" });
@@ -1134,7 +1159,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     document.body.classList.add("tour-open");
     tourLayer.hidden = false;
     tourLayer.setAttribute("aria-hidden", "false");
-    Reflect.get(tourHighlight, "style").setProperty("visibility", "hidden");
+    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
     observeActiveFeatureTour();
     return showFeatureTourStep(0, 1);
   }
@@ -1154,8 +1179,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     tourLayer.setAttribute("aria-hidden", "true");
     tourMain.inert = false;
     document.body.classList.remove("tour-open");
-    Reflect.get(tourHighlight, "style").setProperty("visibility", "hidden");
-    Reflect.get(tourCard, "style").setProperty("visibility", "hidden");
+    runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
+    runtimeElementStyle(tourCard, "tour-card")?.setProperty("visibility", "hidden");
     if (restoreScroll) window.scrollTo({ left: featureTour.restoreScrollX, top: featureTour.restoreScrollY, behavior: "auto" });
     requestAnimationFrame(() => {
       if (featureTour.active) return;
@@ -1505,7 +1530,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         connect: [...manifest.connect],
         recommendedRefreshSeconds: manifest.recommendedRefreshSeconds,
         document: manifest.document,
-        styles: manifest.styles,
       }));
   }
   function pluginRequestPayload() {
@@ -1570,7 +1594,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           documentPath:item.documentPath,
           stylePath:item.stylePath,
           builtIn:item.builtIn,
-          defaultEnabled:["general", "image-search", "weather"].includes(item.manifest.id),
+          defaultEnabled:["general", "flowchart", "image-search", "weather"].includes(item.manifest.id),
         }));
       }
       definitions.sort((a, b) => (manifests.get(a.id)?.name || a.id).localeCompare(manifests.get(b.id)?.name || b.id));
@@ -1686,7 +1710,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         help.textContent = plugin.id === "general" ? t("generalPluginRecommendedHelp") : plugin.helpKey ? t(plugin.helpKey) : localizedManifestValue(manifest, "description") || t("pluginNoDescription");
         meta.className = "plugin-option-meta";
         if (plugin.documentPath && manifest) {
-          const bytes = new TextEncoder().encode(`${manifest.document}\n${manifest.styles || ""}`).length,
+          const bytes = new TextEncoder().encode(manifest.document).length,
             tokens = Math.ceil(bytes / 4),
             source = manifest.source || manifest.connect.map((origin) => new URL(origin).hostname).join(", "),
             sourceItem = document.createElement("span"),
@@ -1883,19 +1907,39 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function updatePluginStylesPreview(validation) {
     if (!pluginStylesPreview) return;
-    const css = validation?.manifest?.styles || "",
-      escaped = css.replace(/<\/style/gi, "<\\/style");
-    pluginStylesPreview.srcdoc = `<!doctype html><meta charset="utf-8"><style>
+    const css = validation?.manifest?.styles || "";
+    pluginStylesPreviewPayload = {
+      type:"penecho-widget-init",
+      title:t("pluginStylesPreview"),
+      html:`<!doctype html><meta charset="utf-8"><style>
       *{box-sizing:border-box}body{margin:0;padding:22px;background:#fff;color:#172033;font:16px/1.45 system-ui,sans-serif}
       .plugin-css-preview{display:grid;gap:16px}.preview-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
       .preview-node{padding:12px 16px;border:2px solid #64748b;border-radius:6px;background:#f8fafc;font-weight:700}
       .preview-muted{color:#64748b}.preview-accent{color:#2563eb}
-    </style><style>${escaped}</style><main class="plugin-css-preview pd-root" data-pd-palette="standard" data-pd-density="comfortable">
+    </style><main class="plugin-css-preview pd-root" data-pd-palette="standard" data-pd-density="comfortable">
       <h2 class="pd-title">Plugin style preview</h2><p class="pd-subtitle preview-muted">Typography, semantic nodes, labels and palette variables</p>
       <div class="preview-row pd-stage"><span class="preview-node pd-node pd-node--service">Service</span><span class="pd-edge-label">request</span><span class="preview-node pd-node pd-node--database">Database</span></div>
       <div class="preview-row"><span class="pd-badge pd-badge--info preview-accent">Info</span><span class="pd-badge pd-badge--success">Success</span><span class="pd-badge pd-badge--warning">Warning</span><span class="pd-badge pd-badge--danger">Error</span></div>
-    </main>`;
+    </main>`,
+      pluginStyles:css,
+    };
+    if (!pluginStylesPreview.getAttribute("src")) {
+      pluginStylesPreviewReady = false;
+      pluginStylesPreview.src = new URL("widget-host.html", location.href).href;
+    }
+    sendPluginStylesPreview();
   }
+  function sendPluginStylesPreview() {
+    if (!pluginStylesPreviewReady || !pluginStylesPreviewPayload || !pluginStylesPreview?.contentWindow) return false;
+    pluginStylesPreview.contentWindow.postMessage(pluginStylesPreviewPayload, location.origin);
+    return true;
+  }
+  function handlePluginStylesPreviewMessage(event) {
+    if (event.source !== pluginStylesPreview?.contentWindow || event.origin !== location.origin || event.data?.type !== "penecho-widget-host-ready") return;
+    pluginStylesPreviewReady = true;
+    sendPluginStylesPreview();
+  }
+  window.addEventListener("message", handlePluginStylesPreviewMessage);
   function updatePluginAuthoringUi() {
     const validation = pluginDraftValidation(),
       status = state.pluginAuthoringStatus || (validation.manifest

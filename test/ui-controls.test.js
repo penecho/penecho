@@ -53,7 +53,7 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(html, /id="imagePickerBtn"/);
   assert.match(html, /id="imagePickerInput" type="file" accept="image\/\*" hidden/);
   assert.doesNotMatch(html, /id="imagePickerInput"[^>]*\bcapture\b/);
-  assert.match(app, /MAX_VISIBLE_IMAGES = 20/);
+  assert.match(app, /MAX_VISIBLE_IMAGES = 100/);
   assert.match(app, /MAX_IMAGE_DIMENSION = 2048/);
   assert.match(prepareImportedImage, /scale = Math\.min\(1, MAX_IMAGE_DIMENSION \/ sourceW, MAX_IMAGE_DIMENSION \/ sourceH/);
   assert.match(app, /function canvasIdentityGeneration\(\)/);
@@ -276,7 +276,7 @@ test("declarative scenes and widgets render below the dedicated ink and interact
     restore = vm.runInNewContext(`(${functionSource(app, "restoreAnimations")})`, {
       ANIMATION: { normalize: (scene) => scene },
       SIZE: 20000,
-      MAX_VISIBLE_ANIMATIONS: 20,
+      MAX_VISIBLE_ANIMATIONS: 100,
       performance: { now: () => 100 },
       hideAnimationControls: () => {},
       requestAnimationLayerRender: () => {},
@@ -288,10 +288,10 @@ test("declarative scenes and widgets render below the dedicated ink and interact
       transform: { x: 10, y: 20, w: 300, h: 200 },
       playback: { playheadMs: 250, paused: true },
     };
-  restore(Array.from({ length: 22 }, () => saved));
-  assert.equal(restoreState.animations.length, 20);
-  assert.equal(new Set(restoreState.animations.map((animation) => animation.id)).size, 20);
-  assert.ok(restoreState.nextAnimationId >= 21);
+  restore(Array.from({ length: 102 }, () => saved));
+  assert.equal(restoreState.animations.length, 100);
+  assert.equal(new Set(restoreState.animations.map((animation) => animation.id)).size, 100);
+  assert.ok(restoreState.nextAnimationId >= 101);
 });
 
 test("plugin manager is a centered dynamic catalog with built-in animation and bundled local plugins", () => {
@@ -304,8 +304,10 @@ test("plugin manager is a centered dynamic catalog with built-in animation and b
   assert.match(app, /id:\s*"animation"[\s\S]*?requestField:\s*"animationEnabled"[\s\S]*?defaultEnabled:\s*true[\s\S]*?onChange:\s*applyAnimationPluginState/);
   assert.doesNotMatch(app, /documentPath:\s*"plugins\/weather\.md"/);
   const loadPluginDocuments = functionSource(app, "loadPluginDocuments");
-  assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "image-search", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?professionalDefinitions = definitions\.filter\(\(definition\) => definition\.id === "flowchart"\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.professionalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
-  assert.match(functionSource(app, "enabledPluginDescriptors"), /id === "general" \? 0 : id === "flowchart" \? 1 : 2/);
+  assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "flowchart", "image-search", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?professionalDefinitions = definitions\.filter\(\(definition\) => definition\.id === "flowchart"\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.professionalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
+  const enabledPluginDescriptors = functionSource(app, "enabledPluginDescriptors");
+  assert.match(enabledPluginDescriptors, /id === "general" \? 0 : id === "flowchart" \? 1 : 2/);
+  assert.doesNotMatch(enabledPluginDescriptors, /styles/);
   assert.match(app, /localStorage\.setItem\(PLUGIN_STORAGE_KEY, JSON\.stringify/);
   assert.match(app, /if \(!state\.pluginCatalogLoaded\) void loadPluginDocuments\(\)/);
   assert.match(app, /applyTheme\(state\.theme\);\s*resetCanvasCursor\(\);\s*loadPluginDocuments\(\)\.catch/);
@@ -319,7 +321,10 @@ test("plugin manager is a centered dynamic catalog with built-in animation and b
   assert.match(functionSource(app, "preparePendingItem"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);
   assert.match(app, /pluginPromptEstimate:\s*"adds about \{tokens\} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens"/);
+  assert.match(app, /MAX_VISIBLE_WIDGETS = 100/);
+  assert.match(app, /widgetLimitReached:\s*"Live widget limit reached \(100\)/);
   assert.match(zh, /pluginPromptEstimate:\s*"启用时，每次 AI 请求约增加 \{tokens\} 个 prompt token；内容添加到画布后，显示、交互、刷新和重绘都不消耗 token"/);
+  assert.match(zh, /widgetLimitReached:\s*"实时组件已达到 100 个上限/);
   assert.match(functionSource(app, "renderPluginOptions"), /plugin\.id === "general"[\s\S]*?pluginRecommended[\s\S]*?generalPluginRecommendedHelp/);
   assert.match(functionSource(app, "renderPluginOptions"), /pluginSourceLabel[\s\S]*?pluginApiLabel[\s\S]*?manifest\.connect\.length[\s\S]*?pluginNoNetwork/);
   assert.match(functionSource(app, "renderPluginOptions"), /pluginPersonalSection[\s\S]*?plugin\.builtIn === false[\s\S]*?pluginBuiltInSection[\s\S]*?plugin\.builtIn !== false/);
@@ -346,9 +351,9 @@ test("plugin manager is a centered dynamic catalog with built-in animation and b
   assert.match(app, /animationPluginDisabledHelp:\s*"When enabled, the model can return animated demonstrations when explicitly requested or genuinely useful/);
   assert.match(zh, /animationPluginCost:\s*"每次 AI 请求约增加 500–600 个 prompt token"/);
   assert.match(zh, /animationPluginDisabledHelp:\s*"勾选后，大模型可在明确要求或确有必要时返回动态图演示。"/);
-  assert.match(app, /MAX_VISIBLE_ANIMATIONS = 20/);
-  assert.match(app, /animationLimitReached:\s*"Animation limit reached \(20\)/);
-  assert.match(zh, /animationLimitReached:\s*"动画已达到 20 个上限/);
+  assert.match(app, /MAX_VISIBLE_ANIMATIONS = 100/);
+  assert.match(app, /animationLimitReached:\s*"Animation limit reached \(100\)/);
+  assert.match(zh, /animationLimitReached:\s*"动画已达到 100 个上限/);
   assert.match(functionSource(app, "requestAI"), /animationLimitReached = pluginEnabled\("animation"\)[\s\S]*?state\.animations\.length >= MAX_VISIBLE_ANIMATIONS[\s\S]*?animate_scene[\s\S]*?setStatusKey\("animationLimitReached"\)/);
 });
 
@@ -395,7 +400,7 @@ test("disabled data plugins send no plugin payload and detach widget runtime hoo
   assert.match(html, /id="widgetLayer"[^>]*\shidden(?:\s|>)/);
   assert.match(requestPayload, /if \(plugins\.length\) payload\.plugins = plugins/);
   assert.match(functionSource(app, "enabledPluginDescriptors"), /filter\(\(plugin\) => pluginEnabled\(plugin\.id\)\)/);
-  assert.match(functionSource(app, "enabledPluginDescriptors"), /sort\(\(a, b\) => a\.id === "general"/);
+  assert.match(functionSource(app, "enabledPluginDescriptors"), /sort\(\(a, b\) => \{[\s\S]*?id === "general" \? 0 : id === "flowchart" \? 1 : 2/);
   assert.match(syncRuntime, /dataPluginDefinitions\(\)\.some[\s\S]*?widgetLayer\.hidden = !enabled[\s\S]*?addEventListener[\s\S]*?removeEventListener/);
   assert.doesNotMatch(app, /window\.addEventListener\("message", handleWidgetMessage\)/);
   assert.match(functionSource(app, "visibleWidgets"), /if \(!widgetRuntimeEnabled\(\)\) return \[\]/);
@@ -426,6 +431,7 @@ test("client widget validation matches the server tolerance boundary", () => {
   assert.deepEqual({ ...fitGeometry({ x:100, y:200, w:10000, h:20000 }, { w:10000, h:10000 }) }, { x:100, y:200, w:2500, h:5000 });
   assert.deepEqual({ ...fitGeometry({ x:100, y:200, w:6800, h:2200 }, { w:10000, h:10000 }) }, { x:100, y:200, w:6800, h:2200 });
   assert.deepEqual({ ...fitGeometry({ x:100, y:200, w:8000, h:6000 }, { w:20000, h:20000 }) }, { x:100, y:200, w:7302, h:5477 });
+  assert.deepEqual({ ...fitGeometry({ x:30000, y:-500, w:2, h:3 }, { w:10000, h:10000 }) }, { x:19700, y:0, w:300, h:450 });
   assert.deepEqual({ ...resizeImage({ x:100, y:200, w:1200, h:800 }, { x:15100, y:10200 }, "resize") }, { x:100, y:200, w:15000, h:10000 });
   assert.doesNotMatch(functionSource(app, "resizeImageBox"), /5000|10000|40000000|maximumArea/);
   assert.doesNotMatch(functionSource(app, "resizeWidgetBox"), /5000|10000|40000000|maximumArea/);
@@ -519,19 +525,19 @@ test("general HTML defaults on while preserving an explicit user choice", () => 
   assert.deepEqual({ ...explicitlyDisabled() }, { general:false });
 });
 
-test("professional diagrams default off while preserving an explicit user choice", () => {
+test("professional diagrams default on while preserving an explicit user choice", () => {
   const storedPluginSettings = vm.runInNewContext(`(${functionSource(read("public/app.js"), "storedPluginSettings")})`, {
-      PLUGIN_DEFINITIONS: [{ id:"flowchart", defaultEnabled:false }],
+      PLUGIN_DEFINITIONS: [{ id:"flowchart", defaultEnabled:true }],
       PLUGIN_STORAGE_KEY: "penecho-plugins",
       localStorage: { getItem:() => null },
     }),
-    explicitlyEnabled = vm.runInNewContext(`(${functionSource(read("public/app.js"), "storedPluginSettings")})`, {
-      PLUGIN_DEFINITIONS: [{ id:"flowchart", defaultEnabled:false }],
+    explicitlyDisabled = vm.runInNewContext(`(${functionSource(read("public/app.js"), "storedPluginSettings")})`, {
+      PLUGIN_DEFINITIONS: [{ id:"flowchart", defaultEnabled:true }],
       PLUGIN_STORAGE_KEY: "penecho-plugins",
-      localStorage: { getItem:(key) => key === "penecho-plugins" ? '{"flowchart":true}' : null },
+      localStorage: { getItem:(key) => key === "penecho-plugins" ? '{"flowchart":false}' : null },
     });
-  assert.deepEqual({ ...storedPluginSettings() }, { flowchart:false });
-  assert.deepEqual({ ...explicitlyEnabled() }, { flowchart:true });
+  assert.deepEqual({ ...storedPluginSettings() }, { flowchart:true });
+  assert.deepEqual({ ...explicitlyDisabled() }, { flowchart:false });
 });
 
 test("empty animation bounds do not break ink-only capture and controls expire after ten seconds", () => {
@@ -574,12 +580,32 @@ test("animation frames do not rewrite unchanged control DOM", () => {
     state:{animationControlsUntil:1000,panX:10,panY:20,scale:1},
     view:{getBoundingClientRect:()=>({width:1000,height:700})},
     t:(key)=>key,
+    runtimeElementStyle:()=>animationControls.style,
     acceptAnimationEdit:()=>{},
   });
   position();
   assert.deepEqual(writes,{hidden:1,style:2,text:1});
   position();
   assert.deepEqual(writes,{hidden:1,style:2,text:1});
+});
+
+test("strict CSP dynamic layout uses stylesheet rules instead of element style attributes", () => {
+  const app = read("public/app.js"),
+    summon = read("public/summon.js"),
+    html = read("public/index.html"),
+    widgetHost = read("public/widget-host.js"),
+    helper = functionSource(app, "runtimeElementStyle");
+  assert.match(helper, /sheet\.insertRule\(`\.\$\{className\} \{\}`/);
+  for (const key of ["tour-layer", "tour-highlight", "tour-card", "tour-progress", "animation-controls", "image-edit-bar", "selection-toolbar", "summon-copy"])
+    assert.match(app, new RegExp(`runtimeElementStyle\\([^)]*["']${key}["']`));
+  assert.doesNotMatch(app, /Reflect\.get\((?:tourLayer|tourHighlight|tourCard|tourProgressBar|animationControls|imageEditBar|selectionToolbar), "style"\)/);
+  assert.doesNotMatch(summon, /copyEl\.style\./);
+  assert.match(summon, /styleFor = options\.styleFor/);
+  assert.doesNotMatch(app, /pluginStylesPreview\.srcdoc|<style>\$\{escaped\}/);
+  assert.doesNotMatch(html, /id="pluginStylesPreview"[^>]*\ssandbox(?:\s|>)/);
+  assert.match(functionSource(app, "updatePluginStylesPreview"), /widget-host\.html/);
+  assert.match(functionSource(app, "handlePluginStylesPreviewMessage"), /penecho-widget-host-ready/);
+  assert.doesNotMatch(widgetHost, /if \(initialized \|\| typeof message\.html/);
 });
 
 test("animation drafts play immediately and share playback controls with confirmed editing", () => {

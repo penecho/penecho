@@ -26,9 +26,9 @@
 
 > Cette traduction présente une vue d'ensemble du projet. Le [README anglais](../../README.md) reste la source officielle pour les informations techniques les plus récentes et les plus complètes.
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Démonstration des plugins PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Démonstration complète de PenEcho" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Démonstration des diagrammes professionnels PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Démonstration complète de PenEcho" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Démonstration des diagrammes professionnels PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Démonstration interactive du canevas PenEcho" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Démonstration des plugins PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Démonstration interactive du canevas PenEcho" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -77,8 +77,8 @@ npm start
 ## Nouveautés de la version 0.8.0
 
 - **Des diagrammes professionnels bien au-delà des organigrammes.** Créez des diagrammes d'architecture, UML, séquence, BPMN, données, ingénierie, science, médecine, finance et géographie avec une source professionnelle modifiable. Les formats pris en charge sont rendus localement à la demande ; les formats spécialisés peuvent rester en HTML complet.
-- **Désactivé par défaut.** Ouvrez **Plugins** et activez **Professional Diagrams** lorsque vous en avez besoin. Tant qu'il est désactivé, son prompt et ses dépendances de rendu ne sont pas chargés.
-- **Affiner un résultat existant.** Dessinez sur ou près d'un diagramme, puis choisissez **AI Refine** pour ne remplacer que ce diagramme. Le format, la mise en page, la terminologie et le langage visuel sont conservés sauf nécessité contraire.
+- **Activé par défaut avec un prompt allégé.** **Professional Diagrams** est disponible immédiatement et peut être désactivé dans **Plugins**. Seul un guide compact est envoyé au modèle ; le CSS complet et les moteurs de rendu restent locaux et sont chargés à la demande.
+- **Affinez les widgets de plugins en dessinant dessus.** Avec le stylet, dessinez ou écrivez les modifications directement sur un widget renvoyé par un plugin, puis cliquez sur le bouton **AI Refine** qui apparaît pour générer sa version améliorée. Ce flux s'applique uniquement aux widgets renvoyés par des plugins.
 - **Stockage sur cet appareil ou sur le serveur PenEcho.** Enregistrez le canevas uniquement dans le navigateur actuel ou sur l'ordinateur qui exécute PenEcho afin que d'autres appareils autorisés du même serveur puissent l'ouvrir. Les contrôles en attente sont confirmés avant l'enregistrement.
 - **Presse-papiers, texte et plugins extensibles.** Ajoutez du texte ou des images depuis le presse-papiers système, copiez les textes, formules et sources professionnelles renvoyés par l'IA et rééditez les zones de texte avec Hand. Un plugin intégré ou privé peut aussi être copié comme plugin personnalisé avec du CSS facultatif chargé seulement à l'utilisation.
 

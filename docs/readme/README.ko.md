@@ -26,9 +26,9 @@
 
 > 이 번역은 프로젝트 개요를 제공합니다. 최신 전체 기술 정보는 공식 원문인 [영문 README](../../README.md)를 참조하세요.
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 플러그인 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 전체 데모" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 전문 다이어그램 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 전체 데모" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 전문 다이어그램 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 대화형 캔버스 데모" width="49%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 플러그인 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 대화형 캔버스 데모" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -77,8 +77,8 @@ npm start
 ## 0.8.0의 새로운 기능
 
 - **플로차트를 넘어선 전문 다이어그램.** 아키텍처, UML, 시퀀스, BPMN, 데이터, 공학, 과학, 의료, 금융, 지리 다이어그램을 편집 가능한 전문 소스와 함께 만들 수 있습니다. 지원 형식은 필요할 때만 로컬에서 렌더링하며, 특수 형식은 완전한 HTML로 표시할 수 있습니다.
-- **기본값은 꺼짐입니다.** 필요할 때 **Plugins**를 열어 **Professional Diagrams**를 직접 켜세요. 꺼져 있으면 전용 Prompt와 렌더러 의존성을 로드하지 않습니다.
-- **기존 결과를 이어서 개선.** 다이어그램 위나 근처에 표시한 뒤 **AI Refine**을 선택하면 그 다이어그램만 교체합니다. 요청한 변경에 꼭 필요하지 않은 한 형식, 배치, 용어, 시각 언어를 유지합니다.
+- **기본값은 켜짐이며 Prompt 부담은 줄었습니다.** **Professional Diagrams**는 바로 사용할 수 있고 **Plugins**에서 끌 수 있습니다. 모델에는 간결한 기능 안내만 보내며 전체 CSS와 렌더러 의존성은 로컬에서 필요할 때만 불러옵니다.
+- **플러그인 위젯에 직접 그려 개선.** 플러그인이 반환한 위젯 위에 펜으로 원하는 변경 사항을 그리거나 적은 다음, 표시되는 **AI Refine** 버튼을 클릭해 개선된 대체 버전을 생성할 수 있습니다. 이 기능은 플러그인이 반환한 위젯에만 적용됩니다.
 - **이 기기 또는 PenEcho 서버에 저장.** 현재 브라우저에만 저장하거나 PenEcho가 실행되는 컴퓨터에 저장하여 같은 서버의 인증된 다른 기기에서 열 수 있습니다. 저장 전에 완료되지 않은 컨트롤을 자동으로 확정합니다.
 - **클립보드, 텍스트, 확장 가능한 플러그인.** 시스템 클립보드에서 텍스트나 이미지를 넣고 AI 텍스트, 수식, 전문 다이어그램 소스를 복사하며 Hand로 Textbox를 다시 편집할 수 있습니다. 내장 또는 비공개 플러그인을 사용 시에만 로드되는 선택적 CSS와 함께 사용자 플러그인으로 복사할 수도 있습니다.
 
