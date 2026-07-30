@@ -8,7 +8,7 @@ End users do **not** need Node.js or Python. Electron bundles its own Chromium a
 
 1. PenEcho opens the graphical setup page.
 2. The user chooses API, Kimi, Codex CLI, or Claude CLI.
-3. `Test, save & launch` validates the fields, encrypts any API key through Electron `safeStorage`, and tests the provider for up to 30 seconds.
+3. `Test, save & launch` validates the fields, stores any API key in a user-only local credential file, and tests the provider for up to 30 seconds. On macOS the key is compressed locally without accessing Keychain; Windows keeps Electron `safeStorage` and DPAPI encryption.
 4. After a successful test, the app restarts and opens the local PenEcho canvas automatically. If the test fails or times out, the saved configuration can still be launched.
 5. Later launches open the canvas directly. `Settings…` remains available from the application menu.
 

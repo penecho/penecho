@@ -71,6 +71,8 @@ let mainWindow = null,
   cliOperation = null,
   quitting = false;
 
+const credentialProtector = process.platform === "darwin" ? null : safeStorage;
+
 function userPaths() {
   const stateDir = app.getPath("userData");
   return {
@@ -90,7 +92,7 @@ function loadConfiguration() {
       packageRoot:ROOT,
       env:desktopConfigurationEnvironment(process.env, paths.stateDir),
     }),
-    apiKey = readSecret(paths.secretFile, safeStorage);
+    apiKey = readSecret(paths.secretFile, credentialProtector);
   configuration.stateDir = paths.stateDir;
   configuration.configFile = paths.configFile;
   Object.assign(configuration.env, kimiPresetUpdates(configuration));
@@ -169,11 +171,16 @@ function showSettings() {
     autoHideMenuBar:true,
     webPreferences:{ preload:PRELOAD },
   }));
-  restrictNavigation(settingsWindow, url => url === pathToFileURL(SETTINGS_FILE).href);
-  settingsWindow.once("ready-to-show", () => settingsWindow?.show());
-  settingsWindow.on("closed", () => { settingsWindow = null; });
-  void settingsWindow.loadFile(SETTINGS_FILE);
-  return settingsWindow;
+  const window = settingsWindow, reveal = () => {
+    if (window.isDestroyed()) return;
+    window.show();
+    window.focus();
+  };
+  restrictNavigation(window, url => url === pathToFileURL(SETTINGS_FILE).href);
+  window.once("ready-to-show", reveal);
+  window.on("closed", () => { if (settingsWindow === window) settingsWindow = null; });
+  void window.loadFile(SETTINGS_FILE).then(reveal);
+  return window;
 }
 
 function createMainWindow(url) {
@@ -416,7 +423,7 @@ function registerIpc() {
     try {
       const loaded = loadConfiguration(), normalized = normalizeSettings(input, { hasSavedApiKey:Boolean(loaded.apiKey) }),
         apiKey = normalized.apiKey || loaded.apiKey;
-      if (["api", "kimi"].includes(normalized.provider) && normalized.apiKey) writeSecret(loaded.paths.secretFile, normalized.apiKey, safeStorage);
+      if (["api", "kimi"].includes(normalized.provider) && normalized.apiKey) writeSecret(loaded.paths.secretFile, normalized.apiKey, credentialProtector);
       saveConfiguration(loaded.configuration, normalized.updates);
       loaded.configuration.env.PENECHO_STATE_DIR = loaded.paths.stateDir;
       loaded.configuration.env.PENECHO_PRIVATE_PLUGIN_DIR = loaded.paths.privatePlugins;

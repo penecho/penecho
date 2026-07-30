@@ -39,16 +39,16 @@ const KIMI_PRESET_MODELS = new Set(Object.values(KIMI_MODELS));
 const translations = {
   zh:{
     eyebrow:"几分钟内连接 AI 画布", title:"设置你的 AI 连接", subtitle:"PenEcho 在本机运行。选择 AI 模型来源，测试一次，然后就可以开始创作。",
-    stepOneTitle:"选择模型来源", stepOneBody:"对大多数用户，API 是最简单的选择。", stepTwoTitle:"安全测试", stepTwoBody:"API Key 由 macOS 或 Windows 加密保存。", stepThreeTitle:"在画布上创作", stepThreeBody:"书写或绘画，让 AI 直接以视觉内容回应。",
+    stepOneTitle:"选择模型来源", stepOneBody:"对大多数用户，API 是最简单的选择。", stepTwoTitle:"本地测试", stepTwoBody:"API Key 保存在仅当前用户可读的本地凭据文件中。", stepThreeTitle:"在画布上创作", stepThreeBody:"书写或绘画，让 AI 直接以视觉内容回应。",
     localTitle:"本地桌面服务", localBody:"画布保留在你的电脑中，模型请求只发送给你选择的服务商。", configuration:"配置", settingsTitle:"连接你的模型", providerLegend:"AI 模型来源",
     apiTitle:"API", apiDescription:"推荐 · 无需安装命令行工具", recommended:"推荐", kimiDescription:"2026 开源合作伙伴 · Kimi K3", kimiCliDescription:"使用本机 Kimi Code 登录", codexDescription:"自动安装或使用已有账户", claudeDescription:"自动安装或使用已有账户",
     kimiPartnerTitle:"PenEcho 是 Kimi 2026 开源合作伙伴", otherProviders:"其他模型来源", kimiCodeLink:"Kimi Code", kimiChinaLink:"中国大陆", kimiGlobalLink:"全球", kimiOffering:"Kimi 服务", kimiRegion:"访问区域", kimiCodeOption:"Kimi Code · 订阅制", kimiPlatformOption:"开放平台 · 按量付费", globalOption:"全球", chinaOption:"中国大陆",
-    apiType:"API 类型", model:"模型", baseUrl:"API 地址", apiKey:"API Key", savedSecurely:"已安全保存", apiKeyHelp:"使用操作系统加密保存，不会暴露给画布页面。",
+    apiType:"API 类型", model:"模型", baseUrl:"API 地址", apiKey:"API Key", savedLocally:"已保存在本机", apiKeyHelp:"保存在仅当前用户可读的本地凭据文件中，不会暴露给画布页面。",
     kimiCliRequired:"使用你已有的 Kimi Code CLI 登录状态。", kimiCliInstallHelp:"PenEcho 可以安装官方 Kimi Code CLI，并使用它已有的登录状态。", installGuide:"安装说明", codexRequired:"通过 Codex CLI 使用你现有的 ChatGPT 登录状态。", codexInstallHelp:"PenEcho 会安装官方 CLI，并直接使用你已有的登录状态。", claudeRequired:"通过 Claude Code 使用你现有的 Anthropic 登录状态。", claudeInstallHelp:"PenEcho 会安装官方稳定版 CLI，并直接使用你已有的登录状态。", install:"安装", modelOptional:"模型（可选）", pathOptional:"可执行文件路径（可选）",
     effort:"推理强度", imageFormat:"画布图片格式", advanced:"高级设置", advancedHelp:"网络、超时和诊断", timeout:"模型超时（秒）", autoDelay:"自动 AI 延迟（秒）", port:"本地端口", network:"网络访问",
     lanAccessTitle:"在其他设备上打开 PenEcho", lanAccessHelp:"在连接同一可信网络的设备上使用以下地址，并保持 PenEcho 运行。", lanDynamicPort:"启动后系统会选择端口，并显示最终的局域网地址。", noLanAddress:"暂未检测到局域网地址。连接网络后，启动时会显示最终地址。", copyAddress:"复制地址",
     recordRequests:"记录完整 AI 请求详情", recordWarning:"用于调试，记录中可能包含私密画布内容。", keepRecords:"保留", records:"条", help:"设置帮助", submit:"测试、保存并启动", settingsStored:"设置文件：",
-    testing:"正在测试连接", testingBody:"正在安全保存设置并检查模型连接……", testTimedOut:"连接测试已超时", testTimedOutBody:"设置已保存。连接测试超过 30 秒，你仍然可以启动 PenEcho 进入画布。", installing:"正在安装", installingBody:"正在从官方来源下载并校验，请稍候……", installed:"安装完成", checkingExistingSession:"正在检查现有账户登录状态……", installFailed:"自动安装未完成", success:"连接成功", launching:"PenEcho 即将启动。", savedTestFailed:"设置已保存，但连接测试失败", launchAnyway:"仍然启动", launchingSaved:"正在使用已保存的设置启动 PenEcho……", failed:"尚未连接", unexpected:"无法打开桌面设置接口。",
+    testing:"正在测试连接", testingBody:"正在本地保存设置并检查模型连接……", testTimedOut:"连接测试已超时", testTimedOutBody:"设置已保存。连接测试超过 30 秒，你仍然可以启动 PenEcho 进入画布。", installing:"正在安装", installingBody:"正在从官方来源下载并校验，请稍候……", installed:"安装完成", checkingExistingSession:"正在检查现有账户登录状态……", installFailed:"自动安装未完成", success:"连接成功", launching:"PenEcho 即将启动。", savedTestFailed:"设置已保存，但连接测试失败", launchAnyway:"仍然启动", launchingSaved:"正在使用已保存的设置启动 PenEcho……", failed:"尚未连接", unexpected:"无法打开桌面设置接口。",
   },
 };
 
@@ -214,7 +214,7 @@ statusAction.addEventListener("click", () => void statusActionHandler?.());
 
 async function testAndLaunch() {
   setBusy(true);
-  setStatus("loading", translations[currentLanguage]?.testing || "Testing connection", translations[currentLanguage]?.testingBody || "Saving settings securely and checking your model…");
+  setStatus("loading", translations[currentLanguage]?.testing || "Testing connection", translations[currentLanguage]?.testingBody || "Saving settings locally and checking your model…");
   try {
     const result = await desktop.saveAndTest(payload());
     if (!result.ok) {

@@ -23,7 +23,7 @@
       </div>
       <ol class="steps" aria-label="Quick start">
         <li><span>1</span><div><strong data-i18n="stepOneTitle">Choose a provider</strong><p data-i18n="stepOneBody">API is the easiest option for most people.</p></div></li>
-        <li><span>2</span><div><strong data-i18n="stepTwoTitle">Test securely</strong><p data-i18n="stepTwoBody">Your API key is encrypted by macOS or Windows.</p></div></li>
+        <li><span>2</span><div><strong data-i18n="stepTwoTitle">Test locally</strong><p data-i18n="stepTwoBody">Your API key is saved in a user-only local credential file.</p></div></li>
         <li><span>3</span><div><strong data-i18n="stepThreeTitle">Create on canvas</strong><p data-i18n="stepThreeBody">Write or draw, then let AI respond visually.</p></div></li>
       </ol>
       <div class="privacy-note"><span aria-hidden="true">✓</span><p><strong data-i18n="localTitle">Local desktop service</strong><br><span data-i18n="localBody">The canvas stays on your computer. Model requests go only to your selected provider.</span></p></div>
@@ -69,7 +69,7 @@
             <label><span data-i18n="model">Model</span><input name="apiModel" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol"></label>
           </div>
           <label><span data-i18n="baseUrl">API base URL</span><input name="apiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1"></label>
-          <label><span data-i18n="apiKey">API key</span><span class="input-with-badge"><input name="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"><small id="savedKeyBadge" hidden data-i18n="savedSecurely">Saved securely</small></span><small class="field-help" data-i18n="apiKeyHelp">Stored with operating-system encryption and never exposed to the canvas page.</small></label>
+          <label><span data-i18n="apiKey">API key</span><span class="input-with-badge"><input name="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"><small id="savedKeyBadge" hidden data-i18n="savedLocally">Saved locally</small></span><small class="field-help" data-i18n="apiKeyHelp">Saved in a user-only local credential file and never exposed to the canvas page.</small></label>
         </section>
 
         <section class="provider-section" data-provider-panel="kimi-cli" hidden>

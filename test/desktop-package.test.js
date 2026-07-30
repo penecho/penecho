@@ -197,17 +197,25 @@ test("desktop settings file is not overridden by stale inherited launch values",
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
 
-test("desktop secret store round-trips only encrypted bytes", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-secret-test-")), file = path.join(directory, "credentials.json"),
-    safeStorage = {
+test("desktop secret store compresses credentials into a user-only local file", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-secret-test-")), file = path.join(directory, "credentials.json");
+  try {
+    writeSecret(file, "sk-private");
+    assert.equal(readSecret(file), "sk-private");
+    const serialized = fs.readFileSync(file, "utf8"), stored = JSON.parse(serialized);
+    assert.equal(stored.version, 2);
+    assert.equal(stored.encoding, "gzip+base64");
+    assert.doesNotMatch(serialized, /sk-private/);
+    if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    const safeStorage = {
       isEncryptionAvailable:() => true,
       encryptString:value => Buffer.from(`encrypted:${value}`).reverse(),
       decryptString:value => Buffer.from(value).reverse().toString().slice("encrypted:".length),
     };
-  try {
-    writeSecret(file, "sk-private", safeStorage);
-    assert.equal(readSecret(file, safeStorage), "sk-private");
-    assert.doesNotMatch(fs.readFileSync(file, "utf8"), /sk-private/);
+    writeSecret(file, "windows-private", safeStorage);
+    assert.equal(readSecret(file, safeStorage), "windows-private");
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).version, 1);
+    assert.equal(readSecret(file), "");
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
 
@@ -246,11 +254,14 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(updateCss, /\.desktop-update-banner/);
   assert.match(updateCss, /\.desktop-update-notes/);
   assert.match(main, /\["api", "kimi"\]\.includes\(normalized\.provider\)/);
+  assert.match(main, /if \(!configurationIsReady\(loaded\)\) \{\s*showSettings\(\);\s*return;/);
+  assert.match(main, /window\.loadFile\(SETTINGS_FILE\)\.then\(reveal\)/);
   assert.match(main, /settingsReadyToLaunch = true;[\s\S]*?ok:false,[\s\S]*?saved:true/);
   assert.match(main, /SETTINGS_TEST_TIMEOUT_MS = 30_000/);
   assert.match(main, /Promise\.race\(\[[\s\S]*?testConfiguredProvider\(loaded\.configuration\)[\s\S]*?PENECHO_SETTINGS_TEST_TIMEOUT/);
   assert.match(main, /timedOut:error\.code === "PENECHO_SETTINGS_TEST_TIMEOUT"/);
   assert.match(settings, /Launch anyway/);
+  assert.match(settings, /setStatus\("success"[\s\S]*?const launched = await desktop\.launch\(\)/);
   assert.match(settings, /result\.timedOut[\s\S]*?Connection test timed out[\s\S]*?still launch PenEcho and enter the canvas/);
   assert.match(settings, /连接测试超过 30 秒，你仍然可以启动 PenEcho 进入画布/);
   assert.match(settings, /KIMI_MODELS = Object\.freeze\(\{ code:"k3", platform:"kimi-k3" \}\)/);
@@ -269,6 +280,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(forge, /optionsForFile:\(\) => \(\{/);
   assert.match(forge, /hardenedRuntime:false/);
   assert.match(fs.readFileSync(path.join(ROOT, ".github", "workflows", "desktop-release.yml"), "utf8"), /codesign --verify --deep --strict/);
+  assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
+  assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
   assert.match(html, /Test, save &amp; launch/);
   assert.match(html, />Install<\/button>/);
   assert.doesNotMatch(html, /Sign in|data-login-cli/);
