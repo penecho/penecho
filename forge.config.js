@@ -22,6 +22,25 @@ const hasAppleNotarization = Boolean(
   process.env.MAC_CODESIGN_IDENTITY && process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID,
 ), hasWindowsCertificate = Boolean(process.env.WINDOWS_CERTIFICATE_FILE && process.env.WINDOWS_CERTIFICATE_PASSWORD),
   macEntitlements = path.join(ROOT, "build", "entitlements.mac.plist");
+const macSigning = process.env.MAC_CODESIGN_IDENTITY ? {
+  identity:process.env.MAC_CODESIGN_IDENTITY,
+  optionsForFile:() => ({
+    hardenedRuntime:true,
+    entitlements:macEntitlements,
+  }),
+} : {
+  // Sign the complete bundle even when Developer ID credentials are unavailable.
+  // Electron's linker signature only covers its main executable and Gatekeeper
+  // rejects the resulting quarantined app as damaged.
+  identity:"-",
+  identityValidation:false,
+  optionsForFile:() => ({
+    hardenedRuntime:false,
+    entitlements:macEntitlements,
+  }),
+  preAutoEntitlements:false,
+  preEmbedProvisioningProfile:false,
+};
 
 module.exports = {
   packagerConfig: {
@@ -38,14 +57,7 @@ module.exports = {
       CFBundleName:"PenEcho",
       NSHumanReadableCopyright:`Copyright © ${new Date().getFullYear()} PenEcho contributors`,
     },
-    ...(process.env.MAC_CODESIGN_IDENTITY ? {
-      osxSign:{
-        identity:process.env.MAC_CODESIGN_IDENTITY,
-        hardenedRuntime:true,
-        entitlements:macEntitlements,
-        "entitlements-inherit":macEntitlements,
-      },
-    } : {}),
+    osxSign:macSigning,
     ...(hasAppleNotarization ? {
       osxNotarize:{
         tool:"notarytool",

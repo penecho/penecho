@@ -264,6 +264,11 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(forge, /\^\\\/tools/);
   assert.match(forge, /maker-dmg/);
   assert.match(forge, /maker-squirrel/);
+  assert.match(forge, /identity:"-"/);
+  assert.match(forge, /identityValidation:false/);
+  assert.match(forge, /optionsForFile:\(\) => \(\{/);
+  assert.match(forge, /hardenedRuntime:false/);
+  assert.match(fs.readFileSync(path.join(ROOT, ".github", "workflows", "desktop-release.yml"), "utf8"), /codesign --verify --deep --strict/);
   assert.match(html, /Test, save &amp; launch/);
   assert.match(html, />Install<\/button>/);
   assert.doesNotMatch(html, /Sign in|data-login-cli/);

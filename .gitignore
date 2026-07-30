@@ -5,12 +5,14 @@
 node_modules/
 npm-debug.log*
 logs/
+debug_logs/
 .opencode/
 .req/
 test-results/
 playwright-report/
 coverage/
 out/
+output/
 release/
 build/icons/generated/
 .DS_Store
