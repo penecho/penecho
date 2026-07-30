@@ -48,10 +48,46 @@ test("each local format maps to one fixed on-demand renderer and unknown formats
   for (const [format, marker] of expected) {
     const html = runtime.documentFor({ sourceFormat:format, source:format.endsWith("json") || format === "geojson" || format === "vega-lite" ? "{}" : "source", title:format });
     assert.match(html, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), format);
-    assert.match(html, /rendering timed out[\s\S]*?could not be rendered/);
+    assert.match(html, /is still loading[\s\S]*?could not be rendered/);
+    assert.doesNotMatch(html, /rendering timed out/);
   }
+  const geoJson = runtime.documentFor({ sourceFormat:"geojson", source:"{}", title:"Map" });
+  assert.match(geoJson, /mt1\.google\.com[\s\S]*?is\.autonavi\.com/);
+  assert.match(geoJson, /wgs84ToGcj02[\s\S]*?activateProvider/);
+  assert.match(geoJson, /\.pd-stage>canvas\{/);
+  assert.doesNotMatch(geoJson, /\.pd-stage canvas\{/);
+  const smiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Aspirin" });
+  assert.match(smiles, /\.draw\(tree, canvas, "light", false\)/);
+  assert.doesNotMatch(smiles, /penecho-smiles-canvas|\.draw\(tree, canvas\.id/);
   assert.equal(runtime.documentFor({ sourceFormat:"plantuml", source:"@startuml", title:"Unsupported" }), "");
   assert.equal(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(20001), title:"Too large" }), "");
+});
+
+test("complex Mermaid phases reflow when the widget aspect ratio changes", () => {
+  const source = `%% penecho:responsive
+flowchart LR
+  subgraph Shop
+    direction TB
+    A --> B --> C --> D
+  end
+  subgraph Pay
+    direction TB
+    E --> F --> G --> H
+  end
+  subgraph Fulfill
+    direction TB
+    I --> J --> K --> L
+  end
+  D --> E
+  H --> I`,
+    wide = runtime.responsiveMermaidSource(source, 1400, 700),
+    narrow = runtime.responsiveMermaidSource(source, 600, 1000);
+  assert.equal(wide.direction, "LR");
+  assert.match(wide.source, /^flowchart LR/m);
+  assert.equal((wide.source.match(/direction TB/g) || []).length, 3);
+  assert.equal(narrow.direction, "TB");
+  assert.match(narrow.source, /^flowchart TB/m);
+  assert.equal((narrow.source.match(/direction LR/g) || []).length, 3);
 });
 
 test("diagram source is persisted canonically and regenerated through the widget iframe", () => {

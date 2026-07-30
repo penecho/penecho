@@ -21,6 +21,10 @@
   }
   function launchAutomaticAI(reason) {
     if (!state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     if (hasUnsettledToolbox()) {
       if (state.statusKey !== "autoToolboxPending") setStatusKey("autoToolboxPending");
       return;
@@ -33,6 +37,10 @@
     clearTimeout(state.timer);
     state.timer = 0;
     if (!state.auto || !state.dirty || !state.autoEligible) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     state.timer = setTimeout(() => {
       state.timer = 0;
       launchAutomaticAI("new-stroke-deadline");
@@ -66,6 +74,12 @@
       bottom = Math.min(a.y + a.h, b.y + b.h);
     return right > x && bottom > y ? { x, y, w: right - x, h: bottom - y } : null;
   }
+  function containsRect(outer, inner) {
+    return Boolean(outer && inner
+      && inner.x >= outer.x && inner.y >= outer.y
+      && inner.x + inner.w <= outer.x + outer.w
+      && inner.y + inner.h <= outer.y + outer.h);
+  }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
     clearWidgetRefineCandidate();
@@ -83,7 +97,9 @@
       attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
       packed = packedOverride || (captureCurrentViewport || attentionBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport) : null),
-      typedInput = isolatedSelection || (captureCurrentViewport && state.latestTypedInput && (!packed?.sourceRect || !intersection(state.latestTypedInput.box, packed.sourceRect))) ? null : state.latestTypedInput,
+      typedInput = !isolatedSelection && state.latestTypedInput && containsRect(packed?.sourceRect, state.latestTypedInput.box)
+        ? state.latestTypedInput
+        : null,
       preservedRecognition = isolatedSelection
         ? {
             dirty: state.dirty ? { ...state.dirty } : null,
@@ -116,11 +132,14 @@
     if (!isolatedSelection) {
       state.dirty = null;
       state.autoEligible = false;
+      if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
+      state.latestTypedInput = null;
+      state.lastUserBox = requestBox;
     }
     const controller = new AbortController(),
       // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputConsumed:!isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
     state.activeAI = run;
     state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
     setBusy(true);
@@ -183,7 +202,7 @@
         tools: commands.map((c) => c.tool),
       });
       if (state.userRevision !== revision) {
-        if (!isolatedSelection && !oneShotInput && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
           schedule();
@@ -371,13 +390,14 @@
     const visible = viewportRect();
     if (!visible) return null;
     const captureRect = captureRectFor(latestBox, visible),
-      ink = unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), animationBounds(captureRect));
-    if (!captureCurrentViewport && !ink) return null;
+      ink = unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), textBoxBounds(captureRect)), animationBounds(captureRect)),
+      useFullViewport = captureCurrentViewport || Boolean(latestBox && !intersection(latestBox, captureRect));
+    if (!useFullViewport && !ink) return null;
     const margin = Math.max(120, Math.min(640, 160 / state.scale)),
-      left = captureCurrentViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
-      top = captureCurrentViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
-      right = captureCurrentViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
-      bottom = captureCurrentViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
+      left = useFullViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
+      top = useFullViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
+      right = useFullViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
+      bottom = useFullViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
       sourceRect = { x: left, y: top, w: right - left, h: bottom - top },
       // Keep ceil(source * scale) inside the server limits despite floating-point drift.
       imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
@@ -387,7 +407,7 @@
       },
       out = offscreen(imageSize.w, imageSize.h),
       q = out.getContext("2d");
-    const latestVisible = latestBox ? intersection(latestBox, sourceRect) : captureCurrentViewport ? { ...sourceRect } : null,
+    const latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : captureCurrentViewport ? { ...sourceRect } : null,
       captureTime = performance.now();
     if (!latestVisible) return null;
     q.fillStyle = "#fff";
@@ -395,6 +415,7 @@
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
     drawImagesToContext(q, sourceRect);
+    drawTextBoxesToContext(q, sourceRect);
     drawWidgetsToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
@@ -405,6 +426,7 @@
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
     drawImagesToContext(q, latestVisible);
+    drawTextBoxesToContext(q, latestVisible);
     drawWidgetsToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
@@ -523,6 +545,7 @@
     q.setTransform(focusScale, 0, 0, focusScale, position.x - focusRect.x * focusScale, position.y - focusRect.y * focusScale);
     q.globalAlpha = 0.32;
     drawImagesToContext(q, focusRect);
+    drawTextBoxesToContext(q, focusRect);
     forTiles(focusRect.x, focusRect.y, focusRect.w, focusRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.globalAlpha = 1;
     drawSharpOverlays(q, focusRect);
@@ -532,6 +555,7 @@
     q.rect(latestBox.x, latestBox.y, latestBox.w, latestBox.h);
     q.clip();
     drawImagesToContext(q, latestBox);
+    drawTextBoxesToContext(q, latestBox);
     forTiles(latestBox.x, latestBox.y, latestBox.w, latestBox.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.restore();
     drawSharpOverlays(q, latestBox);
@@ -2606,15 +2630,16 @@
     const d = state.drawing;
     state.drawing = null;
     const shouldRequest = !d.erase;
+    let refineCandidate = null;
     if (shouldRequest) {
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
-      latchWidgetRefineCandidate(d);
+      refineCandidate = latchWidgetRefineCandidate(d);
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
-    if (shouldRequest && state.autoEligible) schedule();
+    if (shouldRequest && state.autoEligible && !refineCandidate) schedule();
     save();
     requestInteractionLayerRender();
-    if (shouldRequest) setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
+    if (shouldRequest) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }

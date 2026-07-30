@@ -1,11 +1,38 @@
-// Local snapshots, export, drawing history, strokes, and lasso selection.
+// Canvas snapshots, export, drawing history, strokes, and lasso selection.
   const SNAPSHOT_DB = "penecho-canvas-history",
     SNAPSHOT_STORE = "snapshots",
-    SNAPSHOT_TILE_STORE = "snapshot-tiles";
+    SNAPSHOT_TILE_STORE = "snapshot-tiles",
+    SNAPSHOT_LOCATIONS = new Set(["device", "server"]);
   let snapshotDbPromise = null,
     snapshotItems = [],
     snapshotSaveInProgress = false,
+    snapshotListGeneration = 0,
     historyNoticeTimer = 0;
+  function snapshotLocationLabel(location = state.snapshotLocation) {
+    return t(location === "server" ? "storagePenEchoServer" : "storageThisDevice");
+  }
+  function updateSnapshotLocationUi() {
+    const location = SNAPSHOT_LOCATIONS.has(state.snapshotLocation) ? state.snapshotLocation : "device",
+      descriptionKey = location === "server" ? "storagePenEchoServerDescription" : "storageThisDeviceDescription";
+    document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
+      input.checked = input.value === location;
+    });
+    for (const id of ["historyStorageDescription", "newCanvasStorageDescription"]) {
+      const description = document.querySelector(`#${id}`);
+      if (description) description.textContent = t(descriptionKey);
+    }
+  }
+  function setSnapshotLocation(location) {
+    if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
+      updateSnapshotLocationUi();
+      return;
+    }
+    state.snapshotLocation = location;
+    localStorage.setItem("penecho-snapshot-location", location);
+    updateSnapshotLocationUi();
+    updateNewCanvasDialog();
+    refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+  }
   function updateHistorySaveFeedbackLanguage() {
     const button = document.querySelector("#historySave"),
       currentButton = document.querySelector("#historySaveCurrent"),
@@ -13,6 +40,7 @@
     if (button) button.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveSnapshot");
     if (currentButton) currentButton.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveCurrentSnapshot");
     if (notice?.dataset.messageKey) notice.textContent = t(notice.dataset.messageKey);
+    updateSnapshotLocationUi();
   }
   function showHistoryNotice(text, tone = "info", { messageKey = "", duration = 2800 } = {}) {
     const notice = document.querySelector("#historyNotice");
@@ -55,6 +83,7 @@
       saveButton.classList.toggle("is-saving", busy);
       saveButton.setAttribute("aria-busy", String(busy));
     }
+    document.querySelectorAll('input[name="historyStorageLocation"]').forEach((input) => (input.disabled = busy));
   }
   async function saveSnapshotFromHistory() {
     if (snapshotSaveInProgress) return;
@@ -75,7 +104,7 @@
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
-    const overwriteId = state.currentSnapshotId,
+    const overwriteId = state.currentSnapshotLocation === state.snapshotLocation ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
       name = requestedName || (overwriteId ? state.currentSnapshotName : "");
     setHistorySaveBusy(true);
@@ -83,7 +112,7 @@
     try {
       const selectionBusy = selectionAIBusy(),
         selectionBusyKey = selectionAIStatusKey(),
-        id = await saveSnapshot({ overwriteId, name });
+        id = await saveSnapshot({ overwriteId, name, location:state.snapshotLocation });
       showHistoryNoticeKey(id ? (overwriteId ? "snapshotOverwritten" : "snapshotSaved") : selectionBusy ? selectionBusyKey : "emptyCanvas", id ? "success" : "info");
     } catch (error) {
       const message = `${t("snapshotError")}${error.message}`;
@@ -130,6 +159,45 @@
       items = await requestResult(db.transaction(SNAPSHOT_STORE, "readonly").objectStore(SNAPSHOT_STORE).getAll());
     return items.sort((a, b) => b.createdAt - a.createdAt);
   }
+  function blobDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      if (!(blob instanceof Blob)) return reject(Error("Snapshot contains invalid binary data"));
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || Error("Could not encode snapshot data"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  function dataUrlBlob(value) {
+    if (typeof value !== "string") throw Error("Snapshot contains invalid encoded data");
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+    if (!match) throw Error("Snapshot contains invalid encoded data");
+    const binary = atob(match[2]),
+      bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type:match[1] });
+  }
+  async function snapshotApiResponse(response) {
+    let body = null;
+    try { body = await response.json(); } catch {}
+    if (!response.ok) throw Error(body?.error || `PenEcho server returned HTTP ${response.status}`);
+    return body;
+  }
+  async function serverSnapshotItems() {
+    const response = await fetch("/api/canvases", {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:authenticatedApiHeaders(),
+      }),
+      body = await snapshotApiResponse(response);
+    return Promise.all((Array.isArray(body?.canvases) ? body.canvases : []).map(async (item) => ({
+      ...item,
+      preview:dataUrlBlob(item.preview),
+    })));
+  }
+  async function snapshotsAt(location) {
+    return location === "server" ? serverSnapshotItems() : allSnapshots();
+  }
   function animationBounds(region = null) {
     if (!pluginEnabled("animation")) return null;
     let bounds = null;
@@ -143,7 +211,7 @@
   function snapshotPreview() {
     const preview = offscreen(180, 120),
       q = preview.getContext("2d"),
-      bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), animationBounds()), widgetBounds());
+      bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), textBoxBounds()), animationBounds()), widgetBounds());
     q.fillStyle = state.paint.paper;
     q.fillRect(0, 0, preview.width, preview.height);
     if (!bounds) return preview;
@@ -155,6 +223,7 @@
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawImagesToContext(q, bounds);
+    drawTextBoxesToContext(q, bounds);
     q.restore();
     for (const [k, canvas] of tiles) {
       const [tx, ty] = k.split(",").map(Number),
@@ -182,6 +251,7 @@
     }
     bounds = unionLocalBounds(bounds, animationBounds());
     bounds = unionLocalBounds(bounds, imageBounds());
+    bounds = unionLocalBounds(bounds, textBoxBounds());
     bounds = unionLocalBounds(bounds, widgetBounds());
     const selection = state.selection;
     if (selection?.phase !== "active") return bounds;
@@ -229,6 +299,7 @@
       context.stroke();
     }
     drawImagesToContext(context, region);
+    drawTextBoxesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -305,13 +376,56 @@
     if (state.selection) commitSelection();
     finishAIDraftHandMode();
   }
-  async function saveSnapshot({ overwriteId = null, name = null } = {}) {
+  async function saveDeviceSnapshot(item, tileEntries, overwriteId) {
+    const db = await snapshotDb();
+    let oldTileKeys = [];
+    if (overwriteId) oldTileKeys = await requestResult(db.transaction(SNAPSHOT_TILE_STORE, "readonly").objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(overwriteId));
+    const transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readwrite");
+    transaction.objectStore(SNAPSHOT_STORE).put(item);
+    const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
+    oldTileKeys.forEach((key) => tileStore.delete(key));
+    tileEntries.forEach(({ k, blob }) => tileStore.put({ id:`${item.id}:${k}`, snapshotId:item.id, k, blob }));
+    await transactionDone(transaction);
+  }
+  async function serverSnapshotPayload(item, tileEntries) {
+    const [preview, serverTiles, serverImages] = await Promise.all([
+      blobDataUrl(item.preview),
+      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, data:await blobDataUrl(blob) }))),
+      Promise.all(item.images.map(async ({ blob, ...image }) => ({ ...image, data:await blobDataUrl(blob) }))),
+    ]);
+    return {
+      version:1,
+      id:item.id,
+      createdAt:item.createdAt,
+      name:item.name,
+      theme:item.theme,
+      view:item.view,
+      animations:item.animations,
+      widgets:item.widgets,
+      textBoxes:item.textBoxes,
+      images:serverImages,
+      tiles:serverTiles,
+      preview,
+    };
+  }
+  async function saveServerSnapshot(item, tileEntries, overwriteId) {
+    const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {
+      method:overwriteId ? "PUT" : "POST",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+      body:JSON.stringify(await serverSnapshotPayload(item, tileEntries)),
+    });
+    await snapshotApiResponse(response);
+  }
+  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation } = {}) {
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
     }
+    if (!SNAPSHOT_LOCATIONS.has(location)) throw Error("Invalid snapshot location");
+    if (overwriteId && state.currentSnapshotLocation !== location) throw Error(t("noCurrentSnapshot"));
     await finalizeCanvasForSnapshot();
-    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
     }
@@ -322,6 +436,7 @@
       createdAt = Date.now(),
       animations = serializedAnimations(),
       widgets = serializedWidgets(),
+      textBoxes = storedTextBoxes(),
       images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
       preview = await canvasBlob(snapshotPreview()),
@@ -337,45 +452,69 @@
         animations,
         widgetCount: widgets.length,
         widgets,
+        textBoxCount:textBoxes.length,
+        textBoxes,
         imageCount: images.length,
         images,
         preview,
-      },
-      db = await snapshotDb();
+      };
     if (overwriteId && !existing && overwriteId !== state.currentSnapshotId) throw Error(t("noCurrentSnapshot"));
-    let oldTileKeys = [];
-    if (overwriteId) oldTileKeys = await requestResult(db.transaction(SNAPSHOT_TILE_STORE, "readonly").objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(overwriteId));
-    const transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readwrite");
-    transaction.objectStore(SNAPSHOT_STORE).put(item);
-    const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
-    oldTileKeys.forEach((key) => tileStore.delete(key));
-    tileEntries.forEach(({ k, blob }) => tileStore.put({ id: `${id}:${k}`, snapshotId: id, k, blob }));
-    await transactionDone(transaction);
+    if (location === "server") await saveServerSnapshot(item, tileEntries, overwriteId);
+    else await saveDeviceSnapshot(item, tileEntries, overwriteId);
     nameInput.value = "";
     state.currentSnapshotId = id;
     state.currentSnapshotName = snapshotName(item);
+    state.currentSnapshotLocation = location;
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     return id;
   }
-  async function loadSnapshot(id) {
+  async function readDeviceSnapshot(id) {
+    const db = await snapshotDb(),
+      transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readonly"),
+      itemRequest = transaction.objectStore(SNAPSHOT_STORE).get(id),
+      tilesRequest = transaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAll(id),
+      [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
+    return item ? { item, tileEntries } : null;
+  }
+  async function readServerSnapshot(id) {
+    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:authenticatedApiHeaders(),
+      }),
+      body = await snapshotApiResponse(response),
+      stored = body?.canvas;
+    if (!stored || !Array.isArray(stored.tiles) || !Array.isArray(stored.images)) throw Error("PenEcho server returned an invalid canvas");
+    return {
+      item:{
+        ...stored,
+        preview:dataUrlBlob(stored.preview),
+        images:stored.images.map(({ data, ...image }) => ({ ...image, blob:dataUrlBlob(data) })),
+      },
+      tileEntries:stored.tiles.map(({ k, data }) => ({ k, blob:dataUrlBlob(data) })),
+    };
+  }
+  async function readSnapshot(location, id) {
+    return location === "server" ? readServerSnapshot(id) : readDeviceSnapshot(id);
+  }
+  async function loadSnapshot(id, location = state.snapshotLocation) {
     const loadGeneration=++state.snapshotLoadGeneration;
     if (state.selection) cancelSelection(true);
     clearTextEditors();
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
-    const expectedRevision=state.userRevision;
-    const db = await snapshotDb(),
-      transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readonly"),
-      itemRequest = transaction.objectStore(SNAPSHOT_STORE).get(id),
-      tilesRequest = transaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAll(id),
-      [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
-    if (!item) return;
+    const expectedRevision=state.userRevision,
+      stored = await readSnapshot(location, id);
+    if (!stored) return;
+    const { item, tileEntries } = stored;
     const [decoded, images] = await Promise.all([
       Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) }))),
       decodeStoredImages(item.images),
     ]);
+    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
+    await enableSnapshotWidgetPlugins(item.widgets);
     if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
     state.userRevision++;
     invalidateRecognition();
@@ -390,6 +529,7 @@
     state.widgetHistoryBefore = null;
     state.historyBefore.clear();
     state.imageHistoryBefore = null;
+    state.textBoxHistoryBefore = null;
     for (const { k, image } of decoded) {
       const canvas = offscreen(TILE, TILE);
       canvas.getContext("2d").drawImage(image, 0, 0);
@@ -399,6 +539,7 @@
     restoreWidgets(item.widgets);
     if (["arcane", "scifi", "research", "studio"].includes(item.theme)) applyTheme(item.theme);
     restoreImages(images);
+    await restoreTextBoxes(item.textBoxes);
     if (item.view) {
       state.scale = Math.max(0.03, Math.min(2, item.view.scale));
       state.panX = item.view.panX;
@@ -407,12 +548,12 @@
     }
     state.currentSnapshotId = item.id;
     state.currentSnapshotName = snapshotName(item);
+    state.currentSnapshotLocation = location;
     render();
     closeHistoryPanel();
     setStatusKey("snapshotLoaded");
   }
-  async function deleteSnapshot(id) {
-    if (!confirm(t("deleteSnapshotConfirm"))) return;
+  async function deleteDeviceSnapshot(id) {
     const db = await snapshotDb(),
       readTransaction = db.transaction(SNAPSHOT_TILE_STORE, "readonly"),
       tileKeys = await requestResult(readTransaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(id)),
@@ -421,9 +562,23 @@
     const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
     tileKeys.forEach((key) => tileStore.delete(key));
     await transactionDone(transaction);
-    if (state.currentSnapshotId === id) {
+  }
+  async function deleteServerSnapshot(id) {
+    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
+      method:"DELETE",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders(),
+    });
+    await snapshotApiResponse(response);
+  }
+  async function deleteSnapshot(id, location = state.snapshotLocation) {
+    if (!confirm(t(location === "server" ? "deleteSnapshotConfirmServer" : "deleteSnapshotConfirmDevice"))) return;
+    if (location === "server") await deleteServerSnapshot(id);
+    else await deleteDeviceSnapshot(id);
+    if (state.currentSnapshotId === id && state.currentSnapshotLocation === location) {
       state.currentSnapshotId = null;
       state.currentSnapshotName = "";
+      state.currentSnapshotLocation = null;
     }
     await refreshSnapshots();
     setStatusKey("snapshotDeleted");
@@ -432,8 +587,16 @@
     const label = document.querySelector("#currentSnapshotLabel"),
       overwrite = document.querySelector("#newOverwrite");
     if (!label || !overwrite) return;
-    label.textContent = state.currentSnapshotId ? t("currentSnapshot").replace("{name}", state.currentSnapshotName || state.currentSnapshotId) : t("noCurrentSnapshot");
-    overwrite.disabled = !state.currentSnapshotId;
+    if (!state.currentSnapshotId) label.textContent = t("noCurrentSnapshot");
+    else {
+      const sameLocation = state.currentSnapshotLocation === state.snapshotLocation,
+        key = sameLocation ? "currentSnapshot" : "currentSnapshotOtherLocation";
+      label.textContent = t(key)
+        .replace("{name}", state.currentSnapshotName || state.currentSnapshotId)
+        .replace("{location}", snapshotLocationLabel(state.currentSnapshotLocation));
+    }
+    overwrite.disabled = !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    updateSnapshotLocationUi();
   }
   function setNewCanvasDialogBusy(busy) {
     const dialog = document.querySelector("#newCanvasDialog");
@@ -460,9 +623,12 @@
     restoreWidgets([]);
     state.imageHistoryBefore = null;
     restoreImages([]);
+    state.textBoxHistoryBefore = null;
+    void restoreTextBoxes([]);
     state.historyBefore.clear();
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
+    state.currentSnapshotLocation = null;
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -478,7 +644,7 @@
     setStatusKey("newCanvasReady");
   }
   function openNewCanvasDialog() {
-    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       startBlankCanvas();
       return;
     }
@@ -493,8 +659,8 @@
     setNewCanvasDialogBusy(true);
     try {
       let saved = true;
-      if (saveMode === "new") saved = await saveSnapshot({ name });
-      else if (saveMode === "overwrite") saved = await saveSnapshot({ overwriteId: state.currentSnapshotId, name });
+      if (saveMode === "new") saved = await saveSnapshot({ name, location:state.snapshotLocation });
+      else if (saveMode === "overwrite") saved = await saveSnapshot({ overwriteId:state.currentSnapshotId, name, location:state.snapshotLocation });
       if (saved === null) {
         setNewCanvasDialogBusy(false);
         return;
@@ -509,13 +675,14 @@
     return item.name || new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(item.createdAt);
   }
   function renderSnapshotList() {
-    const list = document.querySelector("#historyList");
+    const list = document.querySelector("#historyList"),
+      location = state.snapshotLocation;
     if (!list) return;
     list.replaceChildren();
     if (!snapshotItems.length) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.textContent = t("emptyHistory");
+      empty.textContent = t(state.snapshotLocation === "server" ? "emptyServerHistory" : "emptyDeviceHistory");
       list.append(empty);
       return;
     }
@@ -529,14 +696,17 @@
         actions = document.createElement("div"),
         load = document.createElement("button"),
         remove = document.createElement("button"),
-        url = URL.createObjectURL(item.preview);
+        url = item.preview instanceof Blob ? URL.createObjectURL(item.preview) : "";
       card.className = "history-card";
-      card.classList.toggle("current", item.id === state.currentSnapshotId);
-      if (item.id === state.currentSnapshotId) card.setAttribute("aria-current", "true");
+      const isCurrent = item.id === state.currentSnapshotId && location === state.currentSnapshotLocation;
+      card.classList.toggle("current", isCurrent);
+      if (isCurrent) card.setAttribute("aria-current", "true");
       preview.className = "history-preview";
       image.alt = "";
-      image.src = url;
-      image.onload = image.onerror = () => URL.revokeObjectURL(url);
+      if (url) {
+        image.src = url;
+        image.onload = image.onerror = () => URL.revokeObjectURL(url);
+      }
       preview.append(image);
       meta.className = "history-meta";
       title.textContent = snapshotName(item);
@@ -546,10 +716,10 @@
       if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
       actions.className = "history-actions";
       load.textContent = t("loadSnapshot");
-      load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id));
+      load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id, location));
       remove.className = "history-delete";
       remove.textContent = t("deleteSnapshot");
-      remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id));
+      remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
       meta.append(title, detail, actions);
       card.append(preview, meta);
@@ -557,7 +727,11 @@
     }
   }
   async function refreshSnapshots() {
-    snapshotItems = await allSnapshots();
+    const generation = ++snapshotListGeneration,
+      location = state.snapshotLocation,
+      items = await snapshotsAt(location);
+    if (generation !== snapshotListGeneration || location !== state.snapshotLocation) return;
+    snapshotItems = items;
     renderSnapshotList();
   }
   async function runSnapshotAction(action) {
@@ -575,6 +749,7 @@
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
+    updateSnapshotLocationUi();
     refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
   }
   function closeHistoryPanel() {
@@ -806,14 +981,16 @@
     }
   }
   function save() {
-    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore) return null;
+    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) return null;
     const changes = [];
     const animationsBefore = state.animationHistoryBefore,
       animationsAfter = animationsBefore ? serializedAnimations() : null,
       widgetsBefore = state.widgetHistoryBefore,
       widgetsAfter = widgetsBefore ? serializedWidgets() : null,
       imagesBefore = state.imageHistoryBefore,
-      imagesAfter = imagesBefore ? imageHistoryState() : null;
+      imagesAfter = imagesBefore ? imageHistoryState() : null,
+      textBoxesBefore = state.textBoxHistoryBefore,
+      textBoxesAfter = textBoxesBefore ? textBoxHistoryState() : null;
     for (const [k, before] of state.historyBefore) {
       let current = tiles.get(k);
       if (current && state.inkBounds.get(k) === undefined) {
@@ -829,11 +1006,12 @@
       changes.push({ k, before, after: cloneCanvas(current) });
     }
     state.historyBefore.clear();
-    const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter };
+    const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter, textBoxesBefore, textBoxesAfter };
     state.history.push(entry);
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
     state.imageHistoryBefore = null;
+    state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
     return entry;
@@ -852,6 +1030,8 @@
     if (widgetState) restoreWidgets(widgetState);
     const imageState = !Array.isArray(entry) ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
+    const textBoxState = !Array.isArray(entry) ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
+    if (textBoxState) void restoreTextBoxes(textBoxState);
     restorePendingHistoryState(entry, side);
     clearSharpOverlays();
     requestAnimationLayerRender();

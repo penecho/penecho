@@ -1,9 +1,9 @@
 <h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
 </h1>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="README.ja.md">日本語</a> |
   <strong>한국어</strong> |
@@ -21,14 +21,14 @@
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-커뮤니티%20참여-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="PenEcho Discord 참여"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="GitHub에서 PenEcho에 스타 주기"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="라이선스: AGPL v3"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="라이선스: AGPL v3"></a>
 </p>
 
-> 이 번역은 프로젝트 개요를 제공합니다. 최신 전체 기술 정보는 공식 원문인 [영문 README](README.md)를 참조하세요.
+> 이 번역은 프로젝트 개요를 제공합니다. 최신 전체 기술 정보는 공식 원문인 [영문 README](../../README.md)를 참조하세요.
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 플러그인 데모" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 플러그인 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 전체 데모" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 전체 데모" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 전문 다이어그램 데모" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 대화형 캔버스 데모" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -71,8 +71,16 @@ npm start
 - 답변, 힌트, 설명, 수식, 그래프, 다이어그램을 캔버스에서 바로 받습니다.
 - AI 초안을 이동하거나 크기를 조정한 뒤 작업에 포함하기 전에 개별적으로 승인하거나 폐기합니다.
 - 올가미로 필기를 선택해 이동, 크기 조정, 색상 변경, 삭제 또는 Typeset 정리를 수행합니다.
-- 브라우저에 스냅샷을 로컬로 저장하고 확정된 콘텐츠를 PNG로 내보냅니다.
+- 스냅샷을 이 기기 또는 PenEcho 서버에 저장하고 확정된 콘텐츠를 PNG로 내보냅니다.
 - Arcane, Sci-fi, Research, Studio 테마를 선택할 수 있습니다.
+
+## 0.8.0의 새로운 기능
+
+- **플로차트를 넘어선 전문 다이어그램.** 아키텍처, UML, 시퀀스, BPMN, 데이터, 공학, 과학, 의료, 금융, 지리 다이어그램을 편집 가능한 전문 소스와 함께 만들 수 있습니다. 지원 형식은 필요할 때만 로컬에서 렌더링하며, 특수 형식은 완전한 HTML로 표시할 수 있습니다.
+- **기본값은 꺼짐입니다.** 필요할 때 **Plugins**를 열어 **Professional Diagrams**를 직접 켜세요. 꺼져 있으면 전용 Prompt와 렌더러 의존성을 로드하지 않습니다.
+- **기존 결과를 이어서 개선.** 다이어그램 위나 근처에 표시한 뒤 **AI Refine**을 선택하면 그 다이어그램만 교체합니다. 요청한 변경에 꼭 필요하지 않은 한 형식, 배치, 용어, 시각 언어를 유지합니다.
+- **이 기기 또는 PenEcho 서버에 저장.** 현재 브라우저에만 저장하거나 PenEcho가 실행되는 컴퓨터에 저장하여 같은 서버의 인증된 다른 기기에서 열 수 있습니다. 저장 전에 완료되지 않은 컨트롤을 자동으로 확정합니다.
+- **클립보드, 텍스트, 확장 가능한 플러그인.** 시스템 클립보드에서 텍스트나 이미지를 넣고 AI 텍스트, 수식, 전문 다이어그램 소스를 복사하며 Hand로 Textbox를 다시 편집할 수 있습니다. 내장 또는 비공개 플러그인을 사용 시에만 로드되는 선택적 CSS와 함께 사용자 플러그인으로 복사할 수도 있습니다.
 
 ## 0.7.2의 새로운 기능
 
@@ -80,30 +88,17 @@ npm start
 - **더 안정적인 편집, 저장, 내보내기.** Hand로 이미지, 애니메이션, AI가 반환한 위젯을 직접 이동하고 인위적인 최대 제한 없이 크기를 조절할 수 있습니다. 저장은 기본적으로 불러온 스냅샷을 업데이트하며 새로 저장도 계속 사용할 수 있고, 원격 이미지는 미리보기와 PNG 내보내기에 유지됩니다.
 - **로컬 접근과 데스크톱 통합.** 공유 6자리 코드로 로컬 및 LAN 브라우저 진입을 보호할 수 있으며 잠금 해제 뒤 모델 요청 흐름은 바뀌지 않습니다. 데스크톱 설정은 Kimi API와 Kimi CLI를 일반 API, Codex CLI, Claude CLI와 함께 지원하고 업데이트와 패키징도 개선했습니다.
 
-## 0.7.1의 새로운 기능
-
-- **캔버스에 이미지와 사진 추가.** 시스템 선택기로 사진을 추가합니다. 모바일과 태블릿에서는 사진첩이나 카메라를, 데스크톱에서는 이미지 파일을 선택할 수 있습니다. 큰 사진은 자동으로 축소·압축되어 캔버스와 스냅샷이 가볍게 유지됩니다.
-- **길게 눌러 편집, 명확한 동작.** 이미지를 길게 눌러 다시 이동하거나 크기를 조절하고, 배치, 병합, 삭제를 선택할 수 있습니다. 배치는 이미지를 잉크 아래에 띄워 그 위에 그릴 수 있게 하고, 병합은 이미지를 지울 수 있는 실제 획으로 바꿉니다.
-- **예상치 못한 AI 요청 없음.** 이미지는 스스로 AI 요청을 시작하지 않습니다. AI가 처리하는 동안 이미지를 조작하면 진행 중인 결과는 폐기되고 필기 인식은 자동으로 재개됩니다. 이미지는 실행 취소·다시 실행, 로컬 스냅샷, PNG보내기를 지원합니다.
-
-## 0.7.0의 새로운 기능
-
-- **캔버스 위의 대화형 HTML.** General HTML 플러그인은 시계, 계산기, 대시보드 등의 인터페이스를 격리된 대화형 위젯으로 만들 수 있습니다.
-- **PenEcho 데이터 서비스 없이 유용한 데이터 사용.** 날씨, 주식, 기술 뉴스, 환율, 지진, 자연 현상, 우주 기상, GitHub 플러그인은 브라우저에서 선언된 API로 직접 요청합니다.
-- **명확한 보안 경계.** 각 플러그인의 네트워크는 허용 목록으로 제한되고 HTML은 격리된 iframe에서 실행됩니다. 비활성화된 플러그인은 요청이나 런타임에 관여하지 않습니다.
-- **로컬 플러그인 생성.** 간결한 Markdown 형식과 Preview 생성기에서 AI 개선, 자동 제목, 저장, 활성화, 개인 플러그인 삭제를 지원합니다.
-- **캔버스 기본 저장 및 내보내기.** 확정된 위젯은 스냅샷과 PNG에 포함되며 이동, 재배치, 전체 크기 조정, 실행 취소 가능한 삭제를 지원합니다.
-- **합리적인 기본값.** 새 사용자는 General HTML, Animation scenes, Weather가 기본 활성화되며 다른 데이터 플러그인은 직접 활성화해야 합니다.
-
 ## 이전 릴리스
 
-- **0.6.0 - Animation scenes.** 안전한 선언형 Canvas2D 애니메이션, 캔버스 편집과 스냅샷 유지, 향상된 Markdown/LaTeX 렌더링, 더 안정적인 모델 출력, 비차단 npm 업데이트 확인을 추가했습니다.
+- **0.7.1.** 로컬 이미지와 사진, Hand 개체 편집, 스냅샷, PNG 내보내기, 복사 가능한 Mermaid 다이어그램과 출처가 있는 웹 이미지를 추가했습니다.
+- **0.7.0.** 격리된 대화형 HTML, 실시간 데이터 플러그인, 로컬 플러그인 생성과 위젯 저장을 도입했습니다.
+- **0.6.0 이전.** 선언형 애니메이션, Markdown/LaTeX 개선, 선택 도구와 대형 희소 캔버스 기반을 추가했습니다.
 
 ## 작동 방식
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg"><img alt="PenEcho 작동 방식" src="docs/assets/how-it-works-light.svg"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/how-it-works-dark.svg"><img alt="PenEcho 작동 방식" src="../assets/how-it-works-light.svg"></picture></p>
 
-브라우저는 관련 캔버스 영역과 기하 정보만 전송합니다. 서버는 요청을 검증해 선택한 실행기로 전달하고 이동 가능한 구조화 초안을 반환합니다. 최신 모델 권장 사항과 비용 예시는 [영문 README](README.md#recommended-model-configurations)를 참조하세요.
+브라우저는 관련 캔버스 영역과 기하 정보만 전송합니다. 서버는 요청을 검증해 선택한 실행기로 전달하고 이동 가능한 구조화 초안을 반환합니다. 최신 모델 권장 사항과 비용 예시는 [영문 README](../../README.md#recommended-model-configurations)를 참조하세요.
 
 ## 안전한 배포
 
@@ -119,8 +114,8 @@ npm start
 npm run check
 ```
 
-구현 정보는 [아키텍처 문서](docs/architecture.md), 기여 절차는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참조하세요. 질문과 사용 사례는 [Discord](https://discord.gg/3jrPJ3mXdX) 또는 [GitHub Discussions](https://github.com/penecho/penecho/discussions)에 공유하고, 재현 가능한 문제는 [GitHub Issues](https://github.com/penecho/penecho/issues)에 등록해 주세요.
+구현 정보는 [아키텍처 문서](../architecture.md), 기여 절차는 [CONTRIBUTING.md](../../CONTRIBUTING.md)를 참조하세요. 질문과 사용 사례는 [Discord](https://discord.gg/3jrPJ3mXdX) 또는 [GitHub Discussions](https://github.com/penecho/penecho/discussions)에 공유하고, 재현 가능한 문제는 [GitHub Issues](https://github.com/penecho/penecho/issues)에 등록해 주세요.
 
 ## 라이선스 및 상업적 이용
 
-PenEcho는 [GNU AGPL v3.0 only](LICENSE)로 공개됩니다. 상업적 이용은 허용되지만, 수정한 버전을 네트워크를 통해 사용자에게 제공하는 경우 AGPL에 따라 해당 소스 코드를 제공해야 합니다. AGPL을 준수할 수 없는 독점 제품과 호스팅 서비스에는 별도의 [상업용 라이선스](COMMERCIAL-LICENSE.md)가 제공됩니다. 이름과 로고에는 [상표 정책](TRADEMARKS.md)이 별도로 적용됩니다.
+PenEcho는 [GNU AGPL v3.0 only](../../LICENSE)로 공개됩니다. 상업적 이용은 허용되지만, 수정한 버전을 네트워크를 통해 사용자에게 제공하는 경우 AGPL에 따라 해당 소스 코드를 제공해야 합니다. AGPL을 준수할 수 없는 독점 제품과 호스팅 서비스에는 별도의 [상업용 라이선스](../../COMMERCIAL-LICENSE.md)가 제공됩니다. 이름과 로고에는 [상표 정책](../../TRADEMARKS.md)이 별도로 적용됩니다.

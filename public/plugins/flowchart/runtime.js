@@ -43,14 +43,30 @@
         "'":"&#39;",
       })[character]);
     }
-    function frameRuntime(config) {
+    function responsiveMermaidSource(value, width, height) {
+      const source = String(value || ""),
+        directive = /^(\s*(?:(?:%%[^\n]*)\n\s*)*)(flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/im.exec(source);
+      if (!directive || /%%\s*penecho:fixed-layout\b/i.test(source)) return { source, direction:"" };
+      const connectors = source.match(/-->|---|-\.-?>|==>/g)?.length || 0,
+        responsive = /%%\s*penecho:responsive\b/i.test(source) || connectors > 10;
+      if (!responsive) return { source, direction:directive[3].toUpperCase() };
+      const original = directive[3].toUpperCase(),
+        horizontal = original === "RL" ? "RL" : "LR",
+        vertical = original === "BT" ? "BT" : "TB",
+        direction = width >= height * 1.35 ? horizontal : vertical,
+        innerDirection = direction === horizontal ? "TB" : "LR";
+      let responsiveDiagram = source.replace(directive[0], `${directive[1]}${directive[2]} ${direction}`);
+      if (/%%\s*penecho:responsive\b/i.test(source))
+        responsiveDiagram = responsiveDiagram.replace(/^(\s*direction\s+)(LR|RL|TB|TD|BT)\b/gim, `$1${innerDirection}`);
+      return { source:responsiveDiagram, direction };
+    }
+    function frameRuntime(config, responsiveMermaidSource) {
       const stage = document.querySelector("#diagram-stage"),
         status = document.querySelector("#diagram-status"),
         root = document.querySelector(".pd-root"),
         source = new TextDecoder().decode(Uint8Array.from(atob(config.sourceBase64), (character) => character.charCodeAt(0))),
         format = config.sourceFormat;
-      let resizeRender = null,
-        timedOut = false;
+      let resizeRender = null;
       const notify = () => {
         try { parent.postMessage({ type:"penecho-widget-updated" }, "*"); } catch {}
       };
@@ -93,16 +109,30 @@
       async function renderMermaid() {
         const { default:mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs");
         mermaid.initialize({ startOnLoad:false, securityLevel:"strict", theme:"base" });
-        const rendered = await mermaid.render(`penecho-${Math.random().toString(36).slice(2)}`, source);
-        stage.innerHTML = rendered.svg;
-        rendered.bindFunctions?.(stage);
-        const svg = stage.querySelector("svg");
-        if (svg) {
-          svg.removeAttribute("height");
-          svg.style.width = "100%";
-          svg.style.height = "100%";
-          svg.style.maxWidth = "100%";
-        }
+        let renderedDirection = "",
+          renderVersion = 0;
+        const paint = async () => {
+            const next = responsiveMermaidSource(source, stage.clientWidth, stage.clientHeight),
+              version = ++renderVersion;
+            if (next.direction && next.direction === renderedDirection && stage.querySelector("svg")) return;
+            const rendered = await mermaid.render(`penecho-${Math.random().toString(36).slice(2)}`, next.source);
+            if (version !== renderVersion) return;
+            stage.innerHTML = rendered.svg;
+            rendered.bindFunctions?.(stage);
+            const svg = stage.querySelector("svg");
+            if (svg) {
+              svg.removeAttribute("height");
+              svg.style.width = "100%";
+              svg.style.height = "100%";
+              svg.style.maxWidth = "100%";
+            }
+            renderedDirection = next.direction;
+            notify();
+          };
+        await paint();
+        resizeRender = () => {
+          void paint().catch(() => {});
+        };
       }
       async function renderDot() {
         const { instance } = await import("https://cdn.jsdelivr.net/npm/@viz-js/viz@3.9.0/lib/viz-standalone.mjs"),
@@ -137,25 +167,134 @@
         const result = await globalThis.vegaEmbed(stage, parseJson(), { actions:false, renderer:"svg" });
         resizeRender = () => result.view?.resize?.().runAsync?.().then(notify).catch(() => {});
       }
+      function wgs84ToGcj02(lng, lat) {
+        if (lng < 72.004 || lng > 137.8347 || lat < .8293 || lat > 55.8271) return [lng, lat];
+        const pi = Math.PI,
+          a = 6378245,
+          eccentricity = .006693421622965943,
+          transformLat = (x, y) => {
+            let value = -100 + 2 * x + 3 * y + .2 * y * y + .1 * x * y + .2 * Math.sqrt(Math.abs(x));
+            value += (20 * Math.sin(6 * x * pi) + 20 * Math.sin(2 * x * pi)) * 2 / 3;
+            value += (20 * Math.sin(y * pi) + 40 * Math.sin(y / 3 * pi)) * 2 / 3;
+            return value + (160 * Math.sin(y / 12 * pi) + 320 * Math.sin(y * pi / 30)) * 2 / 3;
+          },
+          transformLng = (x, y) => {
+            let value = 300 + x + 2 * y + .1 * x * x + .1 * x * y + .1 * Math.sqrt(Math.abs(x));
+            value += (20 * Math.sin(6 * x * pi) + 20 * Math.sin(2 * x * pi)) * 2 / 3;
+            value += (20 * Math.sin(x * pi) + 40 * Math.sin(x / 3 * pi)) * 2 / 3;
+            return value + (150 * Math.sin(x / 12 * pi) + 300 * Math.sin(x / 30 * pi)) * 2 / 3;
+          },
+          latitudeOffset = transformLat(lng - 105, lat - 35),
+          longitudeOffset = transformLng(lng - 105, lat - 35),
+          radianLatitude = lat / 180 * pi,
+          magic = 1 - eccentricity * Math.sin(radianLatitude) ** 2,
+          rootMagic = Math.sqrt(magic),
+          adjustedLat = latitudeOffset * 180 / ((a * (1 - eccentricity) / (magic * rootMagic)) * pi),
+          adjustedLng = longitudeOffset * 180 / (a / rootMagic * Math.cos(radianLatitude) * pi);
+        return [lng + adjustedLng, lat + adjustedLat];
+      }
+      function mapGeoJsonCoordinates(value, transform) {
+        if (!value || typeof value !== "object") return value;
+        if (Array.isArray(value)) {
+          if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
+            const [lng, lat] = transform(value[0], value[1]);
+            return [lng, lat, ...value.slice(2)];
+          }
+          return value.map((item) => mapGeoJsonCoordinates(item, transform));
+        }
+        const mapped = { ...value };
+        if (value.coordinates) mapped.coordinates = mapGeoJsonCoordinates(value.coordinates, transform);
+        if (Array.isArray(value.geometries)) mapped.geometries = value.geometries.map((item) => mapGeoJsonCoordinates(item, transform));
+        if (value.geometry) mapped.geometry = mapGeoJsonCoordinates(value.geometry, transform);
+        if (Array.isArray(value.features)) mapped.features = value.features.map((item) => mapGeoJsonCoordinates(item, transform));
+        return mapped;
+      }
       async function renderGeoJson() {
         await Promise.all([
           loadStyle("https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"),
           loadScript("https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"),
         ]);
         if (!globalThis.L?.map) throw Error("GeoJSON renderer did not initialize");
-        const map = globalThis.L.map(stage, { attributionControl:false, zoomControl:true, preferCanvas:true }),
-          layer = globalThis.L.geoJSON(parseJson(), {
+        const geoJson = parseJson(),
+          map = globalThis.L.map(stage, { attributionControl:true, zoomControl:true, preferCanvas:true }),
+          vectorOptions = {
             style:{ color:"#2563eb", weight:3, opacity:.9, fillColor:"#93c5fd", fillOpacity:.22 },
             pointToLayer:(_feature, latlng) => globalThis.L.circleMarker(latlng, {
               radius:7, color:"#1d4ed8", weight:2, fillColor:"#60a5fa", fillOpacity:.85,
             }),
-          }).addTo(map),
-          bounds = layer.getBounds();
-        if (bounds.isValid()) map.fitBounds(bounds, { padding:[24, 24] });
+          },
+          mainlandBrowser = /^zh-CN\b/i.test(navigator.language || "")
+            || (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone === "Asia/Shanghai"; } catch { return false; } })(),
+          google = {
+            id:"google",
+            url:"https://mt1.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}",
+            options:{ maxZoom:20, attribution:'&copy; <a href="https://maps.google.com/">Google</a>' },
+          },
+          amap = {
+            id:"amap",
+            url:"https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}",
+            options:{ subdomains:"1234", maxZoom:20, attribution:'&copy; <a href="https://www.amap.com/">AutoNavi</a>' },
+          },
+          providers = mainlandBrowser ? [amap, google] : [google, amap];
+        map.attributionControl.setPrefix(false);
+        let vectorLayer = null,
+          vectorUsesGcj = null,
+          baseLayer = null,
+          providerAttempt = 0;
+        const paintVector = (useGcj) => {
+            if (vectorLayer && vectorUsesGcj === useGcj) return vectorLayer.getBounds();
+            if (vectorLayer) map.removeLayer(vectorLayer);
+            vectorLayer = globalThis.L.geoJSON(useGcj ? mapGeoJsonCoordinates(geoJson, wgs84ToGcj02) : geoJson, vectorOptions).addTo(map);
+            vectorLayer.bringToFront();
+            vectorUsesGcj = useGcj;
+            return vectorLayer.getBounds();
+          },
+          initialBounds = paintVector(false);
+        if (initialBounds.isValid()) map.fitBounds(initialBounds, { padding:[24, 24] });
         else map.setView([0, 0], 2);
+        const activateProvider = (index) => {
+          const attempt = ++providerAttempt;
+          if (baseLayer) {
+            map.removeLayer(baseLayer);
+            baseLayer = null;
+          }
+          if (index >= providers.length) {
+            paintVector(false);
+            notify();
+            return;
+          }
+          const provider = providers[index],
+            layer = globalThis.L.tileLayer(provider.url, provider.options);
+          baseLayer = layer;
+          paintVector(provider.id === "amap");
+          vectorLayer.bringToFront();
+          let loaded = false,
+            errors = 0,
+            timer = setTimeout(() => {
+              if (!loaded && attempt === providerAttempt) activateProvider(index + 1);
+            }, 4500);
+          layer.on("tileload", () => {
+            if (attempt !== providerAttempt) return;
+            loaded = true;
+            clearTimeout(timer);
+            vectorLayer?.bringToFront();
+            notify();
+          });
+          layer.on("tileerror", () => {
+            errors += 1;
+            if (!loaded && errors >= 2 && attempt === providerAttempt) {
+              clearTimeout(timer);
+              activateProvider(index + 1);
+            }
+          });
+          layer.addTo(map);
+          vectorLayer.bringToFront();
+        };
+        activateProvider(0);
         resizeRender = () => {
           map.invalidateSize(false);
-          if (bounds.isValid()) map.fitBounds(bounds, { padding:[24, 24], animate:false });
+          const bounds = vectorLayer?.getBounds();
+          if (bounds?.isValid()) map.fitBounds(bounds, { padding:[24, 24], animate:false });
         };
       }
       async function renderSmiles() {
@@ -203,8 +342,7 @@
         else throw Error(`Unsupported local renderer: ${format}`);
       }
       const timer = setTimeout(() => {
-        timedOut = true;
-        showStatus(`${config.label} rendering timed out. The source remains available from Copy.`, true);
+        showStatus(`${config.label} is still loading. The source remains available from Copy.`);
       }, 9000);
       render().then(() => {
         clearTimeout(timer);
@@ -218,7 +356,7 @@
         new ResizeObserver(() => {
           clearTimeout(resizeTimer);
           resizeTimer = setTimeout(() => {
-            if (!timedOut) resizeRender?.();
+            resizeRender?.();
             notify();
           }, 80);
         }).observe(stage);
@@ -244,7 +382,7 @@
     .pd-title{margin:0;font-size:clamp(20px,3.2cqw,38px);line-height:1.15;font-weight:700;color:var(--pd-text,#172033)}
     .pd-stage{position:relative;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden}
     .pd-stage>svg,.pd-stage>.vega-embed,.pd-stage>.vega-embed>div{display:block;width:100%;height:100%;max-width:100%;max-height:100%}
-    .pd-stage canvas{display:block;max-width:100%;max-height:100%}
+    .pd-stage>canvas{display:block;max-width:100%;max-height:100%}
     .pd-status{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:clamp(15px,2.1cqw,24px);line-height:1.4;color:var(--pd-muted,#5f6b7a);background:rgba(255,255,255,.94)}
     .pd-status.is-error{color:var(--pd-danger,#b42318)}
     @container (max-width:560px){.pd-root{padding:12px;gap:8px}}
@@ -257,7 +395,7 @@
       <p id="diagram-status" class="pd-status">Rendering ${escapeHtml(format.label)}...</p>
     </section>
   </main>
-  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)});</script>
+  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveMermaidSource.toString()});</script>
 </body>
 </html>`;
     }
@@ -268,6 +406,7 @@
       supports:(value) => Boolean(normalizeFormat(value)),
       formatRecord,
       copyLabel,
+      responsiveMermaidSource,
       documentFor,
     });
   })();

@@ -156,7 +156,11 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /browser-native HTML, CSS, JavaScript, timers, SVG, and canvas/);
   const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
   assert.deepEqual([...flowchart.connect], []);
-  assert.match(flowchart.document, /runtime capability list, not a whitelist of professional needs/);
+  assert.match(flowchart.document, /Professional fields not named here remain in scope/);
+  assert.match(flowchart.document, /electrical\/electronic circuits and IEC\/IEEE schematics/);
+  assert.match(flowchart.document, /mechanical kinematics[\s\S]*?chemical structures[\s\S]*?medical devices[\s\S]*?financial cash flow/);
+  assert.match(flowchart.document, /local renderers are baseline conveniences, not the boundary/);
+  assert.match(flowchart.document, /Never fall back to native `draw`/);
   assert.match(flowchart.document, /Prefer `diagram_source`[\s\S]*?PenEcho supplies the iframe, renderer, shared CSS, Copy button/);
   assert.match(flowchart.document, /Use `html_widget` instead[\s\S]*?not locally rendered[\s\S]*?custom interaction/);
   assert.match(flowchart.document, /PlantUML, DBML, draw\.io XML, D2, Structurizr DSL, Excalidraw JSON, KiCad, SPICE/);
@@ -164,6 +168,8 @@ test("every built-in plugin uses a directory bundle", () => {
     assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
   assert.match(flowchart.document, /unlisted need[\s\S]*?return `html_widget`[\s\S]*?There is no library whitelist/);
+  assert.match(flowchart.document, /ElectricalProfile JSON[\s\S]*?KiCad, SPICE/);
+  assert.match(flowchart.document, /more than about 10 nodes[\s\S]*?penecho:responsive/);
   assert.match(flowchart.document, /same tool and `sourceFormat`[\s\S]*?smallest complete modification/);
   assert.match(flowchart.document, /copyText/);
   assert.match(flowchart.document, /copyLabel:"Copy <format>"/);
@@ -274,6 +280,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(rendererLicense, /Copyright \(c\) 2012 Niklas von Hertzen/);
   assert.match(rendererLicense, /Permission is hereby granted, free of charge/);
   assert.match(host, /MAX_SNAPSHOT_DATA_URL_LENGTH/);
+  assert.match(host, /MAX_HTML_LENGTH = 200000/);
+  assert.match(server, /MAX_WIDGET_HTML_LENGTH = 200000/);
   assert.doesNotMatch(host, /<foreignObject|penecho-widget-snapshot-markup/);
   assert.match(host, /createObjectURL\(new Blob\(\[widgetDocument/);
   assert.match(host, /toDataURL\("image\/png"\)/);

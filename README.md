@@ -4,14 +4,14 @@
 
 <p align="center">
   <strong>English</strong> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.de.md">Deutsch</a>
+  <a href="docs/readme/README.zh-CN.md">简体中文</a> |
+  <a href="docs/readme/README.ja.md">日本語</a> |
+  <a href="docs/readme/README.ko.md">한국어</a> |
+  <a href="docs/readme/README.ru.md">Русский</a> |
+  <a href="docs/readme/README.es.md">Español</a> |
+  <a href="docs/readme/README.pt-BR.md">Português (Brasil)</a> |
+  <a href="docs/readme/README.fr.md">Français</a> |
+  <a href="docs/readme/README.de.md">Deutsch</a>
 </p>
 
 <p align="center"><strong>Think with AI beyond the chat box.</strong></p>
@@ -38,11 +38,13 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="100%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="49%">
 </p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="100%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
 </p>
 
 ## A Kimi Open Source Friend
@@ -68,10 +70,9 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
+- [What's new in 0.8.0](#whats-new-in-080)
 - [What's new in 0.7.2](#whats-new-in-072)
-- [What's new in 0.7.1](#whats-new-in-071)
-- [What's new in 0.7.0](#whats-new-in-070)
-- [Earlier releases](#earlier-releases)
+- [Previous releases](#previous-releases)
 - [How it works](#how-it-works)
 - [Recommended model configurations](#recommended-model-configurations)
 - [Token use and cost](#token-use-and-cost)
@@ -182,10 +183,18 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 - Draw naturally with a stylus or mouse, then pan and zoom across a sparse `20,000 x 20,000` canvas.
 - Draw a freehand lasso around confirmed ink to move, resize, recolor, delete, or send only that selection to Typeset; ordinary selection edits and cancellation never trigger an AI request.
 - Choose Arcane, Sci-fi, Research, or Studio mode to match the kind of problem you are exploring.
-- Save lightweight snapshots locally in your browser. Starting a new canvas can overwrite the current snapshot, save a new copy, or continue without saving; unconfirmed AI drafts are never included.
+- Save lightweight snapshots on this device or on the PenEcho server for access from other authorized devices. Starting a new canvas can overwrite the current snapshot, save a new copy, or continue without saving; unconfirmed AI drafts are never included.
 - Export confirmed canvas ink as a cropped PNG with one `512`-pixel tile of paper margin on every side.
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
+
+## What's new in 0.8.0
+
+- **Professional diagrams beyond flowcharts.** Create architecture, UML, sequence, BPMN, data, engineering, scientific, medical, financial, geographic, and other domain diagrams with editable professional source. Supported formats use on-demand local renderers; specialized formats can return complete HTML without forcing every request into one renderer.
+- **Off by default; enable it when needed.** Open **Plugins** and switch on **Professional Diagrams** before asking for these diagrams. Its prompt and renderer dependencies are otherwise not loaded, so users who do not need professional diagrams pay no extra startup or prompt cost.
+- **Refine without starting over.** Draw on or near an existing diagram and choose **AI Refine** to replace only that diagram. PenEcho sends its current source and asks the model to preserve the format, layout, terminology, and visual language unless the requested change requires otherwise.
+- **Device or PenEcho server storage.** Save canvases only in the current browser, or on the computer running PenEcho so other authorized devices using the same server can open them. Saving first confirms unfinished canvas controls so text boxes, diagrams, and widgets are included.
+- **Clipboard, text, and extensible plugins.** Read text or images from the system clipboard directly into native canvas controls, copy returned text, formulas, and professional diagram source, and reselect editable text boxes with Hand. Built-in and private plugins can be copied into a custom plugin, with optional CSS loaded only when that plugin is used.
 
 ## What's new in 0.7.2
 
@@ -193,27 +202,11 @@ PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where i
 - **Reliable canvas editing, saving, and export.** Hand moves images, animations, and AI-returned widgets directly; images and widgets can be resized without an artificial maximum. Saving updates the loaded snapshot by default, while Save New remains available, and remote images are preserved in thumbnails and PNG exports.
 - **Local access and stronger desktop integration.** A shared six-digit code can protect local and LAN browser entry without changing model requests after unlock. Desktop setup supports Kimi API and Kimi CLI alongside generic API, Codex CLI, and Claude CLI, with improved update and packaging behavior.
 
-## What's new in 0.7.1
+## Previous releases
 
-- **Images and photos on the canvas.** Add pictures through the system picker—photo library or camera on phones and tablets, image files on desktop. Large pictures are downscaled and compressed automatically, so canvases and snapshots stay lightweight.
-- **Long-press editing with clear actions.** Long-press an image to move or resize it again, then choose Place, Merge, or Delete. Place keeps the image floating under your ink so you can draw over it; Merge turns it into real strokes you can erase.
-- **No surprise AI requests.** Images never start AI requests on their own; if you work with an image while AI is still processing, the in-flight result is discarded and handwriting recognition resumes automatically. Images participate in undo and redo, local snapshots, and PNG export.
-- **Direct canvas navigation.** The Hand tool pans the canvas and moves images, animations, and live widgets without starting an AI request.
-- **Copyable professional flowcharts.** The Flowchart plugin renders process, decision, architecture, sequence, and state diagrams, with a trusted toolbar button that copies portable Mermaid source.
-- **Visible online image results.** The Image Search plugin finds up to five relevant images from Wikimedia Commons by default and displays the actual images in a responsive layout with source and license context.
-
-## What's new in 0.7.0
-
-- **Live, interactive HTML on the canvas.** The new General HTML plugin lets the model build focused clocks, calculators, dashboards, and other responsive interfaces as sandboxed canvas widgets. Widget content remains directly interactive; long-press switches into canvas editing for moving, resizing, confirming, or deleting it.
-- **Useful data without a PenEcho data service.** Focused plugins cover weather, stocks, technology news, exchange rates, earthquakes, natural events, space weather, and GitHub activity. Requests go directly from the user's browser to each declared API origin; PenEcho does not proxy or cache plugin data.
-- **Explicit security boundaries.** Every data plugin declares its allowed `connect` origins. Widget networking is restricted to that allowlist, HTML runs in an isolated iframe, and disabled plugins contribute no prompt, payload, message hook, or widget runtime behavior.
-- **Local plugin creation.** A compact Markdown format combines metadata, runtime rules, and required one-shot examples in a prompt budget of roughly 1,000 tokens or less. The Preview creator can improve a draft with AI, fill its title, save and enable it locally, and delete personal plugins later; personal and built-in plugins stay clearly separated in the catalog.
-- **Canvas-native persistence and export.** Confirmed widgets participate in local snapshots and PNG export. Width and height handles reflow the interface without scaling its text, while the corner handle scales the whole widget like an image; deletion remains undoable.
-- **Sensible defaults.** General HTML, Animation scenes, and Weather start enabled for new users. All other data plugins remain opt-in, and every choice is remembered locally.
-
-## Earlier releases
-
-- **0.6.0 — Animation scenes.** Added optional, safe Canvas2D animations with canvas-native editing and snapshot persistence, alongside sharper Markdown/LaTeX rendering, more reliable model output, and non-blocking npm update checks.
+- **0.7.1.** Added local images and photos, Hand-based object editing, snapshots and PNG export, copyable Mermaid flowcharts, and sourced online image results.
+- **0.7.0.** Introduced sandboxed interactive HTML, focused live-data plugins, local plugin creation, and canvas-native widget persistence.
+- **0.6.0 and earlier.** Added declarative animation scenes, improved Markdown/LaTeX rendering and model reliability, selection tools, and the sparse large-canvas foundation.
 
 ## How it works
 

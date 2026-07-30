@@ -18,6 +18,8 @@
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (state.mode === "hand") {
+      const textBox = valid(point) ? textBoxAtPoint(point) : null;
+      if (textBox && editTextBox(textBox)) return;
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -374,6 +376,7 @@
       } else commitSelection();
     }
     if (state.mode === "hand" && mode !== "hand") {
+      for (const editor of [...state.textEditors.values()]) void confirmTextEditor(editor);
       if (state.widgetEdit) acceptWidgetEdit();
       if (state.imageEdit) {
         state.aiDraftReturnMode = null;
@@ -754,6 +757,11 @@
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
+  document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) setSnapshotLocation(input.value);
+    });
+  });
   document.querySelector("#newCanvasClose").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
   document.querySelector("#newCanvasCancel").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
@@ -817,6 +825,7 @@
             recordAnimationsBefore();
             recordWidgetsBefore();
             recordImagesBefore();
+            recordTextBoxesBefore();
             state.animations = [];
             state.selectedAnimationId = null;
             state.animationGesture = null;
@@ -825,6 +834,7 @@
             requestAnimationLayerRender();
             restoreWidgets([]);
             restoreImages([]);
+            void restoreTextBoxes([]);
             tiles.clear();
             state.inkBounds.clear();
             cancelPendingForRevision();

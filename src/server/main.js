@@ -38,12 +38,17 @@ const ANTHROPIC_MAX_EFFORT_THINKING_TARGET_TOKENS = 7000;
 const LOG_DIR = STATE_DIRECTORY ? path.join(STATE_DIRECTORY, "logs") : path.join(ROOT, "logs");
 const LOG_FILE = path.join(LOG_DIR, "penecho.log");
 const REQUEST_TRACE_DIR = path.join(LOG_DIR, "requests");
+const SHARED_CANVAS_DIRECTORY = STATE_DIRECTORY
+  ? path.join(STATE_DIRECTORY, "canvases", "shared")
+  : path.join(os.homedir(), ".penecho", "canvases", "shared");
 const MAX_LOG = 2 * 1024 * 1024;
+const MAX_SHARED_CANVAS_BYTES = 96 * 1024 * 1024;
+const MAX_SHARED_CANVASES = 200;
 const CANVAS_SIZE = 20000;
 const MAX_SELECTION_PATH_POINTS = 4096;
 const MAX_PLUGIN_DOCUMENT_BYTES = 12000;
 const MAX_PLUGIN_STYLES_BYTES = 32000;
-const MAX_WIDGET_HTML_LENGTH = 40000;
+const MAX_WIDGET_HTML_LENGTH = 200000;
 const MAX_WIDGET_COPY_TEXT_LENGTH = 16000;
 const MAX_DIAGRAM_SOURCE_BYTES = 20000;
 const DIAGRAM_SOURCE_DOCUMENT_OVERHEAD = 12000;
@@ -58,6 +63,7 @@ const MAX_ENABLED_PLUGINS = 12;
 const MAX_PLUGIN_CONNECT_ORIGINS = 8;
 const MAX_LOCAL_PLUGINS = 64;
 const PLUGIN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const CANVAS_SNAPSHOT_ID_PATTERN = /^\d{10,16}-[a-zA-Z0-9-]{8,64}$/;
 // These Markdown contracts ship with PenEcho. Files created through the local
 // authoring endpoint are deliberately outside this set and may be removed.
 const BUILTIN_PLUGIN_IDS = new Set([
@@ -268,10 +274,12 @@ modelInput.persona is optional specialization guidance. Use it to choose technic
 
 For userAction plot, always return at least one visual command. If the handwriting contains y=f(x), f(x)=..., or a recognizable single-variable function, use plot_function rather than only draw_formula or write_text. plot_function.expression must be a browser-evaluable ASCII expression using x, numbers, + - * / ^, parentheses, pi, e, and supported functions sin, cos, tan, sqrt, abs, exp, log, or ln. Use explicit multiplication such as 3*x, not 3x. Make each plot_function at least 240 by 180, keep its aspect ratio between 1:6 and 6:1, and prefer a moderate size near 1200 by 800. For a requested non-function drawing or diagram, use draw. Never satisfy plot with prose alone.
 
-You are responsible for text layout. Every write_text command MUST explicitly choose x and y as the top-left start position and maxWidth as the intended initial wrapping width. Inspect the image and choose the blank area where the response is most useful. Do not mechanically append text at the end of the newest handwriting. For arrow/box requests, align x/y with the arrow destination. For ordinary questions, choose a nearby blank area that preserves reading flow and avoids all existing writing. The chosen x/y must normally remain inside captureRect and near latestInput.globalRect or the final arrow destination. Never place an explanation at canvas y=0 or at the top edge merely because that area is blank when the referenced content is far below. maxWidth must fit the available blank region and should usually be wide enough for readable paragraphs; the user may freely resize the draft afterward. Match fontSize approximately to nearby handwriting; lineHeight is a multiplier such as 1.35, not pixels. Do not return color for write_text, draw_formula, plot_function, or draw; the client applies the user's selected AI color. The logical canvas is 20000 by 20000. ALL returned coordinates must be finite global logical coordinates, never image coordinates. If genuinely unreadable or incomplete, use intent none and an empty commands array. Every command MUST identify its tool with property "tool". Always available tools: write_text {tool:"write_text",x,y,text,fontSize,maxWidth,lineHeight}; draw_formula {tool:"draw_formula",x,y,latex,fontSize}; plot_function {tool:"plot_function",x,y,w,h,expression}; draw {tool:"draw",origin:[x,y],types:["line|smooth|rect|ellipse|circle|arc",...],items:[[...],...],width?,tension?,closed?,fill?,arrows?}; erase {tool:"erase",mode:"rect",x,y,w,h} or {tool:"erase",mode:"path",points:[[x,y],...],size}. Keep within canvas, use at most 16 commands, and keep text and formulas short.`;
+You are responsible for text layout. Every write_text command MUST explicitly choose x and y as the top-left start position and maxWidth as the intended initial wrapping width. Inspect the image and choose the blank area where the response is most useful. Do not mechanically append text at the end of the newest handwriting. For arrow/box requests, align x/y with the arrow destination. For ordinary questions, choose a nearby blank area that preserves reading flow and avoids all existing writing. The chosen x/y must normally remain inside captureRect and near latestInput.globalRect or the final arrow destination. Never place an explanation at canvas y=0 or at the top edge merely because that area is blank when the referenced content is far below. maxWidth must fit the available blank region and should usually be wide enough for readable paragraphs; the user may freely resize the draft afterward. Match fontSize approximately to nearby handwriting; lineHeight is a multiplier such as 1.35, not pixels. Do not return color for write_text, draw_formula, plot_function, or draw; the client applies the user's selected AI color. The logical canvas is 20000 by 20000. ALL returned coordinates must be finite global logical coordinates, never image coordinates. If the newest input is non-empty but unclear, incomplete, or lacks enough context, return one short write_text clarification question stating what is missing. Use intent none with an empty commands array only when there is genuinely no new input. Every command MUST identify its tool with property "tool". Always available tools: write_text {tool:"write_text",x,y,text,fontSize,maxWidth,lineHeight}; draw_formula {tool:"draw_formula",x,y,latex,fontSize}; plot_function {tool:"plot_function",x,y,w,h,expression}; draw {tool:"draw",origin:[x,y],types:["line|smooth|rect|ellipse|circle|arc",...],items:[[...],...],width?,tension?,closed?,fill?,arrows?}; erase {tool:"erase",mode:"rect",x,y,w,h} or {tool:"erase",mode:"path",points:[[x,y],...],size}. Keep within canvas, use at most 16 commands, and keep text and formulas short.`;
 
 const JSON_RESPONSE_SCHEMA_PROMPT = `Return exactly one JSON object that conforms to the following final and authoritative JSON Schema. Do not wrap it in Markdown and do not write prose before or after it.
-{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["intent","commands"],"properties":{"intent":{"type":"string","enum":["none","hint","continue","explain","plot","correct","erase","answer","typeset"]},"observedText":{"type":"string"},"message":{"type":"string"},"commands":{"type":"array","maxItems":16,"items":{"type":"object","required":["tool"],"properties":{"tool":{"type":"string"}},"additionalProperties":true}}}}`;
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["intent","commands"],"properties":{"intent":{"type":"string","enum":["none","hint","continue","explain","plot","correct","erase","answer","typeset"]},"observedText":{"type":"string"},"message":{"type":"string"},"commands":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","required":["tool"],"properties":{"tool":{"type":"string"}},"additionalProperties":true}}}}`;
+
+const MANDATORY_VISIBLE_RESPONSE_PROMPT = `Mandatory final visible-response fallback: every request that reaches you represents a confirmed current user input or explicit user action, so you MUST return at least one displayable command. Empty hotspotGrid.hotspots, absent typedInput, absent focusInset, clipped or fragmentary content, nonsensical content, and content that is not phrased as a question or request NEVER permit intent none or an empty commands array. Hotspots only help refine reading order; their absence is not evidence that there is no new input. When no metadata signal identifies a more specific input, treat all visible content inside latestInput.imageRect as the current input. If that region is blank, clipped, or still ambiguous, inspect and use the entire attached input image within sourceRect as the current input. Infer a concise useful response from that overall input. If no specific task can be inferred, return one short write_text clarification question asking what the user wants done with the visible content. This is the final fallback and overrides any earlier wording that conditions an auto response on meaningful content or enough information. Before returning, verify that commands contains at least one renderable command.`;
 
 const ACTIVE_SYSTEM_PROMPT_BASE = `${SYSTEM_PROMPT}
 
@@ -291,23 +299,25 @@ Every motion MUST have both an explicit "type" and an existing object "target". 
 
 Before returning, verify that every object and motion matches one form above and all referenced ids exist. Use at most one animate_scene command with 1..32 objects and 1..32 motions (no more than 32 objects and 32 motions), and only visibly useful parts. Use animate_scene only when motion materially helps.`;
 
+const PLUGIN_ROUTING_PROMPT = `This plugin routing rule narrows the earlier generic draw guidance. Before using native draw, check the enabled bundles. Native draw is for a simple sketch or annotation. If a visual likely needs more than about 10 meaningful shapes, nodes, components, or labels, or requires established professional notation or copyable editable source, use the best matching enabled plugin. Do not split a complex professional diagram into draw plus many write_text commands merely to avoid a plugin.`;
+
 function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
   const sections = [ACTIVE_SYSTEM_PROMPT_BASE];
   if (animationEnabled) sections.push(ANIMATION_SYSTEM_PROMPT);
-  if (pluginsEnabled) sections.push(PLUGIN_SYSTEM_PROMPT);
+  if (pluginsEnabled) sections.push(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT);
   return sections.join("\n\n");
 }
 
 function activeSystemPrompt(literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
   const base = systemPromptBase(animationEnabled, pluginsEnabled);
-  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 
 function anthropicSystemPrompt(effort, literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
   const maxEffort = String(effort || "").trim().toLowerCase() === "max",
     prompt = systemPromptBase(animationEnabled, pluginsEnabled),
     base = maxEffort ? `${prompt}\n\nReason efficiently and avoid unnecessary exploration. Keep internal reasoning concise, aiming for no more than roughly ${ANTHROPIC_MAX_EFFORT_THINKING_TARGET_TOKENS} tokens. Reserve sufficient output budget for one complete valid JSON response. If reasoning becomes lengthy, stop exploring and return the best valid JSON immediately.` : prompt;
-  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 
 const THEME_PERSONAS = {
@@ -321,8 +331,169 @@ function send(res, code, data, type = "application/json; charset=utf-8", extraHe
 function readJson(req, limit = MAX_BODY) { return new Promise((resolve, reject) => { let size = 0, chunks = []; req.on("data", c => { size += c.length; if (size > limit) { reject(new Error("Request too large")); req.destroy(); } else chunks.push(c); }); req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new Error("Invalid JSON")); } }); req.on("error", reject); }); }
 function log(entry) { try { fs.mkdirSync(LOG_DIR, { recursive:true }); if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= MAX_LOG) { try { fs.renameSync(LOG_FILE, `${LOG_FILE}.1`); } catch { fs.truncateSync(LOG_FILE, 0); } } fs.appendFileSync(LOG_FILE, JSON.stringify({ time:new Date().toISOString(), ...entry }) + "\n"); } catch (error) { console.error("PenEcho log error:", error.message); } }
 function short(value, length = 20000) { return typeof value === "string" ? value.slice(0, length) : value; }
+function canvasSnapshotPath(id, metadata = false) {
+  if (typeof id !== "string" || !CANVAS_SNAPSHOT_ID_PATTERN.test(id)) return null;
+  const root=path.resolve(SHARED_CANVAS_DIRECTORY),
+    target=path.resolve(root,`${id}${metadata?".meta":""}.json`);
+  return target.startsWith(root+path.sep)?target:null;
+}
+function atomicJsonWrite(file, value) {
+  fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+  const temporary=`${file}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(temporary,JSON.stringify(value),{encoding:"utf8",flag:"wx",mode:0o600});
+    fs.renameSync(temporary,file);
+  } catch(error) {
+    try { fs.unlinkSync(temporary); } catch {}
+    throw error;
+  }
+}
+function sharedCanvasFiles() {
+  try {
+    return fs.readdirSync(SHARED_CANVAS_DIRECTORY,{withFileTypes:true})
+      .filter(entry=>entry.isFile()&&CANVAS_SNAPSHOT_ID_PATTERN.test(entry.name.replace(/\.meta\.json$/,""))&&entry.name.endsWith(".meta.json"))
+      .map(entry=>entry.name.slice(0,-10));
+  } catch { return []; }
+}
+function sharedCanvasMetadata(snapshot) {
+  return {
+    id:snapshot.id,
+    createdAt:snapshot.createdAt,
+    name:snapshot.name,
+    theme:snapshot.theme,
+    tileCount:snapshot.tiles.length,
+    animationCount:snapshot.animations.length,
+    widgetCount:snapshot.widgets.length,
+    textBoxCount:snapshot.textBoxes.length,
+    imageCount:snapshot.images.length,
+    preview:snapshot.preview,
+  };
+}
+function validSnapshotDataUrl(value, allowedTypes, maximumBytes) {
+  if(typeof value!=="string")return false;
+  const match=/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if(!match||!allowedTypes.has(match[1].toLowerCase())||match[2].length>Math.ceil(maximumBytes/3)*4+4)return false;
+  try{return Buffer.from(match[2],"base64").length<=maximumBytes}catch{return false}
+}
+function canonicalSharedCanvas(value) {
+  if(!value||typeof value!=="object"||Array.isArray(value)||value.version!==1||typeof value.id!=="string"||!CANVAS_SNAPSHOT_ID_PATTERN.test(value.id))return null;
+  const createdAt=Number(value.createdAt),name=typeof value.name==="string"?value.name.trim().slice(0,48):"",
+    theme=["arcane","scifi","research","studio"].includes(value.theme)?value.theme:"studio",
+    view=value.view&&[value.view.scale,value.view.panX,value.view.panY].every(Number.isFinite)
+      ?{scale:Math.max(.03,Math.min(2,value.view.scale)),panX:value.view.panX,panY:value.view.panY}:null,
+    animations=Array.isArray(value.animations)&&value.animations.length<=20?value.animations:null,
+    widgets=Array.isArray(value.widgets)&&value.widgets.length<=20?value.widgets:null,
+    textBoxes=value.textBoxes===undefined?[]:Array.isArray(value.textBoxes)&&value.textBoxes.length<=50?value.textBoxes:null,
+    images=Array.isArray(value.images)&&value.images.length<=20?value.images:null,
+    tiles=Array.isArray(value.tiles)&&value.tiles.length<=1600?value.tiles:null;
+  if(!Number.isSafeInteger(createdAt)||createdAt<1||createdAt>Date.now()+86400000||!view||!animations||!widgets||!textBoxes||!images||!tiles)return null;
+  if(!validSnapshotDataUrl(value.preview,new Set(["image/png"]),2*1024*1024))return null;
+  const seenTiles=new Set();
+  for(const tile of tiles) {
+    if(!tile||typeof tile!=="object"||typeof tile.k!=="string"||!/^\d{1,2},\d{1,2}$/.test(tile.k)||seenTiles.has(tile.k)||!validSnapshotDataUrl(tile.data,new Set(["image/png"]),4*1024*1024))return null;
+    const [x,y]=tile.k.split(",").map(Number);
+    if(x<0||y<0||x>=Math.ceil(CANVAS_SIZE/512)||y>=Math.ceil(CANVAS_SIZE/512))return null;
+    seenTiles.add(tile.k);
+  }
+  for(const image of images) {
+    if(!image||typeof image!=="object"||typeof image.id!=="string"||!/^image-\d+$/.test(image.id)||!validSnapshotDataUrl(image.data,new Set(["image/png","image/jpeg","image/webp","image/gif"]),32*1024*1024))return null;
+    if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<80||image.h<80||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
+  }
+  const canonicalTextBoxes=[];
+  for(const item of textBoxes) {
+    if(!item||typeof item!=="object"||typeof item.id!=="string"||!/^text-box-\d+$/.test(item.id)||typeof item.text!=="string"||!item.text.trim()||item.text.length>2000)return null;
+    if(![item.x,item.y,item.w,item.h,item.maxWidth,item.fontSize].every(Number.isFinite)||item.x<0||item.y<0||item.w<=0||item.h<=0||item.x+item.w>CANVAS_SIZE||item.y+item.h>CANVAS_SIZE||item.maxWidth<item.fontSize*3||item.maxWidth>CANVAS_SIZE||item.fontSize<1||item.fontSize>2000)return null;
+    canonicalTextBoxes.push({
+      id:item.id,x:item.x,y:item.y,w:item.w,h:item.h,maxWidth:item.maxWidth,fontSize:item.fontSize,
+      color:typeof item.color==="string"?item.color.slice(0,40):"#1f2937",text:item.text,
+    });
+  }
+  const serializedWidgets=JSON.stringify(widgets),serializedAnimations=JSON.stringify(animations),serializedTextBoxes=JSON.stringify(canonicalTextBoxes);
+  if(Buffer.byteLength(serializedWidgets,"utf8")>5*1024*1024||Buffer.byteLength(serializedAnimations,"utf8")>2*1024*1024||Buffer.byteLength(serializedTextBoxes,"utf8")>256*1024)return null;
+  return {
+    version:1,id:value.id,createdAt,name,theme,view,
+    animations,widgets,textBoxes:canonicalTextBoxes,
+    images:images.map(image=>({
+      id:image.id,x:Math.round(image.x),y:Math.round(image.y),w:Math.round(image.w),h:Math.round(image.h),
+      naturalW:Math.round(image.naturalW),naturalH:Math.round(image.naturalH),
+      sourceName:typeof image.sourceName==="string"?image.sourceName.trim().slice(0,160):"",
+      data:image.data,
+    })),
+    tiles:tiles.map(tile=>({k:tile.k,data:tile.data})),
+    preview:value.preview,
+  };
+}
+function listSharedCanvases() {
+  const items=[];
+  for(const id of sharedCanvasFiles()) {
+    const file=canvasSnapshotPath(id,true);
+    try {
+      const stat=fs.statSync(file);
+      if(!stat.isFile()||stat.size>3*1024*1024)continue;
+      const item=JSON.parse(fs.readFileSync(file,"utf8"));
+      if(item?.id===id)items.push(item);
+    } catch {}
+  }
+  return items.sort((a,b)=>b.createdAt-a.createdAt);
+}
+function readSharedCanvas(id) {
+  const file=canvasSnapshotPath(id);
+  if(!file)throw Object.assign(new Error("Invalid canvas id."),{status:400});
+  let stat;
+  try{stat=fs.statSync(file)}catch{throw Object.assign(new Error("Canvas was not found."),{status:404})}
+  if(!stat.isFile()||stat.size>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Stored canvas is invalid."),{status:500});
+  const snapshot=canonicalSharedCanvas(JSON.parse(fs.readFileSync(file,"utf8")));
+  if(!snapshot)throw Object.assign(new Error("Stored canvas is invalid."),{status:500});
+  return snapshot;
+}
+function saveSharedCanvas(value, overwriteId = null) {
+  const snapshot=canonicalSharedCanvas(value);
+  if(!snapshot)throw Object.assign(new Error("Invalid shared canvas snapshot."),{status:400});
+  if(overwriteId&&overwriteId!==snapshot.id)throw Object.assign(new Error("Canvas id does not match the request."),{status:400});
+  const file=canvasSnapshotPath(snapshot.id),metadataFile=canvasSnapshotPath(snapshot.id,true),
+    exists=fs.existsSync(file);
+  if(overwriteId&&!exists)throw Object.assign(new Error("Canvas was not found."),{status:404});
+  if(!overwriteId&&exists)throw Object.assign(new Error("A canvas with this id already exists."),{status:409});
+  if(!exists&&sharedCanvasFiles().length>=MAX_SHARED_CANVASES)throw Object.assign(new Error(`The PenEcho server can retain up to ${MAX_SHARED_CANVASES} shared canvases.`),{status:409});
+  const serialized=JSON.stringify(snapshot);
+  if(Buffer.byteLength(serialized,"utf8")>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Shared canvas is too large."),{status:413});
+  atomicJsonWrite(file,snapshot);
+  try{atomicJsonWrite(metadataFile,sharedCanvasMetadata(snapshot))}
+  catch(error){
+    if(!exists)try{fs.unlinkSync(file)}catch{}
+    throw error;
+  }
+  return sharedCanvasMetadata(snapshot);
+}
+function deleteSharedCanvas(id) {
+  const file=canvasSnapshotPath(id),metadataFile=canvasSnapshotPath(id,true);
+  if(!file)throw Object.assign(new Error("Invalid canvas id."),{status:400});
+  if(!fs.existsSync(file)&&!fs.existsSync(metadataFile))throw Object.assign(new Error("Canvas was not found."),{status:404});
+  for(const target of [file,metadataFile])try{fs.unlinkSync(target)}catch(error){if(error.code!=="ENOENT")throw error}
+  return {id};
+}
 function visibleCliDiagnostic(value) {
   return String(value || "").replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, " ").replace(/\s+/g, " ").trim().slice(0, 800);
+}
+function publicModelError(error, { clientError = false, timedOut = false, upstreamStatus = null } = {}) {
+  if (clientError) return error?.message || "Invalid request.";
+  if (LOCAL_CLI) {
+    const message=error?.message||"Unable to process request.",diagnostic=visibleCliDiagnostic(error?.diagnostic);
+    return `${message}${diagnostic ? ` ${diagnostic}` : ""} Run \`penecho doctor --${LOCAL_CLI.doctor}\` for diagnostics.`;
+  }
+  if (error?.name === "ModelOutputLimitError") return error.message;
+  if (timedOut) return "AI service timed out before responding. Please retry.";
+  if (upstreamStatus) {
+    if ([408, 504, 524].includes(upstreamStatus)) return `AI service timed out (HTTP ${upstreamStatus}). Please retry.`;
+    if (upstreamStatus === 429) return "AI service is rate limited (HTTP 429). Please wait and retry.";
+    if ([401, 403].includes(upstreamStatus)) return `AI service authentication failed (HTTP ${upstreamStatus}). Check the configured API credentials.`;
+    if (upstreamStatus === 413) return "AI service rejected the request because it was too large (HTTP 413).";
+    if (upstreamStatus >= 500) return `AI service is temporarily unavailable (HTTP ${upstreamStatus}). Please retry.`;
+    return `AI service rejected the request (HTTP ${upstreamStatus}). Please retry or check the AI service configuration.`;
+  }
+  if (error?.traceTransport?.response || /reading-response-body|parsing-response-json|extracting-provider-content|parsing-model-result/.test(error?.networkPhase || ""))
+    return "AI service returned an invalid response. Please retry.";
+  return "Could not reach the AI service. Please retry.";
 }
 const DEBUG_TOOLS = new Set(["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "html_widget", "diagram_source", "erase"]),
   DEBUG_ACTIONS = new Set(["auto", "hint", "continue", "explain", "plot", "answer", "normalize"]),
@@ -619,6 +790,12 @@ function browserRequestError(req) {
   if (localAccessMode !== "open" && !hasAiSession(req)) return "PenEcho access has expired. Refresh the page and unlock it again.";
   return null;
 }
+function sharedCanvasReadError(req) {
+  const host=requestHost(req),expectedOrigin=canonicalRequestOrigin(req);
+  if(!host||!expectedOrigin)return"Canvas storage requires the configured PenEcho host.";
+  if(localAccessMode!=="open"&&!hasAiSession(req))return"PenEcho access has expired. Refresh the page and unlock it again.";
+  return null;
+}
 function localAccessRequestError(req, requireOrigin = false) {
   const host=requestHost(req),expectedOrigin=canonicalRequestOrigin(req);
   if(!expectedOrigin||!isLanClient(req.socket.remoteAddress)||!isAllowedCliHost(host?.hostname))return"This PenEcho server is not available from this address.";
@@ -745,6 +922,63 @@ function upstreamResponseTrace(response, raw) {
     finishReason = API.format === "anthropic" ? raw?.stop_reason : raw?.choices?.[0]?.finish_reason;
   return { responseId, reportedModel, finishReason:typeof finishReason === "string" ? short(finishReason, 128) : null, headers };
 }
+function transportResponseTrace(response) {
+  const headers = {};
+  for (const name of [
+    "content-type", "content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive",
+    "date", "server", "via", "x-request-id", "request-id", "x-trace-id", "x-correlation-id", "cf-ray",
+  ]) {
+    const value = response?.headers?.get?.(name);
+    if (value) headers[name] = short(value, 512);
+  }
+  return {
+    status:Number.isInteger(response?.status) ? response.status : null,
+    statusText:short(String(response?.statusText || ""), 256),
+    redirected:response?.redirected === true,
+    type:short(String(response?.type || ""), 64),
+    headers,
+  };
+}
+function traceErrorCause(error, depth = 0, seen = new Set()) {
+  if (error === undefined || error === null || depth >= 4) return null;
+  if (typeof error !== "object" && typeof error !== "function")
+    return { name:typeof error, message:short(String(error), 65536) };
+  if (seen.has(error)) return { name:"CircularCause", message:"Cause chain references an earlier error." };
+  seen.add(error);
+  const detail = {
+    name:short(String(error.name || error.constructor?.name || "Error"), 256),
+    message:short(String(error.message || ""), 65536),
+  };
+  for (const key of ["code", "errno", "syscall", "address", "port"])
+    if (["string", "number", "boolean"].includes(typeof error[key])) detail[key] = short(error[key], 512);
+  if (typeof error.stack === "string") detail.stack = short(error.stack, 32768);
+  if (error.socket && typeof error.socket === "object") {
+    const socket = {};
+    for (const key of ["localAddress", "localPort", "remoteAddress", "remotePort", "remoteFamily", "timeout", "bytesWritten", "bytesRead"])
+      if (["string", "number", "boolean"].includes(typeof error.socket[key])) socket[key] = short(error.socket[key], 512);
+    if (Object.keys(socket).length) detail.socket = socket;
+  }
+  const cause = traceErrorCause(error.cause, depth + 1, seen);
+  if (cause) detail.cause = cause;
+  return detail;
+}
+function compactErrorLog(error) {
+  let cause = error;
+  for (let depth = 0; depth < 4 && cause; depth++, cause = cause.cause) {
+    if (cause.code !== undefined || cause.errno !== undefined || depth === 3 || !cause.cause) break;
+  }
+  const response = error?.traceTransport?.response,
+    requestHeaders = response?.headers || {};
+  return {
+    phase:typeof error?.networkPhase === "string" ? short(error.networkPhase, 128) : null,
+    causeCode:cause?.code === undefined ? null : short(String(cause.code), 256),
+    causeErrno:cause?.errno === undefined ? null : short(String(cause.errno), 256),
+    causeMessage:cause?.message ? short(String(cause.message), 512) : null,
+    responseReceived:Boolean(response),
+    responseStatus:Number.isInteger(response?.status) ? response.status : null,
+    upstreamRequestId:requestHeaders["x-request-id"] || requestHeaders["request-id"] || requestHeaders["x-trace-id"] || requestHeaders["x-correlation-id"] || null,
+  };
+}
 function saveLatestModelExchange(requestId, attempt, modelInput, retryInstruction, model) {
   if (!DEBUG_ARTIFACTS) return;
   let serialized;
@@ -773,7 +1007,7 @@ function modelRequestText(modelInput, retryInstruction="") {
 const LOCAL_CLI_IMAGE_POLICY = "Operate only as an image-analysis model for PenEcho. Do not inspect files, run commands, or modify the temporary workspace. Analyze the attached canvas image and return only the requested JSON object as your final response.";
 function localCliSystemPrompt(literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
   const base = `${systemPromptBase(animationEnabled, pluginsEnabled)}\n\n${LOCAL_CLI_IMAGE_POLICY}`;
-  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 function localCliRequestPrompt(text) {
   return `Request metadata:\n${text}`;
@@ -898,7 +1132,17 @@ function traceAttemptResponse(trace, attempt, model) {
   });
 }
 function traceErrorDetails(error) {
-  return {name:String(error?.name||"Error"),message:String(error?.message||"Unknown error").slice(0,65536),status:Number.isInteger(error?.status)?error.status:null,upstream:error?.upstream||null,cliDiagnostic:error?.traceDiagnostic?String(error.traceDiagnostic).slice(0,131072):null};
+  return {
+    name:String(error?.name||"Error"),
+    message:String(error?.message||"Unknown error").slice(0,65536),
+    status:Number.isInteger(error?.status)?error.status:null,
+    phase:typeof error?.networkPhase==="string"?short(error.networkPhase,128):null,
+    transport:error?.traceTransport||null,
+    cause:traceErrorCause(error?.cause),
+    stack:typeof error?.stack==="string"?short(error.stack,32768):null,
+    upstream:error?.upstream||null,
+    cliDiagnostic:error?.traceDiagnostic?String(error.traceDiagnostic).slice(0,131072):null,
+  };
 }
 function traceAttemptError(trace, attempt, error) {
   updateRequestTrace(trace,data=>{
@@ -953,32 +1197,55 @@ async function callModel(modelInput, atlasImage, retryInstruction="", effort, ex
         throw error;
       }
     }
-    const response=await fetch(API.endpoint,{signal:controller.signal,method:"POST",redirect:"error",...providerRequest(API_KEY,MODEL,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled)});
-    if(!response.ok){
-      const responseText=await response.text(),errorText=short(responseText,400),error=new Error(`Model request failed (${response.status}): ${errorText}`);
-      error.status=response.status;
-      error.upstream={status:response.status,body:responseText.slice(0,65536),headers:upstreamResponseTrace(response,null).headers};
-      throw error;
-    }
-    const responseText=await response.text();
-    let raw;
-    try { raw=JSON.parse(responseText); }
-    catch(error){error.upstream={status:response.status,body:responseText.slice(0,65536),headers:upstreamResponseTrace(response,null).headers};throw error}
-    const content=providerResponseText(raw);
-    let result;
-    try { result=parsedModelResponse(content); }
-    catch(error){
-      const upstream={...upstreamResponseTrace(response,raw),rawContent:content};
-      if(upstream.finishReason==="max_tokens"){
-        const limitError=new Error(`Model reached the ${anthropicResponseMaxTokens(effort)}-token response allowance before completing its final JSON. Retry or lower the reasoning effort.`);
-        limitError.name="ModelOutputLimitError";
-        limitError.upstream=upstream;
-        throw limitError;
+    const requestStartedAt=new Date().toISOString(),requestStarted=Date.now();
+    let networkPhase="preparing-request",responseHeadersAt=null,responseTransport=null;
+    try {
+      const requestOptions=providerRequest(API_KEY,MODEL,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled);
+      networkPhase="awaiting-response-headers";
+      const response=await fetch(API.endpoint,{signal:controller.signal,method:"POST",redirect:"error",...requestOptions});
+      responseHeadersAt=new Date().toISOString();
+      responseTransport=transportResponseTrace(response);
+      if(!response.ok){
+        networkPhase="reading-error-response-body";
+        const responseText=await response.text(),errorText=short(responseText,400),error=new Error(`Model request failed (${response.status}): ${errorText}`);
+        error.status=response.status;
+        error.upstream={status:response.status,body:responseText.slice(0,65536),headers:upstreamResponseTrace(response,null).headers};
+        throw error;
       }
-      error.upstream=upstream;
+      networkPhase="reading-response-body";
+      const responseText=await response.text();
+      networkPhase="parsing-response-json";
+      let raw;
+      try { raw=JSON.parse(responseText); }
+      catch(error){error.upstream={status:response.status,body:responseText.slice(0,65536),headers:upstreamResponseTrace(response,null).headers};throw error}
+      networkPhase="extracting-provider-content";
+      const content=providerResponseText(raw);
+      networkPhase="parsing-model-result";
+      let result;
+      try { result=parsedModelResponse(content); }
+      catch(error){
+        const upstream={...upstreamResponseTrace(response,raw),rawContent:content};
+        if(upstream.finishReason==="max_tokens"){
+          const limitError=new Error(`Model reached the ${anthropicResponseMaxTokens(effort)}-token response allowance before completing its final JSON. Retry or lower the reasoning effort.`);
+          limitError.name="ModelOutputLimitError";
+          limitError.upstream=upstream;
+          throw limitError;
+        }
+        error.upstream=upstream;
+        throw error;
+      }
+      return {content,result,status:response.status,provider:"api",model:MODEL,effort,upstream:upstreamResponseTrace(response,raw)};
+    } catch(error) {
+      if(typeof error.networkPhase!=="string")error.networkPhase=networkPhase;
+      if(!error.traceTransport)error.traceTransport={
+        requestStartedAt,
+        responseHeadersAt,
+        failureAt:new Date().toISOString(),
+        elapsedMs:Date.now()-requestStarted,
+        response:responseTransport,
+      };
       throw error;
     }
-    return {content,result,status:response.status,provider:"api",model:MODEL,effort,upstream:upstreamResponseTrace(response,raw)};
   } finally {
     clearTimeout(timeout);
     externalSignal?.removeEventListener("abort", abortFromClient);
@@ -992,7 +1259,7 @@ function responsePlacement(changedBox) {
   return {right,below,instruction:"For an unfinished expression ending in =, append only the missing result at right.x/right.y. For longer prose use below.x/below.y. Do not rewrite the user's entire expression."};
 }
 const REINSPECTION_RETRY = "Perform a second independent inspection. Use focusInset as the primary transcription view when present, especially for Chinese handwriting, then cross-check latestInput.imageRect. Inspect any box/circle-selected content and arrow chain it visually references outside that rectangle. Follow the final arrowhead as the intended destination. Every write_text command must include finite global x and y for its top-left start plus a finite maxWidth chosen from the available blank space.",
-  MANUAL_EMPTY_RETRY = `${REINSPECTION_RETRY} The manual response was empty; prior transcription may be wrong. If legible, fulfill modelInput.userAction with at least one renderable command. Use none only if unreadable or incomplete.`;
+  MANUAL_EMPTY_RETRY = `${REINSPECTION_RETRY} The manual response was empty; prior transcription may be wrong. If there is new input, fulfill modelInput.userAction or ask one brief clarification question with write_text. Use none only when there is no new input.`;
 function visibleMessageCommand(result, payload) {
   const text=typeof result?.message==="string"?result.message.trim().slice(0,800):"";
   if(!text||!payload?.changedBox)return null;
@@ -1436,6 +1703,29 @@ const server = http.createServer(async (req, res) => {
     if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
     return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
   }
+  const sharedCanvasMatch=/^\/api\/canvases\/(\d{10,16}-[a-zA-Z0-9-]{8,64})$/.exec(url.pathname);
+  if(url.pathname==="/api/canvases"||sharedCanvasMatch) {
+    try {
+      const mutation=req.method!=="GET",
+        authorizationError=mutation?browserRequestError(req):sharedCanvasReadError(req);
+      if(authorizationError)return send(res,403,{error:authorizationError});
+      if(req.method==="GET"&&url.pathname==="/api/canvases")return send(res,200,{canvases:listSharedCanvases()});
+      if(req.method==="GET"&&sharedCanvasMatch)return send(res,200,{canvas:readSharedCanvas(sharedCanvasMatch[1])});
+      if(req.method==="POST"&&url.pathname==="/api/canvases") {
+        if(!isJsonRequest(req))return send(res,415,{error:"Canvas storage requires application/json."});
+        return send(res,201,{canvas:saveSharedCanvas(await readJson(req,MAX_SHARED_CANVAS_BYTES))});
+      }
+      if(req.method==="PUT"&&sharedCanvasMatch) {
+        if(!isJsonRequest(req))return send(res,415,{error:"Canvas storage requires application/json."});
+        return send(res,200,{canvas:saveSharedCanvas(await readJson(req,MAX_SHARED_CANVAS_BYTES),sharedCanvasMatch[1])});
+      }
+      if(req.method==="DELETE"&&sharedCanvasMatch)return send(res,200,{canvas:deleteSharedCanvas(sharedCanvasMatch[1])});
+      return send(res,405,{error:"Method Not Allowed"});
+    } catch(error) {
+      const status=Number.isInteger(error?.status)?error.status:error?.message==="Request too large"?413:400;
+      return send(res,status,{error:error?.message||"Unable to access the PenEcho server canvas."});
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/plugins") return send(res, 200, { plugins:localPluginCatalog() });
   const privatePluginMatch=/^\/plugins\/private\/([a-z0-9][a-z0-9-]{0,63})(?:\/(plugin\.md|styles\.css)|(\.md))$/.exec(url.pathname);
   if ((req.method === "GET" || req.method === "HEAD") && privatePluginMatch) {
@@ -1556,7 +1846,26 @@ const server = http.createServer(async (req, res) => {
         if (!isJsonRequest(req)) return send(res, 415, { error:"AI requests require application/json.", requestId });
       }
       const submittedPayload = await readJson(req);
-      if (!validPayload(submittedPayload)) { log({ type:"ai", requestId, ip, status:400, error:"Invalid viewport-image payload." }); return send(res, 400, { error: "Invalid viewport-image payload.", requestId }); }
+      if (!validPayload(submittedPayload)) {
+        log({
+          type:"ai",
+          requestId,
+          ip,
+          status:400,
+          error:"Invalid viewport-image payload.",
+          ...(REQUEST_TRACE_ENABLED ? { failure:{
+            atlasCharacters:typeof submittedPayload?.atlasImage==="string"?submittedPayload.atlasImage.length:null,
+            atlasSize:finiteDebugBox(submittedPayload?.atlasSize),
+            visibleRect:finiteDebugBox(submittedPayload?.visibleRect),
+            captureRect:finiteDebugBox(submittedPayload?.captureRect),
+            sourceRect:finiteDebugBox(submittedPayload?.sourceRect),
+            changedBox:finiteDebugBox(submittedPayload?.changedBox),
+            typedInput:submittedPayload?.typedInput ? { textLength:typeof submittedPayload.typedInput.text==="string"?submittedPayload.typedInput.text.length:null, box:finiteDebugBox(submittedPayload.typedInput.box) } : null,
+            hotspotCount:Array.isArray(submittedPayload?.hotspotGrid?.hotspots)?submittedPayload.hotspotGrid.hotspots.length:null,
+          } } : {}),
+        });
+        return send(res, 400, { error: "Invalid viewport-image payload.", requestId });
+      }
       const payload = canonicalPayload(submittedPayload);
       const configurationError=providerConfigurationError();
       if (configurationError) { log({ type:"ai", requestId, ip, status:400, error:configurationError }); return send(res, 400, { error:configurationError, requestId }); }
@@ -1679,9 +1988,8 @@ const server = http.createServer(async (req, res) => {
       const timedOut=error?.name==="AbortError"||error?.message==="This operation was aborted";
       const upstreamStatus = Number.isInteger(error.status) && error.status >= 400 && error.status <= 599 ? error.status : null,
         code = clientError ? 400 : timedOut ? 504 : upstreamStatus || 502;
-      log({ type:"ai", requestId, ip, status:code, elapsedMs:Date.now()-started, error:clientError?"client-error":timedOut?"timeout":upstreamStatus?"upstream-error":"model-error" });
-      const message = error.message || "Unable to process request.", diagnostic = LOCAL_CLI ? visibleCliDiagnostic(error.diagnostic) : "",
-        userMessage = LOCAL_CLI && !clientError ? `${message}${diagnostic ? ` ${diagnostic}` : ""} Run \`penecho doctor --${LOCAL_CLI.doctor}\` for diagnostics.` : message;
+      log({ type:"ai", requestId, ip, status:code, elapsedMs:Date.now()-started, error:clientError?"client-error":timedOut?"timeout":upstreamStatus?"upstream-error":"model-error", ...(REQUEST_TRACE_ENABLED ? { failure:compactErrorLog(error) } : {}) });
+      const userMessage=publicModelError(error,{clientError,timedOut,upstreamStatus});
       const responseBody={error:userMessage,requestId};
       completeRequestTrace(requestTrace,timedOut?"timeout":"failed",code,responseBody,error);
       send(res, code, responseBody);
@@ -1702,7 +2010,7 @@ const server = http.createServer(async (req, res) => {
   if (!file.startsWith(PUBLIC + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(res, 404, "Not found", "text/plain");
   const host = requestHost(req),
     loopbackFrameSources = isLoopbackHostname(host?.hostname) ? ` http://localhost:${host.port || "80"} http://127.0.0.1:${host.port || "80"}` : "",
-    headers = { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=' 'sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=' 'sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA='; img-src 'self' blob: data:; connect-src 'self'; frame-src 'self'${loopbackFrameSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff", "Cross-Origin-Resource-Policy":"same-origin" };
+    headers = { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=' 'sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=' 'sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA='; img-src 'self' blob: data: https://github.com https://*.githubusercontent.com; connect-src 'self'; frame-src 'self'${loopbackFrameSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff", "Cross-Origin-Resource-Policy":"same-origin" };
   if (requested === "/index.html" && trustedLocalPage && (localAccessMode === "open" || hasAiSession(req))) headers["Set-Cookie"] = aiSessionCookie(req);
   res.writeHead(200, headers);
   if (req.method === "HEAD") return res.end();

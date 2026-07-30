@@ -18,6 +18,7 @@
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
     widgetLayer = document.querySelector("#widgetLayer"),
+    summonLayer = document.querySelector("#summonLayer"),
     inkLayer = document.querySelector("#inkLayer"),
     inkCtx = inkLayer.getContext("2d"),
     interactionLayer = document.querySelector("#interactionLayer"),
@@ -91,7 +92,6 @@
     changelogDialog = document.querySelector("#changelogDialog"),
     changelogCloseButton = document.querySelector("#changelogClose"),
     changelogDoneButton = document.querySelector("#changelogDone"),
-    summonLayer = document.querySelector("#summonLayer"),
     settingsLayer = document.querySelector("#settingsLayer"),
     settingsBackdrop = document.querySelector("#settingsBackdrop"),
     settingsPanel = document.querySelector("#settingsPanel"),
@@ -120,6 +120,7 @@
     TEXT_EDITOR_FONT_FAMILY = "ui-rounded, system-ui, sans-serif",
     TEXT_INPUT_GUARD_MS = 500,
     TEXT_INPUT_MAX_LENGTH = 2000,
+    MAX_VISIBLE_TEXT_BOXES = 50,
     MIXED_FORMULA_MAX_LENGTH = 512,
     AI_TEXT_MAX_LENGTH = 1000,
     COPY_FEEDBACK_MS = 1600,
@@ -133,7 +134,7 @@
     MAX_IMAGE_SOURCE_BYTES = 32 * 1024 * 1024,
     MAX_IMAGE_DIMENSION = 2048,
     MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
-    MAX_WIDGET_HTML_LENGTH = 40000,
+    MAX_WIDGET_HTML_LENGTH = 200000,
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
     MAX_DIAGRAM_SOURCE_BYTES = 20000,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
@@ -331,22 +332,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Real photos, professional diagrams, and smoother canvas work",
-      changelogIntro: "Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.",
-      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images or Professional Diagrams for expert visuals with copyable source formats.",
-      changelogCanvasWorkflow: "Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.",
-      changelogDesktopAccess: "Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.",
+      changelogTitle: "Professional diagrams, editable source, and precise refinement",
+      changelogIntro: "Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.",
+      changelogPluginEnableNote: "Professional Diagrams is off by default. To use professional diagram features, open Plugins and enable Professional Diagrams.",
+      changelogVisualPlugins: "Professional Diagrams chooses an appropriate editable domain format. Supported formats render locally in the existing iframe; specialized or unlisted formats can use generated HTML while preserving copyable professional source.",
+      changelogCanvasWorkflow: "Draw or describe a diagram, then add nearby ink and use AI Refine to replace only that diagram while preserving its format, established layout, terminology, style, and copy action.",
+      changelogDesktopAccess: "Professional Diagrams is second in the plugin list but remains off by default. Enabling it adds about 5.2k–5.5k prompt tokens per AI request; renderers load only when needed and canvas display itself uses no model tokens.",
       changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, and PNG export.",
-      changelogPluginsSummary: "0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.",
-      changelogAnimation: "0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.",
+      changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
+      changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
+      changelogAnimation: "0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
       settingsSummonEnabled: "Show while AI thinks",
-      settingsSummonDescription: "Each request draws a different animated mathematical form.",
+      settingsSummonDescription: "A changing mathematical form and quiet text appear while each request runs.",
       settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
@@ -364,21 +366,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonPhrase10: "Intelligence may begin with calculation; understanding begins with attention.",
       summonPhrase11: "Let’s turn this hazy idea into something we can both see.",
       summonPhrase12: "An answer is not an ending. It is where the next stroke begins.",
-      summonTip1: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
-      summonTip2: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
-      summonTip3: "Tip: circle content with the lasso and AI will work only on that selection.",
-      summonTip4: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
-      summonTip5: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
-      summonTip6: "Tip: raise the Reasoning effort in the toolbar for harder problems.",
-      summonTip7: "Tip: the plugin panel hides live widgets - flowcharts and photo search can join your canvas.",
-      summonTip8: "Tip: the history panel saves canvas snapshots you can return to anytime.",
-      summonTip9: "Tip: zoom with the wheel, pan with the middle mouse button - the canvas spans twenty thousand squares.",
-      summonTip10: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
+      summonTip1: "Tip: create professional diagrams for engineering, science, software, and business.",
+      summonTip2: "Tip: professional diagrams preserve editable source that you can copy into other tools.",
+      summonTip3: "Tip: add a few strokes beside a diagram, then use AI Refine to update only that diagram.",
+      summonTip4: "Tip: AI Refine tries to preserve the diagram’s format, layout, terminology, and visual style.",
+      summonTip5: "Tip: professional diagram renderers load only when needed; simply viewing them uses no model tokens.",
+      summonTip6: "Tip: Professional Diagrams is off by default—enable it from Plugins when you need it.",
+      summonTip7: "Tip: Real Photo Search places sourced web photos directly on the canvas.",
+      summonTip8: "Tip: use Hand to move and freely resize images, animations, and AI widgets.",
+      summonTip9: "Tip: remote images remain included when you save the canvas or export a PNG.",
+      summonTip10: "Tip: save a canvas to the PenEcho server so other authorized devices can open it.",
+      summonTip11: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
+      summonTip12: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
+      summonTip13: "Tip: circle content with the lasso and AI will work only on that selection.",
+      summonTip14: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
+      summonTip15: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
+      summonTip16: "Tip: raise the Reasoning effort in the toolbar for harder problems.",
+      summonTip17: "Tip: plugins add focused capabilities and can be switched off when you do not need them.",
+      summonTip18: "Tip: History can update the current snapshot or save a separate new copy.",
+      summonTip19: "Tip: zoom with the wheel, pan with the middle mouse button—the canvas spans twenty thousand squares.",
+      summonTip20: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
-      history: "Local history",
-      historyTitle: "Local canvas history",
+      history: "Canvas history",
+      historyTitle: "Canvas history",
       historyDescription: "Stores confirmed canvas content, including restorable animation scenes. Unconfirmed AI drafts are excluded.",
+      saveLocation: "Save location",
+      storageThisDevice: "This device",
+      storagePenEchoServer: "PenEcho server",
+      storageThisDeviceDescription: "Saved only in this browser on this device. Other devices cannot see it.",
+      storagePenEchoServerDescription: "Saved on the computer running PenEcho. Anyone using this PenEcho service can see it after passing its access check.",
       closeHistory: "Close history",
       newCanvas: "New",
       saveCanvas: "Save canvas",
@@ -386,8 +403,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exportPng: "Export PNG",
       newCanvasTitle: "Start a new canvas?",
       newCanvasDescription: "Save confirmed content and animation scenes before starting over. Unconfirmed AI drafts are not included.",
-      currentSnapshot: "Current snapshot: {name}",
+      currentSnapshot: "Current snapshot: {name} · {location}",
       noCurrentSnapshot: "There is no current snapshot to overwrite.",
+      currentSnapshotOtherLocation: "Current snapshot {name} is in {location}. Select that location to overwrite it.",
       newSnapshotName: "Name for new snapshot (optional)",
       cancel: "Cancel",
       newWithoutSave: "Don't save",
@@ -399,7 +417,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotSavingShort: "Saving...",
       loadSnapshot: "Load",
       deleteSnapshot: "Delete",
-      emptyHistory: "No local snapshots yet",
+      emptyDeviceHistory: "No canvases saved on this device yet",
+      emptyServerHistory: "No canvases saved on this PenEcho server yet",
       emptyCanvas: "The canvas is empty",
       snapshotSaved: "Canvas snapshot saved",
       snapshotOverwritten: "Current snapshot overwritten",
@@ -408,10 +427,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvasReady: "New canvas ready",
       exportComplete: "PNG exported",
       exportError: "Export: ",
-      snapshotError: "Local history: ",
+      snapshotError: "Canvas history: ",
       snapshotTiles: "canvas tiles",
       snapshotImages: "images",
-      deleteSnapshotConfirm: "Delete this local snapshot?",
+      deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
+      deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
       footerTip: "AI drafts: move the whole group or adjust, accept, and discard items independently",
       ready: "Ready",
       aiBusy: "AI is working. Please wait.",
@@ -553,6 +573,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetSourceCopyFailed: "Widget source could not be copied",
       widgetRefine: "AI Refine",
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
+      widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
       widgetRefining: "AI is refining this widget",
       widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
@@ -611,6 +632,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
@@ -626,6 +648,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function authenticatedApiHeaders(headers = {}) {
@@ -648,10 +671,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       touchGesture: null,
       panGesture: null,
       textEditors: new Map(),
+      textBoxes: [],
       textEditorStyleSheet: null,
       nextTextEditorId: 1,
+      nextTextBoxId: 1,
       nextTextEditorZ: 1,
       activeTextEditorId: null,
+      selectedTextBoxId: null,
+      textBoxHistoryBefore: null,
       animations: [],
       nextAnimationId: 1,
       selectedAnimationId: null,
@@ -729,8 +756,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       busy: false,
       activeAI: null,
       snapshotLoadGeneration: 0,
+      snapshotLocation: initialSnapshotLocation,
       currentSnapshotId: null,
       currentSnapshotName: "",
+      currentSnapshotLocation: null,
       restoreGeneration: 0,
       recognitionGeneration: 0,
       userRevision: 0,
@@ -753,7 +782,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.7.2";
+  const CHANGELOG_VERSION = "0.8.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -800,27 +829,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
   const summonFX = SUMMON?.create({
-    fxCanvas: summonLayer,
+    fxCanvas:summonLayer,
     textLayer: document.querySelector("#summonTextLayer"),
     t,
     getTransform: () => ({ scale: state.scale, panX: state.panX, panY: state.panY, width: view.clientWidth, height: view.clientHeight, dpr: devicePixelRatio || 1 }),
-    getContentRects: summonBlockers,
-    getHotspot: summonHotspot,
     getAiColor: () => state.aiColor,
   });
-  function summonHotspot() {
-    const points = state.hotspotTrail
-        .filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y))
-        .map((point) => ({ x:point.x, y:point.y })),
-      point = points.at(-1),
-      box = state.summonAnchor;
-    if (!point && !box) return null;
-    return {
-      points,
-      point:point || null,
-      box:box ? { x:box.x, y:box.y, w:box.w, h:box.h } : null,
-    };
-  }
   function summonBlockers() {
     const visible = viewportRect(),
       rects = [];
@@ -850,59 +864,76 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (item && Number.isFinite(item.x)) rects.push({ x: item.x, y: item.y, w: item.layoutWidth || item.w || 0, h: item.layoutHeight || item.h || 0 });
     return rects.filter((r) => r.w > 0 && r.h > 0);
   }
+  function summonControlBlockers() {
+    const viewRect = view.getBoundingClientRect(),
+      viewport = { x:0, y:0, w:view.clientWidth, h:view.clientHeight },
+      selectors = [
+        ".object-chrome-button",
+        ".animation-controls:not([hidden])",
+        ".image-edit-bar:not([hidden])",
+        ".selection-context-toolbar",
+        ".text-editor",
+        ".text-input-hint:not([hidden])",
+        ".ai-embodiment",
+        ".ai-embodiment.menu-open .radial-action",
+        "#tip",
+      ].join(","),
+      rects = [];
+    for (const element of view.querySelectorAll(selectors)) {
+      const style = getComputedStyle(element),
+        rect = element.getBoundingClientRect();
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) <= 0.02
+        || rect.width <= 0 || rect.height <= 0) continue;
+      const padding = 8,
+        clipped = intersection({
+          x:rect.left - viewRect.left - padding,
+          y:rect.top - viewRect.top - padding,
+          w:rect.width + padding * 2,
+          h:rect.height + padding * 2,
+        }, viewport);
+      if (clipped) rects.push({ ...clipped, weight:4 });
+    }
+    return rects;
+  }
+  function summonScreenBlockers() {
+    const scale = Math.max(0.03, state.scale),
+      viewport = { x:0, y:0, w:view.clientWidth, h:view.clientHeight },
+      padding = 8,
+      rects = [];
+    for (const rect of summonBlockers()) {
+      const clipped = intersection({
+        x:rect.x * scale + state.panX - padding,
+        y:rect.y * scale + state.panY - padding,
+        w:rect.w * scale + padding * 2,
+        h:rect.h * scale + padding * 2,
+      }, viewport);
+      if (clipped) rects.push({ ...clipped, weight:1 });
+    }
+    return rects.concat(summonControlBlockers());
+  }
   function summonPlacement() {
-    const visible = viewportRect();
-    if (!visible) return null;
-    const blockers = summonBlockers(),
-      anchor = state.summonAnchor,
-      w = visible.w * 0.36,
-      h = visible.h * 0.32,
-      margin = Math.min(visible.w, visible.h) * 0.02,
-      clampBox = (cx, cy) => ({
-        x: Math.min(Math.max(cx - w / 2, visible.x + margin), visible.x + visible.w - margin - w),
-        y: Math.min(Math.max(cy - h / 2, visible.y + margin), visible.y + visible.h - margin - h),
-        w,
-        h,
-      }),
-      overlapArea = (box) => {
-        let area = 0;
-        for (const b of blockers) {
-          const hit = intersection(box, b);
-          if (hit) area += hit.w * hit.h;
-        }
-        return area;
-      },
-      candidates = [];
-    if (anchor) {
-      const acx = anchor.x + anchor.w / 2,
-        acy = anchor.y + anchor.h / 2,
-        gap = Math.min(visible.w, visible.h) * 0.04;
-      candidates.push(
-        clampBox(anchor.x + anchor.w + gap + w / 2, acy),
-        clampBox(acx, anchor.y + anchor.h + gap + h / 2),
-        clampBox(anchor.x - gap - w / 2, acy),
-        clampBox(acx, anchor.y - gap - h / 2),
-      );
-    }
-    const ccx = visible.x + visible.w / 2,
-      ccy = visible.y + visible.h / 2;
-    candidates.push(clampBox(ccx, ccy));
-    for (const [dx, dy] of [[0.24, 0], [-0.24, 0], [0, 0.22], [0, -0.22], [0.24, 0.22], [-0.24, -0.22], [0.24, -0.22], [-0.24, 0.22]])
-      candidates.push(clampBox(ccx + visible.w * dx, ccy + visible.h * dy));
-    let best = candidates[0],
-      bestScore = Infinity;
-    for (const candidate of candidates) {
-      const score = overlapArea(candidate);
-      if (score === 0) {
-        best = candidate;
-        break;
-      }
-      if (score < bestScore) {
-        bestScore = score;
-        best = candidate;
-      }
-    }
-    return { x: best.x + best.w / 2, y: best.y + best.h / 2 };
+    const width = view.clientWidth,
+      height = view.clientHeight,
+      scale = Math.max(0.03, state.scale);
+    if (width <= 0 || height <= 0 || !SUMMON?.chooseThinkingPlacement) return null;
+    const anchor = state.summonAnchor
+        ? {
+            x:state.summonAnchor.x * scale + state.panX,
+            y:state.summonAnchor.y * scale + state.panY,
+            w:state.summonAnchor.w * scale,
+            h:state.summonAnchor.h * scale,
+          }
+        : null,
+      placement = SUMMON.chooseThinkingPlacement({
+        width,
+        height,
+        anchor,
+        blockers:summonScreenBlockers(),
+      });
+    return {
+      x:(placement.x - state.panX) / scale,
+      y:(placement.y - state.panY) / scale,
+    };
   }
   function showSummon() {
     if (!summonFX || !state.summonEnabled) return;
@@ -1431,6 +1462,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function ensurePluginRuntime(pluginId) {
     return pluginId === "flowchart" ? loadDiagramRuntime() : Promise.resolve(null);
   }
+  async function enableSnapshotWidgetPlugins(items) {
+    const pluginIds = [...new Set((Array.isArray(items) ? items : [])
+      .map((item) => typeof item?.pluginId === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) ? item.pluginId : "")
+      .filter(Boolean))];
+    if (!pluginIds.length) return;
+    for (const pluginId of pluginIds) state.plugins[pluginId] = true;
+    if (pluginIds.includes("flowchart") && items.some((item) => item?.pluginId === "flowchart" && item?.widgetType === "diagram_source")) {
+      try { await ensurePluginRuntime("flowchart"); }
+      catch (error) { state.pluginCatalogError = error.message; }
+    }
+    persistPluginSettings();
+    syncWidgetRuntime();
+    updatePluginControl();
+  }
   function dataPluginDefinitions() {
     return PLUGIN_DEFINITIONS.filter((plugin) => plugin.documentPath);
   }
@@ -1448,7 +1493,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return dataPluginDefinitions().filter((plugin) => pluginEnabled(plugin.id))
       .map((plugin) => pluginManifests.get(plugin.id))
       .filter(Boolean)
-      .sort((a, b) => a.id === "general" ? b.id === "general" ? 0 : -1 : b.id === "general" ? 1 : a.id.localeCompare(b.id))
+      .sort((a, b) => {
+        const priority = (id) => id === "general" ? 0 : id === "flowchart" ? 1 : 2,
+          difference = priority(a.id) - priority(b.id);
+        return difference || a.id.localeCompare(b.id);
+      })
       .map((manifest) => ({
         id: manifest.id,
         name: manifest.name,
@@ -1526,13 +1575,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       definitions.sort((a, b) => (manifests.get(a.id)?.name || a.id).localeCompare(manifests.get(b.id)?.name || b.id));
       const generalDefinitions = definitions.filter((definition) => definition.id === "general"),
+        professionalDefinitions = definitions.filter((definition) => definition.id === "flowchart"),
         promotedDefinitions = ["image-search", "weather"].map((id) => definitions.find((definition) => definition.id === id)).filter(Boolean),
-        fixedDefinitionIds = new Set(["general", ...promotedDefinitions.map((definition) => definition.id)]),
+        fixedDefinitionIds = new Set(["general", "flowchart", ...promotedDefinitions.map((definition) => definition.id)]),
         remainingDefinitions = definitions.filter((definition) => !fixedDefinitionIds.has(definition.id)),
         previousIds = new Set(dataPluginDefinitions().map((plugin) => plugin.id)), nextIds = new Set(definitions.map((plugin) => plugin.id));
       if (state.activeAI?.widgetEdit || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
       for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) unmountWidget(widget);
-      PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
+      PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...professionalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
       pluginManifests.clear();
       for (const [id, manifest] of manifests) pluginManifests.set(id, manifest);
       pluginLoadErrors.clear();

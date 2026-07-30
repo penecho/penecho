@@ -1,9 +1,9 @@
 <h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
 </h1>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.ko.md">한국어</a> |
@@ -21,14 +21,14 @@
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-Participe%20da%20comunidade-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Participe do Discord do PenEcho"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="Dê uma estrela ao PenEcho no GitHub"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="Licença: AGPL v3"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="Licença: AGPL v3"></a>
 </p>
 
-> Esta tradução oferece uma visão geral do projeto. O [README em inglês](README.md) é a fonte oficial para as informações técnicas mais recentes e completas.
+> Esta tradução oferece uma visão geral do projeto. O [README em inglês](../../README.md) é a fonte oficial para as informações técnicas mais recentes e completas.
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Demonstração dos plugins do PenEcho" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Demonstração dos plugins do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Demonstração completa do PenEcho" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Demonstração completa do PenEcho" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Demonstração de diagramas profissionais do PenEcho" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Demonstração interativa da tela do PenEcho" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -71,8 +71,16 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Receba respostas, dicas, explicações, fórmulas, gráficos e diagramas diretamente na tela.
 - Mova e redimensione rascunhos da IA; aceite ou descarte cada um antes de incorporá-lo ao trabalho.
 - Selecione traços com o laço para mover, redimensionar, recolorir, excluir ou converter com Typeset.
-- Salve instantâneos localmente no navegador e exporte o conteúdo confirmado como PNG.
+- Salve instantâneos neste dispositivo ou no servidor PenEcho e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
+
+## Novidades da versão 0.8.0
+
+- **Diagramas profissionais além de fluxogramas.** Crie diagramas de arquitetura, UML, sequência, BPMN, dados, engenharia, ciência, medicina, finanças e geografia com fonte profissional editável. Formatos compatíveis são renderizados localmente sob demanda; formatos especializados podem continuar em HTML completo.
+- **Desativado por padrão.** Abra **Plugins** e ative **Professional Diagrams** quando precisar. Enquanto estiver desligado, seu prompt e as dependências de renderização não são carregados.
+- **Refine um resultado existente.** Desenhe sobre ou perto de um diagrama e escolha **AI Refine** para substituir apenas esse diagrama. Formato, layout, terminologia e linguagem visual são preservados, salvo quando a alteração solicitada exigir o contrário.
+- **Armazenamento neste dispositivo ou no servidor PenEcho.** Salve a tela apenas no navegador atual ou no computador que executa o PenEcho para que outros dispositivos autorizados do mesmo servidor possam abri-la. Controles pendentes são confirmados antes do salvamento.
+- **Área de transferência, texto e plugins extensíveis.** Insira texto ou imagens da área de transferência do sistema, copie textos, fórmulas e fontes profissionais retornadas pela IA e reedite caixas de texto com Hand. Plugins integrados ou privados também podem ser copiados como plugins personalizados com CSS opcional carregado somente durante o uso.
 
 ## Novidades da versão 0.7.2
 
@@ -80,30 +88,17 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - **Edição, salvamento e exportação mais confiáveis.** O Hand move diretamente imagens, animações e widgets retornados pela IA e permite redimensioná-los sem um máximo artificial. Salvar atualiza por padrão o instantâneo carregado, Salvar como novo continua disponível e imagens remotas permanecem nas miniaturas e exportações PNG.
 - **Acesso local e melhor integração com o desktop.** Um código compartilhado de seis dígitos pode proteger a entrada de navegadores locais e da rede sem alterar as solicitações ao modelo após o desbloqueio. A configuração do desktop aceita Kimi API e Kimi CLI, além de API genérica, Codex CLI e Claude CLI, com melhorias em atualizações e empacotamento.
 
-## Novidades da versão 0.7.1
-
-- **Imagens e fotos na tela.** Adicione imagens pelo seletor do sistema — biblioteca de fotos ou câmera em celulares e tablets, arquivos de imagem no desktop. Imagens grandes são reduzidas e compactadas automaticamente, mantendo telas e snapshots leves.
-- **Edição com toque longo, ações claras.** Pressione e segure uma imagem para movê-la ou redimensioná-la novamente e escolha Posicionar, Mesclar ou Excluir. Posicionar mantém a imagem flutuando sob a tinta para desenhar por cima; Mesclar a transforma em traços reais que podem ser apagados.
-- **Sem solicitações de IA inesperadas.** Imagens nunca iniciam solicitações de IA por conta própria; se você trabalhar com uma imagem enquanto a IA ainda está processando, o resultado em andamento é descartado e o reconhecimento de escrita é retomado automaticamente. Imagens participam de desfazer/refazer, snapshots locais e exportação PNG.
-
-## Novidades da versão 0.7.0
-
-- **HTML interativo na tela.** O plugin General HTML permite criar relógios, calculadoras, painéis e outras interfaces como widgets interativos isolados.
-- **Dados úteis sem um serviço do PenEcho.** Plugins de clima, ações, notícias de tecnologia, câmbio, terremotos, eventos naturais, clima espacial e GitHub consultam as APIs declaradas diretamente pelo navegador.
-- **Limites de segurança explícitos.** A rede de cada plugin fica restrita a uma lista de origens permitidas, o HTML roda em um iframe isolado e plugins desativados não participam das solicitações nem da execução.
-- **Criação local de plugins.** Um formato Markdown compacto permite aprimorar rascunhos com IA, preencher títulos, salvar, ativar e excluir plugins pessoais em uma interface Preview.
-- **Persistência e exportação nativas.** Widgets confirmados fazem parte dos instantâneos e do PNG, com suporte a movimento, redistribuição, escala e exclusão reversível.
-- **Padrões sensatos.** General HTML, Animation scenes e Weather começam ativados para novos usuários; os outros plugins de dados exigem ativação explícita.
-
 ## Versões anteriores
 
-- **0.6.0 - Animation scenes.** Adicionou animações Canvas2D declarativas e seguras, com edição e persistência em instantâneos, renderização aprimorada de Markdown/LaTeX, respostas de modelo mais robustas e verificação não bloqueante de atualizações do npm.
+- **0.7.1.** Adicionou imagens e fotos locais, edição de objetos com Hand, snapshots, exportação PNG, diagramas Mermaid copiáveis e imagens da Web com fonte.
+- **0.7.0.** Introduziu HTML interativo isolado, plugins de dados ao vivo, criação local de plugins e persistência de widgets.
+- **0.6.0 e anteriores.** Adicionou animações declarativas, melhorias em Markdown/LaTeX, ferramentas de seleção e a base da grande tela esparsa.
 
 ## Como funciona
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg"><img alt="Como o PenEcho funciona" src="docs/assets/how-it-works-light.svg"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/how-it-works-dark.svg"><img alt="Como o PenEcho funciona" src="../assets/how-it-works-light.svg"></picture></p>
 
-O navegador envia apenas o recorte relevante da tela e sua geometria. O servidor valida a solicitação, encaminha ao executor escolhido e devolve um rascunho estruturado e móvel. As recomendações atuais de modelos e os exemplos de custo estão no [README em inglês](README.md#recommended-model-configurations).
+O navegador envia apenas o recorte relevante da tela e sua geometria. O servidor valida a solicitação, encaminha ao executor escolhido e devolve um rascunho estruturado e móvel. As recomendações atuais de modelos e os exemplos de custo estão no [README em inglês](../../README.md#recommended-model-configurations).
 
 ## Implantação segura
 
@@ -119,8 +114,8 @@ Antes de enviar uma alteração, execute:
 npm run check
 ```
 
-Consulte as [notas de arquitetura](docs/architecture.md) e o [CONTRIBUTING.md](CONTRIBUTING.md). Compartilhe dúvidas e exemplos no [Discord](https://discord.gg/3jrPJ3mXdX) ou no [GitHub Discussions](https://github.com/penecho/penecho/discussions), e registre erros reproduzíveis no [GitHub Issues](https://github.com/penecho/penecho/issues).
+Consulte as [notas de arquitetura](../architecture.md) e o [CONTRIBUTING.md](../../CONTRIBUTING.md). Compartilhe dúvidas e exemplos no [Discord](https://discord.gg/3jrPJ3mXdX) ou no [GitHub Discussions](https://github.com/penecho/penecho/discussions), e registre erros reproduzíveis no [GitHub Issues](https://github.com/penecho/penecho/issues).
 
 ## Licença e uso comercial
 
-O PenEcho é distribuído sob a [GNU AGPL v3.0 only](LICENSE). O uso comercial é permitido, mas, se você oferecer uma versão modificada a usuários pela rede, deverá fornecer a eles o código-fonte correspondente conforme a AGPL. Há uma [licença comercial](COMMERCIAL-LICENSE.md) para produtos proprietários e serviços hospedados que não possam cumprir a AGPL. O nome e o logotipo são regidos pela [política de marcas](TRADEMARKS.md).
+O PenEcho é distribuído sob a [GNU AGPL v3.0 only](../../LICENSE). O uso comercial é permitido, mas, se você oferecer uma versão modificada a usuários pela rede, deverá fornecer a eles o código-fonte correspondente conforme a AGPL. Há uma [licença comercial](../../COMMERCIAL-LICENSE.md) para produtos proprietários e serviços hospedados que não possam cumprir a AGPL. O nome e o logotipo são regidos pela [política de marcas](../../TRADEMARKS.md).

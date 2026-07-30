@@ -1,6 +1,6 @@
 # PenEcho desktop packaging
 
-This directory is a self-contained desktop-packaging snapshot of PenEcho 0.7.2. It keeps the existing browser canvas and CLI while adding an Electron shell for macOS and Windows.
+This directory is a self-contained desktop-packaging snapshot of PenEcho 0.8.0. It keeps the existing browser canvas and CLI while adding an Electron shell for macOS and Windows.
 
 End users do **not** need Node.js or Python. Electron bundles its own Chromium and Node.js runtime. API mode is the recommended beginner path. Codex CLI and Claude Code can also be installed from the setup page without opening a terminal.
 
@@ -91,7 +91,7 @@ Azure Artifact Signing can replace the PFX path later if the publisher account i
 
 ## GitHub Releases
 
-Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v0.7.2`.
+Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v0.8.0`.
 
 The workflow can be run manually for private testing. When triggered by a `v*` tag, it creates a **draft** GitHub Release and uploads the installers. Test every installer before publishing the draft.
 
@@ -108,13 +108,13 @@ These paths intentionally do not invoke Electron's native `autoUpdater`, because
 
 Recommended public assets:
 
-- `PenEcho-0.7.2-mac-arm64.dmg`
-- `PenEcho-0.7.2-mac-x64.dmg`
-- `PenEcho-0.7.2-mac-arm64.zip`
-- `PenEcho-0.7.2-mac-x64.zip`
-- `PenEcho-Setup-0.7.2-win-x64.exe`
+- `PenEcho-0.8.0-mac-arm64.dmg`
+- `PenEcho-0.8.0-mac-x64.dmg`
+- `PenEcho-0.8.0-mac-arm64.zip`
+- `PenEcho-0.8.0-mac-x64.zip`
+- `PenEcho-Setup-0.8.0-win-x64.exe`
 - `RELEASES`
-- `penecho-0.7.2-full.nupkg`
+- `penecho-0.8.0-full.nupkg`
 - `SHA256SUMS-<platform>-<arch>.txt`
 
 The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP and Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.

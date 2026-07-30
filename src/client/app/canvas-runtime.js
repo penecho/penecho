@@ -44,6 +44,125 @@
     }
   }
 
+  function textBoxBox(item) {
+    return { x:item.x, y:item.y, w:item.w, h:item.h };
+  }
+  function textBoxHistoryRecord(item) {
+    return {
+      id:item.id,
+      x:item.x,
+      y:item.y,
+      w:item.w,
+      h:item.h,
+      maxWidth:item.maxWidth,
+      fontSize:item.fontSize,
+      color:item.color,
+      text:item.text,
+      image:item.image,
+    };
+  }
+  function storedTextBoxes() {
+    return state.textBoxes.map(({ image, ...item }) => ({ ...item }));
+  }
+  function textBoxHistoryState() {
+    return state.textBoxes.map(textBoxHistoryRecord);
+  }
+  function recordTextBoxesBefore() {
+    if (!state.textBoxHistoryBefore) state.textBoxHistoryBefore = textBoxHistoryState();
+  }
+  function visibleTextBoxes(region = null) {
+    return state.textBoxes.filter((item) => item.id !== state.selectedTextBoxId && (!region || intersection(textBoxBox(item), region)));
+  }
+  function textBoxBounds(region = null) {
+    let bounds = null;
+    for (const item of visibleTextBoxes(region)) bounds = unionLocalBounds(bounds, region ? intersection(textBoxBox(item), region) : textBoxBox(item));
+    return bounds;
+  }
+  function drawTextBoxesToContext(context, region = null) {
+    for (const item of visibleTextBoxes(region)) context.drawImage(item.image, item.x, item.y, item.w, item.h);
+  }
+  function textBoxAtPoint(point) {
+    for (let index = state.textBoxes.length - 1; index >= 0; index--) {
+      const item = state.textBoxes[index],
+        box = textBoxBox(item);
+      if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) return item;
+    }
+    return null;
+  }
+  async function fittedTextBoxContent(text, fontSize, color, maxWidth) {
+    const render = async () => {
+      try {
+        return { image:await mixedTextImage(text, fontSize, color, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY), mixedFallback:false };
+      } catch {
+        return { image:textImage(text, fontSize, color, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH), mixedFallback:true };
+      }
+    };
+    maxWidth = Math.min(SIZE, Math.max(fontSize * 3, maxWidth));
+    let result = await render(),
+      width = result.image.logicalWidth || result.image.width,
+      height = result.image.logicalHeight || result.image.height;
+    for (let attempt = 0; attempt < 3 && (width > SIZE || height > SIZE); attempt++) {
+      const scale = Math.min(SIZE / width, SIZE / height) * 0.995;
+      fontSize = Math.max(1, fontSize * scale);
+      maxWidth = Math.min(SIZE, Math.max(fontSize * 3, maxWidth * scale));
+      result = await render();
+      width = result.image.logicalWidth || result.image.width;
+      height = result.image.logicalHeight || result.image.height;
+    }
+    return {
+      ...result,
+      fontSize,
+      maxWidth,
+      width:Math.min(SIZE, width),
+      height:Math.min(SIZE, height),
+    };
+  }
+  async function renderedTextBoxRecord(item) {
+    if (!item || typeof item !== "object" || typeof item.text !== "string" || !item.text.trim() || item.text.length > TEXT_INPUT_MAX_LENGTH) return null;
+    const x = Number(item.x),
+      y = Number(item.y),
+      fontSize = Number(item.fontSize),
+      maxWidth = Number(item.maxWidth);
+    if (![x, y, fontSize, maxWidth].every(Number.isFinite) || x < 0 || y < 0 || fontSize < 1 || fontSize > 2000 || maxWidth < fontSize * 3 || maxWidth > SIZE) return null;
+    const color = item.color || state.inkColor,
+      fitted = await fittedTextBoxContent(item.text, fontSize, color, maxWidth),
+      width = fitted.width,
+      height = fitted.height,
+      fittedX = Math.max(0, Math.min(SIZE - width, x)),
+      fittedY = Math.max(0, Math.min(SIZE - height, y));
+    if (width <= 0 || height <= 0) return null;
+    return {
+      id:typeof item.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${state.nextTextBoxId++}`,
+      x:fittedX,
+      y:fittedY,
+      w:width,
+      h:height,
+      maxWidth:fitted.maxWidth,
+      fontSize:fitted.fontSize,
+      color:typeof item.color === "string" ? item.color : color,
+      text:item.text,
+      image:fitted.image,
+    };
+  }
+  async function restoreTextBoxes(items) {
+    clearTextEditors();
+    state.textBoxes = [];
+    state.nextTextBoxId = 1;
+    state.selectedTextBoxId = null;
+    for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_TEXT_BOXES) : []) {
+      let record = null;
+      if (item?.image) {
+        record = textBoxHistoryRecord(item);
+      } else record = await renderedTextBoxRecord(item);
+      if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
+      const numbered = /^text-box-(\d+)$/.exec(record.id);
+      if (numbered) state.nextTextBoxId = Math.max(state.nextTextBoxId, Number(numbered[1]) + 1);
+      state.textBoxes.push(record);
+    }
+    positionTextEditors();
+    requestRender();
+  }
+
   function imageBox(item) {
     return { x:item.x, y:item.y, w:item.w, h:item.h };
   }
@@ -1834,6 +1953,7 @@
       ctx.stroke();
     }
     drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
+    drawTextBoxesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
     ctx.restore();
     ctx.strokeStyle = state.paint.border;
     ctx.lineWidth = 2 / state.scale;
@@ -1872,6 +1992,7 @@
       boxes = [
         ...visibleImages().map(imageBox),
         ...visibleAnimations().map(animationBox),
+        ...visibleTextBoxes().map(textBoxBox),
         ...visibleWidgets().map(widgetBox),
       ];
     if (!boxes.length) return;
@@ -2473,7 +2594,7 @@
         declaration.height = `${Math.round(editor.heightCss)}px`;
         declaration.zIndex = String(editor.zIndex || 1);
         declaration.setProperty("--text-editor-font-size", `${editor.fontCss}px`);
-        declaration.setProperty("--text-editor-ink", state.inkColor);
+        declaration.setProperty("--text-editor-ink", editor.color || state.inkColor);
         if (editor.previewLogicalWidth) declaration.setProperty("--text-editor-preview-width", `${editor.previewLogicalWidth}px`);
         else declaration.removeProperty("--text-editor-preview-width");
         if (editor.previewLogicalHeight) declaration.setProperty("--text-editor-preview-height", `${editor.previewLogicalHeight}px`);
@@ -2481,6 +2602,7 @@
       }
       editor.element.classList.toggle("active", active);
     }
+    textEditorLayer.setAttribute("aria-hidden", String(!visible));
   }
   function textEditorStyleSheet() {
     if (state.textEditorStyleSheet) return state.textEditorStyleSheet;
@@ -2543,6 +2665,7 @@
     if (gesture.hit === "move") {
       editor.x = gesture.startX + dx / Math.max(0.03, state.scale);
       editor.y = gesture.startY + dy / Math.max(0.03, state.scale);
+      editor.moved = true;
     } else {
       const point = textEditorScreenPoint(editor),
         maxWidth = Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - Math.max(8, point.left) - 8),
@@ -2551,6 +2674,7 @@
       editor.widthCss = next.widthCss;
       editor.heightCss = next.heightCss;
       editor.fontCss = next.fontCss;
+      editor.resized = true;
       if (editor.mixedMode && (gesture.hit === "width" || gesture.hit === "corner")) scheduleTextEditorPreview(editor);
     }
     positionTextEditors();
@@ -2597,6 +2721,7 @@
     }
     state.textEditors.clear();
     state.activeTextEditorId = null;
+    state.selectedTextBoxId = null;
     state.textTap = null;
     positionTextEditors();
   }
@@ -2618,7 +2743,7 @@
       text = editor.textarea.value,
       fontCss = editor.fontCss,
       maxWidth = Math.max(fontCss * 3, editor.widthCss - 16),
-      color = state.inkColor;
+      color = editor.color || state.inkColor;
     editor.preview.setAttribute("aria-busy", "true");
     let image,
       fallback = false;
@@ -2694,7 +2819,7 @@
   function textEditorContentOffset(editor) {
     const body = editor?.body || editor?.element?.querySelector(".text-editor-body"),
       left = body?.offsetLeft || 0,
-      top = body?.offsetTop || 28;
+      top = body?.offsetTop || 36;
     return { x: left + 8, y: top + 8 };
   }
 
@@ -2709,6 +2834,7 @@
     const commitPromise = (async () => {
       editor.committing = true;
       editor.cancelled = false;
+      editor.element.classList.add("committing");
       cancelTextEditorPreview(editor);
       blockCanvasInput(TEXT_INPUT_GUARD_MS);
       if (!editor.returnMode && state.mode === "text") setCanvasMode("pen");
@@ -2721,32 +2847,48 @@
       editor.x += contentOffset.x / editorScale;
       editor.y += contentOffset.y / editorScale;
       editor.mixedMode = true;
-      const fontSize = editor.fontCss / Math.max(0.03, state.scale),
-        maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
-        x = editor.x,
-        y = editor.y;
-      let image,
-        mixedFallback = false;
-      try {
-        image = editor.mixedMode
-          ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
-          : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-      } catch {
-        image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-        mixedFallback = editor.mixedMode;
-      }
+      const proposedFontSize = editor.fontCss / Math.max(0.03, state.scale);
+      let fontSize = editor.sourceTextBoxId && !editor.resized ? editor.sourceFontSize : proposedFontSize,
+        proposedMaxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
+        color = editor.color || state.inkColor;
+      let maxWidth = editor.sourceTextBoxId && !editor.resized ? editor.sourceMaxWidth : proposedMaxWidth,
+        x = editor.sourceTextBoxId && !editor.moved ? editor.sourceX : editor.x,
+        y = editor.sourceTextBoxId && !editor.moved ? editor.sourceY : editor.y;
+      const fitted = await fittedTextBoxContent(text, fontSize, color, maxWidth);
       if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
-      const width = image.logicalWidth || image.width,
-        height = image.logicalHeight || image.height,
-        box = { x, y, w: width, h: height };
+      const image = fitted.image,
+        mixedFallback = fitted.mixedFallback,
+        width = fitted.width,
+        height = fitted.height;
+      fontSize = fitted.fontSize;
+      maxWidth = fitted.maxWidth;
+      x = Math.max(0, Math.min(SIZE - width, x));
+      y = Math.max(0, Math.min(SIZE - height, y));
+      const
+        box = { x, y, w: width, h: height },
+        existingIndex = editor.sourceTextBoxId ? state.textBoxes.findIndex((item) => item.id === editor.sourceTextBoxId) : -1;
+      recordTextBoxesBefore();
+      const item = {
+        id:existingIndex >= 0 ? state.textBoxes[existingIndex].id : `text-box-${state.nextTextBoxId++}`,
+        x,
+        y,
+        w:width,
+        h:height,
+        maxWidth,
+        fontSize,
+        color,
+        text,
+        image,
+      };
+      if (existingIndex >= 0) state.textBoxes.splice(existingIndex, 1, item);
+      else state.textBoxes.push(item);
       state.userRevision++;
-      blitSized(image, x, y, width, height);
-      retainSharpOverlay(image, box);
       mergeDirtyBox(box);
       state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
       state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
       state.autoEligible = true;
+      state.selectedTextBoxId = null;
       removeTextEditor(editor);
       blockCanvasInput(TEXT_INPUT_GUARD_MS);
       restoreTextEditorMode(editor);
@@ -2774,27 +2916,30 @@
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
+    if (editor.sourceTextBoxId) state.selectedTextBoxId = null;
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
     if (editor.returnMode) restoreTextEditorMode(editor);
     else setCanvasMode("pen");
+    render();
     setStatusKey("ready");
     if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
   function createTextEditor(point, options = null) {
     options ||= {};
+    if (!options.sourceTextBoxId && state.textBoxes.length >= MAX_VISIBLE_TEXT_BOXES) return null;
     supersedeActiveAI("text-input-started");
     if (!state.timer && state.auto && state.dirty && state.autoEligible) schedule();
     const viewport = textEditorViewportSize(),
-      widthCss = Math.min(TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - 24)),
-      heightCss = Math.min(TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, viewport.height - 24)),
+      widthCss = Math.min(Number(options.widthCss) || TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - 24)),
+      heightCss = Math.min(Number(options.heightCss) || TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, viewport.height - 24)),
       editor = {
         id: state.nextTextEditorId++,
         x: point.x,
         y: point.y,
         widthCss,
         heightCss,
-        fontCss: TEXT_EDITOR_FONT_CSS,
+        fontCss: Number(options.fontCss) || TEXT_EDITOR_FONT_CSS,
         zIndex: 1,
         mixedMode: false,
         previewRevision: 0,
@@ -2805,6 +2950,14 @@
         cancelled: false,
         gesture: null,
         returnMode:typeof options.returnMode === "string" ? options.returnMode : "",
+        sourceTextBoxId:typeof options.sourceTextBoxId === "string" ? options.sourceTextBoxId : "",
+        sourceX:Number(options.sourceX),
+        sourceY:Number(options.sourceY),
+        sourceMaxWidth:Number(options.sourceMaxWidth),
+        sourceFontSize:Number(options.sourceFontSize),
+        moved:false,
+        resized:false,
+        color:typeof options.color === "string" ? options.color : state.inkColor,
       },
       root = document.createElement("section"),
       header = document.createElement("header"),
@@ -2930,6 +3083,38 @@
     focusTextEditor(editor, true);
     positionTextEditors();
     return editor;
+  }
+  function editTextBox(item) {
+    if (state.mode !== "hand" || !item || !state.textBoxes.includes(item) || state.textEditors.size) return false;
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
+    if (state.animationEdit) acceptAnimationEdit();
+    state.selectedTextBoxId = item.id;
+    const scale = Math.max(.03, state.scale),
+      editor = createTextEditor({ x:item.x, y:item.y }, {
+        text:item.text,
+        widthCss:Math.max(TEXT_EDITOR_MIN_WIDTH, item.maxWidth * scale + 16),
+        heightCss:Math.max(TEXT_EDITOR_MIN_HEIGHT, item.h * scale + 48),
+        fontCss:Math.max(8, item.fontSize * scale),
+        sourceTextBoxId:item.id,
+        sourceX:item.x,
+        sourceY:item.y,
+        sourceMaxWidth:item.maxWidth,
+        sourceFontSize:item.fontSize,
+        color:item.color,
+        returnMode:"hand",
+      });
+    if (!editor) {
+      state.selectedTextBoxId = null;
+      return false;
+    }
+    const offset = textEditorContentOffset(editor);
+    editor.x -= offset.x / scale;
+    editor.y -= offset.y / scale;
+    positionTextEditors();
+    setStatusKey("ready");
+    render();
+    return true;
   }
   function setCanvasCursor(cursor) {
     screen.classList.remove("cursor-crosshair", "cursor-pen", "cursor-eraser", "cursor-grab", "cursor-grabbing", "cursor-nwse-resize", "cursor-ew-resize", "cursor-ns-resize");

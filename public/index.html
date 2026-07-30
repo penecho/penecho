@@ -181,10 +181,18 @@
     <div id="historyBackdrop" class="history-backdrop" hidden></div>
     <aside id="historyPanel" class="history-panel" aria-hidden="true" aria-labelledby="historyTitle">
       <header>
-        <div><span class="history-kicker">PenEcho</span><h2 id="historyTitle" data-i18n="historyTitle">Local canvas history</h2></div>
+        <div><span class="history-kicker">PenEcho</span><h2 id="historyTitle" data-i18n="historyTitle">Canvas history</h2></div>
         <button id="historyClose" type="button" data-i18n-aria="closeHistory" aria-label="Close history" data-i18n-title="closeHistory" title="Close history">×</button>
       </header>
       <p data-i18n="historyDescription">Stores confirmed canvas content only. Unconfirmed AI drafts are excluded.</p>
+      <fieldset class="snapshot-location" aria-describedby="historyStorageDescription">
+        <legend data-i18n="saveLocation">Save location</legend>
+        <div class="snapshot-location-options">
+          <label><input type="radio" name="historyStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
+          <label><input type="radio" name="historyStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
+        </div>
+        <p id="historyStorageDescription" class="snapshot-location-description"></p>
+      </fieldset>
       <div class="history-save-row">
         <input id="historyName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)" data-i18n-aria="snapshotName" aria-label="Snapshot name">
         <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
@@ -203,6 +211,14 @@
         </header>
         <p data-i18n="newCanvasDescription">Save confirmed content before starting over. Unconfirmed AI drafts are not included.</p>
         <p id="currentSnapshotLabel" class="current-snapshot"></p>
+        <fieldset class="snapshot-location" aria-describedby="newCanvasStorageDescription">
+          <legend data-i18n="saveLocation">Save location</legend>
+          <div class="snapshot-location-options">
+            <label><input type="radio" name="newCanvasStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
+            <label><input type="radio" name="newCanvasStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
+          </div>
+          <p id="newCanvasStorageDescription" class="snapshot-location-description"></p>
+        </fieldset>
         <label class="new-snapshot-name" for="newSnapshotName"><span data-i18n="newSnapshotName">Name for new snapshot (optional)</span>
           <input id="newSnapshotName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)">
         </label>
@@ -432,7 +448,7 @@
             <span id="summonToggleLabel" data-i18n="settingsSummonEnabled">Show while AI thinks</span>
             <button id="summonToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="summonToggleLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
           </div>
-          <p class="settings-note" data-i18n="settingsSummonDescription">Each request draws a different animated mathematical form.</p>
+          <p class="settings-note" data-i18n="settingsSummonDescription">A changing mathematical form and quiet text appear while each request runs.</p>
         </section>
         <section class="settings-group" aria-labelledby="settingsHelpHeading">
           <h3 id="settingsHelpHeading" data-i18n="settingsHelpSection">Help &amp; about</h3>
@@ -474,29 +490,33 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">0.7.2</span>
+          <span class="changelog-version">0.8.0</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </header>
       <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Real photos, flowcharts, and smoother canvas work</h2>
-        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.</p>
+        <h2 id="changelogTitle" data-i18n="changelogTitle">Professional diagrams, editable source, and precise refinement</h2>
+        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.</p>
+        <div class="changelog-demo">
+          <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" loading="eager" decoding="async">
+        </div>
+        <p class="changelog-plugin-note" data-i18n="changelogPluginEnableNote">Professional Diagrams is off by default. To use professional diagram features, open Plugins and enable Professional Diagrams.</p>
         <section class="changelog-release" aria-labelledby="changelogCurrentVersion">
-          <h3 id="changelogCurrentVersion">0.7.2</h3>
+          <h3 id="changelogCurrentVersion">0.8.0</h3>
           <ul>
-            <li data-i18n="changelogVisualPlugins">Use built-in Real Photo Search for sourced web images and Flowchart for professional diagrams with copyable Mermaid source.</li>
-            <li data-i18n="changelogCanvasWorkflow">Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.</li>
-            <li data-i18n="changelogDesktopAccess">Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.</li>
+            <li data-i18n="changelogVisualPlugins">Professional Diagrams chooses an appropriate editable domain format, renders supported formats locally, and preserves copyable professional source for specialized HTML diagrams.</li>
+            <li data-i18n="changelogCanvasWorkflow">Draw or describe a diagram, then add nearby ink and use AI Refine to update only that diagram while preserving its format, layout, terminology, and style.</li>
+            <li data-i18n="changelogDesktopAccess">Professional Diagrams is second in the plugin list but off by default; enabling it adds about 5.2k–5.5k prompt tokens per request, while renderers load only when needed.</li>
           </ul>
         </section>
         <section class="changelog-release changelog-earlier" aria-labelledby="changelogEarlierTitle">
           <h3 id="changelogEarlierTitle" data-i18n="changelogEarlierTitle">Earlier highlights</h3>
           <ul>
-            <li data-i18n="changelogImagesSummary">0.7.1 added local images and photos with canvas-native editing, snapshots, and PNG export.</li>
-            <li data-i18n="changelogPluginsSummary">0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.</li>
-            <li data-i18n="changelogAnimation">0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.</li>
+            <li data-i18n="changelogImagesSummary">0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.</li>
+            <li data-i18n="changelogPluginsSummary">0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.</li>
+            <li data-i18n="changelogAnimation">0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.</li>
           </ul>
         </section>
       </div>

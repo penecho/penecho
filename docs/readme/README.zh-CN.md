@@ -1,9 +1,9 @@
 <h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
 </h1>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <strong>简体中文</strong> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.ko.md">한국어</a> |
@@ -21,14 +21,14 @@
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-加入社区-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="加入 PenEcho Discord"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="在 GitHub 上为 PenEcho 点亮 Star"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="许可证：AGPL v3"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="许可证：AGPL v3"></a>
 </p>
 
-> 本译文提供项目概览。最新、最完整的技术信息以[英文 README](README.md) 为准。
+> 本译文提供项目概览。最新、最完整的技术信息以[英文 README](../../README.md) 为准。
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 插件演示" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho 插件演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 完整演示" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho 完整演示" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho 专业图示演示" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho 交互画布演示" width="49%"></p>
 
 ## Kimi 开源伙伴
 
@@ -71,8 +71,16 @@ npm start
 - 直接在画布上获得答案、提示、解释、公式、函数图像和图表。
 - 移动或缩放 AI 草稿，并在它们成为正式内容前逐项接受或丢弃。
 - 用套索选择笔迹，进行移动、缩放、改色、删除，或通过 Typeset 将内容规范排版。
-- 在浏览器中保存本地快照，并将确认后的画布内容导出为 PNG。
+- 将快照保存到当前设备或 PenEcho 服务器，并将确认后的画布内容导出为 PNG。
 - 可选择 Arcane、Sci-fi、Research 或 Studio 主题。
+
+## 0.8.0 新功能
+
+- **不止流程图的专业图示。** 可生成架构、UML、时序、BPMN、数据、工程、科学、医学、金融、地理等专业图示，并保留可编辑的专业源码。已支持的格式按需本地渲染；更专门的格式可继续用完整 HTML 展示。
+- **默认关闭，需要时手动开启。** 使用前请打开 **Plugins**，启用 **专业图示**。未启用时不会加入其 Prompt，也不会加载渲染依赖，不影响不需要专业图示的用户。
+- **在原图上继续完善。** 在现有图示上或附近补画后，点击 **AI 完善**，只整体替换该图示；除非修改要求确有需要，否则会尽量保持原专业格式、布局、术语和视觉风格。
+- **本机或 PenEcho 服务器存储。** 画布可仅保存在当前浏览器，也可保存到运行 PenEcho 的电脑，让使用同一服务且通过验证的其他设备打开。保存前会自动确认未完成控件，确保 Textbox、图示和 Widget 被写入快照。
+- **剪贴板、文字与可扩展插件。** 可从系统剪贴板直接加入文字或图片，复制 AI 返回的文字、公式和专业图示源码，并用 Hand 重新选择和编辑 Textbox。内置或私有插件也可复制为自定义插件，并配置仅在使用时加载的 CSS。
 
 ## 0.7.2 新功能
 
@@ -80,33 +88,17 @@ npm start
 - **更可靠的画布编辑、保存与导出。** 小手可以直接移动图片、动画和 AI 返回的控件，图片与控件不再有额外的最大缩放限制。载入画布后，“保存”默认更新当前记录，同时仍可“另存为新画布”；缩略图和 PNG 导出也会保留网络图片。
 - **本地访问与桌面集成。** 可用实例共用的 6 位安全码保护本机和局域网浏览器入口，解锁后不改变模型请求流程。桌面设置同时支持 Kimi API、Kimi CLI、通用 API、Codex CLI 和 Claude CLI，并改进自动更新与多平台打包。
 
-## 0.7.1 新功能
-
-- **画布上的图片与照片。** 通过系统选择器添加图片——手机和平板上可调起相册或拍照，桌面上选择图片文件；过大的图片会自动降采样压缩，画布和快照保持轻巧。
-- **长按编辑，操作清晰。** 长按图片即可再次移动或缩放，并可选择“放置”“融合”或“删除”。“放置”让图片衬在墨迹下层，可以直接在上面书写；“融合”把图片变成真正的笔触，可以用橡皮擦。
-- **不会意外发起 AI 请求。** 图片本身不会发起 AI 请求；如果在 AI 处理期间操作图片，进行中的结果会被丢弃，手写识别随后会自动恢复。图片支持撤销重做、本地快照和 PNG 导出。
-- **直接浏览画布。** Hand 工具可以平移画布并移动图片、动画和交互式组件，整个过程不会发起 AI 请求。
-- **可复制的专业流程图。** Flowchart 插件可以渲染流程、决策、架构、时序和状态图，并通过可信工具按钮复制通用的 Mermaid 源码。
-- **实际显示在线图片。** Image Search 插件默认从 Wikimedia Commons 查找最多五张相关图片，以响应式布局直接显示图片及其来源和许可证信息。
-
-## 0.7.0 新功能
-
-- **画布上的交互式 HTML。** General HTML 插件可以生成时钟、计算器、仪表盘等界面，并以隔离的交互式组件直接呈现在画布上。
-- **无需 PenEcho 数据服务即可获取实用数据。** 天气、股票、科技新闻、汇率、地震、自然事件、太空天气和 GitHub 插件会由浏览器直接访问各自声明的 API。
-- **明确的安全边界。** 每个插件只能连接允许列表中的来源，HTML 在隔离的 iframe 中运行；停用的插件不会参与 AI 请求或运行时处理。
-- **创建本地插件。** 使用紧凑的 Markdown 格式定义能力，并可在预览版创建器中通过 AI 改进草稿、自动补全标题、保存启用或删除个人插件。
-- **画布原生的持久化与导出。** 确认后的组件可保存到本地快照并导出为 PNG，同时支持移动、重排、整体缩放和可撤销删除。
-- **合理的默认配置。** 新用户默认启用 General HTML、Animation scenes 和 Weather，其他数据插件需要手动选择启用。
-
 ## 历史版本
 
-- **0.6.0 - Animation scenes。** 增加安全的声明式 Canvas2D 动画、画布编辑和快照持久化，并改进 Markdown/LaTeX 渲染、模型输出可靠性和非阻塞式 npm 更新检查。
+- **0.7.1。** 新增本地图片与照片、Hand 对象编辑、快照和 PNG 导出、可复制 Mermaid 流程图及带来源的网络图片。
+- **0.7.0。** 引入隔离的交互式 HTML、实时数据插件、本地插件创建和 Widget 持久化。
+- **0.6.0 及更早。** 新增声明式动画、Markdown/LaTeX 改进、选择工具与稀疏大画布基础。
 
 ## 工作原理
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg"><img alt="PenEcho 工作原理" src="docs/assets/how-it-works-light.svg"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/how-it-works-dark.svg"><img alt="PenEcho 工作原理" src="../assets/how-it-works-light.svg"></picture></p>
 
-浏览器只会发送与当前任务相关的画布区域及其几何信息。服务器验证请求并交给选定的执行器，然后返回可移动的结构化草稿。当前模型推荐和费用示例请参阅[英文 README](README.md#recommended-model-configurations)。
+浏览器只会发送与当前任务相关的画布区域及其几何信息。服务器验证请求并交给选定的执行器，然后返回可移动的结构化草稿。当前模型推荐和费用示例请参阅[英文 README](../../README.md#recommended-model-configurations)。
 
 ## 安全部署
 
@@ -123,8 +115,8 @@ npm start
 npm run check
 ```
 
-实现细节请参阅[架构说明](docs/architecture.md)，贡献流程请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。问题和使用案例可以发布到 [Discord](https://discord.gg/3jrPJ3mXdX) 或 [GitHub Discussions](https://github.com/penecho/penecho/discussions)，可复现的问题请提交到 [GitHub Issues](https://github.com/penecho/penecho/issues)。
+实现细节请参阅[架构说明](../architecture.md)，贡献流程请参阅 [CONTRIBUTING.md](../../CONTRIBUTING.md)。问题和使用案例可以发布到 [Discord](https://discord.gg/3jrPJ3mXdX) 或 [GitHub Discussions](https://github.com/penecho/penecho/discussions)，可复现的问题请提交到 [GitHub Issues](https://github.com/penecho/penecho/issues)。
 
 ## 许可证与商业使用
 
-PenEcho 采用 [GNU AGPL v3.0 only](LICENSE) 开源许可证，允许商业使用。如果你修改 PenEcho 并通过网络向用户提供该版本，则必须按照 AGPL 的要求向这些用户提供对应的源代码。无法满足 AGPL 要求的专有产品或托管服务可以选择单独的[商业许可证](COMMERCIAL-LICENSE.md)。PenEcho 的名称和标志另受[商标政策](TRADEMARKS.md)约束。
+PenEcho 采用 [GNU AGPL v3.0 only](../../LICENSE) 开源许可证，允许商业使用。如果你修改 PenEcho 并通过网络向用户提供该版本，则必须按照 AGPL 的要求向这些用户提供对应的源代码。无法满足 AGPL 要求的专有产品或托管服务可以选择单独的[商业许可证](../../COMMERCIAL-LICENSE.md)。PenEcho 的名称和标志另受[商标政策](../../TRADEMARKS.md)约束。

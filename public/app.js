@@ -19,6 +19,7 @@
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
     widgetLayer = document.querySelector("#widgetLayer"),
+    summonLayer = document.querySelector("#summonLayer"),
     inkLayer = document.querySelector("#inkLayer"),
     inkCtx = inkLayer.getContext("2d"),
     interactionLayer = document.querySelector("#interactionLayer"),
@@ -92,7 +93,6 @@
     changelogDialog = document.querySelector("#changelogDialog"),
     changelogCloseButton = document.querySelector("#changelogClose"),
     changelogDoneButton = document.querySelector("#changelogDone"),
-    summonLayer = document.querySelector("#summonLayer"),
     settingsLayer = document.querySelector("#settingsLayer"),
     settingsBackdrop = document.querySelector("#settingsBackdrop"),
     settingsPanel = document.querySelector("#settingsPanel"),
@@ -121,6 +121,7 @@
     TEXT_EDITOR_FONT_FAMILY = "ui-rounded, system-ui, sans-serif",
     TEXT_INPUT_GUARD_MS = 500,
     TEXT_INPUT_MAX_LENGTH = 2000,
+    MAX_VISIBLE_TEXT_BOXES = 50,
     MIXED_FORMULA_MAX_LENGTH = 512,
     AI_TEXT_MAX_LENGTH = 1000,
     COPY_FEEDBACK_MS = 1600,
@@ -134,7 +135,7 @@
     MAX_IMAGE_SOURCE_BYTES = 32 * 1024 * 1024,
     MAX_IMAGE_DIMENSION = 2048,
     MAX_IMAGE_PIXELS = 16 * 1024 * 1024,
-    MAX_WIDGET_HTML_LENGTH = 40000,
+    MAX_WIDGET_HTML_LENGTH = 200000,
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
     MAX_DIAGRAM_SOURCE_BYTES = 20000,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
@@ -332,22 +333,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Real photos, professional diagrams, and smoother canvas work",
-      changelogIntro: "Version 0.7.2 adds built-in visual tools, more reliable canvas persistence, and simpler local access.",
-      changelogVisualPlugins: "Use built-in Real Photo Search for sourced web images or Professional Diagrams for expert visuals with copyable source formats.",
-      changelogCanvasWorkflow: "Move AI widgets directly with Hand, resize images and widgets freely, and preserve remote images when saving, loading, or exporting the canvas.",
-      changelogDesktopAccess: "Protect local and LAN access with a six-digit code, connect through Kimi API or Kimi CLI, and use improved desktop updates and packaging.",
+      changelogTitle: "Professional diagrams, editable source, and precise refinement",
+      changelogIntro: "Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.",
+      changelogPluginEnableNote: "Professional Diagrams is off by default. To use professional diagram features, open Plugins and enable Professional Diagrams.",
+      changelogVisualPlugins: "Professional Diagrams chooses an appropriate editable domain format. Supported formats render locally in the existing iframe; specialized or unlisted formats can use generated HTML while preserving copyable professional source.",
+      changelogCanvasWorkflow: "Draw or describe a diagram, then add nearby ink and use AI Refine to replace only that diagram while preserving its format, established layout, terminology, style, and copy action.",
+      changelogDesktopAccess: "Professional Diagrams is second in the plugin list but remains off by default. Enabling it adds about 5.2k–5.5k prompt tokens per AI request; renderers load only when needed and canvas display itself uses no model tokens.",
       changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, and PNG export.",
-      changelogPluginsSummary: "0.7.0 introduced the plugin system: sandboxed HTML widgets and focused data plugins for richer live and interactive work.",
-      changelogAnimation: "0.6.0 introduced controllable, persistent animation scenes with a safe declarative Canvas2D renderer.",
+      changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
+      changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
+      changelogAnimation: "0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
       settingsSummonEnabled: "Show while AI thinks",
-      settingsSummonDescription: "Each request draws a different animated mathematical form.",
+      settingsSummonDescription: "A changing mathematical form and quiet text appear while each request runs.",
       settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
@@ -365,21 +367,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonPhrase10: "Intelligence may begin with calculation; understanding begins with attention.",
       summonPhrase11: "Let’s turn this hazy idea into something we can both see.",
       summonPhrase12: "An answer is not an ending. It is where the next stroke begins.",
-      summonTip1: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
-      summonTip2: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
-      summonTip3: "Tip: circle content with the lasso and AI will work only on that selection.",
-      summonTip4: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
-      summonTip5: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
-      summonTip6: "Tip: raise the Reasoning effort in the toolbar for harder problems.",
-      summonTip7: "Tip: the plugin panel hides live widgets - flowcharts and photo search can join your canvas.",
-      summonTip8: "Tip: the history panel saves canvas snapshots you can return to anytime.",
-      summonTip9: "Tip: zoom with the wheel, pan with the middle mouse button - the canvas spans twenty thousand squares.",
-      summonTip10: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
+      summonTip1: "Tip: create professional diagrams for engineering, science, software, and business.",
+      summonTip2: "Tip: professional diagrams preserve editable source that you can copy into other tools.",
+      summonTip3: "Tip: add a few strokes beside a diagram, then use AI Refine to update only that diagram.",
+      summonTip4: "Tip: AI Refine tries to preserve the diagram’s format, layout, terminology, and visual style.",
+      summonTip5: "Tip: professional diagram renderers load only when needed; simply viewing them uses no model tokens.",
+      summonTip6: "Tip: Professional Diagrams is off by default—enable it from Plugins when you need it.",
+      summonTip7: "Tip: Real Photo Search places sourced web photos directly on the canvas.",
+      summonTip8: "Tip: use Hand to move and freely resize images, animations, and AI widgets.",
+      summonTip9: "Tip: remote images remain included when you save the canvas or export a PNG.",
+      summonTip10: "Tip: save a canvas to the PenEcho server so other authorized devices can open it.",
+      summonTip11: "Tip: pause a few seconds after writing and AI replies on its own; auto mode can be toggled in Settings.",
+      summonTip12: "Tip: click the AI orb on the canvas to manually pick Answer, Hint, Continue, Explain, or Plot.",
+      summonTip13: "Tip: circle content with the lasso and AI will work only on that selection.",
+      summonTip14: "Tip: the text tool understands Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
+      summonTip15: "Tip: AI drafts can be moved as a group, or accepted and discarded item by item.",
+      summonTip16: "Tip: raise the Reasoning effort in the toolbar for harder problems.",
+      summonTip17: "Tip: plugins add focused capabilities and can be switched off when you do not need them.",
+      summonTip18: "Tip: History can update the current snapshot or save a separate new copy.",
+      summonTip19: "Tip: zoom with the wheel, pan with the middle mouse button—the canvas spans twenty thousand squares.",
+      summonTip20: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
-      history: "Local history",
-      historyTitle: "Local canvas history",
+      history: "Canvas history",
+      historyTitle: "Canvas history",
       historyDescription: "Stores confirmed canvas content, including restorable animation scenes. Unconfirmed AI drafts are excluded.",
+      saveLocation: "Save location",
+      storageThisDevice: "This device",
+      storagePenEchoServer: "PenEcho server",
+      storageThisDeviceDescription: "Saved only in this browser on this device. Other devices cannot see it.",
+      storagePenEchoServerDescription: "Saved on the computer running PenEcho. Anyone using this PenEcho service can see it after passing its access check.",
       closeHistory: "Close history",
       newCanvas: "New",
       saveCanvas: "Save canvas",
@@ -387,8 +404,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exportPng: "Export PNG",
       newCanvasTitle: "Start a new canvas?",
       newCanvasDescription: "Save confirmed content and animation scenes before starting over. Unconfirmed AI drafts are not included.",
-      currentSnapshot: "Current snapshot: {name}",
+      currentSnapshot: "Current snapshot: {name} · {location}",
       noCurrentSnapshot: "There is no current snapshot to overwrite.",
+      currentSnapshotOtherLocation: "Current snapshot {name} is in {location}. Select that location to overwrite it.",
       newSnapshotName: "Name for new snapshot (optional)",
       cancel: "Cancel",
       newWithoutSave: "Don't save",
@@ -400,7 +418,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotSavingShort: "Saving...",
       loadSnapshot: "Load",
       deleteSnapshot: "Delete",
-      emptyHistory: "No local snapshots yet",
+      emptyDeviceHistory: "No canvases saved on this device yet",
+      emptyServerHistory: "No canvases saved on this PenEcho server yet",
       emptyCanvas: "The canvas is empty",
       snapshotSaved: "Canvas snapshot saved",
       snapshotOverwritten: "Current snapshot overwritten",
@@ -409,10 +428,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvasReady: "New canvas ready",
       exportComplete: "PNG exported",
       exportError: "Export: ",
-      snapshotError: "Local history: ",
+      snapshotError: "Canvas history: ",
       snapshotTiles: "canvas tiles",
       snapshotImages: "images",
-      deleteSnapshotConfirm: "Delete this local snapshot?",
+      deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
+      deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
       footerTip: "AI drafts: move the whole group or adjust, accept, and discard items independently",
       ready: "Ready",
       aiBusy: "AI is working. Please wait.",
@@ -554,6 +574,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetSourceCopyFailed: "Widget source could not be copied",
       widgetRefine: "AI Refine",
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
+      widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
       widgetRefining: "AI is refining this widget",
       widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
@@ -612,6 +633,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
@@ -627,6 +649,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function authenticatedApiHeaders(headers = {}) {
@@ -649,10 +672,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       touchGesture: null,
       panGesture: null,
       textEditors: new Map(),
+      textBoxes: [],
       textEditorStyleSheet: null,
       nextTextEditorId: 1,
+      nextTextBoxId: 1,
       nextTextEditorZ: 1,
       activeTextEditorId: null,
+      selectedTextBoxId: null,
+      textBoxHistoryBefore: null,
       animations: [],
       nextAnimationId: 1,
       selectedAnimationId: null,
@@ -730,8 +757,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       busy: false,
       activeAI: null,
       snapshotLoadGeneration: 0,
+      snapshotLocation: initialSnapshotLocation,
       currentSnapshotId: null,
       currentSnapshotName: "",
+      currentSnapshotLocation: null,
       restoreGeneration: 0,
       recognitionGeneration: 0,
       userRevision: 0,
@@ -754,7 +783,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.7.2";
+  const CHANGELOG_VERSION = "0.8.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -801,27 +830,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
   const summonFX = SUMMON?.create({
-    fxCanvas: summonLayer,
+    fxCanvas:summonLayer,
     textLayer: document.querySelector("#summonTextLayer"),
     t,
     getTransform: () => ({ scale: state.scale, panX: state.panX, panY: state.panY, width: view.clientWidth, height: view.clientHeight, dpr: devicePixelRatio || 1 }),
-    getContentRects: summonBlockers,
-    getHotspot: summonHotspot,
     getAiColor: () => state.aiColor,
   });
-  function summonHotspot() {
-    const points = state.hotspotTrail
-        .filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y))
-        .map((point) => ({ x:point.x, y:point.y })),
-      point = points.at(-1),
-      box = state.summonAnchor;
-    if (!point && !box) return null;
-    return {
-      points,
-      point:point || null,
-      box:box ? { x:box.x, y:box.y, w:box.w, h:box.h } : null,
-    };
-  }
   function summonBlockers() {
     const visible = viewportRect(),
       rects = [];
@@ -851,59 +865,76 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (item && Number.isFinite(item.x)) rects.push({ x: item.x, y: item.y, w: item.layoutWidth || item.w || 0, h: item.layoutHeight || item.h || 0 });
     return rects.filter((r) => r.w > 0 && r.h > 0);
   }
+  function summonControlBlockers() {
+    const viewRect = view.getBoundingClientRect(),
+      viewport = { x:0, y:0, w:view.clientWidth, h:view.clientHeight },
+      selectors = [
+        ".object-chrome-button",
+        ".animation-controls:not([hidden])",
+        ".image-edit-bar:not([hidden])",
+        ".selection-context-toolbar",
+        ".text-editor",
+        ".text-input-hint:not([hidden])",
+        ".ai-embodiment",
+        ".ai-embodiment.menu-open .radial-action",
+        "#tip",
+      ].join(","),
+      rects = [];
+    for (const element of view.querySelectorAll(selectors)) {
+      const style = getComputedStyle(element),
+        rect = element.getBoundingClientRect();
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) <= 0.02
+        || rect.width <= 0 || rect.height <= 0) continue;
+      const padding = 8,
+        clipped = intersection({
+          x:rect.left - viewRect.left - padding,
+          y:rect.top - viewRect.top - padding,
+          w:rect.width + padding * 2,
+          h:rect.height + padding * 2,
+        }, viewport);
+      if (clipped) rects.push({ ...clipped, weight:4 });
+    }
+    return rects;
+  }
+  function summonScreenBlockers() {
+    const scale = Math.max(0.03, state.scale),
+      viewport = { x:0, y:0, w:view.clientWidth, h:view.clientHeight },
+      padding = 8,
+      rects = [];
+    for (const rect of summonBlockers()) {
+      const clipped = intersection({
+        x:rect.x * scale + state.panX - padding,
+        y:rect.y * scale + state.panY - padding,
+        w:rect.w * scale + padding * 2,
+        h:rect.h * scale + padding * 2,
+      }, viewport);
+      if (clipped) rects.push({ ...clipped, weight:1 });
+    }
+    return rects.concat(summonControlBlockers());
+  }
   function summonPlacement() {
-    const visible = viewportRect();
-    if (!visible) return null;
-    const blockers = summonBlockers(),
-      anchor = state.summonAnchor,
-      w = visible.w * 0.36,
-      h = visible.h * 0.32,
-      margin = Math.min(visible.w, visible.h) * 0.02,
-      clampBox = (cx, cy) => ({
-        x: Math.min(Math.max(cx - w / 2, visible.x + margin), visible.x + visible.w - margin - w),
-        y: Math.min(Math.max(cy - h / 2, visible.y + margin), visible.y + visible.h - margin - h),
-        w,
-        h,
-      }),
-      overlapArea = (box) => {
-        let area = 0;
-        for (const b of blockers) {
-          const hit = intersection(box, b);
-          if (hit) area += hit.w * hit.h;
-        }
-        return area;
-      },
-      candidates = [];
-    if (anchor) {
-      const acx = anchor.x + anchor.w / 2,
-        acy = anchor.y + anchor.h / 2,
-        gap = Math.min(visible.w, visible.h) * 0.04;
-      candidates.push(
-        clampBox(anchor.x + anchor.w + gap + w / 2, acy),
-        clampBox(acx, anchor.y + anchor.h + gap + h / 2),
-        clampBox(anchor.x - gap - w / 2, acy),
-        clampBox(acx, anchor.y - gap - h / 2),
-      );
-    }
-    const ccx = visible.x + visible.w / 2,
-      ccy = visible.y + visible.h / 2;
-    candidates.push(clampBox(ccx, ccy));
-    for (const [dx, dy] of [[0.24, 0], [-0.24, 0], [0, 0.22], [0, -0.22], [0.24, 0.22], [-0.24, -0.22], [0.24, -0.22], [-0.24, 0.22]])
-      candidates.push(clampBox(ccx + visible.w * dx, ccy + visible.h * dy));
-    let best = candidates[0],
-      bestScore = Infinity;
-    for (const candidate of candidates) {
-      const score = overlapArea(candidate);
-      if (score === 0) {
-        best = candidate;
-        break;
-      }
-      if (score < bestScore) {
-        bestScore = score;
-        best = candidate;
-      }
-    }
-    return { x: best.x + best.w / 2, y: best.y + best.h / 2 };
+    const width = view.clientWidth,
+      height = view.clientHeight,
+      scale = Math.max(0.03, state.scale);
+    if (width <= 0 || height <= 0 || !SUMMON?.chooseThinkingPlacement) return null;
+    const anchor = state.summonAnchor
+        ? {
+            x:state.summonAnchor.x * scale + state.panX,
+            y:state.summonAnchor.y * scale + state.panY,
+            w:state.summonAnchor.w * scale,
+            h:state.summonAnchor.h * scale,
+          }
+        : null,
+      placement = SUMMON.chooseThinkingPlacement({
+        width,
+        height,
+        anchor,
+        blockers:summonScreenBlockers(),
+      });
+    return {
+      x:(placement.x - state.panX) / scale,
+      y:(placement.y - state.panY) / scale,
+    };
   }
   function showSummon() {
     if (!summonFX || !state.summonEnabled) return;
@@ -1432,6 +1463,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function ensurePluginRuntime(pluginId) {
     return pluginId === "flowchart" ? loadDiagramRuntime() : Promise.resolve(null);
   }
+  async function enableSnapshotWidgetPlugins(items) {
+    const pluginIds = [...new Set((Array.isArray(items) ? items : [])
+      .map((item) => typeof item?.pluginId === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.pluginId) ? item.pluginId : "")
+      .filter(Boolean))];
+    if (!pluginIds.length) return;
+    for (const pluginId of pluginIds) state.plugins[pluginId] = true;
+    if (pluginIds.includes("flowchart") && items.some((item) => item?.pluginId === "flowchart" && item?.widgetType === "diagram_source")) {
+      try { await ensurePluginRuntime("flowchart"); }
+      catch (error) { state.pluginCatalogError = error.message; }
+    }
+    persistPluginSettings();
+    syncWidgetRuntime();
+    updatePluginControl();
+  }
   function dataPluginDefinitions() {
     return PLUGIN_DEFINITIONS.filter((plugin) => plugin.documentPath);
   }
@@ -1449,7 +1494,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return dataPluginDefinitions().filter((plugin) => pluginEnabled(plugin.id))
       .map((plugin) => pluginManifests.get(plugin.id))
       .filter(Boolean)
-      .sort((a, b) => a.id === "general" ? b.id === "general" ? 0 : -1 : b.id === "general" ? 1 : a.id.localeCompare(b.id))
+      .sort((a, b) => {
+        const priority = (id) => id === "general" ? 0 : id === "flowchart" ? 1 : 2,
+          difference = priority(a.id) - priority(b.id);
+        return difference || a.id.localeCompare(b.id);
+      })
       .map((manifest) => ({
         id: manifest.id,
         name: manifest.name,
@@ -1527,13 +1576,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       definitions.sort((a, b) => (manifests.get(a.id)?.name || a.id).localeCompare(manifests.get(b.id)?.name || b.id));
       const generalDefinitions = definitions.filter((definition) => definition.id === "general"),
+        professionalDefinitions = definitions.filter((definition) => definition.id === "flowchart"),
         promotedDefinitions = ["image-search", "weather"].map((id) => definitions.find((definition) => definition.id === id)).filter(Boolean),
-        fixedDefinitionIds = new Set(["general", ...promotedDefinitions.map((definition) => definition.id)]),
+        fixedDefinitionIds = new Set(["general", "flowchart", ...promotedDefinitions.map((definition) => definition.id)]),
         remainingDefinitions = definitions.filter((definition) => !fixedDefinitionIds.has(definition.id)),
         previousIds = new Set(dataPluginDefinitions().map((plugin) => plugin.id)), nextIds = new Set(definitions.map((plugin) => plugin.id));
       if (state.activeAI?.widgetEdit || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
       for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) unmountWidget(widget);
-      PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
+      PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...professionalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
       pluginManifests.clear();
       for (const [id, manifest] of manifests) pluginManifests.set(id, manifest);
       pluginLoadErrors.clear();
@@ -2378,6 +2428,125 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (region && !intersection(overlay.box, region)) continue;
       context.drawImage(overlay.image, overlay.box.x, overlay.box.y, overlay.box.w, overlay.box.h);
     }
+  }
+
+  function textBoxBox(item) {
+    return { x:item.x, y:item.y, w:item.w, h:item.h };
+  }
+  function textBoxHistoryRecord(item) {
+    return {
+      id:item.id,
+      x:item.x,
+      y:item.y,
+      w:item.w,
+      h:item.h,
+      maxWidth:item.maxWidth,
+      fontSize:item.fontSize,
+      color:item.color,
+      text:item.text,
+      image:item.image,
+    };
+  }
+  function storedTextBoxes() {
+    return state.textBoxes.map(({ image, ...item }) => ({ ...item }));
+  }
+  function textBoxHistoryState() {
+    return state.textBoxes.map(textBoxHistoryRecord);
+  }
+  function recordTextBoxesBefore() {
+    if (!state.textBoxHistoryBefore) state.textBoxHistoryBefore = textBoxHistoryState();
+  }
+  function visibleTextBoxes(region = null) {
+    return state.textBoxes.filter((item) => item.id !== state.selectedTextBoxId && (!region || intersection(textBoxBox(item), region)));
+  }
+  function textBoxBounds(region = null) {
+    let bounds = null;
+    for (const item of visibleTextBoxes(region)) bounds = unionLocalBounds(bounds, region ? intersection(textBoxBox(item), region) : textBoxBox(item));
+    return bounds;
+  }
+  function drawTextBoxesToContext(context, region = null) {
+    for (const item of visibleTextBoxes(region)) context.drawImage(item.image, item.x, item.y, item.w, item.h);
+  }
+  function textBoxAtPoint(point) {
+    for (let index = state.textBoxes.length - 1; index >= 0; index--) {
+      const item = state.textBoxes[index],
+        box = textBoxBox(item);
+      if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) return item;
+    }
+    return null;
+  }
+  async function fittedTextBoxContent(text, fontSize, color, maxWidth) {
+    const render = async () => {
+      try {
+        return { image:await mixedTextImage(text, fontSize, color, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY), mixedFallback:false };
+      } catch {
+        return { image:textImage(text, fontSize, color, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH), mixedFallback:true };
+      }
+    };
+    maxWidth = Math.min(SIZE, Math.max(fontSize * 3, maxWidth));
+    let result = await render(),
+      width = result.image.logicalWidth || result.image.width,
+      height = result.image.logicalHeight || result.image.height;
+    for (let attempt = 0; attempt < 3 && (width > SIZE || height > SIZE); attempt++) {
+      const scale = Math.min(SIZE / width, SIZE / height) * 0.995;
+      fontSize = Math.max(1, fontSize * scale);
+      maxWidth = Math.min(SIZE, Math.max(fontSize * 3, maxWidth * scale));
+      result = await render();
+      width = result.image.logicalWidth || result.image.width;
+      height = result.image.logicalHeight || result.image.height;
+    }
+    return {
+      ...result,
+      fontSize,
+      maxWidth,
+      width:Math.min(SIZE, width),
+      height:Math.min(SIZE, height),
+    };
+  }
+  async function renderedTextBoxRecord(item) {
+    if (!item || typeof item !== "object" || typeof item.text !== "string" || !item.text.trim() || item.text.length > TEXT_INPUT_MAX_LENGTH) return null;
+    const x = Number(item.x),
+      y = Number(item.y),
+      fontSize = Number(item.fontSize),
+      maxWidth = Number(item.maxWidth);
+    if (![x, y, fontSize, maxWidth].every(Number.isFinite) || x < 0 || y < 0 || fontSize < 1 || fontSize > 2000 || maxWidth < fontSize * 3 || maxWidth > SIZE) return null;
+    const color = item.color || state.inkColor,
+      fitted = await fittedTextBoxContent(item.text, fontSize, color, maxWidth),
+      width = fitted.width,
+      height = fitted.height,
+      fittedX = Math.max(0, Math.min(SIZE - width, x)),
+      fittedY = Math.max(0, Math.min(SIZE - height, y));
+    if (width <= 0 || height <= 0) return null;
+    return {
+      id:typeof item.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${state.nextTextBoxId++}`,
+      x:fittedX,
+      y:fittedY,
+      w:width,
+      h:height,
+      maxWidth:fitted.maxWidth,
+      fontSize:fitted.fontSize,
+      color:typeof item.color === "string" ? item.color : color,
+      text:item.text,
+      image:fitted.image,
+    };
+  }
+  async function restoreTextBoxes(items) {
+    clearTextEditors();
+    state.textBoxes = [];
+    state.nextTextBoxId = 1;
+    state.selectedTextBoxId = null;
+    for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_TEXT_BOXES) : []) {
+      let record = null;
+      if (item?.image) {
+        record = textBoxHistoryRecord(item);
+      } else record = await renderedTextBoxRecord(item);
+      if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
+      const numbered = /^text-box-(\d+)$/.exec(record.id);
+      if (numbered) state.nextTextBoxId = Math.max(state.nextTextBoxId, Number(numbered[1]) + 1);
+      state.textBoxes.push(record);
+    }
+    positionTextEditors();
+    requestRender();
   }
 
   function imageBox(item) {
@@ -4170,6 +4339,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ctx.stroke();
     }
     drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
+    drawTextBoxesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
     ctx.restore();
     ctx.strokeStyle = state.paint.border;
     ctx.lineWidth = 2 / state.scale;
@@ -4208,6 +4378,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       boxes = [
         ...visibleImages().map(imageBox),
         ...visibleAnimations().map(animationBox),
+        ...visibleTextBoxes().map(textBoxBox),
         ...visibleWidgets().map(widgetBox),
       ];
     if (!boxes.length) return;
@@ -4809,7 +4980,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         declaration.height = `${Math.round(editor.heightCss)}px`;
         declaration.zIndex = String(editor.zIndex || 1);
         declaration.setProperty("--text-editor-font-size", `${editor.fontCss}px`);
-        declaration.setProperty("--text-editor-ink", state.inkColor);
+        declaration.setProperty("--text-editor-ink", editor.color || state.inkColor);
         if (editor.previewLogicalWidth) declaration.setProperty("--text-editor-preview-width", `${editor.previewLogicalWidth}px`);
         else declaration.removeProperty("--text-editor-preview-width");
         if (editor.previewLogicalHeight) declaration.setProperty("--text-editor-preview-height", `${editor.previewLogicalHeight}px`);
@@ -4817,6 +4988,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       editor.element.classList.toggle("active", active);
     }
+    textEditorLayer.setAttribute("aria-hidden", String(!visible));
   }
   function textEditorStyleSheet() {
     if (state.textEditorStyleSheet) return state.textEditorStyleSheet;
@@ -4879,6 +5051,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (gesture.hit === "move") {
       editor.x = gesture.startX + dx / Math.max(0.03, state.scale);
       editor.y = gesture.startY + dy / Math.max(0.03, state.scale);
+      editor.moved = true;
     } else {
       const point = textEditorScreenPoint(editor),
         maxWidth = Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - Math.max(8, point.left) - 8),
@@ -4887,6 +5060,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       editor.widthCss = next.widthCss;
       editor.heightCss = next.heightCss;
       editor.fontCss = next.fontCss;
+      editor.resized = true;
       if (editor.mixedMode && (gesture.hit === "width" || gesture.hit === "corner")) scheduleTextEditorPreview(editor);
     }
     positionTextEditors();
@@ -4933,6 +5107,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     state.textEditors.clear();
     state.activeTextEditorId = null;
+    state.selectedTextBoxId = null;
     state.textTap = null;
     positionTextEditors();
   }
@@ -4954,7 +5129,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       text = editor.textarea.value,
       fontCss = editor.fontCss,
       maxWidth = Math.max(fontCss * 3, editor.widthCss - 16),
-      color = state.inkColor;
+      color = editor.color || state.inkColor;
     editor.preview.setAttribute("aria-busy", "true");
     let image,
       fallback = false;
@@ -5030,7 +5205,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function textEditorContentOffset(editor) {
     const body = editor?.body || editor?.element?.querySelector(".text-editor-body"),
       left = body?.offsetLeft || 0,
-      top = body?.offsetTop || 28;
+      top = body?.offsetTop || 36;
     return { x: left + 8, y: top + 8 };
   }
 
@@ -5045,6 +5220,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const commitPromise = (async () => {
       editor.committing = true;
       editor.cancelled = false;
+      editor.element.classList.add("committing");
       cancelTextEditorPreview(editor);
       blockCanvasInput(TEXT_INPUT_GUARD_MS);
       if (!editor.returnMode && state.mode === "text") setCanvasMode("pen");
@@ -5057,32 +5233,48 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       editor.x += contentOffset.x / editorScale;
       editor.y += contentOffset.y / editorScale;
       editor.mixedMode = true;
-      const fontSize = editor.fontCss / Math.max(0.03, state.scale),
-        maxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
-        x = editor.x,
-        y = editor.y;
-      let image,
-        mixedFallback = false;
-      try {
-        image = editor.mixedMode
-          ? await mixedTextImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY)
-          : textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-      } catch {
-        image = textImage(text, fontSize, state.inkColor, maxWidth, 1.35, TEXT_EDITOR_FONT_FAMILY, TEXT_INPUT_MAX_LENGTH);
-        mixedFallback = editor.mixedMode;
-      }
+      const proposedFontSize = editor.fontCss / Math.max(0.03, state.scale);
+      let fontSize = editor.sourceTextBoxId && !editor.resized ? editor.sourceFontSize : proposedFontSize,
+        proposedMaxWidth = Math.max(fontSize * 3, (editor.widthCss - 16) / Math.max(0.03, state.scale)),
+        color = editor.color || state.inkColor;
+      let maxWidth = editor.sourceTextBoxId && !editor.resized ? editor.sourceMaxWidth : proposedMaxWidth,
+        x = editor.sourceTextBoxId && !editor.moved ? editor.sourceX : editor.x,
+        y = editor.sourceTextBoxId && !editor.moved ? editor.sourceY : editor.y;
+      const fitted = await fittedTextBoxContent(text, fontSize, color, maxWidth);
       if (editor.cancelled || state.textEditors.get(editor.id) !== editor) return;
-      const width = image.logicalWidth || image.width,
-        height = image.logicalHeight || image.height,
-        box = { x, y, w: width, h: height };
+      const image = fitted.image,
+        mixedFallback = fitted.mixedFallback,
+        width = fitted.width,
+        height = fitted.height;
+      fontSize = fitted.fontSize;
+      maxWidth = fitted.maxWidth;
+      x = Math.max(0, Math.min(SIZE - width, x));
+      y = Math.max(0, Math.min(SIZE - height, y));
+      const
+        box = { x, y, w: width, h: height },
+        existingIndex = editor.sourceTextBoxId ? state.textBoxes.findIndex((item) => item.id === editor.sourceTextBoxId) : -1;
+      recordTextBoxesBefore();
+      const item = {
+        id:existingIndex >= 0 ? state.textBoxes[existingIndex].id : `text-box-${state.nextTextBoxId++}`,
+        x,
+        y,
+        w:width,
+        h:height,
+        maxWidth,
+        fontSize,
+        color,
+        text,
+        image,
+      };
+      if (existingIndex >= 0) state.textBoxes.splice(existingIndex, 1, item);
+      else state.textBoxes.push(item);
       state.userRevision++;
-      blitSized(image, x, y, width, height);
-      retainSharpOverlay(image, box);
       mergeDirtyBox(box);
       state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
       state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
       state.autoEligible = true;
+      state.selectedTextBoxId = null;
       removeTextEditor(editor);
       blockCanvasInput(TEXT_INPUT_GUARD_MS);
       restoreTextEditorMode(editor);
@@ -5110,27 +5302,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
+    if (editor.sourceTextBoxId) state.selectedTextBoxId = null;
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
     if (editor.returnMode) restoreTextEditorMode(editor);
     else setCanvasMode("pen");
+    render();
     setStatusKey("ready");
     if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
   function createTextEditor(point, options = null) {
     options ||= {};
+    if (!options.sourceTextBoxId && state.textBoxes.length >= MAX_VISIBLE_TEXT_BOXES) return null;
     supersedeActiveAI("text-input-started");
     if (!state.timer && state.auto && state.dirty && state.autoEligible) schedule();
     const viewport = textEditorViewportSize(),
-      widthCss = Math.min(TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - 24)),
-      heightCss = Math.min(TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, viewport.height - 24)),
+      widthCss = Math.min(Number(options.widthCss) || TEXT_EDITOR_DEFAULT_WIDTH, Math.max(TEXT_EDITOR_MIN_WIDTH, viewport.width - 24)),
+      heightCss = Math.min(Number(options.heightCss) || TEXT_EDITOR_DEFAULT_HEIGHT, Math.max(TEXT_EDITOR_MIN_HEIGHT, viewport.height - 24)),
       editor = {
         id: state.nextTextEditorId++,
         x: point.x,
         y: point.y,
         widthCss,
         heightCss,
-        fontCss: TEXT_EDITOR_FONT_CSS,
+        fontCss: Number(options.fontCss) || TEXT_EDITOR_FONT_CSS,
         zIndex: 1,
         mixedMode: false,
         previewRevision: 0,
@@ -5141,6 +5336,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         cancelled: false,
         gesture: null,
         returnMode:typeof options.returnMode === "string" ? options.returnMode : "",
+        sourceTextBoxId:typeof options.sourceTextBoxId === "string" ? options.sourceTextBoxId : "",
+        sourceX:Number(options.sourceX),
+        sourceY:Number(options.sourceY),
+        sourceMaxWidth:Number(options.sourceMaxWidth),
+        sourceFontSize:Number(options.sourceFontSize),
+        moved:false,
+        resized:false,
+        color:typeof options.color === "string" ? options.color : state.inkColor,
       },
       root = document.createElement("section"),
       header = document.createElement("header"),
@@ -5267,6 +5470,38 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     positionTextEditors();
     return editor;
   }
+  function editTextBox(item) {
+    if (state.mode !== "hand" || !item || !state.textBoxes.includes(item) || state.textEditors.size) return false;
+    if (state.widgetEdit) acceptWidgetEdit();
+    if (state.imageEdit) acceptImageEdit({ restoreMode:false });
+    if (state.animationEdit) acceptAnimationEdit();
+    state.selectedTextBoxId = item.id;
+    const scale = Math.max(.03, state.scale),
+      editor = createTextEditor({ x:item.x, y:item.y }, {
+        text:item.text,
+        widthCss:Math.max(TEXT_EDITOR_MIN_WIDTH, item.maxWidth * scale + 16),
+        heightCss:Math.max(TEXT_EDITOR_MIN_HEIGHT, item.h * scale + 48),
+        fontCss:Math.max(8, item.fontSize * scale),
+        sourceTextBoxId:item.id,
+        sourceX:item.x,
+        sourceY:item.y,
+        sourceMaxWidth:item.maxWidth,
+        sourceFontSize:item.fontSize,
+        color:item.color,
+        returnMode:"hand",
+      });
+    if (!editor) {
+      state.selectedTextBoxId = null;
+      return false;
+    }
+    const offset = textEditorContentOffset(editor);
+    editor.x -= offset.x / scale;
+    editor.y -= offset.y / scale;
+    positionTextEditors();
+    setStatusKey("ready");
+    render();
+    return true;
+  }
   function setCanvasCursor(cursor) {
     screen.classList.remove("cursor-crosshair", "cursor-pen", "cursor-eraser", "cursor-grab", "cursor-grabbing", "cursor-nwse-resize", "cursor-ew-resize", "cursor-ns-resize");
     screen.classList.add(`cursor-${cursor}`);
@@ -5388,14 +5623,41 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     copy.getContext("2d").drawImage(source, 0, 0);
     return copy;
   }
-// Local snapshots, export, drawing history, strokes, and lasso selection.
+// Canvas snapshots, export, drawing history, strokes, and lasso selection.
   const SNAPSHOT_DB = "penecho-canvas-history",
     SNAPSHOT_STORE = "snapshots",
-    SNAPSHOT_TILE_STORE = "snapshot-tiles";
+    SNAPSHOT_TILE_STORE = "snapshot-tiles",
+    SNAPSHOT_LOCATIONS = new Set(["device", "server"]);
   let snapshotDbPromise = null,
     snapshotItems = [],
     snapshotSaveInProgress = false,
+    snapshotListGeneration = 0,
     historyNoticeTimer = 0;
+  function snapshotLocationLabel(location = state.snapshotLocation) {
+    return t(location === "server" ? "storagePenEchoServer" : "storageThisDevice");
+  }
+  function updateSnapshotLocationUi() {
+    const location = SNAPSHOT_LOCATIONS.has(state.snapshotLocation) ? state.snapshotLocation : "device",
+      descriptionKey = location === "server" ? "storagePenEchoServerDescription" : "storageThisDeviceDescription";
+    document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
+      input.checked = input.value === location;
+    });
+    for (const id of ["historyStorageDescription", "newCanvasStorageDescription"]) {
+      const description = document.querySelector(`#${id}`);
+      if (description) description.textContent = t(descriptionKey);
+    }
+  }
+  function setSnapshotLocation(location) {
+    if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
+      updateSnapshotLocationUi();
+      return;
+    }
+    state.snapshotLocation = location;
+    localStorage.setItem("penecho-snapshot-location", location);
+    updateSnapshotLocationUi();
+    updateNewCanvasDialog();
+    refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+  }
   function updateHistorySaveFeedbackLanguage() {
     const button = document.querySelector("#historySave"),
       currentButton = document.querySelector("#historySaveCurrent"),
@@ -5403,6 +5665,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (button) button.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveSnapshot");
     if (currentButton) currentButton.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveCurrentSnapshot");
     if (notice?.dataset.messageKey) notice.textContent = t(notice.dataset.messageKey);
+    updateSnapshotLocationUi();
   }
   function showHistoryNotice(text, tone = "info", { messageKey = "", duration = 2800 } = {}) {
     const notice = document.querySelector("#historyNotice");
@@ -5445,6 +5708,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       saveButton.classList.toggle("is-saving", busy);
       saveButton.setAttribute("aria-busy", String(busy));
     }
+    document.querySelectorAll('input[name="historyStorageLocation"]').forEach((input) => (input.disabled = busy));
   }
   async function saveSnapshotFromHistory() {
     if (snapshotSaveInProgress) return;
@@ -5465,7 +5729,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
-    const overwriteId = state.currentSnapshotId,
+    const overwriteId = state.currentSnapshotLocation === state.snapshotLocation ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
       name = requestedName || (overwriteId ? state.currentSnapshotName : "");
     setHistorySaveBusy(true);
@@ -5473,7 +5737,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     try {
       const selectionBusy = selectionAIBusy(),
         selectionBusyKey = selectionAIStatusKey(),
-        id = await saveSnapshot({ overwriteId, name });
+        id = await saveSnapshot({ overwriteId, name, location:state.snapshotLocation });
       showHistoryNoticeKey(id ? (overwriteId ? "snapshotOverwritten" : "snapshotSaved") : selectionBusy ? selectionBusyKey : "emptyCanvas", id ? "success" : "info");
     } catch (error) {
       const message = `${t("snapshotError")}${error.message}`;
@@ -5520,6 +5784,45 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       items = await requestResult(db.transaction(SNAPSHOT_STORE, "readonly").objectStore(SNAPSHOT_STORE).getAll());
     return items.sort((a, b) => b.createdAt - a.createdAt);
   }
+  function blobDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      if (!(blob instanceof Blob)) return reject(Error("Snapshot contains invalid binary data"));
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || Error("Could not encode snapshot data"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  function dataUrlBlob(value) {
+    if (typeof value !== "string") throw Error("Snapshot contains invalid encoded data");
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+    if (!match) throw Error("Snapshot contains invalid encoded data");
+    const binary = atob(match[2]),
+      bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type:match[1] });
+  }
+  async function snapshotApiResponse(response) {
+    let body = null;
+    try { body = await response.json(); } catch {}
+    if (!response.ok) throw Error(body?.error || `PenEcho server returned HTTP ${response.status}`);
+    return body;
+  }
+  async function serverSnapshotItems() {
+    const response = await fetch("/api/canvases", {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:authenticatedApiHeaders(),
+      }),
+      body = await snapshotApiResponse(response);
+    return Promise.all((Array.isArray(body?.canvases) ? body.canvases : []).map(async (item) => ({
+      ...item,
+      preview:dataUrlBlob(item.preview),
+    })));
+  }
+  async function snapshotsAt(location) {
+    return location === "server" ? serverSnapshotItems() : allSnapshots();
+  }
   function animationBounds(region = null) {
     if (!pluginEnabled("animation")) return null;
     let bounds = null;
@@ -5533,7 +5836,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function snapshotPreview() {
     const preview = offscreen(180, 120),
       q = preview.getContext("2d"),
-      bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), animationBounds()), widgetBounds());
+      bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), textBoxBounds()), animationBounds()), widgetBounds());
     q.fillStyle = state.paint.paper;
     q.fillRect(0, 0, preview.width, preview.height);
     if (!bounds) return preview;
@@ -5545,6 +5848,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawImagesToContext(q, bounds);
+    drawTextBoxesToContext(q, bounds);
     q.restore();
     for (const [k, canvas] of tiles) {
       const [tx, ty] = k.split(",").map(Number),
@@ -5572,6 +5876,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     bounds = unionLocalBounds(bounds, animationBounds());
     bounds = unionLocalBounds(bounds, imageBounds());
+    bounds = unionLocalBounds(bounds, textBoxBounds());
     bounds = unionLocalBounds(bounds, widgetBounds());
     const selection = state.selection;
     if (selection?.phase !== "active") return bounds;
@@ -5619,6 +5924,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       context.stroke();
     }
     drawImagesToContext(context, region);
+    drawTextBoxesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -5695,13 +6001,56 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.selection) commitSelection();
     finishAIDraftHandMode();
   }
-  async function saveSnapshot({ overwriteId = null, name = null } = {}) {
+  async function saveDeviceSnapshot(item, tileEntries, overwriteId) {
+    const db = await snapshotDb();
+    let oldTileKeys = [];
+    if (overwriteId) oldTileKeys = await requestResult(db.transaction(SNAPSHOT_TILE_STORE, "readonly").objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(overwriteId));
+    const transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readwrite");
+    transaction.objectStore(SNAPSHOT_STORE).put(item);
+    const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
+    oldTileKeys.forEach((key) => tileStore.delete(key));
+    tileEntries.forEach(({ k, blob }) => tileStore.put({ id:`${item.id}:${k}`, snapshotId:item.id, k, blob }));
+    await transactionDone(transaction);
+  }
+  async function serverSnapshotPayload(item, tileEntries) {
+    const [preview, serverTiles, serverImages] = await Promise.all([
+      blobDataUrl(item.preview),
+      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, data:await blobDataUrl(blob) }))),
+      Promise.all(item.images.map(async ({ blob, ...image }) => ({ ...image, data:await blobDataUrl(blob) }))),
+    ]);
+    return {
+      version:1,
+      id:item.id,
+      createdAt:item.createdAt,
+      name:item.name,
+      theme:item.theme,
+      view:item.view,
+      animations:item.animations,
+      widgets:item.widgets,
+      textBoxes:item.textBoxes,
+      images:serverImages,
+      tiles:serverTiles,
+      preview,
+    };
+  }
+  async function saveServerSnapshot(item, tileEntries, overwriteId) {
+    const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {
+      method:overwriteId ? "PUT" : "POST",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+      body:JSON.stringify(await serverSnapshotPayload(item, tileEntries)),
+    });
+    await snapshotApiResponse(response);
+  }
+  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation } = {}) {
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
     }
+    if (!SNAPSHOT_LOCATIONS.has(location)) throw Error("Invalid snapshot location");
+    if (overwriteId && state.currentSnapshotLocation !== location) throw Error(t("noCurrentSnapshot"));
     await finalizeCanvasForSnapshot();
-    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
     }
@@ -5712,6 +6061,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       createdAt = Date.now(),
       animations = serializedAnimations(),
       widgets = serializedWidgets(),
+      textBoxes = storedTextBoxes(),
       images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
       preview = await canvasBlob(snapshotPreview()),
@@ -5727,45 +6077,69 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         animations,
         widgetCount: widgets.length,
         widgets,
+        textBoxCount:textBoxes.length,
+        textBoxes,
         imageCount: images.length,
         images,
         preview,
-      },
-      db = await snapshotDb();
+      };
     if (overwriteId && !existing && overwriteId !== state.currentSnapshotId) throw Error(t("noCurrentSnapshot"));
-    let oldTileKeys = [];
-    if (overwriteId) oldTileKeys = await requestResult(db.transaction(SNAPSHOT_TILE_STORE, "readonly").objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(overwriteId));
-    const transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readwrite");
-    transaction.objectStore(SNAPSHOT_STORE).put(item);
-    const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
-    oldTileKeys.forEach((key) => tileStore.delete(key));
-    tileEntries.forEach(({ k, blob }) => tileStore.put({ id: `${id}:${k}`, snapshotId: id, k, blob }));
-    await transactionDone(transaction);
+    if (location === "server") await saveServerSnapshot(item, tileEntries, overwriteId);
+    else await saveDeviceSnapshot(item, tileEntries, overwriteId);
     nameInput.value = "";
     state.currentSnapshotId = id;
     state.currentSnapshotName = snapshotName(item);
+    state.currentSnapshotLocation = location;
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     return id;
   }
-  async function loadSnapshot(id) {
+  async function readDeviceSnapshot(id) {
+    const db = await snapshotDb(),
+      transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readonly"),
+      itemRequest = transaction.objectStore(SNAPSHOT_STORE).get(id),
+      tilesRequest = transaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAll(id),
+      [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
+    return item ? { item, tileEntries } : null;
+  }
+  async function readServerSnapshot(id) {
+    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:authenticatedApiHeaders(),
+      }),
+      body = await snapshotApiResponse(response),
+      stored = body?.canvas;
+    if (!stored || !Array.isArray(stored.tiles) || !Array.isArray(stored.images)) throw Error("PenEcho server returned an invalid canvas");
+    return {
+      item:{
+        ...stored,
+        preview:dataUrlBlob(stored.preview),
+        images:stored.images.map(({ data, ...image }) => ({ ...image, blob:dataUrlBlob(data) })),
+      },
+      tileEntries:stored.tiles.map(({ k, data }) => ({ k, blob:dataUrlBlob(data) })),
+    };
+  }
+  async function readSnapshot(location, id) {
+    return location === "server" ? readServerSnapshot(id) : readDeviceSnapshot(id);
+  }
+  async function loadSnapshot(id, location = state.snapshotLocation) {
     const loadGeneration=++state.snapshotLoadGeneration;
     if (state.selection) cancelSelection(true);
     clearTextEditors();
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
-    const expectedRevision=state.userRevision;
-    const db = await snapshotDb(),
-      transaction = db.transaction([SNAPSHOT_STORE, SNAPSHOT_TILE_STORE], "readonly"),
-      itemRequest = transaction.objectStore(SNAPSHOT_STORE).get(id),
-      tilesRequest = transaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAll(id),
-      [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
-    if (!item) return;
+    const expectedRevision=state.userRevision,
+      stored = await readSnapshot(location, id);
+    if (!stored) return;
+    const { item, tileEntries } = stored;
     const [decoded, images] = await Promise.all([
       Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) }))),
       decodeStoredImages(item.images),
     ]);
+    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
+    await enableSnapshotWidgetPlugins(item.widgets);
     if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
     state.userRevision++;
     invalidateRecognition();
@@ -5780,6 +6154,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.widgetHistoryBefore = null;
     state.historyBefore.clear();
     state.imageHistoryBefore = null;
+    state.textBoxHistoryBefore = null;
     for (const { k, image } of decoded) {
       const canvas = offscreen(TILE, TILE);
       canvas.getContext("2d").drawImage(image, 0, 0);
@@ -5789,6 +6164,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     restoreWidgets(item.widgets);
     if (["arcane", "scifi", "research", "studio"].includes(item.theme)) applyTheme(item.theme);
     restoreImages(images);
+    await restoreTextBoxes(item.textBoxes);
     if (item.view) {
       state.scale = Math.max(0.03, Math.min(2, item.view.scale));
       state.panX = item.view.panX;
@@ -5797,12 +6173,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     state.currentSnapshotId = item.id;
     state.currentSnapshotName = snapshotName(item);
+    state.currentSnapshotLocation = location;
     render();
     closeHistoryPanel();
     setStatusKey("snapshotLoaded");
   }
-  async function deleteSnapshot(id) {
-    if (!confirm(t("deleteSnapshotConfirm"))) return;
+  async function deleteDeviceSnapshot(id) {
     const db = await snapshotDb(),
       readTransaction = db.transaction(SNAPSHOT_TILE_STORE, "readonly"),
       tileKeys = await requestResult(readTransaction.objectStore(SNAPSHOT_TILE_STORE).index("snapshotId").getAllKeys(id)),
@@ -5811,9 +6187,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const tileStore = transaction.objectStore(SNAPSHOT_TILE_STORE);
     tileKeys.forEach((key) => tileStore.delete(key));
     await transactionDone(transaction);
-    if (state.currentSnapshotId === id) {
+  }
+  async function deleteServerSnapshot(id) {
+    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
+      method:"DELETE",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders(),
+    });
+    await snapshotApiResponse(response);
+  }
+  async function deleteSnapshot(id, location = state.snapshotLocation) {
+    if (!confirm(t(location === "server" ? "deleteSnapshotConfirmServer" : "deleteSnapshotConfirmDevice"))) return;
+    if (location === "server") await deleteServerSnapshot(id);
+    else await deleteDeviceSnapshot(id);
+    if (state.currentSnapshotId === id && state.currentSnapshotLocation === location) {
       state.currentSnapshotId = null;
       state.currentSnapshotName = "";
+      state.currentSnapshotLocation = null;
     }
     await refreshSnapshots();
     setStatusKey("snapshotDeleted");
@@ -5822,8 +6212,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const label = document.querySelector("#currentSnapshotLabel"),
       overwrite = document.querySelector("#newOverwrite");
     if (!label || !overwrite) return;
-    label.textContent = state.currentSnapshotId ? t("currentSnapshot").replace("{name}", state.currentSnapshotName || state.currentSnapshotId) : t("noCurrentSnapshot");
-    overwrite.disabled = !state.currentSnapshotId;
+    if (!state.currentSnapshotId) label.textContent = t("noCurrentSnapshot");
+    else {
+      const sameLocation = state.currentSnapshotLocation === state.snapshotLocation,
+        key = sameLocation ? "currentSnapshot" : "currentSnapshotOtherLocation";
+      label.textContent = t(key)
+        .replace("{name}", state.currentSnapshotName || state.currentSnapshotId)
+        .replace("{location}", snapshotLocationLabel(state.currentSnapshotLocation));
+    }
+    overwrite.disabled = !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    updateSnapshotLocationUi();
   }
   function setNewCanvasDialogBusy(busy) {
     const dialog = document.querySelector("#newCanvasDialog");
@@ -5850,9 +6248,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     restoreWidgets([]);
     state.imageHistoryBefore = null;
     restoreImages([]);
+    state.textBoxHistoryBefore = null;
+    void restoreTextBoxes([]);
     state.historyBefore.clear();
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
+    state.currentSnapshotLocation = null;
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -5868,7 +6269,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("newCanvasReady");
   }
   function openNewCanvasDialog() {
-    if (!tiles.size && !state.images.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       startBlankCanvas();
       return;
     }
@@ -5883,8 +6284,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setNewCanvasDialogBusy(true);
     try {
       let saved = true;
-      if (saveMode === "new") saved = await saveSnapshot({ name });
-      else if (saveMode === "overwrite") saved = await saveSnapshot({ overwriteId: state.currentSnapshotId, name });
+      if (saveMode === "new") saved = await saveSnapshot({ name, location:state.snapshotLocation });
+      else if (saveMode === "overwrite") saved = await saveSnapshot({ overwriteId:state.currentSnapshotId, name, location:state.snapshotLocation });
       if (saved === null) {
         setNewCanvasDialogBusy(false);
         return;
@@ -5899,13 +6300,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return item.name || new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(item.createdAt);
   }
   function renderSnapshotList() {
-    const list = document.querySelector("#historyList");
+    const list = document.querySelector("#historyList"),
+      location = state.snapshotLocation;
     if (!list) return;
     list.replaceChildren();
     if (!snapshotItems.length) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.textContent = t("emptyHistory");
+      empty.textContent = t(state.snapshotLocation === "server" ? "emptyServerHistory" : "emptyDeviceHistory");
       list.append(empty);
       return;
     }
@@ -5919,14 +6321,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         actions = document.createElement("div"),
         load = document.createElement("button"),
         remove = document.createElement("button"),
-        url = URL.createObjectURL(item.preview);
+        url = item.preview instanceof Blob ? URL.createObjectURL(item.preview) : "";
       card.className = "history-card";
-      card.classList.toggle("current", item.id === state.currentSnapshotId);
-      if (item.id === state.currentSnapshotId) card.setAttribute("aria-current", "true");
+      const isCurrent = item.id === state.currentSnapshotId && location === state.currentSnapshotLocation;
+      card.classList.toggle("current", isCurrent);
+      if (isCurrent) card.setAttribute("aria-current", "true");
       preview.className = "history-preview";
       image.alt = "";
-      image.src = url;
-      image.onload = image.onerror = () => URL.revokeObjectURL(url);
+      if (url) {
+        image.src = url;
+        image.onload = image.onerror = () => URL.revokeObjectURL(url);
+      }
       preview.append(image);
       meta.className = "history-meta";
       title.textContent = snapshotName(item);
@@ -5936,10 +6341,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
       actions.className = "history-actions";
       load.textContent = t("loadSnapshot");
-      load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id));
+      load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id, location));
       remove.className = "history-delete";
       remove.textContent = t("deleteSnapshot");
-      remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id));
+      remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
       meta.append(title, detail, actions);
       card.append(preview, meta);
@@ -5947,7 +6352,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   async function refreshSnapshots() {
-    snapshotItems = await allSnapshots();
+    const generation = ++snapshotListGeneration,
+      location = state.snapshotLocation,
+      items = await snapshotsAt(location);
+    if (generation !== snapshotListGeneration || location !== state.snapshotLocation) return;
+    snapshotItems = items;
     renderSnapshotList();
   }
   async function runSnapshotAction(action) {
@@ -5965,6 +6374,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
+    updateSnapshotLocationUi();
     refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
   }
   function closeHistoryPanel() {
@@ -6196,14 +6606,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function save() {
-    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore) return null;
+    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) return null;
     const changes = [];
     const animationsBefore = state.animationHistoryBefore,
       animationsAfter = animationsBefore ? serializedAnimations() : null,
       widgetsBefore = state.widgetHistoryBefore,
       widgetsAfter = widgetsBefore ? serializedWidgets() : null,
       imagesBefore = state.imageHistoryBefore,
-      imagesAfter = imagesBefore ? imageHistoryState() : null;
+      imagesAfter = imagesBefore ? imageHistoryState() : null,
+      textBoxesBefore = state.textBoxHistoryBefore,
+      textBoxesAfter = textBoxesBefore ? textBoxHistoryState() : null;
     for (const [k, before] of state.historyBefore) {
       let current = tiles.get(k);
       if (current && state.inkBounds.get(k) === undefined) {
@@ -6219,11 +6631,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changes.push({ k, before, after: cloneCanvas(current) });
     }
     state.historyBefore.clear();
-    const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter };
+    const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter, textBoxesBefore, textBoxesAfter };
     state.history.push(entry);
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
     state.imageHistoryBefore = null;
+    state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
     return entry;
@@ -6242,6 +6655,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (widgetState) restoreWidgets(widgetState);
     const imageState = !Array.isArray(entry) ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
+    const textBoxState = !Array.isArray(entry) ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
+    if (textBoxState) void restoreTextBoxes(textBoxState);
     restorePendingHistoryState(entry, side);
     clearSharpOverlays();
     requestAnimationLayerRender();
@@ -6686,6 +7101,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function launchAutomaticAI(reason) {
     if (!state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     if (hasUnsettledToolbox()) {
       if (state.statusKey !== "autoToolboxPending") setStatusKey("autoToolboxPending");
       return;
@@ -6698,6 +7117,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     clearTimeout(state.timer);
     state.timer = 0;
     if (!state.auto || !state.dirty || !state.autoEligible) return;
+    if (currentWidgetRefineCandidate()) {
+      if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
+      return;
+    }
     state.timer = setTimeout(() => {
       state.timer = 0;
       launchAutomaticAI("new-stroke-deadline");
@@ -6731,6 +7154,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bottom = Math.min(a.y + a.h, b.y + b.h);
     return right > x && bottom > y ? { x, y, w: right - x, h: bottom - y } : null;
   }
+  function containsRect(outer, inner) {
+    return Boolean(outer && inner
+      && inner.x >= outer.x && inner.y >= outer.y
+      && inner.x + inner.w <= outer.x + outer.w
+      && inner.y + inner.h <= outer.y + outer.h);
+  }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
     clearWidgetRefineCandidate();
@@ -6748,7 +7177,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
       packed = packedOverride || (captureCurrentViewport || attentionBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport) : null),
-      typedInput = isolatedSelection || (captureCurrentViewport && state.latestTypedInput && (!packed?.sourceRect || !intersection(state.latestTypedInput.box, packed.sourceRect))) ? null : state.latestTypedInput,
+      typedInput = !isolatedSelection && state.latestTypedInput && containsRect(packed?.sourceRect, state.latestTypedInput.box)
+        ? state.latestTypedInput
+        : null,
       preservedRecognition = isolatedSelection
         ? {
             dirty: state.dirty ? { ...state.dirty } : null,
@@ -6781,11 +7212,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!isolatedSelection) {
       state.dirty = null;
       state.autoEligible = false;
+      if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
+      state.latestTypedInput = null;
+      state.lastUserBox = requestBox;
     }
     const controller = new AbortController(),
       // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputConsumed:!isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
     state.activeAI = run;
     state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
     setBusy(true);
@@ -6848,7 +7282,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         tools: commands.map((c) => c.tool),
       });
       if (state.userRevision !== revision) {
-        if (!isolatedSelection && !oneShotInput && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
           schedule();
@@ -7036,13 +7470,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const visible = viewportRect();
     if (!visible) return null;
     const captureRect = captureRectFor(latestBox, visible),
-      ink = unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), animationBounds(captureRect));
-    if (!captureCurrentViewport && !ink) return null;
+      ink = unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds(captureRect), imageBounds(captureRect)), textBoxBounds(captureRect)), animationBounds(captureRect)),
+      useFullViewport = captureCurrentViewport || Boolean(latestBox && !intersection(latestBox, captureRect));
+    if (!useFullViewport && !ink) return null;
     const margin = Math.max(120, Math.min(640, 160 / state.scale)),
-      left = captureCurrentViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
-      top = captureCurrentViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
-      right = captureCurrentViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
-      bottom = captureCurrentViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
+      left = useFullViewport ? captureRect.x : Math.max(captureRect.x, ink.x - margin),
+      top = useFullViewport ? captureRect.y : Math.max(captureRect.y, ink.y - margin),
+      right = useFullViewport ? captureRect.x + captureRect.w : Math.min(captureRect.x + captureRect.w, ink.x + ink.w + margin),
+      bottom = useFullViewport ? captureRect.y + captureRect.h : Math.min(captureRect.y + captureRect.h, ink.y + ink.h + margin),
       sourceRect = { x: left, y: top, w: right - left, h: bottom - top },
       // Keep ceil(source * scale) inside the server limits despite floating-point drift.
       imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
@@ -7052,7 +7487,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       },
       out = offscreen(imageSize.w, imageSize.h),
       q = out.getContext("2d");
-    const latestVisible = latestBox ? intersection(latestBox, sourceRect) : captureCurrentViewport ? { ...sourceRect } : null,
+    const latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : captureCurrentViewport ? { ...sourceRect } : null,
       captureTime = performance.now();
     if (!latestVisible) return null;
     q.fillStyle = "#fff";
@@ -7060,6 +7495,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
     drawImagesToContext(q, sourceRect);
+    drawTextBoxesToContext(q, sourceRect);
     drawWidgetsToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
@@ -7070,6 +7506,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
     drawImagesToContext(q, latestVisible);
+    drawTextBoxesToContext(q, latestVisible);
     drawWidgetsToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
@@ -7188,6 +7625,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.setTransform(focusScale, 0, 0, focusScale, position.x - focusRect.x * focusScale, position.y - focusRect.y * focusScale);
     q.globalAlpha = 0.32;
     drawImagesToContext(q, focusRect);
+    drawTextBoxesToContext(q, focusRect);
     forTiles(focusRect.x, focusRect.y, focusRect.w, focusRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.globalAlpha = 1;
     drawSharpOverlays(q, focusRect);
@@ -7197,6 +7635,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.rect(latestBox.x, latestBox.y, latestBox.w, latestBox.h);
     q.clip();
     drawImagesToContext(q, latestBox);
+    drawTextBoxesToContext(q, latestBox);
     forTiles(latestBox.x, latestBox.y, latestBox.w, latestBox.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     q.restore();
     drawSharpOverlays(q, latestBox);
@@ -9271,17 +9710,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const d = state.drawing;
     state.drawing = null;
     const shouldRequest = !d.erase;
+    let refineCandidate = null;
     if (shouldRequest) {
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
-      latchWidgetRefineCandidate(d);
+      refineCandidate = latchWidgetRefineCandidate(d);
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
-    if (shouldRequest && state.autoEligible) schedule();
+    if (shouldRequest && state.autoEligible && !refineCandidate) schedule();
     save();
     requestInteractionLayerRender();
-    if (shouldRequest) setStatusKey(state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
+    if (shouldRequest) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }
 // Pointer and control bindings, portable snapshots, and application startup.
   function updateCanvasPointerPreview(event) {
@@ -9303,6 +9743,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (state.mode === "hand") {
+      const textBox = valid(point) ? textBoxAtPoint(point) : null;
+      if (textBox && editTextBox(textBox)) return;
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -9659,6 +10101,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       } else commitSelection();
     }
     if (state.mode === "hand" && mode !== "hand") {
+      for (const editor of [...state.textEditors.values()]) void confirmTextEditor(editor);
       if (state.widgetEdit) acceptWidgetEdit();
       if (state.imageEdit) {
         state.aiDraftReturnMode = null;
@@ -10039,6 +10482,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
+  document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) setSnapshotLocation(input.value);
+    });
+  });
   document.querySelector("#newCanvasClose").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
   document.querySelector("#newCanvasCancel").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
@@ -10102,6 +10550,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             recordAnimationsBefore();
             recordWidgetsBefore();
             recordImagesBefore();
+            recordTextBoxesBefore();
             state.animations = [];
             state.selectedAnimationId = null;
             state.animationGesture = null;
@@ -10110,6 +10559,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             requestAnimationLayerRender();
             restoreWidgets([]);
             restoreImages([]);
+            void restoreTextBoxes([]);
             tiles.clear();
             state.inkBounds.clear();
             cancelPendingForRevision();

@@ -1,9 +1,9 @@
 <h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
 </h1>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <strong>日本語</strong> |
   <a href="README.ko.md">한국어</a> |
@@ -21,14 +21,14 @@
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-コミュニティに参加-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="PenEcho Discord に参加"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="GitHub で PenEcho にスターを付ける"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="ライセンス: AGPL v3"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="ライセンス: AGPL v3"></a>
 </p>
 
-> この翻訳はプロジェクトの概要を提供します。最新かつ完全な技術情報については、正本である [英語版 README](README.md) を参照してください。
+> この翻訳はプロジェクトの概要を提供します。最新かつ完全な技術情報については、正本である [英語版 README](../../README.md) を参照してください。
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho プラグインのデモ" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho プラグインのデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho の全体デモ" width="49%"></p>
 
-<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho の全体デモ" width="100%"></p>
+<p align="center"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho プロ向け図表のデモ" width="49%"> <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho インタラクティブキャンバスのデモ" width="49%"></p>
 
 ## Kimi Open Source Friends
 
@@ -71,8 +71,16 @@ npm start
 - 回答、ヒント、説明、数式、プロット、図をキャンバス上に直接生成します。
 - AI の下書きは移動、サイズ変更、承認、破棄ができ、確定するまで元の内容とは分離されます。
 - 投げ縄で選択した手書きを移動、変形、色変更、削除、または Typeset で清書できます。
-- スナップショットをブラウザーに保存し、確定済みの内容を PNG として書き出せます。
+- スナップショットをこの端末または PenEcho サーバーに保存し、確定済みの内容を PNG として書き出せます。
 - Arcane、Sci-fi、Research、Studio のテーマを選べます。
+
+## 0.8.0 の新機能
+
+- **フローチャートを超えるプロ向け図表。** アーキテクチャ、UML、シーケンス、BPMN、データ、工学、科学、医療、金融、地理などの図表を、編集可能な専門形式のソース付きで生成できます。対応形式は必要なときだけローカル描画し、特殊な形式は完全な HTML で表示できます。
+- **既定では無効。** 必要なときに **Plugins** を開き、**Professional Diagrams** を有効にしてください。無効時は専用 Prompt も描画依存関係も読み込まれません。
+- **既存の結果をそのまま改善。** 図表の上や近くに追記して **AI Refine** を選ぶと、その図表だけを置き換えます。変更上必要な場合を除き、形式、レイアウト、用語、視覚表現を維持します。
+- **この端末または PenEcho サーバーへ保存。** 現在のブラウザーだけに保存するか、PenEcho を実行するコンピューターに保存して、同じサーバーの認証済み端末から開けます。保存前に未確定のコントロールを自動確定します。
+- **クリップボード、テキスト、拡張可能なプラグイン。** システムのクリップボードから文字や画像を追加し、AI の文字、数式、専門図表ソースをコピーできます。Hand で Textbox を再編集でき、内蔵・非公開プラグインを、使用時のみ読み込む CSS とともにカスタムプラグインへコピーできます。
 
 ## 0.7.2 の新機能
 
@@ -80,30 +88,17 @@ npm start
 - **編集・保存・書き出しの信頼性を向上。** Hand で画像、アニメーション、AI が返したウィジェットを直接移動でき、人工的な上限なしでサイズ変更できます。保存は読み込んだスナップショットを既定で更新し、「新規保存」も選べます。外部画像もサムネイルと PNG 書き出しに保持されます。
 - **ローカルアクセスとデスクトップ連携。** 共有の 6 桁コードでローカルおよび LAN のブラウザー入口を保護でき、解除後のモデルリクエストには影響しません。デスクトップ設定は Kimi API、Kimi CLI、汎用 API、Codex CLI、Claude CLI に対応し、更新とパッケージ作成も改善しました。
 
-## 0.7.1 の新機能
-
-- **キャンバスに画像や写真を追加。** システムのピッカーから画像を追加できます。モバイルやタブレットではフォトライブラリやカメラ、デスクトップでは画像ファイルを選択します。大きな画像は自動で縮小・圧縮され、キャンバスとスナップショットは軽量に保たれます。
-- **長押しで編集、明快な操作。** 画像を長押しすると再び移動・リサイズでき、「配置」「融合」「削除」を選べます。「配置」は画像をインクの下層に浮かせたままにして上に書き込め、「融合」は画像を消しゴムで消せる本物のストロークに変えます。
-- **不意の AI リクエストなし。** 画像が自分から AI リクエストを始めることはありません。AI の処理中に画像を操作すると、進行中の結果は破棄され、手書き認識は自動的に再開されます。画像は取り消し・やり直し、ローカルスナップショット、PNG 書き出しに対応しています。
-
-## 0.7.0 の新機能
-
-- **キャンバス上のライブ HTML。** General HTML プラグインにより、時計、電卓、ダッシュボードなどの操作可能な UI を、隔離されたウィジェットとして生成できます。
-- **データサービス不要のライブデータ。** 天気、株価、技術ニュース、為替、地震、自然現象、宇宙天気、GitHub の専用プラグインが、ブラウザーから宣言済み API へ直接接続します。
-- **明示的なセキュリティ境界。** 接続先はプラグインごとの許可リストに制限され、HTML は隔離 iframe で動作します。無効なプラグインはプロンプトや実行時処理に関与しません。
-- **ローカルプラグイン作成。** コンパクトな Markdown 形式、AI による改善、タイトル補完、保存、有効化、削除を Preview 版の作成画面から行えます。
-- **キャンバス標準の保存と出力。** 確定済みウィジェットはスナップショットと PNG 出力に含まれ、移動、リフロー、拡大縮小、取り消し可能な削除に対応します。
-- **実用的な既定値。** General HTML、Animation scenes、Weather は新規ユーザーで有効になり、その他のデータプラグインは明示的に有効化します。
-
 ## 過去のリリース
 
-- **0.6.0 - Animation scenes。** 安全な宣言型 Canvas2D アニメーション、キャンバス上の編集とスナップショット保存、Markdown/LaTeX 描画の改善、モデル出力の堅牢化、ノンブロッキングな npm 更新確認を追加しました。
+- **0.7.1。** ローカル画像と写真、Hand によるオブジェクト編集、スナップショット、PNG 出力、コピー可能な Mermaid 図表、出典付き Web 画像を追加しました。
+- **0.7.0。** 隔離された対話型 HTML、ライブデータプラグイン、ローカルプラグイン作成、ウィジェット保存を導入しました。
+- **0.6.0 以前。** 宣言型アニメーション、Markdown/LaTeX 改善、選択ツール、大規模な疎キャンバス基盤を追加しました。
 
 ## 仕組み
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg"><img alt="PenEcho の仕組み" src="docs/assets/how-it-works-light.svg"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/how-it-works-dark.svg"><img alt="PenEcho の仕組み" src="../assets/how-it-works-light.svg"></picture></p>
 
-ブラウザーは関連するキャンバス領域と位置情報だけをサーバーへ送信します。サーバーがリクエストを検証して選択済みの実行系へ渡し、移動可能な構造化下書きを返します。現在の推奨モデルと料金例は [英語版 README](README.md#recommended-model-configurations) に掲載しています。
+ブラウザーは関連するキャンバス領域と位置情報だけをサーバーへ送信します。サーバーがリクエストを検証して選択済みの実行系へ渡し、移動可能な構造化下書きを返します。現在の推奨モデルと料金例は [英語版 README](../../README.md#recommended-model-configurations) に掲載しています。
 
 ## 安全な運用
 
@@ -119,8 +114,8 @@ npm start
 npm run check
 ```
 
-実装の概要は [アーキテクチャ資料](docs/architecture.md)、貢献方法は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。質問や事例共有は [Discord](https://discord.gg/3jrPJ3mXdX) と [GitHub Discussions](https://github.com/penecho/penecho/discussions)、再現可能な不具合は [GitHub Issues](https://github.com/penecho/penecho/issues) へお願いします。
+実装の概要は [アーキテクチャ資料](../architecture.md)、貢献方法は [CONTRIBUTING.md](../../CONTRIBUTING.md) を参照してください。質問や事例共有は [Discord](https://discord.gg/3jrPJ3mXdX) と [GitHub Discussions](https://github.com/penecho/penecho/discussions)、再現可能な不具合は [GitHub Issues](https://github.com/penecho/penecho/issues) へお願いします。
 
 ## ライセンスと商用利用
 
-PenEcho は [GNU AGPL v3.0 only](LICENSE) で公開されています。商用利用は可能ですが、ネットワーク越しに変更版を提供する場合は、AGPL の条件に従って対応するソースコードを利用者へ提供する必要があります。AGPL に適合できないプロプライエタリ製品やホステッドサービス向けには、別途 [商用ライセンス](COMMERCIAL-LICENSE.md) があります。名称とロゴには [商標ポリシー](TRADEMARKS.md) が適用されます。
+PenEcho は [GNU AGPL v3.0 only](../../LICENSE) で公開されています。商用利用は可能ですが、ネットワーク越しに変更版を提供する場合は、AGPL の条件に従って対応するソースコードを利用者へ提供する必要があります。AGPL に適合できないプロプライエタリ製品やホステッドサービス向けには、別途 [商用ライセンス](../../COMMERCIAL-LICENSE.md) があります。名称とロゴには [商標ポリシー](../../TRADEMARKS.md) が適用されます。
