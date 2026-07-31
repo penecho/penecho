@@ -102,7 +102,6 @@
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
-  const DRAW = window.PENECHO_DRAW;
   const SELECT = window.PENECHO_SELECTION;
   const TOUR = window.PENECHO_TOUR;
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;
@@ -1452,7 +1451,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     keepEffortControlOpen();
   }
   function pluginEnabled(pluginId) {
-    return state.plugins[pluginId] === true;
+    return pluginId === "general" || state.plugins[pluginId] === true;
   }
   function diagramRuntime() {
     return window.PENECHO_DIAGRAM_RUNTIME || null;
@@ -1692,7 +1691,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         input.type = "checkbox";
         input.dataset.pluginId = plugin.id;
         input.checked = pluginEnabled(plugin.id);
-        input.disabled = Boolean(plugin.documentPath && !pluginManifests.has(plugin.id));
+        input.disabled = plugin.id === "general" || Boolean(plugin.documentPath && !pluginManifests.has(plugin.id));
         copy.className = "plugin-option-copy";
         titleRow.className = "plugin-option-title";
         title.textContent = plugin.labelKey ? t(plugin.labelKey) : localizedManifestValue(manifest, "name") || plugin.id;
@@ -2201,6 +2200,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function setPluginEnabled(pluginId, enabled) {
     const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId);
     if (!plugin) return false;
+    if (pluginId === "general") enabled = true;
     if (enabled && plugin.documentPath && !pluginManifests.has(pluginId)) return false;
     if (enabled) {
       try { await ensurePluginRuntime(pluginId); }

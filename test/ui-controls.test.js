@@ -395,11 +395,14 @@ test("plugin creator offers one air-quality template, editable copies, AI title 
   assert.match(server, /req\.method === "DELETE"[\s\S]*?deleteLocalPlugin\(id\)/);
 });
 
-test("disabled data plugins send no plugin payload and detach widget runtime hooks", () => {
+test("General HTML stays mandatory while optional data plugins can detach widget runtime hooks", () => {
   const app = read("public/app.js"), html = read("public/index.html"), requestPayload = functionSource(app, "pluginRequestPayload"), syncRuntime = functionSource(app, "syncWidgetRuntime"), pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')), validate = functionSource(app, "validate");
   assert.match(html, /id="widgetLayer"[^>]*\shidden(?:\s|>)/);
   assert.match(requestPayload, /if \(plugins\.length\) payload\.plugins = plugins/);
   assert.match(functionSource(app, "enabledPluginDescriptors"), /filter\(\(plugin\) => pluginEnabled\(plugin\.id\)\)/);
+  assert.match(functionSource(app, "pluginEnabled"), /pluginId === "general" \|\| state\.plugins\[pluginId\] === true/);
+  assert.match(functionSource(app, "setPluginEnabled"), /if \(pluginId === "general"\) enabled = true/);
+  assert.match(functionSource(app, "renderPluginOptions"), /input\.disabled = plugin\.id === "general"/);
   assert.match(functionSource(app, "enabledPluginDescriptors"), /sort\(\(a, b\) => \{[\s\S]*?id === "general" \? 0 : id === "flowchart" \? 1 : 2/);
   assert.match(syncRuntime, /dataPluginDefinitions\(\)\.some[\s\S]*?widgetLayer\.hidden = !enabled[\s\S]*?addEventListener[\s\S]*?removeEventListener/);
   assert.doesNotMatch(app, /window\.addEventListener\("message", handleWidgetMessage\)/);

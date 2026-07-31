@@ -1320,8 +1320,8 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /"commands":\{"type":"array","minItems":1,"maxItems":16/);
   assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
-  assert.match(source, /const PLUGIN_ROUTING_PROMPT = `This plugin routing rule narrows the earlier generic draw guidance/);
-  assert.match(source, /more than about 10 meaningful shapes, nodes, components, or labels/);
+  assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
+  assert.match(source, /use the General HTML plugin and prefer a compact inline SVG/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
   assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);
@@ -1745,41 +1745,6 @@ test("request tracing preserves a client-cancelled model attempt", { timeout: 20
   }
 });
 
-test("API mode does not retry or reject a valid in-canvas draw because of aggregate area", { timeout: 20000 }, async () => {
-  const responseContent=JSON.stringify({intent:"plot",commands:[{tool:"draw",origin:[100,100],types:["rect"],items:[[0,0,4000,4000]]}]}),upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
-  try {
-    const payload=validPayload();payload.trigger="manual";payload.userAction="plot";
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),body=await response.json();
-    assert.equal(response.status,200);
-    assert.equal(body.attempts,1);
-    assert.equal(body.commands[0]?.tool,"draw");
-  } finally {
-    await stopServer(child);
-    await new Promise(resolve=>upstream.server.close(resolve));
-  }
-});
-
-test("API mode retries an invalid draw once and returns the corrected command", { timeout: 20000 }, async () => {
-  const invalid=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["circle","line"],items:[[0,0,100,200],[0,0,200]]}]}),
-    corrected=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["ellipse","circle"],items:[[0,0,100,200],[0,0,20]]}]}),
-    upstream=await startApiServer("",{response:({index})=>({body:index===0?invalid:corrected})}),
-    {child,origin}=await startServer(apiServerEnv(upstream.origin));
-  try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
-    assert.equal(response.status,200);
-    assert.equal(body.attempts,2);
-    assert.equal(upstream.requests.length,2);
-    assert.equal(body.commands.length,1);
-    assert.deepEqual(body.commands[0].types,["ellipse","circle"]);
-    const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
-    assert.match(retryText,/previous response contained a draw command that PenEcho cannot render/);
-    assert.match(retryText,/circle needs exactly three/);
-  } finally {
-    await stopServer(child);
-    await new Promise(resolve=>upstream.server.close(resolve));
-  }
-});
-
 test("manual empty responses preserve full reinspection guidance with a domain-neutral supplement", { timeout: 20000 }, async () => {
   const empty=JSON.stringify({intent:"none",observedText:"h₁",commands:[]}),
     corrected=JSON.stringify({intent:"answer",observedText:"hi",commands:[{tool:"write_text",x:0,y:0,text:"Hi!",fontSize:80,maxWidth:400,lineHeight:1.35}]}),
@@ -1812,22 +1777,6 @@ test("manual empty responses preserve full reinspection guidance with a domain-n
     assert.match(retryInstruction,/Use none only when there is no new input/);
     assert.ok(retryInstruction.length<800,`manual empty retry grew to ${retryInstruction.length} characters`);
     assert.doesNotMatch(retryInstruction,/\b(?:hi|hello|hey|yo)\b|h₁|subscript/i);
-  } finally {
-    await stopServer(child);
-    await new Promise(resolve=>upstream.server.close(resolve));
-  }
-});
-
-test("API mode never makes a second retry when the corrected draw is still invalid", { timeout: 20000 }, async () => {
-  const invalid=JSON.stringify({intent:"continue",commands:[{tool:"draw",origin:[1000,1000],types:["circle"],items:[[0,0,100,200]]}]}),
-    upstream=await startApiServer(invalid),
-    {child,origin}=await startServer(apiServerEnv(upstream.origin));
-  try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
-    assert.equal(response.status,200);
-    assert.equal(body.attempts,2);
-    assert.equal(upstream.requests.length,2);
-    assert.deepEqual(body.commands,[]);
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
@@ -2102,7 +2051,7 @@ test("API mode uses one configured key without probes or fallback credentials", 
 });
 
 test("client and server contain no aggregate draft rejection budget", () => {
-  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),draw=fs.readFileSync(path.join(ROOT,"public","draw.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
-  for(const source of [app,draw,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
+  const app=fs.readFileSync(path.join(ROOT,"public","app.js"),"utf8"),server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8");
+  for(const source of [app,server])assert.doesNotMatch(source,/Draft destination budget|Draft raster budget|MAX_DRAFT_RASTER_PIXELS|MAX_LOGICAL_PIXELS|MAX_DESTINATION_TILES/);
   assert.doesNotMatch(server,/padded union bounds may total at most|intersect at most 64/);
 });

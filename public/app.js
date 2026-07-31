@@ -103,7 +103,6 @@
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
-  const DRAW = window.PENECHO_DRAW;
   const SELECT = window.PENECHO_SELECTION;
   const TOUR = window.PENECHO_TOUR;
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;
@@ -1453,7 +1452,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     keepEffortControlOpen();
   }
   function pluginEnabled(pluginId) {
-    return state.plugins[pluginId] === true;
+    return pluginId === "general" || state.plugins[pluginId] === true;
   }
   function diagramRuntime() {
     return window.PENECHO_DIAGRAM_RUNTIME || null;
@@ -1693,7 +1692,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         input.type = "checkbox";
         input.dataset.pluginId = plugin.id;
         input.checked = pluginEnabled(plugin.id);
-        input.disabled = Boolean(plugin.documentPath && !pluginManifests.has(plugin.id));
+        input.disabled = plugin.id === "general" || Boolean(plugin.documentPath && !pluginManifests.has(plugin.id));
         copy.className = "plugin-option-copy";
         titleRow.className = "plugin-option-title";
         title.textContent = plugin.labelKey ? t(plugin.labelKey) : localizedManifestValue(manifest, "name") || plugin.id;
@@ -2202,6 +2201,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function setPluginEnabled(pluginId, enabled) {
     const plugin = PLUGIN_DEFINITIONS.find((item) => item.id === pluginId);
     if (!plugin) return false;
+    if (pluginId === "general") enabled = true;
     if (enabled && plugin.documentPath && !pluginManifests.has(pluginId)) return false;
     if (enabled) {
       try { await ensurePluginRuntime(pluginId); }
@@ -7337,7 +7337,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       if (commands.length) {
         setStatusKey("writing");
-        if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
+        if (commands.length === 1 && commands[0].tool !== "erase") {
           if (state.userRevision !== revision) throw Error(AI_CANCELLED);
           await animate(commands[0], revision, meta, run);
           checkAI(revision, run);
@@ -7776,8 +7776,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
     const acceptedTools = pluginEnabled("animation")
-      ? ["write_text", "draw_formula", "plot_function", "draw", "animate_scene", "erase"]
-      : ["write_text", "draw_formula", "plot_function", "draw", "erase"];
+      ? ["write_text", "draw_formula", "plot_function", "animate_scene", "erase"]
+      : ["write_text", "draw_formula", "plot_function", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
     if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
@@ -7815,11 +7815,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           }
           c.color = aiColor;
           plotPixels += c.w * c.h;
-        }
-        if (c.tool === "draw") {
-          const normalized = DRAW?.normalize(c, SIZE);
-          if (!normalized) return null;
-          c = { ...normalized, color: aiColor };
         }
         if (c.tool === "animate_scene") {
           if (animationSlots <= 0) return null;
@@ -7952,12 +7947,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           pendingCommand = ANIMATION.normalize(c, SIZE);
           image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
         }
-        else if (c.tool === "draw") {
-          const made = DRAW.render(c, offscreen, c.color);
-          image = made.image;
-          x = made.x;
-          y = made.y;
-        }
         if (image) {
           checkAI(revision, run);
           x = Math.max(0, Math.min(x, SIZE - Math.min(image.logicalWidth || image.width, SIZE)));
@@ -7993,12 +7982,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pendingCommand = ANIMATION.normalize(c, SIZE);
       image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
     }
-    else if (c.tool === "draw") {
-      const made = DRAW.render(c, offscreen, c.color);
-      image = made.image;
-      x = made.x;
-      y = made.y;
-    }
     checkAI(revision, run);
     if (!image) throw Error(`Unable to prepare ${c.tool}`);
     const logicalWidth = c.tool === "write_text" ? c.maxWidth : image.logicalWidth || image.width,
@@ -8023,7 +8006,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         .sort((a, b) => a.y - b.y || a.x - b.x),
       placed = [],
       fixed = items
-        .filter((item) => !["write_text", "draw_formula", "draw"].includes(item.command.tool))
+        .filter((item) => !["write_text", "draw_formula"].includes(item.command.tool))
         .map((item) => item.erase ? item.bounds : { x: item.x, y: item.y, w: item.layoutWidth, h: item.layoutHeight });
     for (const item of flow) {
       const width = item.image.logicalWidth || item.image.width,
