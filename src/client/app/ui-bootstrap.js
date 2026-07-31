@@ -3,8 +3,7 @@
     const drawing = state.drawing,
       next = state.mode === "eraser"
         && event.pointerType !== "touch"
-        && drawing?.erase
-        && drawing.id === event.pointerId
+        && (!drawing || drawing.erase && drawing.id === event.pointerId)
         ? clientPoint(event)
         : null,
       preview = next && valid(next) ? next : null,

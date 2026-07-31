@@ -214,7 +214,7 @@ test("pen ink stays above widgets and the eraser exposes a dashed footprint", ()
   const updatePreview = functionSource(app, "updateCanvasPointerPreview"),
     beginPointer = functionSource(app, "beginCanvasPointerAction"),
     finishPointer = functionSource(app, "end");
-  assert.match(updatePreview, /state\.mode === "eraser"[\s\S]*?drawing\?\.erase[\s\S]*?drawing\.id === event\.pointerId[\s\S]*?requestInteractionLayerRender\(\)/);
+  assert.match(updatePreview, /state\.mode === "eraser"[\s\S]*?!drawing \|\| drawing\.erase && drawing\.id === event\.pointerId[\s\S]*?requestInteractionLayerRender\(\)/);
   assert.match(beginPointer, /state\.drawing = \{[\s\S]*?erase: erasing,[\s\S]*?\};[\s\S]*?updateCanvasPointerPreview\(e\)/);
   assert.match(finishPointer, /const wasErasing = state\.drawing\.erase;[\s\S]*?finishDrawing\(e\.pointerType\);[\s\S]*?state\.pointerPreview = null;[\s\S]*?requestInteractionLayerRender\(\)/);
   assert.match(app, /screen\.addEventListener\("pointerleave", \(\) => \{[\s\S]*?state\.pointerPreview = null;[\s\S]*?requestInteractionLayerRender\(\)/);

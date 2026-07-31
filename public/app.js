@@ -9769,8 +9769,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const drawing = state.drawing,
       next = state.mode === "eraser"
         && event.pointerType !== "touch"
-        && drawing?.erase
-        && drawing.id === event.pointerId
+        && (!drawing || drawing.erase && drawing.id === event.pointerId)
         ? clientPoint(event)
         : null,
       preview = next && valid(next) ? next : null,
