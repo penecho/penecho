@@ -301,6 +301,14 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
+  assert.match(html, /name="apiModel" list="apiModelPresets"/);
+  assert.match(html, /value="MiniMax-M3" label="1,000,000-token context; text, image, and video input; adaptive or disabled thinking\."/);
+  assert.match(html, /value="MiniMax-M2\.7" label="204,800-token context; text-only input; thinking always on\."/);
+  assert.match(html, /name="apiUrl" type="url" list="apiUrlPresets"/);
+  for (const endpoint of [
+    "https://api.minimax.io/v1", "https://api.minimax.io/anthropic",
+    "https://api.minimaxi.com/v1", "https://api.minimaxi.com/anthropic",
+  ]) assert.match(html, new RegExp(`value="${endpoint.replaceAll(".", "\\.")}"`));
   assert.match(fs.readFileSync(path.join(ROOT, "desktop", "settings", "settings.css"), "utf8"), /\.inline-primary,\.inline-secondary\{[^}]*display:inline-flex[^}]*text-decoration:none/);
   assert.match(settings, /\["kimi-cli", "codex-cli", "claude-cli"\]\.includes\(selected\)/);
   assert.match(settings, /"kimi-cli":"kimiCliPath"/);

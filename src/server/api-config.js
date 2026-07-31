@@ -1,5 +1,35 @@
 "use strict";
 
+const MINIMAX_ENDPOINTS = Object.freeze({
+  global_en:Object.freeze({
+    openaiBaseUrl:"https://api.minimax.io/v1",
+    anthropicBaseUrl:"https://api.minimax.io/anthropic",
+    docsRoot:"https://platform.minimax.io/docs",
+  }),
+  cn_zh:Object.freeze({
+    openaiBaseUrl:"https://api.minimaxi.com/v1",
+    anthropicBaseUrl:"https://api.minimaxi.com/anthropic",
+    docsRoot:"https://platform.minimaxi.com/docs",
+  }),
+});
+
+const MINIMAX_MODELS = Object.freeze({
+  "MiniMax-M3":Object.freeze({
+    modelId:"MiniMax-M3",
+    contextWindow:1000000,
+    pricingUsdPerMillionTokens:Object.freeze({ input:0.6, output:2.4, cacheRead:0.12, cacheWrite:null }),
+    inputModalities:Object.freeze(["text", "image", "video"]),
+    thinking:Object.freeze(["adaptive", "disabled"]),
+  }),
+  "MiniMax-M2.7":Object.freeze({
+    modelId:"MiniMax-M2.7",
+    contextWindow:204800,
+    pricingUsdPerMillionTokens:Object.freeze({ input:0.3, output:1.2, cacheRead:0.06, cacheWrite:0.375 }),
+    inputModalities:Object.freeze(["text"]),
+    thinking:Object.freeze(["always_on"]),
+  }),
+});
+
 function resolveApiConfig(value, formatOverride) {
   if (!value) return null;
   const requestedFormat = String(formatOverride || "").trim().toLowerCase();
@@ -46,4 +76,11 @@ function anthropicResponseMaxTokens(effort) {
   return String(effort || "").trim().toLowerCase() === "max" ? 16384 : 12288;
 }
 
-module.exports = { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig };
+module.exports = {
+  MINIMAX_ENDPOINTS,
+  MINIMAX_MODELS,
+  anthropicEffortParameters,
+  anthropicResponseMaxTokens,
+  normalizedApiEffort,
+  resolveApiConfig,
+};
