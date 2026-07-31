@@ -154,7 +154,7 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.deepEqual([...general.connect], []);
   assert.match(general.document, /五颜六色的钟/);
   assert.match(general.document, /browser-native HTML, CSS, JavaScript, timers, SVG, and canvas/);
-  assert.match(general.document, /SVG is the default drawing format/);
+  assert.match(general.document, /SVG is the default static and animated visual format/);
   assert.match(general.document, /Placement is semantic, not a search for unused canvas space/);
   assert.match(general.document, /solution path through an existing maze/);
   assert.match(general.document, /Dynamic SVG is fully supported/);

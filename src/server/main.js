@@ -292,19 +292,10 @@ const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles appear in modelInput.enable
 
 Plugin styles are injected automatically after third-party styles and are not repeated in html. Reuse their classes, variables, palettes and density controls. Unless the user asks, preserve their default visual language. Generated HTML may freely use inline JavaScript and may load arbitrary HTTPS third-party scripts, ES modules, styles, fonts, images or data endpoints when they materially improve syntax compatibility, layout or rendering; no library or professional source-format whitelist exists. For an HTML widget with semantic source, prefer rendering that source with an appropriate browser library loaded on demand inside that widget, following any matching plugin renderer contract first. Use mature, fixed, documented browser entries; never use latest tags, guess internal /lib or /dist paths, or invent library APIs. Prefer no dependency when native HTML/SVG/Canvas plus plugin CSS is sufficient. Resources load only with the widget that references them. Do not use frames, forms, navigation, cookies or storage. Never include secrets. Use credentials:"omit" for data requests and crossorigin="anonymous" for cross-origin assets where applicable. Reflow on resize and notify the snapshot bridge after the initial stable render and meaningful changes; wait for visible assets and library rendering before notifying, but never clear a successful render because a non-rendering follow-up fails. Network widgets own refresh timers and visible loading/error/last-update states.`;
 
-const ANIMATION_SYSTEM_PROMPT = `When the user explicitly requests motion, a simulation, or an animated explanation, you may return one declarative animate_scene command; never return executable JavaScript. Use exactly this envelope: {"tool":"animate_scene","x":globalX,"y":globalY,"w":width,"h":height,"durationMs":milliseconds,"loop":true,"objects":[...],"motions":[...]}. Scene x/y are global canvas coordinates; all object and motion geometry is local to the scene's w/h. Choose appropriate scene dimensions based on the user's actual request and the content needed to satisfy it well. Use integer dimensions with 120 <= w <= 5000 and 90 <= h <= 5000; 5000 is only an upper bound, never a target, so do not enlarge a scene merely to approach it. Keep all local geometry inside the scene bounds. The background is always transparent: do not output a background field, a full-scene rectangle, or another backdrop.
-
-Every object MUST have a unique string "id" and an explicit "type". Allowed object forms are group {children:["id",...],x?,y?,rotation?,scale?}, circle {cx,cy,r}, ellipse {cx,cy,rx,ry}, rect {x,y,w,h,radius?}, line {x1,y1,x2,y2}, path {points:[[x,y],...],closed?,smooth?}, and text {x,y,text,fontSize?,fontWeight?,align?}. Optional style fields are fill, stroke, lineWidth, and opacity. Use lineWidth, not strokeWidth; use "transparent", not "none", when no fill or stroke is wanted.
-
-Every motion MUST have both an explicit "type" and an existing object "target". Never infer or omit the motion type. The only valid motion records are {"type":"orbit","target":"id","center":"id-or-[x,y]","rx":n,"ry":n,"periodMs":n,"clockwise"?:bool,"phaseDeg"?:n}, {"type":"spin","target":"id","periodMs":n,"clockwise"?:bool,"phaseDeg"?:n}, {"type":"translate","target":"id","from":[x,y],"to":[x,y],"periodMs":n,"alternate"?:bool,"phaseDeg"?:n}, {"type":"pulse"|"fade","target":"id","from":n,"to":n,"periodMs":n,"phaseDeg"?:n}, or {"type":"keyframes","target":"id","periodMs":n,"frames":[{"at":0..1,"x"?:n,"y"?:n,"rotation"?:n,"scale"?:n,"opacity"?:n},...]}. String center and group child ids must also exist. Keyframe at values must be strictly increasing and each frame must change at least one property.
-
-Before returning, verify that every object and motion matches one form above and all referenced ids exist. Use at most one animate_scene command with 1..32 objects and 1..32 motions (no more than 32 objects and 32 motions), and only visibly useful parts. Use animate_scene only when motion materially helps.`;
-
-const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. For any drawing, illustration, visual annotation, or custom static graphic that is not a single-variable plot, use the General HTML plugin and prefer a compact inline SVG. Use a more specialized enabled plugin when its domain contract clearly fits better. Do not approximate a visual by splitting it into many write_text commands.`;
+const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. For any drawing, animation, simulation, illustration, visual annotation, or custom graphic that is not a single-variable plot, use the General HTML plugin and prefer a compact inline SVG. For motion, use dynamic SVG with CSS, SMIL, or JavaScript as appropriate. Use a more specialized enabled plugin when its domain contract clearly fits better. Do not approximate a visual by splitting it into many write_text commands.`;
 
 function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
   const sections = [ACTIVE_SYSTEM_PROMPT_BASE];
-  if (animationEnabled) sections.push(ANIMATION_SYSTEM_PROMPT);
   if (pluginsEnabled) sections.push(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT);
   return sections.join("\n\n");
 }
@@ -1269,9 +1260,6 @@ function normalizeCommands(result) {
     return tool ? { ...command, tool } : command;
   });
 }
-function filterAnimationCommands(commands, animationEnabled) {
-  return animationEnabled ? commands : commands.filter(command => command?.tool !== "animate_scene");
-}
 function widgetGeometryForViewport(visibleRect) {
   const bucket = value => Math.ceil(Math.min(CANVAS_SIZE, Math.max(1, Number(value) || 1)) / 1000) * 1000,
     viewportW = bucket(visibleRect?.w), viewportH = bucket(visibleRect?.h);
@@ -1405,7 +1393,7 @@ function filterPluginCommands(commands, plugins = [], preserveWidgets = false, w
   return widget ? [widget] : accepted;
 }
 function filterCapabilityCommands(commands, animationEnabled, plugins, preserveWidgets = false, widgetGeometry = null, context = {}) {
-  return filterPluginCommands(filterAnimationCommands(commands, animationEnabled).filter(command => command?.tool !== "draw"), plugins, preserveWidgets, widgetGeometry, context);
+  return filterPluginCommands(commands.filter(command => !["draw", "animate_scene"].includes(command?.tool)), plugins, preserveWidgets, widgetGeometry, context);
 }
 function filterWidgetEditCommands(commands, widgetEdit) {
   if (!widgetEdit) return commands;
@@ -1473,7 +1461,7 @@ function normalizeCommandPlacements(commands,payload){
 }
 function hasInvalidTextLayout(result){return result.commands.some(command=>{const tool=command?.tool||command?.type||command?.name;return tool==="write_text"&&(!Number.isFinite(command.x)||!Number.isFinite(command.y)||!Number.isFinite(command.maxWidth))})}
 function hasVisualCommand(result){
-  return result.commands.some(command=>["plot_function","animate_scene","html_widget","diagram_source"].includes(command?.tool||command?.type||command?.name));
+  return result.commands.some(command=>["plot_function","html_widget","diagram_source"].includes(command?.tool||command?.type||command?.name));
 }
 function plotFallback(result,changedBox){
   const text=String(result?.observedText||"").replace(/[−–—]/g,"-").replace(/[×·]/g,"*").replace(/÷/g,"/").replace(/π/gi,"pi"),match=text.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*([^\n,，;；。？！?!]+)/i);

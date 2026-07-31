@@ -590,19 +590,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
     DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
     DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
-    BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([
-      Object.freeze({
-        id: "animation",
-        labelKey: "animationPlugin",
-        costKey: "animationPluginCost",
-        helpKey: "animationPluginDisabledHelp",
-        requestField: "animationEnabled",
-        builtIn: true,
-        defaultEnabled: true,
-        legacyStorageKey: "penecho-animation-plugin",
-        onChange: applyAnimationPluginState,
-      }),
-    ]);
+    BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([]);
   const PLUGIN_DEFINITIONS = [...BUILTIN_PLUGIN_DEFINITIONS];
   const pluginManifests = new Map(),
     pluginLoadErrors = new Map(),

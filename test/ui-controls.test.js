@@ -294,14 +294,14 @@ test("declarative scenes and widgets render below the dedicated ink and interact
   assert.ok(restoreState.nextAnimationId >= 101);
 });
 
-test("plugin manager is a centered dynamic catalog with built-in animation and bundled local plugins", () => {
+test("plugin manager is a centered dynamic catalog with General HTML and bundled local plugins", () => {
   const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js");
   const css = read("public/style.css");
   for (const id of ["pluginControl", "pluginButton", "pluginPopover", "pluginOptions", "pluginClose", "pluginRefresh", "pluginLocalTab", "pluginCreateTab", "pluginServerTab", "pluginLocalPanel", "pluginCreatePanel", "pluginServerPanel"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /id="animationPluginEnabled"/);
   assert.match(app, /BUILTIN_PLUGIN_DEFINITIONS\s*=\s*Object\.freeze\(\[/);
   assert.match(app, /PLUGIN_DEFINITIONS\s*=\s*\[\.\.\.BUILTIN_PLUGIN_DEFINITIONS\]/);
-  assert.match(app, /id:\s*"animation"[\s\S]*?requestField:\s*"animationEnabled"[\s\S]*?defaultEnabled:\s*true[\s\S]*?onChange:\s*applyAnimationPluginState/);
+  assert.match(app, /BUILTIN_PLUGIN_DEFINITIONS\s*=\s*Object\.freeze\(\[\]\)/);
   assert.doesNotMatch(app, /documentPath:\s*"plugins\/weather\.md"/);
   const loadPluginDocuments = functionSource(app, "loadPluginDocuments");
   assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "flowchart", "image-search", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?professionalDefinitions = definitions\.filter\(\(definition\) => definition\.id === "flowchart"\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.professionalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
@@ -316,9 +316,8 @@ test("plugin manager is a centered dynamic catalog with built-in animation and b
   assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
   assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:authenticatedApiHeaders/);
   assert.match(app, /fetch\("\/api\/ai\/command"[\s\S]*?headers:\s*authenticatedApiHeaders/);
-  assert.match(functionSource(app, "validate"), /acceptedTools = pluginEnabled\("animation"\)/);
-  assert.match(functionSource(app, "animate"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
-  assert.match(functionSource(app, "preparePendingItem"), /c\.tool === "animate_scene" && !pluginEnabled\("animation"\)/);
+  assert.match(functionSource(app, "validate"), /acceptedTools = \["write_text", "draw_formula", "plot_function", "erase"\]/);
+  assert.doesNotMatch(functionSource(app, "validate"), /animate_scene/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);
   assert.match(app, /pluginPromptEstimate:\s*"adds about \{tokens\} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens"/);
   assert.match(app, /MAX_VISIBLE_WIDGETS = 100/);
@@ -347,14 +346,6 @@ test("plugin manager is a centered dynamic catalog with built-in animation and b
   assert.match(app, /generalPluginRecommendedHelp:\s*"Recommended\.[\s\S]*?interactive and dynamic content/);
   assert.match(zh, /generalPluginRecommendedHelp:\s*"建议开启[\s\S]*?交互内容和动态内容/);
   assert.match(html, /data-i18n="serverPluginsComingTitle"/);
-  assert.match(app, /animationPluginCost:\s*"Adds about 500–600 prompt tokens/);
-  assert.match(app, /animationPluginDisabledHelp:\s*"When enabled, the model can return animated demonstrations when explicitly requested or genuinely useful/);
-  assert.match(zh, /animationPluginCost:\s*"每次 AI 请求约增加 500–600 个 prompt token"/);
-  assert.match(zh, /animationPluginDisabledHelp:\s*"勾选后，大模型可在明确要求或确有必要时返回动态图演示。"/);
-  assert.match(app, /MAX_VISIBLE_ANIMATIONS = 100/);
-  assert.match(app, /animationLimitReached:\s*"Animation limit reached \(100\)/);
-  assert.match(zh, /animationLimitReached:\s*"动画已达到 100 个上限/);
-  assert.match(functionSource(app, "requestAI"), /animationLimitReached = pluginEnabled\("animation"\)[\s\S]*?state\.animations\.length >= MAX_VISIBLE_ANIMATIONS[\s\S]*?animate_scene[\s\S]*?setStatusKey\("animationLimitReached"\)/);
 });
 
 test("plugin creator offers one air-quality template, editable copies, AI title completion, deletion, and local save-and-enable", () => {

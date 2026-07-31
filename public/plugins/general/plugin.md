@@ -15,7 +15,7 @@ recommended-refresh-seconds: 60
 
 # General HTML
 
-Use this capability whenever the response needs a drawing, illustration, diagram, annotation overlay, custom visual experience, live display, small interactive tool, or browser-native behavior. For drawings and static visuals, prefer a compact inline SVG inside the generated HTML. SVG is the default drawing format; use canvas only when SVG is materially unsuitable. Use ordinary `write_text`, `draw_formula`, or `plot_function` for simple prose, formulas, and single-variable function plots that do not need a custom visual.
+Use this capability whenever the response needs a drawing, animation, simulation, illustration, diagram, annotation overlay, custom visual experience, live display, small interactive tool, or browser-native behavior. For drawings, animations, and other visuals, prefer a compact inline SVG inside the generated HTML. SVG is the default static and animated visual format; use canvas only when SVG is materially unsuitable. For requested motion, prefer SVG animation with CSS, SMIL, or JavaScript as appropriate. Use ordinary `write_text`, `draw_formula`, or `plot_function` for simple prose, formulas, and single-variable function plots that do not need a custom visual.
 
 ## Output contract
 

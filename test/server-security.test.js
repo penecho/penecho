@@ -556,7 +556,7 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
   } finally { await stopServer(disabledServer.child); await new Promise(resolve=>disabled.server.close(resolve)); }
 });
 
-test("animation plugin conditionally adds prompt instructions and filters disabled output", { timeout:20000 }, async () => {
+test("legacy animate_scene output is always filtered in favor of General HTML SVG", { timeout:20000 }, async () => {
   const animationCommand = { tool:"animate_scene", x:0, y:0, w:200, h:120, durationMs:1000, loop:true, objects:[{id:"dot",type:"circle",cx:20,cy:20,r:5}], motions:[{type:"spin",target:"dot",periodMs:1000}] },
     responseContent = JSON.stringify({ intent:"answer", commands:[animationCommand] }),
     upstream = await startApiServer(responseContent),
@@ -572,38 +572,8 @@ test("animation plugin conditionally adds prompt instructions and filters disabl
     assert.doesNotMatch(disabledSystem, /animate_scene/);
     assert.doesNotMatch(disabledMetadata, /animationEnabled/);
 
-    const enabledPayload = validPayload();
-    enabledPayload.animationEnabled = true;
-    const enabledResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(enabledPayload) }),
-      enabledBody = await enabledResponse.json(),
-      enabledRequest = JSON.parse(upstream.requests[1]),
-      enabledSystem = enabledRequest.messages[0].content,
-      enabledMetadata = enabledRequest.messages[1].content.find(part => part.type === "text").text;
-    assert.equal(enabledResponse.status, 200);
-    assert.equal(enabledBody.commands[0]?.tool, "animate_scene");
-    assert.match(enabledSystem, /at most one animate_scene command/);
-    assert.match(enabledSystem, /32 objects and 32 motions/);
-    assert.match(enabledSystem, /120 <= w <= 5000 and 90 <= h <= 5000/);
-    assert.match(enabledSystem, /appropriate scene dimensions based on the user's actual request/);
-    assert.match(enabledSystem, /5000 is only an upper bound, never a target/);
-    assert.match(enabledSystem, /do not enlarge a scene merely to approach it/);
-    assert.doesNotMatch(enabledSystem, /x \+ w <= 20000, y \+ h <= 20000/);
-    assert.match(enabledSystem, /background is always transparent/);
-    assert.match(enabledSystem, /do not output a background field/);
-    assert.match(enabledSystem, /Every motion MUST have both an explicit "type" and an existing object "target"/);
-    assert.match(enabledSystem, /Never infer or omit the motion type/);
-    assert.match(enabledSystem, /\{"type":"orbit","target":"id"/);
-    assert.match(enabledSystem, /Use lineWidth, not strokeWidth/);
-    assert.match(enabledSystem, /use "transparent", not "none"/);
-    assert.doesNotMatch(enabledSystem, /background\?/);
-    assert.match(enabledMetadata, /"animationEnabled":true/);
-    assert.ok(enabledSystem.length - disabledSystem.length >= 800);
-
-    const invalidPayload = validPayload();
-    invalidPayload.animationEnabled = "true";
-    const invalidResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(invalidPayload) });
-    assert.equal(invalidResponse.status, 400);
-    assert.equal(upstream.requests.length, 2);
+    assert.match(fs.readFileSync(path.join(ROOT,"public","plugins","general","plugin.md"),"utf8"), /SVG is the default static and animated visual format/);
+    assert.equal(upstream.requests.length, 1);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));

@@ -181,7 +181,6 @@
       if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
-        animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
         widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => ["html_widget", "diagram_source"].includes(command?.tool || command?.type || command?.name)),
         commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
@@ -245,8 +244,7 @@
           run.inputConsumed = true;
         }
         if (!isolatedSelection) save();
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (data.message) setStatus(data.message);
         else setStatusKey("aiDone");
       } else {
@@ -255,8 +253,7 @@
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
           if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
         }
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (typeof data.message === "string" && data.message.trim()) setStatus(data.message.trim());
         else setStatusKey("aiNoVisibleResponse");
       }
@@ -648,12 +645,9 @@
   function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
-      animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
       widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
-    const acceptedTools = pluginEnabled("animation")
-      ? ["write_text", "draw_formula", "plot_function", "animate_scene", "erase"]
-      : ["write_text", "draw_formula", "plot_function", "erase"];
+    const acceptedTools = ["write_text", "draw_formula", "plot_function", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
     if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
@@ -691,13 +685,6 @@
           }
           c.color = aiColor;
           plotPixels += c.w * c.h;
-        }
-        if (c.tool === "animate_scene") {
-          if (animationSlots <= 0) return null;
-          const normalized = ANIMATION?.normalize(c, SIZE);
-          if (!normalized) return null;
-          c = normalized;
-          animationSlots--;
         }
         if (c.tool === "html_widget") {
           const allowCopy = c.pluginId !== "image-search",

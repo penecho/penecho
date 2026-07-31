@@ -591,19 +591,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
     DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
     DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
-    BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([
-      Object.freeze({
-        id: "animation",
-        labelKey: "animationPlugin",
-        costKey: "animationPluginCost",
-        helpKey: "animationPluginDisabledHelp",
-        requestField: "animationEnabled",
-        builtIn: true,
-        defaultEnabled: true,
-        legacyStorageKey: "penecho-animation-plugin",
-        onChange: applyAnimationPluginState,
-      }),
-    ]);
+    BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([]);
   const PLUGIN_DEFINITIONS = [...BUILTIN_PLUGIN_DEFINITIONS];
   const pluginManifests = new Map(),
     pluginLoadErrors = new Map(),
@@ -7305,7 +7293,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
-        animationLimitReached = pluginEnabled("animation") && state.animations.length >= MAX_VISIBLE_ANIMATIONS && rawCommands.some((command) => (command?.tool || command?.type || command?.name) === "animate_scene"),
         widgetLimitReached = !widgetEditTarget && state.widgets.length >= MAX_VISIBLE_WIDGETS && rawCommands.some((command) => ["html_widget", "diagram_source"].includes(command?.tool || command?.type || command?.name)),
         commands = normalizeCommandPlacements(validate(rawCommands, aiColor, widgetEditTarget, packed.visibleRect), packed, requestBox),
         meta = { requestId: data.requestId };
@@ -7369,8 +7356,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           run.inputConsumed = true;
         }
         if (!isolatedSelection) save();
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (data.message) setStatus(data.message);
         else setStatusKey("aiDone");
       } else {
@@ -7379,8 +7365,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
           if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
         }
-        if (animationLimitReached) setStatusKey("animationLimitReached");
-        else if (widgetLimitReached) setStatusKey("widgetLimitReached");
+        if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (typeof data.message === "string" && data.message.trim()) setStatus(data.message.trim());
         else setStatusKey("aiNoVisibleResponse");
       }
@@ -7772,12 +7757,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function validate(cmds, aiColor = state.aiColor, widgetEditTarget = null, visibleRect = null) {
     if (!Array.isArray(cmds)) return [];
     let plotPixels = 0,
-      animationSlots = pluginEnabled("animation") ? Math.max(0, MAX_VISIBLE_ANIMATIONS - state.animations.length) : 0,
       widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
-    const acceptedTools = pluginEnabled("animation")
-      ? ["write_text", "draw_formula", "plot_function", "animate_scene", "erase"]
-      : ["write_text", "draw_formula", "plot_function", "erase"];
+    const acceptedTools = ["write_text", "draw_formula", "plot_function", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
     if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
@@ -7815,13 +7797,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           }
           c.color = aiColor;
           plotPixels += c.w * c.h;
-        }
-        if (c.tool === "animate_scene") {
-          if (animationSlots <= 0) return null;
-          const normalized = ANIMATION?.normalize(c, SIZE);
-          if (!normalized) return null;
-          c = normalized;
-          animationSlots--;
         }
         if (c.tool === "html_widget") {
           const allowCopy = c.pluginId !== "image-search",
