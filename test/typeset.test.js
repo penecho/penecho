@@ -45,7 +45,7 @@ test("normalize runtime relies on prompt guidance without content comparison, re
   assert.match(server, /const \{ NORMALIZE_TYPESET_POLICY \} = require\("\.\/typeset\.js"\)/);
   assert.match(server, /normalizePolicy:payload\.userAction==="normalize"\?NORMALIZE_TYPESET_POLICY:null/);
   assert.match(server, /return action==="normalize"\?commands\.filter\(command=>\["write_text","draw_formula","plot_function"\]\.includes\(command\?\.tool\)\):commands/);
-  assert.match(server, /if\(payload\.userAction!=="normalize"&&\(invalidTextLayout\|\|manualEmpty\|\|plotMissing\)\)/);
+  assert.match(server, /if\(payload\.userAction!=="normalize"&&\(invalidTextLayout\|\|invalidDraw\|\|manualEmpty\|\|plotMissing\)\)/);
   assert.match(server, /const result=model\.result;/);
   for (const removed of ["isLiteralTypesetResult", "finalizeLiteralTypesetResult", "NORMALIZE_LITERAL_RETRY", "firstLiteralObservedText", "ai-normalize-literal-fallback", "normalize-nonliteral"])
     assert.doesNotMatch(server, new RegExp(removed));

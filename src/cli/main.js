@@ -23,7 +23,7 @@ const REQUIRED_ASSETS = [
   "src/server/main.js", "src/server/typeset.js", "src/server/api-config.js",
   "src/cli/update.js", "src/cli/configure-ui.js",
   "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
-  "public/index.html", "public/access.html", "public/access.css", "public/access.js", "public/app.js", "public/selection.js", "public/tour.js", "public/style.css",
+  "public/index.html", "public/access.html", "public/access.css", "public/access.js", "public/app.js", "public/draw.js", "public/selection.js", "public/tour.js", "public/style.css",
 ];
 
 const PROVIDER_OPTIONS = "api, kimi-cli, codex-cli, or claude-cli";

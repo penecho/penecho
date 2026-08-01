@@ -859,6 +859,7 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.deepEqual(modelInput.widgetGeometry.max, { w:500, h:500 });
     assert.match(modelInput.widgetRenderingPolicy, /Layout and typography must be designed together/);
     assert.match(modelInput.widgetRenderingPolicy, /clamp\(\) with container- or viewport-relative units/);
+    assert.match(modelInput.widgetRenderingPolicy, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
     assert.match(modelInput.widgetRenderingPolicy, /prominent without crowding[\s\S]*comfortably readable/);
     assert.match(modelInput.widgetRenderingPolicy, /Do not fix overflow by making text excessively small[\s\S]*do not use oversized text/);
     assert.match(modelInput.widgetRenderingPolicy, /reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size/);
@@ -1296,6 +1297,7 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(basePrompt, /If the newest input is non-empty but unclear, incomplete, or lacks enough context, return one short write_text clarification question stating what is missing\./);
   assert.match(basePrompt, /Use intent none with an empty commands array only when there is genuinely no new input\./);
   assert.doesNotMatch(basePrompt, /If genuinely unreadable or incomplete, use intent none/);
+  assert.match(basePrompt, /existing canvas objects as actors, anchors, background, or targets[\s\S]*?overlay only the newly requested paths, effects, or actions[\s\S]*?never recreate those objects/);
   assert.match(source, /const MANDATORY_VISIBLE_RESPONSE_PROMPT = `Mandatory final visible-response fallback/);
   assert.match(source, /Empty hotspotGrid\.hotspots, absent typedInput, absent focusInset, clipped or fragmentary content, nonsensical content/);
   assert.match(source, /Hotspots only help refine reading order; their absence is not evidence that there is no new input\./);
@@ -1307,9 +1309,11 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
   assert.match(source, /clamp\(36px,1\.2cqw,52px\)[\s\S]*?at least 28px[\s\S]*?clamp\(52px,2cqw,80px\)[\s\S]*?14–16px are too small/);
+  assert.match(source, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
   assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
-  assert.match(source, /use the General HTML plugin and prefer a compact inline SVG/);
+  assert.match(source, /Use native draw only[\s\S]*?10 or fewer basic primitives or line segments[\s\S]*?larger static visuals[\s\S]*?General HTML/);
+  assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
@@ -1731,6 +1735,40 @@ test("request tracing preserves a client-cancelled model attempt", { timeout: 20
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
     await fs.promises.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test("API mode accepts a valid simple native draw", { timeout: 20000 }, async () => {
+  const responseContent=JSON.stringify({intent:"plot",commands:[{tool:"draw",origin:[100,100],types:["rect"],items:[[0,0,4000,4000]]}]}),upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload=validPayload();payload.trigger="manual";payload.userAction="plot";
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,1);
+    assert.equal(body.commands[0]?.tool,"draw");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("API mode retries an invalid native draw without restoring legacy animation", { timeout: 20000 }, async () => {
+  const invalid=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["circle","line"],items:[[0,0,100,200],[0,0,200]]}]}),
+    corrected=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["ellipse","circle"],items:[[0,0,100,200],[0,0,20]]}]}),
+    upstream=await startApiServer("",{response:({index})=>({body:index===0?invalid:corrected})}),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,2);
+    assert.deepEqual(body.commands[0]?.types,["ellipse","circle"]);
+    const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
+    assert.match(retryText,/previous response contained a draw command/);
+    assert.match(retryText,/10 or fewer basic primitives or line segments/);
+    assert.doesNotMatch(retryText,/animate_scene/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
   }
 });
 

@@ -70,6 +70,7 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
+- [What's new in 0.8.1](#whats-new-in-081)
 - [What's new in 0.8.0](#whats-new-in-080)
 - [What's new in 0.7.2](#whats-new-in-072)
 - [Previous releases](#previous-releases)
@@ -188,10 +189,15 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
 
+## What's new in 0.8.1
+
+- **Live public data in General HTML widgets.** When a public HTTPS API, RSS feed, or image is blocked by browser CORS, General HTML widgets can fall back to PenEcho's local read-only bridge, enabling live news, dashboards, and other refreshed content without exposing credentials.
+- **SVG-first animation and complex graphics.** Animations and complex custom visuals now default to responsive SVG inside General HTML, providing richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient.
+
 ## What's new in 0.8.0
 
 - **Professional diagrams beyond flowcharts.** Create architecture, UML, sequence, BPMN, data, engineering, scientific, medical, financial, geographic, and other domain diagrams with editable professional source. Supported formats use on-demand local renderers; specialized formats can return complete HTML without forcing every request into one renderer.
-- **On by default, with a smaller prompt footprint.** **Professional Diagrams** starts enabled and can be turned off from **Plugins**. Only its compact capability guide is sent to the model; full CSS and renderer dependencies stay local and load on demand.
+- **Plugin defaults with a smaller prompt footprint.** **General HTML** is always enabled and cannot be unchecked. **Professional Diagrams** starts enabled and can be turned off, while every other built-in or private plugin starts disabled. Explicit choices are preserved across upgrades. Only enabled plugins' compact capability guides are sent to the model; full CSS and renderer dependencies stay local and load on demand.
 - **Refine plugin widgets by drawing on them.** Use the Pen to draw or write the requested changes directly over a widget returned by a plugin, then click the **AI Refine** button that appears to generate its upgraded replacement. This workflow applies only to plugin-returned widgets.
 - **Device or PenEcho server storage.** Save canvases only in the current browser, or on the computer running PenEcho so other authorized devices using the same server can open them. Saving first confirms unfinished canvas controls so text boxes, diagrams, and widgets are included.
 - **Clipboard, text, and extensible plugins.** Read text or images from the system clipboard directly into native canvas controls, copy returned text, formulas, and professional diagram source, and reselect editable text boxes with Hand. Built-in and private plugins can be copied into a custom plugin, with optional CSS loaded only when that plugin is used.

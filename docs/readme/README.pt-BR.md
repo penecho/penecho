@@ -74,10 +74,15 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Salve instantâneos neste dispositivo ou no servidor PenEcho e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
 
+## Novidades da versão 0.8.1
+
+- **Dados públicos ao vivo em widgets General HTML.** Quando uma API HTTPS pública, feed RSS ou imagem é bloqueado pelo CORS do navegador, o widget pode usar a ponte local somente leitura do PenEcho para exibir notícias, painéis e outros conteúdos atualizados sem expor credenciais.
+- **SVG como padrão para animações e gráficos complexos.** Animações e visuais personalizados complexos agora priorizam SVG responsivo dentro do General HTML, oferecendo movimentos, sobreposições e gráficos escaláveis mais expressivos com uma saída de modelo compacta e eficiente em tokens.
+
 ## Novidades da versão 0.8.0
 
 - **Diagramas profissionais além de fluxogramas.** Crie diagramas de arquitetura, UML, sequência, BPMN, dados, engenharia, ciência, medicina, finanças e geografia com fonte profissional editável. Formatos compatíveis são renderizados localmente sob demanda; formatos especializados podem continuar em HTML completo.
-- **Ativado por padrão com prompt mais leve.** **Professional Diagrams** fica disponível de imediato e pode ser desativado em **Plugins**. Só um guia compacto é enviado ao modelo; o CSS completo e os renderizadores permanecem locais e carregam sob demanda.
+- **Padrões de plugins com prompt mais leve.** **General HTML** fica sempre ativado e não pode ser desmarcado. **Professional Diagrams** começa ativado e pode ser desativado; todos os demais plugins integrados ou privados começam desativados. As escolhas salvas explicitamente são preservadas nas atualizações. Apenas os guias compactos dos plugins ativados são enviados ao modelo; o CSS completo e os renderizadores permanecem locais e carregam sob demanda.
 - **Refine widgets de plugins desenhando sobre eles.** Use a caneta para desenhar ou escrever as alterações diretamente sobre um widget retornado por um plugin e clique no botão **AI Refine** que aparece para gerar uma versão aprimorada. Esse fluxo se aplica somente a widgets retornados por plugins.
 - **Armazenamento neste dispositivo ou no servidor PenEcho.** Salve a tela apenas no navegador atual ou no computador que executa o PenEcho para que outros dispositivos autorizados do mesmo servidor possam abri-la. Controles pendentes são confirmados antes do salvamento.
 - **Área de transferência, texto e plugins extensíveis.** Insira texto ou imagens da área de transferência do sistema, copie textos, fórmulas e fontes profissionais retornadas pela IA e reedite caixas de texto com Hand. Plugins integrados ou privados também podem ser copiados como plugins personalizados com CSS opcional carregado somente durante o uso.

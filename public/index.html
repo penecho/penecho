@@ -491,34 +491,30 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">0.8.0</span>
+          <span class="changelog-version">0.8.1</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </header>
       <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Professional diagrams, editable source, and precise refinement</h2>
-        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.</p>
+        <h2 id="changelogTitle" data-i18n="changelogTitle">Live public data and more expressive SVG visuals</h2>
+        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.8.1 gives General HTML widgets reliable public-data access and makes SVG the default for animation and complex graphics.</p>
         <div class="changelog-demo">
           <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" loading="eager" decoding="async">
         </div>
-        <p class="changelog-plugin-note" data-i18n="changelogPluginEnableNote">Professional Diagrams is on by default. You can turn it off at any time from Plugins.</p>
         <section class="changelog-release" aria-labelledby="changelogCurrentVersion">
-          <h3 id="changelogCurrentVersion">0.8.0</h3>
+          <h3 id="changelogCurrentVersion">0.8.1</h3>
           <ul>
-            <li data-i18n="changelogVisualPlugins">Professional Diagrams chooses an appropriate editable domain format, renders supported formats locally, and preserves copyable professional source for specialized HTML diagrams.</li>
-            <li data-i18n="changelogCanvasWorkflow">Draw or describe the professional diagram you need; PenEcho chooses a suitable format and returns it as a canvas widget.</li>
-            <li data-i18n="changelogPluginRefine">Plugin-returned widgets can be refined directly: draw the requested changes over the widget with the Pen, then click the Refine button that appears. This workflow applies only to plugin widgets.</li>
-            <li data-i18n="changelogDesktopAccess">Professional Diagrams is second in the plugin list and on by default; its compact guide adds about 1.5k–2k prompt tokens per request, while full CSS and renderers stay local.</li>
+            <li data-i18n="changelogVisualPlugins">When browser CORS blocks a public HTTPS API, RSS feed, or image, General HTML widgets can fall back to PenEcho's local read-only bridge for live, refreshable content without exposing credentials.</li>
+            <li data-i18n="changelogCanvasWorkflow">Animations and complex custom visuals now default to responsive SVG, enabling richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient. Legacy declarative animations no longer load, while older canvases still open without errors.</li>
           </ul>
         </section>
         <section class="changelog-release changelog-earlier" aria-labelledby="changelogEarlierTitle">
           <h3 id="changelogEarlierTitle" data-i18n="changelogEarlierTitle">Earlier highlights</h3>
           <ul>
-            <li data-i18n="changelogImagesSummary">0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.</li>
-            <li data-i18n="changelogPluginsSummary">0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.</li>
-            <li data-i18n="changelogAnimation">Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.</li>
+            <li data-i18n="changelogImagesSummary">0.8.0 added professional diagrams with editable source, direct widget refinement, server-backed canvas storage, and richer clipboard workflows.</li>
+            <li data-i18n="changelogPluginsSummary">0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.</li>
           </ul>
         </section>
       </div>
@@ -529,6 +525,7 @@
   </div>
   <script src="/api/config.js"></script>
   <script src="locales/zh.js"></script>
+  <script src="draw.js"></script>
   <script src="selection.js"></script>
   <script src="tour.js"></script>
   <script src="mixed-text.js"></script>

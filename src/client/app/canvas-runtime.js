@@ -1,4 +1,5 @@
 // Canvas tiles, widgets, animations, rendering, navigation, and text editing.
+  const WIDGET_REFINE_PROXIMITY_PX = 24;
   const objectChromeButtons = new Map();
   let nextObjectChromeStyleId = 1;
   function tile(tx, ty, create = true) {
@@ -2069,9 +2070,9 @@
     for (const point of points) {
       const next = pointDistanceToWidget(point, widget) * state.scale;
       distance = Math.min(distance, next);
-      if (next <= 48) hits++;
+      if (next <= WIDGET_REFINE_PROXIMITY_PX) hits++;
     }
-    return distance <= 48 ? { distance, hits } : null;
+    return distance <= WIDGET_REFINE_PROXIMITY_PX ? { distance, hits } : null;
   }
   function clearWidgetRefineCandidate() {
     state.widgetRefineCandidate = null;

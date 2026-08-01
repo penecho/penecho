@@ -74,10 +74,15 @@ npm start
 - Enregistrez les instantanés sur cet appareil ou sur le serveur PenEcho et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
+## Nouveautés de la version 0.8.1
+
+- **Données publiques en direct dans les widgets General HTML.** Lorsqu'une API HTTPS publique, un flux RSS ou une image est bloqué par la politique CORS du navigateur, le widget peut utiliser la passerelle locale en lecture seule de PenEcho pour afficher des actualités, tableaux de bord et autres contenus actualisés sans exposer d'identifiants.
+- **SVG par défaut pour les animations et graphismes complexes.** Les animations et visuels personnalisés complexes utilisent désormais en priorité un SVG réactif dans General HTML, pour des mouvements, superpositions et graphismes vectoriels plus riches avec une sortie du modèle compacte et économe en tokens.
+
 ## Nouveautés de la version 0.8.0
 
 - **Des diagrammes professionnels bien au-delà des organigrammes.** Créez des diagrammes d'architecture, UML, séquence, BPMN, données, ingénierie, science, médecine, finance et géographie avec une source professionnelle modifiable. Les formats pris en charge sont rendus localement à la demande ; les formats spécialisés peuvent rester en HTML complet.
-- **Activé par défaut avec un prompt allégé.** **Professional Diagrams** est disponible immédiatement et peut être désactivé dans **Plugins**. Seul un guide compact est envoyé au modèle ; le CSS complet et les moteurs de rendu restent locaux et sont chargés à la demande.
+- **Paramètres par défaut des plugins avec un prompt allégé.** **General HTML** est toujours activé et ne peut pas être décoché. **Professional Diagrams** est activé par défaut et peut être désactivé ; tous les autres plugins intégrés ou privés sont désactivés par défaut. Les choix enregistrés explicitement sont conservés lors des mises à niveau. Seuls les guides compacts des plugins activés sont envoyés au modèle ; le CSS complet et les moteurs de rendu restent locaux et sont chargés à la demande.
 - **Affinez les widgets de plugins en dessinant dessus.** Avec le stylet, dessinez ou écrivez les modifications directement sur un widget renvoyé par un plugin, puis cliquez sur le bouton **AI Refine** qui apparaît pour générer sa version améliorée. Ce flux s'applique uniquement aux widgets renvoyés par des plugins.
 - **Stockage sur cet appareil ou sur le serveur PenEcho.** Enregistrez le canevas uniquement dans le navigateur actuel ou sur l'ordinateur qui exécute PenEcho afin que d'autres appareils autorisés du même serveur puissent l'ouvrir. Les contrôles en attente sont confirmés avant l'enregistrement.
 - **Presse-papiers, texte et plugins extensibles.** Ajoutez du texte ou des images depuis le presse-papiers système, copiez les textes, formules et sources professionnelles renvoyés par l'IA et rééditez les zones de texte avec Hand. Un plugin intégré ou privé peut aussi être copié comme plugin personnalisé avec du CSS facultatif chargé seulement à l'utilisation.

@@ -74,10 +74,15 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Speichere Schnappschüsse auf diesem Gerät oder dem PenEcho-Server und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
+## Neu in Version 0.8.1
+
+- **Öffentliche Live-Daten in General-HTML-Widgets.** Wenn eine öffentliche HTTPS-API, ein RSS-Feed oder ein Bild durch Browser-CORS blockiert wird, kann das Widget auf PenEchos lokale, schreibgeschützte Brücke zurückgreifen und so Nachrichten, Dashboards und andere aktualisierte Inhalte ohne offengelegte Zugangsdaten anzeigen.
+- **SVG als Standard für Animationen und komplexe Grafiken.** Animationen und komplexe benutzerdefinierte Visualisierungen verwenden jetzt bevorzugt responsives SVG in General HTML. Das ermöglicht reichhaltigere Bewegungen, Überlagerungen und skalierbare Grafiken bei kompakter, token-effizienter Modellausgabe.
+
 ## Neu in Version 0.8.0
 
 - **Professionelle Diagramme weit über Flussdiagramme hinaus.** Erstellen Sie Architektur-, UML-, Sequenz-, BPMN-, Daten-, technische, wissenschaftliche, medizinische, finanzielle und geografische Diagramme mit editierbarem professionellem Quelltext. Unterstützte Formate werden bei Bedarf lokal gerendert; Spezialformate können weiterhin als vollständiges HTML dargestellt werden.
-- **Standardmäßig aktiviert, mit kleinerem Prompt.** **Professional Diagrams** ist sofort verfügbar und kann unter **Plugins** deaktiviert werden. Nur ein kompakter Funktionsleitfaden geht an das Modell; vollständiges CSS und Renderer bleiben lokal und werden bei Bedarf geladen.
+- **Plugin-Standardeinstellungen mit kleinerem Prompt.** **General HTML** ist immer aktiviert und kann nicht abgewählt werden. **Professional Diagrams** ist standardmäßig aktiviert und kann deaktiviert werden; alle anderen integrierten oder privaten Plugins sind standardmäßig deaktiviert. Bereits ausdrücklich gespeicherte Einstellungen bleiben bei Updates erhalten. Nur die kompakten Funktionsleitfäden aktivierter Plugins gehen an das Modell; vollständiges CSS und Renderer bleiben lokal und werden bei Bedarf geladen.
 - **Plugin-Widgets direkt durch Zeichnen verfeinern.** Zeichnen oder schreiben Sie die gewünschten Änderungen mit dem Stift direkt auf ein von einem Plugin zurückgegebenes Widget. Klicken Sie dann auf die eingeblendete Schaltfläche **AI Refine**, um eine aktualisierte Ersatzversion zu erzeugen. Dieser Ablauf gilt nur für von Plugins zurückgegebene Widgets.
 - **Speicherung auf diesem Gerät oder dem PenEcho-Server.** Leinwände können nur im aktuellen Browser oder auf dem PenEcho-Rechner gespeichert werden, damit andere autorisierte Geräte desselben Servers sie öffnen können. Vor dem Speichern werden unfertige Steuerelemente bestätigt.
 - **Zwischenablage, Text und erweiterbare Plugins.** Fügen Sie Text oder Bilder aus der Systemzwischenablage ein, kopieren Sie KI-Text, Formeln und professionellen Diagrammquelltext und bearbeiten Sie Textfelder erneut mit Hand. Integrierte und private Plugins lassen sich einschließlich optionalem, nur bei Nutzung geladenem CSS als eigene Plugins kopieren.

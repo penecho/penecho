@@ -35,14 +35,14 @@
 
   inner.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
   inner.setAttribute("title", "Dynamic canvas widget");
-  inner.addEventListener("load", () => {
-    if (innerDocumentUrl) {
-      URL.revokeObjectURL(innerDocumentUrl);
-      innerDocumentUrl = null;
-    }
-    forwardWidgetState();
-  });
+  inner.addEventListener("load", forwardWidgetState);
   document.body.append(inner);
+  function releaseInnerDocumentUrl() {
+    if (!innerDocumentUrl) return;
+    URL.revokeObjectURL(innerDocumentUrl);
+    innerDocumentUrl = null;
+  }
+  addEventListener("pagehide", releaseInnerDocumentUrl, { once:true });
   function runtime() {
     const UPDATED = "penecho-widget-updated",
       DRAG_START = "penecho-widget-drag-start",
@@ -891,7 +891,7 @@
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         initialized = true;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
-        if (innerDocumentUrl) URL.revokeObjectURL(innerDocumentUrl);
+        releaseInnerDocumentUrl();
         innerDocumentUrl = URL.createObjectURL(new Blob([widgetDocument(message.html, message.pluginStyles || "")], { type:"text/html" }));
         inner.src = innerDocumentUrl;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"

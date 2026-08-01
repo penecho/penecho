@@ -212,7 +212,7 @@
       }
       if (commands.length) {
         setStatusKey("writing");
-        if (commands.length === 1 && commands[0].tool !== "erase") {
+        if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
           if (state.userRevision !== revision) throw Error(AI_CANCELLED);
           await animate(commands[0], revision, meta, run);
           checkAI(revision, run);
@@ -647,7 +647,7 @@
     let plotPixels = 0,
       widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
-    const acceptedTools = ["write_text", "draw_formula", "plot_function", "erase"];
+    const acceptedTools = ["write_text", "draw_formula", "plot_function", "draw", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
     if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
@@ -685,6 +685,11 @@
           }
           c.color = aiColor;
           plotPixels += c.w * c.h;
+        }
+        if (c.tool === "draw") {
+          const normalized = DRAW?.normalize(c, SIZE);
+          if (!normalized) return null;
+          c = { ...normalized, color:aiColor };
         }
         if (c.tool === "html_widget") {
           const allowCopy = c.pluginId !== "image-search",
@@ -809,6 +814,11 @@
         } else if (c.tool === "animate_scene") {
           pendingCommand = ANIMATION.normalize(c, SIZE);
           image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
+        } else if (c.tool === "draw") {
+          const made = DRAW.render(c, offscreen, c.color);
+          image = made.image;
+          x = made.x;
+          y = made.y;
         }
         if (image) {
           checkAI(revision, run);
@@ -844,6 +854,11 @@
     else if (c.tool === "animate_scene") {
       pendingCommand = ANIMATION.normalize(c, SIZE);
       image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
+    } else if (c.tool === "draw") {
+      const made = DRAW.render(c, offscreen, c.color);
+      image = made.image;
+      x = made.x;
+      y = made.y;
     }
     checkAI(revision, run);
     if (!image) throw Error(`Unable to prepare ${c.tool}`);
@@ -869,7 +884,7 @@
         .sort((a, b) => a.y - b.y || a.x - b.x),
       placed = [],
       fixed = items
-        .filter((item) => !["write_text", "draw_formula"].includes(item.command.tool))
+        .filter((item) => !["write_text", "draw_formula", "draw"].includes(item.command.tool))
         .map((item) => item.erase ? item.bounds : { x: item.x, y: item.y, w: item.layoutWidth, h: item.layoutHeight });
     for (const item of flow) {
       const width = item.image.logicalWidth || item.image.width,

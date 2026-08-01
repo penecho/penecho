@@ -313,7 +313,7 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
   assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:authenticatedApiHeaders/);
   assert.match(app, /fetch\("\/api\/ai\/command"[\s\S]*?headers:\s*authenticatedApiHeaders/);
-  assert.match(functionSource(app, "validate"), /acceptedTools = \["write_text", "draw_formula", "plot_function", "erase"\]/);
+  assert.match(functionSource(app, "validate"), /acceptedTools = \["write_text", "draw_formula", "plot_function", "draw", "erase"\]/);
   assert.doesNotMatch(functionSource(app, "validate"), /animate_scene/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);
   assert.match(functionSource(app, "renderPluginOptions"), /plugin\.id === "general" \? t\("pluginPublicHttps"\)/);
@@ -401,6 +401,19 @@ test("General HTML stays mandatory while optional data plugins can detach widget
   assert.match(pointerDown, /widgetRuntimeEnabled\(\) && valid\(point\) \? widgetPointerHit/);
   assert.match(validate, /if \(widgetPluginIds\.size\) acceptedTools\.push\("html_widget"\)/);
   assert.match(validate, /allowCopy = c\.pluginId !== "image-search"[\s\S]*?allowCopy && typeof c\.copyText === "string"/);
+});
+
+test("simple native draw is loaded and rendered without enabling legacy animation output", () => {
+  const app = read("public/app.js"),
+    html = read("public/index.html"),
+    validate = functionSource(app, "validate"),
+    prepare = functionSource(app, "preparePendingItem");
+  assert.match(html, /<script src="draw\.js"><\/script>[\s\S]*?<script src="app\.js"><\/script>/);
+  assert.match(app, /const DRAW = window\.PENECHO_DRAW/);
+  assert.match(validate, /acceptedTools = \["write_text", "draw_formula", "plot_function", "draw", "erase"\]/);
+  assert.match(validate, /c\.tool === "draw"[\s\S]*?DRAW\?\.normalize\(c, SIZE\)/);
+  assert.match(prepare, /c\.tool === "draw"[\s\S]*?DRAW\.render\(c, offscreen, c\.color\)/);
+  assert.doesNotMatch(validate, /animate_scene/);
 });
 
 test("AI completion always leaves a user-visible result or diagnostic", () => {
@@ -803,7 +816,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(latch, /if \(state\.widgetRefineCandidate[\s\S]*?return state\.widgetRefineCandidate/);
   assert.match(latch, /for \(const widget of visibleWidgets\(\)\)[\s\S]*?strokeWidgetProximity\(widget, drawing\)/);
   assert.doesNotMatch(latch, /widgetRefinePointer|Hover|Focus|Grace|Date\.now/);
-  assert.match(strokeProximity, /drawing\.trail[\s\S]*?drawing\.last[\s\S]*?next <= 48[\s\S]*?distance <= 48/);
+  assert.match(app, /const WIDGET_REFINE_PROXIMITY_PX = 24/);
+  assert.match(strokeProximity, /drawing\.trail[\s\S]*?drawing\.last[\s\S]*?next <= WIDGET_REFINE_PROXIMITY_PX[\s\S]*?distance <= WIDGET_REFINE_PROXIMITY_PX/);
   const nonHandChrome = chrome.slice(0, chrome.indexOf("const specs = [];"));
   assert.match(nonHandChrome, /state\.mode !== "hand"[\s\S]*?addWidgetToolSpecs\(specs, candidate\.widget, \{ refine:candidate \}\)/);
   assert.doesNotMatch(nonHandChrome, /copy:true/);

@@ -422,9 +422,8 @@ body.changelog-open { overflow: hidden; }
 .changelog-scroll { min-height: 0; padding: 0 18px 16px; overflow: auto; overscroll-behavior: contain; }
 .changelog-dialog h2 { margin: 2px 0 0; overflow-wrap: anywhere; color: var(--ink); font: 760 1.28rem/1.3 system-ui, "Noto Sans SC", sans-serif; letter-spacing: 0; }
 .changelog-intro { margin: 8px 0 14px; color: color-mix(in srgb, var(--ink) 82%, var(--muted)); font: .8rem/1.6 system-ui, "Noto Sans SC", sans-serif; }
-.changelog-demo { width: 100%; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: 6px; background: #0b0b0b; }
+.changelog-demo { width: 100%; margin-bottom: 14px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: 6px; background: #0b0b0b; }
 .changelog-demo img { display: block; width: 100%; max-height: 310px; object-fit: contain; }
-.changelog-plugin-note { margin: 9px 0 18px; padding: 9px 11px; overflow-wrap: anywhere; color: #111; border: 1px solid #c8c8c8; border-radius: 5px; background: #fff; font: 750 .76rem/1.5 system-ui, "Noto Sans SC", sans-serif; }
 .changelog-release { padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--line) 64%, transparent); }
 .changelog-release + .changelog-release { margin-top: 16px; }
 .changelog-release h3 { margin: 0 0 8px; color: var(--gold-bright); font: 800 .76rem/1.3 system-ui, "Noto Sans SC", sans-serif; letter-spacing: 0; }

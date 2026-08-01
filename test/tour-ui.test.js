@@ -83,7 +83,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("0.8.0 changelog is a one-page dialog shown once after the feature tour", () => {
+test("0.8.1 changelog is a one-page dialog shown once after the feature tour", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -92,11 +92,11 @@ test("0.8.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(layer, /class="changelog-layer"[^>]*hidden[^>]*aria-hidden="true"/);
   assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"[^>]*aria-describedby="changelogIntro"/);
   for (const id of ["changelogClose", "changelogTitle", "changelogIntro", "changelogCurrentVersion", "changelogEarlierTitle", "changelogDone"]) assert.match(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />0\.8\.0</);
+  assert.match(layer, />0\.8\.1</);
   assert.match(layer, /class="changelog-demo"[\s\S]*?penecho_plugins\.webp[\s\S]*?loading="eager"/);
-  assert.match(layer, /class="changelog-plugin-note"[^>]*data-i18n="changelogPluginEnableNote"/);
+  assert.doesNotMatch(layer, /class="changelog-plugin-note"/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "0\.8\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "0\.8\.1"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
@@ -104,14 +104,16 @@ test("0.8.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
-  assert.match(css, /\.changelog-plugin-note\s*\{[^}]*color:\s*#111;[^}]*background:\s*#fff/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogPluginEnableNote", "changelogVisualPlugins", "changelogCanvasWorkflow", "changelogPluginRefine", "changelogDesktopAccess", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogAnimation", "changelogDone"]) {
+  assert.match(css, /\.changelog-demo\s*\{[^}]*margin-bottom:\s*14px/);
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogVisualPlugins", "changelogCanvasWorkflow", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogDone"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
-  assert.match(layer, /data-i18n="changelogPluginRefine"/);
-  assert.match(app, /changelogPluginRefine:[^\n]*Refine button[^\n]*only to plugin widgets/);
-  assert.match(zh, /changelogPluginRefine:[^\n]*画笔[^\n]*AI 完善（Refine）[^\n]*仅适用于插件控件/);
+  assert.match(layer, /data-i18n="changelogVisualPlugins"[\s\S]*data-i18n="changelogCanvasWorkflow"/);
+  assert.match(app, /changelogVisualPlugins:[^\n]*local read-only bridge[^\n]*without exposing credentials/);
+  assert.match(app, /changelogCanvasWorkflow:[^\n]*responsive SVG[^\n]*token-efficient[^\n]*Legacy declarative animations no longer load[^\n]*older canvases still open without errors/);
+  assert.match(zh, /changelogVisualPlugins:[^\n]*本地只读桥接[^\n]*无需暴露密钥/);
+  assert.match(zh, /changelogCanvasWorkflow:[^\n]*响应式 SVG[^\n]*模型 token[^\n]*旧版声明式动画不再加载[^\n]*旧画布仍可无报错打开/);
 });
 
 test("feature tour copy is complete in English and Chinese", () => {
@@ -159,7 +161,7 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /闭合套索/);
   assert.match(app, /tourPluginsBody:[\s\S]*Real Photos[\s\S]*Professional Diagrams[\s\S]*copyable source/);
   assert.match(zh, /显示网络真实照片.*一张/);
-  assert.match(zh, /专业图示.*专业源码/);
+  assert.match(zh, /tourPluginsBody:[^\n]*专业图示[^\n]*源码/);
   assert.match(app, /tourHandBody:[\s\S]*small top handle[\s\S]*HTML widgets[\s\S]*click inside HTML widgets/);
   assert.match(zh, /上方的小把手.*AI HTML 控件/);
   assert.match(zh, /直接点击 HTML 控件内部/);

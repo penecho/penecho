@@ -103,6 +103,7 @@
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
+  const DRAW = window.PENECHO_DRAW;
   const SELECT = window.PENECHO_SELECTION;
   const TOUR = window.PENECHO_TOUR;
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;
@@ -333,17 +334,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Professional diagrams, editable source, and precise refinement",
-      changelogIntro: "Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.",
-      changelogPluginEnableNote: "Professional Diagrams is on by default. You can turn it off at any time from Plugins.",
-      changelogVisualPlugins: "Professional Diagrams chooses an appropriate editable domain format. Supported formats render locally in the existing iframe; specialized or unlisted formats can use generated HTML while preserving copyable professional source.",
-      changelogCanvasWorkflow: "Draw or describe the professional diagram you need; PenEcho chooses a suitable format and returns it as a canvas widget.",
-      changelogPluginRefine: "Plugin-returned widgets can be refined directly: draw the requested changes over the widget with the Pen, then click the Refine button that appears. This workflow applies only to plugin widgets.",
-      changelogDesktopAccess: "Professional Diagrams is second in the plugin list and on by default. Its compact capability guide adds about 1.5k–2k prompt tokens per AI request; full renderer CSS and libraries stay local and load only when needed.",
+      changelogTitle: "Live public data and more expressive SVG visuals",
+      changelogIntro: "Version 0.8.1 gives General HTML widgets reliable public-data access and makes SVG the default for animation and complex graphics.",
+      changelogVisualPlugins: "When browser CORS blocks a public HTTPS API, RSS feed, or image, General HTML widgets can fall back to PenEcho's local read-only bridge for live, refreshable content without exposing credentials.",
+      changelogCanvasWorkflow: "Animations and complex custom visuals now default to responsive SVG, enabling richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient. Legacy declarative animations no longer load, while older canvases still open without errors.",
       changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
-      changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
-      changelogAnimation: "Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.",
+      changelogImagesSummary: "0.8.0 added professional diagrams with editable source, direct widget refinement, server-backed canvas storage, and richer clipboard workflows.",
+      changelogPluginsSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -775,7 +772,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.8.0";
+  const CHANGELOG_VERSION = "0.8.1";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -2419,6 +2416,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   const key = (x, y) => `${x},${y}`;
 // Canvas tiles, widgets, animations, rendering, navigation, and text editing.
+  const WIDGET_REFINE_PROXIMITY_PX = 24;
   const objectChromeButtons = new Map();
   let nextObjectChromeStyleId = 1;
   function tile(tx, ty, create = true) {
@@ -4489,9 +4487,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const point of points) {
       const next = pointDistanceToWidget(point, widget) * state.scale;
       distance = Math.min(distance, next);
-      if (next <= 48) hits++;
+      if (next <= WIDGET_REFINE_PROXIMITY_PX) hits++;
     }
-    return distance <= 48 ? { distance, hits } : null;
+    return distance <= WIDGET_REFINE_PROXIMITY_PX ? { distance, hits } : null;
   }
   function clearWidgetRefineCandidate() {
     state.widgetRefineCandidate = null;
@@ -7327,7 +7325,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       if (commands.length) {
         setStatusKey("writing");
-        if (commands.length === 1 && commands[0].tool !== "erase") {
+        if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
           if (state.userRevision !== revision) throw Error(AI_CANCELLED);
           await animate(commands[0], revision, meta, run);
           checkAI(revision, run);
@@ -7762,7 +7760,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     let plotPixels = 0,
       widgetSlots = widgetEditTarget ? 1 : Math.max(0, MAX_VISIBLE_WIDGETS - state.widgets.length),
       widgetPluginIds = new Set(enabledPluginDescriptors().map((plugin) => plugin.id));
-    const acceptedTools = ["write_text", "draw_formula", "plot_function", "erase"];
+    const acceptedTools = ["write_text", "draw_formula", "plot_function", "draw", "erase"];
     if (widgetPluginIds.size) acceptedTools.push("html_widget");
     if (widgetPluginIds.has("flowchart")) acceptedTools.push("diagram_source");
     const validated = cmds
@@ -7800,6 +7798,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           }
           c.color = aiColor;
           plotPixels += c.w * c.h;
+        }
+        if (c.tool === "draw") {
+          const normalized = DRAW?.normalize(c, SIZE);
+          if (!normalized) return null;
+          c = { ...normalized, color:aiColor };
         }
         if (c.tool === "html_widget") {
           const allowCopy = c.pluginId !== "image-search",
@@ -7924,6 +7927,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         } else if (c.tool === "animate_scene") {
           pendingCommand = ANIMATION.normalize(c, SIZE);
           image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
+        } else if (c.tool === "draw") {
+          const made = DRAW.render(c, offscreen, c.color);
+          image = made.image;
+          x = made.x;
+          y = made.y;
         }
         if (image) {
           checkAI(revision, run);
@@ -7959,6 +7967,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else if (c.tool === "animate_scene") {
       pendingCommand = ANIMATION.normalize(c, SIZE);
       image = pendingCommand ? ANIMATION.rasterize(pendingCommand, offscreen, 0, Math.min(2, sharpRenderRatio())) : null;
+    } else if (c.tool === "draw") {
+      const made = DRAW.render(c, offscreen, c.color);
+      image = made.image;
+      x = made.x;
+      y = made.y;
     }
     checkAI(revision, run);
     if (!image) throw Error(`Unable to prepare ${c.tool}`);
@@ -7984,7 +7997,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         .sort((a, b) => a.y - b.y || a.x - b.x),
       placed = [],
       fixed = items
-        .filter((item) => !["write_text", "draw_formula"].includes(item.command.tool))
+        .filter((item) => !["write_text", "draw_formula", "draw"].includes(item.command.tool))
         .map((item) => item.erase ? item.bounds : { x: item.x, y: item.y, w: item.layoutWidth, h: item.layoutHeight });
     for (const item of flow) {
       const width = item.image.logicalWidth || item.image.width,

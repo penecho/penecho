@@ -301,10 +301,15 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /including APIs, RSS\/Atom feeds, and images/);
   assert.match(general.document, /五颜六色的钟/);
   assert.match(general.document, /Native HTML, CSS, JavaScript, timers, SVG, and canvas remain preferred/);
+  assert.match(general.document, /native `draw`[\s\S]*?10 or fewer basic primitives or line segments/);
   assert.match(general.document, /SVG is the default static and animated visual format/);
   assert.match(general.document, /Placement is semantic, not a search for unused canvas space/);
   assert.match(general.document, /overlay only the solution path on an existing maze/);
+  assert.match(general.document, /existing figures or objects[\s\S]*?position the transparent widget over their actual locations[\s\S]*?never redraw the figures/);
   assert.match(general.document, /Dynamic SVG fully supports/);
+  assert.match(general.document, /multi-part SVG visual[\s\S]*?wrapping CSS layout with tight-viewBox panels[\s\S]*?never make the whole widget one fixed-size viewBox/);
+  assert.match(general.document, /explicitly aim the camera at the subject and keep it centered after resize/);
+  assert.match(general.document, /Redraw canvas, SVG, and 3D visuals after viewport changes when needed/);
   assert.match(general.document, /source URLs from fetched news[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer/);
   const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
   assert.deepEqual([...flowchart.connect], []);
@@ -518,7 +523,6 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /touchCount\(\) >= 2[\s\S]*?cancelAllHoldsForNavigation/);
   assert.match(host, /hit:"resize"[\s\S]*?hit:"width"[\s\S]*?hit:"height"/);
   assert.match(host, /penecho-widget-state/);
-  assert.match(host, /inner\.addEventListener\("load", \(\) => \{[\s\S]*?URL\.revokeObjectURL\(innerDocumentUrl\)[\s\S]*?forwardWidgetState\(\)/);
   assert.match(host, /function setRuntimeActive\(active\)/);
   assert.match(host, /document\.getAnimations\(\)/);
   assert.match(host, /pauseAnimations/);
@@ -549,6 +553,16 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(html, /widget-host\.js/);
   assert.match(html, /html, body, iframe \{[^}]*color-scheme: light/);
   assert.match(html, /iframe \{[^}]*touch-action: none/);
+});
+
+test("widget host keeps the active Blob URL across stale iframe load events", () => {
+  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
+    innerLoadRegistration = host.slice(host.indexOf('inner.addEventListener("load"'), host.indexOf("document.body.append(inner)"));
+  assert.match(host, /inner\.addEventListener\("load", forwardWidgetState\)/);
+  assert.doesNotMatch(innerLoadRegistration, /revokeObjectURL|releaseInnerDocumentUrl/);
+  assert.match(host, /function releaseInnerDocumentUrl\(\)[\s\S]*?URL\.revokeObjectURL\(innerDocumentUrl\)[\s\S]*?innerDocumentUrl = null/);
+  assert.match(host, /addEventListener\("pagehide", releaseInnerDocumentUrl, \{ once:true \}\)/);
+  assert.match(host, /releaseInnerDocumentUrl\(\);[\s\S]*?innerDocumentUrl = URL\.createObjectURL[\s\S]*?inner\.src = innerDocumentUrl/);
 });
 
 test("widget iframe preserves direct interaction while forwarding resize and canvas navigation", () => {

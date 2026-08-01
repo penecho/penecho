@@ -102,6 +102,7 @@
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
+  const DRAW = window.PENECHO_DRAW;
   const SELECT = window.PENECHO_SELECTION;
   const TOUR = window.PENECHO_TOUR;
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;
@@ -332,17 +333,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Professional diagrams, editable source, and precise refinement",
-      changelogIntro: "Version 0.8.0 expands PenEcho from flowcharts into professional engineering, scientific, software, and business diagrams.",
-      changelogPluginEnableNote: "Professional Diagrams is on by default. You can turn it off at any time from Plugins.",
-      changelogVisualPlugins: "Professional Diagrams chooses an appropriate editable domain format. Supported formats render locally in the existing iframe; specialized or unlisted formats can use generated HTML while preserving copyable professional source.",
-      changelogCanvasWorkflow: "Draw or describe the professional diagram you need; PenEcho chooses a suitable format and returns it as a canvas widget.",
-      changelogPluginRefine: "Plugin-returned widgets can be refined directly: draw the requested changes over the widget with the Pen, then click the Refine button that appears. This workflow applies only to plugin widgets.",
-      changelogDesktopAccess: "Professional Diagrams is second in the plugin list and on by default. Its compact capability guide adds about 1.5k–2k prompt tokens per AI request; full renderer CSS and libraries stay local and load only when needed.",
+      changelogTitle: "Live public data and more expressive SVG visuals",
+      changelogIntro: "Version 0.8.1 gives General HTML widgets reliable public-data access and makes SVG the default for animation and complex graphics.",
+      changelogVisualPlugins: "When browser CORS blocks a public HTTPS API, RSS feed, or image, General HTML widgets can fall back to PenEcho's local read-only bridge for live, refreshable content without exposing credentials.",
+      changelogCanvasWorkflow: "Animations and complex custom visuals now default to responsive SVG, enabling richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient. Legacy declarative animations no longer load, while older canvases still open without errors.",
       changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
-      changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
-      changelogAnimation: "Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.",
+      changelogImagesSummary: "0.8.0 added professional diagrams with editable source, direct widget refinement, server-backed canvas storage, and richer clipboard workflows.",
+      changelogPluginsSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -774,7 +771,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.8.0";
+  const CHANGELOG_VERSION = "0.8.1";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
