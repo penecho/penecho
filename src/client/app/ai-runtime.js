@@ -150,7 +150,7 @@
           signal: controller.signal,
           method: "POST",
           credentials: "same-origin",
-          headers: authenticatedApiHeaders({ "Content-Type": "application/json" }),
+          headers: aiRequestHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             ...packed,
             trigger: automatic ? "user_paused" : "manual",

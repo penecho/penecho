@@ -938,6 +938,24 @@
   settingsCloseButton.addEventListener("click", () => closeSettings());
   settingsBackdrop.addEventListener("pointerdown", () => closeSettings());
   settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+  settingsOpenApi?.addEventListener("click", () => openConfiguration("api"));
+  settingsOpenSystem?.addEventListener("click", () => openConfiguration("system"));
+  configurationClose?.addEventListener("click", () => closeConfiguration());
+  configurationBackdrop?.addEventListener("pointerdown", () => closeConfiguration());
+  configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
+  canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
+  settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
+  settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
+  settingsConnectionList?.addEventListener("click", handleConnectionAction);
+  settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  settingsProvider?.addEventListener("change", updateSettingsProviderFields);
+  settingsApiFormat?.addEventListener("change", () => updateApiPresetFields(true, true));
+  settingsApiRegion?.addEventListener("change", () => updateApiPresetFields(true, false));
+  settingsApiService?.addEventListener("change", () => updateApiPresetFields(true, true));
+  settingsTraceToggle?.addEventListener("click", () => {
+    settings.requestTrace = !settings.requestTrace;
+    updateTraceToggle();
+  });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {
@@ -953,6 +971,10 @@
       event.preventDefault();
       event.stopPropagation();
       closeSettings();
+    } else if (event.key === "Escape" && settings.configurationMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeConfiguration();
     }
   }, true);
   window.addEventListener("keydown", handleFeatureTourKeydown, true);

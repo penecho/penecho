@@ -223,6 +223,7 @@ async function showLanAccessNotice(window) {
 }
 
 function startServer(configuration) {
+  configuration.env.PENECHO_CONFIG_FILE = configuration.configFile;
   applyEnvironment(configuration);
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -386,6 +387,11 @@ function registerIpc() {
   ipcMain.handle("penecho:update-download", event => fromCanvas(event) ? updateManager?.download() : false);
   ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);
   ipcMain.handle("penecho:update-install", event => fromCanvas(event) ? updateManager?.install() : false);
+  ipcMain.handle("penecho:open-settings", event => {
+    if (!fromCanvas(event)) return false;
+    showSettings();
+    return true;
+  });
   ipcMain.handle("penecho:get-settings", () => {
     const loaded = loadConfiguration();
     const settings = publicSettings(loaded.configuration, { version:pkg.version, hasSavedApiKey:Boolean(loaded.apiKey) }),

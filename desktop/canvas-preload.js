@@ -23,6 +23,9 @@ const updateApi = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("penechoDesktopUpdate", updateApi);
+contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
+  openSettings:() => invoke("penecho:open-settings"),
+}));
 
 function element(tag, className, value) {
   const node = document.createElement(tag);

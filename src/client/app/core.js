@@ -97,6 +97,45 @@
     settingsPanel = document.querySelector("#settingsPanel"),
     settingsButton = document.querySelector("#settingsBtn"),
     settingsCloseButton = document.querySelector("#settingsClose"),
+    settingsOpenApi = document.querySelector("#settingsOpenApi"),
+    settingsOpenSystem = document.querySelector("#settingsOpenSystem"),
+    configurationLayer = document.querySelector("#configurationLayer"),
+    configurationBackdrop = document.querySelector("#configurationBackdrop"),
+    configurationPanel = document.querySelector("#configurationPanel"),
+    configurationBody = document.querySelector("#configurationBody"),
+    configurationTitle = document.querySelector("#configurationTitle"),
+    configurationSubtitle = document.querySelector("#configurationSubtitle"),
+    configurationClose = document.querySelector("#configurationClose"),
+    connectionManager = document.querySelector("#connectionManager"),
+    connectionLimitText = document.querySelector("#connectionLimitText"),
+    settingsConnectionList = document.querySelector("#settingsConnectionList"),
+    settingsConnectionQuickList = document.querySelector("#settingsConnectionQuickList"),
+    settingsConnectionStatus = document.querySelector("#settingsConnectionStatus"),
+    settingsAddConnection = document.querySelector("#settingsAddConnection"),
+    canvasSettingsForm = document.querySelector("#canvasSettingsForm"),
+    settingsProvider = document.querySelector("#settingsProvider"),
+    settingsApiFields = document.querySelector("#settingsApiFields"),
+    settingsApiPresetFields = document.querySelector("#settingsApiPresetFields"),
+    settingsApiRegion = document.querySelector("#settingsApiRegion"),
+    settingsApiService = document.querySelector("#settingsApiService"),
+    settingsCliFields = document.querySelector("#settingsCliFields"),
+    settingsCliModel = document.querySelector("#settingsCliModel"),
+    settingsCliPath = document.querySelector("#settingsCliPath"),
+    settingsApiFormat = document.querySelector("#settingsApiFormat"),
+    settingsApiUrl = document.querySelector("#settingsApiUrl"),
+    settingsApiModel = document.querySelector("#settingsApiModel"),
+    settingsApiModelPresets = document.querySelector("#settingsApiModelPresets"),
+    settingsApiKey = document.querySelector("#settingsApiKey"),
+    settingsApiSaved = document.querySelector("#settingsApiSaved"),
+    settingsEffort = document.querySelector("#settingsEffort"),
+    settingsTimeout = document.querySelector("#settingsTimeout"),
+    settingsAutoDelay = document.querySelector("#settingsAutoDelay"),
+    settingsImageFormat = document.querySelector("#settingsImageFormat"),
+    settingsTraceToggle = document.querySelector("#settingsTraceToggle"),
+    settingsTraceLimit = document.querySelector("#settingsTraceLimit"),
+    settingsSaveButton = document.querySelector("#settingsSave"),
+    settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
+    settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
     summonToggle = document.querySelector("#summonToggle"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
@@ -109,6 +148,22 @@
   const ANIMATION = window.PENECHO_ANIMATION;
   const PLUGINS = window.PENECHO_PLUGINS;
   const SUMMON = window.PENECHO_SUMMON;
+  const API_PRESETS = Object.freeze({
+    "kimi-global-api":Object.freeze({ family:"kimi", region:"global", service:"api", format:"openai", url:"https://api.moonshot.ai/v1", model:"kimi-k3" }),
+    "kimi-china-api":Object.freeze({ family:"kimi", region:"china", service:"api", format:"openai", url:"https://api.moonshot.cn/v1", model:"kimi-k3" }),
+    "kimi-global-coding":Object.freeze({ family:"kimi", region:"global", service:"coding", format:"openai", url:"https://api.kimi.com/coding/v1", model:"k3" }),
+    "kimi-china-coding":Object.freeze({ family:"kimi", region:"china", service:"coding", format:"openai", url:"https://api.kimi.com/coding/v1", model:"k3" }),
+    "minimax-global-api":Object.freeze({ family:"minimax", region:"global", service:"api", format:"openai", url:"https://api.minimax.io/v1", model:"MiniMax-M3" }),
+    "minimax-china-api":Object.freeze({ family:"minimax", region:"china", service:"api", format:"openai", url:"https://api.minimaxi.com/v1", model:"MiniMax-M3" }),
+    "minimax-global-coding":Object.freeze({ family:"minimax", region:"global", service:"coding", format:"anthropic", url:"https://api.minimax.io/anthropic", model:"MiniMax-M3" }),
+    "minimax-china-coding":Object.freeze({ family:"minimax", region:"china", service:"coding", format:"anthropic", url:"https://api.minimaxi.com/anthropic", model:"MiniMax-M3" }),
+  });
+  const API_MODELS = Object.freeze({
+    openai:Object.freeze(["gpt-5.6-sol"]),
+    anthropic:Object.freeze(["claude-opus-4-8"]),
+    kimi:Object.freeze(["k3", "kimi-k3"]),
+    minimax:Object.freeze(["MiniMax-M3", "MiniMax-M2.7"]),
+  });
   const EFFORT_LEVELS = ["none", "low", "medium", "high", "max"],
     EFFORT_OPTIONS = ["config", ...EFFORT_LEVELS],
     TEXT_EDITOR_DEFAULT_WIDTH = 320,
@@ -343,6 +398,70 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
+      settingsApiSection: "AI connection",
+      settingsApiDescription: "Choose an API or an existing local CLI login.",
+      settingsProvider: "AI provider",
+      settingsCliModel: "Model (optional)",
+      settingsCliPath: "Command or path",
+      settingsCliHelp: "Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.",
+      settingsConfiguration: "Configuration",
+      settingsConnections: "AI connections",
+      settingsManage: "Manage",
+      settingsApiEntry: "API & CLI settings",
+      settingsApiEntryHelp: "Changes apply immediately",
+      settingsSystemEntry: "System settings",
+      settingsSystemEntryHelp: "Restart required after saving",
+      settingsApiDialogTitle: "API & CLI settings",
+      settingsApiDialogSubtitle: "Connections are shared with every client. Your current choice is private to this device and applies immediately.",
+      settingsConnectionEditor: "Connection details",
+      settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
+      settingsSavedConnections: "Saved connections",
+      settingsConnectionCount: "{count} of {limit} connections",
+      settingsAddConnection: "Add connection",
+      settingsSaveConnection: "Save connection",
+      settingsCancel: "Cancel",
+      settingsActive: "Current",
+      settingsUse: "Use",
+      settingsEdit: "Edit",
+      settingsDelete: "Delete",
+      settingsDefaultConnection: "Default connection",
+      settingsApiSummary: "{model} · {url}",
+      settingsCliSummary: "{provider} · {model}",
+      settingsCliDefaultModel: "CLI default model",
+      settingsConnectionActivated: "Connection changed. New requests will use it immediately.",
+      settingsConnectionDeleted: "Connection deleted.",
+      settingsConnectionSaved: "Connection saved. Devices using it will apply the changes to new requests immediately.",
+      settingsDeleteConfirm: "Delete this connection?",
+      settingsSystemDialogTitle: "System settings",
+      settingsSystemDialogSubtitle: "Saved changes take effect after PenEcho restarts.",
+      settingsKeySaved: "Key saved",
+      settingsApiFormat: "API format",
+      settingsApiRegion: "Access region",
+      settingsApiRegionGlobal: "Global",
+      settingsApiRegionChina: "Mainland China",
+      settingsApiService: "Service",
+      settingsApiServiceApi: "API",
+      settingsApiServiceCoding: "Coding Plan",
+      settingsApiModel: "Model",
+      settingsApiUrl: "Base URL",
+      settingsApiKey: "API key",
+      settingsApiKeyHelp: "Stored only in the local PenEcho configuration file.",
+      settingsSystemSection: "System",
+      settingsSystemDescription: "Simple defaults for requests and canvas behavior.",
+      settingsEffort: "Reasoning",
+      settingsProviderDefault: "Provider default",
+      settingsTimeout: "Timeout",
+      settingsAutoDelay: "Auto AI delay",
+      settingsImageFormat: "Canvas image",
+      settingsTraceLimit: "Keep request traces",
+      settingsRequestTrace: "Record request details",
+      settingsSave: "Save settings",
+      settingsLoading: "Loading settings…",
+      settingsLoadFailed: "Could not load settings.",
+      settingsSaving: "Saving…",
+      settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
+      settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
+      settingsCanvasSection: "Canvas preferences",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
       settingsSummonEnabled: "Show while AI thinks",
@@ -638,8 +757,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
+  const AI_CONNECTION_STORAGE_KEY = "penecho-ai-connection-id";
+  function selectedAiConnectionId() {
+    const id = String(localStorage.getItem(AI_CONNECTION_STORAGE_KEY) || "default").trim();
+    return id === "default" || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id) ? id : "default";
+  }
   function authenticatedApiHeaders(headers = {}) {
     return configuredAccessSession ? { ...headers, "X-PenEcho-Session":configuredAccessSession } : { ...headers };
+  }
+  function aiRequestHeaders(headers = {}) {
+    return { ...authenticatedApiHeaders(headers), "X-PenEcho-Connection":selectedAiConnectionId() };
   }
   const tiles = new Map(),
     state = {
@@ -1326,15 +1453,317 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     focusable[next]?.focus();
     return true;
   }
-  const settings = { open: false, restoreFocus: null };
+  if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null };
+  function syncLocalConnectionSelection() {
+    const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
+    if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
+    settings.activeConnectionId = activeId;
+    settings.connections = settings.connections.map(connection => ({ ...connection, active:connection.id === activeId }));
+  }
+  function setConfigurationSection(section, visible) {
+    if (!section) return;
+    section.hidden = !visible;
+    for (const control of section.querySelectorAll("input, select, button")) control.disabled = !visible;
+  }
+  function openConfiguration(mode) {
+    if (!configurationLayer || !canvasSettingsForm) return false;
+    closeSettings(false);
+    settings.configurationMode = mode;
+    settings.configurationRestoreFocus = mode === "api" ? settingsOpenApi : settingsOpenSystem;
+    configurationTitle.textContent = t(mode === "api" ? "settingsApiDialogTitle" : "settingsSystemDialogTitle");
+    configurationSubtitle.textContent = t(mode === "api" ? "settingsApiDialogSubtitle" : "settingsSystemDialogSubtitle");
+    setConfigurationSection(canvasSettingsForm.querySelector(".settings-api-group"), mode === "api");
+    setConfigurationSection(canvasSettingsForm.querySelector(".settings-system-group"), mode === "system");
+    connectionManager.hidden = mode !== "api";
+    canvasSettingsForm.dataset.editorHidden = String(mode === "api");
+    settingsEditorCancel.hidden = mode !== "api";
+    settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : "settingsSave");
+    canvasSettingsForm.hidden = false;
+    configurationLayer.hidden = false;
+    configurationLayer.setAttribute("aria-hidden", "false");
+    setSettingsStatus();
+    void loadCanvasSettings();
+    requestAnimationFrame(() => configurationPanel.focus({ preventScroll:true }));
+    return true;
+  }
+  function closeConfiguration(restore = true) {
+    if (!settings.configurationMode) return false;
+    const restoreFocus = settings.configurationRestoreFocus;
+    settings.configurationMode = "";
+    settings.configurationRestoreFocus = null;
+    configurationLayer.hidden = true;
+    configurationLayer.setAttribute("aria-hidden", "true");
+    canvasSettingsForm.hidden = true;
+    if (restore) requestAnimationFrame(() => restoreFocus?.focus({ preventScroll:true }));
+    return true;
+  }
+  function updateSettingsProviderFields() {
+    const provider = settingsProvider?.value || "api", api = provider === "api";
+    if (settings.currentProvider !== "api" && settings.currentProvider !== provider) settings.cli[settings.currentProvider] = { model:settingsCliModel.value, path:settingsCliPath.value };
+    settings.currentProvider = provider;
+    settingsApiFields.hidden = !api;
+    settingsCliFields.hidden = api;
+    for (const control of settingsApiFields.querySelectorAll("input, select")) control.disabled = !api || settings.configurationMode !== "api";
+    for (const control of settingsCliFields.querySelectorAll("input, select")) control.disabled = api || settings.configurationMode !== "api";
+    settingsApiSaved.hidden = !api || settingsApiSaved.dataset.saved !== "true";
+    if (!api) {
+      const values = settings.cli[provider] || {};
+      settingsCliModel.value = values.model || "";
+      settingsCliPath.value = values.path || ({ "kimi-cli":"kimi", "codex-cli":"codex", "claude-cli":"claude" }[provider] || "");
+    }
+    updateApiPresetFields(false);
+  }
+  function apiPresetForConnection(connection = {}) {
+    if (connection.apiPreset && API_PRESETS[connection.apiPreset]) return [connection.apiPreset, API_PRESETS[connection.apiPreset]];
+    const url = String(connection.apiUrl || "").trim().replace(/\/+$/, ""), format = String(connection.apiFormat || "").trim().toLowerCase();
+    return Object.entries(API_PRESETS).find(([, preset]) => preset.url === url && (!format || preset.format === format)) || null;
+  }
+  function selectedApiPreset() {
+    const family = settingsApiFormat?.value || "openai";
+    return API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
+  }
+  function updateApiModelPresets(family) {
+    if (!settingsApiModelPresets) return;
+    settingsApiModelPresets.replaceChildren(...(API_MODELS[family] || []).map(model => {
+      const option = document.createElement("option");
+      option.value = model;
+      return option;
+    }));
+  }
+  function updateApiPresetFields(applyDefaults = false, resetModel = false) {
+    if (!settingsApiFormat || !settingsApiPresetFields) return;
+    const family = settingsApiFormat.value, presetFamily = family === "kimi" || family === "minimax",
+      enabled = presetFamily && settingsProvider?.value === "api" && settings.configurationMode === "api";
+    settingsApiPresetFields.hidden = !presetFamily;
+    for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
+    updateApiModelPresets(family);
+    const preset = selectedApiPreset();
+    if (!applyDefaults || !preset) return;
+    settingsApiUrl.value = preset.url;
+    if (resetModel || !settingsApiModel.value.trim()) settingsApiModel.value = preset.model;
+  }
+  function fillApiEditor(connection = {}) {
+    const matched = apiPresetForConnection(connection), preset = matched?.[1] || null;
+    settingsApiFormat.value = preset?.family || (connection.apiFormat === "anthropic" ? "anthropic" : "openai");
+    settingsApiRegion.value = preset?.region || "global";
+    settingsApiService.value = preset?.service || "api";
+    updateApiPresetFields(false);
+    settingsApiUrl.value = connection.apiUrl || (connection.apiFormat === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1");
+    settingsApiModel.value = connection.apiModel || "";
+  }
+  function connectionProviderLabel(connection) {
+    return { "kimi-cli":"Kimi CLI", "codex-cli":"Codex CLI", "claude-cli":"Claude CLI" }[connection.provider] || connection.provider;
+  }
+  function connectionTitle(connection) {
+    return connection.provider === "api" ? connection.apiModel || "API" : connection.cliModel || t("settingsCliDefaultModel");
+  }
+  function connectionSummary(connection) {
+    return connection.provider === "api" ? connection.apiUrl || "" : connectionProviderLabel(connection);
+  }
+  function setConnectionStatus(message = "", kind = "") {
+    if (!settingsConnectionStatus) return;
+    settingsConnectionStatus.textContent = message;
+    settingsConnectionStatus.className = `settings-save-status${kind ? ` ${kind}` : ""}`;
+  }
+  function renderConnectionLists() {
+    if (!settingsConnectionList || !settingsConnectionQuickList) return;
+    settingsConnectionList.replaceChildren();
+    settingsConnectionQuickList.replaceChildren();
+    for (const connection of settings.connections) {
+      const quick = document.createElement("button"), quickMark = document.createElement("span"), quickCopy = document.createElement("span"), quickName = document.createElement("strong"), quickSummary = document.createElement("small");
+      quick.type = "button";
+      quick.className = `settings-connection-quick${connection.active ? " active" : ""}`;
+      quick.dataset.connectionActivate = connection.id;
+      quickMark.textContent = connection.active ? "✓" : "";
+      quickName.textContent = connectionTitle(connection);
+      quickSummary.textContent = connectionSummary(connection);
+      quickCopy.append(quickName, quickSummary);
+      quick.append(quickMark, quickCopy);
+      settingsConnectionQuickList.append(quick);
+
+      const item = document.createElement("article"), copy = document.createElement("div"), title = document.createElement("div"), name = document.createElement("strong"), summary = document.createElement("p"), actions = document.createElement("div");
+      item.className = `settings-connection-item${connection.active ? " active" : ""}`;
+      copy.className = "settings-connection-copy";
+      title.className = "settings-connection-title";
+      name.textContent = connectionTitle(connection);
+      title.append(name);
+      if (connection.active) {
+        const badge = document.createElement("span");
+        badge.className = "settings-connection-badge";
+        badge.textContent = t("settingsActive");
+        title.append(badge);
+      }
+      summary.textContent = connectionSummary(connection);
+      copy.append(title, summary);
+      actions.className = "settings-connection-actions";
+      if (!connection.active) {
+        const use = document.createElement("button");
+        use.type = "button";
+        use.dataset.connectionActivate = connection.id;
+        use.textContent = t("settingsUse");
+        actions.append(use);
+      }
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.dataset.connectionEdit = connection.id;
+      edit.textContent = t("settingsEdit");
+      actions.append(edit);
+      if (connection.removable) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "danger";
+        remove.dataset.connectionDelete = connection.id;
+        remove.textContent = t("settingsDelete");
+        actions.append(remove);
+      }
+      item.append(copy, actions);
+      settingsConnectionList.append(item);
+    }
+    connectionLimitText.textContent = t("settingsConnectionCount").replace("{count}", String(settings.connections.length)).replace("{limit}", String(settings.connectionLimit));
+    settingsAddConnection.disabled = settings.connections.length >= settings.connectionLimit;
+  }
+  function fillConnectionEditor(connection = null) {
+    settings.editingConnectionId = connection?.id || null;
+    const provider = connection?.provider || "api";
+    settingsProvider.value = provider;
+    settings.currentProvider = provider;
+    fillApiEditor(connection || { apiFormat:"openai", apiUrl:"https://api.openai.com/v1", apiModel:"gpt-5.6-sol" });
+    settingsApiKey.value = "";
+    settingsApiSaved.dataset.saved = String(connection?.hasApiKey === true);
+    settings.cli[provider] = { model:connection?.cliModel || "", path:connection?.cliPath || provider.replace("-cli", "") };
+    settingsEffort.value = connection?.effort || "";
+    canvasSettingsForm.dataset.editorHidden = "false";
+    updateSettingsProviderFields();
+    setSettingsStatus();
+    requestAnimationFrame(() => settingsProvider.focus({ preventScroll:true }));
+  }
+  function hideConnectionEditor() {
+    settings.editingConnectionId = null;
+    canvasSettingsForm.dataset.editorHidden = "true";
+    settingsApiKey.value = "";
+    setSettingsStatus();
+  }
+  function setSettingsStatus(message = "", kind = "") {
+    if (!settingsSaveStatus) return;
+    settingsSaveStatus.textContent = message;
+    settingsSaveStatus.className = `settings-save-status${kind ? ` ${kind}` : ""}`;
+  }
+  function updateTraceToggle() {
+    if (!settingsTraceToggle) return;
+    settingsTraceToggle.classList.toggle("on", settings.requestTrace);
+    settingsTraceToggle.setAttribute("aria-checked", String(settings.requestTrace));
+  }
+  async function loadCanvasSettings() {
+    if (!canvasSettingsForm) return;
+    setSettingsStatus(t("settingsLoading"));
+    try {
+      const response = await fetch("/api/settings", { headers:authenticatedApiHeaders() }), body = await response.json();
+      if (!response.ok) throw new Error(body?.error || t("settingsLoadFailed"));
+      settings.connections = Array.isArray(body.connections) ? body.connections : [];
+      syncLocalConnectionSelection();
+      settings.connectionLimit = Number(body.connectionLimit) || 10;
+      settingsProvider.value = body.provider;
+      settings.currentProvider = body.provider;
+      fillApiEditor({ apiPreset:body.apiPreset, apiFormat:body.apiFormat, apiUrl:body.apiUrl, apiModel:body.apiModel });
+      settingsApiKey.value = "";
+      settingsApiSaved.dataset.saved = String(body.hasApiKey);
+      settings.cli = {
+        "kimi-cli":{ model:body.kimiCliModel, path:body.kimiCliPath },
+        "codex-cli":{ model:body.codexModel, path:body.codexPath },
+        "claude-cli":{ model:body.claudeModel, path:body.claudePath },
+      };
+      settingsEffort.value = body.effort || "";
+      settingsTimeout.value = String(body.timeoutSeconds);
+      settingsAutoDelay.value = String(body.autoDelaySeconds);
+      settingsImageFormat.value = body.imageFormat;
+      settingsTraceLimit.value = String(body.requestTraceLimit);
+      settings.requestTrace = body.requestTrace === true;
+      updateTraceToggle();
+      updateSettingsProviderFields();
+      renderConnectionLists();
+      setSettingsStatus();
+    } catch (error) { setSettingsStatus(error?.message || t("settingsLoadFailed"), "error"); }
+  }
+  async function saveCanvasSettings(event) {
+    event?.preventDefault();
+    if (!canvasSettingsForm || !canvasSettingsForm.reportValidity()) return;
+    settingsSaveButton.disabled = true;
+    setSettingsStatus(t("settingsSaving"));
+    try {
+      const provider = settingsProvider.value, scope = settings.configurationMode;
+      if (provider !== "api") settings.cli[provider] = { model:settingsCliModel.value, path:settingsCliPath.value };
+      const apiPreset = provider === "api" ? selectedApiPreset() : null;
+      const connectionPayload = {
+        provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
+        apiKey:settingsApiKey.value, effort:settingsEffort.value,
+        cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
+      };
+      const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : {
+        scope, provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
+        apiKey:settingsApiKey.value, effort:settingsEffort.value, timeoutSeconds:Number(settingsTimeout.value),
+        autoDelaySeconds:Number(settingsAutoDelay.value), imageFormat:settingsImageFormat.value,
+        requestTrace:settings.requestTrace, requestTraceLimit:Number(settingsTraceLimit.value),
+      };
+      const response = await fetch(endpoint, {
+        method:"POST",
+        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify(payload),
+      }), body = await response.json();
+      if (!response.ok) throw new Error(body?.error || t("settingsLoadFailed"));
+      if (settingsApiKey.value.trim()) settingsApiSaved.dataset.saved = "true";
+      settingsApiKey.value = "";
+      if (scope === "api") {
+        settings.connections = body.connections || settings.connections;
+        syncLocalConnectionSelection();
+        renderConnectionLists();
+        hideConnectionEditor();
+        setConnectionStatus(t("settingsConnectionSaved"), "success");
+      } else setSettingsStatus(t("settingsSystemSaved"), "success");
+    } catch (error) { setSettingsStatus(error?.message || t("settingsLoadFailed"), "error"); }
+    finally { settingsSaveButton.disabled = false; }
+  }
+  async function updateConnection(action, id) {
+    setConnectionStatus(t("settingsSaving"));
+    try {
+      const response = await fetch("/api/settings/connections", { method:"POST", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }), body:JSON.stringify({ action, id }) }), body = await response.json();
+      if (!response.ok) throw new Error(body?.error || t("settingsLoadFailed"));
+      settings.connections = body.connections || [];
+      syncLocalConnectionSelection();
+      renderConnectionLists();
+      setConnectionStatus(t(action === "delete" ? "settingsConnectionDeleted" : "settingsConnectionActivated"), "success");
+    } catch (error) { setConnectionStatus(error?.message || t("settingsLoadFailed"), "error"); }
+  }
+  function handleConnectionAction(event) {
+    const button = event.target.closest("button[data-connection-activate],button[data-connection-edit],button[data-connection-delete]");
+    if (!button) return;
+    if (button.dataset.connectionActivate) {
+      const id = button.dataset.connectionActivate;
+      if (!settings.connections.some(connection => connection.id === id)) return;
+      localStorage.setItem(AI_CONNECTION_STORAGE_KEY, id);
+      syncLocalConnectionSelection();
+      renderConnectionLists();
+      setConnectionStatus(t("settingsConnectionActivated"), "success");
+      return;
+    }
+    const connection = settings.connections.find(item => item.id === button.dataset.connectionEdit || item.id === button.dataset.connectionDelete);
+    if (!connection) return;
+    if (button.dataset.connectionEdit) fillConnectionEditor(connection);
+    else if (window.confirm(t("settingsDeleteConfirm"))) void updateConnection("delete", connection.id);
+  }
   function updateSettingsPanel() {
     if (!settingsPanel) return;
     settingsAutoToggle.classList.toggle("on", state.auto);
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
+    void loadCanvasSettings();
   }
   function openSettings() {
+    if (window.penechoDesktop?.openSettings) {
+      void window.penechoDesktop.openSettings();
+      return true;
+    }
     if (settings.open || !settingsLayer) return false;
     hideAutoDelayControl();
     hideEffortControl();
@@ -2019,7 +2448,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const response = await fetch("/api/plugins/improve", {
         method:"POST",
         credentials:"same-origin",
-        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        headers:aiRequestHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ document, styles, reasoningEffort:state.reasoningEffort }),
       }), body = await pluginJsonResponse(response);
       if (typeof body?.document !== "string" || typeof body?.styles !== "string") throw Error("The AI response did not contain a complete plugin bundle");
@@ -2248,6 +2677,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateGridButton();
     updateHistorySaveFeedbackLanguage();
     renderSnapshotList();
+    renderConnectionLists();
     updateNewCanvasDialog();
     if (state.statusKey) status.textContent = t(state.statusKey);
     updateSelectionToolbar();

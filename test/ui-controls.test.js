@@ -41,6 +41,30 @@ test("canvas file actions are in the top-right header and available in History",
   assert.match(functionSource(app, "loadSnapshot"), /clearTextEditors\(\)/);
 });
 
+test("canvas connection editor uses editable Kimi and MiniMax presets without connection names", () => {
+  const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
+  assert.doesNotMatch(html, /id="settingsConnectionName"|name="connectionName"/);
+  for (const value of ["openai", "anthropic", "kimi", "minimax"]) {
+    assert.match(html, new RegExp(`<option value="${value}"`));
+  }
+  assert.match(html, /id="settingsApiPresetFields"[^>]*hidden/);
+  assert.match(html, /id="settingsApiRegion"/);
+  assert.match(html, /id="settingsApiService"/);
+  assert.match(html, /id="settingsApiModel"[^>]*list="settingsApiModelPresets"/);
+  for (const endpoint of [
+    "https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1", "https://api.kimi.com/coding/v1",
+    "https://api.minimax.io/v1", "https://api.minimax.io/anthropic", "https://api.minimaxi.com/v1", "https://api.minimaxi.com/anthropic",
+  ]) assert.match(app, new RegExp(endpoint.replaceAll(".", "\\.")));
+  for (const model of ["k3", "kimi-k3", "MiniMax-M3", "MiniMax-M2.7"]) assert.match(app, new RegExp(`"${model.replaceAll(".", "\\.")}"`));
+  assert.match(app, /function connectionTitle\(connection\)/);
+  assert.match(app, /return connection\.provider === "api" \? connection\.apiModel \|\| "API" : connection\.cliModel/);
+  assert.match(css, /body\[data-theme="studio"\] \.settings-save[^\{]*\{[^}]*color: #fff;[^}]*background: #4f46e5/);
+  for (const key of ["settingsApiRegion", "settingsApiService", "settingsApiServiceCoding"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
+});
+
 test("canvas photos use one picker, editable image records, side action bar, and no auto AI", () => {
   const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js"), css = read("public/style.css"),
     end = functionSource(app, "end"),
@@ -311,8 +335,12 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(app, /function pluginRequestPayload\(\)/);
   assert.match(app, /\.\.\.pluginRequestPayload\(\)/);
   assert.match(app, /function authenticatedApiHeaders\([\s\S]*?X-PenEcho-Session/);
-  assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:authenticatedApiHeaders/);
-  assert.match(app, /fetch\("\/api\/ai\/command"[\s\S]*?headers:\s*authenticatedApiHeaders/);
+  assert.match(app, /AI_CONNECTION_STORAGE_KEY = "penecho-ai-connection-id"/);
+  assert.match(app, /function aiRequestHeaders\([\s\S]*?X-PenEcho-Connection/);
+  assert.match(functionSource(app, "handleConnectionAction"), /localStorage\.setItem\(AI_CONNECTION_STORAGE_KEY, id\)/);
+  assert.doesNotMatch(functionSource(app, "handleConnectionAction"), /updateConnection\("activate"/);
+  assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:aiRequestHeaders/);
+  assert.match(app, /fetch\("\/api\/ai\/command"[\s\S]*?headers:\s*aiRequestHeaders/);
   assert.match(functionSource(app, "validate"), /acceptedTools = \["write_text", "draw_formula", "plot_function", "draw", "erase"\]/);
   assert.doesNotMatch(functionSource(app, "validate"), /animate_scene/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);

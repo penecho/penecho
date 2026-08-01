@@ -427,8 +427,62 @@
         <button id="settingsClose" class="settings-close" type="button" data-i18n-aria="settingsClose" aria-label="Close settings" data-i18n-title="settingsClose" title="Close settings">×</button>
       </header>
       <div class="settings-scroll">
+        <section class="settings-group settings-entry-group" aria-labelledby="settingsConfigurationHeading">
+          <div class="settings-quick-heading"><h3 id="settingsConfigurationHeading" data-i18n="settingsConnections">AI connections</h3><button id="settingsOpenApi" type="button" data-i18n="settingsManage">Manage</button></div>
+          <div id="settingsConnectionQuickList" class="settings-connection-quick-list"></div>
+          <div class="settings-entry-actions">
+            <button id="settingsOpenSystem" type="button"><strong data-i18n="settingsSystemEntry">System settings</strong><small data-i18n="settingsSystemEntryHelp">Restart required after saving</small></button>
+          </div>
+        </section>
+        <form id="canvasSettingsForm" class="canvas-settings-form" hidden>
+          <section class="settings-group settings-api-group" aria-labelledby="settingsApiHeading">
+            <div class="settings-section-heading">
+              <div><h3 id="settingsApiHeading" data-i18n="settingsConnectionEditor">Connection details</h3><p data-i18n="settingsApiDescription">Connect PenEcho to any OpenAI- or Anthropic-compatible API.</p></div>
+              <span id="settingsApiSaved" class="settings-saved-badge" hidden data-i18n="settingsKeySaved">Key saved</span>
+            </div>
+            <label class="settings-field settings-provider-field"><span data-i18n="settingsProvider">AI provider</span><select id="settingsProvider" name="provider"><option value="api">API</option><option value="kimi-cli">Kimi CLI</option><option value="codex-cli">Codex CLI</option><option value="claude-cli">Claude CLI</option></select></label>
+            <div id="settingsApiFields">
+            <div class="settings-fields two-column">
+              <label><span data-i18n="settingsApiFormat">API format</span><select id="settingsApiFormat" name="apiFormat"><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="kimi">Kimi</option><option value="minimax">MiniMax</option></select></label>
+              <label><span data-i18n="settingsApiModel">Model</span><input id="settingsApiModel" name="apiModel" list="settingsApiModelPresets" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol" required></label>
+            </div>
+            <datalist id="settingsApiModelPresets"></datalist>
+            <div id="settingsApiPresetFields" class="settings-fields two-column settings-preset-fields" hidden>
+              <label><span data-i18n="settingsApiRegion">Access region</span><select id="settingsApiRegion" name="apiRegion"><option value="global" data-i18n="settingsApiRegionGlobal">Global</option><option value="china" data-i18n="settingsApiRegionChina">Mainland China</option></select></label>
+              <label><span data-i18n="settingsApiService">Service</span><select id="settingsApiService" name="apiService"><option value="api" data-i18n="settingsApiServiceApi">API</option><option value="coding" data-i18n="settingsApiServiceCoding">Coding Plan</option></select></label>
+            </div>
+            <label class="settings-field"><span data-i18n="settingsApiUrl">Base URL</span><input id="settingsApiUrl" name="apiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1" required></label>
+            <label class="settings-field"><span data-i18n="settingsApiKey">API key</span><input id="settingsApiKey" name="apiKey" type="password" autocomplete="new-password" placeholder="Paste a new key or leave blank to keep the saved key"><small data-i18n="settingsApiKeyHelp">Stored only in the local PenEcho configuration file.</small></label>
+            </div>
+            <div id="settingsCliFields" hidden>
+              <div class="settings-fields two-column">
+                <label><span data-i18n="settingsCliModel">Model (optional)</span><input id="settingsCliModel" autocomplete="off" spellcheck="false" placeholder="Use CLI default"></label>
+                <label><span data-i18n="settingsCliPath">Command or path</span><input id="settingsCliPath" autocomplete="off" spellcheck="false" placeholder="codex"></label>
+              </div>
+              <p class="settings-note" data-i18n="settingsCliHelp">Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.</p>
+            </div>
+            <label class="settings-field"><span data-i18n="settingsEffort">Reasoning</span><select id="settingsEffort" name="effort"><option value="" data-i18n="settingsProviderDefault">Provider default</option><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Maximum</option></select><small data-i18n="settingsEffortToolbarHelp">You can quickly change reasoning for any request from the Canvas toolbar.</small></label>
+          </section>
+          <section class="settings-group settings-system-group" aria-labelledby="settingsSystemHeading">
+            <div class="settings-section-heading"><div><h3 id="settingsSystemHeading" data-i18n="settingsSystemSection">System</h3><p data-i18n="settingsSystemDescription">Simple defaults for requests and canvas behavior.</p></div></div>
+            <div class="settings-fields two-column">
+              <label><span data-i18n="settingsTimeout">Timeout</span><span class="settings-input-unit"><input id="settingsTimeout" name="timeoutSeconds" type="number" min="10" max="600" step="1" required><small>s</small></span></label>
+              <label><span data-i18n="settingsAutoDelay">Auto AI delay</span><span class="settings-input-unit"><input id="settingsAutoDelay" name="autoDelaySeconds" type="number" min="0" max="60" step="0.1" required><small>s</small></span></label>
+            </div>
+            <div class="settings-fields two-column compact">
+              <label><span data-i18n="settingsImageFormat">Canvas image</span><select id="settingsImageFormat" name="imageFormat"><option value="webp">WebP</option><option value="png">PNG</option></select></label>
+              <label><span data-i18n="settingsTraceLimit">Keep request traces</span><input id="settingsTraceLimit" name="requestTraceLimit" type="number" min="1" max="1000" step="1" required></label>
+            </div>
+            <div class="settings-row"><span id="settingsTraceLabel" data-i18n="settingsRequestTrace">Record request details</span><button id="settingsTraceToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsTraceLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
+          </section>
+          <div class="settings-form-footer">
+            <button id="settingsEditorCancel" class="settings-editor-cancel" type="button" data-i18n="settingsCancel">Cancel</button>
+            <p id="settingsSaveStatus" class="settings-save-status" role="status" aria-live="polite"></p>
+            <button id="settingsSave" class="settings-save" type="submit" data-i18n="settingsSaveConnection">Save connection</button>
+          </div>
+        </form>
         <section class="settings-group" aria-labelledby="settingsAiHeading">
-          <h3 id="settingsAiHeading" data-i18n="settingsAISection">AI</h3>
+          <h3 id="settingsAiHeading" data-i18n="settingsCanvasSection">Canvas preferences</h3>
           <div class="settings-row">
             <span id="settingsAutoLabel" data-i18n="autoAI">Auto AI</span>
             <button id="settingsAutoToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="settingsAutoLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
@@ -462,6 +516,19 @@
             <a href="https://github.com/penecho/penecho/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="settingsDownloadWin">Download for Windows</a>
             <a href="https://github.com/penecho/penecho" target="_blank" rel="noopener noreferrer" data-i18n="settingsGitHub">GitHub repository</a>
           </div>
+        </section>
+      </div>
+    </section>
+  </div>
+  <div id="configurationLayer" class="configuration-layer" hidden aria-hidden="true">
+    <div id="configurationBackdrop" class="configuration-backdrop"></div>
+    <section id="configurationPanel" class="configuration-panel" role="dialog" aria-modal="true" aria-labelledby="configurationTitle" tabindex="-1">
+      <header><div><h2 id="configurationTitle"></h2><p id="configurationSubtitle"></p></div><button id="configurationClose" class="settings-close" type="button" data-i18n-aria="settingsClose" aria-label="Close settings">×</button></header>
+      <div id="configurationBody" class="configuration-body">
+        <section id="connectionManager" class="connection-manager">
+          <header><div><h3 data-i18n="settingsSavedConnections">Saved connections</h3><p id="connectionLimitText"></p></div><button id="settingsAddConnection" type="button" data-i18n="settingsAddConnection">Add connection</button></header>
+          <div id="settingsConnectionList" class="settings-connection-list"></div>
+          <p id="settingsConnectionStatus" class="settings-save-status" role="status" aria-live="polite"></p>
         </section>
       </div>
     </section>

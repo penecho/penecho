@@ -628,6 +628,7 @@ async function main(argv = process.argv.slice(2), options = {}) {
       return 1;
     }
   }
+  configuration.env.PENECHO_CONFIG_FILE = configuration.configFile;
   applyConfiguration(configuration.env);
   let startedServer;
   if (options.startServer) {

@@ -275,6 +275,155 @@ test("Codex CLI mode starts with no extra access or model-provider settings", { 
   } finally { await stopServer(child); }
 });
 
+test("canvas settings expose no API secret and save validated configuration for restart", { timeout:10000 }, async () => {
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret" }));
+  try {
+    const headers = { Origin:origin, "Content-Type":"application/json" };
+    const currentResponse = await fetch(`${origin}/api/settings`, { headers:{ Origin:origin } }), current = await currentResponse.json();
+    assert.equal(currentResponse.status, 200);
+    assert.equal(current.hasApiKey, true);
+    assert.equal(Object.hasOwn(current, "apiKey"), false);
+    const savedResponse = await fetch(`${origin}/api/settings`, {
+      method:"POST", headers,
+      body:JSON.stringify({ scope:"api", provider:"api", apiFormat:"anthropic", apiUrl:"https://api.example.test/anthropic/", apiModel:"model-next", apiKey:"", effort:"high", timeoutSeconds:120, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }),
+    }), saved = await savedResponse.json();
+    assert.equal(savedResponse.status, 200, JSON.stringify(saved));
+    assert.equal(saved.providerApplied, true);
+    assert.equal(saved.restartRequired, false);
+    const text = await fs.promises.readFile(path.join(stateDir, "config.env"), "utf8");
+    assert.match(text, /^AI_API_FORMAT=anthropic$/m);
+    assert.match(text, /^AI_API_URL=https:\/\/api\.example\.test\/anthropic$/m);
+    assert.match(text, /^AI_API_MODEL=model-next$/m);
+    assert.match(text, /^AI_API_KEY=saved-secret$/m);
+    assert.doesNotMatch(text, /^AUTO_AI_DELAY_SECONDS=/m);
+    const switchedResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", provider:"codex-cli", codexModel:"gpt-hot", codexPath:"codex-next", effort:"high", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTrace:false, requestTraceLimit:100 }) });
+    assert.equal(switchedResponse.status, 200);
+    const hot = await fetch(`${origin}/api/config`).then(response => response.json());
+    assert.equal(hot.aiProvider, "codex-cli");
+    const systemResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", timeoutSeconds:120, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }) });
+    const system = await systemResponse.json();
+    assert.equal(system.restartRequired, true);
+    assert.equal(system.providerApplied, false);
+    const afterSystem = await fetch(`${origin}/api/config`).then(response => response.json());
+    assert.equal(afterSystem.aiProvider, "codex-cli");
+    const updatedText = await fs.promises.readFile(path.join(stateDir, "config.env"), "utf8");
+    assert.match(updatedText, /^AUTO_AI_DELAY_SECONDS=2\.5$/m);
+    const invalid = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", apiKey:"", apiUrl:"file:///tmp/model", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTraceLimit:100 }) });
+    assert.equal(invalid.status, 400);
+  } finally { await stopServer(child); }
+});
+
+test("canvas shares ten persistent API and CLI connections without a server-wide selection", { timeout:10000 }, async () => {
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"default-secret" })), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const initial = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(initial.connections.length, 1);
+    assert.equal(initial.connections[0].id, "default");
+    assert.equal(initial.connections[0].removable, false);
+    assert.equal(Object.hasOwn(initial, "activeConnectionId"), false);
+    assert.equal(Object.hasOwn(initial.connections[0], "active"), false);
+    assert.equal(Object.hasOwn(initial.connections[0], "apiKey"), false);
+
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliModel:"gpt-5.6-sol", cliPath:"codex", effort:"high" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const codex = created.connections.find(connection => connection.provider === "codex-cli");
+    assert.ok(codex?.removable);
+    assert.equal(codex.name, "gpt-5.6-sol");
+    assert.equal(created.connections.length, 2);
+
+    const activate = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"activate", id:codex.id }) }), activated = await activate.json();
+    assert.equal(activate.status, 200, JSON.stringify(activated));
+    assert.equal(Object.hasOwn(activated, "activeConnectionId"), false);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).aiProvider, "api");
+
+    for (let index = 2; index <= 9; index++) {
+      const preset = index === 2 ? { apiPreset:"minimax-china-coding", apiFormat:"anthropic", apiUrl:"https://api.minimaxi.com/anthropic", apiModel:"MiniMax-M3" } : { apiFormat:"openai", apiUrl:`https://api${index}.example.test/v1`, apiModel:`model-${index}` };
+      const response = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", ...preset, apiKey:`key-${index}`, effort:"" } }) });
+      assert.equal(response.status, 200, `connection ${index}`);
+    }
+    const full = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(full.connections.length, 10);
+    const minimax = full.connections.find(connection => connection.apiPreset === "minimax-china-coding");
+    assert.equal(minimax?.name, "MiniMax-M3");
+    assert.equal(minimax?.apiFormat, "anthropic");
+    assert.equal(minimax?.apiUrl, "https://api.minimaxi.com/anthropic");
+    const overflow = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://overflow.example.test/v1", apiModel:"overflow", apiKey:"overflow", effort:"" } }) });
+    assert.equal(overflow.status, 400);
+
+    const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:codex.id }) }), removed = await remove.json();
+    assert.equal(remove.status, 200, JSON.stringify(removed));
+    assert.equal(Object.hasOwn(removed, "activeConnectionId"), false);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).aiProvider, "api");
+    const stored = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(stored.connections.length, 8);
+    assert.equal(Object.hasOwn(stored, "activeId"), false);
+    const deleteDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:"default" }) });
+    assert.equal(deleteDefault.status, 400);
+  } finally { await stopServer(child); }
+});
+
+test("two clients independently route requests through the shared connection list", { timeout:10000 }, async () => {
+  const openai = await startApiServer('{"intent":"none","commands":[]}', { delayMs:250 }), anthropic = await startApiServer('{"intent":"none","commands":[]}', { format:"anthropic", delayMs:250 });
+  const { child, origin, stateDir } = await startServer(apiServerEnv(openai.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"key-b", effort:"" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.apiModel === "model-b");
+    const clientAList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json()),
+      clientBList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.deepEqual(clientAList.connections, clientBList.connections);
+
+    const clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) }),
+      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    const deadline = Date.now() + 3000;
+    while ((!openai.requests.length || !anthropic.requests.length) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(openai.requests.length, 1);
+    assert.equal(anthropic.requests.length, 1);
+    assert.equal(JSON.parse(anthropic.requests[0]).model, "model-b");
+
+    const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:connection.id }) });
+    assert.equal(remove.status, 200, await remove.text());
+    const [clientAResponse, clientBResponse] = await Promise.all([clientA, clientB]);
+    assert.equal(clientAResponse.status, 200, await clientAResponse.text());
+    assert.equal(clientBResponse.status, 200, await clientBResponse.text());
+
+    const deletedSelection = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    assert.equal(deletedSelection.status, 200, await deletedSelection.text());
+    assert.equal(openai.requests.length, 2);
+
+    const legacyStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    legacyStore.activeId = "missing-old-global-choice";
+    await fs.promises.writeFile(path.join(stateDir, "connections.json"), `${JSON.stringify(legacyStore, null, 2)}\n`);
+    const afterLegacy = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
+    assert.equal(Object.hasOwn(afterLegacy, "activeConnectionId"), false);
+  } finally {
+    await stopServer(child);
+    await Promise.all([openai.server, anthropic.server].map(server => new Promise(resolve => server.close(resolve))));
+  }
+});
+
+test("a device can select a shared CLI connection while the server default remains API", { timeout:20000 }, async () => {
+  const openai = await startApiServer(), directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-device-cli-")),
+    fakeCli = path.join(directory, "fake-codex.js"), record = path.join(directory, "record.json");
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),args=process.argv.slice(2),image=args[args.indexOf("-i")+1],output=args[args.indexOf("-o")+1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({model:args[args.indexOf("--model")+1],imageExists:fs.existsSync(image)}));fs.writeFileSync(output,'{"intent":"none","commands":[]}');\n`);
+  const { child, origin } = await startServer(apiServerEnv(openai.origin, { CODEX_HOME:TEST_CODEX_HOME })), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliModel:"gpt-device", cliPath:fakeCli, effort:"high" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.provider === "codex-cli");
+    const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...headers, "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    assert.equal(response.status, 200, await response.text());
+    const saved = JSON.parse(await fs.promises.readFile(record, "utf8"));
+    assert.equal(saved.model, "gpt-device");
+    assert.equal(saved.imageExists, true);
+    assert.equal((await fetch(`${origin}/api/config`).then(item => item.json())).aiProvider, "api");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => openai.server.close(resolve));
+    await fs.promises.rm(directory, { recursive:true, force:true });
+  }
+});
+
 test("process-lifetime PIN gates the Canvas and local APIs, then clears on restart", { timeout:30000 }, async () => {
   const stateDir=testStateDir({}),
     env=serverEnv({PENECHO_STATE_DIR:stateDir,PENECHO_TEST_OPEN_ACCESS:"0"});
@@ -2074,7 +2223,7 @@ test("API mode uses one configured key without probes or fallback credentials", 
   const server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"),cli=fs.readFileSync(path.join(ROOT,"src","cli","main.js"),"utf8"),configure=fs.readFileSync(path.join(ROOT,"src","cli","configure-ui.js"),"utf8");
   for(const source of [server,cli,configure])assert.doesNotMatch(source,/OPENAI_PRO_API_KEY/);
   assert.doesNotMatch(server,/api-health|api-selection|api-runtime-failure|refreshApiConfig|testApiKey|HEALTH_INTERVAL|HEALTH_TIMEOUT/);
-  assert.match(server,/providerRequest\(API_KEY,MODEL,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled\)/);
+  assert.match(server,/providerRequest\(provider\.apiKey,provider\.model,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled,provider\.api\)/);
 });
 
 test("client and server contain no aggregate draft rejection budget", () => {
