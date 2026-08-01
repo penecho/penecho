@@ -177,6 +177,14 @@
     for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
     return new Blob([bytes], { type:match[1] });
   }
+  async function snapshotPreviewBlob() {
+    try {
+      return await canvasBlob(snapshotPreview());
+    } catch (error) {
+      console.warn("PenEcho snapshot thumbnail failed; saving with a fallback thumbnail:", error);
+      return dataUrlBlob("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    }
+  }
   async function snapshotApiResponse(response) {
     let body = null;
     try { body = await response.json(); } catch {}
@@ -429,7 +437,7 @@
       setStatusKey("emptyCanvas");
       return null;
     }
-    await snapshotVisibleWidgets();
+    await snapshotVisibleWidgets({ bestEffort:true });
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -439,7 +447,7 @@
       textBoxes = storedTextBoxes(),
       images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
-      preview = await canvasBlob(snapshotPreview()),
+      preview = await snapshotPreviewBlob(),
       requestedName = String(name === null ? nameInput.value : name).trim().slice(0, 48),
       item = {
         id,
@@ -746,6 +754,7 @@
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
     backdrop.hidden = false;
+    panel.inert = false;
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
@@ -756,6 +765,8 @@
     const panel = document.querySelector("#historyPanel"),
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
+    if (panel.contains(document.activeElement)) button.focus({ preventScroll:true });
+    panel.inert = true;
     panel.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
     button.setAttribute("aria-expanded", "false");

@@ -28,7 +28,7 @@ Fetch JSON `GET https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=20`.
 
 ## Runtime rules
 
-Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
+Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, current-frame navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
 
 ## One-shot example
 

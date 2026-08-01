@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eef0f3">
+  <link rel="icon" href="data:,">
   <title>PenEcho | Handwritten AI Canvas</title>
   <link rel="stylesheet" href="style.css">
   <script src="mathjax-config.js"></script>
@@ -179,7 +180,7 @@
     </section>
 
     <div id="historyBackdrop" class="history-backdrop" hidden></div>
-    <aside id="historyPanel" class="history-panel" aria-hidden="true" aria-labelledby="historyTitle">
+    <aside id="historyPanel" class="history-panel" aria-hidden="true" aria-labelledby="historyTitle" inert>
       <header>
         <div><span class="history-kicker">PenEcho</span><h2 id="historyTitle" data-i18n="historyTitle">Canvas history</h2></div>
         <button id="historyClose" type="button" data-i18n-aria="closeHistory" aria-label="Close history" data-i18n-title="closeHistory" title="Close history">×</button>
@@ -517,7 +518,7 @@
           <ul>
             <li data-i18n="changelogImagesSummary">0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.</li>
             <li data-i18n="changelogPluginsSummary">0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.</li>
-            <li data-i18n="changelogAnimation">0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.</li>
+            <li data-i18n="changelogAnimation">Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.</li>
           </ul>
         </section>
       </div>

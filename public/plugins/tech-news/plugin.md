@@ -24,11 +24,11 @@ Return exactly one `html_widget` command and no prose, with `pluginId:"tech-news
 
 ## Data contract
 
-For the front page fetch JSON `GET https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=10`. For a topic fetch `GET https://hn.algolia.com/api/v1/search_by_date?query={encodedTopic}&tags=story&hitsPerPage=10`. Response `hits[]` can include `objectID`, `title`, `url`, `author`, `points`, `num_comments`, `created_at`, and `created_at_i`. Filter missing titles, deduplicate, and use `url` only to extract a display hostname; do not create navigation. Display Hacker News/Algolia attribution and label the selected view as community-ranked or newest.
+For the front page fetch JSON `GET https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=10`. For a topic fetch `GET https://hn.algolia.com/api/v1/search_by_date?query={encodedTopic}&tags=story&hitsPerPage=10`. Response `hits[]` can include `objectID`, `title`, `url`, `author`, `points`, `num_comments`, `created_at`, and `created_at_i`. Filter missing titles and deduplicate. Make every headline a public HTTPS link using `url`, falling back to `https://news.ycombinator.com/item?id={objectID}`, with `target="_blank"` and `rel="noopener noreferrer"`; show its hostname. Display Hacker News/Algolia attribution and label the selected view as community-ranked or newest.
 
 ## Runtime rules
 
-Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
+Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, current-frame navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
 
 ## One-shot example
 

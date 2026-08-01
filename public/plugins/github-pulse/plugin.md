@@ -28,7 +28,7 @@ Fetch JSON `GET https://api.github.com/repos/{owner}/{repo}`. Available fields i
 
 ## Runtime rules
 
-Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, navigation, forms, cookies, storage, Authorization headers, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
+Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its timer. Do not use external assets, current-frame navigation, forms, cookies, storage, Authorization headers, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
 
 ## One-shot example
 

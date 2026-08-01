@@ -138,7 +138,8 @@
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
-    WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
+    WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -342,7 +343,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogEarlierTitle: "Earlier highlights",
       changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
       changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
-      changelogAnimation: "0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.",
+      changelogAnimation: "Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -494,6 +495,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pluginSourceLabel: "Source: {source}",
       pluginApiLabel: "API: {origins}",
       pluginNoNetwork: "No network access",
+      pluginPublicHttps: "Any public HTTPS origin",
       pluginPromptEstimate: "adds about {tokens} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens",
       pluginRefreshRate: "refresh {time}",
       pluginDetails: "Details",
@@ -1582,7 +1584,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           documentPath:item.documentPath,
           stylePath:item.stylePath,
           builtIn:item.builtIn,
-          defaultEnabled:["general", "flowchart", "image-search", "weather"].includes(item.manifest.id),
+          defaultEnabled:["general", "flowchart"].includes(item.manifest.id),
         }));
       }
       definitions.sort((a, b) => (manifests.get(a.id)?.name || a.id).localeCompare(manifests.get(b.id)?.name || b.id));
@@ -1708,7 +1710,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           sourceItem.className = "plugin-option-source";
           sourceItem.textContent = t("pluginSourceLabel").replace("{source}", source);
           apiItem.className = "plugin-option-api";
-          apiItem.textContent = t("pluginApiLabel").replace("{origins}", manifest.connect.length ? manifest.connect.join(" · ") : t("pluginNoNetwork"));
+          apiItem.textContent = t("pluginApiLabel").replace("{origins}", plugin.id === "general" ? t("pluginPublicHttps") : manifest.connect.length ? manifest.connect.join(" · ") : t("pluginNoNetwork"));
           refreshItem.textContent = pluginRefreshText(manifest.recommendedRefreshSeconds);
           tokenItem.textContent = t("pluginPromptEstimate").replace("{tokens}", String(tokens));
           meta.append(sourceItem, apiItem, refreshItem, tokenItem);
@@ -3092,6 +3094,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       url.hostname = "localhost";
       url.searchParams.set("parent-origin", location.origin);
     }
+    if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -3245,38 +3248,39 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       image.src = dataUrl;
     });
   }
-  async function waitForWidgetContent(widget) {
+  async function waitForWidgetContent(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     if (widget.contentReady) return;
     if (!widget.readyPromise) throw Error(t("widgetExportFailed"));
     await Promise.race([
       widget.readyPromise,
-      new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+      new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
     ]);
   }
-  async function requestWidgetSnapshot(widget) {
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     if (widget.snapshotPromise) return widget.snapshotPromise;
+    timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
     const snapshotPromise = (async () => {
       const previousActive = widget.renderActive;
       try {
         if (!widget.hostReady && widget.hostReadyPromise) await Promise.race([
           widget.hostReadyPromise,
-          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
         ]);
         if (!widget.initialized) {
           widget.renderActive = true;
           sendWidgetInit(widget);
           sendWidgetHostState(widget, undefined, undefined, true);
         }
-        await waitForWidgetContent(widget);
+        await waitForWidgetContent(widget, timeoutMs);
         if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
         const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
         return await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             widgetSnapshotRequests.delete(requestId);
             reject(Error(t("widgetExportFailed")));
-          }, WIDGET_SNAPSHOT_TIMEOUT_MS);
+          }, timeoutMs);
           widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, widget.hostOrigin || location.origin);
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
@@ -3338,6 +3342,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetSnapshotRequests.delete(message.requestId);
     clearTimeout(pending.timer);
     if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")) {
+      if (message.type === "penecho-widget-snapshot-error") console.warn("PenEcho widget snapshot failed:", String(message.error || "unknown error").slice(0, 300));
       pending.reject(Error(t("widgetExportFailed")));
       return;
     }
@@ -3831,8 +3836,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function snapshotVisibleWidgets() {
-    for (const widget of visibleWidgets()) await requestWidgetSnapshot(widget);
+  async function snapshotVisibleWidgets({ bestEffort = false } = {}) {
+    const timeoutMs = bestEffort ? WIDGET_HISTORY_SNAPSHOT_WAIT_MS : WIDGET_SNAPSHOT_TIMEOUT_MS,
+      requests = visibleWidgets().map((widget) => requestWidgetSnapshot(widget, timeoutMs));
+    if (!bestEffort) return void await Promise.all(requests);
+    await Promise.all(requests.map((request) => Promise.race([
+      request.catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
+    ])));
   }
 
   function animationBox(animation) {
@@ -3896,35 +3907,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.selectedAnimationId = null;
     state.animationEdit = null;
     hideAnimationControls();
-    const now = performance.now(),
-      usedIds = new Set();
-    for (const saved of Array.isArray(items) ? items : []) {
-      if (state.animations.length >= MAX_VISIBLE_ANIMATIONS) break;
-      const scene = ANIMATION?.normalize(saved?.scene, SIZE),
-        transform = saved?.transform;
-      if (!scene || !transform || ![transform.x, transform.y, transform.w, transform.h].every(Number.isFinite) || transform.w <= 0 || transform.h <= 0 || transform.x < 0 || transform.y < 0 || transform.x + transform.w > SIZE || transform.y + transform.h > SIZE) continue;
-      const playheadMs = Math.max(0, Math.min(scene.durationMs, Number(saved.playback?.playheadMs) || 0)),
-        paused = Boolean(saved.playback?.paused);
-      let id = typeof saved.id === "string" && saved.id.length <= 128 && !usedIds.has(saved.id) ? saved.id : "";
-      const numberedId = /^animation-(\d+)$/.exec(id);
-      if (numberedId) state.nextAnimationId = Math.max(state.nextAnimationId, Number(numberedId[1]) + 1);
-      if (!id) {
-        do id = "animation-" + state.nextAnimationId++;
-        while (usedIds.has(id));
-      }
-      usedIds.add(id);
-      state.animations.push({
-        id,
-        scene,
-        x: transform.x,
-        y: transform.y,
-        w: transform.w,
-        h: transform.h,
-        playheadMs,
-        paused,
-        startedAt: now,
-      });
-    }
+    // Legacy declarative animation scenes are intentionally no longer loaded.
+    // Keeping this tolerant hook lets snapshots from older releases open silently.
     requestAnimationLayerRender();
   }
   function recordAnimationsBefore() {
@@ -5334,14 +5318,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
-    if (editor.sourceTextBoxId) state.selectedTextBoxId = null;
+    let deletedTextBox = null;
+    if (editor.sourceTextBoxId) {
+      const index = state.textBoxes.findIndex((item) => item.id === editor.sourceTextBoxId);
+      if (index >= 0) {
+        recordTextBoxesBefore();
+        deletedTextBox = state.textBoxes[index];
+        state.textBoxes.splice(index, 1);
+      }
+      state.selectedTextBoxId = null;
+    }
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
     if (editor.returnMode) restoreTextEditorMode(editor);
     else setCanvasMode("pen");
+    if (deletedTextBox) {
+      state.userRevision++;
+      mergeDirtyBox(textBoxBox(deletedTextBox));
+      save();
+    }
     render();
     setStatusKey("ready");
-    if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
+    if (!deletedTextBox && !state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
   function createTextEditor(point, options = null) {
     options ||= {};
@@ -5457,9 +5455,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
         confirmTextEditor(editor);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        cancelTextEditor(editor);
       }
     });
     preview.addEventListener("focus", () => focusTextEditor(editor));
@@ -5468,9 +5463,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
         confirmTextEditor(editor);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        cancelTextEditor(editor);
       }
     });
     helpButton.addEventListener("click", (event) => {
@@ -5834,6 +5826,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
     return new Blob([bytes], { type:match[1] });
   }
+  async function snapshotPreviewBlob() {
+    try {
+      return await canvasBlob(snapshotPreview());
+    } catch (error) {
+      console.warn("PenEcho snapshot thumbnail failed; saving with a fallback thumbnail:", error);
+      return dataUrlBlob("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    }
+  }
   async function snapshotApiResponse(response) {
     let body = null;
     try { body = await response.json(); } catch {}
@@ -6086,7 +6086,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setStatusKey("emptyCanvas");
       return null;
     }
-    await snapshotVisibleWidgets();
+    await snapshotVisibleWidgets({ bestEffort:true });
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -6096,7 +6096,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textBoxes = storedTextBoxes(),
       images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
-      preview = await canvasBlob(snapshotPreview()),
+      preview = await snapshotPreviewBlob(),
       requestedName = String(name === null ? nameInput.value : name).trim().slice(0, 48),
       item = {
         id,
@@ -6403,6 +6403,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
     backdrop.hidden = false;
+    panel.inert = false;
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
@@ -6413,6 +6414,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const panel = document.querySelector("#historyPanel"),
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
+    if (panel.contains(document.activeElement)) button.focus({ preventScroll:true });
+    panel.inert = true;
     panel.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
     button.setAttribute("aria-expanded", "false");

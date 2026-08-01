@@ -60,7 +60,96 @@
         responsiveDiagram = responsiveDiagram.replace(/^(\s*direction\s+)(LR|RL|TB|TD|BT)\b/gim, `$1${innerDirection}`);
       return { source:responsiveDiagram, direction };
     }
-    function frameRuntime(config, responsiveMermaidSource) {
+    function responsiveDotSource(value, width, height) {
+      const source = String(value || ""),
+        fixed = /(?:\/\/|\/\*)\s*penecho:fixed-layout\b/i.test(source),
+        edgeCount = source.match(/(?:->|--)/g)?.length || 0,
+        responsive = !fixed && (/(?:\/\/|\/\*)\s*penecho:responsive\b/i.test(source) || edgeCount > 10);
+      let originalDirection = "",
+        transformed = "",
+        index = 0,
+        replaced = false,
+        openingBrace = -1;
+      const directionPattern = /^(LR|RL|TB|TD|BT)$/i,
+        isIdentifierStart = (character) => /[A-Za-z_]/.test(character || ""),
+        isIdentifierPart = (character) => /[A-Za-z0-9_]/.test(character || "");
+      while (index < source.length) {
+        const character = source[index],
+          next = source[index + 1];
+        if (character === '"') {
+          const start = index++;
+          while (index < source.length) {
+            if (source[index] === "\\") index += 2;
+            else if (source[index++] === '"') break;
+          }
+          transformed += source.slice(start, index);
+          continue;
+        }
+        if (character === "/" && next === "/") {
+          const start = index;
+          index = source.indexOf("\n", index + 2);
+          if (index < 0) index = source.length;
+          transformed += source.slice(start, index);
+          continue;
+        }
+        if (character === "/" && next === "*") {
+          const start = index,
+            end = source.indexOf("*/", index + 2);
+          index = end < 0 ? source.length : end + 2;
+          transformed += source.slice(start, index);
+          continue;
+        }
+        if (character === "#" && (index === 0 || source[index - 1] === "\n")) {
+          const start = index;
+          index = source.indexOf("\n", index + 1);
+          if (index < 0) index = source.length;
+          transformed += source.slice(start, index);
+          continue;
+        }
+        if (openingBrace < 0 && character === "{") openingBrace = transformed.length;
+        if (isIdentifierStart(character)) {
+          const start = index++;
+          while (isIdentifierPart(source[index])) index += 1;
+          const identifier = source.slice(start, index);
+          if (identifier.toLowerCase() === "rankdir") {
+            let cursor = index;
+            while (/\s/.test(source[cursor] || "")) cursor += 1;
+            if (source[cursor] === "=") {
+              cursor += 1;
+              while (/\s/.test(source[cursor] || "")) cursor += 1;
+              const quote = source[cursor] === '"' ? '"' : "";
+              if (quote) cursor += 1;
+              const valueStart = cursor;
+              while (/[A-Za-z]/.test(source[cursor] || "")) cursor += 1;
+              const currentDirection = source.slice(valueStart, cursor).toUpperCase();
+              if (directionPattern.test(currentDirection) && (!quote || source[cursor] === quote)) {
+                if (!originalDirection) originalDirection = currentDirection;
+                if (responsive) {
+                  const horizontal = originalDirection === "RL" ? "RL" : "LR",
+                    vertical = originalDirection === "BT" ? "BT" : "TB",
+                    direction = width >= height * 1.35 ? horizontal : vertical;
+                  transformed += source.slice(start, valueStart) + direction + quote;
+                  index = cursor + (quote ? 1 : 0);
+                  replaced = true;
+                  continue;
+                }
+              }
+            }
+          }
+          transformed += identifier;
+          continue;
+        }
+        transformed += character;
+        index += 1;
+      }
+      const horizontal = originalDirection === "RL" ? "RL" : "LR",
+        vertical = originalDirection === "BT" ? "BT" : "TB",
+        direction = responsive ? width >= height * 1.35 ? horizontal : vertical : originalDirection;
+      if (responsive && !replaced && openingBrace >= 0)
+        transformed = `${transformed.slice(0, openingBrace + 1)}\n  graph [rankdir=${direction}];${transformed.slice(openingBrace + 1)}`;
+      return { source:responsive ? transformed : source, direction, responsive };
+    }
+    function frameRuntime(config, responsiveMermaidSource, responsiveDotSource) {
       const stage = document.querySelector("#diagram-stage"),
         status = document.querySelector("#diagram-status"),
         root = document.querySelector(".pd-root"),
@@ -137,12 +226,51 @@
       async function renderDot() {
         const { instance } = await import("https://cdn.jsdelivr.net/npm/@viz-js/viz@3.9.0/lib/viz-standalone.mjs"),
           viz = await instance(),
-          svg = viz.renderSVGElement(source);
-        svg.removeAttribute("width");
-        svg.removeAttribute("height");
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        stage.replaceChildren(svg);
+          initial = responsiveDotSource(source, stage.clientWidth, stage.clientHeight),
+          layouts = [];
+        const addLayout = (next) => {
+            if (layouts.some((layout) => layout.direction === next.direction)) return;
+            const svg = viz.renderSVGElement(next.source),
+              viewBox = svg.getAttribute("viewBox")?.trim().split(/[ ,]+/).map(Number),
+              intrinsicWidth = viewBox?.length === 4 && Number.isFinite(viewBox[2]) && viewBox[2] > 0
+                ? viewBox[2]
+                : Number.parseFloat(svg.getAttribute("width")) || 1,
+              intrinsicHeight = viewBox?.length === 4 && Number.isFinite(viewBox[3]) && viewBox[3] > 0
+                ? viewBox[3]
+                : Number.parseFloat(svg.getAttribute("height")) || 1;
+            svg.removeAttribute("width");
+            svg.removeAttribute("height");
+            svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+            svg.style.width = "100%";
+            svg.style.height = "100%";
+            svg.style.maxWidth = "100%";
+            svg.style.maxHeight = "100%";
+            layouts.push({ svg, direction:next.direction, intrinsicWidth, intrinsicHeight });
+          },
+          paint = () => {
+            const width = Math.max(1, stage.clientWidth),
+              height = Math.max(1, stage.clientHeight),
+              preferred = responsiveDotSource(source, width, height).direction,
+              best = layouts.reduce((winner, layout) => {
+                const scale = Math.min(width / layout.intrinsicWidth, height / layout.intrinsicHeight),
+                  winnerScale = winner ? Math.min(width / winner.intrinsicWidth, height / winner.intrinsicHeight) : -1;
+                return scale > winnerScale + .0001 || Math.abs(scale - winnerScale) <= .0001 && layout.direction === preferred ? layout : winner;
+              }, null);
+            if (best && stage.firstElementChild !== best.svg) {
+              stage.replaceChildren(best.svg);
+              notify();
+            }
+          };
+        if (initial.responsive) {
+          const horizontal = responsiveDotSource(source, 2, 1),
+            vertical = responsiveDotSource(source, 1, 2);
+          for (const next of [horizontal, vertical]) {
+            try { addLayout(next); } catch {}
+          }
+        }
+        if (!layouts.length) addLayout(initial);
+        paint();
+        resizeRender = paint;
       }
       async function renderBpmn() {
         await Promise.all([
@@ -396,7 +524,7 @@
       <p id="diagram-status" class="pd-status">Rendering ${escapeHtml(format.label)}...</p>
     </section>
   </main>
-  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveMermaidSource.toString()});</script>
+  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveMermaidSource.toString()},${responsiveDotSource.toString()});</script>
 </body>
 </html>`;
     }
@@ -408,6 +536,7 @@
       formatRecord,
       copyLabel,
       responsiveMermaidSource,
+      responsiveDotSource,
       documentFor,
     });
   })();

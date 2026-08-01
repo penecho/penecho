@@ -272,12 +272,8 @@ test("declarative scenes and widgets render below the dedicated ink and interact
   assert.match(eraseRect, /invalidateSharpOverlays\(\{ x, y, w, h \}\);[\s\S]*?forTiles\(/);
   assert.match(eraseWithMask, /invalidateSharpOverlays\(\{ x, y, w, h \}\);[\s\S]*?forTiles\(/);
 
-  const restoreState = { animations: [], selectedAnimationId: null, nextAnimationId: 1 },
+  const restoreState = { animations: [{ id:"existing" }], selectedAnimationId: "existing", animationEdit:{ id:"existing" }, nextAnimationId: 1 },
     restore = vm.runInNewContext(`(${functionSource(app, "restoreAnimations")})`, {
-      ANIMATION: { normalize: (scene) => scene },
-      SIZE: 20000,
-      MAX_VISIBLE_ANIMATIONS: 100,
-      performance: { now: () => 100 },
       hideAnimationControls: () => {},
       requestAnimationLayerRender: () => {},
       state: restoreState,
@@ -289,9 +285,10 @@ test("declarative scenes and widgets render below the dedicated ink and interact
       playback: { playheadMs: 250, paused: true },
     };
   restore(Array.from({ length: 102 }, () => saved));
-  assert.equal(restoreState.animations.length, 100);
-  assert.equal(new Set(restoreState.animations.map((animation) => animation.id)).size, 100);
-  assert.ok(restoreState.nextAnimationId >= 101);
+  assert.equal(restoreState.animations.length, 0);
+  assert.equal(restoreState.selectedAnimationId, null);
+  assert.equal(restoreState.animationEdit, null);
+  assert.equal(restoreState.nextAnimationId, 1);
 });
 
 test("plugin manager is a centered dynamic catalog with General HTML and bundled local plugins", () => {
@@ -304,7 +301,7 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(app, /BUILTIN_PLUGIN_DEFINITIONS\s*=\s*Object\.freeze\(\[\]\)/);
   assert.doesNotMatch(app, /documentPath:\s*"plugins\/weather\.md"/);
   const loadPluginDocuments = functionSource(app, "loadPluginDocuments");
-  assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "flowchart", "image-search", "weather"\]\.includes\(item\.manifest\.id\)[\s\S]*?professionalDefinitions = definitions\.filter\(\(definition\) => definition\.id === "flowchart"\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.professionalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
+  assert.match(loadPluginDocuments, /fetch\("\/api\/plugins"[\s\S]*?defaultEnabled:\["general", "flowchart"\]\.includes\(item\.manifest\.id\)[\s\S]*?professionalDefinitions = definitions\.filter\(\(definition\) => definition\.id === "flowchart"\)[\s\S]*?promotedDefinitions = \["image-search", "weather"\][\s\S]*?PLUGIN_DEFINITIONS\.splice\(0, PLUGIN_DEFINITIONS\.length, \.\.\.generalDefinitions, \.\.\.professionalDefinitions, \.\.\.BUILTIN_PLUGIN_DEFINITIONS, \.\.\.promotedDefinitions, \.\.\.remainingDefinitions\)/);
   const enabledPluginDescriptors = functionSource(app, "enabledPluginDescriptors");
   assert.match(enabledPluginDescriptors, /id === "general" \? 0 : id === "flowchart" \? 1 : 2/);
   assert.doesNotMatch(enabledPluginDescriptors, /styles/);
@@ -319,6 +316,7 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(functionSource(app, "validate"), /acceptedTools = \["write_text", "draw_formula", "plot_function", "erase"\]/);
   assert.doesNotMatch(functionSource(app, "validate"), /animate_scene/);
   assert.match(functionSource(app, "renderPluginOptions"), /localizedManifestValue[\s\S]*?pluginPromptEstimate[\s\S]*?copy\.append\(titleRow, help, meta\)/);
+  assert.match(functionSource(app, "renderPluginOptions"), /plugin\.id === "general" \? t\("pluginPublicHttps"\)/);
   assert.match(app, /pluginPromptEstimate:\s*"adds about \{tokens\} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens"/);
   assert.match(app, /MAX_VISIBLE_WIDGETS = 100/);
   assert.match(app, /widgetLimitReached:\s*"Live widget limit reached \(100\)/);
@@ -695,11 +693,14 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.doesNotMatch(functionSource(app, "resizeWidgetBox"), /5000|4000|12000000|maximumArea/);
   assert.doesNotMatch(functionSource(app, "widgetRecord"), /pluginManifests\.has/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /width:widget\.contentW, height:widget\.contentH/);
+  assert.match(functionSource(app, "requestWidgetSnapshot"), /timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS[\s\S]*?timeoutMs \}, widget\.hostOrigin/);
   assert.match(functionSource(app, "requestWidgetSnapshot"), /if \(widget\.snapshotPromise\) return widget\.snapshotPromise[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
   assert.match(messageHandler, /penecho-widget-updated[\s\S]*?widget\.contentReady = true/);
+  assert.match(messageHandler, /penecho-widget-snapshot-error[\s\S]*?console\.warn\("PenEcho widget snapshot failed:"/);
   assert.doesNotMatch(messageHandler, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
   assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 3);
-  assert.match(functionSource(app, "snapshotVisibleWidgets"), /requestWidgetSnapshot\(widget\)/);
+  assert.match(app, /WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,[\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000/);
+  assert.match(app, /async function snapshotVisibleWidgets\(\{ bestEffort = false \} = \{\}\) \{[\s\S]*?Promise\.all\(requests\)[\s\S]*?request\.catch\(\(\) => null\)[\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS/);
   assert.doesNotMatch(finishWidgetGesture, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
   assert.match(finishWidgetGesture, /state\.widgetGesture = null[\s\S]*?positionWidget\(gesture\.widget\)/);
   const visibilityState = { scale:1, widgetGesture:null },
@@ -942,6 +943,9 @@ test("Save canvas exposes non-blocking progress and completion feedback", () => 
   assert.match(finalize, /state\.selection[\s\S]*?commitSelection\(\)/);
   assert.match(finalize, /finishAIDraftHandMode\(\)/);
   assert.match(app, /async function saveSnapshot\(\{ overwriteId = null, name = null, location = state\.snapshotLocation \} = \{\}\) \{[\s\S]*?selectionAIBusy\(\)[\s\S]*?await finalizeCanvasForSnapshot\(\)[\s\S]*?if \(!tiles\.size/);
+  assert.match(app, /async function saveSnapshot\([\s\S]*?snapshotVisibleWidgets\(\{ bestEffort:true \}\)/);
+  assert.match(functionSource(app, "snapshotPreviewBlob"), /canvasBlob\(snapshotPreview\(\)\)[\s\S]*?fallback thumbnail[\s\S]*?data:image\/png;base64/);
+  assert.match(app, /async function saveSnapshot\([\s\S]*?preview = await snapshotPreviewBlob\(\)/);
   assert.match(functionSource(app, "loadSnapshot"), /state\.currentSnapshotId = item\.id/);
   assert.match(functionSource(app, "loadSnapshot"), /state\.currentSnapshotLocation = location/);
   assert.match(app, /async function saveSnapshot\([\s\S]*?state\.currentSnapshotId = id/);
@@ -950,6 +954,10 @@ test("Save canvas exposes non-blocking progress and completion feedback", () => 
 
 test("canvas history clearly separates device-only and shared PenEcho server storage", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
+  const closeHistory = functionSource(app, "closeHistoryPanel"), openHistory = functionSource(app, "openHistoryPanel");
+  assert.match(html, /id="historyPanel"[^>]*aria-hidden="true"[^>]*\sinert/);
+  assert.match(openHistory, /panel\.inert = false/);
+  assert.match(closeHistory, /panel\.contains\(document\.activeElement\)[\s\S]*?button\.focus\(\{ preventScroll:true \}\)[\s\S]*?panel\.inert = true[\s\S]*?aria-hidden", "true"/);
   for (const name of ["historyStorageLocation", "newCanvasStorageLocation"]) {
     assert.match(html, new RegExp(`name="${name}" value="device"`));
     assert.match(html, new RegExp(`name="${name}" value="server"`));
@@ -1205,6 +1213,7 @@ test("text tool toggles a real MD+TeX preview and confirms the unchanged source"
   assert.match(app, /state\.latestTypedInput = \{ text: text\.slice\(0, TEXT_INPUT_MAX_LENGTH\), box \}/);
   const confirm = functionSource(app, "confirmTextEditor"),
     cancel = functionSource(app, "cancelTextEditor"),
+    create = functionSource(app, "createTextEditor"),
     setMode = functionSource(app, "setCanvasMode"),
     openHelp = functionSource(app, "openTextHelp"),
     restoreHelp = functionSource(app, "restoreTextEditorAfterHelp"),
@@ -1214,6 +1223,9 @@ test("text tool toggles a real MD+TeX preview and confirms the unchanged source"
   assert.match(app, /TEXT_INPUT_GUARD_MS\s*=\s*500/);
   assert.match(confirm, /blockCanvasInput\(TEXT_INPUT_GUARD_MS\)/);
   assert.match(cancel, /blockCanvasInput\(TEXT_INPUT_GUARD_MS\)/);
+  assert.match(cancel, /editor\.sourceTextBoxId[\s\S]*?recordTextBoxesBefore\(\)[\s\S]*?state\.textBoxes\.splice\(index, 1\)[\s\S]*?state\.userRevision\+\+[\s\S]*?save\(\)/);
+  assert.match(cancel, /if \(!deletedTextBox && !state\.textEditors\.size/);
+  assert.doesNotMatch(create, /event\.key === "Escape"/);
   assert.match(confirm, /editor\.cancelled \|\| state\.textEditors\.get\(editor\.id\) !== editor/);
   assert.match(confirm, /if \(editor\.commitPromise\) return editor\.commitPromise/);
   assert.match(confirm, /editor\.commitPromise = commitPromise/);

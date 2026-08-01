@@ -137,7 +137,8 @@
     MAX_WIDGET_COPY_TEXT_LENGTH = 16000,
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
-    WIDGET_SNAPSHOT_TIMEOUT_MS = 12000;
+    WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -341,7 +342,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogEarlierTitle: "Earlier highlights",
       changelogImagesSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
       changelogPluginsSummary: "0.7.1 added local images and photos with canvas-native editing, snapshots, PNG export, and early copyable flowcharts.",
-      changelogAnimation: "0.7.0 introduced sandboxed HTML plugins; 0.6.0 introduced controllable declarative animation scenes.",
+      changelogAnimation: "Legacy declarative animations are no longer loaded. Older canvases still open without errors; create new animations through General HTML with SVG.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -493,6 +494,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pluginSourceLabel: "Source: {source}",
       pluginApiLabel: "API: {origins}",
       pluginNoNetwork: "No network access",
+      pluginPublicHttps: "Any public HTTPS origin",
       pluginPromptEstimate: "adds about {tokens} prompt tokens to each AI request while enabled; once on canvas, display, interaction, refresh, and rendering use no tokens",
       pluginRefreshRate: "refresh {time}",
       pluginDetails: "Details",
@@ -1581,7 +1583,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           documentPath:item.documentPath,
           stylePath:item.stylePath,
           builtIn:item.builtIn,
-          defaultEnabled:["general", "flowchart", "image-search", "weather"].includes(item.manifest.id),
+          defaultEnabled:["general", "flowchart"].includes(item.manifest.id),
         }));
       }
       definitions.sort((a, b) => (manifests.get(a.id)?.name || a.id).localeCompare(manifests.get(b.id)?.name || b.id));
@@ -1707,7 +1709,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           sourceItem.className = "plugin-option-source";
           sourceItem.textContent = t("pluginSourceLabel").replace("{source}", source);
           apiItem.className = "plugin-option-api";
-          apiItem.textContent = t("pluginApiLabel").replace("{origins}", manifest.connect.length ? manifest.connect.join(" · ") : t("pluginNoNetwork"));
+          apiItem.textContent = t("pluginApiLabel").replace("{origins}", plugin.id === "general" ? t("pluginPublicHttps") : manifest.connect.length ? manifest.connect.join(" · ") : t("pluginNoNetwork"));
           refreshItem.textContent = pluginRefreshText(manifest.recommendedRefreshSeconds);
           tokenItem.textContent = t("pluginPromptEstimate").replace("{tokens}", String(tokens));
           meta.append(sourceItem, apiItem, refreshItem, tokenItem);

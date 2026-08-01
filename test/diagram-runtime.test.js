@@ -97,6 +97,40 @@ flowchart LR
   assert.equal((narrow.source.match(/direction LR/g) || []).length, 3);
 });
 
+test("complex Graphviz diagrams provide horizontal and vertical layouts for the widget shape", () => {
+  const source = `digraph Transformer {
+  graph [rankdir=LR, bgcolor="transparent"];
+  subgraph cluster_encoder { a -> b -> c -> d -> e -> f; }
+  subgraph cluster_decoder { g -> h -> i -> j -> k -> l; }
+  a -> g; b -> h; c -> i;
+}`,
+    wide = runtime.responsiveDotSource(source, 1600, 700),
+    compact = runtime.responsiveDotSource(source, 1200, 1050);
+  assert.equal(wide.responsive, true);
+  assert.equal(wide.direction, "LR");
+  assert.match(wide.source, /rankdir=LR/);
+  assert.equal(compact.direction, "TB");
+  assert.match(compact.source, /rankdir=TB/);
+
+  const inserted = runtime.responsiveDotSource(`// penecho:responsive\ndigraph G { a -> b; }`, 500, 900);
+  assert.equal(inserted.direction, "TB");
+  assert.match(inserted.source, /\{\n  graph \[rankdir=TB\];/);
+
+  const quoted = runtime.responsiveDotSource(`// penecho:responsive\ndigraph G { graph [rankdir="LR"]; a -> b; }`, 500, 900);
+  assert.match(quoted.source, /rankdir="TB"/);
+
+  const fixed = runtime.responsiveDotSource(`// penecho:fixed-layout\ndigraph G { graph [rankdir=LR]; a -> b; }`, 500, 900);
+  assert.equal(fixed.responsive, false);
+  assert.equal(fixed.source.includes("rankdir=LR"), true);
+});
+
+test("Graphviz renderer selects the layout with the largest readable fit on resize", () => {
+  const html = runtime.documentFor({ sourceFormat:"dot", source:"digraph G { a -> b; }", title:"Graph" });
+  assert.match(html, /responsiveDotSource/);
+  assert.match(html, /Math\.min\(width \/ layout\.intrinsicWidth, height \/ layout\.intrinsicHeight\)/);
+  assert.match(html, /resizeRender = paint/);
+});
+
 test("diagram source is persisted canonically and regenerated through the widget iframe", () => {
   const canvas = read("src/client/app/canvas-runtime.js"),
     core = read("src/client/app/core.js"),

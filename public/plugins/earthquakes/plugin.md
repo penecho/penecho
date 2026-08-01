@@ -28,7 +28,7 @@ Fetch GeoJSON from `GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summar
 
 ## Runtime rules
 
-Fetch only the declared origin with `credentials:"omit"`. The HTML owns its initial fetch and refresh timer. Do not use external assets, navigation, forms, cookies, storage, or secrets. Show loading/error states and the last successful update time. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
+Fetch only the declared origin with `credentials:"omit"`. The HTML owns its initial fetch and refresh timer. Do not use external assets, current-frame navigation, forms, cookies, storage, or secrets. Show loading/error states and the last successful update time. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
 
 ## One-shot example
 

@@ -674,6 +674,7 @@
       url.hostname = "localhost";
       url.searchParams.set("parent-origin", location.origin);
     }
+    if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -827,38 +828,39 @@
       image.src = dataUrl;
     });
   }
-  async function waitForWidgetContent(widget) {
+  async function waitForWidgetContent(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     if (widget.contentReady) return;
     if (!widget.readyPromise) throw Error(t("widgetExportFailed"));
     await Promise.race([
       widget.readyPromise,
-      new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+      new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
     ]);
   }
-  async function requestWidgetSnapshot(widget) {
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     if (widget.snapshotPromise) return widget.snapshotPromise;
+    timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
     const snapshotPromise = (async () => {
       const previousActive = widget.renderActive;
       try {
         if (!widget.hostReady && widget.hostReadyPromise) await Promise.race([
           widget.hostReadyPromise,
-          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), WIDGET_SNAPSHOT_TIMEOUT_MS)),
+          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
         ]);
         if (!widget.initialized) {
           widget.renderActive = true;
           sendWidgetInit(widget);
           sendWidgetHostState(widget, undefined, undefined, true);
         }
-        await waitForWidgetContent(widget);
+        await waitForWidgetContent(widget, timeoutMs);
         if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
         const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
         return await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             widgetSnapshotRequests.delete(requestId);
             reject(Error(t("widgetExportFailed")));
-          }, WIDGET_SNAPSHOT_TIMEOUT_MS);
+          }, timeoutMs);
           widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH }, widget.hostOrigin || location.origin);
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
@@ -920,6 +922,7 @@
     widgetSnapshotRequests.delete(message.requestId);
     clearTimeout(pending.timer);
     if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")) {
+      if (message.type === "penecho-widget-snapshot-error") console.warn("PenEcho widget snapshot failed:", String(message.error || "unknown error").slice(0, 300));
       pending.reject(Error(t("widgetExportFailed")));
       return;
     }
@@ -1413,8 +1416,14 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function snapshotVisibleWidgets() {
-    for (const widget of visibleWidgets()) await requestWidgetSnapshot(widget);
+  async function snapshotVisibleWidgets({ bestEffort = false } = {}) {
+    const timeoutMs = bestEffort ? WIDGET_HISTORY_SNAPSHOT_WAIT_MS : WIDGET_SNAPSHOT_TIMEOUT_MS,
+      requests = visibleWidgets().map((widget) => requestWidgetSnapshot(widget, timeoutMs));
+    if (!bestEffort) return void await Promise.all(requests);
+    await Promise.all(requests.map((request) => Promise.race([
+      request.catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
+    ])));
   }
 
   function animationBox(animation) {
@@ -1478,35 +1487,8 @@
     state.selectedAnimationId = null;
     state.animationEdit = null;
     hideAnimationControls();
-    const now = performance.now(),
-      usedIds = new Set();
-    for (const saved of Array.isArray(items) ? items : []) {
-      if (state.animations.length >= MAX_VISIBLE_ANIMATIONS) break;
-      const scene = ANIMATION?.normalize(saved?.scene, SIZE),
-        transform = saved?.transform;
-      if (!scene || !transform || ![transform.x, transform.y, transform.w, transform.h].every(Number.isFinite) || transform.w <= 0 || transform.h <= 0 || transform.x < 0 || transform.y < 0 || transform.x + transform.w > SIZE || transform.y + transform.h > SIZE) continue;
-      const playheadMs = Math.max(0, Math.min(scene.durationMs, Number(saved.playback?.playheadMs) || 0)),
-        paused = Boolean(saved.playback?.paused);
-      let id = typeof saved.id === "string" && saved.id.length <= 128 && !usedIds.has(saved.id) ? saved.id : "";
-      const numberedId = /^animation-(\d+)$/.exec(id);
-      if (numberedId) state.nextAnimationId = Math.max(state.nextAnimationId, Number(numberedId[1]) + 1);
-      if (!id) {
-        do id = "animation-" + state.nextAnimationId++;
-        while (usedIds.has(id));
-      }
-      usedIds.add(id);
-      state.animations.push({
-        id,
-        scene,
-        x: transform.x,
-        y: transform.y,
-        w: transform.w,
-        h: transform.h,
-        playheadMs,
-        paused,
-        startedAt: now,
-      });
-    }
+    // Legacy declarative animation scenes are intentionally no longer loaded.
+    // Keeping this tolerant hook lets snapshots from older releases open silently.
     requestAnimationLayerRender();
   }
   function recordAnimationsBefore() {
@@ -2916,14 +2898,28 @@
   }
   function cancelTextEditor(editor) {
     if (!editor || editor.committing) return;
-    if (editor.sourceTextBoxId) state.selectedTextBoxId = null;
+    let deletedTextBox = null;
+    if (editor.sourceTextBoxId) {
+      const index = state.textBoxes.findIndex((item) => item.id === editor.sourceTextBoxId);
+      if (index >= 0) {
+        recordTextBoxesBefore();
+        deletedTextBox = state.textBoxes[index];
+        state.textBoxes.splice(index, 1);
+      }
+      state.selectedTextBoxId = null;
+    }
     removeTextEditor(editor);
     blockCanvasInput(TEXT_INPUT_GUARD_MS);
     if (editor.returnMode) restoreTextEditorMode(editor);
     else setCanvasMode("pen");
+    if (deletedTextBox) {
+      state.userRevision++;
+      mergeDirtyBox(textBoxBox(deletedTextBox));
+      save();
+    }
     render();
     setStatusKey("ready");
-    if (!state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
+    if (!deletedTextBox && !state.textEditors.size && state.auto && state.autoEligible) schedule(Math.max(1000, state.autoDelayMs));
   }
   function createTextEditor(point, options = null) {
     options ||= {};
@@ -3039,9 +3035,6 @@
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
         confirmTextEditor(editor);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        cancelTextEditor(editor);
       }
     });
     preview.addEventListener("focus", () => focusTextEditor(editor));
@@ -3050,9 +3043,6 @@
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
         confirmTextEditor(editor);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        cancelTextEditor(editor);
       }
     });
     helpButton.addEventListener("click", (event) => {

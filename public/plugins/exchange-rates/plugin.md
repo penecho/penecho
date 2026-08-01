@@ -28,7 +28,7 @@ For latest data fetch JSON `GET https://api.frankfurter.dev/v1/latest?base={BASE
 
 ## Runtime rules
 
-Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its daily timer. Do not use external assets, navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
+Fetch only the declared origin with `credentials:"omit"`. The HTML owns fetching and its daily timer. Do not use external assets, current-frame navigation, forms, cookies, storage, or secrets. Show loading/error states and last successful update. After every render call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`.
 
 ## One-shot example
 

@@ -5,8 +5,13 @@
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
     MAX_SNAPSHOT_DATA_URL_LENGTH = 28 * 1024 * 1024,
-    SNAPSHOT_REQUEST_TIMEOUT_MS = 15000,
+    SNAPSHOT_REQUEST_TIMEOUT_MS = 18000,
     UPDATE_FORWARD_INTERVAL_MS = 2000,
+    PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024,
+    accessSession = (() => {
+      const value = new URL(location.href).searchParams.get("access-session") || "";
+      return /^[A-Za-z0-9_-]{32,128}$/.test(value) ? value : "";
+    })(),
     requestedParentOrigin = new URL(location.href).searchParams.get("parent-origin"),
     parentOrigin = (() => {
       try {
@@ -16,6 +21,7 @@
       }
     })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
+    publicFetchUrl = new URL("api/widget-fetch", location.href).href,
     connect = new URL(location.href).searchParams.getAll("connect"),
     inner = document.createElement("iframe");
   let initialized = false,
@@ -27,7 +33,7 @@
     widgetState = { selected:false, active:true, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
 
-  inner.setAttribute("sandbox", parentOrigin === location.origin ? "allow-scripts" : "allow-scripts allow-same-origin");
+  inner.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
   inner.setAttribute("title", "Dynamic canvas widget");
   inner.addEventListener("load", () => {
     if (innerDocumentUrl) {
@@ -49,23 +55,98 @@
       PAN_MOVE = "penecho-widget-pan-move",
       PAN_END = "penecho-widget-pan-end",
       WHEEL = "penecho-widget-wheel",
+      PUBLIC_FETCH_REQUEST = "penecho-widget-public-fetch-request",
+      PUBLIC_FETCH_RESPONSE = "penecho-widget-public-fetch-response",
       MOVE_TOLERANCE_PX = 8,
       CONTROL_RADIUS_PX = 26,
       MAX_SNAPSHOT_DIMENSION = 2400,
-      MAX_SNAPSHOT_PIXELS = 4800000;
+      MAX_SNAPSHOT_PIXELS = 4800000,
+      PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024;
     let widgetState = { selected:false, active:true, scaleX:1, scaleY:1 },
       suppressClickUntil = 0,
       middlePan = null;
     const presses = new Map(),
+      publicFetchRequests = new Map(),
       pausedAnimations = new WeakSet(),
       pausedSvgRoots = new WeakSet(),
       pendingAnimationFrames = new Map(),
       nativeAnimationFrames = new Map(),
       nativeRequestAnimationFrame = globalThis.requestAnimationFrame.bind(globalThis),
-      nativeCancelAnimationFrame = globalThis.cancelAnimationFrame.bind(globalThis);
+      nativeCancelAnimationFrame = globalThis.cancelAnimationFrame.bind(globalThis),
+      nativeFetch = typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null,
+      nativeOpen = typeof globalThis.open === "function" ? globalThis.open.bind(globalThis) : null;
     let runtimeActive = true,
-      nextAnimationFrameId = 1;
+      nextAnimationFrameId = 1,
+      nextPublicFetchId = 1;
     const clock = () => typeof performance === "object" && typeof performance.now === "function" ? performance.now() : Date.now();
+    function publicHttpsLink(value) {
+      try {
+        const url = new URL(String(value || ""), document.baseURI);
+        return url.protocol === "https:" && !url.username && !url.password ? url.href : "";
+      } catch {
+        return "";
+      }
+    }
+    function prepareOutboundLink(anchor) {
+      const href = publicHttpsLink(anchor?.getAttribute?.("href"));
+      if (!href) return false;
+      anchor.setAttribute("href", href);
+      anchor.setAttribute("target", "_blank");
+      anchor.setAttribute("rel", "noopener noreferrer");
+      anchor.setAttribute("referrerpolicy", "no-referrer");
+      anchor.removeAttribute("download");
+      anchor.removeAttribute("ping");
+      return true;
+    }
+    if (nativeOpen) {
+      const safeOpen = (value) => {
+        const href = publicHttpsLink(value);
+        return href ? nativeOpen(href, "_blank", "noopener,noreferrer") : null;
+      };
+      try { Object.defineProperty(globalThis, "open", { value:safeOpen, configurable:false, writable:false }); }
+      catch { try { globalThis.open = safeOpen; } catch {} }
+    }
+    globalThis.penechoFetchPublic = (value) => {
+      const url = String(value || "");
+      if (!url || url.length > PUBLIC_FETCH_MAX_URL_LENGTH) return Promise.reject(Error("A public HTTPS URL is required"));
+      const requestId = `public-fetch-${nextPublicFetchId++}`;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          publicFetchRequests.delete(requestId);
+          reject(Error("The public data request timed out"));
+        }, 45000);
+        publicFetchRequests.set(requestId, { resolve, reject, timer });
+        parent.postMessage({ type:PUBLIC_FETCH_REQUEST, requestId, url }, "*");
+      });
+    };
+    function publicFetchFallbackUrl(input, init) {
+      try {
+        const request = typeof Request === "function" && input instanceof Request ? input : null,
+          method = String(init?.method || request?.method || "GET").toUpperCase(),
+          signal = init?.signal || request?.signal;
+        if (method !== "GET" || init?.body != null || signal?.aborted) return "";
+        const credentials = String(init?.credentials || request?.credentials || "omit").toLowerCase();
+        if (!["omit", "same-origin"].includes(credentials)) return "";
+        const headers = new Headers(init?.headers || request?.headers || undefined);
+        if (headers.has("authorization") || headers.has("cookie")) return "";
+        return publicHttpsLink(request?.url || input);
+      } catch {
+        return "";
+      }
+    }
+    if (nativeFetch) {
+      const directFirstFetch = async (input, init) => {
+        try {
+          return await nativeFetch(input, init);
+        } catch (error) {
+          const url = publicFetchFallbackUrl(input, init);
+          if (!url) throw error;
+          return globalThis.penechoFetchPublic(url);
+        }
+      };
+      try { Object.defineProperty(globalThis, "fetch", { value:directFirstFetch, configurable:false, writable:false }); }
+      catch { try { globalThis.fetch = directFirstFetch; } catch {} }
+    }
     function scheduleAnimationFrame(id) {
       const callback = pendingAnimationFrames.get(id);
       if (!callback || !runtimeActive || nativeAnimationFrames.has(id)) return;
@@ -292,11 +373,15 @@
       event.stopImmediatePropagation();
     }, { capture:true, passive:false });
     addEventListener("click", (event) => {
-      if (!suppressClickUntil || clock() > suppressClickUntil) {
+      if (suppressClickUntil && clock() <= suppressClickUntil) {
         suppressClickUntil = 0;
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
       suppressClickUntil = 0;
+      const anchor = event.target?.closest?.("a[href]");
+      if (!anchor || prepareOutboundLink(anchor)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, true);
@@ -357,6 +442,8 @@
           "text-anchor", "dominant-baseline", "paint-order",
           "marker-start", "marker-mid", "marker-end",
           "stop-color", "stop-opacity",
+          "transform", "transform-origin", "transform-box",
+          "filter", "clip-path", "mask",
         ],
         records = [],
         backgrounds = [];
@@ -375,61 +462,153 @@
         }
         for (const element of [svg, ...svg.querySelectorAll("*")]) {
           const computed = getComputedStyle(element),
-            attributes = [];
+            styles = [];
           for (const property of properties) {
             const value = computed.getPropertyValue(property).trim();
             if (!value) continue;
-            attributes.push([property, element.hasAttribute(property), element.getAttribute(property)]);
-            element.setAttribute(property, value);
+            styles.push([property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
+            element.style.setProperty(property, value, "important");
           }
-          if (attributes.length) records.push([element, attributes]);
+          if (styles.length) records.push([element, styles]);
         }
       }
       return () => {
-        for (const [element, attributes] of records) {
-          for (const [property, present, value] of attributes) {
-            if (present) element.setAttribute(property, value);
-            else element.removeAttribute(property);
+        for (const [element, styles] of records) {
+          for (const [property, value, priority] of styles) {
+            if (value) element.style.setProperty(property, value, priority);
+            else element.style.removeProperty(property);
           }
         }
         for (const background of backgrounds) background.remove();
       };
+    }
+    function imageFromUrl(url, timeoutMs = 5000) {
+      return new Promise((resolve, reject) => {
+        const image = new Image(),
+          finish = (error) => {
+            clearTimeout(timer);
+            image.onload = image.onerror = null;
+            if (error) reject(error);
+            else resolve(image);
+          },
+          timer = setTimeout(() => finish(Error("SVG snapshot decoding timed out")), timeoutMs);
+        image.onload = () => finish();
+        image.onerror = () => finish(Error("SVG snapshot could not be decoded"));
+        image.src = url;
+      });
+    }
+    function withTimeout(promise, timeoutMs, onTimeout) {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          onTimeout?.();
+          reject(Error("Widget snapshot timed out"));
+        }, timeoutMs);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+    async function snapshotPrimarySvg(requestedWidth, requestedHeight, scale) {
+      const visible = [...document.querySelectorAll("svg")].map((svg) => ({ svg, rect:svg.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.width > 0 && rect.height > 0);
+      if (visible.length !== 1) return null;
+      const { svg, rect } = visible[0],
+        tolerance = 2;
+      if (rect.left > tolerance || rect.top > tolerance || rect.right < requestedWidth - tolerance || rect.bottom < requestedHeight - tolerance) return null;
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("width", String(requestedWidth));
+      clone.setAttribute("height", String(requestedHeight));
+      const source = new XMLSerializer().serializeToString(clone),
+        url = URL.createObjectURL(new Blob([source], { type:"image/svg+xml" }));
+      try {
+        const image = await imageFromUrl(url),
+          canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.floor(requestedWidth * scale));
+        canvas.height = Math.max(1, Math.floor(requestedHeight * scale));
+        const context = canvas.getContext("2d");
+        if (!context) throw Error("Canvas renderer is unavailable");
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        return canvas;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
     }
     async function snapshot(message) {
       let restoreSvgStyles = () => {};
       try {
         const requestedWidth = Math.max(1, Number(message.width) || document.documentElement.clientWidth || 1),
           requestedHeight = Math.max(1, Number(message.height) || document.documentElement.clientHeight || 1),
-          scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight)));
-        if (typeof globalThis.html2canvas !== "function") throw Error("Widget renderer is unavailable");
+          scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight))),
+          timeoutMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
+        setRuntimeActive(false);
         restoreSvgStyles = inlineSvgComputedStyles();
-        const canvas = await globalThis.html2canvas(document.documentElement, {
-          backgroundColor:null,
-          width:requestedWidth,
-          height:requestedHeight,
-          windowWidth:requestedWidth,
-          windowHeight:requestedHeight,
-          scrollX:0,
-          scrollY:0,
-          scale,
-          logging:false,
-          useCORS:true,
-          allowTaint:false,
-          foreignObjectRendering:false,
-          penechoDirectRendering:true,
-          imageTimeout:10000,
-        });
+        let captureExpired = false;
+        const render = async () => {
+          let canvas = null;
+          try {
+            canvas = await snapshotPrimarySvg(requestedWidth, requestedHeight, scale);
+            if (canvas) canvas.toDataURL("image/png");
+          } catch (error) {
+            console.warn("PenEcho native SVG snapshot failed; using DOM renderer:", String(error?.message || error).slice(0, 300));
+          }
+          if (captureExpired) {
+            if (canvas) canvas.width = canvas.height = 1;
+            throw Error("Widget snapshot timed out");
+          }
+          if (!canvas) {
+            if (typeof globalThis.html2canvas !== "function") throw Error("Widget renderer is unavailable");
+            canvas = await globalThis.html2canvas(document.documentElement, {
+              backgroundColor:null,
+              width:requestedWidth,
+              height:requestedHeight,
+              windowWidth:requestedWidth,
+              windowHeight:requestedHeight,
+              scrollX:0,
+              scrollY:0,
+              scale,
+              logging:false,
+              useCORS:true,
+              allowTaint:false,
+              foreignObjectRendering:false,
+              penechoDirectRendering:true,
+              imageTimeout:Math.min(10000, timeoutMs),
+            });
+          }
+          if (captureExpired) {
+            canvas.width = canvas.height = 1;
+            throw Error("Widget snapshot timed out");
+          }
+          return canvas;
+        };
+        const canvas = await withTimeout(render(), timeoutMs, () => (captureExpired = true));
         parent.postMessage({ type:"penecho-widget-snapshot", requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height }, "*");
         canvas.width = canvas.height = 1;
       } catch (error) {
         parent.postMessage({ type: "penecho-widget-snapshot-error", requestId: message.requestId, error: error.message }, "*");
       } finally {
-        restoreSvgStyles();
+        try {
+          restoreSvgStyles();
+        } finally {
+          setRuntimeActive(widgetState.active);
+        }
       }
     }
     addEventListener("message", (event) => {
       if (event.source !== parent) return;
-      if (event.data?.type === "penecho-widget-snapshot-request") void snapshot(event.data);
+      if (event.data?.type === PUBLIC_FETCH_RESPONSE && publicFetchRequests.has(event.data.requestId)) {
+        const pending = publicFetchRequests.get(event.data.requestId);
+        publicFetchRequests.delete(event.data.requestId);
+        clearTimeout(pending.timer);
+        if (typeof event.data.error === "string") pending.reject(Error(event.data.error));
+        else if (Number.isInteger(event.data.status) && event.data.status >= 200 && event.data.status <= 599
+          && (typeof event.data.body === "string" || event.data.body instanceof ArrayBuffer)) {
+          const headers = new Headers();
+          if (typeof event.data.contentType === "string" && event.data.contentType) headers.set("Content-Type", event.data.contentType);
+          if (typeof event.data.finalUrl === "string" && event.data.finalUrl) headers.set("X-PenEcho-Final-URL", event.data.finalUrl);
+          const body = [204, 205, 304].includes(event.data.status) ? null : event.data.body;
+          pending.resolve(new Response(body, { status:event.data.status, headers }));
+        } else pending.reject(Error("The public data response was invalid"));
+      } else if (event.data?.type === "penecho-widget-snapshot-request") void snapshot(event.data);
       else if (event.data?.type === "penecho-widget-state" && typeof event.data.selected === "boolean" && typeof event.data.active === "boolean"
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
         widgetState = { selected:event.data.selected, active:event.data.active, scaleX:event.data.scaleX, scaleY:event.data.scaleY };
@@ -442,7 +621,38 @@
   function snapshotError(requestId, message = "Widget snapshot failed") {
     clearTimeout(pendingSnapshots.get(requestId)?.timer);
     pendingSnapshots.delete(requestId);
-    parent.postMessage({ type:"penecho-widget-snapshot-error", requestId, error:message }, parentOrigin);
+    const error = String(message || "Widget snapshot failed").replace(/[\r\n\t]+/g, " ").slice(0, 300);
+    console.warn("PenEcho widget snapshot failed:", error);
+    parent.postMessage({ type:"penecho-widget-snapshot-error", requestId, error }, parentOrigin);
+  }
+
+  async function proxyPublicFetch(message) {
+    const reply = (payload, transfer = []) => inner.contentWindow?.postMessage({ type:"penecho-widget-public-fetch-response", requestId:message.requestId, ...payload }, "*", transfer);
+    try {
+      const response = await fetch(publicFetchUrl, {
+          method:"POST",
+          credentials:"same-origin",
+          cache:"no-store",
+          headers:{ "Content-Type":"application/json", ...(accessSession ? { "X-PenEcho-Session":accessSession } : {}) },
+          body:JSON.stringify({ url:message.url }),
+        }),
+        body = await response.arrayBuffer(),
+        upstreamStatus = Number(response.headers.get("x-penecho-upstream-status"));
+      if (body.byteLength > 5 * 1024 * 1024) throw Error("The public data response is too large");
+      if (!response.ok) {
+        let detail = "", errorText = "";
+        try { errorText = new TextDecoder().decode(body); detail = JSON.parse(errorText)?.error || ""; } catch {}
+        throw Error(detail || `The public data channel returned HTTP ${response.status}`);
+      }
+      reply({
+        status:Number.isInteger(upstreamStatus) && upstreamStatus >= 200 && upstreamStatus <= 599 ? upstreamStatus : response.status,
+        body,
+        contentType:String(response.headers.get("content-type") || "").slice(0, 200),
+        finalUrl:String(response.headers.get("x-penecho-final-url") || "").slice(0, PUBLIC_FETCH_MAX_URL_LENGTH),
+      }, [body]);
+    } catch (error) {
+      reply({ error:String(error?.message || "The public data request failed").slice(0, 300) });
+    }
   }
 
   function csp() {
@@ -460,6 +670,27 @@
       if (["SCRIPT", "LINK", "IMG", "VIDEO", "AUDIO", "SOURCE"].includes(element.tagName)) element.setAttribute("crossorigin", "anonymous");
       return true;
     } catch {
+      return false;
+    }
+  }
+
+  function safeOutboundLink(element) {
+    const value = element.getAttribute("href");
+    try {
+      const url = new URL(value, location.href);
+      if (url.protocol !== "https:" || url.username || url.password) throw Error("unsafe link");
+      element.setAttribute("href", url.href);
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
+      element.setAttribute("referrerpolicy", "no-referrer");
+      element.removeAttribute("download");
+      element.removeAttribute("ping");
+      return true;
+    } catch {
+      element.removeAttribute("href");
+      element.removeAttribute("target");
+      element.removeAttribute("download");
+      element.removeAttribute("ping");
       return false;
     }
   }
@@ -575,6 +806,7 @@
       }
       if (!safeHttpsResource(element, "src")) element.removeAttribute("src");
     });
+    parsed.querySelectorAll("a[href]").forEach(safeOutboundLink);
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
     policy.content = csp();
@@ -590,7 +822,7 @@
       parsed.head.append(pluginStyle);
     }
     const bridgeStyle = parsed.createElement("style");
-    bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
+    bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     parsed.head.append(bridgeStyle);
     const renderer = parsed.createElement("script");
     renderer.src = rendererUrl;
@@ -667,16 +899,20 @@
         widgetState = { selected:message.selected, active:message.active, scaleX:message.scaleX, scaleY:message.scaleY };
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-snapshot-request" && initialized) {
-        const requestedWidth = Number(message.width), requestedHeight = Number(message.height);
+        const requestedWidth = Number(message.width), requestedHeight = Number(message.height),
+          timeoutMs = Math.max(1000, Math.min(SNAPSHOT_REQUEST_TIMEOUT_MS, Number(message.timeoutMs) || SNAPSHOT_REQUEST_TIMEOUT_MS));
         if (typeof message.requestId !== "string" || message.requestId.length > 128 || !Number.isFinite(requestedWidth) || !Number.isFinite(requestedHeight) || requestedWidth <= 0 || requestedHeight <= 0) return;
-        const timer = setTimeout(() => pendingSnapshots.delete(message.requestId), SNAPSHOT_REQUEST_TIMEOUT_MS);
+        const timer = setTimeout(() => snapshotError(message.requestId, "Widget snapshot timed out"), timeoutMs);
         pendingSnapshots.set(message.requestId, { requestedWidth, requestedHeight, timer });
-        inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, width:requestedWidth, height:requestedHeight }, "*");
+        inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, width:requestedWidth, height:requestedHeight, timeoutMs:Math.max(500, timeoutMs - 250) }, "*");
       }
       return;
     }
     if (event.source !== inner.contentWindow || !message || typeof message !== "object") return;
-    if (message.type === "penecho-widget-updated") {
+    if (message.type === "penecho-widget-public-fetch-request") {
+      if (typeof message.requestId !== "string" || !/^public-fetch-\d+$/.test(message.requestId) || message.requestId.length > 64 || typeof message.url !== "string" || message.url.length > PUBLIC_FETCH_MAX_URL_LENGTH) return;
+      void proxyPublicFetch(message);
+    } else if (message.type === "penecho-widget-updated") {
       forwardWidgetState();
       const now = Date.now();
       if (now - lastUpdate < UPDATE_FORWARD_INTERVAL_MS) return;
@@ -693,7 +929,7 @@
         pendingSnapshots.delete(message.requestId);
         parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height }, parentOrigin);
       }
-    } else if (message.type === "penecho-widget-snapshot-error" && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, "Widget content could not be rendered");
+    } else if (message.type === "penecho-widget-snapshot-error" && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error);
     else if (message.type === "penecho-widget-activate") parent.postMessage({ type:message.type }, parentOrigin);
     else if (validDragMessage(message)) forwardDragMessage(message);
     else if (validTouchMessage(message)) parent.postMessage(message, parentOrigin);

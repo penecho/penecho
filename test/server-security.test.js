@@ -1246,17 +1246,33 @@ test("widget host CSP permits on-demand HTTPS resources inside the isolated widg
     assert.equal(response.status, 200);
     assert.match(policy, /script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:/);
     assert.match(policy, /style-src 'unsafe-inline' https:/);
-    assert.match(policy, /connect-src https:/);
+    assert.match(policy, /connect-src 'self' https:/);
     assert.match(policy, /img-src data: blob: https:/);
     assert.match(policy, /frame-ancestors 'self'/);
     const offlinePolicy = (await fetch(`${origin}/widget-host.html`)).headers.get("content-security-policy");
-    assert.match(offlinePolicy, /connect-src https:/);
+    assert.match(offlinePolicy, /connect-src 'self' https:/);
     const renderer = await fetch(`${origin}/widget-renderer.js`);
     assert.equal(renderer.status, 200);
     assert.match(renderer.headers.get("content-type"), /^application\/javascript/);
     assert.equal(renderer.headers.get("cross-origin-resource-policy"), "cross-origin");
     assert.equal(renderer.headers.get("access-control-allow-origin"), "*");
     assert.match(await renderer.text(), /html2canvas/);
+
+    const privateData = await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("https://127.0.0.1/")}`, { headers:{ Origin:origin } });
+    assert.equal(privateData.status, 403);
+    assert.match(await privateData.text(), /Local and private destinations/);
+    const configScript = await fetch(`${origin}/api/config.js`).then(response => response.text()),
+      accessSession = /"accessSessionToken":"([A-Za-z0-9_-]+)"/.exec(configScript)?.[1];
+    assert.match(accessSession, /^[A-Za-z0-9_-]{40,}$/);
+    const sandboxedWidgetData = await fetch(`${origin}/api/widget-fetch`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "X-PenEcho-Session":accessSession },
+      body:JSON.stringify({ url:"https://127.0.0.1:8443/image.png" }),
+    });
+    assert.equal(sandboxedWidgetData.status, 403);
+    assert.match(await sandboxedWidgetData.text(), /Local and private destinations/);
+    assert.equal((await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("http://example.com/")}`, { headers:{ Origin:origin } })).status, 400);
+    assert.equal((await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("https://example.com/")}`)).status, 403);
 
     for (const values of [
       ["https://*.open-meteo.com"],
@@ -1290,8 +1306,11 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /"commands":\{"type":"array","minItems":1,"maxItems":16/);
   assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
+  assert.match(source, /clamp\(36px,1\.2cqw,52px\)[\s\S]*?at least 28px[\s\S]*?clamp\(52px,2cqw,80px\)[\s\S]*?14–16px are too small/);
+  assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
   assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
   assert.match(source, /use the General HTML plugin and prefer a compact inline SVG/);
+  assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
   assert.match(source, /function localPluginCatalog\(\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);

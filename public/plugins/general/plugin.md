@@ -8,7 +8,7 @@ description: Self-contained HTML for SVG drawing, transparent overlays, live vis
 description-zh: 为 SVG 绘图、透明叠加、实时视觉和交互式浏览器体验生成自包含 HTML。
 category: Creative
 category-zh: 创作
-source: No network
+source: Public HTTPS web
 connect:
 recommended-refresh-seconds: 60
 ---
@@ -21,16 +21,16 @@ Use this capability whenever the response needs a drawing, animation, simulation
 
 Return exactly one `html_widget` command and no prose, with `pluginId:"general"`. Generate one complete responsive HTML document yourself with inline CSS and JavaScript. Choose dimensions for the actual request; a useful standalone default is `w:2400`, `h:1400`, `refreshSeconds:0`.
 
-Placement is semantic, not a search for unused canvas space. Put the widget where it most directly solves the user's problem. When the result annotates, traces, highlights, corrects, or completes existing canvas content, align and overlap the widget with that source content as needed. Set `x`, `y`, `w`, and `h` to the source region and map the SVG `viewBox` to the widget rectangle so overlay geometry registers with the underlying pixels. For example, a requested solution path through an existing maze should be rendered as a transparent SVG overlay directly on the maze, not as a separate maze or a path placed in nearby blank space. Use a nearby blank area only for genuinely standalone visuals or when covering the source would hide information the user still needs.
+Placement is semantic, not a search for unused canvas space. Put the widget where it most directly solves the user's problem. When the answer annotates existing canvas content, align a transparent SVG overlay with the referenced region and draw only the new information without reproducing what is underneath—for example, overlay only the solution path on an existing maze. Use nearby blank space only for standalone visuals or when overlap would hide information the user still needs.
 
 Transparency is the default. Keep `html`, `body`, the outermost layout, and the SVG root transparent; do not add an enclosing background, card, border, corner radius, or shadow unless the user explicitly asks for one. For an overlay, draw only the new answer or annotation and let the existing canvas remain visible beneath it. Make requested content prominent and readable.
 
 ## Runtime rules
 
-This plugin has no network access. Do not call `fetch`, XMLHttpRequest, WebSocket, EventSource, sendBeacon, or external assets. Use only browser-native HTML, CSS, JavaScript, timers, SVG, and canvas. Dynamic SVG is fully supported: inline scripts, CSS animation, SMIL animation, filters, gradients, masks, and event-driven interaction may be used when useful. Do not use navigation, forms, cookies, storage, secrets, or external libraries. Reflow on viewport resize and redraw canvas or SVG visuals when needed. After the initial render and meaningful layout/state changes, call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`; do not send it on every animation frame or clock tick.
+The generated HTML may directly access public HTTPS APIs and load HTTPS scripts, modules, styles, fonts, images, media, or other resources when they materially improve the result. Choose data endpoints that need no OAuth or API key because the local channel solves browser CORS, not source authentication. When a resource supports browser CORS, call its exact HTTPS URL directly with `fetch(url,{credentials:"omit"})`; do not route a working direct request through PenEcho. If browser CORS prevents a direct GET, use the read-only fallback `window.penechoFetchPublic(url)`. It returns a standard `Response`: check `response.ok`, then consume it with `response.json()`, `response.text()`, `response.blob()`, or `response.arrayBuffer()` as appropriate. The fallback passes through bounded public HTTPS response bodies—including APIs, RSS/Atom feeds, and images—without rewriting the supplied URL or requiring a correct `Content-Type`. It rejects credentials, localhost, private networks, and unsafe redirects. Do not call the local channel endpoint yourself.
+
+Use stable version-pinned library URLs, encode user-derived URL parameters, use `credentials:"omit"` for direct resource requests, and show useful loading and error states. Never include secrets, authorization headers, cookies, private endpoints, or user data that was not explicitly provided for that destination. Do not use forms, storage, `sendBeacon`, or current-frame navigation. Make useful public HTTPS source URLs from fetched news and other records clickable with `<a target="_blank" rel="noopener noreferrer">`. Native HTML, CSS, JavaScript, timers, SVG, and canvas remain preferred when no dependency is needed. Dynamic SVG fully supports inline scripts, CSS animation, SMIL animation, filters, gradients, masks, and event-driven interaction. Reflow on viewport resize and redraw canvas or SVG visuals when needed. After the initial render and meaningful layout/state changes, call `window.parent.postMessage({type:"penecho-widget-updated"}, "*")`; do not send it on every animation frame or clock tick.
 
 ## One-shot example
 
 User writes `我需要一个五颜六色的钟，显示当前时间` and points right. Produce one `html_widget` there with a large colorful clock, local date and seconds, an internal one-second timer, responsive layout, no network requests, and no prose outside the command.
-
-User draws a maze and asks `找出路径`. Produce one `html_widget` whose transparent bounds align with the existing maze and whose inline SVG draws only the solution path over the original maze.
