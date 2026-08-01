@@ -116,6 +116,56 @@ test("Anthropic API configuration offers none and defaults new selections to med
   assert.equal(effortPrompt.defaultValue, "medium");
 });
 
+test("MiniMax API presets expose regional endpoints and current model capabilities", async () => {
+  const directory = temporaryDirectory(), configuration = {
+    home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
+  }, saved = [];
+  const ui = uiScript({
+    selections:["minimax-global-anthropic", "MiniMax-M3", "none", "save"],
+    passwords:["test-key"],
+  });
+  await runConfigureMenu(configuration, {
+    ui, directProvider:"api", save:async values => saved.push(values), test:async () => "ok",
+  });
+  const typePrompt = ui.selects.find(item => item.message === "API type"),
+    modelPrompt = ui.selects.find(item => item.message === "Model"),
+    effortPrompt = ui.selects.find(item => item.message === "Reasoning effort"),
+    m3 = modelPrompt.choices.find(choice => choice.value === "MiniMax-M3"),
+    m27 = modelPrompt.choices.find(choice => choice.value === "MiniMax-M2.7");
+  assert.ok(typePrompt.choices.some(choice => choice.value === "minimax-global-openai"));
+  assert.ok(typePrompt.choices.some(choice => choice.value === "minimax-global-anthropic"));
+  assert.ok(typePrompt.choices.some(choice => choice.value === "minimax-china-openai"));
+  assert.ok(typePrompt.choices.some(choice => choice.value === "minimax-china-anthropic"));
+  assert.match(m3.description, /1,000,000-token context/);
+  assert.match(m3.description, /text, image, and video input/);
+  assert.match(m3.description, /adaptive or disabled thinking/);
+  assert.match(m27.description, /204,800-token context/);
+  assert.match(m27.description, /text-only input/);
+  assert.match(m27.description, /thinking always on/);
+  assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
+  assert.equal(saved[0].AI_API_FORMAT, "anthropic");
+  assert.equal(saved[0].AI_API_URL, "https://api.minimax.io/anthropic");
+  assert.equal(saved[0].AI_API_MODEL, "MiniMax-M3");
+});
+
+test("MiniMax always-on thinking preset omits the disabled choice", async () => {
+  const directory = temporaryDirectory(), configuration = {
+    home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
+  }, saved = [];
+  const ui = uiScript({
+    selections:["minimax-china-openai", "MiniMax-M2.7", "high", "save"],
+    passwords:["test-key"],
+  });
+  await runConfigureMenu(configuration, {
+    ui, directProvider:"api", save:async values => saved.push(values), test:async () => "ok",
+  });
+  const effortPrompt = ui.selects.find(item => item.message === "Reasoning effort");
+  assert.ok(effortPrompt.choices.every(choice => choice.value !== "none"));
+  assert.equal(saved[0].AI_API_FORMAT, "openai");
+  assert.equal(saved[0].AI_API_URL, "https://api.minimaxi.com/v1");
+  assert.equal(saved[0].AI_API_MODEL, "MiniMax-M2.7");
+});
+
 test("configured CLI models are discovered when local settings expose them", () => {
   const home = temporaryDirectory();
   fs.mkdirSync(path.join(home, ".codex"), { recursive:true });

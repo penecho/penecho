@@ -2,7 +2,38 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../src/server/api-config.js");
+const {
+  MINIMAX_ENDPOINTS, MINIMAX_MODELS, anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig,
+} = require("../src/server/api-config.js");
+
+test("MiniMax presets retain current endpoint and model metadata", () => {
+  assert.deepEqual(MINIMAX_ENDPOINTS, {
+    global_en:{
+      openaiBaseUrl:"https://api.minimax.io/v1",
+      anthropicBaseUrl:"https://api.minimax.io/anthropic",
+      docsRoot:"https://platform.minimax.io/docs",
+    },
+    cn_zh:{
+      openaiBaseUrl:"https://api.minimaxi.com/v1",
+      anthropicBaseUrl:"https://api.minimaxi.com/anthropic",
+      docsRoot:"https://platform.minimaxi.com/docs",
+    },
+  });
+  assert.deepEqual(MINIMAX_MODELS["MiniMax-M3"], {
+    modelId:"MiniMax-M3",
+    contextWindow:1000000,
+    pricingUsdPerMillionTokens:{ input:0.6, output:2.4, cacheRead:0.12, cacheWrite:null },
+    inputModalities:["text", "image", "video"],
+    thinking:["adaptive", "disabled"],
+  });
+  assert.deepEqual(MINIMAX_MODELS["MiniMax-M2.7"], {
+    modelId:"MiniMax-M2.7",
+    contextWindow:204800,
+    pricingUsdPerMillionTokens:{ input:0.3, output:1.2, cacheRead:0.06, cacheWrite:0.375 },
+    inputModalities:["text"],
+    thinking:["always_on"],
+  });
+});
 
 test("API format selection builds the matching endpoint", () => {
   assert.deepEqual(resolveApiConfig("https://api.openai.com/v1", "openai"), {

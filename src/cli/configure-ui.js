@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { MINIMAX_ENDPOINTS, MINIMAX_MODELS } = require("../server/api-config.js");
 
 const PROVIDERS = {
   kimi: "kimi-cli",
@@ -9,6 +10,13 @@ const PROVIDERS = {
   codex: "codex-cli",
   api: "api",
 };
+
+const MINIMAX_API_PRESETS = Object.freeze([
+  Object.freeze({ value:"minimax-global-openai", name:"MiniMax - Global - Chat Completions", format:"openai", baseUrl:MINIMAX_ENDPOINTS.global_en.openaiBaseUrl }),
+  Object.freeze({ value:"minimax-global-anthropic", name:"MiniMax - Global - Messages", format:"anthropic", baseUrl:MINIMAX_ENDPOINTS.global_en.anthropicBaseUrl }),
+  Object.freeze({ value:"minimax-china-openai", name:"MiniMax - Mainland China - Chat Completions", format:"openai", baseUrl:MINIMAX_ENDPOINTS.cn_zh.openaiBaseUrl }),
+  Object.freeze({ value:"minimax-china-anthropic", name:"MiniMax - Mainland China - Messages", format:"anthropic", baseUrl:MINIMAX_ENDPOINTS.cn_zh.anthropicBaseUrl }),
+]);
 
 function cleanText(value) {
   return String(value ?? "").trim();
@@ -29,6 +37,29 @@ function uniqueChoices(choices) {
     seen.add(key);
     return true;
   });
+}
+
+function currentMinimaxApiPreset(format, url) {
+  const normalizedUrl = cleanText(url).replace(/\/+$/, "");
+  return MINIMAX_API_PRESETS.find(preset => (!format || preset.format === format) && preset.baseUrl === normalizedUrl) || null;
+}
+
+function minimaxModelDescription(model) {
+  const context = model.contextWindow.toLocaleString("en-US"), modalities = model.inputModalities,
+    input = modalities.length === 1 ? `${modalities[0]}-only input` : `${modalities.slice(0, -1).join(", ")}, and ${modalities.at(-1)} input`,
+    thinking = model.thinking.includes("always_on") ? "thinking always on" : "adaptive or disabled thinking";
+  return `${context}-token context; ${input}; ${thinking}.`;
+}
+
+async function chooseMinimaxModel(ui, current) {
+  const models = Object.values(MINIMAX_MODELS), choices = [
+    ...models.map(model => ({ name:model.modelId, value:model.modelId, description:minimaxModelDescription(model) })),
+    ...(current && !MINIMAX_MODELS[current] ? [{ name:`Current custom model: ${current}`, value:current }] : []),
+    { name:"Enter a model manually…", value:"__manual__", description:"Use another MiniMax model ID." },
+  ];
+  const selected = await ui.select("Model", uniqueChoices(choices), current || models[0].modelId);
+  if (selected !== "__manual__") return selected;
+  return cleanText(await ui.input("Model", current || models[0].modelId, textValidator("Model")));
 }
 
 function readJsonModel(file) {
@@ -147,9 +178,12 @@ async function chooseModel(ui, provider, configuration) {
   return cleanText(await ui.input("Model ID or alias", current || detected, textValidator("Model")));
 }
 
-async function chooseEffort(ui, provider, current, format = "") {
+async function chooseEffort(ui, provider, current, format = "", model = null) {
   const isKimi = provider === PROVIDERS.kimi, isCodex = provider === PROVIDERS.codex, isClaude = provider === PROVIDERS.claude,
-    defaultValue = current || (format === "anthropic" ? "medium" : isKimi ? "high" : isClaude ? "max" : "xhigh");
+    modelThinking = Array.isArray(model?.thinking) ? model.thinking : [], alwaysOn = modelThinking.includes("always_on"),
+    supportsDisabled = modelThinking.includes("disabled"), normalizedCurrent = cleanText(current),
+    currentValue = alwaysOn && normalizedCurrent.toLowerCase() === "none" ? "" : normalizedCurrent,
+    defaultValue = currentValue || (format === "anthropic" ? "medium" : isKimi ? "high" : isClaude ? "max" : "xhigh");
   const levels = isCodex
     ? [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (maximum for Codex)"]]
     : isKimi
@@ -157,17 +191,17 @@ async function chooseEffort(ui, provider, current, format = "") {
       : isClaude
       ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium"],["high","High"],["max","Max"]]
       : format === "anthropic"
-        ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended)"],["high","High"],["max","Max"]]
-        : [["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (OpenAI-compatible maximum)"],["max","Max"]];
+        ? [...(alwaysOn ? [] : [["none","None (thinking disabled)"]]),["low","Low"],["medium","Medium (recommended)"],["high","High"],["max","Max"]]
+        : [...(supportsDisabled ? [["none","None (thinking disabled)"]] : []),["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (OpenAI-compatible maximum)"],["max","Max"]];
   const choices = [
     ...((isKimi || isCodex || isClaude) ? [{ name:`Use the ${isKimi ? "Kimi" : isCodex ? "Codex" : "Claude"} CLI default`, value:"", description:"Do not pass an explicit effort." }] : []),
     ...levels.map(([value, name]) => ({ name, value })),
-    ...(current && !levels.some(([value]) => value === current) ? [{ name:`Current custom value: ${current}`, value:current }] : []),
+    ...(currentValue && !levels.some(([value]) => value === currentValue) ? [{ name:`Current custom value: ${currentValue}`, value:currentValue }] : []),
     { name:"Enter a value manually…", value:"__manual__", description:"For model-specific or future effort levels." },
   ];
   const selected = await ui.select("Reasoning effort", uniqueChoices(choices), defaultValue);
   if (selected !== "__manual__") return selected;
-  return cleanText(await ui.input("Effort value", current, textValidator("Effort")));
+  return cleanText(await ui.input("Effort value", currentValue, textValidator("Effort")));
 }
 
 async function finishProviderConfiguration(ui, configuration, values, options) {
@@ -229,21 +263,27 @@ async function configureApi(ui, configuration, options) {
   ui.header("API", "Main menu  ›  LLM source  ›  API",
     "Choose the wire format used by your endpoint. Compatible gateways and local services are supported.");
   const env = configuration.env, currentFormat = apiValue(env, "FORMAT").toLowerCase(),
-    format = await ui.select("API type", [
+    currentUrl = apiValue(env, "URL"), currentModel = apiValue(env, "MODEL"),
+    currentPreset = currentMinimaxApiPreset(currentFormat, currentUrl),
+    selectedType = await ui.select("API type", [
       { name:"OpenAI-compatible", value:"openai", description:"Uses the Chat Completions request format." },
       { name:"Anthropic / Claude-compatible", value:"anthropic", description:"Uses the Claude Messages request format." },
-    ], ["openai","anthropic"].includes(currentFormat) ? currentFormat : "openai"),
-    sameFormat = format === currentFormat,
-    defaultUrl = sameFormat && apiValue(env, "URL") || (format === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"),
-    defaultModel = sameFormat && apiValue(env, "MODEL") || (format === "anthropic" ? "claude-opus-4-8" : "gpt-5.6-sol"),
+      ...MINIMAX_API_PRESETS.map(preset => ({ name:preset.name, value:preset.value, description:`Uses ${preset.baseUrl}.` })),
+    ], currentPreset?.value || (["openai","anthropic"].includes(currentFormat) ? currentFormat : "openai")),
+    preset = MINIMAX_API_PRESETS.find(candidate => candidate.value === selectedType) || null,
+    format = preset?.format || selectedType,
+    sameSelection = preset ? preset.value === currentPreset?.value : !currentPreset && format === currentFormat,
+    defaultUrl = sameSelection && currentUrl || preset?.baseUrl || (format === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"),
+    defaultModel = sameSelection && currentModel || (format === "anthropic" ? "claude-opus-4-8" : "gpt-5.6-sol"),
     apiUrl = cleanText(await ui.input("API base URL", defaultUrl, value => {
       try {
         const url = new URL(cleanText(value));
         return ["http:","https:"].includes(url.protocol) && url.hostname && !url.username && !url.password ? true : "Enter a valid HTTP(S) URL without embedded credentials.";
       } catch { return "Enter a valid HTTP(S) URL."; }
     })),
-    model = cleanText(await ui.input("Model", defaultModel, textValidator("Model"))),
-    effort = await chooseEffort(ui, PROVIDERS.api, sameFormat ? cleanText(env.AI_EFFORT) : "", format),
+    model = preset ? await chooseMinimaxModel(ui, sameSelection ? currentModel : "") : cleanText(await ui.input("Model", defaultModel, textValidator("Model"))),
+    modelMetadata = MINIMAX_MODELS[model] || null,
+    effort = await chooseEffort(ui, PROVIDERS.api, sameSelection ? cleanText(env.AI_EFFORT) : "", format, modelMetadata),
     currentKey = apiValue(env, "KEY"), enteredKey = cleanText(await ui.password(currentKey ? "API key (leave blank to keep the saved key)" : "API key")),
     key = enteredKey || currentKey;
   if (!key) {
