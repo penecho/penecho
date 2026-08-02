@@ -103,6 +103,7 @@
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
   const ZH = window.PENECHO_LOCALES?.zh || {};
   const DRAW = window.PENECHO_DRAW;
+  const LAYOUT = window.PENECHO_LAYOUT;
   const SELECT = window.PENECHO_SELECTION;
   const TOUR = window.PENECHO_TOUR;
   const MIXED_TEXT = window.PENECHO_MIXED_TEXT;

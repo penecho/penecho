@@ -877,33 +877,48 @@
       layoutHeight: logicalHeight,
     };
   }
+  function existingContentObstacles() {
+    // Confirmed canvas content that pending AI text/formulas must not cover:
+    // the ink bounds of every populated tile plus placed images. Tile ink
+    // boxes are cached in state.inkBounds the same way visibleInkBounds does.
+    const obstacles = [];
+    for (const [k, tileCanvas] of tiles) {
+      const [tx, ty] = k.split(",").map(Number);
+      let ink = state.inkBounds.get(k);
+      if (ink === undefined) {
+        ink = tileCanvas ? inkBox(tileCanvas, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE)) : null;
+        state.inkBounds.set(k, ink);
+      }
+      if (ink) obstacles.push({ x: tx * TILE + ink.x, y: ty * TILE + ink.y, w: ink.w, h: ink.h });
+    }
+    for (const item of state.images) obstacles.push(imageBox(item));
+    return obstacles;
+  }
   function resolvePendingItemOverlaps(items, meta) {
     const gap = Math.max(40, 14 / Math.max(0.03, state.scale)),
       flow = items
         .filter((item) => ["write_text", "draw_formula"].includes(item.command.tool))
         .sort((a, b) => a.y - b.y || a.x - b.x),
-      placed = [],
       fixed = items
         .filter((item) => !["write_text", "draw_formula", "draw"].includes(item.command.tool))
         .map((item) => item.erase ? item.bounds : { x: item.x, y: item.y, w: item.layoutWidth, h: item.layoutHeight });
-    for (const item of flow) {
-      const width = item.image.logicalWidth || item.image.width,
-        height = item.image.logicalHeight || item.image.height;
-      let y = item.y;
-      for (let pass = 0; pass < items.length; pass++) {
-        const collisions = [...fixed, ...placed].filter((prior) => {
-          const horizontalOverlap = Math.min(item.x + width, prior.x + prior.w) - Math.max(item.x, prior.x),
-            verticalOverlap = Math.min(y + height, prior.y + prior.h) - Math.max(y, prior.y);
-          return horizontalOverlap > 0 && verticalOverlap > 0;
-        });
-        if (!collisions.length) break;
-        y = Math.max(...collisions.map((prior) => prior.y + prior.h)) + gap;
-      }
+    const sized = flow.map((item) => ({
+        x: item.x,
+        y: item.y,
+        w: item.image.logicalWidth || item.image.width,
+        h: item.image.logicalHeight || item.image.height,
+      })),
+      adjusted = LAYOUT.resolveFlowOverlaps({
+        flow: sized,
+        obstacles: [...fixed, ...existingContentObstacles()],
+        gap,
+        maxY: SIZE,
+      });
+    flow.forEach((item, index) => {
       const originalY = item.y;
-      item.y = Math.max(0, Math.min(SIZE - height, y));
-      if (item.y !== originalY) debug("tool-layout-adjusted", { ...meta, tool: item.command.tool, x: item.x, originalY, y: item.y, width, height });
-      placed.push({ x: item.x, y: item.y, w: width, h: height });
-    }
+      item.y = adjusted[index];
+      if (item.y !== originalY) debug("tool-layout-adjusted", { ...meta, tool: item.command.tool, x: item.x, originalY, y: item.y, width: sized[index].w, height: sized[index].h });
+    });
   }
   function sharpRenderRatio() {
     return Math.min(3, Math.max(1, (devicePixelRatio || 1) * Math.max(1, state.scale)));
