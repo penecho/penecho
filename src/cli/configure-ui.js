@@ -183,7 +183,7 @@ async function chooseEffort(ui, provider, current, format = "", model = null) {
     modelThinking = Array.isArray(model?.thinking) ? model.thinking : [], alwaysOn = modelThinking.includes("always_on"),
     supportsDisabled = modelThinking.includes("disabled"), normalizedCurrent = cleanText(current),
     currentValue = alwaysOn && normalizedCurrent.toLowerCase() === "none" ? "" : normalizedCurrent,
-    defaultValue = currentValue || (format === "anthropic" ? "medium" : isKimi ? "high" : isClaude ? "max" : "xhigh");
+    defaultValue = currentValue || "medium";
   const levels = isCodex
     ? [["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Maximum"]]
     : isKimi
@@ -191,7 +191,7 @@ async function chooseEffort(ui, provider, current, format = "", model = null) {
       : isClaude
       ? [["none","None (thinking disabled)"],["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Max"]]
       : format === "anthropic"
-        ? [...(alwaysOn ? [] : [["none","None (thinking disabled)"]]),["low","Low"],["medium","Medium (recommended)"],["high","High"],["max","Max"]]
+        ? [...(alwaysOn ? [] : [["none","None (thinking disabled)"]]),["low","Low"],["medium","Medium (recommended default)"],["high","High"],["xhigh","Extra high"],["max","Max"]]
         : [...(supportsDisabled ? [["none","None (thinking disabled)"]] : []),["low","Low"],["medium","Medium"],["high","High"],["xhigh","Extra high (OpenAI-compatible maximum)"],["max","Max"]];
   const choices = [
     ...((isKimi || isCodex || isClaude) ? [{ name:`Use the ${isKimi ? "Kimi" : isCodex ? "Codex" : "Claude"} CLI default`, value:"", description:"Do not pass an explicit effort." }] : []),
