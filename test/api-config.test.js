@@ -2,7 +2,31 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../src/server/api-config.js");
+const {
+  NOVITA_ENDPOINTS, NOVITA_MODELS, anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig,
+} = require("../src/server/api-config.js");
+
+test("Novita presets retain current endpoint and model metadata", () => {
+  assert.deepEqual(NOVITA_ENDPOINTS, {
+    openaiBaseUrl:"https://api.novita.ai/openai/v1",
+    anthropicBaseUrl:"https://api.novita.ai/anthropic",
+    docsRoot:"https://novita.ai/docs",
+  });
+  assert.deepEqual(NOVITA_MODELS["deepseek/deepseek-v3.2-exp"], {
+    modelId:"deepseek/deepseek-v3.2-exp",
+    contextWindow:163840,
+    pricingUsdPerMillionTokens:{ input:0.27, output:0.41, cacheRead:null, cacheWrite:null },
+    inputModalities:["text"],
+    thinking:["adaptive", "disabled"],
+  });
+  assert.deepEqual(NOVITA_MODELS["moonshotai/Kimi-K2-Instruct"], {
+    modelId:"moonshotai/Kimi-K2-Instruct",
+    contextWindow:131072,
+    pricingUsdPerMillionTokens:{ input:0.57, output:2.3, cacheRead:null, cacheWrite:null },
+    inputModalities:["text"],
+    thinking:["adaptive", "disabled"],
+  });
+});
 
 test("API format selection builds the matching endpoint", () => {
   assert.deepEqual(resolveApiConfig("https://api.openai.com/v1", "openai"), {

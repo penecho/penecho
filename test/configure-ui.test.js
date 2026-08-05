@@ -116,6 +116,34 @@ test("Anthropic API configuration offers none and defaults new selections to med
   assert.equal(effortPrompt.defaultValue, "medium");
 });
 
+test("Novita API presets expose the OpenAI and Anthropic endpoints and current model capabilities", async () => {
+  const directory = temporaryDirectory(), configuration = {
+    home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
+  }, saved = [];
+  const ui = uiScript({
+    selections:["novita-anthropic", "deepseek/deepseek-v3.2-exp", "none", "save"],
+    passwords:["test-key"],
+  });
+  await runConfigureMenu(configuration, {
+    ui, directProvider:"api", save:async values => saved.push(values), test:async () => "ok",
+  });
+  const typePrompt = ui.selects.find(item => item.message === "API type"),
+    modelPrompt = ui.selects.find(item => item.message === "Model"),
+    effortPrompt = ui.selects.find(item => item.message === "Reasoning effort"),
+    deepseek = modelPrompt.choices.find(choice => choice.value === "deepseek/deepseek-v3.2-exp"),
+    kimiK2 = modelPrompt.choices.find(choice => choice.value === "moonshotai/Kimi-K2-Instruct");
+  assert.ok(typePrompt.choices.some(choice => choice.value === "novita-openai"));
+  assert.ok(typePrompt.choices.some(choice => choice.value === "novita-anthropic"));
+  assert.match(deepseek.description, /163,840-token context/);
+  assert.match(deepseek.description, /text-only input/);
+  assert.match(deepseek.description, /adaptive or disabled thinking/);
+  assert.match(kimiK2.description, /131,072-token context/);
+  assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
+  assert.equal(saved[0].AI_API_FORMAT, "anthropic");
+  assert.equal(saved[0].AI_API_URL, "https://api.novita.ai/anthropic");
+  assert.equal(saved[0].AI_API_MODEL, "deepseek/deepseek-v3.2-exp");
+});
+
 test("configured CLI models are discovered when local settings expose them", () => {
   const home = temporaryDirectory();
   fs.mkdirSync(path.join(home, ".codex"), { recursive:true });
