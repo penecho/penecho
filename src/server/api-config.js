@@ -7,17 +7,24 @@ const NOVITA_ENDPOINTS = Object.freeze({
 });
 
 const NOVITA_MODELS = Object.freeze({
-  "deepseek/deepseek-v3.2-exp":Object.freeze({
-    modelId:"deepseek/deepseek-v3.2-exp",
-    contextWindow:163840,
-    pricingUsdPerMillionTokens:Object.freeze({ input:0.27, output:0.41, cacheRead:null, cacheWrite:null }),
+  "moonshotai/kimi-k3":Object.freeze({
+    modelId:"moonshotai/kimi-k3",
+    contextWindow:1048576,
+    pricingUsdPerMillionTokens:Object.freeze({ input:3.0, output:15.0, cacheRead:0.3, cacheWrite:null }),
+    inputModalities:Object.freeze(["text", "image", "video"]),
+    thinking:Object.freeze(["adaptive", "disabled"]),
+  }),
+  "zai-org/glm-5.2":Object.freeze({
+    modelId:"zai-org/glm-5.2",
+    contextWindow:1048576,
+    pricingUsdPerMillionTokens:Object.freeze({ input:1.4, output:4.4, cacheRead:0.26, cacheWrite:null }),
     inputModalities:Object.freeze(["text"]),
     thinking:Object.freeze(["adaptive", "disabled"]),
   }),
-  "moonshotai/Kimi-K2-Instruct":Object.freeze({
-    modelId:"moonshotai/Kimi-K2-Instruct",
-    contextWindow:131072,
-    pricingUsdPerMillionTokens:Object.freeze({ input:0.57, output:2.3, cacheRead:null, cacheWrite:null }),
+  "deepseek/deepseek-v4-flash-0731":Object.freeze({
+    modelId:"deepseek/deepseek-v4-flash-0731",
+    contextWindow:1048576,
+    pricingUsdPerMillionTokens:Object.freeze({ input:0.14, output:0.28, cacheRead:0.028, cacheWrite:null }),
     inputModalities:Object.freeze(["text"]),
     thinking:Object.freeze(["adaptive", "disabled"]),
   }),

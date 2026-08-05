@@ -121,7 +121,7 @@ test("Novita API presets expose the OpenAI and Anthropic endpoints and current m
     home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
   }, saved = [];
   const ui = uiScript({
-    selections:["novita-anthropic", "deepseek/deepseek-v3.2-exp", "none", "save"],
+    selections:["novita-anthropic", "moonshotai/kimi-k3", "none", "save"],
     passwords:["test-key"],
   });
   await runConfigureMenu(configuration, {
@@ -130,18 +130,18 @@ test("Novita API presets expose the OpenAI and Anthropic endpoints and current m
   const typePrompt = ui.selects.find(item => item.message === "API type"),
     modelPrompt = ui.selects.find(item => item.message === "Model"),
     effortPrompt = ui.selects.find(item => item.message === "Reasoning effort"),
-    deepseek = modelPrompt.choices.find(choice => choice.value === "deepseek/deepseek-v3.2-exp"),
-    kimiK2 = modelPrompt.choices.find(choice => choice.value === "moonshotai/Kimi-K2-Instruct");
+    kimiK3 = modelPrompt.choices.find(choice => choice.value === "moonshotai/kimi-k3"),
+    glm = modelPrompt.choices.find(choice => choice.value === "zai-org/glm-5.2");
   assert.ok(typePrompt.choices.some(choice => choice.value === "novita-openai"));
   assert.ok(typePrompt.choices.some(choice => choice.value === "novita-anthropic"));
-  assert.match(deepseek.description, /163,840-token context/);
-  assert.match(deepseek.description, /text-only input/);
-  assert.match(deepseek.description, /adaptive or disabled thinking/);
-  assert.match(kimiK2.description, /131,072-token context/);
+  assert.match(kimiK3.description, /1,048,576-token context/);
+  assert.match(kimiK3.description, /text, image, and video input/);
+  assert.match(kimiK3.description, /adaptive or disabled thinking/);
+  assert.match(glm.description, /text-only input/);
   assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
   assert.equal(saved[0].AI_API_FORMAT, "anthropic");
   assert.equal(saved[0].AI_API_URL, "https://api.novita.ai/anthropic");
-  assert.equal(saved[0].AI_API_MODEL, "deepseek/deepseek-v3.2-exp");
+  assert.equal(saved[0].AI_API_MODEL, "moonshotai/kimi-k3");
 });
 
 test("configured CLI models are discovered when local settings expose them", () => {

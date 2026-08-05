@@ -302,8 +302,9 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
   assert.match(html, /name="apiModel" list="apiModelPresets"/);
-  assert.match(html, /value="deepseek\/deepseek-v3\.2-exp" label="163,840-token context; text-only input; adaptive or disabled thinking\."/);
-  assert.match(html, /value="moonshotai\/Kimi-K2-Instruct" label="131,072-token context; text-only input; adaptive or disabled thinking\."/);
+  assert.match(html, /value="moonshotai\/kimi-k3" label="1,048,576-token context; text, image, and video input; adaptive or disabled thinking\."/);
+  assert.match(html, /value="zai-org\/glm-5\.2" label="1,048,576-token context; text-only input; adaptive or disabled thinking\."/);
+  assert.match(html, /value="deepseek\/deepseek-v4-flash-0731" label="1,048,576-token context; text-only input; adaptive or disabled thinking\."/);
   assert.match(html, /name="apiUrl" type="url" list="apiUrlPresets"/);
   for (const endpoint of ["https://api.novita.ai/openai/v1", "https://api.novita.ai/anthropic"]) {
     assert.match(html, new RegExp(`value="${endpoint.replaceAll(".", "\\.")}"`));
