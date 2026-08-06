@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { mapCodexReasoningEffort } = require("./reasoning-effort.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MAX_AUTH_BYTES = 1024 * 1024;
@@ -99,7 +100,7 @@ function buildCodexArgs({ workDir, imageFile, outputFile, model, effort }) {
   if (imageFile) args.push("-i", imageFile);
   args.push("-o", outputFile);
   if (model) args.push("--model", model);
-  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(effort)}`);
+  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(mapCodexReasoningEffort(String(effort).trim().toLowerCase(), model))}`);
   args.push("-");
   return args;
 }
@@ -185,7 +186,7 @@ function codexEventError(event) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function runJsonProcess(launch, args, prompt, cwd, env, signal) {
+function runJsonProcess(launch, args, prompt, cwd, env, signal, onProgress = null, onActivity = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -194,10 +195,15 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
     } catch (error) {
       return reject(error);
     }
-    let termination = null, settled = false, lineBuffer = "", stderr = "", finalContent = "";
+    let termination = null, settled = false, lineBuffer = "", stderr = "", finalContent = "", responseStarted = false;
     const events = [];
     const terminate = () => termination ||= stopProcessTree(child);
     const traceDiagnostic = () => JSON.stringify({ events, stderr:stderr.slice(-4000) });
+    const reportResponseStarted = () => {
+      if (responseStarted) return;
+      responseStarted = true;
+      try { onProgress?.("receiving"); } catch {}
+    };
     const remember = (event, invalid = false) => {
       const summary = invalid
         ? { type:"invalid-json", preview:String(event).slice(0, 200) }
@@ -229,6 +235,7 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
       try { event = JSON.parse(line); }
       catch { remember(line, true); return; }
       remember(event);
+      if (event?.type === "turn.started" || String(event?.type || "").startsWith("item.")) reportResponseStarted();
       const content = codexAgentMessage(event);
       if (content) {
         if (Buffer.byteLength(content, "utf8") > MAX_CAPTURE_BYTES) return failEarly(new Error("Codex CLI final response is too large."));
@@ -247,6 +254,7 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", chunk => {
       if (settled) return;
+      try { onActivity?.(); } catch {}
       lineBuffer += chunk;
       let newline;
       while ((newline = lineBuffer.indexOf("\n")) >= 0 && !settled) {
@@ -294,7 +302,7 @@ function decodeAtlasImage(dataUrl) {
   return { buffer:Buffer.from(match[2], "base64"), extension:format, mimeType:`image/${format}` };
 }
 
-async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env }) {
+async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env, onProgress = null, onActivity = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-codex-"));
   const image = atlasImage ? decodeAtlasImage(atlasImage) : null,
     imageFile = image ? path.join(workDir, `atlas.${image.extension}`) : null,
@@ -306,7 +314,7 @@ async function callCodexCli({ executable, model, effort, prompt, atlasImage, sig
     const launch = resolveCodexLaunch(executable, env),
       args = buildCodexArgs({ workDir, imageFile, outputFile, model, effort }),
       childEnv = await prepareIsolatedRuntime(workDir, env),
-      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal);
+      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal, onProgress, onActivity);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
     if (signal?.aborted) throw abortError();

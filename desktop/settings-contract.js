@@ -1,5 +1,7 @@
 "use strict";
 
+const { DEFAULT_REASONING_EFFORT } = require("../src/providers/reasoning-effort.js");
+
 const PROVIDERS = new Set(["api", "kimi", "kimi-cli", "codex-cli", "claude-cli"]);
 const FORMATS = new Set(["openai", "anthropic"]);
 const KIMI_PRODUCTS = new Set(["code", "platform"]);
@@ -15,7 +17,7 @@ const KIMI_PRESET_ENDPOINTS = new Set([
 ]);
 const KIMI_PRESET_MODELS = new Set(Object.values(KIMI_MODELS));
 const IMAGE_FORMATS = new Set(["webp", "png"]);
-const EFFORTS = new Set(["", "none", "low", "medium", "high", "xhigh", "max"]);
+const EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
 function text(value, label, maximum = 512, allowEmpty = false) {
   const result = String(value ?? "").trim();
@@ -80,7 +82,7 @@ function normalizeSettings(input, options = {}) {
   if (!PROVIDERS.has(provider)) throw new Error("Choose a supported AI provider.");
   const imageFormat = text(input.imageFormat || "webp", "Image format", 16);
   if (!IMAGE_FORMATS.has(imageFormat)) throw new Error("Choose WebP or PNG image transport.");
-  const effort = text(input.effort ?? "", "Reasoning effort", 32, true).toLowerCase();
+  const effort = text(input.effort || DEFAULT_REASONING_EFFORT, "Reasoning effort", 32).toLowerCase();
   if (!EFFORTS.has(effort)) throw new Error("Choose a supported reasoning effort.");
   const host = text(input.host || "127.0.0.1", "Listening interface", 64);
   if (!["127.0.0.1", "0.0.0.0"].includes(host)) throw new Error("Choose local-only or LAN listening.");
@@ -175,7 +177,7 @@ function publicSettings(configuration, options = {}) {
     codexPath:String(env.CODEX_CLI_PATH || ""),
     claudeModel:String(env.CLAUDE_CLI_MODEL || "opus"),
     claudePath:String(env.CLAUDE_CLI_PATH || ""),
-    effort:String(env.AI_EFFORT || "xhigh"),
+    effort:String(env.AI_EFFORT || "medium"),
     timeout:String(env.AI_TIMEOUT_SECONDS || "180"),
     imageFormat:String(env.PENECHO_AI_IMAGE_FORMAT || "webp"),
     autoDelay:String(env.AUTO_AI_DELAY_SECONDS || "5"),

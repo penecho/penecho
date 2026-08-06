@@ -56,6 +56,7 @@
     pluginSave = document.querySelector("#pluginSave"),
     status = document.querySelector("#status"),
     coords = document.querySelector("#coords"),
+    canvasHint = document.querySelector("#canvasHint"),
     debugList = document.querySelector("#debugEvents"),
     debugRequest = document.querySelector("#debugRequest"),
     embodiment = document.querySelector("#aiEmbodiment"),
@@ -128,12 +129,15 @@
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
     settingsEffort = document.querySelector("#settingsEffort"),
+    settingsMaxTokens = document.querySelector("#settingsMaxTokens"),
     settingsTimeout = document.querySelector("#settingsTimeout"),
     settingsAutoDelay = document.querySelector("#settingsAutoDelay"),
     settingsImageFormat = document.querySelector("#settingsImageFormat"),
     settingsTraceToggle = document.querySelector("#settingsTraceToggle"),
     settingsTraceLimit = document.querySelector("#settingsTraceLimit"),
     settingsSaveButton = document.querySelector("#settingsSave"),
+    settingsTestConnection = document.querySelector("#settingsTestConnection"),
+    settingsInstallCli = document.querySelector("#settingsInstallCli"),
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
@@ -194,7 +198,10 @@
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
-    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000,
+    WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS = 350,
+    WIDGET_SNAPSHOT_CACHE_REFRESH_MS = 60000,
+    WIDGET_SNAPSHOT_CACHE_STAGGER_MS = 5000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -344,6 +351,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvas: "Zoomable handwritten AI canvas",
       aiGuide: "AI knowledge guide",
       openAIMenu: "Open AI action menu",
+      stopAIRequest: "Stop current AI request",
       aiActions: "AI actions",
       answer: "Answer",
       hint: "Hint",
@@ -388,13 +396,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Live public data and more expressive SVG visuals",
-      changelogIntro: "Version 0.8.1 gives General HTML widgets reliable public-data access and makes SVG the default for animation and complex graphics.",
-      changelogVisualPlugins: "When browser CORS blocks a public HTTPS API, RSS feed, or image, General HTML widgets can fall back to PenEcho's local read-only bridge for live, refreshable content without exposing credentials.",
-      changelogCanvasWorkflow: "Animations and complex custom visuals now default to responsive SVG, enabling richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient. Legacy declarative animations no longer load, while older canvases still open without errors.",
+      changelogTitle: "Faster refinement and flexible AI connections",
+      changelogIntro: "Version 0.8.2 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.",
+      changelogConnections: "Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.",
+      changelogRefine: "Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens while preserving undo and confirmation.",
+      changelogStreaming: "API requests now use true SSE streaming, reducing long silent waits, improving responsiveness, and keeping lengthy model responses more stable through compatible gateways.",
+      changelogProgress: "The top status area now shows each request stage, live response receipt, retries, long-wait notices, and cancellation; the magic button can stop active requests immediately.",
       changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.8.0 added professional diagrams with editable source, direct widget refinement, server-backed canvas storage, and richer clipboard workflows.",
-      changelogPluginsSummary: "0.7.2 added sourced web photos, more reliable canvas persistence and export, and simpler protected local access.",
+      changelogImagesSummary: "0.8.1 added live public-data access for General HTML widgets and SVG-first animation and complex graphics.",
+      changelogPluginsSummary: "0.8.0 and earlier added editable professional diagrams, server-backed canvas storage, clipboard workflows, sourced web photos, and more reliable editing and export.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -403,7 +413,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProvider: "AI provider",
       settingsCliModel: "Model (optional)",
       settingsCliPath: "Command or path",
-      settingsCliHelp: "Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.",
+      settingsCliHelp: "Uses the CLI's existing local login. Test the connection for installation and sign-in guidance.",
       settingsConfiguration: "Configuration",
       settingsConnections: "AI connections",
       settingsManage: "Manage",
@@ -419,6 +429,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsConnectionCount: "{count} of {limit} connections",
       settingsAddConnection: "Add connection",
       settingsSaveConnection: "Save connection",
+      settingsTestConnection: "Test connection",
+      settingsTestingConnection: "Testing the model with a small image request…",
+      settingsConnectionTestPassed: "Connection ready. The model accepted the image and responded successfully.",
+      settingsConnectionTestFailed: "Connection test failed.",
+      settingsInstallCli: "Install CLI",
+      settingsInstallingCli: "Downloading, verifying, and installing the official CLI…",
+      settingsCliInstalled: "CLI installed. Testing the connection again…",
+      settingsCliInstallFailed: "Automatic CLI installation failed.",
       settingsCancel: "Cancel",
       settingsActive: "Current",
       settingsUse: "Use",
@@ -449,7 +467,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSystemSection: "System",
       settingsSystemDescription: "Simple defaults for requests and canvas behavior.",
       settingsEffort: "Reasoning",
-      settingsProviderDefault: "Provider default",
+      settingsMaxTokens: "Maximum response tokens",
+      settingsMaxTokensHelp: "Includes thinking tokens. Default 20,000; must be larger than 15,000. Low limits may be exhausted during reasoning.",
       settingsTimeout: "Timeout",
       settingsAutoDelay: "Auto AI delay",
       settingsImageFormat: "Canvas image",
@@ -549,12 +568,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotImages: "images",
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
-      footerTip: "AI drafts: move the whole group or adjust, accept, and discard items independently",
+      canvasHintWidgetAdded: "Draw changes near a widget, then choose AI Refine to apply them.",
+      canvasHintWidgetAddedAlt: "Notes anywhere in this view can guide AI Refine for the widget you select.",
+      canvasHintRefineInPlace: "To improve a widget in place, add marks near it or in this view, then use its AI Refine button.",
+      canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
+      canvasHintHand: "Hand pauses Auto AI without stopping a request already in progress.",
+      canvasHintHandAlt: "Select a widget with Hand to reveal move, copy, delete, and AI Refine.",
+      canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
+      canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
+      canvasHintText: "Text supports Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
+      canvasHintTextAlt: "Place text near a widget, then use AI Refine to apply the instruction.",
+      canvasHintEraser: "Eraser removes ink only; use Hand controls to delete canvas objects.",
+      canvasHintEraserAlt: "Erase an instruction before AI runs without changing widgets beneath it.",
       ready: "Ready",
       aiBusy: "AI is working. Please wait.",
       noInk: "Write something first",
       cannotCapture: "Could not capture the newest handwriting",
       observing: "Observing...",
+      aiPreparingCanvas: "Preparing canvas context...",
+      aiSendingRequest: "Sending request...",
+      aiRequestReceived: "Request received by PenEcho",
+      aiPreparingImage: "Preparing model input...",
+      aiConnecting: "Connecting to the model...",
+      aiWaitingResponse: "Waiting for the model...",
+      aiReceivingResponse: "Receiving model response...",
+      aiValidatingResponse: "Checking model response...",
+      aiRetrying: "Correcting response · attempt {attempt}",
+      aiImageFallback: "Retrying with a compatible image · attempt {attempt}",
+      aiStillWaiting: "The model is taking longer than usual · PenEcho timeout {seconds}s",
+      aiCancelled: "AI request cancelled",
+      aiCancelledForInput: "AI request cancelled because new input started",
       deferred: "New ink found; this AI result was deferred",
       writing: "Writing...",
       aiDone: "AI complete",
@@ -691,6 +734,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetSourceCopyFailed: "Widget source could not be copied",
       widgetRefine: "AI Refine",
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
+      widgetRefineNearbyHint: "New annotations were detected near this widget. Use AI Refine to update it from those instructions.",
+      widgetRefineViewportHint: "New instructions are present in this view. Use AI Refine to update this widget from them.",
       widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
       widgetRefining: "AI is refining this widget",
       widgetReplacementReady: "Review the refined replacement",
@@ -757,13 +802,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
-  const AI_CONNECTION_STORAGE_KEY = "penecho-ai-connection-id";
+  function canvasClientId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  const AI_CONNECTION_STORAGE_KEY = "penecho-ai-connection-id",
+    AI_CLIENT_ID = canvasClientId();
   function selectedAiConnectionId() {
     const id = String(localStorage.getItem(AI_CONNECTION_STORAGE_KEY) || "default").trim();
     return id === "default" || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id) ? id : "default";
   }
   function authenticatedApiHeaders(headers = {}) {
-    return configuredAccessSession ? { ...headers, "X-PenEcho-Session":configuredAccessSession } : { ...headers };
+    return configuredAccessSession
+      ? { ...headers, "X-PenEcho-Client":AI_CLIENT_ID, "X-PenEcho-Session":configuredAccessSession }
+      : { ...headers, "X-PenEcho-Client":AI_CLIENT_ID };
   }
   function aiRequestHeaders(headers = {}) {
     return { ...authenticatedApiHeaders(headers), "X-PenEcho-Connection":selectedAiConnectionId() };
@@ -792,6 +847,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       nextTextEditorZ: 1,
       activeTextEditorId: null,
       selectedTextBoxId: null,
+      textBoxGesture: null,
       textBoxHistoryBefore: null,
       animations: [],
       nextAnimationId: 1,
@@ -808,6 +864,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetHostPan: null,
       widgetHistoryBefore: null,
       widgetRefineCandidate: null,
+      widgetRefineHoverCandidate: null,
+      widgetRefineHoveredWidgetId: null,
+      widgetRefineButtonHoverId: null,
+      widgetRefineClickPulse: null,
+      widgetRefinePointer: null,
+      widgetRefineHoverTimer: 0,
+      widgetRefineHintTimer: 0,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -889,6 +952,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       radialCloseTimer: 0,
       radialSuppressClickUntil: 0,
       statusKey: "ready",
+      aiProgressEvent: null,
+      canvasHintKey: null,
     };
   let textHelpInvoker = null;
   let pluginStylesPreviewReady = false,
@@ -898,7 +963,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.8.1";
+  const CHANGELOG_VERSION = "0.8.2";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -959,12 +1024,34 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     element.classList.add(record.className);
     return record.style;
   }
+  const AI_NON_PROGRESS_STATUS_KEYS = new Set(["aiBusy", "aiDone", "aiNoVisibleResponse", "aiError", "aiCancelled", "aiCancelledForInput"]);
   const setStatus = (text, key = null) => {
     status.textContent = text;
     state.statusKey = key;
+    const progress=typeof key==="string"&&key.startsWith("ai")&&!AI_NON_PROGRESS_STATUS_KEYS.has(key);
+    if(!progress)state.aiProgressEvent=null;
+    status.dataset.aiProgress=String(progress);
+    status.title=progress?text:"";
   };
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
+  function renderCanvasHint(restart = false) {
+    if (!canvasHint || !state.canvasHintKey) return;
+    canvasHint.textContent = `Hint: ${t(state.canvasHintKey)}`;
+    canvasHint.hidden = false;
+    if (!restart) return;
+    canvasHint.classList.remove("is-new");
+    void canvasHint.offsetWidth;
+    canvasHint.classList.add("is-new");
+  }
+  function showCanvasHint(keys) {
+    const candidates = (Array.isArray(keys) ? keys : [keys]).filter((key) => key && (I18N[state.language][key] || I18N.zh[key]));
+    if (!candidates.length) return;
+    const alternatives = candidates.filter((key) => key !== state.canvasHintKey),
+      choices = alternatives.length ? alternatives : candidates;
+    state.canvasHintKey = choices[Math.floor(Math.random() * choices.length)];
+    renderCanvasHint(true);
+  }
   const summonFX = SUMMON?.create({
     fxCanvas:summonLayer,
     textLayer: document.querySelector("#summonTextLayer"),
@@ -1478,6 +1565,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     connectionManager.hidden = mode !== "api";
     canvasSettingsForm.dataset.editorHidden = String(mode === "api");
     settingsEditorCancel.hidden = mode !== "api";
+    settingsTestConnection.hidden = mode !== "api";
+    settingsInstallCli.hidden = true;
     settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : "settingsSave");
     canvasSettingsForm.hidden = false;
     configurationLayer.hidden = false;
@@ -1507,12 +1596,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const control of settingsApiFields.querySelectorAll("input, select")) control.disabled = !api || settings.configurationMode !== "api";
     for (const control of settingsCliFields.querySelectorAll("input, select")) control.disabled = api || settings.configurationMode !== "api";
     settingsApiSaved.hidden = !api || settingsApiSaved.dataset.saved !== "true";
+    showCliInstaller("", false);
     if (!api) {
       const values = settings.cli[provider] || {};
       settingsCliModel.value = values.model || "";
       settingsCliPath.value = values.path || ({ "kimi-cli":"kimi", "codex-cli":"codex", "claude-cli":"claude" }[provider] || "");
     }
     updateApiPresetFields(false);
+  }
+  function defaultConnectionEffort(provider = settingsProvider?.value || "api") {
+    return "medium";
+  }
+  function selectDefaultConnectionEffort() {
+    settingsEffort.value = defaultConnectionEffort();
   }
   function apiPresetForConnection(connection = {}) {
     if (connection.apiPreset && API_PRESETS[connection.apiPreset]) return [connection.apiPreset, API_PRESETS[connection.apiPreset]];
@@ -1582,8 +1678,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       quick.append(quickMark, quickCopy);
       settingsConnectionQuickList.append(quick);
 
-      const item = document.createElement("article"), copy = document.createElement("div"), title = document.createElement("div"), name = document.createElement("strong"), summary = document.createElement("p"), actions = document.createElement("div");
-      item.className = `settings-connection-item${connection.active ? " active" : ""}`;
+      const item = document.createElement("article"), copy = document.createElement("div"), title = document.createElement("div"), name = document.createElement("strong"), summary = document.createElement("p"), actions = document.createElement("div"),
+        editing = settings.editingConnectionId === connection.id;
+      item.className = `settings-connection-item${editing ? " editing" : ""}`;
       copy.className = "settings-connection-copy";
       title.className = "settings-connection-title";
       name.textContent = connectionTitle(connection);
@@ -1632,9 +1729,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsApiKey.value = "";
     settingsApiSaved.dataset.saved = String(connection?.hasApiKey === true);
     settings.cli[provider] = { model:connection?.cliModel || "", path:connection?.cliPath || provider.replace("-cli", "") };
-    settingsEffort.value = connection?.effort || "";
+    settingsEffort.value = connection?.effort || defaultConnectionEffort(provider);
     canvasSettingsForm.dataset.editorHidden = "false";
     updateSettingsProviderFields();
+    renderConnectionLists();
     setSettingsStatus();
     requestAnimationFrame(() => settingsProvider.focus({ preventScroll:true }));
   }
@@ -1642,12 +1740,70 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settings.editingConnectionId = null;
     canvasSettingsForm.dataset.editorHidden = "true";
     settingsApiKey.value = "";
+    renderConnectionLists();
     setSettingsStatus();
   }
   function setSettingsStatus(message = "", kind = "") {
     if (!settingsSaveStatus) return;
     settingsSaveStatus.textContent = message;
     settingsSaveStatus.className = `settings-save-status${kind ? ` ${kind}` : ""}`;
+  }
+  function connectionEditorPayload() {
+    const provider = settingsProvider.value;
+    if (provider !== "api") settings.cli[provider] = { model:settingsCliModel.value, path:settingsCliPath.value };
+    const apiPreset = provider === "api" ? selectedApiPreset() : null;
+    return {
+      provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
+      apiKey:settingsApiKey.value, effort:settingsEffort.value,
+      cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
+    };
+  }
+  function setConnectionTestBusy(busy) {
+    settingsTestConnection.disabled = busy;
+    settingsSaveButton.disabled = busy;
+    settingsInstallCli.disabled = busy;
+  }
+  function showCliInstaller(provider, visible) {
+    settingsInstallCli.hidden = !visible || !window.penechoDesktop?.installCli || !["kimi-cli", "codex-cli", "claude-cli"].includes(provider);
+    settingsInstallCli.dataset.provider = settingsInstallCli.hidden ? "" : provider;
+  }
+  async function testCanvasConnection() {
+    if (!canvasSettingsForm || !canvasSettingsForm.reportValidity()) return;
+    setConnectionTestBusy(true);
+    showCliInstaller("", false);
+    setSettingsStatus(t("settingsTestingConnection"));
+    try {
+      const connection = connectionEditorPayload(), response = await fetch("/api/settings/connections/test", {
+        method:"POST", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ id:settings.editingConnectionId, connection }),
+      }), body = await response.json();
+      if (!response.ok) {
+        showCliInstaller(body?.provider || connection.provider, body?.installable === true);
+        throw new Error([body?.error, body?.guidance].filter(Boolean).join(" ") || t("settingsConnectionTestFailed"));
+      }
+      setSettingsStatus(body?.message || t("settingsConnectionTestPassed"), "success");
+    } catch (error) { setSettingsStatus(error?.message || t("settingsConnectionTestFailed"), "error"); }
+    finally { setConnectionTestBusy(false); }
+  }
+  async function installCanvasCli() {
+    const provider = settingsInstallCli.dataset.provider;
+    if (!window.penechoDesktop?.installCli || !provider) return;
+    setConnectionTestBusy(true);
+    setSettingsStatus(t("settingsInstallingCli"));
+    try {
+      const result = await window.penechoDesktop.installCli(provider);
+      if (!result?.ok) throw new Error(result?.error || t("settingsCliInstallFailed"));
+      settingsCliPath.value = result.executable;
+      settings.cli[provider] = { model:settingsCliModel.value, path:result.executable };
+      showCliInstaller("", false);
+      setSettingsStatus(t("settingsCliInstalled"), "success");
+    } catch (error) {
+      setSettingsStatus(error?.message || t("settingsCliInstallFailed"), "error");
+      setConnectionTestBusy(false);
+      return;
+    }
+    setConnectionTestBusy(false);
+    await testCanvasConnection();
   }
   function updateTraceToggle() {
     if (!settingsTraceToggle) return;
@@ -1673,7 +1829,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         "codex-cli":{ model:body.codexModel, path:body.codexPath },
         "claude-cli":{ model:body.claudeModel, path:body.claudePath },
       };
-      settingsEffort.value = body.effort || "";
+      settingsEffort.value = body.effort || defaultConnectionEffort(body.provider);
+      settingsMaxTokens.value = String(body.maxTokens);
       settingsTimeout.value = String(body.timeoutSeconds);
       settingsAutoDelay.value = String(body.autoDelaySeconds);
       settingsImageFormat.value = body.imageFormat;
@@ -1688,20 +1845,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function saveCanvasSettings(event) {
     event?.preventDefault();
     if (!canvasSettingsForm || !canvasSettingsForm.reportValidity()) return;
-    settingsSaveButton.disabled = true;
+    setConnectionTestBusy(true);
     setSettingsStatus(t("settingsSaving"));
     try {
-      const provider = settingsProvider.value, scope = settings.configurationMode;
-      if (provider !== "api") settings.cli[provider] = { model:settingsCliModel.value, path:settingsCliPath.value };
-      const apiPreset = provider === "api" ? selectedApiPreset() : null;
-      const connectionPayload = {
-        provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
-        apiKey:settingsApiKey.value, effort:settingsEffort.value,
-        cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
-      };
+      const provider = settingsProvider.value, scope = settings.configurationMode, connectionPayload = connectionEditorPayload(), apiPreset = provider === "api" ? selectedApiPreset() : null;
       const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : {
         scope, provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
-        apiKey:settingsApiKey.value, effort:settingsEffort.value, timeoutSeconds:Number(settingsTimeout.value),
+        apiKey:settingsApiKey.value, effort:settingsEffort.value, maxTokens:Number(settingsMaxTokens.value), timeoutSeconds:Number(settingsTimeout.value),
         autoDelaySeconds:Number(settingsAutoDelay.value), imageFormat:settingsImageFormat.value,
         requestTrace:settings.requestTrace, requestTraceLimit:Number(settingsTraceLimit.value),
       };
@@ -1721,7 +1871,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         setConnectionStatus(t("settingsConnectionSaved"), "success");
       } else setSettingsStatus(t("settingsSystemSaved"), "success");
     } catch (error) { setSettingsStatus(error?.message || t("settingsLoadFailed"), "error"); }
-    finally { settingsSaveButton.disabled = false; }
+    finally { setConnectionTestBusy(false); }
   }
   async function updateConnection(action, id) {
     setConnectionStatus(t("settingsSaving"));
@@ -1738,12 +1888,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const button = event.target.closest("button[data-connection-activate],button[data-connection-edit],button[data-connection-delete]");
     if (!button) return;
     if (button.dataset.connectionActivate) {
-      const id = button.dataset.connectionActivate;
+      const id = button.dataset.connectionActivate,
+        closeAfterActivation = settingsConnectionQuickList?.contains(button) === true;
       if (!settings.connections.some(connection => connection.id === id)) return;
       localStorage.setItem(AI_CONNECTION_STORAGE_KEY, id);
       syncLocalConnectionSelection();
       renderConnectionLists();
       setConnectionStatus(t("settingsConnectionActivated"), "success");
+      if (closeAfterActivation) closeSettings();
       return;
     }
     const connection = settings.connections.find(item => item.id === button.dataset.connectionEdit || item.id === button.dataset.connectionDelete);
@@ -2019,7 +2171,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         fixedDefinitionIds = new Set(["general", "flowchart", ...promotedDefinitions.map((definition) => definition.id)]),
         remainingDefinitions = definitions.filter((definition) => !fixedDefinitionIds.has(definition.id)),
         previousIds = new Set(dataPluginDefinitions().map((plugin) => plugin.id)), nextIds = new Set(definitions.map((plugin) => plugin.id));
-      if (state.activeAI?.widgetEdit || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
+      if (activeWidgetRefinement() || state.pendingWidgetReplacement) cancelWidgetRefinement("plugin-catalog-reloaded");
       for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) unmountWidget(widget);
       PLUGIN_DEFINITIONS.splice(0, PLUGIN_DEFINITIONS.length, ...generalDefinitions, ...professionalDefinitions, ...BUILTIN_PLUGIN_DEFINITIONS, ...promotedDefinitions, ...remainingDefinitions);
       pluginManifests.clear();
@@ -2602,7 +2754,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function applyWidgetPluginState(pluginId, enabled) {
-    if (!enabled && state.activeAI?.widgetEdit?.pluginId === pluginId) cancelWidgetRefinement("widget-plugin-disabled");
+    if (!enabled && activeWidgetRefinement()?.pluginId === pluginId) cancelWidgetRefinement("widget-plugin-disabled");
     if (!enabled && state.pendingWidget?.pluginId === pluginId) rejectPendingWidget();
     if (!enabled && selectedWidget()?.pluginId === pluginId) acceptWidgetEdit();
     for (const widget of state.widgets) {
@@ -2679,7 +2831,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     renderSnapshotList();
     renderConnectionLists();
     updateNewCanvasDialog();
-    if (state.statusKey) status.textContent = t(state.statusKey);
+    renderCanvasHint(false);
+    if (state.aiProgressEvent) setStatus(aiProgressText(state.aiProgressEvent),AI_PROGRESS_STATUS_KEYS[state.aiProgressEvent.phase]);
+    else if (state.statusKey) setStatusKey(state.statusKey);
     updateSelectionToolbar();
     updateFeatureTourLanguage();
     summonFX?.refreshText();
@@ -2696,7 +2850,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateEmbodimentLabel() {
     const label = t({ arcane: "guideArcane", scifi: "guideScifi", research: "guideResearch", studio: "guideStudio" }[state.theme]);
     embodiment.setAttribute("aria-label", label);
-    aiOrb.setAttribute("title", label);
+    const orbLabel = state.busy ? t("stopAIRequest") : t("openAIMenu");
+    aiOrb.setAttribute("aria-label", orbLabel);
+    aiOrb.setAttribute("title", orbLabel);
   }
   function updateFullscreenButton() {
     const button = document.querySelector("#fullscreenBtn");
@@ -2739,8 +2895,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.busy = Boolean(value);
     embodiment.classList.toggle("working", state.busy);
     embodiment.setAttribute("aria-busy", String(state.busy));
-    if (state.busy) showSummon();
-    else hideSummon();
+    aiOrb.setAttribute("aria-haspopup", state.busy ? "false" : "menu");
+    if (state.busy) {
+      state.radialGesture = null;
+      closeRadialMenu();
+      showSummon();
+    } else hideSummon();
+    updateEmbodimentLabel();
   }
   function setNavigating(value) {
     clearTimeout(state.navigationTimer);
@@ -2792,6 +2953,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestAI(action, null, { captureCurrentViewport: true });
   }
   function openRadialMenu() {
+    if (state.busy) return;
     clearTimeout(state.radialCloseTimer);
     embodiment.classList.add("menu-open");
     aiOrb.setAttribute("aria-expanded", "true");

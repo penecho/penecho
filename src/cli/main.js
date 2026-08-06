@@ -6,10 +6,12 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
-const { anthropicEffortParameters, normalizedApiEffort, resolveApiConfig } = require("../server/api-config.js");
-const { resolveCodexLaunch } = require("../providers/codex-cli.js");
+const { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig } = require("../server/api-config.js");
+const { isEventStreamResponse, readProviderEventStream } = require("../server/api-stream.js");
+const { apiReasoningParameters, reasoningEffortMapping } = require("../providers/reasoning-effort.js");
+const { callCodexCli, resolveCodexLaunch } = require("../providers/codex-cli.js");
 const { callClaudeCli, resolveClaudeLaunch } = require("../providers/claude-cli.js");
-const { resolveKimiLaunch } = require("../providers/kimi-cli.js");
+const { callKimiCli, resolveKimiLaunch } = require("../providers/kimi-cli.js");
 const { isPromptExit, runConfigureMenu } = require("./configure-ui.js");
 const { maybeUpdateOnStart } = require("./update.js");
 
@@ -27,7 +29,7 @@ const REQUIRED_ASSETS = [
 ];
 
 const PROVIDER_OPTIONS = "api, kimi-cli, codex-cli, or claude-cli";
-const KIMI_INSTALL_GUIDANCE = "Kimi Code CLI is not available. Install it yourself, then restart PenEcho:\n  macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\n  Windows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\n  Verify: kimi --version\n  Authenticate: kimi login\n  Official guide: https://github.com/MoonshotAI/kimi-code";
+const KIMI_INSTALL_GUIDANCE = "Kimi Code CLI is not available. Install it, sign in, then test the connection again:\n  macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\n  Windows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\n  Verify: kimi --version\n  Authenticate: kimi login\n  Official guide: https://github.com/MoonshotAI/kimi-code";
 const CLI_PREFLIGHT_TIMEOUT_MS = 30000;
 
 function parsePort(value) {
@@ -212,40 +214,55 @@ function safeApiDiagnostic(value, key) {
   return text.slice(0, 500);
 }
 
+function connectionTestTimeoutError(message) {
+  const error = new Error(message);
+  error.code = "PENECHO_CONNECTION_TEST_TIMEOUT";
+  return error;
+}
+
 async function testApiConnection(env, options = {}) {
   const issues = apiConfigurationIssues(env);
   if (issues.length) throw new Error(`API configuration is incomplete: ${issues.join(", ")}`);
   const apiUrl = apiEnvValue(env, "URL"), format = apiEnvValue(env, "FORMAT").toLowerCase(), model = apiEnvValue(env, "MODEL"), key = apiEnvValue(env, "KEY"),
     api = resolveApiConfig(apiUrl, format || undefined);
   if (!api) throw new Error("AI_API_URL and AI_API_FORMAT do not describe a compatible OpenAI or Anthropic endpoint.");
-  const effort = normalizedApiEffort(api.format, env.AI_EFFORT);
+  const effort = normalizedApiEffort(api.format, env.AI_EFFORT), mapping = reasoningEffortMapping({ provider:"api", apiFormat:api.format, apiPreset:env.PENECHO_API_PRESET, apiUrl, model, effort }), reasoning = apiReasoningParameters({ apiFormat:api.format, apiPreset:env.PENECHO_API_PRESET, apiUrl, model, effort }), testImage = configuredTestImage(env), [imageHeader, imageData] = testImage.split(",", 2), imageType = imageHeader.slice(5).split(";", 1)[0];
   const request = api.format === "anthropic"
     ? {
         headers: { "Content-Type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01" },
-        body: JSON.stringify({ model, max_tokens:10, ...anthropicEffortParameters(effort, false), messages:[{ role:"user", content:"Reply with OK." }] }),
+        body: JSON.stringify({ model, max_tokens:anthropicResponseMaxTokens(effort), stream:true, ...(mapping.family === "minimax" ? reasoning : anthropicEffortParameters(effort, false, { apiUrl, model })), messages:[{ role:"user", content:[{ type:"text", text:"Inspect the attached test image and reply with OK only." }, { type:"image", source:{ type:"base64", media_type:imageType, data:imageData } }] }] }),
       }
     : {
         headers: { "Content-Type":"application/json", Authorization:`Bearer ${key}` },
-        body: JSON.stringify({ model, messages:[{ role:"user", content:"Reply with OK." }], max_tokens:10, reasoning_effort:effort }),
+        body: JSON.stringify({ model, stream:true, messages:[{ role:"user", content:[{ type:"text", text:"Inspect the attached test image and reply with OK only." }, { type:"image_url", image_url:{ url:testImage } }] }], ...reasoning }),
       };
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new Error("This Node.js version does not provide fetch().");
   const timeoutMs = options.timeoutMs || configuredTimeoutSeconds(env) * 1000, controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
+  let response, phase = "connecting";
   try {
-    response = await fetchImpl(api.endpoint, { method:"POST", redirect:"error", signal:controller.signal, ...request });
+    try {
+      response = await fetchImpl(api.endpoint, { method:"POST", redirect:"error", signal:controller.signal, ...request });
+    } catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new Error(`API connection failed: ${safeApiDiagnostic(error.message, key) || "network error"}`);
+    }
+    phase = "reading response";
+    if (!response.ok) {
+      const responseText = await response.text();
+      const diagnostic = safeApiDiagnostic(responseText, key);
+      throw new Error(`${api.format} API returned HTTP ${response.status}${diagnostic ? `: ${diagnostic}` : ""}`);
+    }
+    if (isEventStreamResponse(response)) await readProviderEventStream(response,api.format);
+    else await response.text();
+    return { format:api.format, status:response.status };
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(`API connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
-    throw new Error(`API connection failed: ${safeApiDiagnostic(error.message, key) || "network error"}`);
+    if (controller.signal.aborted) throw connectionTestTimeoutError(`API connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    if (phase === "connecting") throw new Error(`API connection failed: ${safeApiDiagnostic(error.message, key) || "network error"}`);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
-  const responseText = await response.text();
-  if (!response.ok) {
-    const diagnostic = safeApiDiagnostic(responseText, key);
-    throw new Error(`${api.format} API returned HTTP ${response.status}${diagnostic ? `: ${diagnostic}` : ""}`);
-  }
-  return { format:api.format, status:response.status };
 }
 
 function runCaptured(launch, args, options = {}) {
@@ -437,43 +454,42 @@ function cliTestError(error) {
 async function testConfiguredProvider(configuration, options = {}) {
   const provider = configuration.provider;
   if (!["api", "kimi-cli", "codex-cli", "claude-cli"].includes(provider)) throw new Error(`AI_PROVIDER must be ${PROVIDER_OPTIONS}.`);
+  const requestedTimeoutMs = Number(options.timeoutMs),
+    timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : configuredTimeoutSeconds(configuration.env) * 1000;
   if (provider === "api") {
-    const timeoutMs = configuredTimeoutSeconds(configuration.env) * 1000;
     const result = await (options.apiTester || testApiConnection)(configuration.env, { fetchImpl:options.fetchImpl, timeoutMs });
     return `${result.format} API responded with HTTP ${result.status}.`;
   }
-  const preflight = provider === "kimi-cli"
-    ? await runKimiPreflight(configuration, { runner:options.runner })
-    : provider === "codex-cli"
-      ? await runCodexPreflight(configuration, { runner:options.runner })
-      : await runClaudePreflight(configuration, { runner:options.runner });
-  if (!preflight.ok) throw new Error(preflight.error);
-  if (provider === "kimi-cli") return `${preflight.version}; executable is ready. Kimi authentication will be checked on the first Canvas request. No model request was made.`;
-  if (provider === "codex-cli") {
-    const model = normalizedEffort(configuration.env.CODEX_CLI_MODEL);
-    if (!model) return `${preflight.version}; login is ready and the Codex CLI default model will be used. No model request was made.`;
-    const models = await codexBundledModels(configuration, { runner:options.runner });
-    if (!models.some(candidate => candidate.toLowerCase() === model.toLowerCase())) {
-      throw new Error(`Codex model "${model}" is not present in ${preflight.version}'s bundled model catalog. The configuration was saved; upgrade Codex or choose another model.`);
-    }
-    return `${preflight.version}; login is ready and ${model} exists in the bundled model catalog. No model request was made.`;
-  }
-  const timeoutMs = configuredTimeoutSeconds(configuration.env) * 1000;
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs), atlasImage = configuredTestImage(configuration.env);
   try {
-    await (options.claudeCaller || callClaudeCli)({
-      executable:configuration.env.CLAUDE_CLI_PATH || "claude",
-      model:normalizedEffort(configuration.env.CLAUDE_CLI_MODEL) || null,
-      effort:normalizedEffort(configuration.env.AI_EFFORT) || null,
-      systemPrompt:"You are running a PenEcho configuration test. Do not use tools. Reply with OK only.",
-      prompt:"Reply with OK.",
+    const preflight = provider === "kimi-cli"
+      ? await runKimiPreflight(configuration, { runner:options.runner })
+      : provider === "codex-cli"
+        ? await runCodexPreflight(configuration, { runner:options.runner })
+        : await runClaudePreflight(configuration, { runner:options.runner });
+    if (controller.signal.aborted) throw connectionTestTimeoutError(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    if (!preflight.ok) throw new Error(preflight.error);
+    if (provider === "codex-cli") {
+      const model = normalizedEffort(configuration.env.CODEX_CLI_MODEL);
+      const models = model ? await codexBundledModels(configuration, { runner:options.runner }) : [];
+      if (controller.signal.aborted) throw connectionTestTimeoutError(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+      if (model && !models.some(candidate => candidate.toLowerCase() === model.toLowerCase())) {
+        throw new Error(`Codex model "${model}" is not present in ${preflight.version}'s bundled model catalog. The configuration was saved; upgrade Codex or choose another model.`);
+      }
+    }
+    const common = {
+      effort:reasoningEffortMapping({ provider, model:configuration.env[provider === "kimi-cli" ? "KIMI_CLI_MODEL" : provider === "codex-cli" ? "CODEX_CLI_MODEL" : "CLAUDE_CLI_MODEL"], effort:normalizedEffort(configuration.env.AI_EFFORT) || "medium" }).requested,
+      prompt:"Inspect the attached PenEcho connection-test image and reply with OK only. Do not use tools.",
       atlasImage,
       signal:controller.signal,
       env:configuration.env,
-    });
-    return `${preflight.version}; the selected Claude model and effort responded successfully.`;
+    };
+    if (provider === "kimi-cli") await (options.kimiCaller || callKimiCli)({ ...common, executable:configuration.env.KIMI_CLI_PATH || "kimi", model:normalizedEffort(configuration.env.KIMI_CLI_MODEL) || null });
+    else if (provider === "codex-cli") await (options.codexCaller || callCodexCli)({ ...common, executable:configuration.env.CODEX_CLI_PATH || "codex", model:normalizedEffort(configuration.env.CODEX_CLI_MODEL) || null });
+    else await (options.claudeCaller || callClaudeCli)({ ...common, executable:configuration.env.CLAUDE_CLI_PATH || "claude", model:normalizedEffort(configuration.env.CLAUDE_CLI_MODEL) || null, systemPrompt:"You are running a PenEcho connection test. Do not use tools. Reply with OK only." });
+    return `${preflight.version}; the selected ${provider === "kimi-cli" ? "Kimi" : provider === "codex-cli" ? "Codex" : "Claude"} model, image input, and reasoning effort responded successfully.`;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    if (controller.signal.aborted) throw connectionTestTimeoutError(`Connection test timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
     throw new Error(cliTestError(error));
   } finally { clearTimeout(timer); }
 }
@@ -489,8 +505,7 @@ async function runDoctor(args, configuration, options = {}) {
   report(port.ok, port.ok ? `Port ${configuration.port} is available` : `Port ${configuration.port} is unavailable (${port.error})`);
   try { report(true, `Unified model timeout is ${configuredTimeoutSeconds(configuration.env)} seconds`); }
   catch (error) { report(false, error.message); }
-  const defaultEffort = apiEnvValue(configuration.env, "FORMAT").toLowerCase() === "anthropic" ? "medium (Anthropic API default)" : "max (OpenAI API default)";
-  report(true, `Reasoning effort is ${configuration.env.AI_EFFORT || (configuration.provider === "api" ? defaultEffort : "the CLI default")}`);
+  report(true, `Reasoning effort is ${configuration.env.AI_EFFORT || "medium (PenEcho default)"}`);
   if (configuration.provider === "kimi-cli") report(true, `Model is ${configuration.env.KIMI_CLI_MODEL || "the Kimi Code CLI configured default"}`);
   if (configuration.provider === "codex-cli") report(true, `Model is ${configuration.env.CODEX_CLI_MODEL || "the Codex CLI default for PenEcho's isolated session"}`);
   if (configuration.provider === "claude-cli") report(true, `Model is ${configuration.env.CLAUDE_CLI_MODEL || "the Claude CLI default"}`);

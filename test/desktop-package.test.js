@@ -21,7 +21,7 @@ const ROOT = path.resolve(__dirname, "..");
 function base(overrides = {}) {
   return {
     provider:"api", apiFormat:"openai", apiUrl:"https://api.openai.com/v1", apiModel:"gpt-5.6-sol", apiKey:"secret",
-    effort:"xhigh", imageFormat:"webp", timeout:"180", autoDelay:"1.2", host:"127.0.0.1", port:"3888",
+    effort:"medium", imageFormat:"webp", timeout:"180", autoDelay:"1.2", host:"127.0.0.1", port:"3888",
     requestTrace:false, traceLimit:"100", ...overrides,
   };
 }
@@ -36,6 +36,7 @@ test("desktop settings accept a secure API configuration and reject unsafe value
   assert.doesNotThrow(() => normalizeSettings(base({ apiKey:"" }), { hasSavedApiKey:true }));
   assert.throws(() => normalizeSettings(base({ apiUrl:"https://user:pass@example.com" })), /without embedded credentials/);
   assert.throws(() => normalizeSettings(base({ host:"192.168.1.2" })), /local-only or LAN/);
+  assert.equal(normalizeSettings(base({ effort:"" })).updates.AI_EFFORT, "medium");
 });
 
 test("desktop settings support CLI providers without exposing API secrets", () => {
@@ -221,6 +222,7 @@ test("desktop secret store compresses credentials into a user-only local file", 
 
 test("desktop shell and Forge config keep the renderer isolated and package native assets", () => {
   const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8"),
+    serverMain = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     preload = fs.readFileSync(path.join(ROOT, "desktop", "preload.js"), "utf8"),
     canvasPreload = fs.readFileSync(path.join(ROOT, "desktop", "canvas-preload.js"), "utf8"),
     updateCss = fs.readFileSync(path.join(ROOT, "public", "desktop-update.css"), "utf8"),
@@ -234,6 +236,11 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /PENECHO_PRIVATE_PLUGIN_DIR/);
   assert.match(main, /Object\.assign\(configuration\.env, kimiPresetUpdates\(configuration\)\)/);
   assert.match(main, /desktopConfigurationEnvironment\(process\.env, paths\.stateDir\)/);
+  assert.match(main, /stateDir = app\.getPath\("userData"\)/);
+  assert.match(main, /configuration\.env\.PENECHO_CONFIG_FILE = configuration\.configFile;\s*applyEnvironment\(configuration\);[\s\S]*?server = require\("\.\.\/server\.js"\)/);
+  assert.match(serverMain, /const CONNECTIONS_FILE = STATE_DIRECTORY\s*\? path\.join\(STATE_DIRECTORY, "connections\.json"\)/);
+  assert.match(serverMain, /if \(error\?\.code === "ENOENT"\) return \{ defaultName:"Default connection", connections:\[\] \}/);
+  assert.match(serverMain, /fs\.mkdirSync\(path\.dirname\(CONNECTIONS_FILE\), \{ recursive:true, mode:0o700 \}\);[\s\S]*?fs\.renameSync\(temporary, CONNECTIONS_FILE\)/);
   assert.match(main, /configuration\.env\.HOST\) configuration\.env\.HOST = "0\.0\.0\.0"/);
   assert.match(main, /createUpdateManager/);
   assert.match(main, /updateManager\.start\(\)/);
@@ -248,6 +255,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.doesNotMatch(preload, /loginCli/);
   assert.match(preload, /copyText/);
   assert.match(canvasPreload, /penechoDesktopUpdate/);
+  assert.match(canvasPreload, /installCli:provider => ipcRenderer\.invoke\("penecho:install-cli", provider\)/);
+  assert.doesNotMatch(canvasPreload, /openSettings/);
   assert.match(canvasPreload, /process\.platform !== "win32"/);
   assert.match(canvasPreload, /What's new/);
   assert.match(canvasPreload, /desktop-update-progress/);
@@ -255,11 +264,13 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(updateCss, /\.desktop-update-notes/);
   assert.match(main, /\["api", "kimi"\]\.includes\(normalized\.provider\)/);
   assert.match(main, /if \(!configurationIsReady\(loaded\)\) \{\s*showSettings\(\);\s*return;/);
+  assert.match(main, /label:"Settings…"[\s\S]*?click:showSettings/);
+  assert.match(main, /if \(!fromCanvas\(event\) && !fromSetup\) return \{ ok:false/);
   assert.match(main, /window\.loadFile\(SETTINGS_FILE\)\.then\(reveal\)/);
   assert.match(main, /settingsReadyToLaunch = true;[\s\S]*?ok:false,[\s\S]*?saved:true/);
   assert.match(main, /SETTINGS_TEST_TIMEOUT_MS = 30_000/);
-  assert.match(main, /Promise\.race\(\[[\s\S]*?testConfiguredProvider\(loaded\.configuration\)[\s\S]*?PENECHO_SETTINGS_TEST_TIMEOUT/);
-  assert.match(main, /timedOut:error\.code === "PENECHO_SETTINGS_TEST_TIMEOUT"/);
+  assert.match(main, /Promise\.race\(\[[\s\S]*?testConfiguredProvider\(loaded\.configuration, \{ timeoutMs:SETTINGS_TEST_TIMEOUT_MS \}\)[\s\S]*?PENECHO_SETTINGS_TEST_TIMEOUT/);
+  assert.match(main, /timedOut:\["PENECHO_SETTINGS_TEST_TIMEOUT", "PENECHO_CONNECTION_TEST_TIMEOUT"\]\.includes\(error\.code\)/);
   assert.match(settings, /Launch anyway/);
   assert.match(settings, /setStatus\("success"[\s\S]*?const launched = await desktop\.launch\(\)/);
   assert.match(settings, /result\.timedOut[\s\S]*?Connection test timed out[\s\S]*?still launch PenEcho and enter the canvas/);
@@ -297,7 +308,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(otherGroup, /value="codex-cli"/);
   assert.match(otherGroup, /value="claude-cli"/);
   assert.ok(html.indexOf("kimi-provider-group") < html.indexOf("otherProviderGroupTitle"));
-  assert.equal(rootPackage.version, "0.8.1");
+  assert.equal(rootPackage.version, "0.8.2");
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);

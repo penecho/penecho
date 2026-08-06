@@ -74,24 +74,17 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Speichere Schnappschüsse auf diesem Gerät oder dem PenEcho-Server und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
-## Neu in Version 0.8.1
+## Neu in Version 0.8.2
 
-- **Öffentliche Live-Daten in General-HTML-Widgets.** Wenn eine öffentliche HTTPS-API, ein RSS-Feed oder ein Bild durch Browser-CORS blockiert wird, kann das Widget auf PenEchos lokale, schreibgeschützte Brücke zurückgreifen und so Nachrichten, Dashboards und andere aktualisierte Inhalte ohne offengelegte Zugangsdaten anzeigen.
-- **SVG als Standard für Animationen und komplexe Grafiken.** Animationen und komplexe benutzerdefinierte Visualisierungen verwenden jetzt bevorzugt responsives SVG in General HTML. Das ermöglicht reichhaltigere Bewegungen, Überlagerungen und skalierbare Grafiken bei kompakter, token-effizienter Modellausgabe.
+- **Mehrere KI-Verbindungen mit Ein-Klick-Wechsel.** Speichere bis zu zehn API- oder CLI-Verbindungen, nutze bearbeitbare Kimi- und MiniMax-Voreinstellungen, teste Verbindungen im Canvas und wähle auf jedem Client desselben PenEcho-Hosts eine eigene aktive Verbindung. Änderungen gelten sofort.
+- **Schnelleres, flexibleres Refine.** Schreibe Anweisungen an eine beliebige Stelle des sichtbaren Bereichs und wähle das zu ändernde Widget. Standardisierte Unified Diffs übertragen nur Änderungen statt des vollständigen Widgets und reduzieren so Tokenbedarf und Wartezeit; Bestätigung und Rückgängig bleiben erhalten.
+- **Echte API-Streams.** OpenAI- und Anthropic-kompatible APIs verwenden jetzt durchgehend SSE, sodass eingehende Antworten sofort sichtbar werden und lange Anfragen über kompatible Gateways stabiler laufen.
+- **Klarer Fortschritt und Abbruch.** Der obere Status zeigt Vorbereitung, Verbindung, Warten, Empfang, Prüfung, Wiederholungen und Zeitüberschreitungen. Während einer Anfrage stoppt die magische Schaltfläche die aktive Arbeit sofort.
 
-## Neu in Version 0.8.0
+## Frühere Höhepunkte
 
-- **Professionelle Diagramme weit über Flussdiagramme hinaus.** Erstellen Sie Architektur-, UML-, Sequenz-, BPMN-, Daten-, technische, wissenschaftliche, medizinische, finanzielle und geografische Diagramme mit editierbarem professionellem Quelltext. Unterstützte Formate werden bei Bedarf lokal gerendert; Spezialformate können weiterhin als vollständiges HTML dargestellt werden.
-- **Plugin-Standardeinstellungen mit kleinerem Prompt.** **General HTML** ist immer aktiviert und kann nicht abgewählt werden. **Professional Diagrams** ist standardmäßig aktiviert und kann deaktiviert werden; alle anderen integrierten oder privaten Plugins sind standardmäßig deaktiviert. Bereits ausdrücklich gespeicherte Einstellungen bleiben bei Updates erhalten. Nur die kompakten Funktionsleitfäden aktivierter Plugins gehen an das Modell; vollständiges CSS und Renderer bleiben lokal und werden bei Bedarf geladen.
-- **Plugin-Widgets direkt durch Zeichnen verfeinern.** Zeichnen oder schreiben Sie die gewünschten Änderungen mit dem Stift direkt auf ein von einem Plugin zurückgegebenes Widget. Klicken Sie dann auf die eingeblendete Schaltfläche **AI Refine**, um eine aktualisierte Ersatzversion zu erzeugen. Dieser Ablauf gilt nur für von Plugins zurückgegebene Widgets.
-- **Speicherung auf diesem Gerät oder dem PenEcho-Server.** Leinwände können nur im aktuellen Browser oder auf dem PenEcho-Rechner gespeichert werden, damit andere autorisierte Geräte desselben Servers sie öffnen können. Vor dem Speichern werden unfertige Steuerelemente bestätigt.
-- **Zwischenablage, Text und erweiterbare Plugins.** Fügen Sie Text oder Bilder aus der Systemzwischenablage ein, kopieren Sie KI-Text, Formeln und professionellen Diagrammquelltext und bearbeiten Sie Textfelder erneut mit Hand. Integrierte und private Plugins lassen sich einschließlich optionalem, nur bei Nutzung geladenem CSS als eigene Plugins kopieren.
-
-## Neu in Version 0.7.2
-
-- **Integrierte echte Fotos und professionelle Flussdiagramme.** Real Photo Search zeigt Bilder aus dem Web samt Quelle direkt auf der Leinwand, standardmäßig ein Ergebnis und bei einem Fehler eine alternative Quelle. Flowchart erstellt Prozess-, Entscheidungs-, Architektur-, Sequenz- und Zustandsdiagramme mit kopierbarem Mermaid-Quelltext.
-- **Zuverlässigeres Bearbeiten, Speichern und Exportieren.** Mit Hand lassen sich Bilder, Animationen und von der KI zurückgegebene Widgets direkt verschieben und ohne künstliche Obergrenze skalieren. Speichern aktualisiert standardmäßig den geladenen Schnappschuss, Speichern unter bleibt verfügbar, und externe Bilder bleiben in Vorschaubildern und PNG-Exporten erhalten.
-- **Lokaler Zugriff und bessere Desktop-Integration.** Ein gemeinsamer sechsstelliger Code kann den Browserzugriff im lokalen Netz schützen, ohne Modellanfragen nach dem Entsperren zu verändern. Die Desktop-Einrichtung unterstützt Kimi API und Kimi CLI neben allgemeiner API, Codex CLI und Claude CLI sowie verbesserte Updates und Pakete.
+- **0.8.1.** Ergänzte öffentliche Live-Daten für General HTML sowie SVG als Standard für Animationen und komplexe Grafiken.
+- **0.8.0 und 0.7.2.** Ergänzten editierbare professionelle Diagramme, Server-Speicherung, Zwischenablage-Workflows, Webfotos mit Quellen sowie zuverlässigere Bearbeitung und Exporte.
 
 ## Frühere Versionen
 

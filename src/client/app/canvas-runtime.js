@@ -1,7 +1,31 @@
 // Canvas tiles, widgets, animations, rendering, navigation, and text editing.
   const WIDGET_REFINE_PROXIMITY_PX = 24;
+  const WIDGET_REFINE_HOVER_GRACE_MS = 5000;
+  const WIDGET_REFINE_HINT_MS = 10000;
+  const WIDGET_REFINE_CLICK_PULSE_MS = 900;
   const objectChromeButtons = new Map();
   let nextObjectChromeStyleId = 1;
+  function normalizedWidgetSource(value) {
+    return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
+  }
+  function widgetSourceMirrorsHtml(source, html) {
+    const normalizedSource = normalizedWidgetSource(source);
+    return Boolean(normalizedSource) && normalizedSource === normalizedWidgetSource(html);
+  }
+  function widgetUsesHtmlCopySource(widget) {
+    return Boolean(widget && widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search"
+      && (!widget.copyText || widgetSourceMirrorsHtml(widget.copyText, widget.html)));
+  }
+  function widgetCopySource(widget) {
+    if (!widget || widget.pluginId === "image-search") return "";
+    if (widget.widgetType === "diagram_source") return widget.source || widget.copyText || "";
+    return widgetUsesHtmlCopySource(widget) ? widget.html : widget.copyText || "";
+  }
+  function widgetCopySourceLabel(widget) {
+    if (!widgetCopySource(widget)) return "";
+    if (widgetUsesHtmlCopySource(widget)) return "Copy HTML";
+    return widget.copyLabel || (widget.sourceFormat ? `Copy ${widget.sourceFormat}` : t("copyText"));
+  }
   function tile(tx, ty, create = true) {
     const k = key(tx, ty);
     if (!tiles.has(k) && create) {
@@ -572,6 +596,13 @@
     if (!widgetRuntimeEnabled()) return [];
     return state.widgets.filter((widget) => !widget.hiddenForReplacement && pluginEnabled(widget.pluginId) && pluginManifests.has(widget.pluginId) && (!region || intersection(widgetBox(widget), region)));
   }
+  function capturableWidgets(region = null) {
+    const widgets = visibleWidgets(region),
+      pending = state.pendingWidget;
+    if (!pending || !pending.shell || pending.hiddenForReplacement || !pluginEnabled(pending.pluginId) || !pluginManifests.has(pending.pluginId)
+      || region && !intersection(widgetBox(pending), region) || widgets.includes(pending)) return widgets;
+    return [...widgets, pending];
+  }
   function serializedWidgets() {
     return state.widgets.map((widget) => ({
       id: widget.id,
@@ -640,14 +671,19 @@
       copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
       copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
+      snapshotTimer: 0,
+      snapshotCapturedAt: 0,
+      contentVersion: 0,
+      snapshotVersion: -1,
       shell: null,
       frame: null,
       hostOrigin: null,
       pending: false,
+      runtimeDiagnostics: null,
     };
   }
   function restoreWidgets(items) {
-    if (state.activeAI?.widgetEdit) supersedeActiveAI("widgets-restored");
+    if (activeWidgetRefinement()) supersedeActiveAI("widgets-restored");
     if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
     state.pendingWidgetReplacement = null;
     clearWidgetRefineCandidate();
@@ -708,12 +744,11 @@
     widget.shell = shell;
     widget.frame = frame;
     widget.hostOrigin = new URL(frame.src).origin;
+    widget.runtimeDiagnostics = null;
     widget.initialized = false;
     widget.hostReady = false;
     widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
     widget.hostStateKey = null;
-    widget.contentReady = false;
-    widget.readyPromise = new Promise((resolve) => (widget.resolveReady = resolve));
     addWidgetStyleRule(widget);
     positionWidget(widget);
   }
@@ -723,6 +758,8 @@
       setNavigating(false);
     }
     removeWidgetStyleRule(widget);
+    clearTimeout(widget.snapshotTimer);
+    widget.snapshotTimer = 0;
     widget.shell?.remove();
     widget.shell = null;
     widget.frame = null;
@@ -731,9 +768,6 @@
     widget.hostReady = false;
     widget.resolveHostReady = null;
     widget.hostReadyPromise = null;
-    widget.contentReady = false;
-    widget.resolveReady = null;
-    widget.readyPromise = null;
     for (const [requestId, pending] of widgetSnapshotRequests) {
       if (pending.widget !== widget) continue;
       clearTimeout(pending.timer);
@@ -829,53 +863,83 @@
       image.src = dataUrl;
     });
   }
-  async function waitForWidgetContent(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
-    if (widget.contentReady) return;
-    if (!widget.readyPromise) throw Error(t("widgetExportFailed"));
-    await Promise.race([
-      widget.readyPromise,
-      new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
-    ]);
-  }
-  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
-    if (widget.snapshotPromise) return widget.snapshotPromise;
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true) {
+    clearTimeout(widget.snapshotTimer);
+    widget.snapshotTimer = 0;
+    if (widget.snapshotPromise) {
+      const inFlight = widget.snapshotPromise;
+      if (!requireFresh) return inFlight;
+      try { await inFlight; } catch {}
+      if (widget.snapshotImage && widget.snapshotVersion >= widget.contentVersion) return widget.snapshotImage;
+    }
     timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
     const snapshotPromise = (async () => {
-      const previousActive = widget.renderActive;
+      const previousActive = widget.renderActive,
+        deadline = performance.now() + timeoutMs,
+        remaining = () => Math.max(1, deadline - performance.now());
       try {
-        if (!widget.hostReady && widget.hostReadyPromise) await Promise.race([
-          widget.hostReadyPromise,
-          new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), timeoutMs)),
-        ]);
-        if (!widget.initialized) {
-          widget.renderActive = true;
-          sendWidgetInit(widget);
-          sendWidgetHostState(widget, undefined, undefined, true);
-        }
-        await waitForWidgetContent(widget, timeoutMs);
         if (!widget.frame?.contentWindow) throw Error(t("widgetExportFailed"));
+        if (!widget.hostReady) {
+          if (!widget.hostReadyPromise) throw Error(t("widgetExportFailed"));
+          await Promise.race([
+            widget.hostReadyPromise,
+            new Promise((_, reject) => setTimeout(() => reject(Error(t("widgetExportFailed"))), remaining())),
+          ]);
+        }
+        widget.renderActive = true;
+        widget.shell?.classList.remove("widget-offscreen");
+        if (!widget.initialized) sendWidgetInit(widget);
+        if (!widget.hostReady || !widget.initialized) throw Error(t("widgetExportFailed"));
+        sendWidgetHostState(widget, undefined, undefined, true);
         const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
         return await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             widgetSnapshotRequests.delete(requestId);
             reject(Error(t("widgetExportFailed")));
-          }, timeoutMs);
-          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer });
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs }, widget.hostOrigin || location.origin);
+          }, remaining());
+          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer, contentVersion:widget.contentVersion });
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs:remaining() }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
           widget.renderActive = false;
+          widget.shell?.classList.add("widget-offscreen");
           sendWidgetHostState(widget, undefined, undefined, true);
         }
       }
     })();
     widget.snapshotPromise = snapshotPromise;
+    let snapshotSucceeded = false;
     try {
-      return await snapshotPromise;
+      const image = await snapshotPromise;
+      snapshotSucceeded = true;
+      return image;
     } finally {
       if (widget.snapshotPromise === snapshotPromise) widget.snapshotPromise = null;
+      scheduleWidgetSnapshot(widget, snapshotSucceeded ? WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS : WIDGET_SNAPSHOT_CACHE_REFRESH_MS);
     }
+  }
+  function widgetSnapshotRefreshStagger(widget) {
+    let hash = 0;
+    for (const character of String(widget?.id || "")) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    return hash % (WIDGET_SNAPSHOT_CACHE_STAGGER_MS + 1);
+  }
+  function scheduleWidgetSnapshot(widget, minimumDelayMs = WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS) {
+    if (widget.snapshotTimer || widget.snapshotPromise) return;
+    const elapsed = widget.snapshotCapturedAt ? Date.now() - widget.snapshotCapturedAt : Number.POSITIVE_INFINITY,
+      stagger = widgetSnapshotRefreshStagger(widget),
+      delay = widget.snapshotImage
+        ? Math.max(minimumDelayMs, WIDGET_SNAPSHOT_CACHE_REFRESH_MS + stagger - elapsed)
+        : Math.max(minimumDelayMs, WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS) + stagger;
+    widget.snapshotTimer = setTimeout(() => {
+      widget.snapshotTimer = 0;
+      if (!(state.widgets.includes(widget) || state.pendingWidget === widget) || !widget.shell) return;
+      if (widget.renderActive === false) {
+        scheduleWidgetSnapshot(widget, WIDGET_SNAPSHOT_CACHE_REFRESH_MS);
+        return;
+      }
+      void requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, false).catch(() => {});
+    }, Math.max(WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS, delay));
   }
   async function handleWidgetMessage(event) {
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])].find((item) => item.frame?.contentWindow === event.source);
@@ -887,6 +951,10 @@
       widget.resolveHostReady = null;
       sendWidgetInit(widget);
       sendWidgetHostState(widget, undefined, undefined, true);
+      return;
+    }
+    if (message.type === "penecho-widget-capture-ready") {
+      scheduleWidgetSnapshot(widget);
       return;
     }
     if (message.type === "penecho-widget-activate") {
@@ -911,10 +979,16 @@
       handleWidgetHostNavigation(widget, message);
       return;
     }
+    if (validWidgetRuntimeDiagnostics(message)) {
+      widget.runtimeDiagnostics = {
+        errors:message.errors.map(error => ({ ...error, stack:[...error.stack] })),
+        truncated:message.truncated,
+      };
+      return;
+    }
     if (message.type === "penecho-widget-updated") {
-      widget.contentReady = true;
-      widget.resolveReady?.();
-      widget.resolveReady = null;
+      widget.contentVersion++;
+      if (!widget.snapshotImage) scheduleWidgetSnapshot(widget);
       return;
     }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
@@ -929,6 +1003,8 @@
     }
     try {
       widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
+      widget.snapshotCapturedAt = Date.now();
+      widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
       pending.reject(error);
@@ -1096,6 +1172,20 @@
       return [message.localX, message.localY, message.deltaY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
     return Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff && message.pointerType === "mouse"
       && [message.localX, message.localY, message.screenX, message.screenY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
+  }
+  function validWidgetRuntimeDiagnostics(message) {
+    return message && message.type === "penecho-widget-runtime-diagnostics"
+      && typeof message.truncated === "boolean" && Array.isArray(message.errors) && message.errors.length <= 5
+      && message.errors.every(error => error && typeof error === "object"
+        && ["error", "unhandledrejection", "script-load"].includes(error.kind)
+        && typeof error.name === "string" && error.name.length > 0 && error.name.length <= 80
+        && typeof error.message === "string" && error.message.length > 0 && error.message.length <= 400
+        && typeof error.file === "string" && error.file.length > 0 && error.file.length <= 300
+        && Number.isInteger(error.line) && error.line >= 0 && error.line <= 10000000
+        && Number.isInteger(error.column) && error.column >= 0 && error.column <= 10000000
+        && Number.isInteger(error.repeatedCount) && error.repeatedCount >= 1 && error.repeatedCount <= 1000000
+        && Array.isArray(error.stack) && error.stack.length <= 3
+        && error.stack.every(frame => typeof frame === "string" && frame.length > 0 && frame.length <= 300));
   }
   function widgetHostPointerId(widget, pointerId) {
     return `widget-host:${widget.id}:${pointerId}`;
@@ -1313,8 +1403,8 @@
     widget.pending = false;
     const resolve = widget.resolve;
     widget.resolve = null;
-    unmountWidget(widget);
     if (replacement) {
+      unmountWidget(widget);
       const index = state.widgets.indexOf(replacement.target);
       if (index < 0 || replacement.target.id !== widget.id || replacement.target.pluginId !== widget.pluginId) {
         replacement.target.hiddenForReplacement = false;
@@ -1325,8 +1415,16 @@
         return;
       }
       state.widgets.splice(index, 1, widget);
-    } else state.widgets.push(widget);
-    mountWidget(widget);
+      mountWidget(widget);
+    } else {
+      state.widgets.push(widget);
+      if (widget.shell) {
+        widget.shell.classList.remove("pending");
+        widget.shell.tabIndex = 0;
+        widget.hostStateKey = null;
+        sendWidgetHostState(widget, undefined, undefined, true);
+      } else mountWidget(widget);
+    }
     const historyEntry = save();
     if (!replacement) recordPendingHistory(historyEntry, pendingBefore, capturePendingHistoryState());
     requestInteractionLayerRender();
@@ -1357,7 +1455,7 @@
   }
   function cancelWidgetRefinement(reason = "widget-refine-cancelled", options) {
     let cancelled = false;
-    if (state.activeAI?.widgetEdit) {
+    if (activeWidgetRefinement()) {
       supersedeActiveAI(reason);
       cancelled = true;
     }
@@ -1378,6 +1476,7 @@
     enterAIDraftHandMode();
     mountWidget(widget);
     requestInteractionLayerRender();
+    if (widget.widgetType === "html_widget") showCanvasHint(["canvasHintWidgetAdded", "canvasHintWidgetAddedAlt", "canvasHintRefineInPlace", "canvasHintAIAddsOnly"]);
     setStatusKey("draftReady");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
@@ -1400,31 +1499,44 @@
     unmountWidget(target);
     state.pendingWidget = widget;
     state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
-    enterAIDraftHandMode();
-    mountWidget(widget);
-    requestInteractionLayerRender();
-    setStatusKey("widgetReplacementReady");
-    return new Promise((resolve) => (widget.resolve = resolve));
+    acceptPendingWidget({ restoreMode:false });
+    return Promise.resolve(state.widgets.includes(widget));
   }
   function widgetBounds(region = null) {
     let bounds = null;
-    for (const widget of visibleWidgets(region)) bounds = unionLocalBounds(bounds, region ? intersection(widgetBox(widget), region) : widgetBox(widget));
+    for (const widget of capturableWidgets(region)) bounds = unionLocalBounds(bounds, region ? intersection(widgetBox(widget), region) : widgetBox(widget));
     return bounds;
   }
   function drawWidgetsToContext(context, region = null) {
-    for (const widget of visibleWidgets(region)) {
+    for (const widget of capturableWidgets(region)) {
       if (!widget.snapshotImage) continue;
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function snapshotVisibleWidgets({ bestEffort = false } = {}) {
-    const timeoutMs = bestEffort ? WIDGET_HISTORY_SNAPSHOT_WAIT_MS : WIDGET_SNAPSHOT_TIMEOUT_MS,
-      requests = visibleWidgets().map((widget) => requestWidgetSnapshot(widget, timeoutMs));
-    if (!bestEffort) return void await Promise.all(requests);
-    await Promise.all(requests.map((request) => Promise.race([
-      request.catch(() => null),
-      new Promise((resolve) => setTimeout(resolve, WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
-    ])));
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true) {
+    let widgets = [];
+    try {
+      widgets = capturableWidgets(region);
+      const captured = await Promise.all(widgets.map(async (widget) => {
+        try {
+          const request = requestWidgetSnapshot(widget);
+          if (bestEffort) await Promise.race([
+            request,
+            new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
+          ]);
+          else await request;
+        } catch (error) {
+          debug("widget-snapshot-degraded", { widgetId:widget.id, error:String(error?.message || error).slice(0, 300) });
+        }
+        return Boolean(widget.snapshotImage);
+      })),
+        capturedCount = captured.filter(Boolean).length;
+      return { total:widgets.length, captured:capturedCount, missing:widgets.length - capturedCount };
+    } catch (error) {
+      debug("widget-snapshot-preparation-failed", { error:String(error?.message || error).slice(0, 300) });
+      const captured = widgets.filter((widget) => widget.snapshotImage).length;
+      return { total:widgets.length, captured, missing:widgets.length - captured };
+    }
   }
 
   function animationBox(animation) {
@@ -1987,6 +2099,52 @@
     for (const box of boxes) context.strokeRect(box.x, box.y, box.w, box.h);
     context.restore();
   }
+  function widgetRefineOutlineTarget(widgetId) {
+    const widget = visibleWidgets().find((item) => item.id === widgetId);
+    return widget?.shell && !widget.pending && widget.renderActive !== false ? widget : null;
+  }
+  function strokeWidgetRefineOutline(context, widget, opacity = 1) {
+    const box = widgetBox(widget),
+      unit = 1 / state.scale;
+    context.save();
+    context.globalAlpha *= opacity;
+    context.strokeStyle = "rgba(0, 122, 255, 0.34)";
+    context.lineWidth = unit;
+    context.setLineDash([4 * unit, 4 * unit]);
+    context.lineCap = context.lineJoin = "round";
+    context.strokeRect(box.x, box.y, box.w, box.h);
+    context.restore();
+  }
+  function drawWidgetRefineButtonHoverOutline(context) {
+    const widgetId = state.widgetRefineButtonHoverId;
+    if (!["pen", "hand"].includes(state.mode) || !widgetId || state.widgetRefineClickPulse?.widgetId === widgetId) return;
+    const widget = widgetRefineOutlineTarget(widgetId);
+    if (widget) strokeWidgetRefineOutline(context, widget);
+  }
+  function triggerWidgetRefineClickPulse(widgetId) {
+    if (!widgetId) return;
+    state.widgetRefineClickPulse = { widgetId, startedAt:performance.now() };
+    requestInteractionLayerRender();
+  }
+  function drawWidgetRefineClickPulse(context) {
+    const pulse = state.widgetRefineClickPulse;
+    if (!pulse) return;
+    const elapsed = performance.now() - pulse.startedAt;
+    if (elapsed >= WIDGET_REFINE_CLICK_PULSE_MS) {
+      if (state.widgetRefineClickPulse === pulse) state.widgetRefineClickPulse = null;
+      return;
+    }
+    if (!["pen", "hand"].includes(state.mode)) return;
+    const widget = widgetRefineOutlineTarget(pulse.widgetId);
+    if (!widget) {
+      if (state.widgetRefineClickPulse === pulse) state.widgetRefineClickPulse = null;
+      return;
+    }
+    const progress = elapsed / WIDGET_REFINE_CLICK_PULSE_MS,
+      opacity = Math.sin(progress * Math.PI * 2) ** 2;
+    strokeWidgetRefineOutline(context, widget, opacity);
+    requestInteractionLayerRender();
+  }
   function drawWidgetChrome(context) {
     if (!widgetRuntimeEnabled()) return;
     const widget = state.pendingWidget || (state.widgetEdit ? selectedWidget() : null);
@@ -2074,76 +2232,210 @@
     }
     return distance <= WIDGET_REFINE_PROXIMITY_PX ? { distance, hits } : null;
   }
+  function boxWidgetProximity(widget, box) {
+    if (!box) return null;
+    const target = widgetBox(widget),
+      dx = box.x + box.w < target.x ? target.x - box.x - box.w : target.x + target.w < box.x ? box.x - target.x - target.w : 0,
+      dy = box.y + box.h < target.y ? target.y - box.y - box.h : target.y + target.h < box.y ? box.y - target.y - target.h : 0,
+      distance = Math.hypot(dx, dy) * state.scale;
+    return distance <= WIDGET_REFINE_PROXIMITY_PX ? { distance, hits:intersection(box, target) ? 1 : 0 } : null;
+  }
+  function validWidgetRefineCandidate(candidate) {
+    return Boolean(candidate && state.widgets.includes(candidate.widget) && !candidate.widget.hiddenForReplacement
+      && !candidate.widget.pending && candidate.widget.shell && candidate.widget.renderActive !== false);
+  }
+  function widgetRefineHintHovered(candidate) {
+    return Boolean(candidate && (state.widgetRefineHoveredWidgetId === candidate.widgetId || state.widgetRefineButtonHoverId === candidate.widgetId));
+  }
+  function scheduleWidgetRefineHintRender() {
+    clearTimeout(state.widgetRefineHintTimer);
+    state.widgetRefineHintTimer = 0;
+    const now = Date.now(),
+      candidates = [state.widgetRefineCandidate, state.widgetRefineHoverCandidate],
+      next = candidates.reduce((deadline, candidate) => candidate && !widgetRefineHintHovered(candidate) && candidate.hintUntil > now
+        ? Math.min(deadline, candidate.hintUntil)
+        : deadline, Infinity);
+    if (!Number.isFinite(next)) return;
+    state.widgetRefineHintTimer = setTimeout(() => {
+      state.widgetRefineHintTimer = 0;
+      requestInteractionLayerRender();
+    }, Math.max(0, next - now));
+  }
+  function hideWidgetRefineHint() {
+    let changed = false;
+    for (const candidate of [state.widgetRefineCandidate, state.widgetRefineHoverCandidate]) {
+      if (!candidate || !candidate.hintUntil) continue;
+      candidate.hintUntil = 0;
+      changed = true;
+    }
+    if (changed) {
+      scheduleWidgetRefineHintRender();
+      requestInteractionLayerRender();
+    }
+  }
+  function widgetRefineHintVisible(candidate) {
+    return Boolean(candidate && (widgetRefineHintHovered(candidate) || candidate.hintUntil > Date.now()));
+  }
+  function clearWidgetRefineHoverCandidate() {
+    clearTimeout(state.widgetRefineHoverTimer);
+    state.widgetRefineHoverTimer = 0;
+    state.widgetRefineHoverCandidate = null;
+    scheduleWidgetRefineHintRender();
+  }
   function clearWidgetRefineCandidate() {
+    clearWidgetRefineHoverCandidate();
+    clearTimeout(state.widgetRefineHintTimer);
+    state.widgetRefineHintTimer = 0;
     state.widgetRefineCandidate = null;
     requestInteractionLayerRender();
   }
   function dismissWidgetRefineCandidate() {
     clearWidgetRefineCandidate();
   }
-  function latchWidgetRefineCandidate(drawing) {
-    if (state.widgetRefineCandidate || state.mode === "hand" || state.pending || state.pendingWidget || state.pendingWidgetReplacement) return state.widgetRefineCandidate;
+  function latchWidgetRefineCandidate(input, kind = "stroke") {
+    if (state.widgetRefineCandidate || state.pending || state.pendingWidget || state.pendingWidgetReplacement) return state.widgetRefineCandidate;
     const candidates = [];
     for (const widget of visibleWidgets()) {
       if (!widget.shell || widget.renderActive === false || widget.pending) continue;
-      const dirty = strokeWidgetProximity(widget, drawing);
+      const dirty = kind === "text-box" ? boxWidgetProximity(widget, textBoxBox(input)) : strokeWidgetProximity(widget, input);
       if (!dirty) continue;
       candidates.push({
         widget,
         widgetId:widget.id,
         instructionMode:"nearby-dirty",
+        hintKey:"widgetRefineNearbyHint",
+        hintUntil:Date.now() + WIDGET_REFINE_HINT_MS,
         distance:dirty.distance,
         hits:dirty.hits,
       });
     }
     candidates.sort((a, b) => a.distance - b.distance || b.hits - a.hits || state.widgets.indexOf(b.widget) - state.widgets.indexOf(a.widget));
     state.widgetRefineCandidate = candidates[0] || null;
-    if (state.widgetRefineCandidate) requestInteractionLayerRender();
+    if (state.widgetRefineCandidate) {
+      scheduleWidgetRefineHintRender();
+      requestInteractionLayerRender();
+    }
     return state.widgetRefineCandidate;
   }
   function currentWidgetRefineCandidate() {
     const candidate = state.widgetRefineCandidate;
-    if (!candidate || state.mode === "hand") return null;
-    if (!state.widgets.includes(candidate.widget) || candidate.widget.hiddenForReplacement || candidate.widget.pending || candidate.widget.renderActive === false) {
+    if (!candidate) return null;
+    if (!validWidgetRefineCandidate(candidate)) {
       state.widgetRefineCandidate = null;
       return null;
     }
     return candidate;
   }
+  function currentWidgetRefineHoverCandidate() {
+    const candidate = state.widgetRefineHoverCandidate;
+    if (!candidate) return null;
+    if (!validWidgetRefineCandidate(candidate) || candidate.expiresAt && candidate.expiresAt <= Date.now()) {
+      clearWidgetRefineHoverCandidate();
+      return null;
+    }
+    return candidate;
+  }
+  function viewportHasWidgetRefineInput() {
+    const visible = viewportRect();
+    return Boolean(state.dirty && visible && intersection(state.dirty, visible));
+  }
+  function selectedWidgetRefineCandidate(widget, persistentCandidate, hoverCandidate) {
+    if (!widget || activeWidgetRefinement()) return null;
+    if (persistentCandidate?.widget === widget) return persistentCandidate;
+    if (hoverCandidate?.widget === widget) return hoverCandidate;
+    if (!viewportHasWidgetRefineInput()) return null;
+    return {
+      widget,
+      widgetId:widget.id,
+      instructionMode:"viewport-dirty",
+      hintKey:"widgetRefineViewportHint",
+      hintUntil:0,
+      expiresAt:0,
+    };
+  }
+  function widgetAtRefinePoint(point) {
+    if (!point || !valid(point)) return null;
+    const widgets = visibleWidgets(),
+      padding = state.mode === "hand" ? 12 / Math.max(.03, state.scale) : 0;
+    for (let index = widgets.length - 1; index >= 0; index--) {
+      const widget = widgets[index], box = widgetBox(widget);
+      if (widget.shell && widget.renderActive !== false && point.x >= box.x - padding && point.x <= box.x + box.w + padding && point.y >= box.y - padding && point.y <= box.y + box.h + padding) return widget;
+    }
+    return null;
+  }
+  function scheduleWidgetRefineHoverClear() {
+    const candidate = currentWidgetRefineHoverCandidate();
+    if (!candidate || state.widgetRefineHoverTimer || widgetRefineHintHovered(candidate)) return;
+    candidate.expiresAt = Date.now() + WIDGET_REFINE_HOVER_GRACE_MS;
+    state.widgetRefineHoverTimer = setTimeout(() => {
+      state.widgetRefineHoverTimer = 0;
+      if (widgetRefineHintHovered(candidate)) return;
+      if (state.widgetRefineHoverCandidate === candidate) state.widgetRefineHoverCandidate = null;
+      scheduleWidgetRefineHintRender();
+      requestInteractionLayerRender();
+    }, WIDGET_REFINE_HOVER_GRACE_MS);
+  }
+  function updateWidgetRefinePointer(point) {
+    state.widgetRefinePointer = point && valid(point) ? point : null;
+    const widget = ["pen", "hand"].includes(state.mode) ? widgetAtRefinePoint(state.widgetRefinePointer) : null,
+      previousHoverId = state.widgetRefineHoveredWidgetId,
+      previousCandidate = state.widgetRefineHoverCandidate;
+    state.widgetRefineHoveredWidgetId = widget?.id || null;
+    if (widget && viewportHasWidgetRefineInput() && !activeWidgetRefinement()) {
+      clearTimeout(state.widgetRefineHoverTimer);
+      state.widgetRefineHoverTimer = 0;
+      let candidate = state.widgetRefineHoverCandidate;
+      if (!candidate || candidate.widget !== widget) candidate = {
+        widget,
+        widgetId:widget.id,
+        instructionMode:"viewport-dirty",
+        hintKey:"widgetRefineViewportHint",
+        hintUntil:Date.now() + WIDGET_REFINE_HINT_MS,
+        expiresAt:0,
+      };
+      candidate.expiresAt = 0;
+      state.widgetRefineHoverCandidate = candidate;
+    } else scheduleWidgetRefineHoverClear();
+    if (previousHoverId !== state.widgetRefineHoveredWidgetId || previousCandidate !== state.widgetRefineHoverCandidate) {
+      scheduleWidgetRefineHintRender();
+      requestInteractionLayerRender();
+    }
+  }
+  function refreshWidgetRefineHoverCandidate() {
+    updateWidgetRefinePointer(state.widgetRefinePointer);
+  }
   async function copyWidgetSource(widget) {
-    if (!widget || typeof widget.copyText !== "string" || !widget.copyText) return false;
-    const copied = await writeClipboardText(widget.copyText);
+    const source = widgetCopySource(widget);
+    if (!source) return false;
+    const copied = await writeClipboardText(source);
     setStatusKey(copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
     return copied;
   }
   function widgetEditContext(widget, instructionMode) {
+    const sourceMirrorsHtml = widgetUsesHtmlCopySource(widget);
     return {
       mode:"replace",
       widgetType:widget.widgetType,
       pluginId:widget.pluginId,
       title:widget.title,
+      refreshSeconds:widget.refreshSeconds,
       instructionMode,
       box:widgetBox(widget),
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
-      ...(widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(sourceMirrorsHtml ? { sourceMirrorsHtml:true } : widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.widgetType === "html_widget" && widget.runtimeDiagnostics?.errors?.length ? { runtimeDiagnostics:widget.runtimeDiagnostics } : {}),
     };
   }
-  async function requestWidgetRefinement(widget, instructionMode) {
-    if (!widget || state.mode === "hand" || !state.widgets.includes(widget) || widget.hiddenForReplacement || state.pendingWidget || state.pendingWidgetReplacement) return false;
-    const revision = state.userRevision;
+  function requestWidgetRefinement(widget, instructionMode) {
+    if (!widget || activeWidgetRefinement() || !["pen", "hand"].includes(state.mode) || !state.widgets.includes(widget) || widget.hiddenForReplacement || state.pendingWidget || state.pendingWidgetReplacement) return false;
+    clearTimeout(state.timer);
+    state.timer = 0;
     clearWidgetRefineCandidate();
     supersedeActiveAI("widget-refine");
     setStatusKey("widgetRefining");
-    try {
-      await requestWidgetSnapshot(widget);
-    } catch (error) {
-      if (state.userRevision === revision) setStatus(`${t("aiError")}${error.message}`);
-      return false;
-    }
-    if (state.userRevision !== revision || !state.widgets.includes(widget) || widget.hiddenForReplacement) return false;
     void requestAI("answer", null, {
       captureCurrentViewport:true,
       widgetEditTarget:widget,
@@ -2172,12 +2464,13 @@
   function addWidgetToolSpecs(specs, widget, options = {}) {
     if (!widget) return;
     const box = widgetBox(widget),
-      items = [];
-    if (options.copy && widget.copyText) items.push({
+      items = [],
+      copyLabel = widgetCopySourceLabel(widget);
+    if (options.copy && copyLabel) items.push({
       key:`widget:${widget.id}:tool-copy`,
       kind:"copy",
-      label:widget.copyLabel || (widget.sourceFormat ? `Copy ${widget.sourceFormat}` : t("copyText")),
-      baseWidth:widgetToolLabelWidth(widget.copyLabel || `Copy ${widget.sourceFormat || "source"}`, 118),
+      label:copyLabel,
+      baseWidth:widgetToolLabelWidth(copyLabel, 118),
       activate:() => void copyWidgetSource(widget),
     });
     if (options.refine) items.push({
@@ -2185,6 +2478,7 @@
       kind:"refine",
       label:t("widgetRefine"),
       baseWidth:112,
+      refineCandidate:options.refine,
       activate:() => void requestWidgetRefinement(widget, options.refine.instructionMode),
     });
     if (!items.length) return;
@@ -2229,9 +2523,10 @@
     if (spec?.widgetTool) {
       const groupWidth = spec.groupBaseWidth * controlScale,
         groupHeight = height,
+        hintSpace = spec.refineCandidate && widgetRefineHintVisible(spec.refineCandidate) ? 88 : 0,
         gap = chromeGap * controlScale,
         clampGroupX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - groupWidth - 6), value)),
-        clampGroupY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - groupHeight - 6), value)),
+        clampGroupY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - groupHeight - hintSpace - 12), value)),
         positions = [
           { x:right - groupWidth, y:screenBox.top - groupHeight - gap },
           { x:right + gap, y:screenBox.top },
@@ -2287,6 +2582,13 @@
       started = beginImageGesture(event, point, { image:spec.object, hit:"move" });
     } else if (spec.target === "animation") {
       started = beginAnimationGesture(event, point, { animation:spec.object, hit:"move" });
+    } else if (spec.target === "text-box") {
+      const item = spec.object;
+      if (item && state.textBoxes.includes(item)) {
+        recordTextBoxesBefore();
+        state.textBoxGesture = { id:event.pointerId, item, startClientX:event.clientX, startClientY:event.clientY, startX:item.x, startY:item.y, changed:false };
+        started = true;
+      }
     }
     if (!started) return false;
     try { objectChromeLayer.setPointerCapture(event.pointerId); } catch {}
@@ -2302,14 +2604,50 @@
     if (state.widgetGesture?.id === event.pointerId) return finishWidgetGesture(event);
     if (state.imageGesture?.id === event.pointerId) return finishImageGesture(event);
     if (state.animationGesture?.id === event.pointerId) return finishAnimationGesture(event);
+    if (state.textBoxGesture?.id === event.pointerId) return finishTextBoxChromeGesture(event);
     return false;
+  }
+  function updateTextBoxChromeGesture(event) {
+    const gesture = state.textBoxGesture;
+    if (!gesture || gesture.id !== event.pointerId || !state.textBoxes.includes(gesture.item)) return false;
+    const item = gesture.item,
+      scale = Math.max(.03, state.scale),
+      x = Math.max(0, Math.min(SIZE - item.w, gesture.startX + (event.clientX - gesture.startClientX) / scale)),
+      y = Math.max(0, Math.min(SIZE - item.h, gesture.startY + (event.clientY - gesture.startClientY) / scale));
+    if (x === item.x && y === item.y) return true;
+    item.x = x;
+    item.y = y;
+    gesture.changed = true;
+    requestRender();
+    return true;
+  }
+  function finishTextBoxChromeGesture(event) {
+    const gesture = state.textBoxGesture;
+    if (!gesture || gesture.id !== event.pointerId) return false;
+    state.textBoxGesture = null;
+    if (gesture.changed) {
+      const before = { x:gesture.startX, y:gesture.startY, w:gesture.item.w, h:gesture.item.h };
+      state.userRevision++;
+      mergeDirtyBox(before);
+      mergeDirtyBox(textBoxBox(gesture.item));
+      state.autoEligible = true;
+      save();
+      const refineCandidate = latchWidgetRefineCandidate(gesture.item, "text-box");
+      if (state.auto && !refineCandidate) schedule(Math.max(1000, state.autoDelayMs));
+      if (refineCandidate) setStatusKey("widgetRefinePending");
+    } else {
+      state.textBoxHistoryBefore = null;
+      editTextBox(gesture.item);
+    }
+    requestRender();
+    return true;
   }
   function createObjectChromeButton(key, kind) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span></span>` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -2320,8 +2658,31 @@
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (kind !== "move") button.penechoSpec?.activate?.();
+      if (kind === "move") return;
+      if (kind === "refine") triggerWidgetRefineClickPulse(button.penechoSpec?.refineCandidate?.widgetId);
+      button.penechoSpec?.activate?.();
     });
+    if (kind === "refine") {
+      button.addEventListener("pointerenter", () => {
+        const candidate = button.penechoSpec?.refineCandidate;
+        if (!candidate) return;
+        state.widgetRefineButtonHoverId = candidate.widgetId;
+        if (state.widgetRefineHoverCandidate === candidate) {
+          clearTimeout(state.widgetRefineHoverTimer);
+          state.widgetRefineHoverTimer = 0;
+          candidate.expiresAt = 0;
+        }
+        scheduleWidgetRefineHintRender();
+        requestInteractionLayerRender();
+      });
+      button.addEventListener("pointerleave", () => {
+        const candidate = button.penechoSpec?.refineCandidate;
+        if (state.widgetRefineButtonHoverId === candidate?.widgetId) state.widgetRefineButtonHoverId = null;
+        if (state.widgetRefineHoverCandidate === candidate) scheduleWidgetRefineHoverClear();
+        scheduleWidgetRefineHintRender();
+        requestInteractionLayerRender();
+      });
+    }
     objectChromeLayer.append(button);
     objectChromeButtons.set(key, button);
     return button;
@@ -2363,16 +2724,23 @@
     else add("pending", draftBounds(pending));
   }
   function objectChromeSpecs() {
+    const persistentCandidate = currentWidgetRefineCandidate(),
+      hoverCandidate = currentWidgetRefineHoverCandidate(),
+      editWidget = state.mode === "hand" && state.widgetEdit ? selectedWidget() : null,
+      editWidgetRefineCandidate = selectedWidgetRefineCandidate(editWidget, persistentCandidate, hoverCandidate);
     if (state.mode !== "hand") {
-      const specs = [],
-        candidate = currentWidgetRefineCandidate();
-      if (candidate) addWidgetToolSpecs(specs, candidate.widget, { refine:candidate });
+      const specs = [];
+      if (persistentCandidate) addWidgetToolSpecs(specs, persistentCandidate.widget, { refine:persistentCandidate });
+      if (hoverCandidate && hoverCandidate.widget !== persistentCandidate?.widget) addWidgetToolSpecs(specs, hoverCandidate.widget, { refine:hoverCandidate });
       return specs;
     }
     const specs = [];
+    if (!state.textEditors.size) for (const item of state.textBoxes) specs.push({ key:`text-box:${item.id}:move`, kind:"move", box:textBoxBox(item), target:"text-box", object:item, priority:2 });
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
     for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
     for (const widget of visibleWidgets()) specs.push({ key:`widget:${widget.id}:move`, kind:"move", box:widgetBox(widget), target:"widget", object:widget, priority:2 });
+    if (persistentCandidate && persistentCandidate.widget !== editWidget) addWidgetToolSpecs(specs, persistentCandidate.widget, { refine:persistentCandidate });
+    if (hoverCandidate && hoverCandidate.widget !== persistentCandidate?.widget && hoverCandidate.widget !== editWidget) addWidgetToolSpecs(specs, hoverCandidate.widget, { refine:hoverCandidate });
     if (state.animationEdit) {
       const animation = selectedAnimation();
       if (animation) {
@@ -2382,12 +2750,11 @@
       }
     }
     if (state.widgetEdit) {
-      const widget = selectedWidget();
-      if (widget) {
-        const box = widgetBox(widget);
-        specs.push({ key:`widget:${widget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(widget), priority:3 });
-        specs.push({ key:`widget:${widget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
-        addWidgetToolSpecs(specs, widget, { copy:true });
+      if (editWidget) {
+        const box = widgetBox(editWidget);
+        specs.push({ key:`widget:${editWidget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(editWidget), priority:3 });
+        specs.push({ key:`widget:${editWidget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
+        addWidgetToolSpecs(specs, editWidget, { copy:true, refine:editWidgetRefineCandidate });
       }
     }
     pendingChromeSpecs(specs, state.pending);
@@ -2404,6 +2771,7 @@
   function syncObjectChrome() {
     if (!objectChromeLayer) return;
     const active = new Set();
+    let removedHoveredRefineButton = false;
     for (const spec of objectChromeSpecs()) {
       const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
         position = objectChromePosition(spec.box, spec.kind, spec.key, spec);
@@ -2414,11 +2782,22 @@
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupBaseWidth === spec.baseWidth));
+      button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
       else delete button.dataset.widgetToolGroup;
       button.setAttribute("aria-label", label);
-      button.title = spec.kind === "refine" ? t("widgetRefineHint") : label;
-      if (["copy", "refine"].includes(spec.kind)) button.querySelector("span").textContent = label;
+      if (spec.kind === "refine") button.removeAttribute("title");
+      else button.title = label;
+      if (["copy", "refine"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
+      if (spec.kind === "refine") {
+        const hint = button.querySelector(".widget-refine-hint"),
+          visible = widgetRefineHintVisible(spec.refineCandidate),
+          hintWidth = Math.min(320, Math.max(120, view.clientWidth - 24)),
+          hintLeft = Math.max(12, Math.min(Math.max(12, view.clientWidth - hintWidth - 12), position.x)) - position.x;
+        hint.textContent = t(spec.refineCandidate?.hintKey || "widgetRefineHint");
+        hint.hidden = !visible;
+        declaration?.setProperty("--refine-hint-left", `${hintLeft.toFixed(1)}px`);
+      }
       declaration?.setProperty("--object-control-x", `${position.x.toFixed(1)}px`);
       declaration?.setProperty("--object-control-y", `${position.y.toFixed(1)}px`);
       declaration?.setProperty("--object-control-scale", String(position.scale || 1));
@@ -2428,16 +2807,24 @@
     }
     for (const [key, button] of objectChromeButtons) {
       if (active.has(key)) continue;
+      if (button.penechoSpec?.kind === "refine"
+        && state.widgetRefineButtonHoverId === button.penechoSpec.refineCandidate?.widgetId) {
+        state.widgetRefineButtonHoverId = null;
+        removedHoveredRefineButton = true;
+      }
       removeObjectChromeStyleRule(button);
       button.remove();
       objectChromeButtons.delete(key);
     }
+    if (removedHoveredRefineButton) requestInteractionLayerRender();
   }
   objectChromeLayer?.addEventListener("pointermove", (event) => {
+    if (event.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(event));
     if (state.pendingGesture?.id === event.pointerId) updatePendingGesture(event);
     else if (state.widgetGesture?.id === event.pointerId) updateWidgetGesture(event);
     else if (state.imageGesture?.id === event.pointerId) updateImageGesture(event);
     else if (state.animationGesture?.id === event.pointerId) updateAnimationGesture(event);
+    else if (state.textBoxGesture?.id === event.pointerId) updateTextBoxChromeGesture(event);
   });
   objectChromeLayer?.addEventListener("pointerup", finishObjectChromeGesture);
   objectChromeLayer?.addEventListener("pointercancel", finishObjectChromeGesture);
@@ -2470,6 +2857,8 @@
     drawPointerPreview(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
     drawHandModeOutlines(interactionCtx);
+    drawWidgetRefineButtonHoverOutline(interactionCtx);
+    drawWidgetRefineClickPulse(interactionCtx);
     drawSelectedAnimation(interactionCtx);
     if (state.pending) {
       interactionCtx.save();
@@ -2509,6 +2898,17 @@
       w: right - Math.min(state.dirty.x, box.x),
       h: bottom - Math.min(state.dirty.y, box.y),
     };
+  }
+  function reconcileDirtyAfterTextBoxDeletion(deletedBox) {
+    const latestTypedBox = state.latestTypedInput?.box,
+      deletedLatestTypedInput = latestTypedBox
+        && ["x", "y", "w", "h"].every((key) => Math.abs(latestTypedBox[key] - deletedBox[key]) < .001);
+    if (deletedLatestTypedInput) state.latestTypedInput = null;
+    // A merged dirty rectangle cannot subtract one contribution. With no pen
+    // input pending, rebuild it from the typed input that still remains.
+    if (state.hotspotTrail.length) return;
+    state.dirty = state.latestTypedInput?.box ? { ...state.latestTypedInput.box } : null;
+    state.autoEligible = Boolean(state.dirty);
   }
   function textEditorScreenPoint(editor) {
     return { left: editor.x * state.scale + state.panX, top: editor.y * state.scale + state.panY };
@@ -2868,9 +3268,8 @@
       state.userRevision++;
       mergeDirtyBox(box);
       state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
-      state.hotspotTrail.push({ x: x + width / 2, y: y + height / 2 });
-      if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
       state.autoEligible = true;
+      const refineCandidate = latchWidgetRefineCandidate(item, "text-box");
       state.selectedTextBoxId = null;
       removeTextEditor(editor);
       blockCanvasInput(TEXT_INPUT_GUARD_MS);
@@ -2878,7 +3277,8 @@
       save();
       render();
       setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
-      if (state.auto) schedule(Math.max(1000, state.autoDelayMs));
+      if (state.auto && !refineCandidate) schedule(Math.max(1000, state.autoDelayMs));
+      if (refineCandidate) setStatusKey("widgetRefinePending");
     })();
     editor.commitPromise = commitPromise;
     try {
@@ -2915,7 +3315,7 @@
     else setCanvasMode("pen");
     if (deletedTextBox) {
       state.userRevision++;
-      mergeDirtyBox(textBoxBox(deletedTextBox));
+      reconcileDirtyAfterTextBoxDeletion(textBoxBox(deletedTextBox));
       save();
     }
     render();
@@ -3032,6 +3432,10 @@
     root.addEventListener("pointerup", (event) => finishTextEditorGesture(event, editor));
     root.addEventListener("pointercancel", (event) => finishTextEditorGesture(event, editor));
     textarea.addEventListener("focus", () => focusTextEditor(editor));
+    textarea.addEventListener("input", () => {
+      hideWidgetRefineHint();
+      if (editor.mixedMode) scheduleTextEditorPreview(editor);
+    });
     textarea.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
@@ -3204,15 +3608,8 @@
       bottom = Math.max(box.y + box.h, state.dirty.y + state.dirty.h);
     state.dirty = { x, y, w: right - x, h: bottom - y };
   }
-  function discardUncapturableInput(hotspotCount, usedDirty) {
-    if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-    state.dirty = null;
-    state.autoEligible = false;
-    if (!usedDirty) state.lastUserBox = null;
-  }
   function invalidateRecognition() {
-    const active=state.activeAI;
-    if(active&&!active.superseded){active.superseded=true;active.dirtyRestored=true;active.controller.abort();if(state.activeAI===active){state.activeAI=null;setBusy(false)}}
+    supersedeActiveAI("recognition-invalidated");
     clearTimeout(state.timer);
     state.timer = 0;
     state.recognitionGeneration++;

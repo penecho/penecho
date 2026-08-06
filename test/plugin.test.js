@@ -303,6 +303,8 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /Native HTML, CSS, JavaScript, timers, SVG, and canvas remain preferred/);
   assert.match(general.document, /native `draw`[\s\S]*?10 or fewer basic primitives or line segments/);
   assert.match(general.document, /SVG is the default static and animated visual format/);
+  assert.match(general.document, /never use a JSON, XML, YAML, source-code, or `<pre>` dump as the primary view/);
+  assert.match(general.document, /locally renders its supported `diagram_source` formats from source alone/);
   assert.match(general.document, /Placement is semantic, not a search for unused canvas space/);
   assert.match(general.document, /overlay only the solution path on an existing maze/);
   assert.match(general.document, /existing figures or objects[\s\S]*?position the transparent widget over their actual locations[\s\S]*?never redraw the figures/);
@@ -311,6 +313,8 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /explicitly aim the camera at the subject and keep it centered after resize/);
   assert.match(general.document, /Redraw canvas, SVG, and 3D visuals after viewport changes when needed/);
   assert.match(general.document, /source URLs from fetched news[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer/);
+  assert.match(general.document, /HTML is the sole reusable source[\s\S]*?Omit `copyText` and `copyLabel`[\s\S]*?Copy HTML/);
+  assert.match(general.document, /Do not minify[\s\S]*?stable multiline formatting[\s\S]*?below 160 characters/);
   const flowchart = parsed.find((plugin) => plugin.id === "flowchart");
   assert.deepEqual([...flowchart.connect], []);
   assert.match(flowchart.document, /Professional fields not named here remain in scope/);
@@ -319,6 +323,7 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(flowchart.document, /local renderers are baseline conveniences, not the boundary/);
   assert.match(flowchart.document, /Never fall back to an improvised generic SVG/);
   assert.match(flowchart.document, /Prefer `diagram_source`[\s\S]*?PenEcho supplies the iframe, renderer, shared CSS, Copy button/);
+  assert.match(flowchart.document, /Do not return HTML alongside a supported local format[\s\S]*?professional `source`/);
   assert.match(flowchart.document, /Use `html_widget` instead[\s\S]*?not locally rendered[\s\S]*?custom interaction/);
   assert.match(flowchart.document, /PlantUML, DBML, draw\.io XML, D2, Structurizr DSL, Excalidraw JSON, KiCad, SPICE/);
   assert.match(flowchart.document, /### A\. Locally rendered source: `diagram_source`/);
@@ -331,8 +336,10 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
   assert.match(flowchart.document, /unlisted need[\s\S]*?return `html_widget`[\s\S]*?There is no library whitelist/);
   assert.match(flowchart.document, /teaching-only JSON[\s\S]*?KiCad, SPICE/);
+  assert.match(flowchart.document, /HTML is the primary human-readable visualization[\s\S]*?do not make JSON, XML, YAML, SQL, DSL, code, or a `<pre>` dump the main visible content[\s\S]*?complete professional source in `copyText`/);
   assert.match(flowchart.document, /more than about 10 nodes[\s\S]*?responsive Mermaid[\s\S]*?responsive DOT[\s\S]*?largest readable scale/);
-  assert.match(flowchart.document, /same tool and `sourceFormat`[\s\S]*?smallest complete modification/);
+  assert.match(flowchart.document, /`widget_patch`[\s\S]*?preserve the existing tool and `sourceFormat`[\s\S]*?smallest complete modification/);
+  assert.doesNotMatch(flowchart.document, /never a patch/);
   assert.match(flowchart.document, /copyText/);
   assert.match(flowchart.document, /copyLabel:"Copy <format>"/);
   assert.match(flowchart.styles, /\.pd-root/);
@@ -423,6 +430,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
     flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart", "plugin.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
+  const snapshot = functionSource(host, "snapshot"),
+    widgetDocument = functionSource(host, "widgetDocument");
   const scopeInlineScript = vm.runInNewContext(`(() => {
     ${functionSource(host, "inlineScriptHasWindowBinding")}
     ${functionSource(host, "scopedInlineWidgetScript")}
@@ -467,14 +476,25 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /target", "_blank"[\s\S]*?rel", "noopener noreferrer"/);
   assert.match(host, /nativeOpen\(href, "_blank", "noopener,noreferrer"\)[\s\S]*?Object\.defineProperty\(globalThis, "open"/);
   assert.match(host, /pluginStyle\.dataset\.penechoPluginStyles/);
+  assert.match(host, /parsed\.head\.insertBefore\(pluginStyle, parsed\.head\.querySelector\("style, link"\)\)/);
   assert.ok(host.indexOf("pluginStyle.textContent = pluginStyles") < host.indexOf('bridgeStyle.textContent = "html,body'));
   assert.match(server, /path\.join\(PUBLIC, "vendor", "penecho-dom-renderer\.js"\)/);
   assert.match(server, /url\.pathname === "\/widget-renderer\.js"[\s\S]*?Cross-Origin-Resource-Policy":"cross-origin"/);
-  assert.match(host, /globalThis\.html2canvas\(document\.documentElement/);
+  assert.match(snapshot, /domSnapshotRenderer = globalThis\.html2canvas[\s\S]*?domSnapshotRenderer\(document\.documentElement/);
+  assert.doesNotMatch(snapshot, /\bfetch\s*\(|proxyPublicFetch|PUBLIC_FETCH|notifyReady|penecho-widget-updated/);
   assert.match(host, /snapshotPrimarySvg\(requestedWidth, requestedHeight, scale\)/);
   assert.match(host, /new XMLSerializer\(\)\.serializeToString\(clone\)/);
   assert.match(host, /context\.drawImage\(image, 0, 0, canvas\.width, canvas\.height\)/);
-  assert.match(host, /setRuntimeActive\(false\)[\s\S]*?inlineSvgComputedStyles\(\)[\s\S]*?setRuntimeActive\(widgetState\.active\)/);
+  assert.match(host, /setRuntimeActive\(false\)[\s\S]*?inlineSvgComputedStyles\(\)[\s\S]*?inlineSnapshotCompatibleColors\(\)[\s\S]*?setRuntimeActive\(widgetState\.active\)/);
+  assert.match(host, /unsupportedSnapshotColor = \/\\b\(\?:color\|lab\|lch\|oklab\|oklch\|hwb\)[\s\S]*?getImageData\(0, 0, 1, 1\)/);
+  assert.match(host, /function inlineSnapshotCompatibleColors\(\)[\s\S]*?background-image[\s\S]*?box-shadow/);
+  assert.doesNotMatch(host, /snapshotSemanticFallback|createTreeWalker/);
+  assert.match(host, /function settleSnapshotFrame\(\)[\s\S]*?setTimeout\(\(\) => finish\(false\), 50\)[\s\S]*?nativeRequestAnimationFrame\(\(\) => finish\(true\)\)/);
+  assert.match(host, /function flushPendingSnapshotFrame\(\)[\s\S]*?\[\.\.\.pendingAnimationFrames\.entries\(\)\][\s\S]*?pendingAnimationFrames\.delete\(id\)[\s\S]*?callback\(timestamp\)/);
+  assert.doesNotMatch(host, /notifySnapshotReady|penecho-widget-snapshot-ready/);
+  assert.match(widgetDocument, /parsed\.body\.append\(renderer\)[\s\S]*?penecho-widget-document-ready[\s\S]*?parsed\.body\.append\(ready\)[\s\S]*?policy\.after\(bridge\)/);
+  assert.match(snapshot, /framePresented = await settleSnapshotFrame\(\)[\s\S]*?setRuntimeActive\(false\)[\s\S]*?if \(!framePresented\) flushPendingSnapshotFrame\(\)/);
+  assert.match(host, /restoreCompatibleColors\(\)[\s\S]*?restoreSvgStyles\(\)/);
   assert.match(host, /foreignObjectRendering:false/);
   assert.match(host, /penechoDirectRendering:true/);
   assert.match(host, /useCORS:true/);
@@ -487,9 +507,20 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /MAX_SNAPSHOT_DATA_URL_LENGTH/);
   assert.match(host, /setTimeout\(\(\) => snapshotError\(message\.requestId, "Widget snapshot timed out"\), timeoutMs\)/);
   assert.match(host, /withTimeout\(render\(\), timeoutMs,[\s\S]*?captureExpired = true/);
+  assert.match(host, /penecho-widget-document-ready" && message\.runtimeVersion === runtimeVersion[\s\S]*?innerDocumentReady = true;[\s\S]*?penecho-widget-capture-ready[\s\S]*?forwardSnapshotRequest/);
+  assert.match(snapshot, /penecho-widget-snapshot", runtimeVersion/);
+  assert.match(host, /for \(const requestId of \[\.\.\.pendingSnapshots\.keys\(\)\]\) snapshotError\(requestId, "Widget changed during snapshot"\)/);
   assert.match(host, /globalThis\.penechoFetchPublic/);
   assert.match(host, /return await nativeFetch\(input, init\)[\s\S]*?globalThis\.penechoFetchPublic\(url\)/);
   assert.match(host, /penecho-widget-public-fetch-request/);
+  assert.match(host, /MAX_RUNTIME_ERRORS = 5/);
+  assert.match(host, /addEventListener\("error"[\s\S]*?recordRuntimeError/);
+  assert.match(host, /addEventListener\("unhandledrejection"[\s\S]*?recordRuntimeError/);
+  assert.match(host, /error\.line \|\| error\.column[\s\S]*?\[error\.file, error\.line, error\.column\]\.join/);
+  assert.match(host, /penecho-widget-runtime-diagnostics/);
+  assert.match(host, /message\.runtimeVersion === runtimeVersion/);
+  assert.match(host, /message\.errors\.length <= 5/);
+  assert.doesNotMatch(host, /console\.log.*runtimeDiagnostics|console\.error.*runtimeDiagnostics/);
   assert.match(host, /fetch\(publicFetchUrl, \{[\s\S]*?method:"POST"[\s\S]*?body:JSON\.stringify\(\{ url:message\.url \}\)/);
   assert.match(host, /response\.arrayBuffer\(\)/);
   assert.match(host, /\}, \[body\]\)/);
@@ -565,11 +596,49 @@ test("widget host keeps the active Blob URL across stale iframe load events", ()
   assert.match(host, /releaseInnerDocumentUrl\(\);[\s\S]*?innerDocumentUrl = URL\.createObjectURL[\s\S]*?inner\.src = innerDocumentUrl/);
 });
 
+test("offscreen widget snapshots flush exactly one throttled animation frame", async () => {
+  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
+    pendingAnimationFrames = new Map(),
+    errors = [],
+    frames = [],
+    flush = vm.runInNewContext(`(${functionSource(host, "flushPendingSnapshotFrame")})`, {
+      pendingAnimationFrames,
+      clock:() => 42,
+      recordRuntimeError:error => errors.push(error),
+    });
+  pendingAnimationFrames.set(1, (timestamp) => {
+    frames.push([1, timestamp]);
+    pendingAnimationFrames.set(3, nextTimestamp => frames.push([3, nextTimestamp]));
+  });
+  pendingAnimationFrames.set(2, timestamp => frames.push([2, timestamp]));
+
+  flush();
+
+  assert.deepEqual(frames, [[1, 42], [2, 42]]);
+  assert.deepEqual([...pendingAnimationFrames.keys()], [3]);
+  assert.deepEqual(errors, []);
+
+  let timerCallback = null,
+    frameCallback = null;
+  const settle = vm.runInNewContext(`(${functionSource(host, "settleSnapshotFrame")})`, {
+    setTimeout(callback) { timerCallback = callback; return 1; },
+    clearTimeout() {},
+    nativeRequestAnimationFrame(callback) { frameCallback = callback; return 1; },
+  });
+  const throttled = settle();
+  timerCallback();
+  assert.equal(await throttled, false);
+  const presented = settle();
+  frameCallback();
+  assert.equal(await presented, true);
+});
+
 test("widget iframe preserves direct interaction while forwarding resize and canvas navigation", () => {
+  const interactionMessages = harness => harness.messages;
   const navigation = widgetRuntimeHarness();
   navigation.pointer("pointerdown");
   navigation.pointer("pointermove", { clientX:120, screenX:120 });
-  assert.deepEqual(navigation.messages.map((message) => message.type), ["penecho-widget-touch-start"]);
+  assert.deepEqual(interactionMessages(navigation).map((message) => message.type), ["penecho-widget-touch-start"]);
   navigation.runTimers();
   assert.equal(navigation.messages.some((message) => message.type === "penecho-widget-drag-start"), false);
 
@@ -577,13 +646,13 @@ test("widget iframe preserves direct interaction while forwarding resize and can
   direct.pointer("pointerdown", { pointerType:"pen" });
   direct.pointer("pointermove", { pointerType:"pen", clientX:120, screenX:120 });
   direct.runTimers();
-  assert.deepEqual(direct.messages.map((message) => message.type), ["penecho-widget-activate"]);
+  assert.deepEqual(interactionMessages(direct).map((message) => message.type), ["penecho-widget-activate"]);
 
   const selected = widgetRuntimeHarness();
   selected.select();
   selected.pointer("pointerdown", { pointerType:"pen" });
   selected.pointer("pointermove", { pointerType:"pen", clientX:120, screenX:120 });
-  assert.equal(selected.messages.length, 0);
+  assert.equal(interactionMessages(selected).length, 0);
 
   for (const [hit, point] of Object.entries({
     width:{ clientX:995, clientY:300, screenX:995, screenY:300 },
@@ -611,7 +680,7 @@ test("widget iframe preserves direct interaction while forwarding resize and can
   middle.pointer("pointerdown", { pointerType:"mouse", button:1 });
   middle.pointer("pointermove", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
   middle.pointer("pointerup", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
-  assert.deepEqual(middle.messages.map((message) => message.type), ["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end"]);
+  assert.deepEqual(interactionMessages(middle).map((message) => message.type), ["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end"]);
 
   const wheel = widgetRuntimeHarness();
   wheel.pointer("wheel", { pointerType:"mouse", deltaY:-120 });

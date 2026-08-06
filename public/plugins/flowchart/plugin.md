@@ -40,11 +40,14 @@ Return:
 `source` must be a complete reusable professional document under 20 KB—not a fragment, pseudocode, HTML, SVG or renderer code. PenEcho supplies the iframe, renderer, shared CSS, Copy button and refresh behavior.
 
 PenEcho owns fixed renderer versions and loads only the selected renderer. Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`. Self-check syntax, escaping, required fields and semantic completeness.
+Do not return HTML alongside a supported local format. PenEcho needs only the professional `source`; it creates the complete visual document locally.
 SMILES structures render functional groups expanded by default. Preserve explicit atoms and hydrogens needed by the depiction. Only when the user explicitly asks for an abbreviated or contracted structure, use `diagramKind:"molecular-structure-compact"`.
 
 ### B. Directly rendered HTML: `html_widget`
 
 Use `html_widget` instead when the requested professional source is not locally rendered, the user names another valid format, or custom interaction, custom symbols or specialized rendering is needed. PenEcho displays the returned HTML directly in an isolated canvas widget.
+
+The HTML is the primary human-readable visualization, not a source-code viewer. Unless the user explicitly asks to inspect raw source, do not make JSON, XML, YAML, SQL, DSL, code, or a `<pre>` dump the main visible content. Render the source as the domain view people expect: for example, a clinical workflow or pathway should show its phases, actions, reassessment loops, decisions, and escalation relationships. Put the complete professional source in `copyText` for the trusted Copy action.
 
 Common direct-HTML choices include:
 
@@ -78,7 +81,7 @@ Keep a semantic native fallback or a specific usable error so the stage is never
 
 ## Refinement
 
-When widget edit context is present, return one complete replacement using the same tool and `sourceFormat`, never a patch or explanation. Preserve terminology, direction, grouping, unaffected content, renderer, palette, density and layout. Apply the smallest complete modification unless restructuring is necessary. Repair blank, clipped or failed rendering before applying the requested change.
+When widget edit context is present, follow `modelInput.widgetEditPolicy` and return exactly one `widget_patch` command. Patch only the virtual files listed in `widgetEdit.patchFiles`, preserve the existing tool and `sourceFormat`, and do not return a complete replacement or explanation. Preserve terminology, direction, grouping, unaffected content, renderer, palette, density, layout, and stable formatting. Apply the smallest complete modification unless restructuring is necessary. Repair blank, clipped or failed rendering before applying the requested change.
 
 ## One-shot example
 

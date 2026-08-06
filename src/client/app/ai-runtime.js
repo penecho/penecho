@@ -1,26 +1,158 @@
 // AI requests, validation, generated drafts, plotting, and draft interaction.
+  let aiPreparationGeneration = 0,
+    aiPreparation = null;
+  const AI_STREAM_IDLE_GRACE_MS = 10_000;
+  function aiTimeoutMultiplier(effort) {
+    return ["xhigh", "max"].includes(String(effort || "").trim().toLowerCase()) ? 2 : 1;
+  }
+  function activeAiRequestTimeoutMs() {
+    const effort = state.reasoningEffort === "config" ? configuredAiEffort : state.reasoningEffort;
+    return state.aiRequestTimeoutMs * aiTimeoutMultiplier(effort);
+  }
+  function createActivityAwareAbortTimeout(controller, totalTimeoutMs, idleGraceMs = AI_STREAM_IDLE_GRACE_MS) {
+    const deadline = Date.now() + totalTimeoutMs;
+    let lastActivityAt = null, timer = 0, cleared = false;
+    const schedule = delay => { timer = setTimeout(check, Math.max(1, Math.ceil(delay))); };
+    const check = () => {
+      if (cleared || controller.signal.aborted) return;
+      const now = Date.now();
+      if (now < deadline) return schedule(deadline - now);
+      if (lastActivityAt !== null && now - lastActivityAt < idleGraceMs) return schedule(idleGraceMs - (now - lastActivityAt));
+      controller.abort();
+    };
+    schedule(totalTimeoutMs);
+    return {
+      activity() { if (!cleared && !controller.signal.aborted) lastActivityAt = Date.now(); },
+      clear() { cleared = true; clearTimeout(timer); timer = 0; },
+    };
+  }
+  function activeWidgetRefinement() {
+    return aiPreparation?.widgetEdit || state.activeAI?.widgetEdit || null;
+  }
+  function finishAIPreparation(preparation) {
+    if (aiPreparation !== preparation) return false;
+    aiPreparation = null;
+    if (!state.activeAI) {
+      setBusy(false);
+      state.summonAnchor = null;
+    }
+    return true;
+  }
+  function aiPreparationInvalid(preparation, generation, revision) {
+    if (generation !== aiPreparationGeneration || preparation.superseded || aiPreparation !== preparation) return true;
+    if (state.userRevision === revision) return false;
+    preparation.superseded = true;
+    preparation.controller.abort();
+    finishAIPreparation(preparation);
+    setStatusKey("deferred");
+    return true;
+  }
   function supersedeActiveAI(reason) {
+    aiPreparationGeneration++;
+    const preparation = aiPreparation;
+    let cancelled = false;
+    if (preparation && !preparation.superseded) {
+      preparation.superseded = true;
+      preparation.controller.abort();
+      if (aiPreparation === preparation) aiPreparation = null;
+      cancelled = true;
+      debug("ai-deferred", { requestId:state.lastRequestId, reason, phase:"preparing" });
+    }
     const active = state.activeAI;
     if (active && !active.superseded) {
+      const wasCurrent = state.activeAI === active;
       active.superseded = true;
       active.controller.abort();
-      if (state.activeAI === active) {
+      if (wasCurrent) {
         state.activeAI = null;
         setBusy(false);
+        setStatusKey(reason === "user-input-started" ? "aiCancelledForInput" : "aiCancelled");
       }
-      if (!active.dirtyRestored && !active.oneShotInput && active.recognitionGeneration === state.recognitionGeneration) {
+      if ((reason === "user-stop" || !active.dirtyRestored) && !active.oneShotInput && active.recognitionGeneration === state.recognitionGeneration) {
         restoreDirty(active.dirtySnapshot);
         active.dirtyRestored = true;
         state.autoEligible = Boolean(state.dirty);
+        if (reason === "user-stop") refreshWidgetRefineHoverCandidate();
       }
       debug("ai-deferred", { requestId: state.lastRequestId, reason });
     }
+    if (cancelled && !state.activeAI) {
+      setBusy(false);
+      state.summonAnchor = null;
+      setStatusKey(reason === "user-input-started" ? "aiCancelledForInput" : "aiCancelled");
+      if (reason === "user-stop") refreshWidgetRefineHoverCandidate();
+    }
+  }
+  function stopActiveAIRequests() {
+    const active = state.activeAI || aiPreparation;
+    if (!active || active.superseded) return false;
+    state.radialGesture = null;
+    state.radialSuppressClickUntil = performance.now() + 450;
+    closeRadialMenu();
+    supersedeActiveAI("user-stop");
+    return true;
   }
   function hasUnsettledToolbox() {
     return Boolean(state.pending || state.pendingWidget || state.pendingGesture || state.widgetEdit || state.widgetGesture || state.imageEdit || state.imageGesture || state.imageImporting || state.selection || state.selectionGesture || state.textEditors.size);
   }
+  const AI_PROGRESS_STATUS_KEYS = Object.freeze({
+    received:"aiRequestReceived",
+    "preparing-image":"aiPreparingImage",
+    connecting:"aiConnecting",
+    waiting:"aiWaitingResponse",
+    receiving:"aiReceivingResponse",
+    validating:"aiValidatingResponse",
+    retrying:"aiRetrying",
+    "image-fallback":"aiImageFallback",
+    slow:"aiStillWaiting",
+  });
+  function aiProgressText(event) {
+    const key=AI_PROGRESS_STATUS_KEYS[event?.phase];
+    if(!key)return "";
+    return t(key)
+      .replace("{attempt}",String(Math.max(1,Number(event.attempt)||1)))
+      .replace("{seconds}",String(Math.max(10,Number(event.timeoutSeconds)||10)));
+  }
+  function applyAiProgress(run,event) {
+    if(!run||run.superseded||state.activeAI!==run)return;
+    const previous=state.aiProgressEvent;
+    if(event?.phase==="waiting"&&["retrying","image-fallback"].includes(previous?.phase)&&previous.attempt===event.attempt)return;
+    const text=aiProgressText(event);
+    if(!text)return;
+    if(event.requestId)run.requestId=event.requestId;
+    state.aiProgressEvent={phase:event.phase,attempt:event.attempt||null,requestId:event.requestId||null,timeoutSeconds:event.timeoutSeconds||null};
+    setStatus(text,AI_PROGRESS_STATUS_KEYS[event.phase]);
+  }
+  async function readAiCommandResponse(response,onProgress,onActivity) {
+    onActivity?.();
+    const contentType=String(response.headers.get("content-type")||"").split(";",1)[0].trim().toLowerCase();
+    if(contentType!=="application/x-ndjson")return{ok:response.ok,status:response.status,data:await response.json()};
+    if(!response.body)throw new Error("PenEcho returned an empty progress stream.");
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer="",terminal=null;
+    const consume=(line)=>{
+      if(!line.trim())return;
+      let event;
+      try{event=JSON.parse(line)}catch{throw new Error("PenEcho returned an invalid progress event.")}
+      if(event?.type==="progress")onProgress?.(event);
+      else if(event?.type==="result"||event?.type==="error")terminal=event;
+    };
+    while(true){
+      const{done,value}=await reader.read();
+      if(value?.byteLength)onActivity?.();
+      buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+      let newline;
+      while((newline=buffer.indexOf("\n"))>=0){consume(buffer.slice(0,newline));buffer=buffer.slice(newline+1)}
+      if(done)break;
+    }
+    if(buffer.trim())consume(buffer);
+    if(!terminal)throw new Error("PenEcho progress stream ended before the model response arrived.");
+    const status=Number.isInteger(terminal.status)?terminal.status:terminal.type==="result"?200:500;
+    return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
+  }
   function launchAutomaticAI(reason) {
-    if (!state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (aiPreparation || state.activeAI) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
       return;
@@ -36,7 +168,8 @@
   function schedule(delay = state.autoDelayMs) {
     clearTimeout(state.timer);
     state.timer = 0;
-    if (!state.auto || !state.dirty || !state.autoEligible) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible) return;
+    if (activeWidgetRefinement()) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
       return;
@@ -82,9 +215,14 @@
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    const automatic = action === "auto";
+    if (!automatic) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+    }
+    const preparationGeneration = ++aiPreparationGeneration;
     clearWidgetRefineCandidate();
-    const automatic = action === "auto",
-      isolatedSelection = Boolean(requestOptions.isolatedSelection),
+    const isolatedSelection = Boolean(requestOptions.isolatedSelection),
       oneShotInput = Boolean(requestOptions.oneShotInput),
       captureCurrentViewport = Boolean(requestOptions.captureCurrentViewport),
       widgetEditTarget = requestOptions.widgetEditTarget || null,
@@ -96,61 +234,79 @@
       latestBox = dirtySnapshot || state.lastUserBox,
       attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
-      packed = packedOverride || (captureCurrentViewport || attentionBox ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport) : null),
-      typedInput = !isolatedSelection && state.latestTypedInput && containsRect(packed?.sourceRect, state.latestTypedInput.box)
-        ? state.latestTypedInput
-        : null,
-      preservedRecognition = isolatedSelection
-        ? {
-            dirty: state.dirty ? { ...state.dirty } : null,
-            autoEligible: state.autoEligible,
-            lastUserBox: state.lastUserBox ? { ...state.lastUserBox } : null,
-            hotspotTrail: state.hotspotTrail.slice(),
-            latestTypedInput: state.latestTypedInput,
-          }
-        : null;
+      controller = new AbortController(),
+      preparation = {
+        controller,
+        generation:preparationGeneration,
+        superseded:false,
+        widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null,
+      };
+    aiPreparation = preparation;
+    state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
+    setBusy(true);
+    setStatusKey("aiPreparingCanvas");
     if (pluginEnabled("flowchart")) {
       try { await ensurePluginRuntime("flowchart"); }
       catch (error) {
-        setStatus(`${t("aiError")}${error.message}`);
-        return;
+        if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+        debug("ai-preparation-degraded", { stage:"flowchart-runtime", error:String(error?.message || error).slice(0, 300) });
       }
     }
+    if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+    let capturePlan = null,
+      packed = packedOverride;
     if (!packed) {
-      discardUncapturableInput(hotspotCount, Boolean(dirtySnapshot));
-      if (preservedRecognition) {
-        state.dirty = preservedRecognition.dirty;
-        state.autoEligible = preservedRecognition.autoEligible;
-        state.lastUserBox = preservedRecognition.lastUserBox;
-        state.hotspotTrail = preservedRecognition.hotspotTrail;
-        state.latestTypedInput = preservedRecognition.latestTypedInput;
+      try {
+        capturePlan = captureCurrentViewport || attentionBox ? planViewportImage(attentionBox, captureCurrentViewport) : null;
+      } catch (error) {
+        debug("ai-preparation-degraded", { stage:"capture-plan", error:String(error?.message || error).slice(0, 300) });
       }
-      setStatusKey(latestBox ? "cannotCapture" : "noInk");
-      return;
+      let snapshotRegion = capturePlan?.sourceRect || null;
+      if (!snapshotRegion) {
+        try { snapshotRegion = viewportRect(); } catch {}
+      }
+      const snapshots = await prepareVisibleWidgetSnapshots(snapshotRegion);
+      if (snapshots.missing) debug("ai-preparation-degraded", { stage:"widget-snapshot", ...snapshots });
+      if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+      try {
+        packed = captureCurrentViewport || attentionBox
+          ? buildViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox, captureCurrentViewport, capturePlan)
+          : null;
+      } catch (error) {
+        debug("ai-preparation-degraded", { stage:"viewport-atlas", error:String(error?.message || error).slice(0, 300) });
+      }
+      if (!packed) {
+        packed = emergencyViewportImage(state.hotspotTrail.slice(0, hotspotCount), attentionBox);
+        debug("ai-preparation-degraded", { stage:"viewport-atlas-fallback", sourceRect:packed.sourceRect, atlasSize:packed.atlasSize });
+      }
     }
+    if (aiPreparationInvalid(preparation, preparationGeneration, revision)) return;
+    const
+      typedInput = !isolatedSelection && state.latestTypedInput && containsRect(packed?.sourceRect, state.latestTypedInput.box)
+        ? state.latestTypedInput
+        : null;
     const requestBox = packed.changedBox;
-    if (!isolatedSelection) {
-      state.dirty = null;
-      state.autoEligible = false;
-      if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-      state.latestTypedInput = null;
-      state.lastUserBox = requestBox;
-    }
-    const controller = new AbortController(),
-      // A selection-scoped request never consumes the normal recognition state. Mark its
+    const // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputConsumed:!isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputConsumed:isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+    if (aiPreparation !== preparation) return;
+    aiPreparation = null;
     state.activeAI = run;
-    state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
-    setBusy(true);
-    setStatusKey(isolatedSelection && action === "normalize" ? "selectionTypesetting" : "observing");
-    const timeout = setTimeout(() => controller.abort(), state.aiRequestTimeoutMs);
+    setStatusKey("aiSendingRequest");
+    const requestTimeoutMs=activeAiRequestTimeoutMs(),slowNoticeDelay=Math.min(60000,Math.max(10000,Math.floor(requestTimeoutMs/3)));
+    run.slowNoticeTimer=setTimeout(()=>{
+      if(run.superseded||state.activeAI!==run)return;
+      const phase=state.aiProgressEvent?.phase;
+      if(!phase||["received","preparing-image","connecting","waiting","slow"].includes(phase))
+        applyAiProgress(run,{phase:"slow",requestId:run.requestId||null,timeoutSeconds:Math.ceil(requestTimeoutMs/1000)});
+    },slowNoticeDelay);
+    const timeout = createActivityAwareAbortTimeout(controller,requestTimeoutMs);
     try {
       const res = await fetch("/api/ai/command", {
           signal: controller.signal,
           method: "POST",
           credentials: "same-origin",
-          headers: aiRequestHeaders({ "Content-Type": "application/json" }),
+          headers: aiRequestHeaders({ "Content-Type": "application/json", Accept:"application/x-ndjson, application/json" }),
           body: JSON.stringify({
             ...packed,
             trigger: automatic ? "user_paused" : "manual",
@@ -169,12 +325,13 @@
             }[state.theme],
           }),
         }),
-        data = await res.json();
+        streamed = await readAiCommandResponse(res,event=>applyAiProgress(run,event),timeout.activity),
+        data = streamed.data;
       if (run.superseded || state.activeAI !== run) throw Error(AI_SUPERSEDED);
       rememberRequest(data.requestId);
-      if (!res.ok) {
-        const error = Error(data.error || `HTTP ${res.status}`);
-        error.status = res.status;
+      if (!streamed.ok) {
+        const error = Error(data.error || `HTTP ${streamed.status}`);
+        error.status = streamed.status;
         throw error;
       }
       // Draft confirmation is a separate interaction after the model request has ended.
@@ -211,6 +368,13 @@
         return;
       }
       if (commands.length) {
+        if (!isolatedSelection) {
+          state.dirty = null;
+          state.autoEligible = false;
+          run.dirtyRestored = false;
+          run.inputCleared = true;
+          clearWidgetRefineCandidate();
+        }
         setStatusKey("writing");
         if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
           if (state.userRevision !== revision) throw Error(AI_CANCELLED);
@@ -225,7 +389,7 @@
             checkAI(revision, run);
           }
           const activeItems = pluginEnabled("animation") ? items : items.filter((item) => !item.animationScene);
-          if (!activeItems.length) throw Error(AI_REJECTED);
+          if (!activeItems.length) throw Error("AI response tools could not be prepared");
           resolvePendingItemOverlaps(activeItems, meta);
           checkAI(revision, run);
           const outcome = await startPendingBatch(activeItems, revision, meta);
@@ -242,17 +406,13 @@
             if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
           }
           run.inputConsumed = true;
+          run.dirtyRestored = true;
         }
         if (!isolatedSelection) save();
         if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (data.message) setStatus(data.message);
         else setStatusKey("aiDone");
       } else {
-        if (!isolatedSelection) {
-          state.lastUserBox = requestBox;
-          if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-          if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
-        }
         if (widgetLimitReached) setStatusKey("widgetLimitReached");
         else if (typeof data.message === "string" && data.message.trim()) setStatus(data.message.trim());
         else setStatusKey("aiNoVisibleResponse");
@@ -261,16 +421,15 @@
       if (run.superseded) {
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "request-superseded" });
       } else if (e.message === AI_REJECTED) {
-        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+        if (!isolatedSelection && run.inputCleared && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           state.lastUserBox = requestBox;
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
+          if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
+          run.inputConsumed = true;
+          run.dirtyRestored = true;
         }
         setStatusKey("draftRejected");
       } else if (e.message === AI_SUPERSEDED) {
-        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          state.lastUserBox = requestBox;
-          if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
-        }
         setStatusKey("ready");
       } else if (state.userRevision !== revision) {
         if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
@@ -296,6 +455,8 @@
           message = timedOut ? t("timeout") : e.message;
         if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
           state.autoEligible = false;
         }
         setStatus(`${t("aiError")}${message}`);
@@ -306,7 +467,8 @@
         });
       }
     } finally {
-      clearTimeout(timeout);
+      timeout.clear();
+      clearTimeout(run.slowNoticeTimer);
       if (state.activeAI === run) {
         state.activeAI = null;
         setBusy(false);
@@ -383,7 +545,7 @@
     // Retained dirty ink from a failed request must never expand the next capture beyond what the user can currently see.
     return visible;
   }
-  function buildViewportImage(hotspotPoints, latestBox, captureCurrentViewport = false) {
+  function planViewportImage(latestBox, captureCurrentViewport = false) {
     const visible = viewportRect();
     if (!visible) return null;
     const captureRect = captureRectFor(latestBox, visible),
@@ -402,11 +564,17 @@
         w: Math.max(1, Math.min(MAX_ATLAS_WIDTH, Math.ceil(sourceRect.w * imageScale))),
         h: Math.max(1, Math.min(MAX_ATLAS_HEIGHT, Math.ceil(sourceRect.h * imageScale))),
       },
-      out = offscreen(imageSize.w, imageSize.h),
-      q = out.getContext("2d");
-    const latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : captureCurrentViewport ? { ...sourceRect } : null,
-      captureTime = performance.now();
+      latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : captureCurrentViewport ? { ...sourceRect } : null;
     if (!latestVisible) return null;
+    return { visible, captureRect, sourceRect, imageScale, imageSize, latestVisible };
+  }
+  function buildViewportImage(hotspotPoints, latestBox, captureCurrentViewport = false, capturePlan = null) {
+    const plan = capturePlan || planViewportImage(latestBox, captureCurrentViewport);
+    if (!plan) return null;
+    const { visible, captureRect, sourceRect, imageScale, imageSize, latestVisible } = plan,
+      out = offscreen(imageSize.w, imageSize.h),
+      q = out.getContext("2d"),
+      captureTime = performance.now();
     q.fillStyle = "#fff";
     q.fillRect(0, 0, out.width, out.height);
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
@@ -452,6 +620,37 @@
       changedBox: latestVisible,
       focusInset,
       hotspotGrid,
+    };
+  }
+  function emergencyViewportImage(hotspotPoints, latestBox) {
+    let visible = null;
+    try { visible = viewportRect(); } catch {}
+    if (!visible) visible = { x:0, y:0, w:1, h:1 };
+    const sourceRect = { ...visible },
+      latestVisible = latestBox ? intersection(latestBox, sourceRect) || { ...sourceRect } : { ...sourceRect },
+      imageScale = Math.min(1, MAX_ATLAS_WIDTH / sourceRect.w, MAX_ATLAS_HEIGHT / sourceRect.h) * (1 - Number.EPSILON * 4),
+      imageSize = {
+        w:Math.max(1, Math.min(MAX_ATLAS_WIDTH, Math.ceil(sourceRect.w * imageScale))),
+        h:Math.max(1, Math.min(MAX_ATLAS_HEIGHT, Math.ceil(sourceRect.h * imageScale))),
+      },
+      plan = { visible, captureRect:{ ...visible }, sourceRect, imageScale, imageSize, latestVisible };
+    try {
+      const packed = buildViewportImage(hotspotPoints, latestBox, true, plan);
+      if (packed) return packed;
+    } catch (error) {
+      debug("ai-preparation-degraded", { stage:"viewport-atlas-emergency", error:String(error?.message || error).slice(0, 300) });
+    }
+    const fallbackScale = Math.min(1, 1 / sourceRect.w, 1 / sourceRect.h);
+    return {
+      atlasImage:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      atlasSize:{ w:1, h:1 },
+      visibleRect:{ ...visible },
+      captureRect:{ ...visible },
+      sourceRect,
+      imageScale:fallbackScale,
+      changedBox:latestVisible,
+      focusInset:null,
+      hotspotGrid:{ columns:8, rows:8, order:"oldest-to-newest", attention:"newest unconsumed pen path; use ordered cells to read and apply every edit inside latestInput.imageRect", hotspots:[] },
     };
   }
   function buildSelectionImage(selection) {
@@ -785,14 +984,15 @@
     });
     try {
       checkAI(revision, run);
-      if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error(AI_REJECTED);
+      if (c.tool === "animate_scene" && !pluginEnabled("animation")) throw Error("Animation rendering is unavailable");
       if (["html_widget", "diagram_source"].includes(c.tool)) {
-        if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error(AI_REJECTED);
+        if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error("Widget rendering is unavailable");
         const target = run?.widgetEdit?.target,
           accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);
         if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
         if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
-        if (!accepted) throw Error(AI_REJECTED);
+        if (accepted === AI_REJECTED) throw Error(AI_REJECTED);
+        if (!accepted) throw Error("Widget draft could not be prepared");
       } else if (c.tool === "erase") {
         const bounds = eraseBounds(c),
           item={ command: c, erase: true, bounds, image: eraseMask(c, bounds) };
@@ -827,8 +1027,8 @@
           const accepted = await startPending(image, x, y, revision, meta, pendingCommand);
           if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
           if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
-          if (!accepted) throw Error(AI_REJECTED);
-        }
+          if (accepted === AI_REJECTED || !accepted) throw Error(AI_REJECTED);
+        } else throw Error(`Unable to prepare ${c.tool}`);
       }
       debug("tool-complete", { ...meta, tool: c.tool, x: c.x, y: c.y });
     } catch (error) {

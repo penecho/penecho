@@ -30,6 +30,8 @@
     queuedDragMove = null,
     dragMoveFrame = 0,
     innerDocumentUrl = null,
+    runtimeVersion = 0,
+    innerDocumentReady = false,
     widgetState = { selected:false, active:true, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
 
@@ -43,7 +45,7 @@
     innerDocumentUrl = null;
   }
   addEventListener("pagehide", releaseInnerDocumentUrl, { once:true });
-  function runtime() {
+  function runtime(runtimeVersion) {
     const UPDATED = "penecho-widget-updated",
       DRAG_START = "penecho-widget-drag-start",
       DRAG_MOVE = "penecho-widget-drag-move",
@@ -57,6 +59,8 @@
       WHEEL = "penecho-widget-wheel",
       PUBLIC_FETCH_REQUEST = "penecho-widget-public-fetch-request",
       PUBLIC_FETCH_RESPONSE = "penecho-widget-public-fetch-response",
+      RUNTIME_DIAGNOSTICS = "penecho-widget-runtime-diagnostics",
+      MAX_RUNTIME_ERRORS = 5,
       MOVE_TOLERANCE_PX = 8,
       CONTROL_RADIUS_PX = 26,
       MAX_SNAPSHOT_DIMENSION = 2400,
@@ -77,8 +81,103 @@
       nativeOpen = typeof globalThis.open === "function" ? globalThis.open.bind(globalThis) : null;
     let runtimeActive = true,
       nextAnimationFrameId = 1,
-      nextPublicFetchId = 1;
+      nextPublicFetchId = 1,
+      diagnosticsTimer = 0,
+      diagnosticsTruncated = false;
+    const runtimeErrors = new Map();
     const clock = () => typeof performance === "object" && typeof performance.now === "function" ? performance.now() : Date.now();
+    function diagnosticText(value, maxLength) {
+      return String(value || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLength);
+    }
+    function diagnosticFile(value) {
+      const text = diagnosticText(value, 600);
+      if (!text) return "widget.html";
+      try {
+        const url = new URL(text, location.href);
+        if (url.protocol === "blob:" || url.href === location.href) return "widget.html";
+        url.search = "";
+        url.hash = "";
+        return url.href.slice(0, 300);
+      } catch {
+        return text.slice(0, 300);
+      }
+    }
+    function diagnosticStack(error) {
+      return String(error?.stack || "").split(/\r?\n/).slice(1, 4).map(line => diagnosticText(line, 300)
+        .replace(/blob:[^\s)]+/g, "widget.html")
+        .replace(/https:\/\/[^\s)]+/g, value => diagnosticFile(value))).filter(Boolean);
+    }
+    function sendRuntimeDiagnostics() {
+      diagnosticsTimer = 0;
+      parent.postMessage({
+        type:RUNTIME_DIAGNOSTICS,
+        runtimeVersion,
+        errors:[...runtimeErrors.values()],
+        truncated:diagnosticsTruncated,
+      }, "*");
+    }
+    function recordRuntimeError(details) {
+      const error = {
+          kind:details.kind,
+          name:diagnosticText(details.name, 80) || "Error",
+          message:diagnosticText(details.message, 400) || "JavaScript runtime error",
+          file:diagnosticFile(details.file),
+          line:Number.isInteger(details.line) && details.line >= 0 ? Math.min(details.line, 10000000) : 0,
+          column:Number.isInteger(details.column) && details.column >= 0 ? Math.min(details.column, 10000000) : 0,
+          repeatedCount:1,
+          stack:diagnosticStack(details.error),
+        },
+        key = error.line || error.column
+          ? [error.file, error.line, error.column].join("\0")
+          : [error.kind, error.name, error.file, error.message].join("\0"),
+        existing = runtimeErrors.get(key);
+      if (existing) {
+        existing.repeatedCount = Math.min(1000000, existing.repeatedCount + 1);
+        if (!diagnosticsTimer) diagnosticsTimer = setTimeout(sendRuntimeDiagnostics, 100);
+        return;
+      }
+      if (runtimeErrors.size >= MAX_RUNTIME_ERRORS) {
+        if (diagnosticsTruncated) return;
+        diagnosticsTruncated = true;
+      } else runtimeErrors.set(key, error);
+      if (!diagnosticsTimer) diagnosticsTimer = setTimeout(sendRuntimeDiagnostics, 100);
+    }
+    addEventListener("error", (event) => {
+      const target = event.target;
+      if (target && target !== globalThis && String(target.tagName || "").toUpperCase() === "SCRIPT") {
+        recordRuntimeError({
+          kind:"script-load",
+          name:"ScriptLoadError",
+          message:`Failed to load JavaScript: ${diagnosticFile(target.src)}`,
+          file:target.src,
+          line:0,
+          column:0,
+        });
+        return;
+      }
+      if (target && target !== globalThis) return;
+      recordRuntimeError({
+        kind:"error",
+        name:event.error?.name || "Error",
+        message:event.message || event.error?.message,
+        file:event.filename,
+        line:Number(event.lineno),
+        column:Number(event.colno),
+        error:event.error,
+      });
+    }, true);
+    addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason;
+      recordRuntimeError({
+        kind:"unhandledrejection",
+        name:reason?.name || "UnhandledRejection",
+        message:reason?.message || reason,
+        file:"widget.html",
+        line:0,
+        column:0,
+        error:reason,
+      });
+    });
     function publicHttpsLink(value) {
       try {
         const url = new URL(String(value || ""), document.baseURI);
@@ -482,6 +581,100 @@
         for (const background of backgrounds) background.remove();
       };
     }
+    let snapshotColorCanvas = null,
+      snapshotColorContext = null;
+    const snapshotColorCache = new Map(),
+      unsupportedSnapshotColor = /\b(?:color|lab|lch|oklab|oklch|hwb)\([^()]*\)/gi;
+    function snapshotLegacyColor(value) {
+      if (!value) return value;
+      if (!snapshotColorContext) {
+        if (typeof document.createElement !== "function") return value;
+        snapshotColorCanvas = document.createElement("canvas");
+        snapshotColorCanvas.width = snapshotColorCanvas.height = 1;
+        snapshotColorContext = snapshotColorCanvas.getContext("2d", { willReadFrequently:true });
+      }
+      if (!snapshotColorContext) return value;
+      if (snapshotColorCache.has(value)) return snapshotColorCache.get(value);
+      snapshotColorContext.clearRect(0, 0, 1, 1);
+      snapshotColorContext.fillStyle = "rgba(0,0,0,0)";
+      snapshotColorContext.fillStyle = value;
+      snapshotColorContext.fillRect(0, 0, 1, 1);
+      const [red, green, blue, alphaByte] = snapshotColorContext.getImageData(0, 0, 1, 1).data,
+        alpha = Math.round(alphaByte / 255 * 1000) / 1000,
+        result = alphaByte === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+      snapshotColorCache.set(value, result);
+      return result;
+    }
+    function snapshotCompatibleCssValue(value) {
+      unsupportedSnapshotColor.lastIndex = 0;
+      return value.replace(unsupportedSnapshotColor, snapshotLegacyColor);
+    }
+    function inlineSnapshotCompatibleColors() {
+      const properties = [
+          "color", "background-color", "background-image",
+          "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+          "outline-color", "text-decoration-color", "column-rule-color",
+          "box-shadow", "text-shadow",
+          "fill", "stroke", "stop-color", "flood-color", "lighting-color",
+        ],
+        records = [];
+      for (const element of [document.documentElement, ...document.querySelectorAll("*")]) {
+        const computed = getComputedStyle(element),
+          styles = [];
+        for (const property of properties) {
+          const value = computed.getPropertyValue(property).trim();
+          unsupportedSnapshotColor.lastIndex = 0;
+          if (!value || !unsupportedSnapshotColor.test(value)) continue;
+          const compatible = snapshotCompatibleCssValue(value);
+          if (compatible === value) continue;
+          styles.push([property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
+          element.style.setProperty(property, compatible, "important");
+        }
+        if (styles.length) records.push([element, styles]);
+      }
+      return () => {
+        for (const [element, styles] of records) {
+          for (const [property, value, priority] of styles) {
+            if (value) element.style.setProperty(property, value, priority);
+            else element.style.removeProperty(property);
+          }
+        }
+      };
+    }
+    function settleSnapshotFrame() {
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (presented) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(presented);
+        },
+          timer = setTimeout(() => finish(false), 50);
+        nativeRequestAnimationFrame(() => finish(true));
+      });
+    }
+    function flushPendingSnapshotFrame() {
+      const callbacks = [...pendingAnimationFrames.entries()],
+        timestamp = clock();
+      for (const [id, callback] of callbacks) {
+        if (!pendingAnimationFrames.has(id)) continue;
+        pendingAnimationFrames.delete(id);
+        try {
+          callback(timestamp);
+        } catch (error) {
+          recordRuntimeError({
+            kind:"error",
+            name:error?.name || "Error",
+            message:error?.message || error,
+            file:"widget.html",
+            line:0,
+            column:0,
+            error,
+          });
+        }
+      }
+    }
     function imageFromUrl(url, timeoutMs = 5000) {
       return new Promise((resolve, reject) => {
         const image = new Image(),
@@ -534,14 +727,18 @@
       }
     }
     async function snapshot(message) {
-      let restoreSvgStyles = () => {};
+      let restoreSvgStyles = () => {},
+        restoreCompatibleColors = () => {};
       try {
         const requestedWidth = Math.max(1, Number(message.width) || document.documentElement.clientWidth || 1),
           requestedHeight = Math.max(1, Number(message.height) || document.documentElement.clientHeight || 1),
           scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight))),
           timeoutMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
+        const framePresented = await settleSnapshotFrame();
         setRuntimeActive(false);
+        if (!framePresented) flushPendingSnapshotFrame();
         restoreSvgStyles = inlineSvgComputedStyles();
+        restoreCompatibleColors = inlineSnapshotCompatibleColors();
         let captureExpired = false;
         const render = async () => {
           let canvas = null;
@@ -556,8 +753,9 @@
             throw Error("Widget snapshot timed out");
           }
           if (!canvas) {
-            if (typeof globalThis.html2canvas !== "function") throw Error("Widget renderer is unavailable");
-            canvas = await globalThis.html2canvas(document.documentElement, {
+            const domSnapshotRenderer = globalThis.html2canvas;
+            if (typeof domSnapshotRenderer !== "function") throw Error("Widget renderer is unavailable");
+            canvas = await domSnapshotRenderer(document.documentElement, {
               backgroundColor:null,
               width:requestedWidth,
               height:requestedHeight,
@@ -581,15 +779,19 @@
           return canvas;
         };
         const canvas = await withTimeout(render(), timeoutMs, () => (captureExpired = true));
-        parent.postMessage({ type:"penecho-widget-snapshot", requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height }, "*");
+        parent.postMessage({ type:"penecho-widget-snapshot", runtimeVersion, requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height }, "*");
         canvas.width = canvas.height = 1;
       } catch (error) {
-        parent.postMessage({ type: "penecho-widget-snapshot-error", requestId: message.requestId, error: error.message }, "*");
+        parent.postMessage({ type: "penecho-widget-snapshot-error", runtimeVersion, requestId: message.requestId, error: error.message }, "*");
       } finally {
         try {
-          restoreSvgStyles();
+          restoreCompatibleColors();
         } finally {
-          setRuntimeActive(widgetState.active);
+          try {
+            restoreSvgStyles();
+          } finally {
+            setRuntimeActive(widgetState.active);
+          }
         }
       }
     }
@@ -624,6 +826,18 @@
     const error = String(message || "Widget snapshot failed").replace(/[\r\n\t]+/g, " ").slice(0, 300);
     console.warn("PenEcho widget snapshot failed:", error);
     parent.postMessage({ type:"penecho-widget-snapshot-error", requestId, error }, parentOrigin);
+  }
+
+  function forwardSnapshotRequest(requestId, request) {
+    if (!innerDocumentReady || request.forwarded) return;
+    request.forwarded = true;
+    inner.contentWindow?.postMessage({
+      type:"penecho-widget-snapshot-request",
+      requestId,
+      width:request.requestedWidth,
+      height:request.requestedHeight,
+      timeoutMs:Math.max(500, request.timeoutMs - 250),
+    }, "*");
   }
 
   async function proxyPublicFetch(message) {
@@ -780,7 +994,7 @@
     return inlineScriptHasWindowBinding(script) ? `(() => {\n${script}\n})();` : script;
   }
 
-  function widgetDocument(html, pluginStyles = "") {
+  function widgetDocument(html, pluginStyles = "", documentVersion = 0) {
     const parsed = new DOMParser().parseFromString(html, "text/html");
     parsed.querySelectorAll("base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
@@ -819,7 +1033,8 @@
       const pluginStyle = parsed.createElement("style");
       pluginStyle.dataset.penechoPluginStyles = "";
       pluginStyle.textContent = pluginStyles;
-      parsed.head.append(pluginStyle);
+      // Plugin CSS provides defaults; widget-authored styles must be able to override them.
+      parsed.head.insertBefore(pluginStyle, parsed.head.querySelector("style, link"));
     }
     const bridgeStyle = parsed.createElement("style");
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
@@ -827,8 +1042,13 @@
     const renderer = parsed.createElement("script");
     renderer.src = rendererUrl;
     parsed.body.append(renderer);
+    const ready = parsed.createElement("script");
+    ready.textContent = `parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")`;
+    parsed.body.append(ready);
     const bridge = parsed.createElement("script");
-    bridge.textContent = `(${runtime.toString()})()`;
+    bridge.textContent = `(${runtime.toString()})(${JSON.stringify(documentVersion)})`;
+    // Establish the bridge early. The end marker runs after widget-authored scripts and
+    // the bundled renderer, without waiting for unrelated images or other load events.
     policy.after(bridge);
     return `<!doctype html>\n${parsed.documentElement.outerHTML}`;
   }
@@ -852,6 +1072,20 @@
       return [message.localX, message.localY, message.deltaY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
     return Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff && message.pointerType === "mouse"
       && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
+  }
+  function validRuntimeDiagnostics(message) {
+    return message && message.type === "penecho-widget-runtime-diagnostics" && message.runtimeVersion === runtimeVersion
+      && typeof message.truncated === "boolean" && Array.isArray(message.errors) && message.errors.length <= 5
+      && message.errors.every(error => error && typeof error === "object"
+        && ["error", "unhandledrejection", "script-load"].includes(error.kind)
+        && typeof error.name === "string" && error.name.length > 0 && error.name.length <= 80
+        && typeof error.message === "string" && error.message.length > 0 && error.message.length <= 400
+        && typeof error.file === "string" && error.file.length > 0 && error.file.length <= 300
+        && Number.isInteger(error.line) && error.line >= 0 && error.line <= 10000000
+        && Number.isInteger(error.column) && error.column >= 0 && error.column <= 10000000
+        && Number.isInteger(error.repeatedCount) && error.repeatedCount >= 1 && error.repeatedCount <= 1000000
+        && Array.isArray(error.stack) && error.stack.length <= 3
+        && error.stack.every(frame => typeof frame === "string" && frame.length > 0 && frame.length <= 300));
   }
   function forwardWidgetState() {
     inner.contentWindow?.postMessage({ type:"penecho-widget-state", ...widgetState }, "*");
@@ -889,22 +1123,34 @@
       if (message?.type === "penecho-widget-init") {
         if (typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
+        for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot");
         initialized = true;
+        runtimeVersion++;
+        innerDocumentReady = false;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
+        parent.postMessage({ type:"penecho-widget-runtime-diagnostics", errors:[], truncated:false }, parentOrigin);
         releaseInnerDocumentUrl();
-        innerDocumentUrl = URL.createObjectURL(new Blob([widgetDocument(message.html, message.pluginStyles || "")], { type:"text/html" }));
+        innerDocumentUrl = URL.createObjectURL(new Blob([widgetDocument(message.html, message.pluginStyles || "", runtimeVersion)], { type:"text/html" }));
         inner.src = innerDocumentUrl;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
         widgetState = { selected:message.selected, active:message.active, scaleX:message.scaleX, scaleY:message.scaleY };
         forwardWidgetState();
-      } else if (message?.type === "penecho-widget-snapshot-request" && initialized) {
+      } else if (message?.type === "penecho-widget-snapshot-request") {
         const requestedWidth = Number(message.width), requestedHeight = Number(message.height),
           timeoutMs = Math.max(1000, Math.min(SNAPSHOT_REQUEST_TIMEOUT_MS, Number(message.timeoutMs) || SNAPSHOT_REQUEST_TIMEOUT_MS));
-        if (typeof message.requestId !== "string" || message.requestId.length > 128 || !Number.isFinite(requestedWidth) || !Number.isFinite(requestedHeight) || requestedWidth <= 0 || requestedHeight <= 0) return;
+        if (typeof message.requestId !== "string" || message.requestId.length > 128 || !Number.isFinite(requestedWidth) || !Number.isFinite(requestedHeight) || requestedWidth <= 0 || requestedHeight <= 0) {
+          if (typeof message.requestId === "string" && message.requestId.length <= 128) snapshotError(message.requestId, "Widget snapshot request is invalid");
+          return;
+        }
+        if (!initialized) {
+          snapshotError(message.requestId, "Widget host is not initialized");
+          return;
+        }
         const timer = setTimeout(() => snapshotError(message.requestId, "Widget snapshot timed out"), timeoutMs);
-        pendingSnapshots.set(message.requestId, { requestedWidth, requestedHeight, timer });
-        inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, width:requestedWidth, height:requestedHeight, timeoutMs:Math.max(500, timeoutMs - 250) }, "*");
+        const request = { requestedWidth, requestedHeight, timeoutMs, timer, forwarded:false };
+        pendingSnapshots.set(message.requestId, request);
+        forwardSnapshotRequest(message.requestId, request);
       }
       return;
     }
@@ -912,13 +1158,19 @@
     if (message.type === "penecho-widget-public-fetch-request") {
       if (typeof message.requestId !== "string" || !/^public-fetch-\d+$/.test(message.requestId) || message.requestId.length > 64 || typeof message.url !== "string" || message.url.length > PUBLIC_FETCH_MAX_URL_LENGTH) return;
       void proxyPublicFetch(message);
+    } else if (message.type === "penecho-widget-document-ready" && message.runtimeVersion === runtimeVersion) {
+      innerDocumentReady = true;
+      parent.postMessage({ type:"penecho-widget-capture-ready" }, parentOrigin);
+      for (const [requestId, request] of pendingSnapshots) forwardSnapshotRequest(requestId, request);
+    } else if (validRuntimeDiagnostics(message)) {
+      parent.postMessage({ type:message.type, errors:message.errors, truncated:message.truncated }, parentOrigin);
     } else if (message.type === "penecho-widget-updated") {
       forwardWidgetState();
       const now = Date.now();
       if (now - lastUpdate < UPDATE_FORWARD_INTERVAL_MS) return;
       lastUpdate = now;
       parent.postMessage({ type: "penecho-widget-updated" }, parentOrigin);
-    } else if (message.type === "penecho-widget-snapshot" && pendingSnapshots.has(message.requestId)) {
+    } else if (message.type === "penecho-widget-snapshot" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) {
       const request = pendingSnapshots.get(message.requestId),
         scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / request.requestedWidth, MAX_SNAPSHOT_DIMENSION / request.requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (request.requestedWidth * request.requestedHeight))),
         expectedWidth = Math.max(1, Math.floor(request.requestedWidth * scale)),
@@ -929,7 +1181,7 @@
         pendingSnapshots.delete(message.requestId);
         parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height }, parentOrigin);
       }
-    } else if (message.type === "penecho-widget-snapshot-error" && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error);
+    } else if (message.type === "penecho-widget-snapshot-error" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error);
     else if (message.type === "penecho-widget-activate") parent.postMessage({ type:message.type }, parentOrigin);
     else if (validDragMessage(message)) forwardDragMessage(message);
     else if (validTouchMessage(message)) parent.postMessage(message, parentOrigin);

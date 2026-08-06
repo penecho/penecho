@@ -162,6 +162,7 @@ class KimiAcpClient {
     if (!update || typeof update !== "object") return;
     const active = this.activeRequest;
     if (!active || params.sessionId !== active.sessionId) return;
+    try { active.onActivity?.(); } catch {}
     const kind = update.sessionUpdate;
     if (kind === "agent_message_chunk") {
       const contentText = update.content?.text;
@@ -203,7 +204,7 @@ class KimiAcpClient {
     });
   }
 
-  async _request({ model, effort, prompt, image, signal }) {
+  async _request({ model, effort, prompt, image, signal, onActivity }) {
     if (this.closed) throw acpInfraError("Kimi ACP client is closed.");
     if (signal?.aborted) throw abortError();
     const requestKeepAlive = setInterval(() => {}, 60_000);
@@ -225,7 +226,7 @@ class KimiAcpClient {
         if (thinking.error) throw new Error(`Kimi ACP rejected thinking effort "${mapped}": ${thinking.error.message}`);
       }
       stage = "prompted";
-      return await this._prompt({ sessionId, prompt, image, signal });
+      return await this._prompt({ sessionId, prompt, image, signal, onActivity });
     } catch (error) {
       if (stage !== "prompted" && error.acpTransport && !error.acpInfraFailure) error.acpInfraFailure = true;
       throw error;
@@ -234,7 +235,7 @@ class KimiAcpClient {
     }
   }
 
-  _prompt({ sessionId, prompt, image, signal }) {
+  _prompt({ sessionId, prompt, image, signal, onActivity }) {
     return new Promise((resolve, reject) => {
       const blocks = [];
       if (image) blocks.push({ type:"image", data:image.data, mimeType:image.mimeType });
@@ -242,6 +243,7 @@ class KimiAcpClient {
       const state = {
         sessionId,
         text:"",
+        onActivity,
         settled:false,
         fail:error => { if (state.settled) return; state.settled = true; cleanup(); reject(error); },
         succeed:() => { if (state.settled) return; state.settled = true; cleanup(); resolve(state.text.trim()); },

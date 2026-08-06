@@ -74,24 +74,17 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Salve instantâneos neste dispositivo ou no servidor PenEcho e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
 
-## Novidades da versão 0.8.1
+## Novidades da versão 0.8.2
 
-- **Dados públicos ao vivo em widgets General HTML.** Quando uma API HTTPS pública, feed RSS ou imagem é bloqueado pelo CORS do navegador, o widget pode usar a ponte local somente leitura do PenEcho para exibir notícias, painéis e outros conteúdos atualizados sem expor credenciais.
-- **SVG como padrão para animações e gráficos complexos.** Animações e visuais personalizados complexos agora priorizam SVG responsivo dentro do General HTML, oferecendo movimentos, sobreposições e gráficos escaláveis mais expressivos com uma saída de modelo compacta e eficiente em tokens.
+- **Várias conexões de IA com troca em um clique.** Salve até dez conexões API ou CLI, use predefinições editáveis de Kimi e MiniMax, teste-as na tela e escolha uma conexão ativa diferente em cada cliente do mesmo host PenEcho. As alterações são aplicadas imediatamente.
+- **Refine mais rápido e flexível.** Escreva instruções em qualquer lugar da área visível e escolha o widget a alterar. Diffs unificados padrão enviam apenas as mudanças, reduzindo tokens e espera sem perder confirmação e Desfazer.
+- **Streaming real da API.** APIs compatíveis com OpenAI e Anthropic agora usam SSE de ponta a ponta para mostrar o recebimento imediatamente e tornar solicitações longas mais estáveis em gateways compatíveis.
+- **Progresso e cancelamento claros.** O status superior mostra preparação, conexão, espera, recebimento, validação, novas tentativas e tempo limite. Durante uma solicitação, o botão mágico interrompe o trabalho ativo imediatamente.
 
-## Novidades da versão 0.8.0
+## Destaques anteriores
 
-- **Diagramas profissionais além de fluxogramas.** Crie diagramas de arquitetura, UML, sequência, BPMN, dados, engenharia, ciência, medicina, finanças e geografia com fonte profissional editável. Formatos compatíveis são renderizados localmente sob demanda; formatos especializados podem continuar em HTML completo.
-- **Padrões de plugins com prompt mais leve.** **General HTML** fica sempre ativado e não pode ser desmarcado. **Professional Diagrams** começa ativado e pode ser desativado; todos os demais plugins integrados ou privados começam desativados. As escolhas salvas explicitamente são preservadas nas atualizações. Apenas os guias compactos dos plugins ativados são enviados ao modelo; o CSS completo e os renderizadores permanecem locais e carregam sob demanda.
-- **Refine widgets de plugins desenhando sobre eles.** Use a caneta para desenhar ou escrever as alterações diretamente sobre um widget retornado por um plugin e clique no botão **AI Refine** que aparece para gerar uma versão aprimorada. Esse fluxo se aplica somente a widgets retornados por plugins.
-- **Armazenamento neste dispositivo ou no servidor PenEcho.** Salve a tela apenas no navegador atual ou no computador que executa o PenEcho para que outros dispositivos autorizados do mesmo servidor possam abri-la. Controles pendentes são confirmados antes do salvamento.
-- **Área de transferência, texto e plugins extensíveis.** Insira texto ou imagens da área de transferência do sistema, copie textos, fórmulas e fontes profissionais retornadas pela IA e reedite caixas de texto com Hand. Plugins integrados ou privados também podem ser copiados como plugins personalizados com CSS opcional carregado somente durante o uso.
-
-## Novidades da versão 0.7.2
-
-- **Fotos reais e fluxogramas profissionais integrados.** O Real Photo Search mostra imagens da Web com a fonte diretamente na tela, um resultado por padrão e uma fonte alternativa se a principal falhar. O Flowchart cria diagramas de processo, decisão, arquitetura, sequência e estado com código Mermaid copiável.
-- **Edição, salvamento e exportação mais confiáveis.** O Hand move diretamente imagens, animações e widgets retornados pela IA e permite redimensioná-los sem um máximo artificial. Salvar atualiza por padrão o instantâneo carregado, Salvar como novo continua disponível e imagens remotas permanecem nas miniaturas e exportações PNG.
-- **Acesso local e melhor integração com o desktop.** Um código compartilhado de seis dígitos pode proteger a entrada de navegadores locais e da rede sem alterar as solicitações ao modelo após o desbloqueio. A configuração do desktop aceita Kimi API e Kimi CLI, além de API genérica, Codex CLI e Claude CLI, com melhorias em atualizações e empacotamento.
+- **0.8.1.** Adicionou dados públicos ao vivo ao General HTML e SVG como padrão para animações e gráficos complexos.
+- **0.8.0 e 0.7.2.** Adicionaram diagramas profissionais editáveis, armazenamento no servidor, fluxos da área de transferência, fotos Web com fonte e edição e exportação mais confiáveis.
 
 ## Versões anteriores
 

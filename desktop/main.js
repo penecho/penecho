@@ -387,11 +387,6 @@ function registerIpc() {
   ipcMain.handle("penecho:update-download", event => fromCanvas(event) ? updateManager?.download() : false);
   ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);
   ipcMain.handle("penecho:update-install", event => fromCanvas(event) ? updateManager?.install() : false);
-  ipcMain.handle("penecho:open-settings", event => {
-    if (!fromCanvas(event)) return false;
-    showSettings();
-    return true;
-  });
   ipcMain.handle("penecho:get-settings", () => {
     const loaded = loadConfiguration();
     const settings = publicSettings(loaded.configuration, { version:pkg.version, hasSavedApiKey:Boolean(loaded.apiKey) }),
@@ -411,7 +406,9 @@ function registerIpc() {
     clipboard.writeText(text);
     return { ok:true };
   });
-  ipcMain.handle("penecho:install-cli", async (_event, provider) => {
+  ipcMain.handle("penecho:install-cli", async (event, provider) => {
+    const fromSetup = Boolean(settingsWindow && !settingsWindow.isDestroyed() && event.sender === settingsWindow.webContents);
+    if (!fromCanvas(event) && !fromSetup) return { ok:false, error:"CLI installation is available only in the PenEcho desktop application." };
     if (cliOperation) return { ok:false, error:"Another CLI setup operation is already running." };
     cliOperation = `install:${provider}`;
     try {
@@ -439,7 +436,7 @@ function registerIpc() {
       try {
         let timer;
         diagnostic = await Promise.race([
-          testConfiguredProvider(loaded.configuration),
+          testConfiguredProvider(loaded.configuration, { timeoutMs:SETTINGS_TEST_TIMEOUT_MS }),
           new Promise((_, reject) => {
             timer = setTimeout(() => {
               const error = new Error("Connection test timed out after 30 seconds.");
@@ -454,7 +451,7 @@ function registerIpc() {
         return {
           ok:false,
           saved:true,
-          timedOut:error.code === "PENECHO_SETTINGS_TEST_TIMEOUT",
+          timedOut:["PENECHO_SETTINGS_TEST_TIMEOUT", "PENECHO_CONNECTION_TEST_TIMEOUT"].includes(error.code),
           error:error.message || "Connection test failed.",
         };
       }

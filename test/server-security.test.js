@@ -88,6 +88,33 @@ function startApiServer(responseContent = '{"intent":"none","commands":[]}', opt
       const reply=()=>{
         if(res.destroyed)return;
         const configured=typeof options.response==="function"?options.response({index:requests.length-1,requestBody}):null,status=configured?.status||options.status||200,responseBody=configured?.body;
+        if(status===200&&options.stream){
+          const content=responseBody??responseContent,half=Math.max(1,Math.floor(content.length/2)),events=options.format==="anthropic"?[
+            `event: message_start\ndata: ${JSON.stringify({type:"message_start",message:{id:"test-response-id",model:"test-upstream-model",usage:{input_tokens:10}}})}\n\n`,
+            `event: content_block_delta\ndata: ${JSON.stringify({type:"content_block_delta",index:0,delta:{type:"text_delta",text:content.slice(0,half)}})}\n\n`,
+            `event: content_block_delta\ndata: ${JSON.stringify({type:"content_block_delta",index:0,delta:{type:"text_delta",text:content.slice(half)}})}\n\n`,
+            `event: message_delta\ndata: ${JSON.stringify({type:"message_delta",delta:{stop_reason:options.stopReason||"end_turn"},usage:{output_tokens:5}})}\n\n`,
+            `event: message_stop\ndata: ${JSON.stringify({type:"message_stop"})}\n\n`,
+          ]:[
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{role:"assistant"},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{content:content.slice(0,half)},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{content:content.slice(half)},finish_reason:null}]})}\n\n`,
+            `data: ${JSON.stringify({id:"test-response-id",model:"test-upstream-model",choices:[{delta:{},finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5}})}\n\n`,
+            "data: [DONE]\n\n",
+          ];
+          res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache","x-request-id":"test-upstream-request"});
+          res.flushHeaders();
+          let index=0;
+          const writeNext=()=>{
+            if(res.destroyed)return;
+            if(index>=events.length){res.end();return}
+            res.write(events[index++]);
+            if(options.streamDelayMs)setTimeout(writeNext,options.streamDelayMs);
+            else setImmediate(writeNext);
+          };
+          writeNext();
+          return;
+        }
         res.writeHead(status, { "Content-Type":"application/json", "x-request-id":"test-upstream-request" });
         const successfulBody=options.format==="anthropic"?{id:"test-response-id",model:"test-upstream-model",stop_reason:options.stopReason||"end_turn",content:options.contentBlocks??[{type:"text",text:responseBody??responseContent}]}:{id:"test-response-id",model:"test-upstream-model",choices:[{finish_reason:"stop",message:{content:responseBody??responseContent}}]};
         res.end(status===200?JSON.stringify(successfulBody):responseBody??responseContent);
@@ -100,6 +127,58 @@ function startApiServer(responseContent = '{"intent":"none","commands":[]}', opt
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolve({ server, requests, origin:`http://127.0.0.1:${server.address().port}` }));
   });
+}
+
+function outboundModelText(rawRequest) {
+  const request = JSON.parse(rawRequest);
+  return request.messages[1].content.find(part => part.type === "text").text;
+}
+
+function parseRefineModelText(text) {
+  const stablePrefix = "PenEcho Refine stable context (JSON; cacheable across edits of this target):\n",
+    filesIntroduction = "\n\nPenEcho virtual files follow.",
+    stableEnd = text.indexOf(filesIntroduction), files = [];
+  assert.equal(text.startsWith(stablePrefix), true);
+  assert.ok(stableEnd > stablePrefix.length);
+  const stableMetadata = JSON.parse(text.slice(stablePrefix.length, stableEnd));
+  let cursor = text.indexOf("\n\nPenEcho virtual file:\n", stableEnd);
+  assert.ok(cursor > stableEnd);
+  while (text.startsWith("\n\nPenEcho virtual file:\n", cursor)) {
+    cursor += 2;
+    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\nendsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
+    assert.ok(header);
+    const contentStart = cursor + header[0].length, endMarker = `\n<<<END ${header[5]}>>>`, contentEnd = text.indexOf(endMarker, contentStart);
+    assert.ok(contentEnd >= contentStart);
+    const content = text.slice(contentStart, contentEnd), endsWithNewline = /(?:\r\n|\r|\n)$/.test(content),
+      separators = content.match(/\r\n|\r|\n/g)?.length || 0,
+      logicalLines = content.length ? separators + (endsWithNewline ? 0 : 1) : 0;
+    assert.equal(Buffer.byteLength(content, "utf8"), Number(header[2]));
+    assert.equal(logicalLines, Number(header[3]));
+    assert.equal(endsWithNewline, header[4] === "true");
+    assert.equal(content.includes(header[5]), false);
+    files.push({ path:header[1], content, utf8Bytes:Number(header[2]), logicalLines, endsWithNewline, boundary:header[5] });
+    cursor = contentEnd + endMarker.length;
+  }
+  const currentPrefix = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n";
+  assert.equal(text.startsWith(currentPrefix, cursor), true);
+  const currentStart = cursor + currentPrefix.length,
+    retryPrefix = "\n\nPenEcho Refine retry instruction:\n",
+    retryStart = text.indexOf(retryPrefix, currentStart),
+    currentEnd = retryStart < 0 ? text.length : retryStart,
+    currentMetadata = JSON.parse(text.slice(currentStart, currentEnd)),
+    metadata = {
+      ...stableMetadata,
+      ...currentMetadata,
+      widgetEdit:{ ...stableMetadata.widgetEdit, ...currentMetadata.widgetEdit },
+    };
+  cursor = currentEnd;
+  let retryInstruction = "";
+  if (text.startsWith(retryPrefix, cursor)) {
+    retryInstruction = text.slice(cursor + retryPrefix.length);
+    cursor = text.length;
+  }
+  assert.equal(cursor, text.length);
+  return { metadata, files, retryInstruction };
 }
 
 function startTruncatedApiServer() {
@@ -204,6 +283,11 @@ function validPayload() {
   };
 }
 
+async function progressEvents(response) {
+  assert.match(response.headers.get("content-type") || "", /^application\/x-ndjson\b/);
+  return (await response.text()).trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
+}
+
 function validSharedCanvas(id = `${Date.now()}-123e4567-e89b-12d3-a456-426614174000`, overrides = {}) {
   return {
     version:1,
@@ -283,6 +367,7 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.equal(currentResponse.status, 200);
     assert.equal(current.hasApiKey, true);
     assert.equal(Object.hasOwn(current, "apiKey"), false);
+    assert.equal(current.maxTokens, 20000);
     const savedResponse = await fetch(`${origin}/api/settings`, {
       method:"POST", headers,
       body:JSON.stringify({ scope:"api", provider:"api", apiFormat:"anthropic", apiUrl:"https://api.example.test/anthropic/", apiModel:"model-next", apiKey:"", effort:"high", timeoutSeconds:120, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }),
@@ -308,6 +393,9 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.equal(afterSystem.aiProvider, "codex-cli");
     const updatedText = await fs.promises.readFile(path.join(stateDir, "config.env"), "utf8");
     assert.match(updatedText, /^AUTO_AI_DELAY_SECONDS=2\.5$/m);
+    assert.match(updatedText, /^MAX_TOKENS=20000$/m);
+    const invalidMaxTokens = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"system", maxTokens:14999 }) });
+    assert.equal(invalidMaxTokens.status, 400);
     const invalid = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", apiKey:"", apiUrl:"file:///tmp/model", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTraceLimit:100 }) });
     assert.equal(invalid.status, 400);
   } finally { await stopServer(child); }
@@ -324,6 +412,33 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
     assert.equal(Object.hasOwn(initial.connections[0], "active"), false);
     assert.equal(Object.hasOwn(initial.connections[0], "apiKey"), false);
 
+    const emptyEffort = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliPath:"codex", effort:"" } }) }), emptyEffortBody = await emptyEffort.json();
+    assert.equal(emptyEffort.status, 200, JSON.stringify(emptyEffortBody));
+    const defaultedConnection = emptyEffortBody.connections.find(connection => connection.id === emptyEffortBody.savedId);
+    assert.equal(defaultedConnection?.effort, "medium");
+    const defaultedStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(defaultedStore.connections.find(connection => connection.id === emptyEffortBody.savedId)?.effort, "medium");
+    const removeDefaulted = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:emptyEffortBody.savedId }) });
+    assert.equal(removeDefaulted.status, 200);
+
+    const missingCliTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"codex-cli", cliPath:path.join(stateDir, "missing-codex"), effort:"xhigh" } }) }), missingCliBody = await missingCliTest.json();
+    assert.equal(missingCliTest.status, 400);
+    assert.equal(missingCliBody.installable, true);
+    assert.equal(missingCliBody.provider, "codex-cli");
+    assert.match(missingCliBody.guidance, /chatgpt\.com\/codex\/install\.sh/);
+    assert.match(missingCliBody.guidance, /codex login/);
+    assert.doesNotMatch(missingCliBody.guidance, /restart/i);
+    assert.equal((await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json())).connections.length, 1);
+
+    const missingKimiTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"kimi-cli", cliPath:path.join(stateDir, "missing-kimi"), effort:"high" } }) }), missingKimiBody = await missingKimiTest.json();
+    assert.equal(missingKimiTest.status, 400);
+    assert.equal(missingKimiBody.installable, true);
+    assert.equal(missingKimiBody.provider, "kimi-cli");
+    assert.match(missingKimiBody.guidance, /code\.kimi\.com\/kimi-code\/install\.sh/);
+    assert.match(missingKimiBody.guidance, /kimi login/);
+    assert.doesNotMatch(missingKimiBody.error, /Install it|restart PenEcho/);
+    assert.doesNotMatch(missingKimiBody.guidance, /restart/i);
+
     const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"codex-cli", cliModel:"gpt-5.6-sol", cliPath:"codex", effort:"high" } }) }), created = await create.json();
     assert.equal(create.status, 200, JSON.stringify(created));
     const codex = created.connections.find(connection => connection.provider === "codex-cli");
@@ -338,7 +453,7 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
 
     for (let index = 2; index <= 9; index++) {
       const preset = index === 2 ? { apiPreset:"minimax-china-coding", apiFormat:"anthropic", apiUrl:"https://api.minimaxi.com/anthropic", apiModel:"MiniMax-M3" } : { apiFormat:"openai", apiUrl:`https://api${index}.example.test/v1`, apiModel:`model-${index}` };
-      const response = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", ...preset, apiKey:`key-${index}`, effort:"" } }) });
+      const response = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", ...preset, apiKey:`key-${index}`, effort:index === 2 ? "medium" : "xhigh" } }) });
       assert.equal(response.status, 200, `connection ${index}`);
     }
     const full = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
@@ -347,7 +462,7 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
     assert.equal(minimax?.name, "MiniMax-M3");
     assert.equal(minimax?.apiFormat, "anthropic");
     assert.equal(minimax?.apiUrl, "https://api.minimaxi.com/anthropic");
-    const overflow = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://overflow.example.test/v1", apiModel:"overflow", apiKey:"overflow", effort:"" } }) });
+    const overflow = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://overflow.example.test/v1", apiModel:"overflow", apiKey:"overflow", effort:"xhigh" } }) });
     assert.equal(overflow.status, 400);
 
     const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:codex.id }) }), removed = await remove.json();
@@ -366,26 +481,44 @@ test("two clients independently route requests through the shared connection lis
   const openai = await startApiServer('{"intent":"none","commands":[]}', { delayMs:250 }), anthropic = await startApiServer('{"intent":"none","commands":[]}', { format:"anthropic", delayMs:250 });
   const { child, origin, stateDir } = await startServer(apiServerEnv(openai.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
   try {
-    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"key-b", effort:"" } }) }), created = await create.json();
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"key-b", effort:"medium" } }) }), created = await create.json();
     assert.equal(create.status, 200, JSON.stringify(created));
     const connection = created.connections.find(item => item.apiModel === "model-b");
     const clientAList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json()),
       clientBList = await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json());
     assert.deepEqual(clientAList.connections, clientBList.connections);
 
-    const clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) }),
-      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
+    const testedResponse = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ id:connection.id, connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${anthropic.origin}/v1`, apiModel:"model-b", apiKey:"", effort:"medium" } }) }), tested = await testedResponse.json();
+    assert.equal(testedResponse.status, 200, JSON.stringify(tested));
+    assert.match(tested.message, /anthropic API responded with HTTP 200/);
+    const testRequest = JSON.parse(anthropic.requests[0]), testImage = testRequest.messages[0].content.find(part => part.type === "image");
+    assert.equal(testImage.source.media_type, "image/webp");
+    assert.ok(testImage.source.data.length > 0);
+    assert.equal((await fetch(`${origin}/api/settings/connections`, { headers:{ Origin:origin } }).then(response => response.json())).connections.length, 2);
+
+    const clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) }),
+      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
     const deadline = Date.now() + 3000;
     while ((!openai.requests.length || !anthropic.requests.length) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(openai.requests.length, 1);
-    assert.equal(anthropic.requests.length, 1);
+    assert.equal(anthropic.requests.length, 2);
     assert.equal(JSON.parse(anthropic.requests[0]).model, "model-b");
 
     const remove = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:connection.id }) });
     assert.equal(remove.status, 200, await remove.text());
     const [clientAResponse, clientBResponse] = await Promise.all([clientA, clientB]);
-    assert.equal(clientAResponse.status, 200, await clientAResponse.text());
-    assert.equal(clientBResponse.status, 200, await clientBResponse.text());
+    assert.equal(clientAResponse.status, 200);
+    assert.equal(clientBResponse.status, 200);
+    const [clientAEvents,clientBEvents]=await Promise.all([progressEvents(clientAResponse),progressEvents(clientBResponse)]),
+      clientAIds=new Set(clientAEvents.map(event=>event.requestId)),clientBIds=new Set(clientBEvents.map(event=>event.requestId));
+    assert.equal(clientAIds.size,1);
+    assert.equal(clientBIds.size,1);
+    assert.notEqual([...clientAIds][0],[...clientBIds][0]);
+    for(const events of [clientAEvents,clientBEvents]){
+      assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>event.phase),["received","preparing-image","connecting","waiting","receiving","validating"]);
+      assert.equal(events.at(-1).type,"result");
+      assert.equal(events.at(-1).data.requestId,events.at(-1).requestId);
+    }
 
     const deletedSelection = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
     assert.equal(deletedSelection.status, 200, await deletedSelection.text());
@@ -616,7 +749,7 @@ test("Codex CLI mode writes the configured WebP image with a .webp extension", {
     const configuredPayload=validPayload(),configuredResponse=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(configuredPayload)});
     assert.equal(configuredResponse.status,200);
     const configured=JSON.parse(await fs.promises.readFile(record,"utf8"));
-    assert.ok(!configured.args.some(argument=>argument.startsWith("model_reasoning_effort=")));
+    assert.ok(configured.args.includes('model_reasoning_effort="medium"'));
   } finally {
     await stopServer(child);
     await fs.promises.rm(directory,{recursive:true,force:true});
@@ -641,8 +774,12 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     const disabledResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(disabledPayload)});
     assert.equal(disabledResponse.status,200);
     const disabledRequest=JSON.parse(openai.requests[0]);
+    assert.equal(disabledRequest.stream,true);
+    assert.equal(disabledRequest.max_tokens,20000);
     assert.equal(disabledRequest.reasoning_effort,"none");
     assert.equal(Object.hasOwn(disabledRequest,"temperature"),false);
+    assert.match(disabledRequest.messages[0].content,/Never spend more than one half of the available output-token allowance on internal reasoning/);
+    assert.match(disabledRequest.messages[0].content,/reserve at least the other half for one complete final response/);
     const maxPayload=validPayload();maxPayload.reasoningEffort="max";
     const maxResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(maxPayload)});
     assert.equal(maxResponse.status,200);
@@ -672,18 +809,19 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     const response=await fetch(`${anthropicServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())});
     assert.equal(response.status,200);
     const request=JSON.parse(anthropic.requests[0]);
+    assert.equal(request.stream,true);
     assert.deepEqual(request.thinking,{type:"adaptive"});
     assert.equal(request.output_config.effort,"max");
     assert.equal(Object.hasOwn(request,"temperature"),false);
-    assert.equal(request.max_tokens,16384);
+    assert.equal(request.max_tokens,20000);
     assert.match(request.system,/Treat the canvas as an existing document to extend/);
     assert.match(request.system,/place only `5` immediately after the equals sign/);
     assert.match(request.system,/within approximately 6144 tokens/);
-    assert.match(request.system,/no more than roughly 7000 tokens/);
-    assert.match(request.system,/Reserve sufficient output budget for one complete valid JSON response/);
+    assert.match(request.system,/Never spend more than one half of the available output-token allowance on internal reasoning/);
+    assert.match(request.system,/reserve at least the other half for one complete final response/);
     const fallbackStart=request.system.indexOf("Mandatory final visible-response fallback"),
       schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
-    assert.ok(fallbackStart > request.system.indexOf("Reserve sufficient output budget"));
+    assert.ok(fallbackStart > request.system.indexOf("reserve at least the other half"));
     assert.match(request.system.slice(fallbackStart,schemaStart),/their absence is not evidence that there is no new input/);
     assert.match(request.system.slice(fallbackStart,schemaStart),/entire attached input image within sourceRect/);
     assert.ok(schemaStart > fallbackStart);
@@ -700,9 +838,35 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.deepEqual(request.thinking,{type:"disabled"});
     assert.equal(request.output_config,undefined);
     assert.equal(Object.hasOwn(request,"temperature"),false);
-    assert.equal(request.max_tokens,12288);
-    assert.doesNotMatch(request.system,/no more than roughly 7000 tokens/);
+    assert.equal(request.max_tokens,20000);
+    assert.match(request.system,/Never spend more than one half of the available output-token allowance on internal reasoning/);
   } finally { await stopServer(disabledServer.child); await new Promise(resolve=>disabled.server.close(resolve)); }
+});
+
+test("API mode consumes true upstream SSE and reports receiving before validation", { timeout:20000 }, async () => {
+  const responseContent=JSON.stringify({intent:"answer",commands:[{tool:"write_text",x:10,y:10,text:"streamed",fontSize:24,maxWidth:300,lineHeight:1.35}]}),
+    upstream=await startApiServer(responseContent,{stream:true,streamDelayMs:10}),running=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),
+      events=await progressEvents(response),phases=events.filter(event=>event.type==="progress").map(event=>event.phase),terminal=events.at(-1);
+    assert.equal(response.status,200);
+    assert.deepEqual(phases,["received","preparing-image","connecting","waiting","receiving","validating"]);
+    assert.equal(terminal.type,"result");
+    assert.equal(terminal.data.commands[0].text,"streamed");
+    assert.equal(JSON.parse(upstream.requests[0]).stream,true);
+  } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("AI progress streams send heartbeats while the model is silent", { timeout:20000 }, async () => {
+  const upstream=await startApiServer('{"intent":"none","commands":[]}',{delayMs:140}),
+    running=await startServer(apiServerEnv(upstream.origin,{PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS:"25"}));
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),
+      events=await progressEvents(response),heartbeats=events.filter(event=>event.type==="activity");
+    assert.equal(response.status,200);
+    assert.ok(heartbeats.length>=2);
+    assert.equal(events.at(-1).type,"result");
+  } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
 });
 
 test("legacy animate_scene output is always filtered in favor of General HTML SVG", { timeout:20000 }, async () => {
@@ -734,7 +898,7 @@ test("Anthropic output exhaustion reports the real response limit instead of a J
   try {
     const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
     assert.equal(response.status,502);
-    assert.match(body.error,/12288-token response allowance/);
+    assert.match(body.error,/20000-token response allowance/);
     assert.doesNotMatch(body.error,/Unexpected end of JSON input/);
   } finally { await stopServer(running.child); await new Promise(resolve=>upstream.server.close(resolve)); }
 });
@@ -1001,6 +1165,8 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     const outbound = JSON.parse(upstream.requests[0]),
       modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
     const { styles:ignoredStyles, ...modelDescriptor } = descriptor;
+    assert.equal(Object.keys(modelInput)[0], "languagePolicy");
+    assert.ok(Object.keys(modelInput).indexOf("enabledPlugins") < Object.keys(modelInput).indexOf("trigger"));
     assert.deepEqual(modelInput.enabledPlugins, [modelDescriptor]);
     assert.equal("styles" in modelInput.enabledPlugins[0], false);
     assert.equal(Object.keys(modelInput).at(-1), "widgetGeometry");
@@ -1208,7 +1374,7 @@ test("professional diagrams accept local source renderers and keep unknown forma
           response(diagram("mermaid")),
           response(diagram("Graphviz DOT", "digraph G { A -> B }")),
           response(diagram("plantuml", "@startuml\nA -> B\n@enduml")),
-          response(diagram("mermaid", "flowchart LR\nA --> B --> C")),
+          response({ tool:"widget_patch", patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,2 +1,2 @@\n flowchart LR\n-A --> B\n+A --> B --> C\n" }),
           response(diagram("dot", "digraph G { A -> B -> C }")),
           response(diagram("dot", "digraph G { A -> B -> C }")),
           response(diagram("mermaid", `%% ${"x".repeat(90 * 1024)}`)),
@@ -1275,14 +1441,15 @@ test("professional diagrams accept local source renderers and keep unknown forma
     }).then(value => value.json());
     assert.equal(refined.commands[0].tool, "diagram_source");
     assert.equal(refined.commands[0].sourceFormat, "mermaid");
-    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C");
+    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C\n");
 
-    const changedFormat = await fetch(`${running.origin}/api/ai/command`, {
+    const fullReplacementResponse = await fetch(`${running.origin}/api/ai/command`, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body:JSON.stringify(refinePayload),
-    }).then(value => value.json());
-    assert.deepEqual(changedFormat.commands, []);
+    }), fullReplacement = await fullReplacementResponse.json();
+    assert.equal(fullReplacementResponse.status, 502);
+    assert.match(fullReplacement.error, /widget patch that could not be applied after retry/);
 
     const largeSource = await fetch(`${running.origin}/api/ai/command`, {
       method:"POST",
@@ -1293,27 +1460,37 @@ test("professional diagrams accept local source renderers and keep unknown forma
     assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") > 20 * 1024);
     assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") <= 100 * 1024);
 
-    const outbound = JSON.parse(upstream.requests[3]),
-      modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
+    const modelText = outboundModelText(upstream.requests[3]),
+      { metadata:modelInput, files, retryInstruction } = parseRefineModelText(modelText);
     assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
-    assert.equal(modelInput.widgetEdit.source, refinePayload.widgetEdit.source);
+    assert.equal("source" in modelInput.widgetEdit, false);
     assert.equal("html" in modelInput.widgetEdit, false);
-    assert.match(modelInput.widgetEditPolicy, /same pluginId and sourceFormat[\s\S]*?never HTML/);
+    assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.source", widgetEditField:"source" }]);
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff[\s\S]*?widget\.source/);
+    assert.match(modelInput.widgetEditPolicy, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?Never emit a bare @@ header/);
+    assert.match(modelInput.widgetEditPolicy, /first space is the unified-diff marker[\s\S]*?original source indentation/);
+    assert.equal(retryInstruction, "");
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
+      { path:"widget.source", content:`${refinePayload.widgetEdit.source}\n`, endsWithNewline:true },
+    ]);
+    assert.match(modelText, /<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\nflowchart LR\nA --> B\n\n<<<END/);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
   }
 });
 
-test("custom plugin widget refinement preserves its bundle and rejects ambiguous replacements", { timeout:20000 }, async () => {
+test("custom plugin widget refinement applies one patch and rejects ambiguous patches", { timeout:20000 }, async () => {
   const replacement = {
-      tool:"html_widget",
-      html:"<!doctype html><main class=\"custom-node\">Updated</main>",
-      diagramKind:"architecture",
-      copyText:"client -> api -> database",
+      tool:"widget_patch",
+      patch:"--- a/widget.html\n+++ b/widget.html\n@@ -1,1 +1,1 @@\n-<!doctype html><main class=\"custom-node\">Existing</main>\n+<!doctype html><main class=\"custom-node\">Updated</main>\n",
+    },
+    oversized = {
+      tool:"widget_patch",
+      patch:`--- a/widget.html\n+++ b/widget.html\n@@ -1,1 +1,1 @@\n-<!doctype html><main class="custom-node">Existing</main>\n+<!doctype html><main>${"x".repeat(200000)}</main>\n`,
     },
     response = commands => JSON.stringify({ intent:"answer", commands }),
-    upstream = await startApiServer("", { response:({index}) => ({ body:index === 0 ? response([replacement]) : response([replacement, { ...replacement, title:"Ambiguous second widget" }]) }) }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:index === 0 || index >= 5 ? response([replacement]) : index <= 2 ? response([replacement, replacement]) : response([oversized]) }) }),
     running = await startServer(apiServerEnv(upstream.origin)),
     plugin = {
       id:"custom-diagram",
@@ -1338,6 +1515,19 @@ test("custom plugin widget refinement preserves its bundle and rejects ambiguous
     sourceFormat:"d2",
     source:"client -> api -> database",
     targetId:"client-only-widget-id",
+    runtimeDiagnostics:{
+      errors:[{
+        kind:"error",
+        name:"TypeError",
+        message:"A widget script failed",
+        file:"widget.html",
+        line:35,
+        column:12,
+        repeatedCount:2,
+        stack:["at render (widget.html:35:12)"],
+      }],
+      truncated:false,
+    },
   };
   try {
     const acceptedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
@@ -1365,21 +1555,128 @@ test("custom plugin widget refinement preserves its bundle and rejects ambiguous
     );
     assert.equal(accepted.commands[0].sourceFormat, "d2");
     assert.equal(accepted.commands[0].copyLabel, "Copy d2");
+    assert.equal(accepted.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>\n");
+    assert.equal(accepted.commands[0].copyText, payload.widgetEdit.source);
 
-    const outbound = JSON.parse(upstream.requests[0]),
-      modelInput = JSON.parse(outbound.messages[1].content.find(part => part.type === "text").text);
+    const { metadata:modelInput, files, retryInstruction } = parseRefineModelText(outboundModelText(upstream.requests[0]));
     assert.equal(modelInput.enabledPlugins[0].document, plugin.document);
     assert.equal("styles" in modelInput.enabledPlugins[0], false);
     assert.equal(modelInput.widgetEdit.pluginId, plugin.id);
-    assert.equal(modelInput.widgetEdit.html, payload.widgetEdit.html);
+    assert.equal("html" in modelInput.widgetEdit, false);
+    assert.equal("source" in modelInput.widgetEdit, false);
     assert.equal("targetId" in modelInput.widgetEdit, false);
-    assert.match(modelInput.widgetEditPolicy, /one-shot replacement of exactly the supplied html_widget target/);
+    assert.deepEqual(modelInput.widgetEdit.runtimeDiagnostics, payload.widgetEdit.runtimeDiagnostics);
+    assert.deepEqual(modelInput.widgetEdit.patchFiles, [
+      { path:"widget.html", widgetEditField:"html" },
+      { path:"widget.source", widgetEditField:"source" },
+    ]);
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff[\s\S]*?widget\.html/);
+    assert.match(modelInput.widgetEditPolicy, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?Never emit a bare @@ header/);
+    assert.match(modelInput.widgetEditPolicy, /first space is the unified-diff marker[\s\S]*?original source indentation/);
+    assert.match(modelInput.widgetEditPolicy, /newly added or replaced HTML[\s\S]*?one long or minified line[\s\S]*?below 160 characters/);
+    assert.match(modelInput.widgetEditPolicy, /runtimeDiagnostics[\s\S]*?try to repair JavaScript errors[\s\S]*?display or interaction[\s\S]*?preserving unrelated behavior/);
+    assert.doesNotMatch(modelInput.widgetEditPolicy, /JSXGraph|earliest runtime error/);
+    assert.equal(retryInstruction, "");
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
+      { path:"widget.html", content:`${payload.widgetEdit.html}\n`, endsWithNewline:true },
+      { path:"widget.source", content:`${payload.widgetEdit.source}\n`, endsWithNewline:true },
+    ]);
 
-    const ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+    const shiftedPayload = { ...payload, widgetEdit:{ ...payload.widgetEdit, box:{ ...payload.widgetEdit.box, x:payload.widgetEdit.box.x + 1 } } },
+      ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(shiftedPayload) }),
       ambiguous = await ambiguousResponse.json();
-    assert.equal(ambiguousResponse.status, 200);
-    assert.deepEqual(ambiguous.commands, []);
+    assert.equal(ambiguousResponse.status, 502);
+    assert.match(ambiguous.error, /widget patch that could not be applied after retry/);
     assert.equal(upstream.requests.length, 3);
+    const firstText = outboundModelText(upstream.requests[0]), shiftedText = outboundModelText(upstream.requests[1]),
+      currentContextMarker = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n",
+      firstCurrent = firstText.indexOf(currentContextMarker), shiftedCurrent = shiftedText.indexOf(currentContextMarker);
+    assert.ok(firstCurrent > 0);
+    assert.equal(firstText.slice(0, firstCurrent), shiftedText.slice(0, shiftedCurrent));
+    assert.notEqual(firstText.slice(firstCurrent), shiftedText.slice(shiftedCurrent));
+    const retryRequest = parseRefineModelText(outboundModelText(upstream.requests[2]));
+    assert.deepEqual(retryRequest.files.map(file => file.content), [`${payload.widgetEdit.html}\n`, `${payload.widgetEdit.source}\n`]);
+    assert.match(retryRequest.retryInstruction, /previous widget patch[\s\S]*?real multiline virtual-file blocks[\s\S]*?standard unified diff/);
+    assert.match(retryRequest.retryInstruction, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?never return a bare @@ header/);
+    assert.ok(outboundModelText(upstream.requests[2]).endsWith(retryRequest.retryInstruction));
+
+    const oversizedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      rejectedOversized = await oversizedResponse.json();
+    assert.equal(oversizedResponse.status, 502);
+    assert.match(rejectedOversized.error, /widget patch that could not be applied after retry/);
+    assert.equal(upstream.requests.length, 5);
+
+    const mirroredPayload = {
+        ...payload,
+        widgetEdit:{
+          ...payload.widgetEdit,
+          sourceFormat:"html",
+          source:payload.widgetEdit.html,
+          copyLabel:"Copy HTML",
+        },
+      },
+      mirroredResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(mirroredPayload) }),
+      mirrored = await mirroredResponse.json(),
+      { metadata:mirroredModelInput, files:mirroredFiles } = parseRefineModelText(outboundModelText(upstream.requests[5]));
+    assert.equal(mirroredResponse.status, 200);
+    assert.equal(mirrored.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>\n");
+    assert.equal("copyText" in mirrored.commands[0], false);
+    assert.equal("copyLabel" in mirrored.commands[0], false);
+    assert.equal(mirroredModelInput.widgetEdit.sourceMirrorsHtml, true);
+    assert.equal("source" in mirroredModelInput.widgetEdit, false);
+    assert.deepEqual(mirroredModelInput.widgetEdit.patchFiles, [{ path:"widget.html", widgetEditField:"html" }]);
+    assert.match(mirroredModelInput.widgetEditPolicy, /sourceMirrorsHtml[\s\S]*?sole canonical file[\s\S]*?Copy HTML/);
+    assert.deepEqual(mirroredFiles.map(file => ({ path:file.path, content:file.content })), [
+      { path:"widget.html", content:`${mirroredPayload.widgetEdit.html}\n` },
+    ]);
+    assert.equal(upstream.requests.length, 6);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("widget refinement applies an exact uniquely located patch without a model retry", { timeout:20000 }, async () => {
+  const patch = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -40,99 +42,70 @@",
+      " <main>",
+      "-<h1>Old</h1>",
+      "+<h1>Updated</h1>",
+      " <p>Keep</p>",
+      "",
+    ].join("\n"),
+    upstream = await startApiServer(JSON.stringify({ intent:"answer", commands:[{ tool:"widget_patch", patch }] })),
+    running = await startServer(apiServerEnv(upstream.origin)), payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [builtInPluginDescriptor("general")];
+  payload.widgetEdit = {
+    mode:"replace",
+    widgetType:"html_widget",
+    pluginId:"general",
+    title:"Existing widget",
+    instructionMode:"nearby-dirty",
+    box:{ x:120, y:240, w:1200, h:700 },
+    html:"<!doctype html>\n<main>\n<h1>Old</h1>\n<p>Keep</p>\n</main>\n",
+    sourceFormat:"html",
+    sourceMirrorsHtml:true,
+    refreshSeconds:0,
+  };
+  try {
+    const response = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(payload) }),
+      result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.attempts, 1);
+    assert.equal(upstream.requests.length, 1);
+    assert.match(result.commands[0].html, /<h1>Updated<\/h1>/);
+    const { metadata:modelInput, files } = parseRefineModelText(outboundModelText(upstream.requests[0]));
+    assert.equal("html" in modelInput.widgetEdit, false);
+    assert.equal("source" in modelInput.widgetEdit, false);
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
+      { path:"widget.html", content:payload.widgetEdit.html, endsWithNewline:true },
+    ]);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -1457,6 +1754,8 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /"commands":\{"type":"array","minItems":1,"maxItems":16/);
   assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
+  assert.match(source, /Do not minify generated HTML[\s\S]*?stable multiline formatting[\s\S]*?below 160 characters/);
+  assert.match(source, /reusable source is the HTML document itself[\s\S]*?omit copyText and copyLabel[\s\S]*?Copy HTML/);
   assert.match(source, /clamp\(36px,1\.2cqw,52px\)[\s\S]*?at least 28px[\s\S]*?clamp\(52px,2cqw,80px\)[\s\S]*?14–16px are too small/);
   assert.match(source, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
@@ -1743,9 +2042,12 @@ test("API mode retries the original PNG only after an explicit WebP format rejec
     return imageUrl.startsWith("data:image/webp")?{status:415,body:'{"error":{"message":"Unsupported image format: webp"}}'}:{status:200};
   }}),{child,origin}=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true"}));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),events=await progressEvents(response),body=events.at(-1).data;
     assert.equal(response.status,200);
     assert.equal(body.attempts,2);
+    assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>[event.phase,event.attempt||null]),[
+      ["received",null],["preparing-image",null],["connecting",1],["waiting",1],["receiving",1],["image-fallback",2],["waiting",2],["receiving",2],["validating",2],
+    ]);
     assert.equal(upstream.requests.length,2);
     const imageUrls=upstream.requests.map(raw=>JSON.parse(raw).messages[1].content.find(part=>part.type==="image_url").image_url.url);
     assert.match(imageUrls[0],/^data:image\/webp;base64,/);
@@ -1907,9 +2209,12 @@ test("API mode retries an invalid native draw without restoring legacy animation
     upstream=await startApiServer("",{response:({index})=>({body:index===0?invalid:corrected})}),
     {child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/x-ndjson"},body:JSON.stringify(validPayload())}),events=await progressEvents(response),body=events.at(-1).data;
     assert.equal(response.status,200);
     assert.equal(body.attempts,2);
+    assert.deepEqual(events.filter(event=>event.type==="progress").map(event=>[event.phase,event.attempt||null]),[
+      ["received",null],["preparing-image",null],["connecting",1],["waiting",1],["receiving",1],["validating",1],["retrying",2],["waiting",2],["receiving",2],["validating",2],
+    ]);
     assert.deepEqual(body.commands[0]?.types,["ellipse","circle"]);
     const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
     assert.match(retryText,/previous response contained a draw command/);
@@ -2096,6 +2401,25 @@ test("a new Codex request immediately supersedes the running request", { timeout
   }
 });
 
+test("local CLI requests from different Canvas clients do not supersede each other", { timeout: 20000 }, async () => {
+  const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-client-isolation-test-")),
+    fakeCli = path.join(directory, "fake-codex.js"), completedFile = path.join(directory, "completed.txt");
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),at=process.argv.indexOf("-o");setTimeout(()=>{fs.appendFileSync(path.join(__dirname,"completed.txt"),"1");fs.writeFileSync(process.argv[at+1],'{"intent":"none","commands":[]}')},300);\n`);
+  const { child, origin } = await startServer(serverEnv({ CODEX_CLI_PATH:fakeCli }));
+  try {
+    const base = { "Content-Type":"application/json", Origin:origin },
+      clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...base, "X-PenEcho-Client":"123e4567-e89b-12d3-a456-426614174000" }, body:JSON.stringify(validPayload()) }),
+      clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ ...base, "X-PenEcho-Client":"223e4567-e89b-12d3-a456-426614174000" }, body:JSON.stringify(validPayload()) }),
+      [responseA, responseB] = await Promise.all([clientA, clientB]);
+    assert.equal(responseA.status, 200, await responseA.text());
+    assert.equal(responseB.status, 200, await responseB.text());
+    assert.equal(await fs.promises.readFile(completedFile, "utf8"), "11");
+  } finally {
+    await stopServer(child);
+    await fs.promises.rm(directory, { recursive:true, force:true });
+  }
+});
+
 test("rapid Codex requests leave only the newest request active", { timeout: 20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-latest-chain-test-")),fakeCli=path.join(directory,"fake-codex.js"),countFile=path.join(directory,"count.txt"),startedFile=path.join(directory,"started.txt");
   await fs.promises.writeFile(fakeCli,`"use strict";const fs=require("node:fs"),path=require("node:path"),countFile=path.join(__dirname,"count.txt"),count=Number(fs.existsSync(countFile)?fs.readFileSync(countFile,"utf8"):0)+1;fs.writeFileSync(countFile,String(count));fs.appendFileSync(path.join(__dirname,"started.txt"),String(count));if(count<3)setInterval(()=>{},1000);else{const at=process.argv.indexOf("-o");fs.writeFileSync(process.argv[at+1],'{"intent":"none","commands":[]}')}\n`);
@@ -2223,7 +2547,7 @@ test("API mode uses one configured key without probes or fallback credentials", 
   const server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"),cli=fs.readFileSync(path.join(ROOT,"src","cli","main.js"),"utf8"),configure=fs.readFileSync(path.join(ROOT,"src","cli","configure-ui.js"),"utf8");
   for(const source of [server,cli,configure])assert.doesNotMatch(source,/OPENAI_PRO_API_KEY/);
   assert.doesNotMatch(server,/api-health|api-selection|api-runtime-failure|refreshApiConfig|testApiKey|HEALTH_INTERVAL|HEALTH_TIMEOUT/);
-  assert.match(server,/providerRequest\(provider\.apiKey,provider\.model,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled,provider\.api\)/);
+  assert.match(server,/providerRequest\(provider\.apiKey,provider\.model,text,atlasImage,effort,literalTypeset,animationEnabled,pluginsEnabled,provider\.api,provider\)/);
 });
 
 test("client and server contain no aggregate draft rejection budget", () => {

@@ -279,7 +279,7 @@
     return { x, y, w: right - x, h: bottom - y };
   }
   async function renderExportCanvas() {
-    await snapshotVisibleWidgets();
+    await prepareVisibleWidgetSnapshots(null, false);
     const region = exportRegion();
     if (!region) return null;
     const scale = Math.min(1, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
@@ -437,7 +437,7 @@
       setStatusKey("emptyCanvas");
       return null;
     }
-    await snapshotVisibleWidgets({ bestEffort:true });
+    await prepareVisibleWidgetSnapshots(null, false);
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,

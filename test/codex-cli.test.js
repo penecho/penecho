@@ -31,7 +31,7 @@ test("builds a non-interactive read-only Codex invocation", () => {
   assert.ok(args.includes("image.png"));
   assert.ok(args.includes("answer.txt"));
   assert.ok(args.includes("test-model"));
-  assert.ok(args.includes('model_reasoning_effort="max"'));
+  assert.ok(args.includes('model_reasoning_effort="xhigh"'));
   assert.equal(args.some(value => /temperature/i.test(String(value))), false);
   assert.ok(args.includes("--json"));
   assert.equal(args.includes("--oss"), false);
@@ -41,6 +41,11 @@ test("builds a non-interactive read-only Codex invocation", () => {
 test("leaves Codex reasoning effort unset when the global value is empty", () => {
   const args = buildCodexArgs({ workDir:"work", imageFile:"image.png", outputFile:"answer.txt", model:null, effort:null });
   assert.equal(args.some(value => String(value).startsWith("model_reasoning_effort=")), false);
+});
+
+test("maps maximum effort to the model's supported Codex ceiling", () => {
+  assert.ok(buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:"gpt-5.5", effort:"max" }).includes('model_reasoning_effort="xhigh"'));
+  assert.ok(buildCodexArgs({ workDir:"work", imageFile:null, outputFile:"answer.txt", model:"gpt-5.6-sol", effort:"max" }).includes('model_reasoning_effort="max"'));
 });
 
 test("omits the Codex image argument for a text-only request", () => {
@@ -160,13 +165,26 @@ const fs = require("fs");
 fs.writeFileSync(${JSON.stringify(marker)}, process.cwd());
 process.stdout.write(JSON.stringify({type:"thread.started",thread_id:"test"})+"\\n");
 process.stdout.write(JSON.stringify({type:"turn.started"})+"\\n");
-process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(response)}}})+"\\n");
-process.stdout.write(JSON.stringify({type:"turn.completed",usage:{}})+"\\n");
-setInterval(() => {}, 1000);
+setTimeout(() => {
+  process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(response)}}})+"\\n");
+  process.stdout.write(JSON.stringify({type:"turn.completed",usage:{}})+"\\n");
+  setInterval(() => {}, 1000);
+}, 150);
 `);
   try {
-    const started = Date.now(), content = await callCodexCli({ executable:fakeCli, prompt:"stream", atlasImage:PNG, env:testCodexEnv(directory) }), elapsedMs=Date.now()-started;
+    let reportReceiving,activityCount=0;
+    const receiving = new Promise(resolve => { reportReceiving=resolve; }), started = Date.now(), request = callCodexCli({
+      executable:fakeCli,
+      prompt:"stream",
+      atlasImage:PNG,
+      env:testCodexEnv(directory),
+      onProgress:phase => { if(phase === "receiving")reportReceiving(); },
+      onActivity:() => activityCount++,
+    });
+    assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
+    const content = await request, elapsedMs=Date.now()-started;
     assert.equal(JSON.parse(content).message, "immediate");
+    assert.ok(activityCount>0);
     assert.ok(elapsedMs < 1500, `streamed completion took ${elapsedMs}ms`);
     const workDir = await fs.promises.readFile(marker, "utf8"), deadline=Date.now()+5000;
     while(fs.existsSync(workDir)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));

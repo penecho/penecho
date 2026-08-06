@@ -1,5 +1,10 @@
 "use strict";
 
+const { DEFAULT_REASONING_EFFORT, apiReasoningParameters } = require("../providers/reasoning-effort.js");
+
+const DEFAULT_MAX_TOKENS = 20000;
+const MIN_MAX_TOKENS = 15000;
+
 function resolveApiConfig(value, formatOverride) {
   if (!value) return null;
   const requestedFormat = String(formatOverride || "").trim().toLowerCase();
@@ -30,20 +35,31 @@ function resolveApiConfig(value, formatOverride) {
 
 function normalizedApiEffort(format, value) {
   const effort = String(value || "").trim();
-  return effort || (format === "anthropic" ? "medium" : "max");
+  return effort || DEFAULT_REASONING_EFFORT;
 }
 
-function anthropicEffortParameters(effort, enableThinking = true) {
-  const normalized = normalizedApiEffort("anthropic", effort);
-  if (normalized.toLowerCase() === "none") return { thinking: { type:"disabled" } };
-  return {
-    ...(enableThinking ? { thinking: { type:"adaptive" } } : {}),
-    output_config: { effort:normalized },
-  };
+function anthropicEffortParameters(effort, enableThinking = true, options = {}) {
+  const parameters = apiReasoningParameters({ ...options, apiFormat:"anthropic", effort:normalizedApiEffort("anthropic", effort) });
+  if (enableThinking || parameters.thinking?.type === "disabled") return parameters;
+  const { thinking, ...rest } = parameters;
+  return rest;
 }
 
-function anthropicResponseMaxTokens(effort) {
-  return String(effort || "").trim().toLowerCase() === "max" ? 16384 : 12288;
+function configuredMaxTokens(value, fallback = DEFAULT_MAX_TOKENS) {
+  const text = String(value ?? "").trim(), parsed = text ? Number(text) : fallback;
+  return Number.isSafeInteger(parsed) && parsed > MIN_MAX_TOKENS ? parsed : null;
 }
 
-module.exports = { anthropicEffortParameters, anthropicResponseMaxTokens, normalizedApiEffort, resolveApiConfig };
+function anthropicResponseMaxTokens(effort, maxTokens = DEFAULT_MAX_TOKENS) {
+  return configuredMaxTokens(maxTokens) || DEFAULT_MAX_TOKENS;
+}
+
+module.exports = {
+  DEFAULT_MAX_TOKENS,
+  MIN_MAX_TOKENS,
+  anthropicEffortParameters,
+  anthropicResponseMaxTokens,
+  configuredMaxTokens,
+  normalizedApiEffort,
+  resolveApiConfig,
+};

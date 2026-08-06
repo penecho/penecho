@@ -72,6 +72,7 @@
     supersedeActiveAI("user-input-started");
     clearTimeout(state.timer);
     state.timer = 0;
+    hideWidgetRefineHint();
     state.latestTypedInput = null;
     const erasing = state.mode === "eraser";
     if (erasing) invalidateRecognition();
@@ -171,6 +172,7 @@
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     updateCanvasPointerPreview(e);
+    if (e.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(e));
     if (state.pendingGesture?.id === e.pointerId) {
       updatePendingGesture(e);
       return;
@@ -318,6 +320,7 @@
     state.pointerPreview = null;
     requestInteractionLayerRender();
   });
+  view.addEventListener("pointerleave", () => updateWidgetRefinePointer(null));
   screen.addEventListener("contextmenu", (e) => e.preventDefault());
   view.addEventListener(
     "wheel",
@@ -351,10 +354,12 @@
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    if (mode !== state.mode && !options.preserveWidgetRefinement && (state.activeAI?.widgetEdit || state.pendingWidgetReplacement)) {
+    const staysInWidgetRefineModes = ["pen", "hand"].includes(state.mode) && ["pen", "hand"].includes(mode);
+    if (mode !== state.mode && !staysInWidgetRefineModes && !options.preserveWidgetRefinement && (activeWidgetRefinement() || state.pendingWidgetReplacement)) {
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
-      cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
+      if (state.pendingWidgetReplacement) acceptPendingWidget({ restoreMode:false });
+      else cancelWidgetRefinement("widget-refine-tool-change", { restoreMode:false });
     }
     const leavingDraftHand = state.mode === "hand" && mode !== "hand" && !options.skipDraftFinalize && (state.pending || state.pendingWidget);
     let deferredSelectionCommit = false;
@@ -362,7 +367,7 @@
       state.aiDraftReturnMode = null;
       state.pendingHistoryRestored = false;
       if (state.pending) acceptPending({ restoreMode:false });
-      if (state.pendingWidgetReplacement) rejectPendingWidget(AI_CANCELLED, { restoreMode:false });
+      if (state.pendingWidgetReplacement) acceptPendingWidget({ restoreMode:false });
       else if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     }
     if (!options.preserveSelection && mode !== "select" && state.selection && (state.mode === "select" || leavingDraftHand)) {
@@ -384,8 +389,13 @@
       }
       if (state.animationEdit) acceptAnimationEdit();
     }
+    if (mode === "hand") {
+      clearTimeout(state.timer);
+      state.timer = 0;
+    }
     state.mode = mode;
-    if (mode === "hand") clearWidgetRefineCandidate();
+    if (!["pen", "hand"].includes(mode)) updateWidgetRefinePointer(null);
+    else refreshWidgetRefineHoverCandidate();
     if (mode !== "eraser") state.pointerPreview = null;
     if (mode !== "select") deselectAnimation();
     view.classList.toggle("hand-mode", mode === "hand");
@@ -396,12 +406,21 @@
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
+    if (options.showHint) {
+      const hintKey = {
+        hand:["canvasHintHand", "canvasHintHandAlt"],
+        select:["canvasHintLasso", "canvasHintLassoAlt"],
+        text:["canvasHintText", "canvasHintTextAlt"],
+        eraser:["canvasHintEraser", "canvasHintEraserAlt"],
+      }[mode];
+      if (hintKey) showCanvasHint(hintKey);
+    }
     if (deferredSelectionCommit) queueMicrotask(() => {
       if (state.mode === mode && state.selection && !selectionAIBusy(state.selection)) commitSelection();
     });
   }
   document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.onclick = () => setCanvasMode(button.dataset.mode);
+    button.onclick = () => setCanvasMode(button.dataset.mode, { showHint:true });
   });
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -855,6 +874,10 @@
   aiOrb.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (state.busy) {
+      stopActiveAIRequests();
+      return;
+    }
     openRadialMenu();
     state.radialGesture = { id: e.pointerId, moved: false, selected: null };
     try {
@@ -899,6 +922,10 @@
     e.preventDefault();
     e.stopPropagation();
     if (performance.now() < state.radialSuppressClickUntil) return;
+    if (state.busy) {
+      stopActiveAIRequests();
+      return;
+    }
     if (embodiment.classList.contains("menu-open")) closeRadialMenu();
     else openRadialMenu();
   });
@@ -944,14 +971,25 @@
   configurationBackdrop?.addEventListener("pointerdown", () => closeConfiguration());
   configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
   canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
+  settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
-  settingsProvider?.addEventListener("change", updateSettingsProviderFields);
-  settingsApiFormat?.addEventListener("change", () => updateApiPresetFields(true, true));
+  settingsProvider?.addEventListener("change", () => {
+    updateSettingsProviderFields();
+    selectDefaultConnectionEffort();
+  });
+  settingsApiFormat?.addEventListener("change", () => {
+    updateApiPresetFields(true, true);
+    selectDefaultConnectionEffort();
+  });
   settingsApiRegion?.addEventListener("change", () => updateApiPresetFields(true, false));
-  settingsApiService?.addEventListener("change", () => updateApiPresetFields(true, true));
+  settingsApiService?.addEventListener("change", () => {
+    updateApiPresetFields(true, true);
+    selectDefaultConnectionEffort();
+  });
   settingsTraceToggle?.addEventListener("click", () => {
     settings.requestTrace = !settings.requestTrace;
     updateTraceToggle();
@@ -992,7 +1030,7 @@
       rejectPendingWidget();
       return;
     }
-    if (e.key === "Escape" && state.activeAI?.widgetEdit) {
+    if (e.key === "Escape" && activeWidgetRefinement()) {
       cancelWidgetRefinement();
       setStatusKey("ready");
       return;

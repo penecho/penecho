@@ -51,6 +51,15 @@ test("Claude none disables thinking while using low to override a global CLI eff
   assert.equal(args.includes("none"), false);
 });
 
+test("Claude CLI maps xhigh away from older models that expose only four enabled levels", () => {
+  const older = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-6", effort:"xhigh" });
+  assert.equal(older[older.indexOf("--effort") + 1], "max");
+  const oldest = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-5", effort:"xhigh" });
+  assert.equal(oldest[oldest.indexOf("--effort") + 1], "high");
+  const current = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-8", effort:"xhigh" });
+  assert.equal(current[current.indexOf("--effort") + 1], "xhigh");
+});
+
 test("Claude CLI input carries text and the canvas image in one streaming user message", () => {
   const payload = JSON.parse(claudeInput("request metadata", PNG));
   assert.equal(payload.type, "user");
@@ -96,7 +105,8 @@ test("Claude CLI JSON result parsing accepts text and structured output", () => 
 test("Claude CLI adapter sends the image, system prompt, model, and no API key", async () => {
   const directory = temporaryDirectory(), fakeCli = path.join(directory, "fake-claude.js"), record = path.join(directory, "record.json");
   fs.writeFileSync(fakeCli, `"use strict";const fs=require("node:fs");const args=process.argv.slice(2),input=JSON.parse(fs.readFileSync(0,"utf8").trim()),systemIndex=args.indexOf("--system-prompt"),systemPrompt=args[systemIndex+1],image=input.message.content.find(part=>part.type==="image");fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,systemPrompt,mediaType:image?.source?.media_type,hasImage:Boolean(image?.source?.data),maxThinkingTokens:process.env.MAX_THINKING_TOKENS}));const result={intent:"answer",observedText:"image",message:process.env.AI_API_KEY?"leaked":"ok",commands:[]};process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:JSON.stringify(result)}));\n`);
-  const content = await callClaudeCli({ executable:fakeCli, model:"sonnet", effort:"medium", systemPrompt:"system instructions", prompt:"request metadata", atlasImage:PNG, env:{ ...process.env, AI_API_KEY:"must-not-leak", MAX_THINKING_TOKENS:"9000" } });
+  let activityCount=0;
+  const content = await callClaudeCli({ executable:fakeCli, model:"sonnet", effort:"medium", systemPrompt:"system instructions", prompt:"request metadata", atlasImage:PNG, env:{ ...process.env, AI_API_KEY:"must-not-leak", MAX_THINKING_TOKENS:"9000" }, onActivity:()=>activityCount++ });
   const result = JSON.parse(content), saved = JSON.parse(fs.readFileSync(record, "utf8"));
   assert.equal(result.message, "ok");
   assert.equal(saved.systemPrompt, "system instructions");
@@ -106,6 +116,7 @@ test("Claude CLI adapter sends the image, system prompt, model, and no API key",
   assert.equal(saved.args[saved.args.indexOf("--effort") + 1], "medium");
   assert.deepEqual(JSON.parse(saved.args[saved.args.indexOf("--settings") + 1]), { env:{ CLAUDE_CODE_EFFORT_LEVEL:"medium" } });
   assert.equal(saved.maxThinkingTokens, undefined);
+  assert.ok(activityCount>0);
 });
 
 test("Claude CLI adapter executes a text-only request without an image part", async () => {

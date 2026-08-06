@@ -40,7 +40,7 @@ test("main menu provides LLM source and Settings navigation with a parent return
   }, saved = [];
   const ui = uiScript({
     selections:["llm", "__back__", "settings", "webp", "127.0.0.1", "save", "exit"],
-    inputs:["180", "25", "3999", "5.3"],
+    inputs:["180", "20000", "25", "3999", "5.3"],
     confirms:[true],
   });
   await runConfigureMenu(configuration, {
@@ -50,6 +50,7 @@ test("main menu provides LLM source and Settings navigation with a parent return
   });
   assert.equal(saved.length, 1);
   assert.equal(saved[0].AI_TIMEOUT_SECONDS, "180");
+  assert.equal(saved[0].MAX_TOKENS, "20000");
   assert.equal(saved[0].PENECHO_AI_IMAGE_FORMAT, "webp");
   assert.equal(saved[0].PENECHO_REQUEST_TRACE, "true");
   assert.equal(saved[0].PENECHO_REQUEST_TRACE_LIMIT, "25");
@@ -76,9 +77,9 @@ test("provider pages include the requested model quality guidance", async () => 
   await runConfigureMenu(configuration, { ui:codexUi, directProvider:"codex-cli", save:async () => {}, test:async () => "ok" });
   assert.match(codexUi.headers[0].detail, /GPT-5\.5 or newer/);
   assert.match(codexUi.headers[0].detail, /gpt-5\.6-sol/);
-  assert.match(codexUi.headers[0].detail, /xhigh/);
+  assert.match(codexUi.headers[0].detail, /medium default/);
 
-  const kimiUi = uiScript({ selections:["__manual__", "high", "cancel"], inputs:["kimi-code/k3"] });
+  const kimiUi = uiScript({ selections:["__manual__", "medium", "cancel"], inputs:["kimi-code/k3"] });
   await runConfigureMenu(configuration, { ui:kimiUi, directProvider:"kimi-cli", save:async () => {}, test:async () => "ok" });
   assert.match(kimiUi.headers[0].detail, /does not install or log in/);
   assert.match(kimiUi.headers[0].detail, /code\.kimi\.com\/kimi-code\/install\.sh/);
@@ -87,17 +88,19 @@ test("provider pages include the requested model quality guidance", async () => 
   assert.ok(kimiModelPrompt.choices.every(choice => !/recommended/i.test(choice.name)));
   assert.ok(kimiModelPrompt.choices.some(choice => choice.value === "__manual__"));
   const kimiEffortPrompt = kimiUi.selects.find(item => item.message === "Reasoning effort");
-  assert.deepEqual(kimiEffortPrompt.choices.filter(choice => ["none","low","medium","high","xhigh","max"].includes(choice.value)).map(choice => choice.value), ["low","high","max"]);
+  assert.deepEqual(kimiEffortPrompt.choices.filter(choice => ["none","low","medium","high","xhigh","max"].includes(choice.value)).map(choice => choice.value), ["none","low","medium","high","xhigh","max"]);
+  assert.equal(kimiEffortPrompt.defaultValue, "medium");
 });
 
-test("Claude CLI configuration offers none alongside explicit thinking effort levels", async () => {
+test("Claude CLI configuration offers the complete shared effort scale", async () => {
   const directory = temporaryDirectory(), configuration = {
     home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
   };
   const ui = uiScript({ selections:["opus", "none", "cancel"] });
   await runConfigureMenu(configuration, { ui, directProvider:"claude-cli", save:async () => {}, test:async () => "ok" });
   const effortPrompt = ui.selects.find(item => item.message === "Reasoning effort");
-  assert.deepEqual(effortPrompt.choices.filter(choice => ["none","low","medium","high","max"].includes(choice.value)).map(choice => choice.value), ["none","low","medium","high","max"]);
+  assert.deepEqual(effortPrompt.choices.filter(choice => ["none","low","medium","high","xhigh","max"].includes(choice.value)).map(choice => choice.value), ["none","low","medium","high","xhigh","max"]);
+  assert.equal(effortPrompt.defaultValue, "medium");
 });
 
 test("Anthropic API configuration offers none and defaults new selections to medium", async () => {
@@ -112,7 +115,7 @@ test("Anthropic API configuration offers none and defaults new selections to med
   });
   await runConfigureMenu(configuration, { ui, directProvider:"api", save:async () => {}, test:async () => "ok" });
   const effortPrompt = ui.selects.find(item => item.message === "Reasoning effort");
-  assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
+  assert.deepEqual(effortPrompt.choices.filter(choice => ["none","low","medium","high","xhigh","max"].includes(choice.value)).map(choice => choice.value), ["none","low","medium","high","xhigh","max"]);
   assert.equal(effortPrompt.defaultValue, "medium");
 });
 

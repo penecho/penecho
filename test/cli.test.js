@@ -240,6 +240,8 @@ test("Kimi, Codex, and Claude are supported by configure and save their model ch
     const options = {
       env:{ PATH:process.env.PATH, KIMI_CLI_PATH:process.execPath, CODEX_CLI_PATH:process.execPath, CLAUDE_CLI_PATH:process.execPath }, home, cwd, packageRoot:ROOT, ui, output:capture().stream, errorOutput:capture().stream,
       runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "test cli\n" : args[0] === "debug" ? JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }) : "logged in\n", stderr:"" }),
+      kimiCaller:async () => "OK",
+      codexCaller:async () => "OK",
       claudeCaller:async () => "OK",
     };
     const code = await main(["configure", scenario.flag], options), saved = fs.readFileSync(path.join(home, ".penecho", "config.env"), "utf8");
@@ -255,23 +257,47 @@ test("API validation and connection requests use the selected wire format", asyn
   await testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://openai.test/v1", AI_API_MODEL:"gpt", AI_API_KEY:"key", AI_EFFORT:"xhigh" }, { fetchImpl, timeoutMs:1000 });
   await testApiConnection({ AI_API_FORMAT:"anthropic", AI_API_URL:"https://anthropic.test", AI_API_MODEL:"claude", AI_API_KEY:"key", AI_EFFORT:"max" }, { fetchImpl, timeoutMs:1000 });
   await testApiConnection({ AI_API_FORMAT:"anthropic", AI_API_URL:"https://anthropic.test", AI_API_MODEL:"claude", AI_API_KEY:"key", AI_EFFORT:"none" }, { fetchImpl, timeoutMs:1000 });
-  const openAiBody=JSON.parse(calls[0].options.body),anthropicBody=JSON.parse(calls[1].options.body),disabledAnthropicBody=JSON.parse(calls[2].options.body);
+  await testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://openai.test/v1", AI_API_MODEL:"gpt-5.6-sol", AI_API_KEY:"key", AI_EFFORT:"max" }, { fetchImpl, timeoutMs:1000 });
+  const openAiBody=JSON.parse(calls[0].options.body),anthropicBody=JSON.parse(calls[1].options.body),disabledAnthropicBody=JSON.parse(calls[2].options.body),gpt56Body=JSON.parse(calls[3].options.body);
   assert.equal(calls[0].url, "https://openai.test/v1/chat/completions");
+  assert.equal(openAiBody.stream,true);
+  assert.equal(Object.hasOwn(openAiBody,"max_tokens"),false);
   assert.equal(openAiBody.reasoning_effort, "xhigh");
+  assert.match(openAiBody.messages[0].content.find(part => part.type === "image_url").image_url.url, /^data:image\/webp;base64,/);
   assert.equal(Object.hasOwn(openAiBody,"temperature"),false);
   assert.equal(calls[1].url, "https://anthropic.test/v1/messages");
+  assert.equal(anthropicBody.stream,true);
+  assert.equal(anthropicBody.max_tokens,20000);
   assert.equal(anthropicBody.output_config.effort, "max");
+  assert.equal(anthropicBody.messages[0].content.find(part => part.type === "image").source.media_type, "image/webp");
   assert.equal(Object.hasOwn(anthropicBody,"temperature"),false);
   assert.deepEqual(disabledAnthropicBody.thinking, { type:"disabled" });
+  assert.equal(disabledAnthropicBody.max_tokens,20000);
   assert.equal(disabledAnthropicBody.output_config, undefined);
   assert.equal(Object.hasOwn(disabledAnthropicBody,"temperature"),false);
+  assert.equal(gpt56Body.reasoning_effort, "max");
+  assert.equal(Object.hasOwn(gpt56Body,"max_tokens"),false);
 
   const kimiCalls = [], kimiFetch = async (url, options) => {
     kimiCalls.push({ url, options });
     return { ok:true, status:200, text:async () => "{}" };
   };
   await testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://api.kimi.com/coding/v1", AI_API_MODEL:"k3", AI_API_KEY:"key", AI_EFFORT:"high" }, { fetchImpl:kimiFetch, timeoutMs:1000 });
+  assert.equal(JSON.parse(kimiCalls[0].options.body).stream,true);
+  assert.equal(JSON.parse(kimiCalls[0].options.body).reasoning_effort,"high");
+  assert.equal(Object.hasOwn(JSON.parse(kimiCalls[0].options.body),"max_tokens"),false);
   assert.equal(Object.hasOwn(JSON.parse(kimiCalls[0].options.body),"temperature"),false);
+
+  const minimaxCalls = [], minimaxFetch = async (url, options) => {
+    minimaxCalls.push({ url, options });
+    return { ok:true, status:200, text:async () => "{}" };
+  };
+  await testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://api.minimax.io/v1", AI_API_MODEL:"MiniMax-M3", AI_API_KEY:"key", AI_EFFORT:"medium", PENECHO_API_PRESET:"minimax-global-api" }, { fetchImpl:minimaxFetch, timeoutMs:1000 });
+  const minimaxBody = JSON.parse(minimaxCalls[0].options.body);
+  assert.equal(minimaxBody.stream,true);
+  assert.deepEqual(minimaxBody.thinking, { type:"adaptive" });
+  assert.equal(Object.hasOwn(minimaxBody,"max_tokens"),false);
+  assert.equal(Object.hasOwn(minimaxBody, "reasoning_effort"), false);
 });
 
 test("API failure diagnostics redact the key", async () => {
@@ -284,21 +310,37 @@ test("API failure diagnostics redact the key", async () => {
   );
 });
 
-test("configured Codex check reads the bundled catalog without making a model request", async () => {
+test("API connection timeout covers an SSE body that never completes", async () => {
+  await assert.rejects(
+    testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://openai.test/v1", AI_API_MODEL:"gpt", AI_API_KEY:"key" }, {
+      timeoutMs:25,
+      fetchImpl:async (_url, options) => new Response(new ReadableStream({
+        start(controller) {
+          options.signal.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")), { once:true });
+        },
+      }), { headers:{ "Content-Type":"text/event-stream" } }),
+    }),
+    /API connection test timed out/,
+  );
+});
+
+test("configured Codex check reads the bundled catalog and sends one small image request", async () => {
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
     AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-5.6-sol", AI_EFFORT:"xhigh", AI_TIMEOUT_SECONDS:"120", PENECHO_AI_IMAGE_FORMAT:"webp", CODEX_CLI_PATH:process.execPath, PATH:process.env.PATH,
   });
   const calls = [];
+  let modelRequest;
   const result = await testConfiguredProvider(configuration, {
     runner:async (_launch, args) => {
       calls.push(args);
       return { code:0, stdout:args[0] === "--version" ? "codex test\n" : args[0] === "debug" ? JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }) : "logged in\n", stderr:"" };
     },
-    codexCaller:async () => { throw new Error("must not make a model request"); },
+    codexCaller:async input => { modelRequest=input; return "OK"; },
   });
   assert.deepEqual(calls, [["--version"], ["login", "status"], ["debug", "models", "--bundled"]]);
-  assert.match(result, /exists in the bundled model catalog/);
-  assert.match(result, /No model request was made/);
+  assert.match(result, /image input.*responded successfully/);
+  assert.match(modelRequest.atlasImage, /^data:image\/webp;base64,/);
+  assert.equal(modelRequest.model, "gpt-5.6-sol");
 });
 
 test("configured Codex check reports an unknown saved model immediately", async () => {
@@ -308,6 +350,19 @@ test("configured Codex check reports an unknown saved model immediately", async 
   await assert.rejects(testConfiguredProvider(configuration, {
     runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "codex test\n" : args[0] === "debug" ? JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }) : "logged in\n", stderr:"" }),
   }), /not present.*bundled model catalog/);
+});
+
+test("configured CLI connection tests abort the model request at an explicit caller timeout", async () => {
+  const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
+    AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-5.6-sol", CODEX_CLI_PATH:process.execPath, PATH:process.env.PATH,
+  });
+  await assert.rejects(testConfiguredProvider(configuration, {
+    timeoutMs:25,
+    runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "codex test\n" : args[0] === "debug" ? JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }) : "logged in\n", stderr:"" }),
+    codexCaller:input => new Promise((resolve, reject) => {
+      input.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once:true });
+    }),
+  }), error => error.code === "PENECHO_CONNECTION_TEST_TIMEOUT" && /timed out/.test(error.message));
 });
 
 test("Codex bundled-model query uses the offline catalog command", async () => {
@@ -355,6 +410,7 @@ test("doctor is diagnostic-only and reports the unified timeout", async () => {
   });
   assert.equal(ready, true);
   assert.match(output.text(), /Unified model timeout is 180 seconds/);
+  assert.match(output.text(), /Reasoning effort is medium \(PenEcho default\)/);
   assert.match(output.text(), /no model request was made/);
 });
 

@@ -70,9 +70,8 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
-- [What's new in 0.8.1](#whats-new-in-081)
-- [What's new in 0.8.0](#whats-new-in-080)
-- [What's new in 0.7.2](#whats-new-in-072)
+- [What's new in 0.8.2](#whats-new-in-082)
+- [Earlier release highlights](#earlier-release-highlights)
 - [Previous releases](#previous-releases)
 - [How it works](#how-it-works)
 - [Recommended model configurations](#recommended-model-configurations)
@@ -101,13 +100,13 @@ Interactive starts print the current version immediately. After the server is li
 `penecho configure` opens the interactive configuration center. Its main menu contains `LLM source`, `Settings`, and `Exit`. Use the arrow keys and Enter to navigate:
 
 - `LLM source -> Claude CLI` selects a detected, recommended, default, or manually entered model and an effort level. Opus 4.8 or newer is recommended; Sonnet and Opus 4.6 can respond but may produce weaker canvas results.
-- `LLM source -> Codex CLI` selects a model and effort. GPT-5.5 or newer is required for good results, `gpt-5.6-sol` is recommended, and `xhigh` is the highest listed Codex effort.
-- `LLM source -> API` selects the OpenAI-compatible or Anthropic/Claude-compatible request format, then asks for the URL, model, effort, and hidden key. Anthropic API offers `none` to disable thinking and defaults new configurations to the recommended `medium` adaptive-thinking level. Existing values are offered as defaults and a blank key keeps the saved key.
-- `Settings` controls the unified model timeout, the image format sent to every model executor, request recording and retention, listening interface and port, and initial Auto AI delay. WebP is the default; PNG is also available. The delay can also be changed on the canvas.
+- `LLM source -> Codex CLI` selects a model and effort. GPT-5.5 or newer is required for good results, and `gpt-5.6-sol` is recommended.
+- `LLM source -> API` selects the OpenAI-compatible or Anthropic/Claude-compatible request format, then asks for the URL, model, effort, and hidden key. API model calls use each format's standard SSE stream so response receipt is visible immediately and long generations do not wait for one final buffered JSON body; gateways that ignore streaming and return a normal JSON envelope remain compatible. Every new API or CLI connection starts at PenEcho `medium`; it stays native on Codex and Claude, maps to Kimi `high`, and enables MiniMax adaptive thinking. Existing values are offered as defaults and a blank key keeps the saved key.
+- `Settings` controls the unified model timeout, the maximum API response tokens (including thinking tokens), the image format sent to every model executor, request recording and retention, listening interface and port, and initial Auto AI delay. The response-token limit defaults to 20,000 and must be larger than 15,000. WebP is the default; PNG is also available. The delay can also be changed on the canvas.
 
 Every LLM page ends with `Test & Save`, and PenEcho always saves before checking. Codex CLI uses a fast offline check: it verifies the executable and login, then reads `codex debug models --bundled` to confirm the selected model exists. It does not run inference, attach an image, refresh the online catalog, or consume model tokens. Claude CLI and API configuration still send one small real request to verify the selected endpoint/model settings. Whether a check passes or fails, the configuration remains saved and the UI returns to the parent menu with a clear diagnostic.
 
-The canvas toolbar exposes a fixed-width clickable `Reasoning` menu beside Auto AI for frequent per-request changes: `Configured`, `none`, `low`, `medium`, `high`, and the provider's highest practical level. `Configured` omits the per-request effort field so the server preserves the configured custom effort or the underlying CLI default. The last explicit position maps to `xhigh` for OpenAI API and Codex CLI, and to `max` for Anthropic API and Claude CLI. `none` sends OpenAI `reasoning_effort=none`; for Claude it disables thinking. Model support remains provider-dependent, so an endpoint may reject a level its selected model does not implement. The saved `AI_EFFORT` initializes this control, while a toolbar change overrides it for subsequent canvas requests without rewriting the configuration file. The menu closes after a selection or five seconds of inactivity.
+The canvas toolbar exposes a fixed-width clickable `Reasoning` menu beside Auto AI for frequent per-request changes: `Configured`, `none`, `low`, `medium`, `high`, and the provider's highest practical level. `Configured` uses the selected connection's saved level; a toolbar choice overrides it without rewriting the connection. PenEcho maps this common scale to the selected model's native controls: Kimi's three levels, MiniMax's adaptive/disabled thinking mode, and model-specific Codex/Claude ceilings. PenEcho `medium` is a shared quality/speed intent rather than a promise that the provider has a same-named field: it stays native on Codex and Claude, becomes Kimi `high`, and enables MiniMax adaptive thinking. `none` cannot turn thinking off on Kimi or MiniMax-M2.x. Request records show both the selected and mapped values.
 
 The default configuration is `~/.penecho/config.env`. API credentials are plaintext in this local file, receive owner-only permissions on POSIX systems, and are never sent to browser code. Protect it like any other credential. If `penecho` is started before this file exists, it opens the configuration center automatically in an interactive terminal.
 
@@ -189,24 +188,18 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
 
-## What's new in 0.8.1
+## What's new in 0.8.2
 
-- **Live public data in General HTML widgets.** When a public HTTPS API, RSS feed, or image is blocked by browser CORS, General HTML widgets can fall back to PenEcho's local read-only bridge, enabling live news, dashboards, and other refreshed content without exposing credentials.
-- **SVG-first animation and complex graphics.** Animations and complex custom visuals now default to responsive SVG inside General HTML, providing richer motion, overlays, and scalable graphics while keeping model output compact and token-efficient.
+- **Multiple AI connections with one-click switching.** Save up to ten API or CLI connections, use editable Kimi and MiniMax regional/Coding Plan presets, test a connection before use, and choose a different active connection on each client connected to the same PenEcho host. API and CLI changes apply immediately.
+- **Faster, more flexible Refine.** Write instructions anywhere in the visible viewport, then choose which nearby widget to improve. Refine sends the widget's editable source when available and uses a standard unified diff instead of regenerating the full widget, substantially reducing tokens and turnaround time while preserving confirmation and undo.
+- **True streaming API requests.** OpenAI- and Anthropic-compatible APIs now use end-to-end SSE streaming, so PenEcho can show response receipt immediately, avoid long buffered waits through gateways, and handle lengthy requests more reliably.
+- **Clear request progress and cancellation.** The top status area reports preparation, connection, waiting, streaming, validation, retries, and long-wait timeouts without shifting the canvas. During a request, the magic button becomes a stop control that cancels active work while preserving unsent Refine instructions.
 
-## What's new in 0.8.0
+## Earlier release highlights
 
-- **Professional diagrams beyond flowcharts.** Create architecture, UML, sequence, BPMN, data, engineering, scientific, medical, financial, geographic, and other domain diagrams with editable professional source. Supported formats use on-demand local renderers; specialized formats can return complete HTML without forcing every request into one renderer.
-- **Plugin defaults with a smaller prompt footprint.** **General HTML** is always enabled and cannot be unchecked. **Professional Diagrams** starts enabled and can be turned off, while every other built-in or private plugin starts disabled. Explicit choices are preserved across upgrades. Only enabled plugins' compact capability guides are sent to the model; full CSS and renderer dependencies stay local and load on demand.
-- **Refine plugin widgets by drawing on them.** Use the Pen to draw or write the requested changes directly over a widget returned by a plugin, then click the **AI Refine** button that appears to generate its upgraded replacement. This workflow applies only to plugin-returned widgets.
-- **Device or PenEcho server storage.** Save canvases only in the current browser, or on the computer running PenEcho so other authorized devices using the same server can open them. Saving first confirms unfinished canvas controls so text boxes, diagrams, and widgets are included.
-- **Clipboard, text, and extensible plugins.** Read text or images from the system clipboard directly into native canvas controls, copy returned text, formulas, and professional diagram source, and reselect editable text boxes with Hand. Built-in and private plugins can be copied into a custom plugin, with optional CSS loaded only when that plugin is used.
-
-## What's new in 0.7.2
-
-- **Built-in real photos and professional flowcharts.** Real Photo Search displays sourced web images directly on the canvas, using one result by default and an alternate source when the primary image fails. Flowchart creates process, decision, architecture, sequence, and state diagrams with copyable Mermaid source.
-- **Reliable canvas editing, saving, and export.** Hand moves images, animations, and AI-returned widgets directly; images and widgets can be resized without an artificial maximum. Saving updates the loaded snapshot by default, while Save New remains available, and remote images are preserved in thumbnails and PNG exports.
-- **Local access and stronger desktop integration.** A shared six-digit code can protect local and LAN browser entry without changing model requests after unlock. Desktop setup supports Kimi API and Kimi CLI alongside generic API, Codex CLI, and Claude CLI, with improved update and packaging behavior.
+- **0.8.1.** Added live public-data access for General HTML widgets and SVG-first animation and complex graphics.
+- **0.8.0.** Added editable professional diagrams, direct widget refinement, server-backed canvas storage, richer clipboard and text workflows, and smaller plugin prompts.
+- **0.7.2.** Added sourced web photos and professional flowcharts, more reliable editing, persistence and PNG export, protected local/LAN access, and stronger desktop integration.
 
 ## Previous releases
 
@@ -281,8 +274,9 @@ The configuration center writes these settings to `~/.penecho/config.env`, or to
 | `AI_API_FORMAT` | API request format: `openai` (default example) or `anthropic` |
 | `AI_API_URL` / `AI_API_KEY` | API endpoint and credential; used only in API mode |
 | `AI_API_MODEL` | Model used in API mode |
-| `AI_EFFORT` | Startup reasoning effort for the canvas control; the toolbar's `Configured` option preserves this value verbatim, including custom names, while an empty CLI value leaves the CLI default untouched; Anthropic API and Claude CLI support `none` (wire value `thinking.type=disabled`), while OpenAI sends `reasoning_effort=none`; explicit toolbar levels override this value per request without modifying the file |
-| `AI_TIMEOUT_SECONDS` | Unified timeout for API, Codex CLI, and Claude CLI model attempts; default 180, allowed range 10–600 |
+| `AI_EFFORT` | Saved PenEcho reasoning level; new configurations default to `medium`, the toolbar can override it per request, and the server maps it to each selected provider/model's supported native control |
+| `AI_TIMEOUT_SECONDS` | Unified timeout for API and CLI model attempts; default 180, allowed range 10–600. `xhigh` and `max` attempts use twice this value. Once the total timeout is reached, an active stream may continue until no data has arrived for 10 seconds. |
+| `MAX_TOKENS` | Maximum API response-token allowance, including thinking tokens; default 20,000 and must be larger than 15,000. Low values may be exhausted during reasoning. Restart PenEcho after changing it. |
 | `PENECHO_AI_IMAGE_FORMAT` | Image format sent to API, Codex CLI, and Claude CLI: `webp` (default) or `png` |
 | `CODEX_CLI_MODEL` | Optional model override for Codex CLI mode |
 | `CLAUDE_CLI_MODEL` | Optional alias or model-ID override for Claude CLI mode |

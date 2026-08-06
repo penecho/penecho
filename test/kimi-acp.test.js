@@ -52,7 +52,9 @@ test("Kimi ACP keeps one process while creating isolated sessions", async () => 
       kimiHome:path.join(directory, "kimi-home"),
     });
   try {
-    assert.equal(await client.request({ prompt:"first", model:"kimi-code/k3", effort:"medium" }), "Hello");
+    let activityCount=0;
+    assert.equal(await client.request({ prompt:"first", model:"kimi-code/k3", effort:"medium", onActivity:()=>activityCount++ }), "Hello");
+    assert.ok(activityCount>0);
     assert.equal(await client.request({ prompt:"second" }), "Hello");
   } finally {
     await client.close();

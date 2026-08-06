@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { mapKimiReasoningEffort } = require("./reasoning-effort.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const KIMI_AGENT_FILE = "penecho-canvas-agent.md";
@@ -50,13 +51,10 @@ function resolveKimiLaunch(configuredPath = "kimi", env = process.env) {
   return { command: executable, prefixArgs: [] };
 }
 
-const KIMI_EFFORT_MAP = { none:"low", low:"low", medium:"high", high:"high", xhigh:"max", max:"max" };
-
 function mapKimiEffort(effort) {
   const normalized = String(effort || "").trim().toLowerCase();
   if (!normalized || normalized === "config") return null;
-  if (Object.hasOwn(KIMI_EFFORT_MAP, normalized)) return KIMI_EFFORT_MAP[normalized];
-  return normalized;
+  return mapKimiReasoningEffort(normalized) || normalized;
 }
 
 function sanitizeKimiEnv(env = process.env, effort = null) {
@@ -153,7 +151,7 @@ function appendTail(current, value) {
   return buffer.length <= MAX_CAPTURE_BYTES ? combined : buffer.subarray(-MAX_CAPTURE_BYTES).toString("utf8");
 }
 
-function runProcess(launch, args, cwd, env, signal) {
+function runProcess(launch, args, cwd, env, signal, onActivity = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -202,6 +200,7 @@ function runProcess(launch, args, cwd, env, signal) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", chunk => {
       if (settled) return;
+      try { onActivity?.(); } catch {}
       lineBuffer += chunk;
       let newline;
       while ((newline = lineBuffer.indexOf("\n")) >= 0 && !settled) { const line = lineBuffer.slice(0, newline); lineBuffer = lineBuffer.slice(newline + 1); handleLine(line); }
@@ -230,7 +229,7 @@ function imageParts(atlasImage) {
   return match ? { mimeType:match[1].toLowerCase(), buffer:Buffer.from(match[2], "base64") } : null;
 }
 
-async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env }) {
+async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-kimi-"));
   let cleanupReady = Promise.resolve(), deferCleanup = false, caughtError = null;
   try {
@@ -244,7 +243,7 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
       await fs.promises.writeFile(file, image.buffer, { mode:0o600 });
       imageHint = `\n\nA canvas image is available at @${path.basename(file)}. Inspect only this image as needed. Do not run shell commands, modify files, or use other tools.`;
     }
-    const launch = resolveKimiLaunch(executable, env), result = await runProcess(launch, buildKimiArgs({ model, prompt:`${String(prompt || "")}${imageHint}`, agentFile }), workDir, sanitizeKimiEnv(env, effort), signal);
+    const launch = resolveKimiLaunch(executable, env), result = await runProcess(launch, buildKimiArgs({ model, prompt:`${String(prompt || "")}${imageHint}`, agentFile }), workDir, sanitizeKimiEnv(env, effort), signal, onActivity);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
     if (signal?.aborted) throw abortError();
@@ -272,7 +271,7 @@ function kimiHomeFromEnv(env) {
   return String(env.KIMI_CODE_HOME || "").trim() || path.join(os.homedir(), ".kimi-code");
 }
 
-async function callKimiCli({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env }) {
+async function callKimiCli({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
   const image = imageParts(atlasImage);
   try {
     const launch = resolveKimiLaunch(executable, env);
@@ -290,10 +289,11 @@ async function callKimiCli({ executable = "kimi", model = null, effort = null, p
       prompt:String(prompt || ""),
       image:image ? { mimeType:image.mimeType, data:image.buffer.toString("base64") } : null,
       signal,
+      onActivity,
     });
   } catch (error) {
     if (!error.acpInfraFailure) throw error;
-    return callKimiCliSpawn({ executable, model, effort, prompt, atlasImage, signal, env });
+    return callKimiCliSpawn({ executable, model, effort, prompt, atlasImage, signal, env, onActivity });
   }
 }
 

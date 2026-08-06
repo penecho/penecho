@@ -74,24 +74,17 @@ npm start
 - Enregistrez les instantanés sur cet appareil ou sur le serveur PenEcho et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
-## Nouveautés de la version 0.8.1
+## Nouveautés de la version 0.8.2
 
-- **Données publiques en direct dans les widgets General HTML.** Lorsqu'une API HTTPS publique, un flux RSS ou une image est bloqué par la politique CORS du navigateur, le widget peut utiliser la passerelle locale en lecture seule de PenEcho pour afficher des actualités, tableaux de bord et autres contenus actualisés sans exposer d'identifiants.
-- **SVG par défaut pour les animations et graphismes complexes.** Les animations et visuels personnalisés complexes utilisent désormais en priorité un SVG réactif dans General HTML, pour des mouvements, superpositions et graphismes vectoriels plus riches avec une sortie du modèle compacte et économe en tokens.
+- **Plusieurs connexions IA, sélectionnables en un clic.** Enregistrez jusqu'à dix connexions API ou CLI, utilisez les préréglages Kimi et MiniMax modifiables, testez-les dans le canevas et choisissez une connexion active propre à chaque client d'un même hôte PenEcho. Les changements s'appliquent immédiatement.
+- **Refine plus rapide et plus souple.** Écrivez des consignes n'importe où dans la zone visible puis choisissez le widget à modifier. Les diffs unifiés standard ne transmettent que les changements, réduisant les tokens et le délai tout en conservant confirmation et annulation.
+- **Vrai streaming API.** Les API compatibles OpenAI et Anthropic utilisent maintenant SSE de bout en bout afin de signaler immédiatement les données reçues et de stabiliser les requêtes longues via les passerelles compatibles.
+- **Progression et annulation claires.** L'état supérieur indique préparation, connexion, attente, réception, validation, nouvelles tentatives et délais. Pendant une requête, le bouton magique arrête immédiatement le travail actif.
 
-## Nouveautés de la version 0.8.0
+## Points forts précédents
 
-- **Des diagrammes professionnels bien au-delà des organigrammes.** Créez des diagrammes d'architecture, UML, séquence, BPMN, données, ingénierie, science, médecine, finance et géographie avec une source professionnelle modifiable. Les formats pris en charge sont rendus localement à la demande ; les formats spécialisés peuvent rester en HTML complet.
-- **Paramètres par défaut des plugins avec un prompt allégé.** **General HTML** est toujours activé et ne peut pas être décoché. **Professional Diagrams** est activé par défaut et peut être désactivé ; tous les autres plugins intégrés ou privés sont désactivés par défaut. Les choix enregistrés explicitement sont conservés lors des mises à niveau. Seuls les guides compacts des plugins activés sont envoyés au modèle ; le CSS complet et les moteurs de rendu restent locaux et sont chargés à la demande.
-- **Affinez les widgets de plugins en dessinant dessus.** Avec le stylet, dessinez ou écrivez les modifications directement sur un widget renvoyé par un plugin, puis cliquez sur le bouton **AI Refine** qui apparaît pour générer sa version améliorée. Ce flux s'applique uniquement aux widgets renvoyés par des plugins.
-- **Stockage sur cet appareil ou sur le serveur PenEcho.** Enregistrez le canevas uniquement dans le navigateur actuel ou sur l'ordinateur qui exécute PenEcho afin que d'autres appareils autorisés du même serveur puissent l'ouvrir. Les contrôles en attente sont confirmés avant l'enregistrement.
-- **Presse-papiers, texte et plugins extensibles.** Ajoutez du texte ou des images depuis le presse-papiers système, copiez les textes, formules et sources professionnelles renvoyés par l'IA et rééditez les zones de texte avec Hand. Un plugin intégré ou privé peut aussi être copié comme plugin personnalisé avec du CSS facultatif chargé seulement à l'utilisation.
-
-## Nouveautés de la version 0.7.2
-
-- **Photos réelles et organigrammes professionnels intégrés.** Real Photo Search affiche directement sur le canevas des images du Web avec leur source, un seul résultat par défaut et une source de secours si la principale échoue. Flowchart crée des diagrammes de processus, décision, architecture, séquence et état avec une source Mermaid copiable.
-- **Édition, enregistrement et export plus fiables.** Hand déplace directement les images, animations et widgets renvoyés par l'IA, sans limite maximale artificielle de redimensionnement. Enregistrer met à jour par défaut l'instantané chargé, Enregistrer comme nouveau reste disponible, et les images distantes sont conservées dans les miniatures et les exports PNG.
-- **Accès local et meilleure intégration au bureau.** Un code partagé à six chiffres peut protéger l'accès des navigateurs locaux et du réseau sans modifier les requêtes au modèle après déverrouillage. La configuration de bureau prend en charge Kimi API et Kimi CLI, ainsi que l'API générique, Codex CLI et Claude CLI, avec de meilleures mises à jour et une meilleure création de paquets.
+- **0.8.1.** Ajout des données publiques en direct pour General HTML et de SVG par défaut pour les animations et graphismes complexes.
+- **0.8.0 et 0.7.2.** Ajout des diagrammes professionnels modifiables, du stockage serveur, des flux de presse-papiers, des photos Web sourcées et d'une édition et d'un export plus fiables.
 
 ## Versions précédentes
 

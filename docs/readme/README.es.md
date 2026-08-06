@@ -74,24 +74,17 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 - Guarda instantáneas en este dispositivo o en el servidor PenEcho y exporta el contenido confirmado como PNG.
 - Elige entre los temas Arcane, Sci-fi, Research y Studio.
 
-## Novedades de la versión 0.8.1
+## Novedades de la versión 0.8.2
 
-- **Datos públicos en vivo en widgets de General HTML.** Cuando una API HTTPS pública, un canal RSS o una imagen queda bloqueada por CORS del navegador, el widget puede recurrir al puente local de solo lectura de PenEcho para mostrar noticias, paneles y otros contenidos actualizados sin exponer credenciales.
-- **SVG como opción predeterminada para animaciones y gráficos complejos.** Las animaciones y los elementos visuales personalizados complejos ahora priorizan SVG adaptable dentro de General HTML, con movimientos, superposiciones y gráficos escalables más expresivos y una salida del modelo compacta y eficiente en tokens.
+- **Varias conexiones de IA con cambio en un clic.** Guarda hasta diez conexiones API o CLI, usa preajustes editables de Kimi y MiniMax, pruébalas en el lienzo y elige una conexión activa distinta en cada cliente del mismo host PenEcho. Los cambios se aplican al instante.
+- **Refine más rápido y flexible.** Escribe instrucciones en cualquier lugar del área visible y elige el widget que quieres modificar. Los diffs unificados estándar envían solo los cambios, reduciendo tokens y tiempo sin perder la confirmación ni Deshacer.
+- **Streaming real de API.** Las API compatibles con OpenAI y Anthropic ahora usan SSE de extremo a extremo para mostrar enseguida la recepción y mejorar la estabilidad de solicitudes largas a través de gateways compatibles.
+- **Progreso y cancelación claros.** El estado superior muestra preparación, conexión, espera, recepción, validación, reintentos y tiempos de espera. Durante una solicitud, el botón mágico detiene inmediatamente el trabajo activo.
 
-## Novedades de la versión 0.8.0
+## Novedades anteriores
 
-- **Diagramas profesionales más allá de los diagramas de flujo.** Crea diagramas de arquitectura, UML, secuencia, BPMN, datos, ingeniería, ciencia, medicina, finanzas y geografía con código profesional editable. Los formatos compatibles se renderizan localmente bajo demanda; los especializados pueden seguir mostrándose como HTML completo.
-- **Valores predeterminados de plugins con un prompt más ligero.** **General HTML** está siempre activado y no se puede desmarcar. **Professional Diagrams** empieza activado y puede desactivarse; todos los demás plugins integrados o privados empiezan desactivados. Las opciones guardadas explícitamente se conservan tras las actualizaciones. Solo se envían al modelo las guías compactas de los plugins activados; el CSS completo y los renderizadores permanecen locales y se cargan bajo demanda.
-- **Perfecciona widgets de plugins dibujando sobre ellos.** Usa el lápiz para dibujar o escribir los cambios directamente sobre un widget devuelto por un plugin y pulsa el botón **AI Refine** que aparece para generar una versión mejorada. Este flujo solo se aplica a widgets devueltos por plugins.
-- **Almacenamiento en este dispositivo o en el servidor PenEcho.** Guarda el lienzo solo en el navegador actual o en el equipo que ejecuta PenEcho para que otros dispositivos autorizados del mismo servidor puedan abrirlo. Al guardar se confirman primero los controles pendientes.
-- **Portapapeles, texto y plugins ampliables.** Inserta texto o imágenes desde el portapapeles del sistema, copia texto, fórmulas y código profesional devueltos por la IA y vuelve a editar cuadros de texto con Hand. También puedes copiar un plugin integrado o privado como plugin personalizado con CSS opcional cargado solo al usarlo.
-
-## Novedades de la versión 0.7.2
-
-- **Fotos reales y diagramas de flujo profesionales integrados.** Real Photo Search muestra imágenes web con su fuente directamente en el lienzo, un resultado de forma predeterminada y una fuente alternativa si falla la principal. Flowchart crea diagramas de procesos, decisiones, arquitectura, secuencia y estados con código Mermaid copiable.
-- **Edición, guardado y exportación más fiables.** Hand mueve directamente imágenes, animaciones y widgets devueltos por la IA, y permite redimensionarlos sin un máximo artificial. Guardar actualiza de forma predeterminada la instantánea cargada, Guardar como nuevo sigue disponible y las imágenes remotas se conservan en miniaturas y exportaciones PNG.
-- **Acceso local y mejor integración de escritorio.** Un código compartido de seis dígitos puede proteger la entrada desde navegadores locales y de la red sin alterar las solicitudes al modelo después del desbloqueo. La configuración de escritorio admite Kimi API y Kimi CLI, además de API genérica, Codex CLI y Claude CLI, con mejoras en actualizaciones y empaquetado.
+- **0.8.1.** Añadió datos públicos en vivo para General HTML y SVG como opción predeterminada para animaciones y gráficos complejos.
+- **0.8.0 y 0.7.2.** Añadieron diagramas profesionales editables, almacenamiento en servidor, flujos de portapapeles, fotos web con fuente y edición y exportación más fiables.
 
 ## Versiones anteriores
 

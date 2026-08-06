@@ -50,8 +50,10 @@ const image=/@(canvas\\.(?:png|webp))/.exec(prompt)?.[1];
 if(!image||!fs.existsSync(image)||!agentFile||!fs.readFileSync(agentFile,"utf8").includes("tools: []"))process.exit(3);
 process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"none","commands":[]}'}]})+"\\n");
 `);
-  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:PNG });
+  let activityCount=0;
+  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:PNG, onActivity:()=>activityCount++ });
   assert.equal(result, '{"intent":"none","commands":[]}');
+  assert.ok(activityCount>0);
 });
 
 test("Kimi child environment keeps runtime settings and drops API secrets", () => {
