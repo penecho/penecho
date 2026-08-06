@@ -105,6 +105,9 @@
     calibrateScreenClientRatio(e, false);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") {
+      const touchPoint = clientPoint(e),
+        touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
+      if (touchWidget) beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (state.touches.size >= 2) {
         state.textTap = null;
@@ -248,7 +251,10 @@
   });
   function end(e) {
     state.pointers.delete(e.pointerId);
-    if (e.pointerType === "touch") state.touches.delete(e.pointerId);
+    if (e.pointerType === "touch") {
+      state.touches.delete(e.pointerId);
+      finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
+    }
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
       return;
@@ -1033,6 +1039,10 @@
     if (e.key === "Escape" && activeWidgetRefinement()) {
       cancelWidgetRefinement();
       setStatusKey("ready");
+      return;
+    }
+    if (e.key === "Escape" && state.widgetRefineConfirmation) {
+      cancelWidgetRefineConfirmation();
       return;
     }
     if (e.key === "Escape" && state.widgetRefineCandidate) {

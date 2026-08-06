@@ -475,9 +475,19 @@ body.changelog-open { overflow: hidden; }
 .object-chrome-button.copy:not(.widget-tool) span { display: none; }
 .object-chrome-button.widget-tool { display: flex; width: var(--object-control-width, 112px); height: var(--object-control-height, 34px); gap: 7px; padding: 0 12px; justify-content: center; border-style: dashed; border-radius: 5px; background: color-mix(in srgb, var(--panel) 86%, transparent); font: 720 13px/1 system-ui, sans-serif; white-space: nowrap; }
 .object-chrome-button.refine { color: #2563eb; border-color: color-mix(in srgb, #2563eb 55%, var(--line)); opacity: .82; }
+.object-chrome-button.refine.refine-no-input { color: #6b7280; border-color: color-mix(in srgb, #6b7280 58%, var(--line)); }
 .object-chrome-button.refine:hover, .object-chrome-button.refine:focus-visible, .object-chrome-button.refine.refine-hovered { opacity: 1; border-style: solid; box-shadow: none; }
 .widget-refine-hint { position: absolute; top: calc(100% + 7px); left: var(--refine-hint-left, 0); width: min(320px, calc(100vw - 24px)); padding: 8px 10px; overflow-wrap: anywhere; pointer-events: none; color: var(--ink); border: 1px solid color-mix(in srgb, #3b82f6 38%, var(--line)); border-radius: 5px; background: color-mix(in srgb, var(--panel-raised) 97%, transparent); box-shadow: none; font: 560 12px/1.45 system-ui, "Noto Sans SC", sans-serif; white-space: normal; }
 .widget-refine-hint[hidden] { display: none; }
+.widget-refine-confirmation { position: absolute; z-index: 8; top: 0; left: 0; display: flex; width: var(--widget-refine-confirm-width, 360px); min-height: 42px; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; pointer-events: auto; color: var(--ink); border: 1px solid color-mix(in srgb, #2563eb 45%, var(--line)); border-radius: 6px; background: color-mix(in srgb, var(--panel-raised) 96%, transparent); font: 600 12px/1.25 system-ui, "Noto Sans SC", sans-serif; transform: translate3d(var(--widget-refine-confirm-x, 8px), var(--widget-refine-confirm-y, 8px), 0); animation: widget-refine-confirm-in .16s ease-out both; }
+.widget-refine-confirmation.no-input { color: var(--muted); border-color: color-mix(in srgb, #6b7280 52%, var(--line)); }
+.widget-refine-confirmation-copy { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget-refine-confirmation-button { display: grid; width: 30px; height: 30px; flex: 0 0 30px; padding: 0; place-items: center; color: currentColor; border: 1px solid currentColor; border-radius: 5px; background: transparent; cursor: pointer; }
+.widget-refine-confirmation-button:hover, .widget-refine-confirmation-button:focus-visible { background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
+.widget-refine-confirmation-button.confirm { color: var(--confirm); }
+.widget-refine-confirmation-button.cancel { color: var(--danger); }
+.widget-refine-confirmation-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+@keyframes widget-refine-confirm-in { from { opacity: 0; transform: translate3d(var(--widget-refine-confirm-x, 8px), var(--widget-refine-confirm-y, 8px), 0) scaleX(.76); } to { opacity: 1; transform: translate3d(var(--widget-refine-confirm-x, 8px), var(--widget-refine-confirm-y, 8px), 0) scaleX(1); } }
 .object-chrome-button.widget-tool svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .animation-controls { position: absolute; z-index: 5; top: 0; left: 0; display: flex; gap: 4px; padding: 4px; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.3); transform: translate3d(var(--animation-controls-x, 8px), var(--animation-controls-y, 8px), 0); }
 .animation-controls[hidden] { display: none; }

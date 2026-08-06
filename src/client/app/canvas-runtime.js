@@ -4,6 +4,8 @@
   const WIDGET_REFINE_HINT_MS = 10000;
   const WIDGET_REFINE_CLICK_PULSE_MS = 900;
   const objectChromeButtons = new Map();
+  const widgetRefineTouchCandidates = new Map();
+  let widgetRefineConfirmationElement = null;
   let nextObjectChromeStyleId = 1;
   function normalizedWidgetSource(value) {
     return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
@@ -1221,6 +1223,7 @@
   }
   function releaseWidgetHostTouch(widget, pointerId) {
     const id = widgetHostPointerId(widget, pointerId);
+    finishWidgetRefineTouch(id);
     widgetHostPointerAnchors.delete(id);
     state.pointers.delete(id);
     state.touches.delete(id);
@@ -1233,6 +1236,7 @@
     const point = widgetHostViewportPoint(widget, message);
     if (!point) return false;
     const id = widgetHostPointerId(widget, message.pointerId);
+    beginWidgetRefineTouch(id, widget);
     state.pointers.set(id, point);
     state.touches.set(id, point);
     widgetHostPointerAnchors.set(id, { clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY });
@@ -1272,6 +1276,7 @@
     state.pointers.delete(id);
     state.touches.delete(id);
     widgetHostPointerAnchors.delete(id);
+    finishWidgetRefineTouch(id);
     state.touchGesture = null;
     if (state.touches.size === 1) {
       const [remainingId, point] = state.touches.entries().next().value;
@@ -2103,23 +2108,31 @@
     const widget = visibleWidgets().find((item) => item.id === widgetId);
     return widget?.shell && !widget.pending && widget.renderActive !== false ? widget : null;
   }
-  function strokeWidgetRefineOutline(context, widget, opacity = 1) {
+  function strokeWidgetRefineOutline(context, widget, opacity = 1, muted = false) {
     const box = widgetBox(widget),
       unit = 1 / state.scale;
     context.save();
     context.globalAlpha *= opacity;
-    context.strokeStyle = "rgba(0, 122, 255, 0.34)";
+    if (muted) context.strokeStyle = "rgba(107, 114, 128, 0.38)";
+    else {
+      context.strokeStyle = "rgba(0, 122, 255, 0.34)";
+    }
     context.lineWidth = unit;
     context.setLineDash([4 * unit, 4 * unit]);
     context.lineCap = context.lineJoin = "round";
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.restore();
   }
+  function widgetRefineCandidateForId(widgetId) {
+    const confirmation = state.widgetRefineConfirmation;
+    if (confirmation?.widgetId === widgetId) return confirmation.candidate;
+    return [state.widgetRefineCandidate, state.widgetRefineHoverCandidate].find(candidate => candidate?.widgetId === widgetId) || null;
+  }
   function drawWidgetRefineButtonHoverOutline(context) {
     const widgetId = state.widgetRefineButtonHoverId;
     if (!["pen", "hand"].includes(state.mode) || !widgetId || state.widgetRefineClickPulse?.widgetId === widgetId) return;
     const widget = widgetRefineOutlineTarget(widgetId);
-    if (widget) strokeWidgetRefineOutline(context, widget);
+    if (widget) strokeWidgetRefineOutline(context, widget, 1, widgetRefineCandidateForId(widgetId)?.instructionMode === "implicit-polish");
   }
   function triggerWidgetRefineClickPulse(widgetId) {
     if (!widgetId) return;
@@ -2142,8 +2155,50 @@
     }
     const progress = elapsed / WIDGET_REFINE_CLICK_PULSE_MS,
       opacity = Math.sin(progress * Math.PI * 2) ** 2;
-    strokeWidgetRefineOutline(context, widget, opacity);
+    strokeWidgetRefineOutline(context, widget, opacity, widgetRefineCandidateForId(pulse.widgetId)?.instructionMode === "implicit-polish");
     requestInteractionLayerRender();
+  }
+  function currentWidgetRefineConfirmation() {
+    const confirmation = state.widgetRefineConfirmation;
+    if (!confirmation) return null;
+    if (!validWidgetRefineCandidate(confirmation.candidate)) {
+      state.widgetRefineConfirmation = null;
+      return null;
+    }
+    const dirtyBox = confirmation.dirtyBox ? { ...confirmation.dirtyBox } : null,
+      hasDirty = Boolean(confirmation.hasDirty && dirtyBox);
+    return {
+      ...confirmation,
+      dirtyBox,
+      hasDirty,
+      instructionMode:hasDirty
+        ? confirmation.candidate.instructionMode === "nearby-dirty" ? "nearby-dirty" : "viewport-dirty"
+        : "implicit-polish",
+    };
+  }
+  function drawWidgetRefineConfirmation(context) {
+    const confirmation = currentWidgetRefineConfirmation();
+    if (!confirmation) return;
+    const widget = widgetRefineOutlineTarget(confirmation.widgetId);
+    if (!widget) return;
+    strokeWidgetRefineOutline(context, widget, 1, !confirmation.hasDirty);
+    if (!confirmation.dirtyBox) return;
+    const box = confirmation.dirtyBox,
+      widgetBounds = widgetBox(widget),
+      unit = 1 / state.scale;
+    context.save();
+    context.strokeStyle = "rgba(0, 122, 255, 0.34)";
+    context.lineWidth = unit;
+    context.setLineDash([4 * unit, 4 * unit]);
+    context.lineCap = context.lineJoin = "round";
+    context.strokeRect(box.x, box.y, box.w, box.h);
+    context.setLineDash([]);
+    context.globalAlpha *= .72;
+    context.beginPath();
+    context.moveTo(box.x + box.w / 2, box.y + box.h / 2);
+    context.lineTo(widgetBounds.x + widgetBounds.w / 2, widgetBounds.y + widgetBounds.h / 2);
+    context.stroke();
+    context.restore();
   }
   function drawWidgetChrome(context) {
     if (!widgetRuntimeEnabled()) return;
@@ -2287,6 +2342,7 @@
     clearTimeout(state.widgetRefineHintTimer);
     state.widgetRefineHintTimer = 0;
     state.widgetRefineCandidate = null;
+    state.widgetRefineConfirmation = null;
     requestInteractionLayerRender();
   }
   function dismissWidgetRefineCandidate() {
@@ -2343,12 +2399,12 @@
     if (!widget || activeWidgetRefinement()) return null;
     if (persistentCandidate?.widget === widget) return persistentCandidate;
     if (hoverCandidate?.widget === widget) return hoverCandidate;
-    if (!viewportHasWidgetRefineInput()) return null;
+    const hasDirty = viewportHasWidgetRefineInput();
     return {
       widget,
       widgetId:widget.id,
-      instructionMode:"viewport-dirty",
-      hintKey:"widgetRefineViewportHint",
+      instructionMode:hasDirty ? "viewport-dirty" : "implicit-polish",
+      hintKey:hasDirty ? "widgetRefineViewportHint" : "widgetRefineNoInputHint",
       hintUntil:0,
       expiresAt:0,
     };
@@ -2375,27 +2431,60 @@
       requestInteractionLayerRender();
     }, WIDGET_REFINE_HOVER_GRACE_MS);
   }
+  function setWidgetRefineHoverCandidate(widget, showHint = true) {
+    if (!widget || activeWidgetRefinement()) return null;
+    const hasDirty = viewportHasWidgetRefineInput();
+    clearTimeout(state.widgetRefineHoverTimer);
+    state.widgetRefineHoverTimer = 0;
+    let candidate = state.widgetRefineHoverCandidate;
+    if (!candidate || candidate.widget !== widget || candidate.hasDirty !== hasDirty) candidate = {
+      widget,
+      widgetId:widget.id,
+      hasDirty,
+      instructionMode:hasDirty ? "viewport-dirty" : "implicit-polish",
+      hintKey:hasDirty ? "widgetRefineViewportHint" : "widgetRefineNoInputHint",
+      hintUntil:showHint ? Date.now() + WIDGET_REFINE_HINT_MS : 0,
+      expiresAt:0,
+    };
+    candidate.expiresAt = 0;
+    state.widgetRefineHoverCandidate = candidate;
+    return candidate;
+  }
+  function beginWidgetRefineTouch(pointerId, widget) {
+    if (!pointerId || !widget || !["pen", "hand"].includes(state.mode)) return null;
+    const candidate = setWidgetRefineHoverCandidate(widget, false);
+    if (!candidate) return null;
+    widgetRefineTouchCandidates.set(pointerId, candidate);
+    state.widgetRefineHoveredWidgetId = widget.id;
+    scheduleWidgetRefineHintRender();
+    requestInteractionLayerRender();
+    return candidate;
+  }
+  function finishWidgetRefineTouch(pointerId) {
+    const candidate = widgetRefineTouchCandidates.get(pointerId);
+    if (!candidate) return;
+    widgetRefineTouchCandidates.delete(pointerId);
+    if (![...widgetRefineTouchCandidates.values()].some(item => item.widgetId === candidate.widgetId)
+      && state.widgetRefineHoveredWidgetId === candidate.widgetId) state.widgetRefineHoveredWidgetId = null;
+    if (state.widgetRefineHoverCandidate === candidate) scheduleWidgetRefineHoverClear();
+    scheduleWidgetRefineHintRender();
+    requestInteractionLayerRender();
+  }
   function updateWidgetRefinePointer(point) {
     state.widgetRefinePointer = point && valid(point) ? point : null;
     const widget = ["pen", "hand"].includes(state.mode) ? widgetAtRefinePoint(state.widgetRefinePointer) : null,
       previousHoverId = state.widgetRefineHoveredWidgetId,
       previousCandidate = state.widgetRefineHoverCandidate;
+    const hasDirty = viewportHasWidgetRefineInput();
     state.widgetRefineHoveredWidgetId = widget?.id || null;
-    if (widget && viewportHasWidgetRefineInput() && !activeWidgetRefinement()) {
-      clearTimeout(state.widgetRefineHoverTimer);
-      state.widgetRefineHoverTimer = 0;
-      let candidate = state.widgetRefineHoverCandidate;
-      if (!candidate || candidate.widget !== widget) candidate = {
-        widget,
-        widgetId:widget.id,
+    if (widget && !activeWidgetRefinement()) {
+      const candidate = setWidgetRefineHoverCandidate(widget);
+      if (candidate && hasDirty) Object.assign(candidate, {
         instructionMode:"viewport-dirty",
         hintKey:"widgetRefineViewportHint",
-        hintUntil:Date.now() + WIDGET_REFINE_HINT_MS,
-        expiresAt:0,
-      };
-      candidate.expiresAt = 0;
-      state.widgetRefineHoverCandidate = candidate;
-    } else scheduleWidgetRefineHoverClear();
+      });
+    }
+    else scheduleWidgetRefineHoverClear();
     if (previousHoverId !== state.widgetRefineHoveredWidgetId || previousCandidate !== state.widgetRefineHoverCandidate) {
       scheduleWidgetRefineHintRender();
       requestInteractionLayerRender();
@@ -2403,6 +2492,38 @@
   }
   function refreshWidgetRefineHoverCandidate() {
     updateWidgetRefinePointer(state.widgetRefinePointer);
+  }
+  function beginWidgetRefineConfirmation(candidate) {
+    if (!validWidgetRefineCandidate(candidate) || activeWidgetRefinement()) return false;
+    const visible = viewportRect(),
+      dirtyBox = state.dirty && visible ? intersection(state.dirty, visible) : null,
+      hasDirty = Boolean(dirtyBox);
+    state.widgetRefineConfirmation = {
+      candidate,
+      widget:candidate.widget,
+      widgetId:candidate.widgetId,
+      dirtyBox:dirtyBox ? { ...dirtyBox } : null,
+      hasDirty,
+      instructionMode:hasDirty
+        ? candidate.instructionMode === "nearby-dirty" ? "nearby-dirty" : "viewport-dirty"
+        : "implicit-polish",
+    };
+    state.widgetRefineButtonHoverId = null;
+    requestInteractionLayerRender();
+    return true;
+  }
+  function cancelWidgetRefineConfirmation() {
+    if (!state.widgetRefineConfirmation) return false;
+    state.widgetRefineConfirmation = null;
+    requestInteractionLayerRender();
+    return true;
+  }
+  function confirmWidgetRefinement() {
+    const confirmation = currentWidgetRefineConfirmation();
+    if (!confirmation) return false;
+    state.widgetRefineConfirmation = null;
+    triggerWidgetRefineClickPulse(confirmation.widgetId);
+    return requestWidgetRefinement(confirmation.widget, confirmation.instructionMode);
   }
   async function copyWidgetSource(widget) {
     const source = widgetCopySource(widget);
@@ -2473,13 +2594,13 @@
       baseWidth:widgetToolLabelWidth(copyLabel, 118),
       activate:() => void copyWidgetSource(widget),
     });
-    if (options.refine) items.push({
+    if (options.refine && state.widgetRefineConfirmation?.widgetId !== widget.id) items.push({
       key:`widget:${widget.id}:tool-refine`,
       kind:"refine",
       label:t("widgetRefine"),
       baseWidth:112,
       refineCandidate:options.refine,
-      activate:() => void requestWidgetRefinement(widget, options.refine.instructionMode),
+      activate:() => void beginWidgetRefineConfirmation(options.refine),
     });
     if (!items.length) return;
     const gap = 4,
@@ -2566,6 +2687,51 @@
     if (kind === "copy") return t("copyText");
     if (kind === "refine") return t("widgetRefine");
     return t("hand");
+  }
+  function syncWidgetRefineConfirmation() {
+    const confirmation = currentWidgetRefineConfirmation();
+    if (!confirmation) {
+      if (widgetRefineConfirmationElement) {
+        widgetRefineConfirmationElement.remove();
+        widgetRefineConfirmationElement = null;
+      }
+      return;
+    }
+    const widget = widgetRefineOutlineTarget(confirmation.widgetId);
+    if (!widget) return;
+    if (!widgetRefineConfirmationElement) {
+      const element = document.createElement("div"),
+        copy = document.createElement("span"),
+        yes = document.createElement("button"),
+        no = document.createElement("button");
+      element.className = "widget-refine-confirmation";
+      copy.className = "widget-refine-confirmation-copy";
+      yes.className = "widget-refine-confirmation-button confirm";
+      no.className = "widget-refine-confirmation-button cancel";
+      yes.type = no.type = "button";
+      yes.innerHTML = OBJECT_CHROME_ICONS.accept;
+      no.innerHTML = OBJECT_CHROME_ICONS.cancel;
+      yes.setAttribute("aria-label", t("widgetRefineConfirm"));
+      no.setAttribute("aria-label", t("widgetRefineCancel"));
+      yes.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); confirmWidgetRefinement(); });
+      no.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); cancelWidgetRefineConfirmation(); });
+      element.append(copy, yes, no);
+      objectChromeLayer.append(element);
+      widgetRefineConfirmationElement = element;
+    }
+    const element = widgetRefineConfirmationElement,
+      copy = element.querySelector(".widget-refine-confirmation-copy"),
+      screenBox = screenObjectBox(widgetBox(widget)),
+      width = Math.max(180, Math.min(440, view.clientWidth - 24)),
+      height = 42,
+      x = Math.max(12, Math.min(Math.max(12, view.clientWidth - width - 12), screenBox.left + screenBox.width / 2 - width / 2)),
+      y = screenBox.top - height - 10 >= 8 ? screenBox.top - height - 10 : Math.min(view.clientHeight - height - 8, screenBox.top + screenBox.height + 10);
+    const declaration = runtimeElementStyle(element, "widget-refine-confirmation");
+    copy.textContent = t(confirmation.hasDirty ? "widgetRefineConfirmDirty" : "widgetRefineConfirmNoInput");
+    element.classList.toggle("no-input", !confirmation.hasDirty);
+    declaration?.setProperty("--widget-refine-confirm-x", `${x.toFixed(1)}px`);
+    declaration?.setProperty("--widget-refine-confirm-y", `${Math.max(8, y).toFixed(1)}px`);
+    declaration?.setProperty("--widget-refine-confirm-width", `${width.toFixed(1)}px`);
   }
   function beginObjectChromeMove(event, spec) {
     if (state.mode !== "hand" || Number(event.button) !== 0) return false;
@@ -2782,6 +2948,7 @@
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupBaseWidth === spec.baseWidth));
+      button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
       else delete button.dataset.widgetToolGroup;
@@ -2817,6 +2984,7 @@
       objectChromeButtons.delete(key);
     }
     if (removedHoveredRefineButton) requestInteractionLayerRender();
+    syncWidgetRefineConfirmation();
   }
   objectChromeLayer?.addEventListener("pointermove", (event) => {
     if (event.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(event));
@@ -2859,6 +3027,7 @@
     drawHandModeOutlines(interactionCtx);
     drawWidgetRefineButtonHoverOutline(interactionCtx);
     drawWidgetRefineClickPulse(interactionCtx);
+    drawWidgetRefineConfirmation(interactionCtx);
     drawSelectedAnimation(interactionCtx);
     if (state.pending) {
       interactionCtx.save();
