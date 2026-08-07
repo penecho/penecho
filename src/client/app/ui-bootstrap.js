@@ -73,9 +73,9 @@
     clearTimeout(state.timer);
     state.timer = 0;
     hideWidgetRefineHint();
-    state.latestTypedInput = null;
     const erasing = state.mode === "eraser";
-    if (erasing) invalidateRecognition();
+    if (erasing) clearWidgetRefineCandidate();
+    else state.latestTypedInput = null;
     const cssSize = erasing ? state.eraser : pressureWidth(e),
       size = logicalWidth(cssSize);
     state.userRevision++;
@@ -91,13 +91,15 @@
       bbox: { x: p.x, y: p.y, w: 0, h: 0 },
       trail: [p],
       erase: erasing,
+      dirtyMaskTouched:erasing ? new Set() : null,
     };
     updateCanvasPointerPreview(e);
-    dot(p, erasing, size, !erasing);
+    dot(p, erasing, size, true);
     requestRender();
   }
   screen.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    finishStaleWidgetHostGesture(e);
     if (Date.now() < state.textInputBlockedUntil) return;
     try {
       screen.setPointerCapture(e.pointerId);
@@ -107,7 +109,10 @@
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
         touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
-      if (touchWidget) beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
+      if (touchWidget) {
+        if (state.mode !== "hand") showCanvasHint("canvasHintWidgetTouchHand");
+        if (state.mode === "pen") beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
+      }
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (state.touches.size >= 2) {
         state.textTap = null;
@@ -170,6 +175,7 @@
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -233,7 +239,7 @@
       cssSize = d.erase ? state.eraser : pressureWidth(e),
       size = logicalWidth(cssSize);
     state.userRevision++;
-    stroke(a, p, d.erase, size, !d.erase);
+    stroke(a, p, d.erase, size, true);
     d.last = p;
     d.size = size;
     d.points++;
@@ -336,6 +342,15 @@
     },
     { passive: false },
   );
+  canvasNavigationLock.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  canvasNavigationLock.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setCanvasNavigationLocked(!state.navigationLocked);
+  });
   function enterAIDraftHandMode() {
     if (state.mode !== "hand" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
     state.pendingHistoryRestored = false;
@@ -1001,6 +1016,7 @@
     updateTraceToggle();
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {
     closeSettings(false);
@@ -1099,11 +1115,13 @@
   document.querySelectorAll(".radial-action").forEach((button) => button.setAttribute("tabindex", "-1"));
   setPluginTemplate("simple");
   applyLanguage();
+  setWidgetShadowEnabled(state.widgetShadowEnabled);
   applyTheme(state.theme);
   resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
   refreshSnapshots().catch(() => {});
   fit();
   setNavigating(true);
+  scheduleAIOrbIdle();
   requestAnimationFrame(() => requestAnimationFrame(maybeStartOnboarding));
 })();

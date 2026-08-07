@@ -32,7 +32,7 @@
     innerDocumentUrl = null,
     runtimeVersion = 0,
     innerDocumentReady = false,
-    widgetState = { selected:false, active:true, scaleX:1, scaleY:1 };
+    widgetState = { selected:false, active:true, navigationLocked:false, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
 
   inner.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
@@ -66,7 +66,8 @@
       MAX_SNAPSHOT_DIMENSION = 2400,
       MAX_SNAPSHOT_PIXELS = 4800000,
       PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024;
-    let widgetState = { selected:false, active:true, scaleX:1, scaleY:1 },
+    let widgetState = { selected:false, active:true, navigationLocked:false, scaleX:1, scaleY:1 },
+      widgetStateReceived = false,
       suppressClickUntil = 0,
       middlePan = null;
     const presses = new Map(),
@@ -334,21 +335,22 @@
     }
     function finishPress(event, cancelled = false) {
       const press = presses.get(event.pointerId);
-      if (!press) return;
+      if (!press || press.finishing) return;
+      press.finishing = true;
       clearHoldTimer(press);
-      press.clientX = Number(event.clientX);
-      press.clientY = Number(event.clientY);
-      press.screenX = Number(event.screenX);
-      press.screenY = Number(event.screenY);
+      for (const key of ["clientX", "clientY", "screenX", "screenY"]) {
+        const value = Number(event[key]);
+        if (Number.isFinite(value)) press[key] = value;
+      }
       if (press.active) {
         event.preventDefault?.();
         event.stopImmediatePropagation?.();
         pointerMessage(DRAG_END, { ...press, cancelled });
         suppressClickUntil = clock() + 650;
       }
-      if (press.pointerType === "touch") pointerMessage(TOUCH_END, { ...press, cancelled });
-      if (press.captured) try { document.documentElement.releasePointerCapture(press.pointerId); } catch {}
+      if (press.pointerType === "touch" && !widgetState.navigationLocked) pointerMessage(TOUCH_END, { ...press, cancelled });
       presses.delete(event.pointerId);
+      if (press.captured) try { document.documentElement.releasePointerCapture(press.pointerId); } catch {}
       if (![...presses.values()].some((item) => item.active)) document.documentElement.classList.remove("penecho-widget-dragging");
     }
     function finishMiddlePan(event, cancelled = false) {
@@ -366,7 +368,7 @@
       return true;
     }
     addEventListener("pointerdown", (event) => {
-      if (Number(event.button) === 1 && event.pointerType === "mouse" && !middlePan) {
+      if (Number(event.button) === 1 && event.pointerType === "mouse" && !middlePan && !widgetState.navigationLocked) {
         middlePan = {
           pointerId:event.pointerId,
           pointerType:event.pointerType,
@@ -410,7 +412,7 @@
       };
       if (![press.clientX, press.clientY, press.startX, press.startY].every(Number.isFinite)) return;
       presses.set(event.pointerId, press);
-      if (press.pointerType === "touch") {
+      if (press.pointerType === "touch" && !widgetState.navigationLocked) {
         pointerMessage(TOUCH_START, press);
         if (touchCount() >= 2) cancelAllHoldsForNavigation();
       }
@@ -440,13 +442,17 @@
       press.screenX = screenX;
       press.screenY = screenY;
       if (press.active) {
+        if (press.pointerType === "mouse" && (Number(event.buttons) & 1) === 0) {
+          finishPress(event);
+          return;
+        }
         event.preventDefault();
         event.stopImmediatePropagation();
         pointerMessage(DRAG_MOVE, press);
         return;
       }
       const moved = Math.hypot(screenX - press.startX, screenY - press.startY) > MOVE_TOLERANCE_PX;
-      if (press.pointerType === "touch" && (press.navigation || touchCount() >= 2)) {
+      if (press.pointerType === "touch" && !widgetState.navigationLocked && (press.navigation || touchCount() >= 2)) {
         if (moved || touchCount() >= 2) {
           clearHoldTimer(press);
           press.navigation = true;
@@ -465,8 +471,15 @@
     addEventListener("pointercancel", (event) => {
       if (!finishMiddlePan(event, true)) finishPress(event, true);
     }, { capture:true, passive:false });
+    addEventListener("lostpointercapture", (event) => {
+      if (presses.has(event.pointerId)) finishPress({ pointerId:event.pointerId }, true);
+    }, { capture:true });
+    addEventListener("blur", () => {
+      for (const press of [...presses.values()]) finishPress({ pointerId:press.pointerId }, true);
+    });
     addEventListener("wheel", (event) => {
       if (!Number.isFinite(event.deltaY) || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+      if (widgetState.navigationLocked) return;
       parent.postMessage({ type:WHEEL, localX:event.clientX, localY:event.clientY, deltaY:event.deltaY }, "*");
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -531,6 +544,9 @@
         } catch {}
       }
       document.documentElement.classList.add("penecho-widget-paused");
+    }
+    function notifyVisibleViewport() {
+      try { dispatchEvent(new Event("resize")); } catch {}
     }
     function inlineSvgComputedStyles() {
       const properties = [
@@ -654,26 +670,27 @@
         nativeRequestAnimationFrame(() => finish(true));
       });
     }
-    function flushPendingSnapshotFrame() {
-      const callbacks = [...pendingAnimationFrames.entries()],
-        timestamp = clock();
-      for (const [id, callback] of callbacks) {
-        if (!pendingAnimationFrames.has(id)) continue;
-        pendingAnimationFrames.delete(id);
-        try {
-          callback(timestamp);
-        } catch (error) {
-          recordRuntimeError({
-            kind:"error",
-            name:error?.name || "Error",
-            message:error?.message || error,
-            file:"widget.html",
-            line:0,
-            column:0,
-            error,
-          });
+    function captureDirectRendererStyleMutations() {
+      if (typeof MutationObserver !== "function" || !document.documentElement) return () => {};
+      const originalStyles = new Map(),
+        remember = (records) => {
+          for (const record of records) if (!originalStyles.has(record.target)) originalStyles.set(record.target, record.oldValue);
+        },
+        observer = new MutationObserver(remember);
+      observer.observe(document.documentElement, {
+        subtree:true,
+        attributes:true,
+        attributeFilter:["style"],
+        attributeOldValue:true,
+      });
+      return () => {
+        remember(observer.takeRecords());
+        observer.disconnect();
+        for (const [element, value] of originalStyles) {
+          if (value === null) element.removeAttribute("style");
+          else element.setAttribute("style", value);
         }
-      }
+      };
     }
     function imageFromUrl(url, timeoutMs = 5000) {
       return new Promise((resolve, reject) => {
@@ -734,9 +751,9 @@
           requestedHeight = Math.max(1, Number(message.height) || document.documentElement.clientHeight || 1),
           scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight))),
           timeoutMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
-        const framePresented = await settleSnapshotFrame();
-        setRuntimeActive(false);
-        if (!framePresented) flushPendingSnapshotFrame();
+        // Read the presented widget without pausing its live runtime. Cancelling
+        // animation frames here can blank maps and canvases for the whole save.
+        await settleSnapshotFrame();
         restoreSvgStyles = inlineSvgComputedStyles();
         restoreCompatibleColors = inlineSnapshotCompatibleColors();
         let captureExpired = false;
@@ -755,22 +772,32 @@
           if (!canvas) {
             const domSnapshotRenderer = globalThis.html2canvas;
             if (typeof domSnapshotRenderer !== "function") throw Error("Widget renderer is unavailable");
-            canvas = await domSnapshotRenderer(document.documentElement, {
-              backgroundColor:null,
-              width:requestedWidth,
-              height:requestedHeight,
-              windowWidth:requestedWidth,
-              windowHeight:requestedHeight,
-              scrollX:0,
-              scrollY:0,
-              scale,
-              logging:false,
-              useCORS:true,
-              allowTaint:false,
-              foreignObjectRendering:false,
-              penechoDirectRendering:true,
-              imageTimeout:Math.min(10000, timeoutMs),
-            });
+            const restoreDirectRendererStyles = captureDirectRendererStyleMutations();
+            let rendering;
+            try {
+              rendering = domSnapshotRenderer(document.documentElement, {
+                backgroundColor:null,
+                width:requestedWidth,
+                height:requestedHeight,
+                windowWidth:requestedWidth,
+                windowHeight:requestedHeight,
+                scrollX:0,
+                scrollY:0,
+                scale,
+                logging:false,
+                useCORS:true,
+                allowTaint:false,
+                foreignObjectRendering:false,
+                penechoDirectRendering:true,
+                imageTimeout:Math.min(10000, timeoutMs),
+              });
+            } finally {
+              // Direct parsing removes transforms and animation durations from
+              // the live DOM. Restore them before the browser can paint so a
+              // save cannot blank maps or move other rendered widget content.
+              restoreDirectRendererStyles();
+            }
+            canvas = await rendering;
           }
           if (captureExpired) {
             canvas.width = canvas.height = 1;
@@ -787,11 +814,7 @@
         try {
           restoreCompatibleColors();
         } finally {
-          try {
-            restoreSvgStyles();
-          } finally {
-            setRuntimeActive(widgetState.active);
-          }
+          restoreSvgStyles();
         }
       }
     }
@@ -813,8 +836,11 @@
       } else if (event.data?.type === "penecho-widget-snapshot-request") void snapshot(event.data);
       else if (event.data?.type === "penecho-widget-state" && typeof event.data.selected === "boolean" && typeof event.data.active === "boolean"
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
-        widgetState = { selected:event.data.selected, active:event.data.active, scaleX:event.data.scaleX, scaleY:event.data.scaleY };
+        const becameVisible = event.data.active && (!widgetStateReceived || !widgetState.active);
+        widgetState = { selected:event.data.selected, active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
+        widgetStateReceived = true;
         setRuntimeActive(widgetState.active);
+        if (becameVisible) notifyVisibleViewport();
       }
     });
     addEventListener("load", notifyReady, { once: true });
@@ -989,8 +1015,12 @@
     return false;
   }
 
+  function compatibleInlineWidgetScript(source) {
+    return String(source || "").replace(/\b(?:(?:window|globalThis)\.)?parent\.penechoFetchPublic\b/g, "window.penechoFetchPublic");
+  }
+
   function scopedInlineWidgetScript(source) {
-    const script = String(source || "");
+    const script = compatibleInlineWidgetScript(source);
     return inlineScriptHasWindowBinding(script) ? `(() => {\n${script}\n})();` : script;
   }
 
@@ -1134,7 +1164,7 @@
         inner.src = innerDocumentUrl;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
-        widgetState = { selected:message.selected, active:message.active, scaleX:message.scaleX, scaleY:message.scaleY };
+        widgetState = { selected:message.selected, active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-snapshot-request") {
         const requestedWidth = Number(message.width), requestedHeight = Number(message.height),

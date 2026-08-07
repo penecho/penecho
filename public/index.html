@@ -260,6 +260,14 @@
       <div class="frame-corner corner-left" aria-hidden="true"></div>
       <div class="frame-corner corner-right" aria-hidden="true"></div>
       <section id="viewport" data-i18n-aria="canvas" aria-label="Zoomable handwritten AI canvas">
+        <button id="canvasNavigationLock" class="canvas-navigation-lock" type="button" aria-pressed="false" data-i18n-aria="canvasLockNavigation" aria-label="Lock canvas navigation" data-i18n-title="canvasLockNavigation" title="Lock canvas navigation">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="navigation-lock-shackle open" d="M8 10V7.5a4 4 0 0 1 7.7-1.5"/>
+            <path class="navigation-lock-shackle closed" d="M8 10V7.5a4 4 0 0 1 8 0V10"/>
+            <rect x="6" y="10" width="12" height="10" rx="2.5"/>
+            <path d="M12 14v2.5"/>
+          </svg>
+        </button>
         <canvas id="screen"></canvas>
         <canvas id="animationLayer" class="animation-layer" aria-hidden="true"></canvas>
         <div id="widgetLayer" class="widget-layer" hidden aria-live="polite"></div>
@@ -319,6 +327,7 @@
             <button type="button" role="menuitem" class="radial-action radial-plot" data-ai-action="plot" data-i18n="plot" data-i18n-aria="plot" aria-label="Plot">Plot</button>
           </div>
         </div>
+        <div id="canvasNavigationLockHint" class="canvas-navigation-lock-hint" data-i18n="canvasNavigationLockedHint">Canvas view locked · Click the top-left lock to unlock</div>
         <div id="tip" data-i18n="tip">Pan: middle-mouse drag, Hand tool, or one finger · Zoom: wheel or pinch</div>
       </section>
     </section>
@@ -490,6 +499,10 @@
           <div class="settings-row">
             <span id="settingsAutoLabel" data-i18n="autoAI">Auto AI</span>
             <button id="settingsAutoToggle" class="settings-switch on" type="button" role="switch" aria-checked="true" aria-labelledby="settingsAutoLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
+          </div>
+          <div class="settings-row">
+            <span id="settingsWidgetShadowLabel" data-i18n="settingsWidgetShadow">Widget &amp; image shadows</span>
+            <button id="settingsWidgetShadowToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsWidgetShadowLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button>
           </div>
           <label class="settings-row" for="aiFont">
             <span data-i18n="aiFont">AI font</span>

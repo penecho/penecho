@@ -3,6 +3,7 @@
 (() => {
   const SIZE = 20000,
     TILE = 512,
+    DIRTY_MASK_SCALE = 0.25,
     INITIAL_VIEW_ZOOM = 1.5,
     EXPORT_MAX_DIMENSION = 16384,
     EXPORT_MAX_PIXELS = 64 * 1024 * 1024,
@@ -15,6 +16,7 @@
     DEFAULT_AI_TIMEOUT = 260000,
     screen = document.querySelector("#screen"),
     view = document.querySelector("#viewport"),
+    canvasNavigationLock = document.querySelector("#canvasNavigationLock"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
@@ -142,6 +144,7 @@
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
     summonToggle = document.querySelector("#summonToggle"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
@@ -199,10 +202,7 @@
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
-    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000,
-    WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS = 350,
-    WIDGET_SNAPSHOT_CACHE_REFRESH_MS = 60000,
-    WIDGET_SNAPSHOT_CACHE_STAGGER_MS = 5000;
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -316,6 +316,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       grid: "Canvas grid",
       gridOn: "Show canvas grid",
       gridOff: "Hide canvas grid",
+      canvasLockNavigation: "Lock canvas navigation",
+      canvasUnlockNavigation: "Unlock canvas navigation",
+      canvasNavigationLockedHint: "Canvas view locked · Click the top-left lock to unlock",
       researchGridDefault: "Research grid (off by default)",
       font: "Font",
       aiFont: "AI font",
@@ -482,6 +485,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
       settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
       settingsCanvasSection: "Canvas preferences",
+      settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
       settingsSummonEnabled: "Show while AI thinks",
@@ -569,16 +573,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotImages: "images",
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
-      canvasHintWidgetAdded: "Draw changes near a widget, then choose AI Refine to apply them.",
-      canvasHintWidgetAddedAlt: "Notes anywhere in this view can guide AI Refine for the widget you select.",
-      canvasHintRefineInPlace: "To improve a widget in place, add marks near it or in this view, then use its AI Refine button.",
+      canvasHintWidgetAdded: "Use Pen to mark changes near a widget, then tap the AI Refine button that appears.",
+      canvasHintWidgetAddedAlt: "In Pen, notes anywhere in this view can reveal AI Refine on the target widget.",
+      canvasHintRefineInPlace: "In Pen, add an instruction, then tap AI Refine on the target widget.",
       canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
       canvasHintHand: "Hand pauses Auto AI without stopping a request already in progress.",
-      canvasHintHandAlt: "Select a widget with Hand to reveal move, copy, delete, and AI Refine.",
+      canvasHintHandAlt: "Select a widget with Hand to reveal its move, copy, and delete controls.",
+      canvasHintWidgetTouchHand: "Switch to Hand to interact directly with this widget's content.",
       canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
       canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
       canvasHintText: "Text supports Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
-      canvasHintTextAlt: "Place text near a widget, then use AI Refine to apply the instruction.",
+      canvasHintTextAlt: "After confirming text near a widget, switch to Pen and tap AI Refine.",
       canvasHintEraser: "Eraser removes ink only; use Hand controls to delete canvas objects.",
       canvasHintEraserAlt: "Erase an instruction before AI runs without changing widgets beneath it.",
       ready: "Ready",
@@ -601,7 +606,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiCancelledForInput: "AI request cancelled because new input started",
       deferred: "New ink found; this AI result was deferred",
       writing: "Writing...",
-      aiDone: "AI complete",
+      aiDone: "AI completed",
       draftRejected: "AI draft discarded",
       draftFading: "Continued writing detected; fading the AI draft",
       canvasChanged: "Canvas changed; the old AI draft was discarded",
@@ -737,9 +742,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
       widgetRefineNearbyHint: "New annotations were detected near this widget. Use AI Refine to update it from those instructions.",
       widgetRefineViewportHint: "New instructions are present in this view. Use AI Refine to update this widget from them.",
-      widgetRefineNoInputHint: "No new instructions are available. You can still refine this widget from the current view.",
+      widgetRefineNoInputHint: "AI Refine needs a clear instruction. Add a note or drawing to show what should change.",
       widgetRefineConfirmDirty: "Update this widget using the new instructions?",
-      widgetRefineConfirmNoInput: "No new instructions. Refine from the current view anyway? A clear instruction works better.",
+      widgetRefineConfirmNoInput: "No change request was found. Continue anyway? AI may not know what you want changed.",
       widgetRefineConfirm: "Update widget",
       widgetRefineCancel: "Cancel",
       widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
@@ -789,6 +794,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
@@ -805,6 +811,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
     initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
@@ -845,6 +852,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       touches: new Map(),
       touchGesture: null,
       panGesture: null,
+      navigationLocked: false,
       textEditors: new Map(),
       textBoxes: [],
       textEditorStyleSheet: null,
@@ -914,6 +922,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
+      widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
       autoPopoverTimer: 0,
@@ -931,6 +940,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       reasoningEffort: initialAiEffort,
       aiRequestTimeoutMs: initialAiTimeout,
       dirty: null,
+      dirtyInkTiles: new Map(),
+      dirtyInkBounds: new Map(),
+      dirtyImageIds: new Set(),
+      dirtyTextBoxIds: new Set(),
       autoEligible: false,
       lastUserBox: null,
       history: [],
@@ -955,6 +968,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       gridVisible: initialTheme === "research" ? initialResearchGrid : initialGrid,
       paint: { paper: "#ead9ad", paperGrid: "#c8ae7155", outside: "#090814", border: "#7f693b" },
       navigationTimer: 0,
+      aiOrbIdleTimer: 0,
       radialGesture: null,
       radialCloseTimer: 0,
       radialSuppressClickUntil: 0,
@@ -1084,6 +1098,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
     }
     for (const widget of state.widgets) rects.push({ x: widget.x, y: widget.y, w: widget.w, h: widget.h });
+    if (state.pendingWidget) rects.push({ x:state.pendingWidget.x, y:state.pendingWidget.y, w:state.pendingWidget.w, h:state.pendingWidget.h });
+    for (const item of state.textBoxes) rects.push({ x:item.x, y:item.y, w:item.w, h:item.h });
     for (const editor of state.textEditors.values()) {
       const scale = Math.max(0.03, state.scale);
       rects.push({ x: editor.x, y: editor.y, w: editor.widthCss / scale, h: editor.heightCss / scale });
@@ -1916,6 +1932,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
+    settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.setAttribute("aria-checked", String(state.widgetShadowEnabled));
     void loadCanvasSettings();
   }
   function openSettings() {
@@ -1952,6 +1970,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
     updateSettingsPanel();
+  }
+  function setWidgetShadowEnabled(enabled) {
+    state.widgetShadowEnabled = Boolean(enabled);
+    localStorage.setItem("penecho-widget-shadow", String(state.widgetShadowEnabled));
+    view.classList.toggle("widget-shadows", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.setAttribute("aria-checked", String(state.widgetShadowEnabled));
+    requestRender();
   }
   function maybeStartOnboarding() {
     if (!maybeStartFeatureTour()) maybeShowChangelog();
@@ -2906,8 +2932,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.busy) {
       state.radialGesture = null;
       closeRadialMenu();
+      revealAIOrb();
       showSummon();
-    } else hideSummon();
+    } else {
+      hideSummon();
+      scheduleAIOrbIdle();
+    }
     updateEmbodimentLabel();
   }
   function setNavigating(value) {
@@ -2920,6 +2950,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }, NAVIGATION_HINT_VISIBLE_MS);
   }
   function wheelNavigating() {
+    setNavigating(true);
+  }
+  function setCanvasNavigationLocked(locked) {
+    state.navigationLocked = Boolean(locked);
+    state.panGesture = null;
+    state.touchGesture = null;
+    state.widgetHostPan = null;
+    const label = t(state.navigationLocked ? "canvasUnlockNavigation" : "canvasLockNavigation");
+    view.classList.toggle("navigation-locked", state.navigationLocked);
+    canvasNavigationLock.classList.toggle("locked", state.navigationLocked);
+    canvasNavigationLock.setAttribute("aria-pressed", String(state.navigationLocked));
+    canvasNavigationLock.setAttribute("aria-label", label);
+    canvasNavigationLock.setAttribute("title", label);
+    syncWidgetHostStates();
+    resetCanvasCursor();
     setNavigating(true);
   }
   function selectionAIRequest(selection = state.selection) {
@@ -2959,8 +3004,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     supersedeActiveAI("manual-action");
     requestAI(action, null, { captureCurrentViewport: true });
   }
+  const AI_ORB_IDLE_DELAY_MS = 5000;
+  function revealAIOrb() {
+    clearTimeout(state.aiOrbIdleTimer);
+    state.aiOrbIdleTimer = 0;
+    embodiment.classList.remove("idle-dim");
+  }
+  function scheduleAIOrbIdle() {
+    revealAIOrb();
+    if (state.busy || embodiment.classList.contains("menu-open")) return;
+    state.aiOrbIdleTimer = setTimeout(() => {
+      state.aiOrbIdleTimer = 0;
+      if (!state.busy && !state.radialGesture && !embodiment.classList.contains("menu-open")) embodiment.classList.add("idle-dim");
+    }, AI_ORB_IDLE_DELAY_MS);
+  }
   function openRadialMenu() {
     if (state.busy) return;
+    revealAIOrb();
     clearTimeout(state.radialCloseTimer);
     embodiment.classList.add("menu-open");
     aiOrb.setAttribute("aria-expanded", "true");
@@ -2976,6 +3036,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.classList.remove("is-highlighted");
       button.setAttribute("tabindex", "-1");
     });
+    if (!state.busy) scheduleAIOrbIdle();
   }
   function chooseRadialAction(clientX, clientY) {
     const orbRect = aiOrb.getBoundingClientRect(),
@@ -3018,6 +3079,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const WIDGET_REFINE_HOVER_GRACE_MS = 5000;
   const WIDGET_REFINE_HINT_MS = 10000;
   const WIDGET_REFINE_CLICK_PULSE_MS = 900;
+  // TEMP: Keep enabled only while visually validating dirty-region shrinking.
+  const SHOW_DIRTY_MASK_DEBUG_BOUNDS = true;
   const objectChromeButtons = new Map();
   const widgetRefineTouchCandidates = new Map();
   let widgetRefineConfirmationElement = null;
@@ -3301,8 +3364,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const item of visibleImages(region)) bounds = unionLocalBounds(bounds, region ? intersection(imageBox(item), region) : imageBox(item));
     return bounds;
   }
-  function drawImagesToContext(context, region = null) {
-    for (const item of visibleImages(region)) context.drawImage(item.image, item.x, item.y, item.w, item.h);
+  function drawImagesToContext(context, region = null, withShadow = false) {
+    for (const item of visibleImages(region)) {
+      if (!withShadow) {
+        context.drawImage(item.image, item.x, item.y, item.w, item.h);
+        continue;
+      }
+      context.save();
+      context.shadowColor = "rgba(15, 23, 42, .24)";
+      context.shadowBlur = 18;
+      context.shadowOffsetX = 0;
+      context.shadowOffsetY = 7;
+      context.drawImage(item.image, item.x, item.y, item.w, item.h);
+      context.restore();
+    }
   }
   function selectedImage() {
     return state.images.find((item) => item.id === state.selectedImageId) || null;
@@ -3344,15 +3419,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.imageGesture = null;
     state.imageEdit = null;
     state.selectedImageId = null;
+    let refineCandidate = null;
     if (edit?.changed) {
       state.userRevision++;
       save();
     } else if (edit) state.imageHistoryBefore = null;
-    if (edit && state.mode !== "hand") schedule();
+    if (edit && state.dirtyImageIds.has(edit.id)) {
+      recomputeDirtyBounds();
+      refineCandidate = relatchWidgetRefineCandidateFromDirty();
+    }
     requestRender();
     if (edit) setStatusKey("ready");
     if (edit && restoreMode) finishManualImageHandMode();
     else if (edit) state.imageHandReturnMode = null;
+    if (edit && state.mode !== "hand" && !refineCandidate) schedule();
     return Boolean(edit);
   }
   function cancelImageEdit() {
@@ -3363,10 +3443,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.imageGesture = null;
     state.imageEdit = null;
     state.selectedImageId = null;
-    if (edit && state.mode !== "hand") schedule();
+    let refineCandidate = null;
+    if (edit && state.dirtyImageIds.has(edit.id)) {
+      recomputeDirtyBounds();
+      refineCandidate = relatchWidgetRefineCandidateFromDirty();
+    }
     requestRender();
     if (edit) setStatusKey("ready");
     if (edit) finishManualImageHandMode();
+    if (edit && state.mode !== "hand" && !refineCandidate) schedule();
     return Boolean(edit);
   }
   function imageControlHit(item, point, pointerType = "mouse") {
@@ -3456,6 +3541,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     state.images = state.images.filter((candidate) => candidate !== item);
+    state.dirtyImageIds.delete(item.id);
+    recomputeDirtyBounds();
     if (state.selectedImageId === item.id) {
       state.selectedImageId = null;
       state.imageEdit = null;
@@ -3491,20 +3578,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           h: Math.min(TILE, item.y + item.h - ty * TILE) - Math.max(0, item.y - ty * TILE),
         });
       }
+    trackMergedImageAsDirty(item, box);
     state.images = state.images.filter((candidate) => candidate !== item);
+    state.dirtyImageIds.delete(item.id);
     if (state.selectedImageId === item.id) {
       state.selectedImageId = null;
       state.imageEdit = null;
       state.imageGesture = null;
     }
     state.userRevision++;
-    mergeDirty(box.x, box.y, 0);
-    mergeDirty(box.x + box.w, box.y + box.h, 0);
+    recomputeDirtyBounds();
     if (edited) finishManualImageHandMode();
-    if (state.mode !== "hand") {
-      state.autoEligible = true;
-      schedule();
-    }
+    state.autoEligible = true;
+    if (state.mode !== "hand") schedule();
     save();
     requestRender();
     setStatusKey("imageMerged");
@@ -3589,6 +3675,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       });
       if (!item) throw imageImportError("imageImportFailed");
       state.images.push(item);
+      state.dirtyImageIds.add(item.id);
+      recomputeDirtyBounds();
+      state.autoEligible = true;
       state.userRevision++;
       save();
       requestRender();
@@ -3688,8 +3777,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
       copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
-      snapshotTimer: 0,
-      snapshotCapturedAt: 0,
       contentVersion: 0,
       snapshotVersion: -1,
       shell: null,
@@ -3775,8 +3862,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setNavigating(false);
     }
     removeWidgetStyleRule(widget);
-    clearTimeout(widget.snapshotTimer);
-    widget.snapshotTimer = 0;
     widget.shell?.remove();
     widget.shell = null;
     widget.frame = null;
@@ -3864,10 +3949,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const selected = widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id),
       active = widget.renderActive !== false,
-      key = `${selected ? 1 : 0}:${active ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
+      key = `${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}`;
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, scaleX, scaleY }, widget.hostOrigin || location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function syncWidgetHostStates() {
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) sendWidgetHostState(widget);
@@ -3881,8 +3966,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
   }
   async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true) {
-    clearTimeout(widget.snapshotTimer);
-    widget.snapshotTimer = 0;
     if (widget.snapshotPromise) {
       const inFlight = widget.snapshotPromise;
       if (!requireFresh) return inFlight;
@@ -3926,37 +4009,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
     })();
     widget.snapshotPromise = snapshotPromise;
-    let snapshotSucceeded = false;
     try {
-      const image = await snapshotPromise;
-      snapshotSucceeded = true;
-      return image;
+      return await snapshotPromise;
     } finally {
       if (widget.snapshotPromise === snapshotPromise) widget.snapshotPromise = null;
-      scheduleWidgetSnapshot(widget, snapshotSucceeded ? WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS : WIDGET_SNAPSHOT_CACHE_REFRESH_MS);
     }
-  }
-  function widgetSnapshotRefreshStagger(widget) {
-    let hash = 0;
-    for (const character of String(widget?.id || "")) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-    return hash % (WIDGET_SNAPSHOT_CACHE_STAGGER_MS + 1);
-  }
-  function scheduleWidgetSnapshot(widget, minimumDelayMs = WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS) {
-    if (widget.snapshotTimer || widget.snapshotPromise) return;
-    const elapsed = widget.snapshotCapturedAt ? Date.now() - widget.snapshotCapturedAt : Number.POSITIVE_INFINITY,
-      stagger = widgetSnapshotRefreshStagger(widget),
-      delay = widget.snapshotImage
-        ? Math.max(minimumDelayMs, WIDGET_SNAPSHOT_CACHE_REFRESH_MS + stagger - elapsed)
-        : Math.max(minimumDelayMs, WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS) + stagger;
-    widget.snapshotTimer = setTimeout(() => {
-      widget.snapshotTimer = 0;
-      if (!(state.widgets.includes(widget) || state.pendingWidget === widget) || !widget.shell) return;
-      if (widget.renderActive === false) {
-        scheduleWidgetSnapshot(widget, WIDGET_SNAPSHOT_CACHE_REFRESH_MS);
-        return;
-      }
-      void requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, false).catch(() => {});
-    }, Math.max(WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS, delay));
   }
   async function handleWidgetMessage(event) {
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])].find((item) => item.frame?.contentWindow === event.source);
@@ -3971,7 +4028,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     if (message.type === "penecho-widget-capture-ready") {
-      scheduleWidgetSnapshot(widget);
       return;
     }
     if (message.type === "penecho-widget-activate") {
@@ -4005,7 +4061,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (message.type === "penecho-widget-updated") {
       widget.contentVersion++;
-      if (!widget.snapshotImage) scheduleWidgetSnapshot(widget);
       return;
     }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
@@ -4013,14 +4068,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!pending || pending.widget !== widget) return;
     widgetSnapshotRequests.delete(message.requestId);
     clearTimeout(pending.timer);
-    if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")) {
+    if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")
+      || !Number.isFinite(message.width) || message.width <= 0 || !Number.isFinite(message.height) || message.height <= 0) {
       if (message.type === "penecho-widget-snapshot-error") console.warn("PenEcho widget snapshot failed:", String(message.error || "unknown error").slice(0, 300));
       pending.reject(Error(t("widgetExportFailed")));
       return;
     }
     try {
       widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
-      widget.snapshotCapturedAt = Date.now();
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
@@ -4170,6 +4225,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!gesture || gesture.id !== event.pointerId) return false;
     return updateWidgetGesturePoint(gesture, clientPoint(event));
   }
+  function finishReleasedWidgetGesture(event) {
+    const gesture = state.widgetGesture;
+    if (!gesture || event.pointerType !== "mouse" || Number(event.buttons) !== 0) return false;
+    if (gesture.source !== "widget-host" && gesture.id !== event.pointerId) return false;
+    return finishWidgetGesture({ pointerId:gesture.id });
+  }
+  function finishStaleWidgetHostGesture(event) {
+    const gesture = state.widgetGesture;
+    if (!gesture || gesture.source !== "widget-host" || event.pointerType !== "mouse" || Number(event.button) !== 0) return false;
+    return finishWidgetGesture({ pointerId:gesture.id });
+  }
   function validWidgetHostDrag(message) {
     return message && ["penecho-widget-drag-start", "penecho-widget-drag-move", "penecho-widget-drag-end"].includes(message.type)
       && Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff
@@ -4247,11 +4313,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!state.touches.size) setNavigating(false);
   }
   function beginWidgetHostTouch(widget, message) {
-    if (!validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-start") return false;
+    if (state.navigationLocked || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-start") return false;
     const point = widgetHostViewportPoint(widget, message);
     if (!point) return false;
     const id = widgetHostPointerId(widget, message.pointerId);
-    beginWidgetRefineTouch(id, widget);
     state.pointers.set(id, point);
     state.touches.set(id, point);
     widgetHostPointerAnchors.set(id, { clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY });
@@ -4267,7 +4332,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function updateWidgetHostTouch(widget, message) {
-    if (!validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-move") return false;
+    if (state.navigationLocked || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-move") return false;
     const id = widgetHostPointerId(widget, message.pointerId),
       old = state.pointers.get(id),
       point = widgetHostTrackedPoint(widgetHostPointerAnchors.get(id), message) || widgetHostViewportPoint(widget, message);
@@ -4301,7 +4366,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function handleWidgetHostNavigation(widget, message) {
-    if (!validWidgetHostNavigation(message)) return false;
+    if (state.navigationLocked || !validWidgetHostNavigation(message)) return false;
     if (message.type === "penecho-widget-wheel") {
       const point = widgetHostViewportPoint(widget, message);
       if (!point) return false;
@@ -4497,7 +4562,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     mountWidget(widget);
     requestInteractionLayerRender();
     if (widget.widgetType === "html_widget") showCanvasHint(["canvasHintWidgetAdded", "canvasHintWidgetAddedAlt", "canvasHintRefineInPlace", "canvasHintAIAddsOnly"]);
-    setStatusKey("draftReady");
+    setStatusKey("aiDone");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
   function startPendingWidgetReplacement(command, target, revision) {
@@ -4539,7 +4604,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
-          const request = requestWidgetSnapshot(widget);
+          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
@@ -5067,7 +5132,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       ctx.stroke();
     }
-    drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
+    drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t }, state.widgetShadowEnabled);
     drawTextBoxesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
     ctx.restore();
     ctx.strokeStyle = state.paint.border;
@@ -5191,6 +5256,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         : "implicit-polish",
     };
   }
+  function widgetRefineEdgeMidpoints(box) {
+    return [
+      { x:box.x, y:box.y + box.h / 2, axis:"horizontal" },
+      { x:box.x + box.w, y:box.y + box.h / 2, axis:"horizontal" },
+      { x:box.x + box.w / 2, y:box.y, axis:"vertical" },
+      { x:box.x + box.w / 2, y:box.y + box.h, axis:"vertical" },
+    ];
+  }
+  function widgetRefineConnectorPoints(fromBox, toBox) {
+    let closest = null;
+    for (const from of widgetRefineEdgeMidpoints(fromBox))
+      for (const to of widgetRefineEdgeMidpoints(toBox)) {
+        const distance = Math.hypot(to.x - from.x, to.y - from.y);
+        if (!closest || distance < closest.distance) closest = { from, to, distance };
+      }
+    if (!closest) return [];
+    const { from, to } = closest;
+    let points;
+    if (from.axis === to.axis) {
+      if (from.axis === "horizontal") {
+        const middleX = (from.x + to.x) / 2;
+        points = [from, { x:middleX, y:from.y }, { x:middleX, y:to.y }, to];
+      } else {
+        const middleY = (from.y + to.y) / 2;
+        points = [from, { x:from.x, y:middleY }, { x:to.x, y:middleY }, to];
+      }
+    } else if (from.axis === "horizontal") points = [from, { x:to.x, y:from.y }, to];
+    else points = [from, { x:from.x, y:to.y }, to];
+    return points.filter((point, index) => !index || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
+  }
   function drawWidgetRefineConfirmation(context) {
     const confirmation = currentWidgetRefineConfirmation();
     if (!confirmation) return;
@@ -5209,10 +5304,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.setLineDash([]);
     context.globalAlpha *= .72;
-    context.beginPath();
-    context.moveTo(box.x + box.w / 2, box.y + box.h / 2);
-    context.lineTo(widgetBounds.x + widgetBounds.w / 2, widgetBounds.y + widgetBounds.h / 2);
-    context.stroke();
+    const connector = widgetRefineConnectorPoints(box, widgetBounds);
+    if (connector.length > 1) {
+      context.beginPath();
+      context.moveTo(connector[0].x, connector[0].y);
+      for (const point of connector.slice(1)) context.lineTo(point.x, point.y);
+      context.stroke();
+    }
     context.restore();
   }
   function drawWidgetChrome(context) {
@@ -5368,7 +5466,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const candidates = [];
     for (const widget of visibleWidgets()) {
       if (!widget.shell || widget.renderActive === false || widget.pending) continue;
-      const dirty = kind === "text-box" ? boxWidgetProximity(widget, textBoxBox(input)) : strokeWidgetProximity(widget, input);
+      const dirty = kind === "text-box"
+        ? boxWidgetProximity(widget, textBoxBox(input))
+        : kind === "box"
+          ? boxWidgetProximity(widget, input)
+          : strokeWidgetProximity(widget, input);
       if (!dirty) continue;
       candidates.push({
         widget,
@@ -5387,6 +5489,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       requestInteractionLayerRender();
     }
     return state.widgetRefineCandidate;
+  }
+  function relatchWidgetRefineCandidateFromDirty() {
+    clearWidgetRefineCandidate();
+    if (state.hotspotTrail.length) {
+      const strokeCandidate = latchWidgetRefineCandidate({
+        trail:state.hotspotTrail,
+        last:state.hotspotTrail.at(-1),
+        erase:false,
+      });
+      if (strokeCandidate) return strokeCandidate;
+    }
+    for (const id of state.dirtyTextBoxIds) {
+      const item = state.textBoxes.find((candidate) => candidate.id === id);
+      if (item && latchWidgetRefineCandidate(item, "text-box")) return state.widgetRefineCandidate;
+    }
+    for (const id of state.dirtyImageIds) {
+      const item = state.images.find((candidate) => candidate.id === id);
+      if (item && latchWidgetRefineCandidate(imageBox(item), "box")) return state.widgetRefineCandidate;
+    }
+    return null;
   }
   function currentWidgetRefineCandidate() {
     const candidate = state.widgetRefineCandidate;
@@ -5466,7 +5588,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return candidate;
   }
   function beginWidgetRefineTouch(pointerId, widget) {
-    if (!pointerId || !widget || !["pen", "hand"].includes(state.mode)) return null;
+    if (!pointerId || !widget || state.mode !== "pen") return null;
     const candidate = setWidgetRefineHoverCandidate(widget, false);
     if (!candidate) return null;
     widgetRefineTouchCandidates.set(pointerId, candidate);
@@ -5508,15 +5630,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function refreshWidgetRefineHoverCandidate() {
     updateWidgetRefinePointer(state.widgetRefinePointer);
   }
-  function beginWidgetRefineConfirmation(candidate) {
+  function objectChromeAnchor(element) {
+    if (!element?.getBoundingClientRect) return null;
+    const rect = element.getBoundingClientRect(),
+      viewRect = view.getBoundingClientRect(),
+      anchor = {
+        x:rect.left - viewRect.left,
+        y:rect.top - viewRect.top,
+        width:rect.width,
+        height:rect.height,
+      };
+    return Object.values(anchor).every(Number.isFinite) && anchor.width > 0 && anchor.height > 0 ? anchor : null;
+  }
+  function beginWidgetRefineConfirmation(candidate, anchor = null) {
     if (!validWidgetRefineCandidate(candidate) || activeWidgetRefinement()) return false;
     const visible = viewportRect(),
       dirtyBox = state.dirty && visible ? intersection(state.dirty, visible) : null,
       hasDirty = Boolean(dirtyBox);
+    clearTimeout(state.timer);
+    state.timer = 0;
     state.widgetRefineConfirmation = {
       candidate,
       widget:candidate.widget,
       widgetId:candidate.widgetId,
+      anchor:anchor ? { ...anchor } : null,
       dirtyBox:dirtyBox ? { ...dirtyBox } : null,
       hasDirty,
       instructionMode:hasDirty
@@ -5529,8 +5666,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function cancelWidgetRefineConfirmation() {
     if (!state.widgetRefineConfirmation) return false;
-    state.widgetRefineConfirmation = null;
-    requestInteractionLayerRender();
+    clearWidgetRefineCandidate();
+    if (state.auto && state.dirty && state.autoEligible) schedule(state.autoDelayMs);
     return true;
   }
   function confirmWidgetRefinement() {
@@ -5572,10 +5709,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     clearWidgetRefineCandidate();
     supersedeActiveAI("widget-refine");
     setStatusKey("widgetRefining");
+    const visible = viewportRect(),
+      refineInputBox = state.dirty && visible ? intersection(state.dirty, visible) : null;
     void requestAI("answer", null, {
       captureCurrentViewport:true,
       widgetEditTarget:widget,
       widgetEditContext:widgetEditContext(widget, instructionMode),
+      attentionBox:refineInputBox,
     });
     return true;
   }
@@ -5615,28 +5755,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       label:t("widgetRefine"),
       baseWidth:112,
       refineCandidate:options.refine,
-      activate:() => void beginWidgetRefineConfirmation(options.refine),
+      activate:(button) => void beginWidgetRefineConfirmation(options.refine, objectChromeAnchor(button)),
     });
     if (!items.length) return;
     const gap = 4,
-      groupBaseWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
+      groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
+      groupVerticalWidth = Math.max(...items.map(item => item.baseWidth)),
+      groupVerticalHeight = items.length * 34 + gap * (items.length - 1),
       controlScale = 1,
       widgetToolGroup = `widget-${widget.id}`;
-    let groupOffset = 0;
-    for (const item of items) {
+    let horizontalOffset = 0;
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
       specs.push({
         ...item,
         box,
         widget,
         widgetTool:true,
         widgetToolGroup,
-        groupBaseWidth,
-        groupOffset,
+        groupRefineCandidate:options.refine || null,
+        groupItemCount:items.length,
+        groupHorizontalWidth,
+        groupVerticalWidth,
+        groupVerticalHeight,
+        groupHorizontalOffset:horizontalOffset,
+        groupVerticalOffset:index * (34 + gap),
         controlScale,
         baseHeight:34,
         priority:6,
       });
-      groupOffset += item.baseWidth + gap;
+      horizontalOffset += item.baseWidth + gap;
     }
   }
   function objectChromePosition(box, kind, ignoreKey = "", spec = null) {
@@ -5657,20 +5805,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       above = screenBox.top - height - chromeGap,
       y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
     if (spec?.widgetTool) {
-      const groupWidth = spec.groupBaseWidth * controlScale,
-        groupHeight = height,
-        hintSpace = spec.refineCandidate && widgetRefineHintVisible(spec.refineCandidate) ? 88 : 0,
+      const horizontalWidth = spec.groupHorizontalWidth * controlScale,
+        verticalWidth = spec.groupVerticalWidth * controlScale,
+        verticalHeight = spec.groupVerticalHeight * controlScale,
+        hintSpace = spec.groupRefineCandidate && widgetRefineHintVisible(spec.groupRefineCandidate) ? 88 : 0,
         gap = chromeGap * controlScale,
-        clampGroupX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - groupWidth - 6), value)),
-        clampGroupY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - groupHeight - hintSpace - 12), value)),
         positions = [
-          { x:right - groupWidth, y:screenBox.top - groupHeight - gap },
-          { x:right + gap, y:screenBox.top },
-          { x:right + gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
-          { x:right - groupWidth, y:bottom + gap },
-          { x:screenBox.left, y:bottom + gap },
-          { x:screenBox.left - groupWidth - gap, y:screenBox.top + screenBox.height / 2 - groupHeight / 2 },
-        ].map(position => ({ x:clampGroupX(position.x), y:clampGroupY(position.y) })),
+          { side:"top", layout:"horizontal", x:right - horizontalWidth, y:screenBox.top - height - gap, w:horizontalWidth, h:height },
+          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
+          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
+          { side:"bottom", layout:"horizontal", x:right - horizontalWidth, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"bottom", layout:"horizontal", x:screenBox.left, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
+        ].map(position => ({
+          ...position,
+          x:Math.max(6, Math.min(Math.max(6, viewportWidth - position.w - 6), position.x)),
+          y:Math.max(6, Math.min(Math.max(6, viewportHeight - position.h - hintSpace - 12), position.y)),
+        })),
         viewRect = view.getBoundingClientRect(),
         obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
           .filter(element => element.dataset.objectChromeKey !== ignoreKey && element.dataset.widgetToolGroup !== spec.widgetToolGroup)
@@ -5678,11 +5829,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           const rect = element.getBoundingClientRect();
           return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
         }),
-        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + groupWidth + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + groupHeight + 5 > obstacle.y),
+        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + position.w + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + position.h + 5 > obstacle.y),
         groupPosition = positions.find(position => !overlapsObstacle(position)) || positions[0];
+      const vertical = groupPosition.layout === "vertical",
+        alignRight = vertical && groupPosition.side === "left";
       return {
-        x:groupPosition.x + spec.groupOffset * controlScale,
-        y:groupPosition.y,
+        x:groupPosition.x + (vertical ? alignRight ? groupPosition.w - width : 0 : spec.groupHorizontalOffset * controlScale),
+        y:groupPosition.y + (vertical ? spec.groupVerticalOffset * controlScale : 0),
         scale:controlScale,
         baseWidth,
         baseHeight,
@@ -5702,6 +5855,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (kind === "copy") return t("copyText");
     if (kind === "refine") return t("widgetRefine");
     return t("hand");
+  }
+  function widgetRefineConfirmationPosition(anchor, width, height, viewportWidth, viewportHeight) {
+    const safeAnchor = anchor && [anchor.x, anchor.y, anchor.width, anchor.height].every(Number.isFinite)
+        ? anchor
+        : { x:8, y:8, width:0, height:0 },
+      min = 8,
+      maxX = Math.max(min, viewportWidth - width - min),
+      maxY = Math.max(min, viewportHeight - height - min);
+    return {
+      x:Math.max(min, Math.min(maxX, safeAnchor.x + safeAnchor.width / 2 - width / 2)),
+      y:Math.max(min, Math.min(maxY, safeAnchor.y + safeAnchor.height / 2 - height / 2)),
+    };
   }
   function syncWidgetRefineConfirmation() {
     const confirmation = currentWidgetRefineConfirmation();
@@ -5736,17 +5901,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     const element = widgetRefineConfirmationElement,
       copy = element.querySelector(".widget-refine-confirmation-copy"),
-      screenBox = screenObjectBox(widgetBox(widget)),
-      width = Math.max(180, Math.min(440, view.clientWidth - 24)),
-      height = 42,
-      x = Math.max(12, Math.min(Math.max(12, view.clientWidth - width - 12), screenBox.left + screenBox.width / 2 - width / 2)),
-      y = screenBox.top - height - 10 >= 8 ? screenBox.top - height - 10 : Math.min(view.clientHeight - height - 8, screenBox.top + screenBox.height + 10);
-    const declaration = runtimeElementStyle(element, "widget-refine-confirmation");
+      width = Math.max(180, Math.min(560, view.clientWidth - 24)),
+      declaration = runtimeElementStyle(element, "widget-refine-confirmation");
     copy.textContent = t(confirmation.hasDirty ? "widgetRefineConfirmDirty" : "widgetRefineConfirmNoInput");
     element.classList.toggle("no-input", !confirmation.hasDirty);
-    declaration?.setProperty("--widget-refine-confirm-x", `${x.toFixed(1)}px`);
-    declaration?.setProperty("--widget-refine-confirm-y", `${Math.max(8, y).toFixed(1)}px`);
     declaration?.setProperty("--widget-refine-confirm-width", `${width.toFixed(1)}px`);
+    const layoutWidth = Math.max(width, element.offsetWidth || width),
+      height = Math.max(42, element.offsetHeight || 42),
+      screenBox = screenObjectBox(widgetBox(widget)),
+      fallbackAnchor = {
+        x:screenBox.left + screenBox.width / 2 - 56,
+        y:Math.max(8, screenBox.top - 41),
+        width:112,
+        height:34,
+      },
+      position = widgetRefineConfirmationPosition(confirmation.anchor || fallbackAnchor, layoutWidth, height, view.clientWidth, view.clientHeight);
+    declaration?.setProperty("--widget-refine-confirm-x", `${position.x.toFixed(1)}px`);
+    declaration?.setProperty("--widget-refine-confirm-y", `${position.y.toFixed(1)}px`);
   }
   function beginObjectChromeMove(event, spec) {
     if (state.mode !== "hand" || Number(event.button) !== 0) return false;
@@ -5807,10 +5978,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!gesture || gesture.id !== event.pointerId) return false;
     state.textBoxGesture = null;
     if (gesture.changed) {
-      const before = { x:gesture.startX, y:gesture.startY, w:gesture.item.w, h:gesture.item.h };
       state.userRevision++;
-      mergeDirtyBox(before);
-      mergeDirtyBox(textBoxBox(gesture.item));
+      state.dirtyTextBoxIds.add(gesture.item.id);
+      recomputeDirtyBounds();
       state.autoEligible = true;
       save();
       const refineCandidate = latchWidgetRefineCandidate(gesture.item, "text-box");
@@ -5831,9 +6001,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
-      event.stopPropagation();
-      if (kind !== "move") return;
       event.preventDefault();
+      event.stopPropagation();
+      finishStaleWidgetHostGesture(event);
+      if (kind !== "move") {
+        try { button.setPointerCapture(event.pointerId); } catch {}
+        return;
+      }
       beginObjectChromeMove(event, button.penechoSpec);
     });
     button.addEventListener("click", (event) => {
@@ -5841,7 +6015,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       event.stopPropagation();
       if (kind === "move") return;
       if (kind === "refine") triggerWidgetRefineClickPulse(button.penechoSpec?.refineCandidate?.widgetId);
-      button.penechoSpec?.activate?.();
+      button.penechoSpec?.activate?.(button);
     });
     if (kind === "refine") {
       button.addEventListener("pointerenter", () => {
@@ -5907,8 +6081,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function objectChromeSpecs() {
     const persistentCandidate = currentWidgetRefineCandidate(),
       hoverCandidate = currentWidgetRefineHoverCandidate(),
-      editWidget = state.mode === "hand" && state.widgetEdit ? selectedWidget() : null,
-      editWidgetRefineCandidate = selectedWidgetRefineCandidate(editWidget, persistentCandidate, hoverCandidate);
+      editWidget = state.mode === "hand" && state.widgetEdit ? selectedWidget() : null;
     if (state.mode !== "hand") {
       const specs = [];
       if (persistentCandidate) addWidgetToolSpecs(specs, persistentCandidate.widget, { refine:persistentCandidate });
@@ -5920,8 +6093,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
     for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
     for (const widget of visibleWidgets()) specs.push({ key:`widget:${widget.id}:move`, kind:"move", box:widgetBox(widget), target:"widget", object:widget, priority:2 });
-    if (persistentCandidate && persistentCandidate.widget !== editWidget) addWidgetToolSpecs(specs, persistentCandidate.widget, { refine:persistentCandidate });
-    if (hoverCandidate && hoverCandidate.widget !== persistentCandidate?.widget && hoverCandidate.widget !== editWidget) addWidgetToolSpecs(specs, hoverCandidate.widget, { refine:hoverCandidate });
     if (state.animationEdit) {
       const animation = selectedAnimation();
       if (animation) {
@@ -5935,7 +6106,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         const box = widgetBox(editWidget);
         specs.push({ key:`widget:${editWidget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(editWidget), priority:3 });
         specs.push({ key:`widget:${editWidget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
-        addWidgetToolSpecs(specs, editWidget, { copy:true, refine:editWidgetRefineCandidate });
+        addWidgetToolSpecs(specs, editWidget, { copy:true });
       }
     }
     pendingChromeSpecs(specs, state.pending);
@@ -5962,7 +6133,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
-      button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupBaseWidth === spec.baseWidth));
+      button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
@@ -6002,7 +6173,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     syncWidgetRefineConfirmation();
   }
   objectChromeLayer?.addEventListener("pointermove", (event) => {
-    if (event.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(event));
+    if (finishReleasedWidgetGesture(event)) return;
+    const overChromeControl = event.target?.closest?.(".object-chrome-button, .widget-refine-confirmation");
+    if (event.pointerType !== "touch" && !overChromeControl) updateWidgetRefinePointer(clientPoint(event));
     if (state.pendingGesture?.id === event.pointerId) updatePendingGesture(event);
     else if (state.widgetGesture?.id === event.pointerId) updateWidgetGesture(event);
     else if (state.imageGesture?.id === event.pointerId) updateImageGesture(event);
@@ -6040,6 +6213,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     drawPointerPreview(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
     drawHandModeOutlines(interactionCtx);
+    drawDirtyMaskDebugBounds(interactionCtx);
     drawWidgetRefineButtonHoverOutline(interactionCtx);
     drawWidgetRefineClickPulse(interactionCtx);
     drawWidgetRefineConfirmation(interactionCtx);
@@ -6068,31 +6242,203 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.textInputBlockedUntil = Math.max(state.textInputBlockedUntil, Date.now() + duration);
     resetCanvasCursor();
   }
+  function unionDirtyBounds(current, next) {
+    if (!current) return next ? { ...next } : null;
+    if (!next) return { ...current };
+    const x = Math.min(current.x, next.x),
+      y = Math.min(current.y, next.y),
+      right = Math.max(current.x + current.w, next.x + next.w),
+      bottom = Math.max(current.y + current.h, next.y + next.h);
+    return { x, y, w:right - x, h:bottom - y };
+  }
+  function dirtyInkDebugBounds() {
+    let bounds = null;
+    for (const [k, local] of state.dirtyInkBounds) {
+      if (!local) continue;
+      const [tx, ty] = k.split(",").map(Number);
+      bounds = unionDirtyBounds(bounds, {
+        x:tx * TILE + local.x / DIRTY_MASK_SCALE,
+        y:ty * TILE + local.y / DIRTY_MASK_SCALE,
+        w:local.w / DIRTY_MASK_SCALE,
+        h:local.h / DIRTY_MASK_SCALE,
+      });
+    }
+    return bounds;
+  }
+  function dirtyObjectDebugBounds(ids, items, boxForItem) {
+    let bounds = null;
+    for (const id of ids) {
+      const item = items.find((candidate) => candidate.id === id);
+      if (item) bounds = unionDirtyBounds(bounds, boxForItem(item));
+    }
+    return bounds;
+  }
+  function drawDirtyMaskDebugBounds(context) {
+    if (!SHOW_DIRTY_MASK_DEBUG_BOUNDS) return;
+    const boxes = [
+      dirtyInkDebugBounds(),
+      dirtyObjectDebugBounds(state.dirtyImageIds, state.images, imageBox),
+      dirtyObjectDebugBounds(state.dirtyTextBoxIds, state.textBoxes, textBoxBox),
+    ].filter(Boolean);
+    if (!boxes.length) return;
+    const unit = 1 / state.scale,
+      margin = 3 * unit;
+    context.save();
+    context.strokeStyle = "rgba(107, 114, 128, 0.62)";
+    context.lineWidth = unit;
+    context.lineCap = "round";
+    context.setLineDash([unit, 4 * unit]);
+    for (const box of boxes) context.strokeRect(box.x - margin, box.y - margin, box.w + margin * 2, box.h + margin * 2);
+    context.restore();
+  }
   function mergeDirtyBox(box) {
     if (!box) return;
-    if (!state.dirty) {
-      state.dirty = { ...box };
-      return;
-    }
-    const right = Math.max(state.dirty.x + state.dirty.w, box.x + box.w),
-      bottom = Math.max(state.dirty.y + state.dirty.h, box.y + box.h);
-    state.dirty = {
-      x: Math.min(state.dirty.x, box.x),
-      y: Math.min(state.dirty.y, box.y),
-      w: right - Math.min(state.dirty.x, box.x),
-      h: bottom - Math.min(state.dirty.y, box.y),
-    };
+    state.dirty = unionDirtyBounds(state.dirty, box);
   }
-  function reconcileDirtyAfterTextBoxDeletion(deletedBox) {
+  function dirtyMaskTile(tx, ty, create = true) {
+    const k = key(tx, ty);
+    if (!state.dirtyInkTiles.has(k) && create) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = Math.ceil(TILE * DIRTY_MASK_SCALE);
+      canvas.getContext("2d", { willReadFrequently:true });
+      state.dirtyInkTiles.set(k, canvas);
+      state.dirtyInkBounds.set(k, null);
+    }
+    return state.dirtyInkTiles.get(k) || null;
+  }
+  function dirtyMaskLocalBox(tx, ty, box) {
+    const left = Math.max(0, (box.x - tx * TILE) * DIRTY_MASK_SCALE),
+      top = Math.max(0, (box.y - ty * TILE) * DIRTY_MASK_SCALE),
+      right = Math.min(TILE * DIRTY_MASK_SCALE, (box.x + box.w - tx * TILE) * DIRTY_MASK_SCALE),
+      bottom = Math.min(TILE * DIRTY_MASK_SCALE, (box.y + box.h - ty * TILE) * DIRTY_MASK_SCALE);
+    return right > left && bottom > top ? { x:left, y:top, w:right - left, h:bottom - top } : null;
+  }
+  function trackDirtyStrokeSegment(tx, ty, a, b, erase, size, box) {
+    const canvas = dirtyMaskTile(tx, ty, !erase);
+    if (!canvas) return;
+    const context = canvas.getContext("2d", { willReadFrequently:true });
+    context.save();
+    context.globalCompositeOperation = erase ? "destination-out" : "source-over";
+    context.strokeStyle = "#000";
+    context.lineWidth = Math.max(1, size * DIRTY_MASK_SCALE);
+    context.lineCap = context.lineJoin = "round";
+    context.beginPath();
+    context.moveTo((a.x - tx * TILE) * DIRTY_MASK_SCALE, (a.y - ty * TILE) * DIRTY_MASK_SCALE);
+    context.lineTo((b.x - tx * TILE) * DIRTY_MASK_SCALE, (b.y - ty * TILE) * DIRTY_MASK_SCALE);
+    context.stroke();
+    context.restore();
+    const k = key(tx, ty);
+    if (erase) {
+      state.dirtyInkBounds.delete(k);
+      state.drawing?.dirtyMaskTouched?.add(k);
+    }
+    else state.dirtyInkBounds.set(k, unionDirtyBounds(state.dirtyInkBounds.get(k), dirtyMaskLocalBox(tx, ty, box)));
+  }
+  function trackMergedImageAsDirty(item, box) {
+    const x0 = Math.max(0, Math.floor(box.x / TILE)),
+      y0 = Math.max(0, Math.floor(box.y / TILE)),
+      x1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.ceil((box.x + box.w) / TILE) - 1),
+      y1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.ceil((box.y + box.h) / TILE) - 1);
+    for (let ty = y0; ty <= y1; ty++)
+      for (let tx = x0; tx <= x1; tx++) {
+        const canvas = dirtyMaskTile(tx, ty),
+          context = canvas.getContext("2d", { willReadFrequently:true });
+        context.drawImage(
+          item.image,
+          (item.x - tx * TILE) * DIRTY_MASK_SCALE,
+          (item.y - ty * TILE) * DIRTY_MASK_SCALE,
+          item.w * DIRTY_MASK_SCALE,
+          item.h * DIRTY_MASK_SCALE,
+        );
+        const k = key(tx, ty);
+        state.dirtyInkBounds.set(k, unionDirtyBounds(state.dirtyInkBounds.get(k), dirtyMaskLocalBox(tx, ty, box)));
+      }
+  }
+  function dirtyMaskAlphaBounds(canvas) {
+    const { width, height } = canvas;
+    if (!width || !height) return null;
+    const data = canvas.getContext("2d", { willReadFrequently:true }).getImageData(0, 0, width, height).data;
+    let left = width, top = height, right = -1, bottom = -1;
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        if (!data[(y * width + x) * 4 + 3]) continue;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    return right < 0 ? null : { x:left, y:top, w:right - left + 1, h:bottom - top + 1 };
+  }
+  function recomputeDirtyBounds() {
+    let next = null;
+    for (const [k, canvas] of [...state.dirtyInkTiles]) {
+      let local = state.dirtyInkBounds.get(k);
+      if (!state.dirtyInkBounds.has(k)) {
+        local = dirtyMaskAlphaBounds(canvas);
+        state.dirtyInkBounds.set(k, local);
+      }
+      if (!local) {
+        state.dirtyInkTiles.delete(k);
+        state.dirtyInkBounds.delete(k);
+        continue;
+      }
+      const [tx, ty] = k.split(",").map(Number);
+      next = unionDirtyBounds(next, {
+        x:tx * TILE + local.x / DIRTY_MASK_SCALE,
+        y:ty * TILE + local.y / DIRTY_MASK_SCALE,
+        w:local.w / DIRTY_MASK_SCALE,
+        h:local.h / DIRTY_MASK_SCALE,
+      });
+    }
+    for (const id of [...state.dirtyImageIds]) {
+      const item = state.images.find((candidate) => candidate.id === id);
+      if (item) next = unionDirtyBounds(next, imageBox(item));
+      else state.dirtyImageIds.delete(id);
+    }
+    for (const id of [...state.dirtyTextBoxIds]) {
+      const item = state.textBoxes.find((candidate) => candidate.id === id);
+      if (item) next = unionDirtyBounds(next, textBoxBox(item));
+      else state.dirtyTextBoxIds.delete(id);
+    }
+    state.dirty = next;
+    if (!next) state.autoEligible = false;
+    return next;
+  }
+  function clearDirtyContributionTracking() {
+    state.dirtyInkTiles.clear();
+    state.dirtyInkBounds.clear();
+    state.dirtyImageIds.clear();
+    state.dirtyTextBoxIds.clear();
+  }
+  function filterErasedDirtyHotspots(touchedTiles) {
+    const pixels = new Map();
+    state.hotspotTrail = state.hotspotTrail.filter((point) => {
+      const tx = Math.floor(point.x / TILE),
+        ty = Math.floor(point.y / TILE),
+        k = key(tx, ty),
+        canvas = state.dirtyInkTiles.get(k);
+      if (touchedTiles && !touchedTiles.has(k)) return true;
+      if (!canvas) return false;
+      if (!pixels.has(k)) pixels.set(k, canvas.getContext("2d", { willReadFrequently:true }).getImageData(0, 0, canvas.width, canvas.height));
+      const image = pixels.get(k),
+        x = Math.max(0, Math.min(image.width - 1, Math.floor((point.x - tx * TILE) * DIRTY_MASK_SCALE))),
+        y = Math.max(0, Math.min(image.height - 1, Math.floor((point.y - ty * TILE) * DIRTY_MASK_SCALE)));
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const px = x + dx, py = y + dy;
+          if (px >= 0 && py >= 0 && px < image.width && py < image.height && image.data[(py * image.width + px) * 4 + 3]) return true;
+        }
+      return false;
+    });
+  }
+  function reconcileDirtyAfterTextBoxDeletion(deletedTextBox) {
+    const deletedBox = textBoxBox(deletedTextBox);
     const latestTypedBox = state.latestTypedInput?.box,
       deletedLatestTypedInput = latestTypedBox
         && ["x", "y", "w", "h"].every((key) => Math.abs(latestTypedBox[key] - deletedBox[key]) < .001);
     if (deletedLatestTypedInput) state.latestTypedInput = null;
-    // A merged dirty rectangle cannot subtract one contribution. With no pen
-    // input pending, rebuild it from the typed input that still remains.
-    if (state.hotspotTrail.length) return;
-    state.dirty = state.latestTypedInput?.box ? { ...state.latestTypedInput.box } : null;
-    state.autoEligible = Boolean(state.dirty);
+    state.dirtyTextBoxIds.delete(deletedTextBox.id);
+    recomputeDirtyBounds();
   }
   function textEditorScreenPoint(editor) {
     return { left: editor.x * state.scale + state.panX, top: editor.y * state.scale + state.panY };
@@ -6450,7 +6796,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (existingIndex >= 0) state.textBoxes.splice(existingIndex, 1, item);
       else state.textBoxes.push(item);
       state.userRevision++;
-      mergeDirtyBox(box);
+      state.dirtyTextBoxIds.add(item.id);
+      recomputeDirtyBounds();
       state.latestTypedInput = { text: text.slice(0, TEXT_INPUT_MAX_LENGTH), box };
       state.autoEligible = true;
       const refineCandidate = latchWidgetRefineCandidate(item, "text-box");
@@ -6499,7 +6846,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else setCanvasMode("pen");
     if (deletedTextBox) {
       state.userRevision++;
-      reconcileDirtyAfterTextBoxDeletion(textBoxBox(deletedTextBox));
+      reconcileDirtyAfterTextBoxDeletion(deletedTextBox);
       save();
     }
     render();
@@ -6703,7 +7050,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setCanvasCursor(state.mode === "hand" ? "grab" : state.mode === "pen" ? "pen" : state.mode === "eraser" ? "eraser" : "crosshair");
   }
   function beginTouchGesture() {
-    if (state.touches.size < 2) return;
+    if (state.navigationLocked || state.touches.size < 2) return;
     const ids = [...state.touches.keys()].slice(0, 2),
       points = ids.map((id) => state.touches.get(id));
     state.touchGesture = {
@@ -6722,6 +7069,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateTouchGesture() {
     const g = state.touchGesture;
     if (!g) return false;
+    if (state.navigationLocked) {
+      setNavigating(true);
+      return false;
+    }
     const points = g.ids.map((id) => state.touches.get(id));
     if (points.some((p) => !p)) return false;
     const center = {
@@ -6742,12 +7093,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function moveCanvas(dx, dy) {
+    if (state.navigationLocked) {
+      setNavigating(true);
+      return false;
+    }
     state.panX += dx;
     state.panY += dy;
     updateCoordinates();
     requestRender();
+    return true;
   }
   function zoomCanvasAt(clientX, clientY, deltaY) {
+    if (state.navigationLocked) {
+      setNavigating(true);
+      return false;
+    }
     const rect = view.getBoundingClientRect(),
       factor = deltaY < 0 ? 1.12 : 0.89,
       next = Math.max(0.03, Math.min(2, state.scale * factor)),
@@ -6759,6 +7119,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateCoordinates();
     requestRender();
     wheelNavigating();
+    return true;
   }
   function valid(p) {
     return p.x >= 0 && p.x <= SIZE && p.y >= 0 && p.y <= SIZE;
@@ -6781,23 +7142,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function restoreDirty(box) {
-    if (!box) return;
-    if (!state.dirty) {
-      state.dirty = box;
-      return;
+    if (state.dirtyInkTiles.size || state.dirtyImageIds.size || state.dirtyTextBoxIds.size) {
+      const tracked = recomputeDirtyBounds();
+      if (tracked) return;
     }
-    const x = Math.min(box.x, state.dirty.x),
-      y = Math.min(box.y, state.dirty.y),
-      right = Math.max(box.x + box.w, state.dirty.x + state.dirty.w),
-      bottom = Math.max(box.y + box.h, state.dirty.y + state.dirty.h);
-    state.dirty = { x, y, w: right - x, h: bottom - y };
+    if (!box) return;
+    mergeDirtyBox(box);
   }
   function invalidateRecognition() {
     supersedeActiveAI("recognition-invalidated");
     clearTimeout(state.timer);
     state.timer = 0;
+    clearWidgetRefineCandidate();
     state.recognitionGeneration++;
     state.hotspotTrail = [];
+    clearDirtyContributionTracking();
     state.dirty = null;
     state.autoEligible = false;
     state.lastUserBox = null;
@@ -7090,9 +7449,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return { x, y, w: right - x, h: bottom - y };
   }
   async function renderExportCanvas() {
-    await prepareVisibleWidgetSnapshots(null, false);
     const region = exportRegion();
     if (!region) return null;
+    await prepareVisibleWidgetSnapshots(null, false);
     const scale = Math.min(1, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
       canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
@@ -7265,7 +7624,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         createdAt,
         name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : ""),
         theme: state.theme,
-        view: { scale: state.scale, panX: state.panX, panY: state.panY },
+        view: { scale: state.scale, panX: state.panX, panY: state.panY, navigationLocked:state.navigationLocked },
         tileCount: tileEntries.length,
         animationCount: animations.length,
         animations,
@@ -7365,6 +7724,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.panY = item.view.panY;
       updateCoordinates();
     }
+    setCanvasNavigationLocked(item.view?.navigationLocked === true);
     state.currentSnapshotId = item.id;
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
@@ -7631,8 +7991,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       x = Math.min(a.x, b.x) - pad,
       y = Math.min(a.y, b.y) - pad,
       w = Math.abs(a.x - b.x) + pad * 2,
-      h = Math.abs(a.y - b.y) + pad * 2;
-    invalidateSharpOverlays({ x, y, w, h });
+      h = Math.abs(a.y - b.y) + pad * 2,
+      changedBox = { x, y, w, h };
+    invalidateSharpOverlays(changedBox);
     const x0 = Math.max(0, Math.floor(x / TILE)),
       y0 = Math.max(0, Math.floor(y / TILE)),
       x1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.floor((x + w) / TILE)),
@@ -7656,6 +8017,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         q.lineTo(b.x - tx * TILE, b.y - ty * TILE);
         q.stroke();
         q.restore();
+        if (userChange) trackDirtyStrokeSegment(tx, ty, a, b, erase, size, changedBox);
         const k = key(tx, ty);
         if (erase) state.inkBounds.delete(k);
         else {
@@ -7668,7 +8030,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           extendInkBounds(k, local);
         }
       }
-    if (userChange) {
+    if (userChange && !erase) {
       mergeDirty(a.x, a.y, pad);
       mergeDirty(b.x, b.y, pad);
     }
@@ -8428,7 +8790,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
   }
   function launchAutomaticAI(reason) {
-    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing || state.widgetRefineConfirmation) return;
     if (aiPreparation || state.activeAI) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
@@ -8446,7 +8808,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     clearTimeout(state.timer);
     state.timer = 0;
     if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible) return;
-    if (activeWidgetRefinement()) return;
+    if (activeWidgetRefinement() || state.widgetRefineConfirmation) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
       return;
@@ -8504,12 +8866,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       captureCurrentViewport = Boolean(requestOptions.captureCurrentViewport),
       widgetEditTarget = requestOptions.widgetEditTarget || null,
       widgetEditContext = requestOptions.widgetEditContext || null,
+      requestedAttentionBox = requestOptions.attentionBox || null,
       revision = state.userRevision,
       recognitionGeneration = state.recognitionGeneration,
       aiColor = state.aiColor,
       dirtySnapshot = state.dirty ? { ...state.dirty } : null,
       latestBox = dirtySnapshot || state.lastUserBox,
-      attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
       controller = new AbortController(),
       preparation = {
@@ -8518,6 +8880,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         superseded:false,
         widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null,
       };
+    let attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox);
+    if (requestedAttentionBox) attentionBox = requestedAttentionBox;
     aiPreparation = preparation;
     state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
     setBusy(true);
@@ -8611,7 +8975,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         error.status = streamed.status;
         throw error;
       }
-      // Draft confirmation is a separate interaction after the model request has ended.
+      // Draft confirmation is a separate interaction after the model request has
+      // ended. Stop request-only timers now so they cannot report a slow model
+      // while the user is deciding whether to keep the completed draft.
+      timeout.clear();
+      clearTimeout(run.slowNoticeTimer);
+      run.slowNoticeTimer = 0;
       if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
@@ -8681,6 +9050,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             state.lastUserBox = requestBox;
             if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
             if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
+            clearDirtyContributionTracking();
           }
           run.inputConsumed = true;
           run.dirtyRestored = true;
@@ -8702,6 +9072,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           state.lastUserBox = requestBox;
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
           if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
+          clearDirtyContributionTracking();
           run.inputConsumed = true;
           run.dirtyRestored = true;
         }
@@ -10229,6 +10600,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const end = state.hotspotTrail.indexOf(p.hotspotEnd);
       if (end >= 0) state.hotspotTrail.splice(0, end + 1);
     }
+    clearDirtyContributionTracking();
   }
   function finishPendingItemAction(p, statusKey) {
     if (p.items.length) {
@@ -11111,13 +11483,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
       refineCandidate = latchWidgetRefineCandidate(d);
+    } else {
+      recomputeDirtyBounds();
+      filterErasedDirtyHotspots(d.dirtyMaskTouched);
+      refineCandidate = relatchWidgetRefineCandidateFromDirty();
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
-    if (shouldRequest && state.autoEligible && !refineCandidate) schedule();
+    if (state.dirty && state.autoEligible && !refineCandidate) schedule();
     save();
     requestInteractionLayerRender();
-    if (shouldRequest) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
+    if (shouldRequest || d.erase) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }
 // Pointer and control bindings, portable snapshots, and application startup.
   function updateCanvasPointerPreview(event) {
@@ -11194,9 +11570,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     clearTimeout(state.timer);
     state.timer = 0;
     hideWidgetRefineHint();
-    state.latestTypedInput = null;
     const erasing = state.mode === "eraser";
-    if (erasing) invalidateRecognition();
+    if (erasing) clearWidgetRefineCandidate();
+    else state.latestTypedInput = null;
     const cssSize = erasing ? state.eraser : pressureWidth(e),
       size = logicalWidth(cssSize);
     state.userRevision++;
@@ -11212,13 +11588,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bbox: { x: p.x, y: p.y, w: 0, h: 0 },
       trail: [p],
       erase: erasing,
+      dirtyMaskTouched:erasing ? new Set() : null,
     };
     updateCanvasPointerPreview(e);
-    dot(p, erasing, size, !erasing);
+    dot(p, erasing, size, true);
     requestRender();
   }
   screen.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    finishStaleWidgetHostGesture(e);
     if (Date.now() < state.textInputBlockedUntil) return;
     try {
       screen.setPointerCapture(e.pointerId);
@@ -11228,7 +11606,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
         touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
-      if (touchWidget) beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
+      if (touchWidget) {
+        if (state.mode !== "hand") showCanvasHint("canvasHintWidgetTouchHand");
+        if (state.mode === "pen") beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
+      }
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (state.touches.size >= 2) {
         state.textTap = null;
@@ -11291,6 +11672,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -11354,7 +11736,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       cssSize = d.erase ? state.eraser : pressureWidth(e),
       size = logicalWidth(cssSize);
     state.userRevision++;
-    stroke(a, p, d.erase, size, !d.erase);
+    stroke(a, p, d.erase, size, true);
     d.last = p;
     d.size = size;
     d.points++;
@@ -11457,6 +11839,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     },
     { passive: false },
   );
+  canvasNavigationLock.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  canvasNavigationLock.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setCanvasNavigationLocked(!state.navigationLocked);
+  });
   function enterAIDraftHandMode() {
     if (state.mode !== "hand" && state.aiDraftReturnMode === null) state.aiDraftReturnMode = state.mode;
     state.pendingHistoryRestored = false;
@@ -12122,6 +12513,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateTraceToggle();
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {
     closeSettings(false);
@@ -12220,11 +12612,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.querySelectorAll(".radial-action").forEach((button) => button.setAttribute("tabindex", "-1"));
   setPluginTemplate("simple");
   applyLanguage();
+  setWidgetShadowEnabled(state.widgetShadowEnabled);
   applyTheme(state.theme);
   resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
   refreshSnapshots().catch(() => {});
   fit();
   setNavigating(true);
+  scheduleAIOrbIdle();
   requestAnimationFrame(() => requestAnimationFrame(maybeStartOnboarding));
 })();

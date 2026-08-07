@@ -279,9 +279,9 @@
     return { x, y, w: right - x, h: bottom - y };
   }
   async function renderExportCanvas() {
-    await prepareVisibleWidgetSnapshots(null, false);
     const region = exportRegion();
     if (!region) return null;
+    await prepareVisibleWidgetSnapshots(null, false);
     const scale = Math.min(1, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
       canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
@@ -454,7 +454,7 @@
         createdAt,
         name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : ""),
         theme: state.theme,
-        view: { scale: state.scale, panX: state.panX, panY: state.panY },
+        view: { scale: state.scale, panX: state.panX, panY: state.panY, navigationLocked:state.navigationLocked },
         tileCount: tileEntries.length,
         animationCount: animations.length,
         animations,
@@ -554,6 +554,7 @@
       state.panY = item.view.panY;
       updateCoordinates();
     }
+    setCanvasNavigationLocked(item.view?.navigationLocked === true);
     state.currentSnapshotId = item.id;
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
@@ -820,8 +821,9 @@
       x = Math.min(a.x, b.x) - pad,
       y = Math.min(a.y, b.y) - pad,
       w = Math.abs(a.x - b.x) + pad * 2,
-      h = Math.abs(a.y - b.y) + pad * 2;
-    invalidateSharpOverlays({ x, y, w, h });
+      h = Math.abs(a.y - b.y) + pad * 2,
+      changedBox = { x, y, w, h };
+    invalidateSharpOverlays(changedBox);
     const x0 = Math.max(0, Math.floor(x / TILE)),
       y0 = Math.max(0, Math.floor(y / TILE)),
       x1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.floor((x + w) / TILE)),
@@ -845,6 +847,7 @@
         q.lineTo(b.x - tx * TILE, b.y - ty * TILE);
         q.stroke();
         q.restore();
+        if (userChange) trackDirtyStrokeSegment(tx, ty, a, b, erase, size, changedBox);
         const k = key(tx, ty);
         if (erase) state.inkBounds.delete(k);
         else {
@@ -857,7 +860,7 @@
           extendInkBounds(k, local);
         }
       }
-    if (userChange) {
+    if (userChange && !erase) {
       mergeDirty(a.x, a.y, pad);
       mergeDirty(b.x, b.y, pad);
     }

@@ -2,6 +2,7 @@
 (() => {
   const SIZE = 20000,
     TILE = 512,
+    DIRTY_MASK_SCALE = 0.25,
     INITIAL_VIEW_ZOOM = 1.5,
     EXPORT_MAX_DIMENSION = 16384,
     EXPORT_MAX_PIXELS = 64 * 1024 * 1024,
@@ -14,6 +15,7 @@
     DEFAULT_AI_TIMEOUT = 260000,
     screen = document.querySelector("#screen"),
     view = document.querySelector("#viewport"),
+    canvasNavigationLock = document.querySelector("#canvasNavigationLock"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
@@ -141,6 +143,7 @@
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
     summonToggle = document.querySelector("#summonToggle"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
     settingsChangelogButton = document.querySelector("#settingsChangelogBtn");
@@ -198,10 +201,7 @@
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
-    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000,
-    WIDGET_BACKGROUND_SNAPSHOT_DELAY_MS = 350,
-    WIDGET_SNAPSHOT_CACHE_REFRESH_MS = 60000,
-    WIDGET_SNAPSHOT_CACHE_STAGGER_MS = 5000;
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -315,6 +315,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       grid: "Canvas grid",
       gridOn: "Show canvas grid",
       gridOff: "Hide canvas grid",
+      canvasLockNavigation: "Lock canvas navigation",
+      canvasUnlockNavigation: "Unlock canvas navigation",
+      canvasNavigationLockedHint: "Canvas view locked · Click the top-left lock to unlock",
       researchGridDefault: "Research grid (off by default)",
       font: "Font",
       aiFont: "AI font",
@@ -481,6 +484,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
       settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
       settingsCanvasSection: "Canvas preferences",
+      settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
       settingsSummonEnabled: "Show while AI thinks",
@@ -568,16 +572,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotImages: "images",
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
-      canvasHintWidgetAdded: "Draw changes near a widget, then choose AI Refine to apply them.",
-      canvasHintWidgetAddedAlt: "Notes anywhere in this view can guide AI Refine for the widget you select.",
-      canvasHintRefineInPlace: "To improve a widget in place, add marks near it or in this view, then use its AI Refine button.",
+      canvasHintWidgetAdded: "Use Pen to mark changes near a widget, then tap the AI Refine button that appears.",
+      canvasHintWidgetAddedAlt: "In Pen, notes anywhere in this view can reveal AI Refine on the target widget.",
+      canvasHintRefineInPlace: "In Pen, add an instruction, then tap AI Refine on the target widget.",
       canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
       canvasHintHand: "Hand pauses Auto AI without stopping a request already in progress.",
-      canvasHintHandAlt: "Select a widget with Hand to reveal move, copy, delete, and AI Refine.",
+      canvasHintHandAlt: "Select a widget with Hand to reveal its move, copy, and delete controls.",
+      canvasHintWidgetTouchHand: "Switch to Hand to interact directly with this widget's content.",
       canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
       canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
       canvasHintText: "Text supports Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
-      canvasHintTextAlt: "Place text near a widget, then use AI Refine to apply the instruction.",
+      canvasHintTextAlt: "After confirming text near a widget, switch to Pen and tap AI Refine.",
       canvasHintEraser: "Eraser removes ink only; use Hand controls to delete canvas objects.",
       canvasHintEraserAlt: "Erase an instruction before AI runs without changing widgets beneath it.",
       ready: "Ready",
@@ -600,7 +605,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiCancelledForInput: "AI request cancelled because new input started",
       deferred: "New ink found; this AI result was deferred",
       writing: "Writing...",
-      aiDone: "AI complete",
+      aiDone: "AI completed",
       draftRejected: "AI draft discarded",
       draftFading: "Continued writing detected; fading the AI draft",
       canvasChanged: "Canvas changed; the old AI draft was discarded",
@@ -736,9 +741,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
       widgetRefineNearbyHint: "New annotations were detected near this widget. Use AI Refine to update it from those instructions.",
       widgetRefineViewportHint: "New instructions are present in this view. Use AI Refine to update this widget from them.",
-      widgetRefineNoInputHint: "No new instructions are available. You can still refine this widget from the current view.",
+      widgetRefineNoInputHint: "AI Refine needs a clear instruction. Add a note or drawing to show what should change.",
       widgetRefineConfirmDirty: "Update this widget using the new instructions?",
-      widgetRefineConfirmNoInput: "No new instructions. Refine from the current view anyway? A clear instruction works better.",
+      widgetRefineConfirmNoInput: "No change request was found. Continue anyway? AI may not know what you want changed.",
       widgetRefineConfirm: "Update widget",
       widgetRefineCancel: "Cancel",
       widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
@@ -788,6 +793,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
@@ -804,6 +810,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
     initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
@@ -844,6 +851,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       touches: new Map(),
       touchGesture: null,
       panGesture: null,
+      navigationLocked: false,
       textEditors: new Map(),
       textBoxes: [],
       textEditorStyleSheet: null,
@@ -913,6 +921,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
+      widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
       autoPopoverTimer: 0,
@@ -930,6 +939,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       reasoningEffort: initialAiEffort,
       aiRequestTimeoutMs: initialAiTimeout,
       dirty: null,
+      dirtyInkTiles: new Map(),
+      dirtyInkBounds: new Map(),
+      dirtyImageIds: new Set(),
+      dirtyTextBoxIds: new Set(),
       autoEligible: false,
       lastUserBox: null,
       history: [],
@@ -954,6 +967,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       gridVisible: initialTheme === "research" ? initialResearchGrid : initialGrid,
       paint: { paper: "#ead9ad", paperGrid: "#c8ae7155", outside: "#090814", border: "#7f693b" },
       navigationTimer: 0,
+      aiOrbIdleTimer: 0,
       radialGesture: null,
       radialCloseTimer: 0,
       radialSuppressClickUntil: 0,
@@ -1083,6 +1097,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
     }
     for (const widget of state.widgets) rects.push({ x: widget.x, y: widget.y, w: widget.w, h: widget.h });
+    if (state.pendingWidget) rects.push({ x:state.pendingWidget.x, y:state.pendingWidget.y, w:state.pendingWidget.w, h:state.pendingWidget.h });
+    for (const item of state.textBoxes) rects.push({ x:item.x, y:item.y, w:item.w, h:item.h });
     for (const editor of state.textEditors.values()) {
       const scale = Math.max(0.03, state.scale);
       rects.push({ x: editor.x, y: editor.y, w: editor.widthCss / scale, h: editor.heightCss / scale });
@@ -1915,6 +1931,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
+    settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.setAttribute("aria-checked", String(state.widgetShadowEnabled));
     void loadCanvasSettings();
   }
   function openSettings() {
@@ -1951,6 +1969,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
     updateSettingsPanel();
+  }
+  function setWidgetShadowEnabled(enabled) {
+    state.widgetShadowEnabled = Boolean(enabled);
+    localStorage.setItem("penecho-widget-shadow", String(state.widgetShadowEnabled));
+    view.classList.toggle("widget-shadows", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
+    settingsWidgetShadowToggle.setAttribute("aria-checked", String(state.widgetShadowEnabled));
+    requestRender();
   }
   function maybeStartOnboarding() {
     if (!maybeStartFeatureTour()) maybeShowChangelog();
@@ -2905,8 +2931,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.busy) {
       state.radialGesture = null;
       closeRadialMenu();
+      revealAIOrb();
       showSummon();
-    } else hideSummon();
+    } else {
+      hideSummon();
+      scheduleAIOrbIdle();
+    }
     updateEmbodimentLabel();
   }
   function setNavigating(value) {
@@ -2919,6 +2949,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }, NAVIGATION_HINT_VISIBLE_MS);
   }
   function wheelNavigating() {
+    setNavigating(true);
+  }
+  function setCanvasNavigationLocked(locked) {
+    state.navigationLocked = Boolean(locked);
+    state.panGesture = null;
+    state.touchGesture = null;
+    state.widgetHostPan = null;
+    const label = t(state.navigationLocked ? "canvasUnlockNavigation" : "canvasLockNavigation");
+    view.classList.toggle("navigation-locked", state.navigationLocked);
+    canvasNavigationLock.classList.toggle("locked", state.navigationLocked);
+    canvasNavigationLock.setAttribute("aria-pressed", String(state.navigationLocked));
+    canvasNavigationLock.setAttribute("aria-label", label);
+    canvasNavigationLock.setAttribute("title", label);
+    syncWidgetHostStates();
+    resetCanvasCursor();
     setNavigating(true);
   }
   function selectionAIRequest(selection = state.selection) {
@@ -2958,8 +3003,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     supersedeActiveAI("manual-action");
     requestAI(action, null, { captureCurrentViewport: true });
   }
+  const AI_ORB_IDLE_DELAY_MS = 5000;
+  function revealAIOrb() {
+    clearTimeout(state.aiOrbIdleTimer);
+    state.aiOrbIdleTimer = 0;
+    embodiment.classList.remove("idle-dim");
+  }
+  function scheduleAIOrbIdle() {
+    revealAIOrb();
+    if (state.busy || embodiment.classList.contains("menu-open")) return;
+    state.aiOrbIdleTimer = setTimeout(() => {
+      state.aiOrbIdleTimer = 0;
+      if (!state.busy && !state.radialGesture && !embodiment.classList.contains("menu-open")) embodiment.classList.add("idle-dim");
+    }, AI_ORB_IDLE_DELAY_MS);
+  }
   function openRadialMenu() {
     if (state.busy) return;
+    revealAIOrb();
     clearTimeout(state.radialCloseTimer);
     embodiment.classList.add("menu-open");
     aiOrb.setAttribute("aria-expanded", "true");
@@ -2975,6 +3035,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.classList.remove("is-highlighted");
       button.setAttribute("tabindex", "-1");
     });
+    if (!state.busy) scheduleAIOrbIdle();
   }
   function chooseRadialAction(clientX, clientY) {
     const orbRect = aiOrb.getBoundingClientRect(),

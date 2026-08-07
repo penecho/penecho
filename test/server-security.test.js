@@ -8,6 +8,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const sharp = require("sharp");
+const { widgetPatchFiles } = require("../src/server/widget-patch.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -145,9 +146,9 @@ function parseRefineModelText(text) {
   assert.ok(cursor > stableEnd);
   while (text.startsWith("\n\nPenEcho virtual file:\n", cursor)) {
     cursor += 2;
-    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\nendsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
+    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\npatchBaselineEndsWithNewline: (true|false)\noriginalEndsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
     assert.ok(header);
-    const contentStart = cursor + header[0].length, endMarker = `\n<<<END ${header[5]}>>>`, contentEnd = text.indexOf(endMarker, contentStart);
+    const contentStart = cursor + header[0].length, endMarker = `\n<<<END ${header[6]}>>>`, contentEnd = text.indexOf(endMarker, contentStart);
     assert.ok(contentEnd >= contentStart);
     const content = text.slice(contentStart, contentEnd), endsWithNewline = /(?:\r\n|\r|\n)$/.test(content),
       separators = content.match(/\r\n|\r|\n/g)?.length || 0,
@@ -155,8 +156,8 @@ function parseRefineModelText(text) {
     assert.equal(Buffer.byteLength(content, "utf8"), Number(header[2]));
     assert.equal(logicalLines, Number(header[3]));
     assert.equal(endsWithNewline, header[4] === "true");
-    assert.equal(content.includes(header[5]), false);
-    files.push({ path:header[1], content, utf8Bytes:Number(header[2]), logicalLines, endsWithNewline, boundary:header[5] });
+    assert.equal(content.includes(header[6]), false);
+    files.push({ path:header[1], content, utf8Bytes:Number(header[2]), logicalLines, patchBaselineEndsWithNewline:endsWithNewline, originalEndsWithNewline:header[5] === "true", boundary:header[6] });
     cursor = contentEnd + endMarker.length;
   }
   const currentPrefix = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n";
@@ -1007,7 +1008,7 @@ test("PIN authentication leaves the API provider request behavior unchanged", { 
 test("shared PenEcho server canvases support authorized metadata-first CRUD", { timeout:20000 }, async () => {
   const stateDir=testStateDir({}),
     {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
-    snapshot=validSharedCanvas(),
+    snapshot=validSharedCanvas(undefined,{view:{scale:0.5,panX:120,panY:240,navigationLocked:true}}),
     mutationHeaders={"Content-Type":"application/json",Origin:origin};
   try {
     const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify(snapshot)}),
@@ -1031,12 +1032,15 @@ test("shared PenEcho server canvases support authorized metadata-first CRUD", { 
     assert.equal(loaded.status,200);
     assert.deepEqual(loadedBody.canvas.tiles,snapshot.tiles);
     assert.deepEqual(loadedBody.canvas.widgets,[]);
+    assert.equal(loadedBody.canvas.view.navigationLocked,true);
 
-    const changed={...snapshot,name:"Updated shared design",createdAt:Date.now()};
+    const changed={...snapshot,name:"Updated shared design",createdAt:Date.now(),view:{scale:0.5,panX:120,panY:240}};
     const updated=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"PUT",headers:mutationHeaders,body:JSON.stringify(changed)}),
       updatedBody=await updated.json();
     assert.equal(updated.status,200,JSON.stringify(updatedBody));
     assert.equal(updatedBody.canvas.name,"Updated shared design");
+    const legacyLoaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`).then(response=>response.json());
+    assert.equal(legacyLoaded.canvas.view.navigationLocked,false);
 
     const invalidId=await fetch(`${origin}/api/canvases/../../package.json`);
     assert.equal(invalidId.status,404);
@@ -1441,7 +1445,7 @@ test("professional diagrams accept local source renderers and keep unknown forma
     }).then(value => value.json());
     assert.equal(refined.commands[0].tool, "diagram_source");
     assert.equal(refined.commands[0].sourceFormat, "mermaid");
-    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C\n");
+    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C");
 
     const fullReplacementResponse = await fetch(`${running.origin}/api/ai/command`, {
       method:"POST",
@@ -1465,15 +1469,91 @@ test("professional diagrams accept local source renderers and keep unknown forma
     assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
     assert.equal("source" in modelInput.widgetEdit, false);
     assert.equal("html" in modelInput.widgetEdit, false);
-    assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.source", widgetEditField:"source" }]);
-    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff[\s\S]*?widget\.source/);
-    assert.match(modelInput.widgetEditPolicy, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?Never emit a bare @@ header/);
-    assert.match(modelInput.widgetEditPolicy, /first space is the unified-diff marker[\s\S]*?original source indentation/);
+    assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.source" }]);
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?File names, extensions and file count are not fixed/);
+    assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
+    assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
+    assert.match(modelInput.widgetEditPolicy, /never reconstruct or normalize removed lines[\s\S]*?character-for-character/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?bare unified diff only/);
+    assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
     assert.equal(retryInstruction, "");
-    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
-      { path:"widget.source", content:`${refinePayload.widgetEdit.source}\n`, endsWithNewline:true },
-    ]);
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles(refinePayload.widgetEdit).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
+    assert.deepEqual(JSON.parse(files[0].content), {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      title:"Professional diagram",
+      refreshSeconds:0,
+      diagramKind:"process",
+      sourceFormat:"mermaid",
+      sourceFile:"widget.source",
+    });
     assert.match(modelText, /<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\nflowchart LR\nA --> B\n\n<<<END/);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("diagram refinement applies editable manifest metadata and a new source format", { timeout:20000 }, async () => {
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -3,6 +3,6 @@",
+      '   "pluginId": "flowchart",',
+      '-  "title": "Molecule",',
+      '+  "title": "Process",',
+      '   "refreshSeconds": 0,',
+      '-  "diagramKind": "molecular-structure",',
+      '-  "sourceFormat": "smiles",',
+      '+  "diagramKind": "process",',
+      '+  "sourceFormat": "mermaid",',
+      '   "sourceFile": "widget.source"',
+      "--- a/widget.source",
+      "+++ b/widget.source",
+      "@@ -1 +1,2 @@",
+      "-CCO",
+      "+flowchart LR",
+      "+A --> B",
+      "",
+    ].join("\n"),
+    upstream = await startApiServer(JSON.stringify({ intent:"answer",commands:[{ tool:"widget_patch",patch }] })),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = validPayload();
+  payload.trigger = "manual";
+  payload.userAction = "answer";
+  payload.plugins = [builtInPluginDescriptor("flowchart")];
+  payload.widgetEdit = {
+    mode:"replace",
+    widgetType:"diagram_source",
+    pluginId:"flowchart",
+    title:"Molecule",
+    instructionMode:"implicit-polish",
+    box:{ x:120,y:240,w:1200,h:700 },
+    diagramKind:"molecular-structure",
+    sourceFormat:"smiles",
+    source:"CCO",
+  };
+  try {
+    const response = await fetch(`${running.origin}/api/ai/command`, { method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payload) }),
+      result = await response.json();
+    assert.equal(response.status,200);
+    assert.equal(result.attempts,1);
+    assert.deepEqual(result.commands[0], {
+      tool:"diagram_source",
+      pluginId:"flowchart",
+      x:120,
+      y:240,
+      w:1200,
+      h:700,
+      title:"Process",
+      refreshSeconds:0,
+      sourceFormat:"mermaid",
+      source:"flowchart LR\nA --> B",
+      diagramKind:"process",
+    });
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -1555,7 +1635,7 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     );
     assert.equal(accepted.commands[0].sourceFormat, "d2");
     assert.equal(accepted.commands[0].copyLabel, "Copy d2");
-    assert.equal(accepted.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>\n");
+    assert.equal(accepted.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>");
     assert.equal(accepted.commands[0].copyText, payload.widgetEdit.source);
 
     const { metadata:modelInput, files, retryInstruction } = parseRefineModelText(outboundModelText(upstream.requests[0]));
@@ -1567,20 +1647,23 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     assert.equal("targetId" in modelInput.widgetEdit, false);
     assert.deepEqual(modelInput.widgetEdit.runtimeDiagnostics, payload.widgetEdit.runtimeDiagnostics);
     assert.deepEqual(modelInput.widgetEdit.patchFiles, [
-      { path:"widget.html", widgetEditField:"html" },
-      { path:"widget.source", widgetEditField:"source" },
+      { path:"widget.json" },
+      { path:"widget.html" },
+      { path:"widget.source" },
     ]);
-    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff[\s\S]*?widget\.html/);
-    assert.match(modelInput.widgetEditPolicy, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?Never emit a bare @@ header/);
-    assert.match(modelInput.widgetEditPolicy, /first space is the unified-diff marker[\s\S]*?original source indentation/);
+    assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?File names, extensions and file count are not fixed/);
+    assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
+    assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?bare unified diff only/);
+    assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
     assert.match(modelInput.widgetEditPolicy, /newly added or replaced HTML[\s\S]*?one long or minified line[\s\S]*?below 160 characters/);
     assert.match(modelInput.widgetEditPolicy, /runtimeDiagnostics[\s\S]*?try to repair JavaScript errors[\s\S]*?display or interaction[\s\S]*?preserving unrelated behavior/);
     assert.doesNotMatch(modelInput.widgetEditPolicy, /JSXGraph|earliest runtime error/);
     assert.equal(retryInstruction, "");
-    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
-      { path:"widget.html", content:`${payload.widgetEdit.html}\n`, endsWithNewline:true },
-      { path:"widget.source", content:`${payload.widgetEdit.source}\n`, endsWithNewline:true },
-    ]);
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
 
     const shiftedPayload = { ...payload, widgetEdit:{ ...payload.widgetEdit, box:{ ...payload.widgetEdit.box, x:payload.widgetEdit.box.x + 1 } } },
       ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(shiftedPayload) }),
@@ -1595,9 +1678,10 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     assert.equal(firstText.slice(0, firstCurrent), shiftedText.slice(0, shiftedCurrent));
     assert.notEqual(firstText.slice(firstCurrent), shiftedText.slice(shiftedCurrent));
     const retryRequest = parseRefineModelText(outboundModelText(upstream.requests[2]));
-    assert.deepEqual(retryRequest.files.map(file => file.content), [`${payload.widgetEdit.html}\n`, `${payload.widgetEdit.source}\n`]);
-    assert.match(retryRequest.retryInstruction, /previous widget patch[\s\S]*?real multiline virtual-file blocks[\s\S]*?standard unified diff/);
-    assert.match(retryRequest.retryInstruction, /complete form @@ -<oldStart>,<oldCount> \+<newStart>,<newCount> @@[\s\S]*?never return a bare @@ header/);
+    assert.deepEqual(retryRequest.files.map(file => file.content),widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => file.content));
+    assert.match(retryRequest.retryInstruction, /previous widget patch[\s\S]*?original virtual files[\s\S]*?widgetEdit\.patchFiles manifest/);
+    assert.match(retryRequest.retryInstruction, /standard file headers[\s\S]*?complete hunk headers[\s\S]*?ordered non-overlapping hunks/);
+    assert.match(retryRequest.retryInstruction, /bare unified diff[\s\S]*?wrapper headers or footers/);
     assert.ok(outboundModelText(upstream.requests[2]).endsWith(retryRequest.retryInstruction));
 
     const oversizedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
@@ -1619,15 +1703,17 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
       mirrored = await mirroredResponse.json(),
       { metadata:mirroredModelInput, files:mirroredFiles } = parseRefineModelText(outboundModelText(upstream.requests[5]));
     assert.equal(mirroredResponse.status, 200);
-    assert.equal(mirrored.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>\n");
+    assert.equal(mirrored.commands[0].html, "<!doctype html><main class=\"custom-node\">Updated</main>");
     assert.equal("copyText" in mirrored.commands[0], false);
     assert.equal("copyLabel" in mirrored.commands[0], false);
-    assert.equal(mirroredModelInput.widgetEdit.sourceMirrorsHtml, true);
+    assert.equal("sourceMirrorsHtml" in mirroredModelInput.widgetEdit, false);
     assert.equal("source" in mirroredModelInput.widgetEdit, false);
-    assert.deepEqual(mirroredModelInput.widgetEdit.patchFiles, [{ path:"widget.html", widgetEditField:"html" }]);
-    assert.match(mirroredModelInput.widgetEditPolicy, /sourceMirrorsHtml[\s\S]*?sole canonical file[\s\S]*?Copy HTML/);
-    assert.deepEqual(mirroredFiles.map(file => ({ path:file.path, content:file.content })), [
+    assert.deepEqual(mirroredModelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.html" },{ path:"widget.source" }]);
+    assert.match(mirroredModelInput.widgetEditPolicy, /copyTextFile value selects no copy source, HTML itself, or the distinct source/);
+    assert.equal(JSON.parse(mirroredFiles[0].content).copyTextFile,"widget.html");
+    assert.deepEqual(mirroredFiles.slice(1).map(file => ({ path:file.path, content:file.content })), [
       { path:"widget.html", content:`${mirroredPayload.widgetEdit.html}\n` },
+      { path:"widget.source", content:"" },
     ]);
     assert.equal(upstream.requests.length, 6);
   } finally {
@@ -1674,9 +1760,8 @@ test("widget refinement applies an exact uniquely located patch without a model 
     const { metadata:modelInput, files } = parseRefineModelText(outboundModelText(upstream.requests[0]));
     assert.equal("html" in modelInput.widgetEdit, false);
     assert.equal("source" in modelInput.widgetEdit, false);
-    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, endsWithNewline:file.endsWithNewline })), [
-      { path:"widget.html", content:payload.widgetEdit.html, endsWithNewline:true },
-    ]);
+    assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
+      widgetPatchFiles(payload.widgetEdit).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));

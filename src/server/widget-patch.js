@@ -3,9 +3,13 @@
 const { applyPatch, parsePatch } = require("diff");
 
 const MAX_WIDGET_PATCH_BYTES = 256 * 1024;
-const MAX_WIDGET_PATCH_FILES = 2;
+const MAX_WIDGET_PATCH_FILES = 16;
 const MAX_WIDGET_PATCH_HUNKS = 128;
 const MAX_WIDGET_PATCH_LINES = 12000;
+const WIDGET_MANIFEST_PATH = "widget.json";
+const WIDGET_HTML_PATH = "widget.html";
+const WIDGET_SOURCE_PATH = "widget.source";
+const FINAL_NEWLINE = /(?:\r\n|\r|\n)$/;
 
 function normalizedWidgetSource(value) {
   return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
@@ -17,28 +21,116 @@ function widgetSourceMirrorsHtml(source, html) {
 }
 
 function widgetPatchFileContent(value) {
-  if (typeof value !== "string" || !value || /(?:\r\n|\r|\n)$/.test(value)) return typeof value === "string" ? value : "";
+  if (typeof value !== "string" || !value || FINAL_NEWLINE.test(value)) return typeof value === "string" ? value : "";
   return `${value}\n`;
+}
+
+function widgetManifest(widgetEdit) {
+  const common = {
+    tool:widgetEdit.widgetType,
+    pluginId:widgetEdit.pluginId,
+    title:widgetEdit.title,
+    refreshSeconds:widgetEdit.widgetType === "diagram_source" ? 0 : widgetEdit.refreshSeconds || 0,
+    diagramKind:widgetEdit.diagramKind || null,
+    sourceFormat:widgetEdit.sourceFormat || null,
+  };
+  if (widgetEdit.widgetType === "diagram_source") {
+    return {
+      ...common,
+      sourceFile:WIDGET_SOURCE_PATH,
+    };
+  }
+  const hasDistinctSource = !widgetEdit.sourceMirrorsHtml && typeof widgetEdit.source === "string" && Boolean(widgetEdit.source);
+  return {
+    ...common,
+    frameworkVersion:widgetEdit.frameworkVersion || null,
+    htmlFile:WIDGET_HTML_PATH,
+    copyTextFile:widgetEdit.sourceMirrorsHtml ? WIDGET_HTML_PATH : hasDistinctSource ? WIDGET_SOURCE_PATH : null,
+    copyLabel:hasDistinctSource ? widgetEdit.copyLabel || null : null,
+  };
+}
+
+function widgetManifestContent(widgetEdit) {
+  return `${JSON.stringify(widgetManifest(widgetEdit),null,2)}\n`;
+}
+
+function widgetPatchFile(path, originalContent) {
+  const original = typeof originalContent === "string" ? originalContent : "";
+  return {
+    path,
+    originalContent:original,
+    originalEndsWithNewline:FINAL_NEWLINE.test(original),
+    content:widgetPatchFileContent(original),
+  };
 }
 
 function patchFilesForWidgetEdit(widgetEdit) {
   if (!widgetEdit) return [];
+  const manifest = widgetPatchFile(WIDGET_MANIFEST_PATH,widgetManifestContent(widgetEdit));
   if (widgetEdit.widgetType === "diagram_source") {
-    return [{ path:"widget.source", field:"source", content:widgetPatchFileContent(widgetEdit.source) }];
+    return [manifest,widgetPatchFile(WIDGET_SOURCE_PATH,widgetEdit.source)];
   }
   return [
-    { path:"widget.html", field:"html", content:widgetPatchFileContent(widgetEdit.html) },
-    ...(!widgetEdit.sourceMirrorsHtml && typeof widgetEdit.source === "string" && widgetEdit.source ? [{ path:"widget.source", field:"source", content:widgetPatchFileContent(widgetEdit.source) }] : []),
+    manifest,
+    widgetPatchFile(WIDGET_HTML_PATH,widgetEdit.html),
+    widgetPatchFile(WIDGET_SOURCE_PATH,!widgetEdit.sourceMirrorsHtml ? widgetEdit.source : ""),
   ];
 }
 
 function widgetPatchContract(widgetEdit) {
-  return patchFilesForWidgetEdit(widgetEdit).map(file => ({ path:file.path, widgetEditField:file.field }));
+  return patchFilesForWidgetEdit(widgetEdit).map(file => ({ path:file.path }));
 }
 
-function normalizedPatchText(value) {
+function widgetPatchFiles(widgetEdit) {
+  return patchFilesForWidgetEdit(widgetEdit).map(file => ({
+    path:file.path,
+    content:file.content,
+    originalEndsWithNewline:file.originalEndsWithNewline,
+  }));
+}
+
+function possiblyUnifiedDiffLine(line) {
+  return /^(?:--- a\/|\+\+\+ b\/|@@(?: |$)|[ +\\-]|\\ No newline at end of file$)/.test(line);
+}
+
+function normalizedPatchText(value, widgetEdit) {
   if (typeof value !== "string" || !value.trim() || Buffer.byteLength(value, "utf8") > MAX_WIDGET_PATCH_BYTES) return "";
-  return value.replace(/\r\n/g, "\n");
+  const lines = value.replace(/\r\n/g, "\n").split("\n"),
+    paths = new Set(patchFilesForWidgetEdit(widgetEdit).map(file => file.path)),
+    firstHeader = lines.findIndex((line, index) => {
+      const match = /^--- a\/(.+)$/.exec(line), path = match?.[1];
+      return Boolean(path && paths.has(path) && lines[index + 1] === `+++ b/${path}`);
+    });
+  if (firstHeader < 0) return "";
+  const diffLines = lines.slice(firstHeader);
+  while (diffLines.at(-1) === "") diffLines.pop();
+  while (diffLines.length && !possiblyUnifiedDiffLine(diffLines.at(-1))) diffLines.pop();
+  return diffLines.length ? `${diffLines.join("\n")}\n` : "";
+}
+
+function coalescedPatchFileSections(patchText, widgetEdit) {
+  if (!patchText) return "";
+  const lines = patchText.split("\n"), finalNewline = lines.at(-1) === "",
+    allowed = new Set(patchFilesForWidgetEdit(widgetEdit).map(file => file.path)),
+    order = [], sections = new Map();
+  if (finalNewline) lines.pop();
+  let cursor = 0, sectionCount = 0;
+  while (cursor < lines.length) {
+    const header = /^--- a\/(.+)$/.exec(lines[cursor] || ""), path = header?.[1];
+    if (!path || !allowed.has(path) || lines[cursor + 1] !== `+++ b/${path}`) return "";
+    cursor += 2;
+    const body = [];
+    while (cursor < lines.length && !/^--- a\//.test(lines[cursor])) body.push(lines[cursor++]);
+    if (!body.length || ++sectionCount > MAX_WIDGET_PATCH_HUNKS) return "";
+    if (!sections.has(path)) {
+      sections.set(path, []);
+      order.push(path);
+    }
+    sections.get(path).push(...body);
+  }
+  const output = [];
+  for (const path of order) output.push(`--- a/${path}`, `+++ b/${path}`, ...sections.get(path));
+  return `${output.join("\n")}${finalNewline ? "\n" : ""}`;
 }
 
 function uniqueSequenceStart(lines, expected, minimumStart, matchesLine = (actual, submitted) => actual === submitted) {
@@ -174,10 +266,89 @@ function exactContextPatch(source, patch) {
   return { ...patch, hunks };
 }
 
+function optionalManifestString(value) {
+  return value === undefined || value === null ? null : typeof value === "string" ? value : false;
+}
+
+function parsedWidgetManifest(content, widgetEdit) {
+  let manifest;
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)
+    || manifest.tool !== widgetEdit.widgetType || manifest.pluginId !== widgetEdit.pluginId
+    || typeof manifest.title !== "string" || !Number.isFinite(manifest.refreshSeconds)) return null;
+  const commonKeys = ["tool","pluginId","title","refreshSeconds","diagramKind","sourceFormat"],
+    typeKeys = widgetEdit.widgetType === "diagram_source"
+      ? ["sourceFile"]
+      : ["frameworkVersion","htmlFile","copyTextFile","copyLabel"],
+    allowedKeys = new Set([...commonKeys,...typeKeys]);
+  if (Object.keys(manifest).some(key => !allowedKeys.has(key))) return null;
+  for (const field of ["diagramKind","sourceFormat",...(widgetEdit.widgetType === "html_widget" ? ["frameworkVersion","copyLabel"] : [])]) {
+    const value = optionalManifestString(manifest[field]);
+    if (value === false) return null;
+    manifest[field] = value;
+  }
+  if (widgetEdit.widgetType === "diagram_source") {
+    if (manifest.sourceFile !== WIDGET_SOURCE_PATH) return null;
+  } else if (manifest.htmlFile !== WIDGET_HTML_PATH
+    || ![null,WIDGET_HTML_PATH,WIDGET_SOURCE_PATH].includes(manifest.copyTextFile ?? null)) return null;
+  return manifest;
+}
+
+function restoredPatchFileContent(file, content) {
+  if (file.originalEndsWithNewline || typeof content !== "string") return content;
+  return content.replace(FINAL_NEWLINE,"");
+}
+
+function optionalCommandField(value) {
+  return typeof value === "string" && value ? value : "";
+}
+
+function widgetCommandFromFiles(contents, widgetEdit) {
+  const manifest = parsedWidgetManifest(contents.get(WIDGET_MANIFEST_PATH),widgetEdit);
+  if (!manifest) return null;
+  const diagramKind = optionalCommandField(manifest.diagramKind),
+    sourceFormat = optionalCommandField(manifest.sourceFormat);
+  if (widgetEdit.widgetType === "diagram_source") {
+    return {
+      tool:"diagram_source",
+      pluginId:widgetEdit.pluginId,
+      ...widgetEdit.box,
+      title:manifest.title,
+      refreshSeconds:0,
+      sourceFormat,
+      source:contents.get(WIDGET_SOURCE_PATH),
+      ...(diagramKind ? { diagramKind } : {}),
+    };
+  }
+  const frameworkVersion = optionalCommandField(manifest.frameworkVersion),
+    copyLabel = optionalCommandField(manifest.copyLabel),
+    copyTextFile = manifest.copyTextFile ?? null,
+    distinctCopyText = copyTextFile === WIDGET_SOURCE_PATH ? contents.get(WIDGET_SOURCE_PATH) : "";
+  if (copyTextFile === WIDGET_SOURCE_PATH && (widgetEdit.pluginId === "image-search" || typeof distinctCopyText !== "string" || !distinctCopyText.trim())) return null;
+  return {
+    tool:"html_widget",
+    pluginId:widgetEdit.pluginId,
+    ...widgetEdit.box,
+    title:manifest.title,
+    refreshSeconds:manifest.refreshSeconds,
+    html:contents.get(WIDGET_HTML_PATH),
+    ...(diagramKind ? { diagramKind } : {}),
+    ...(sourceFormat ? { sourceFormat } : {}),
+    ...(frameworkVersion ? { frameworkVersion } : {}),
+    ...(copyTextFile === WIDGET_SOURCE_PATH ? { copyText:distinctCopyText,...(copyLabel ? { copyLabel } : {}) } : {}),
+  };
+}
+
 function parsedWidgetPatch(command, widgetEdit) {
   if (!command || typeof command !== "object" || Array.isArray(command)
     || command.tool !== "widget_patch" || Object.keys(command).some(key => !["tool", "patch"].includes(key))) return null;
-  const submittedPatchText = normalizedPatchText(command.patch), patchText = canonicalPatchCounts(submittedPatchText, widgetEdit);
+  const normalized = normalizedPatchText(command.patch, widgetEdit),
+    submittedPatchText = coalescedPatchFileSections(normalized, widgetEdit),
+    patchText = canonicalPatchCounts(submittedPatchText, widgetEdit);
   if (!submittedPatchText || !patchText) return null;
   let patches;
   try {
@@ -200,8 +371,6 @@ function parsedWidgetPatch(command, widgetEdit) {
       || !patch.hunks.length || patch.isRename || patch.isCopy || patch.isCreate || patch.isDelete || patch.isBinary) return null;
     seen.add(path);
   }
-  const requiredPath = widgetEdit.widgetType === "diagram_source" ? "widget.source" : "widget.html";
-  if (!seen.has(requiredPath)) return null;
   return hasChange && hunkCount <= MAX_WIDGET_PATCH_HUNKS && lineCount <= MAX_WIDGET_PATCH_LINES ? { patches, allowed } : null;
 }
 
@@ -222,32 +391,15 @@ function commandFromWidgetPatch(command, widgetEdit) {
     if (content === false) return null;
     updated.set(path, content);
   }
-  if (!files.some(file => updated.has(file.path) && updated.get(file.path) !== file.content)) return null;
-  const content = path => updated.has(path) ? updated.get(path) : parsed.allowed.get(path)?.content;
-  if (widgetEdit.widgetType === "diagram_source") {
-    return {
-      tool:"diagram_source",
-      pluginId:widgetEdit.pluginId,
-      ...widgetEdit.box,
-      title:widgetEdit.title,
-      refreshSeconds:0,
-      sourceFormat:widgetEdit.sourceFormat,
-      source:content("widget.source"),
-      ...(widgetEdit.diagramKind ? { diagramKind:widgetEdit.diagramKind } : {}),
-    };
-  }
-  return {
-    tool:"html_widget",
-    pluginId:widgetEdit.pluginId,
-    ...widgetEdit.box,
-    title:widgetEdit.title,
-    refreshSeconds:widgetEdit.refreshSeconds || 0,
-    html:content("widget.html"),
-    ...(widgetEdit.diagramKind ? { diagramKind:widgetEdit.diagramKind } : {}),
-    ...(widgetEdit.sourceFormat ? { sourceFormat:widgetEdit.sourceFormat } : {}),
-    ...(widgetEdit.frameworkVersion ? { frameworkVersion:widgetEdit.frameworkVersion } : {}),
-    ...(parsed.allowed.has("widget.source") ? { copyText:content("widget.source"), copyLabel:widgetEdit.copyLabel || `Copy ${widgetEdit.sourceFormat || "source"}` } : {}),
-  };
+  const originalContents = new Map(files.map(file => [file.path,file.originalContent])),
+    finalContents = new Map(files.map(file => {
+      const result = updated.has(file.path) ? updated.get(file.path) : file.content;
+      return [file.path,restoredPatchFileContent(file,result)];
+    })),
+    originalCommand = widgetCommandFromFiles(originalContents,widgetEdit),
+    updatedCommand = widgetCommandFromFiles(finalContents,widgetEdit);
+  if (!originalCommand || !updatedCommand || JSON.stringify(updatedCommand) === JSON.stringify(originalCommand)) return null;
+  return updatedCommand;
 }
 
 function resolveWidgetEditPatchCommands(commands, widgetEdit) {
@@ -264,4 +416,5 @@ module.exports = {
   widgetSourceMirrorsHtml,
   widgetPatchFileContent,
   widgetPatchContract,
+  widgetPatchFiles,
 };

@@ -63,6 +63,7 @@ function buildClaudeArgs({ systemPrompt, model, effort }) {
     "-p",
     "--input-format", "stream-json",
     "--output-format", "stream-json",
+    "--include-partial-messages",
     "--verbose",
     "--no-session-persistence",
     "--safe-mode",
@@ -161,16 +162,27 @@ function toolUseName(value) {
   return "";
 }
 
-function runProcess(launch, args, input, cwd, env, signal, onActivity = null) {
+function claudeResponseEvent(event) {
+  if (event?.type === "assistant") return true;
+  if (event?.type !== "stream_event") return false;
+  return ["message_start", "content_block_start", "content_block_delta", "message_delta", "message_stop"].includes(event?.event?.type);
+}
+
+function runProcess(launch, args, input, cwd, env, signal, onProgress = null, onActivity = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
     try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
     catch (error) { reject(error); return; }
-    let termination = null, settled = false, lineBuffer = "", stderr = "";
+    let termination = null, settled = false, lineBuffer = "", stderr = "", responseStarted = false;
     const events = [];
     const terminate = () => termination ||= stopProcessTree(child);
     const traceDiagnostic = () => JSON.stringify({ events, stderr:stderr.slice(-4000) });
+    const reportResponseStarted = () => {
+      if (responseStarted) return;
+      responseStarted = true;
+      try { onProgress?.("receiving"); } catch {}
+    };
     const remember = (event, invalid = false) => {
       const summary = invalid
         ? { type:"invalid-json", preview:String(event).slice(0, 200) }
@@ -208,6 +220,7 @@ function runProcess(launch, args, input, cwd, env, signal, onActivity = null) {
       try { event = JSON.parse(line); }
       catch { remember(line, true); return; }
       remember(event);
+      if (claudeResponseEvent(event) || event?.type === "result") reportResponseStarted();
       if (event?.type === "system" && event?.subtype === "init") {
         if (Array.isArray(event.tools) && event.tools.length) return failEarly(new Error(`Claude CLI exposed disabled tools: ${event.tools.map(String).join(", ")}.`));
         if (Array.isArray(event.mcp_servers) && event.mcp_servers.length) return failEarly(new Error("Claude CLI connected MCP servers despite strict isolation."));
@@ -260,12 +273,12 @@ function runProcess(launch, args, input, cwd, env, signal, onActivity = null) {
   });
 }
 
-async function callClaudeCli({ executable, model, effort, systemPrompt, prompt, atlasImage, signal, env = process.env, onActivity = null }) {
+async function callClaudeCli({ executable, model, effort, systemPrompt, prompt, atlasImage, signal, env = process.env, onProgress = null, onActivity = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-claude-"));
   let caughtError = null, cleanupReady = Promise.resolve(), deferCleanup = false;
   try {
     await fs.promises.chmod(workDir, 0o700).catch(() => {});
-    const launch = resolveClaudeLaunch(executable, env), args = buildClaudeArgs({ systemPrompt, model, effort }), input = claudeInput(prompt, atlasImage), childEnv = sanitizeClaudeEnv(env, effort), result = await runProcess(launch, args, input, workDir, childEnv, signal, onActivity);
+    const launch = resolveClaudeLaunch(executable, env), args = buildClaudeArgs({ systemPrompt, model, effort }), input = claudeInput(prompt, atlasImage), childEnv = sanitizeClaudeEnv(env, effort), result = await runProcess(launch, args, input, workDir, childEnv, signal, onProgress, onActivity);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
     if (signal?.aborted) throw abortError();

@@ -12,10 +12,10 @@
     TIP_MS = 26000,
     TEXT_INTERVALS = Object.freeze({ phrase:PHRASE_MS, tip:TIP_MS }),
     THINKING_LAYOUT = Object.freeze({
-      loaderRadius:43,
-      copyTop:68,
+      loaderRadius:32,
+      copyTop:52,
       copyWidth:330,
-      copyHeight:72,
+      copyHeight:82,
       padding:12,
       viewportMargin:14,
     });
@@ -187,11 +187,12 @@
   function thinkingFootprint(center, viewportWidth) {
     const width = Math.max(0, Number(viewportWidth) || 0),
       copyWidth = Math.max(0, Math.min(THINKING_LAYOUT.copyWidth, width - 36)),
+      copyHeight = THINKING_LAYOUT.copyHeight + Math.max(0, THINKING_LAYOUT.copyWidth - copyWidth) * 0.48,
       halfWidth = Math.max(THINKING_LAYOUT.loaderRadius, copyWidth / 2),
       left = center.x - halfWidth - THINKING_LAYOUT.padding,
       top = center.y - THINKING_LAYOUT.loaderRadius - THINKING_LAYOUT.padding,
       right = center.x + halfWidth + THINKING_LAYOUT.padding,
-      bottom = center.y + THINKING_LAYOUT.copyTop + THINKING_LAYOUT.copyHeight + THINKING_LAYOUT.padding;
+      bottom = center.y + THINKING_LAYOUT.copyTop + copyHeight + THINKING_LAYOUT.padding;
     return { x:left, y:top, w:right - left, h:bottom - top };
   }
 
@@ -234,6 +235,64 @@
             score += overlapWidth * overlapHeight * Math.max(1, Number(blocker.weight) || 1);
         }
         return score;
+      },
+      emptyPlacement = () => {
+        const minLeft = margin,
+          maxLeft = width - margin - template.w,
+          minTop = margin,
+          maxTop = height - margin - template.h;
+        if (maxLeft < minLeft || maxTop < minTop) return null;
+        const preferred = anchor
+            ? { x:anchor.x + anchor.w / 2, y:anchor.y + anchor.h / 2 }
+            : { x:width / 2, y:height / 2 },
+          preferredLeft = preferred.x - template.w / 2,
+          boxCenterOffsetY = template.y + template.h / 2,
+          tops = [minTop];
+        for (const blocker of blockers) {
+          const top = blocker.y + blocker.h;
+          if (top >= minTop && top <= maxTop) tops.push(top);
+        }
+        tops.sort((a, b) => Math.abs(a + boxCenterOffsetY - preferred.y) - Math.abs(b + boxCenterOffsetY - preferred.y));
+        let bestEmpty = null,
+          bestDistance = Infinity;
+        for (const top of tops) {
+          const intervals = [];
+          for (const blocker of blockers) {
+            if (blocker.y >= top + template.h || blocker.y + blocker.h <= top) continue;
+            const start = blocker.x - template.w,
+              end = blocker.x + blocker.w;
+            if (end < minLeft || start > maxLeft) continue;
+            intervals.push({ start:Math.max(minLeft, start), end:Math.min(maxLeft, end) });
+          }
+          intervals.sort((a, b) => a.start - b.start || a.end - b.end);
+          const merged = [];
+          for (const interval of intervals) {
+            const previous = merged[merged.length - 1];
+            if (previous && interval.start < previous.end) previous.end = Math.max(previous.end, interval.end);
+            else merged.push({ ...interval });
+          }
+          const gaps = [];
+          let cursor = minLeft;
+          for (const interval of merged) {
+            if (interval.start >= cursor) gaps.push({ start:cursor, end:interval.start });
+            cursor = Math.max(cursor, interval.end);
+          }
+          if (cursor <= maxLeft) gaps.push({ start:cursor, end:maxLeft });
+          for (const gap of gaps) {
+            const left = Math.max(gap.start, Math.min(gap.end, preferredLeft)),
+              point = { x:left - template.x, y:top - template.y },
+              box = thinkingFootprint(point, width);
+            if (overlapScore(box) !== 0) continue;
+            const dx = point.x - preferred.x,
+              dy = point.y - preferred.y,
+              distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              bestEmpty = { x:point.x, y:point.y, box, score:0 };
+            }
+          }
+        }
+        return bestEmpty;
       };
     if (anchor) {
       const centerX = anchor.x + anchor.w / 2,
@@ -260,6 +319,10 @@
         bestScore = score;
         if (score === 0) break;
       }
+    }
+    if (bestScore > 0) {
+      const empty = emptyPlacement();
+      if (empty) return empty;
     }
     return { x:best.x, y:best.y, box:bestBox, score:bestScore };
   }
@@ -338,7 +401,7 @@
     }
 
     function drawLoader(elapsed, fade, screenX, screenY) {
-      const radius = 41 * (1 + Math.sin(elapsed * 0.68 + model.data.phase) * 0.018),
+      const radius = (THINKING_LAYOUT.loaderRadius - 2) * (1 + Math.sin(elapsed * 0.68 + model.data.phase) * 0.018),
         points = buildLoaderPoints(model.type, model.data, elapsed)
           .map((point) => ({ x:point.x * radius, y:point.y * radius }));
       ctx.save();

@@ -151,7 +151,7 @@
     return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
   }
   function launchAutomaticAI(reason) {
-    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing) return;
+    if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing || state.widgetRefineConfirmation) return;
     if (aiPreparation || state.activeAI) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
@@ -169,7 +169,7 @@
     clearTimeout(state.timer);
     state.timer = 0;
     if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible) return;
-    if (activeWidgetRefinement()) return;
+    if (activeWidgetRefinement() || state.widgetRefineConfirmation) return;
     if (currentWidgetRefineCandidate()) {
       if (state.statusKey !== "widgetRefinePending") setStatusKey("widgetRefinePending");
       return;
@@ -227,12 +227,12 @@
       captureCurrentViewport = Boolean(requestOptions.captureCurrentViewport),
       widgetEditTarget = requestOptions.widgetEditTarget || null,
       widgetEditContext = requestOptions.widgetEditContext || null,
+      requestedAttentionBox = requestOptions.attentionBox || null,
       revision = state.userRevision,
       recognitionGeneration = state.recognitionGeneration,
       aiColor = state.aiColor,
       dirtySnapshot = state.dirty ? { ...state.dirty } : null,
       latestBox = dirtySnapshot || state.lastUserBox,
-      attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox),
       hotspotCount = isolatedSelection ? 0 : state.hotspotTrail.length,
       controller = new AbortController(),
       preparation = {
@@ -241,6 +241,8 @@
         superseded:false,
         widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null,
       };
+    let attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox);
+    if (requestedAttentionBox) attentionBox = requestedAttentionBox;
     aiPreparation = preparation;
     state.summonAnchor = dirtySnapshot || state.lastUserBox || null;
     setBusy(true);
@@ -334,7 +336,12 @@
         error.status = streamed.status;
         throw error;
       }
-      // Draft confirmation is a separate interaction after the model request has ended.
+      // Draft confirmation is a separate interaction after the model request has
+      // ended. Stop request-only timers now so they cannot report a slow model
+      // while the user is deciding whether to keep the completed draft.
+      timeout.clear();
+      clearTimeout(run.slowNoticeTimer);
+      run.slowNoticeTimer = 0;
       if (state.activeAI === run) setBusy(false);
       const rawCommands = Array.isArray(data.commands) ? data.commands : [],
         rawCount = rawCommands.length,
@@ -404,6 +411,7 @@
             state.lastUserBox = requestBox;
             if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
             if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
+            clearDirtyContributionTracking();
           }
           run.inputConsumed = true;
           run.dirtyRestored = true;
@@ -425,6 +433,7 @@
           state.lastUserBox = requestBox;
           if (hotspotCount) state.hotspotTrail.splice(0, hotspotCount);
           if (state.latestTypedInput === typedInput) state.latestTypedInput = null;
+          clearDirtyContributionTracking();
           run.inputConsumed = true;
           run.dirtyRestored = true;
         }
@@ -1952,6 +1961,7 @@
       const end = state.hotspotTrail.indexOf(p.hotspotEnd);
       if (end >= 0) state.hotspotTrail.splice(0, end + 1);
     }
+    clearDirtyContributionTracking();
   }
   function finishPendingItemAction(p, statusKey) {
     if (p.items.length) {
@@ -2834,11 +2844,15 @@
       for (const point of d.trail) state.hotspotTrail.push(point);
       if (state.hotspotTrail.length > 512) state.hotspotTrail.splice(0, state.hotspotTrail.length - 512);
       refineCandidate = latchWidgetRefineCandidate(d);
+    } else {
+      recomputeDirtyBounds();
+      filterErasedDirtyHotspots(d.dirtyMaskTouched);
+      refineCandidate = relatchWidgetRefineCandidateFromDirty();
     }
     notePendingContinuedInput(d);
     state.autoEligible ||= shouldRequest;
-    if (shouldRequest && state.autoEligible && !refineCandidate) schedule();
+    if (state.dirty && state.autoEligible && !refineCandidate) schedule();
     save();
     requestInteractionLayerRender();
-    if (shouldRequest) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
+    if (shouldRequest || d.erase) setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "ready");
   }

@@ -39,7 +39,7 @@ function parsePlugin(relativePath) {
 
 function widgetRuntimeHarness(options = {}) {
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
-    listeners = new Map(), messages = [], timers = new Map(), frames = new Map(), parent = {}, classes = new Set(), opened = [], directFetches = [],
+    listeners = new Map(), messages = [], timers = new Map(), frames = new Map(), parent = {}, classes = new Set(), opened = [], directFetches = [], dispatched = [],
     animation = {
       playState:"running",
       pause() { this.playState = "paused"; },
@@ -69,6 +69,8 @@ function widgetRuntimeHarness(options = {}) {
       return options.fetch ? options.fetch(...args) : Promise.resolve(new Response("direct response"));
     },
     performance:{ now:() => 100 },
+    Event:class RuntimeEvent { constructor(type) { this.type = type; } },
+    dispatchEvent(event) { dispatched.push(event.type); return true; },
     addEventListener(type, listener) { listeners.set(type, listener); },
     setTimeout(callback) { const id = nextTimer++; timers.set(id, callback); return id; },
     clearTimeout(id) { timers.delete(id); },
@@ -108,6 +110,7 @@ function widgetRuntimeHarness(options = {}) {
     animation,
     svg,
     classes,
+    dispatched,
     fetchPublic(url) { return sandbox.penechoFetchPublic(url); },
     fetch(url, init = { credentials:"omit" }) { return sandbox.fetch(url, init); },
     open(url) { return sandbox.open(url); },
@@ -172,6 +175,11 @@ test("widget fetch tries the source directly and falls back to the public-data b
   assert.equal(direct.directFetches.length, 1);
   assert.equal(direct.messages.some(message => message.type === "penecho-widget-public-fetch-request"), false);
 
+  const notFound = widgetRuntimeHarness({ fetch:() => Promise.resolve(new Response("missing", { status:404 })) }),
+    notFoundResponse = await notFound.fetch("https://example.com/missing.json");
+  assert.equal(notFoundResponse.status, 404);
+  assert.equal(notFound.messages.some(message => message.type === "penecho-widget-public-fetch-request"), false);
+
   const corsBlocked = widgetRuntimeHarness({ fetch:() => Promise.reject(new TypeError("Failed to fetch")) }),
     pending = corsBlocked.fetch("https://www.reddit.com/hot.json?limit=10&raw_json=1");
   await new Promise(resolve => setImmediate(resolve));
@@ -197,6 +205,16 @@ test("widget fetch does not proxy credentialed, body-bearing, or aborted request
   await assert.rejects(runtime.fetch("https://example.com/post", { method:"POST", body:"value", credentials:"omit" }), /Failed to fetch/);
   await assert.rejects(runtime.fetch("https://example.com/aborted", { credentials:"omit", signal:{ aborted:true } }), /Failed to fetch/);
   assert.equal(runtime.messages.some(message => message.type === "penecho-widget-public-fetch-request"), false);
+});
+
+test("widget runtime notifies size-sensitive libraries when first shown or resumed", () => {
+  const runtime = widgetRuntimeHarness();
+  runtime.select(true, 1, 1, true);
+  runtime.select(true, 1, 1, true);
+  assert.deepEqual(runtime.dispatched, ["resize"]);
+  runtime.select(false, 1, 1, false);
+  runtime.select(false, 1, 1, true);
+  assert.deepEqual(runtime.dispatched, ["resize", "resize"]);
 });
 
 test("widget links are limited to public HTTPS and always open outside the sandbox", () => {
@@ -292,13 +310,14 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.deepEqual([...general.connect], []);
   assert.match(general.document, /source: Public HTTPS web/);
   assert.match(general.document, /credentials:"omit"/);
-  assert.match(general.document, /window\.penechoFetchPublic\(url\)/);
   assert.match(general.document, /local channel solves browser CORS, not source authentication/);
-  assert.match(general.document, /When a resource supports browser CORS/);
-  assert.match(general.document, /do not route a working direct request through PenEcho/);
-  assert.match(general.document, /without rewriting the supplied URL/);
+  assert.match(general.document, /ordinary `fetch/);
+  assert.match(general.document, /automatically falls back through its server/);
+  assert.match(general.document, /browser CORS or a direct network failure/);
+  assert.match(general.document, /may use public HTTPS URLs directly/);
+  assert.doesNotMatch(general.document, /penechoFetchPublic/);
+  assert.match(general.document, /need no CORS workaround/);
   assert.match(general.document, /response\.blob\(\)/);
-  assert.match(general.document, /including APIs, RSS\/Atom feeds, and images/);
   assert.match(general.document, /五颜六色的钟/);
   assert.match(general.document, /Native HTML, CSS, JavaScript, timers, SVG, and canvas remain preferred/);
   assert.match(general.document, /native `draw`[\s\S]*?10 or fewer basic primitives or line segments/);
@@ -434,6 +453,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
     widgetDocument = functionSource(host, "widgetDocument");
   const scopeInlineScript = vm.runInNewContext(`(() => {
     ${functionSource(host, "inlineScriptHasWindowBinding")}
+    ${functionSource(host, "compatibleInlineWidgetScript")}
     ${functionSource(host, "scopedInlineWidgetScript")}
     return scopedInlineWidgetScript;
   })()`);
@@ -451,6 +471,12 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   linkAttributes.set("href", "javascript:alert(1)");
   assert.equal(safeOutboundLink(link), false);
   assert.equal(linkAttributes.has("href"), false);
+  assert.equal(scopeInlineScript("window.parent.penechoFetchPublic(url).then(render);"), "window.penechoFetchPublic(url).then(render);");
+  assert.equal(scopeInlineScript("globalThis.parent.penechoFetchPublic(url);"), "window.penechoFetchPublic(url);");
+  assert.equal(
+    scopeInlineScript("parent.penechoFetchPublic(url); window.parent.postMessage({type:'updated'}, '*');"),
+    "window.penechoFetchPublic(url); window.parent.postMessage({type:'updated'}, '*');"
+  );
   const conflictingScript = "var xs=[160,340], coilX=900, top=70, gap=104; globalThis.renderHeight=top+gap;";
   assert.match(scopeInlineScript(conflictingScript), /^\(\(\) => \{/);
   const scopedContext = {};
@@ -483,17 +509,23 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(snapshot, /domSnapshotRenderer = globalThis\.html2canvas[\s\S]*?domSnapshotRenderer\(document\.documentElement/);
   assert.doesNotMatch(snapshot, /\bfetch\s*\(|proxyPublicFetch|PUBLIC_FETCH|notifyReady|penecho-widget-updated/);
   assert.match(host, /snapshotPrimarySvg\(requestedWidth, requestedHeight, scale\)/);
+  assert.match(snapshot, /scale = Math\.min\(1, MAX_SNAPSHOT_DIMENSION \/ requestedWidth, MAX_SNAPSHOT_DIMENSION \/ requestedHeight, Math\.sqrt\(MAX_SNAPSHOT_PIXELS \/ \(requestedWidth \* requestedHeight\)\)\)/);
+  assert.match(host, /scale = Math\.min\(1, MAX_SNAPSHOT_DIMENSION \/ request\.requestedWidth, MAX_SNAPSHOT_DIMENSION \/ request\.requestedHeight, Math\.sqrt\(MAX_SNAPSHOT_PIXELS \/ \(request\.requestedWidth \* request\.requestedHeight\)\)\)/);
+  assert.doesNotMatch(host, /requestedScale|dataUrlLimit|scale:request\.requested/);
   assert.match(host, /new XMLSerializer\(\)\.serializeToString\(clone\)/);
   assert.match(host, /context\.drawImage\(image, 0, 0, canvas\.width, canvas\.height\)/);
-  assert.match(host, /setRuntimeActive\(false\)[\s\S]*?inlineSvgComputedStyles\(\)[\s\S]*?inlineSnapshotCompatibleColors\(\)[\s\S]*?setRuntimeActive\(widgetState\.active\)/);
+  assert.match(snapshot, /await settleSnapshotFrame\(\)[\s\S]*?inlineSvgComputedStyles\(\)[\s\S]*?inlineSnapshotCompatibleColors\(\)/);
+  assert.match(host, /function captureDirectRendererStyleMutations\(\)[\s\S]*?attributeFilter:\["style"\][\s\S]*?observer\.takeRecords\(\)[\s\S]*?element\.setAttribute\("style", value\)/);
+  assert.match(snapshot, /restoreDirectRendererStyles = captureDirectRendererStyleMutations\(\)[\s\S]*?rendering = domSnapshotRenderer\([\s\S]*?finally\s*\{[\s\S]*?restoreDirectRendererStyles\(\)[\s\S]*?canvas = await rendering/);
   assert.match(host, /unsupportedSnapshotColor = \/\\b\(\?:color\|lab\|lch\|oklab\|oklch\|hwb\)[\s\S]*?getImageData\(0, 0, 1, 1\)/);
   assert.match(host, /function inlineSnapshotCompatibleColors\(\)[\s\S]*?background-image[\s\S]*?box-shadow/);
   assert.doesNotMatch(host, /snapshotSemanticFallback|createTreeWalker/);
   assert.match(host, /function settleSnapshotFrame\(\)[\s\S]*?setTimeout\(\(\) => finish\(false\), 50\)[\s\S]*?nativeRequestAnimationFrame\(\(\) => finish\(true\)\)/);
-  assert.match(host, /function flushPendingSnapshotFrame\(\)[\s\S]*?\[\.\.\.pendingAnimationFrames\.entries\(\)\][\s\S]*?pendingAnimationFrames\.delete\(id\)[\s\S]*?callback\(timestamp\)/);
+  assert.match(host, /press\.pointerType === "mouse"[\s\S]*?event\.buttons[\s\S]*?finishPress\(event\)/);
+  assert.match(host, /lostpointercapture[\s\S]*?finishPress\(\{ pointerId:event\.pointerId \}, true\)[\s\S]*?addEventListener\("blur"/);
+  assert.doesNotMatch(snapshot, /setRuntimeActive\(|flushPendingSnapshotFrame|penecho-widget-paused/);
   assert.doesNotMatch(host, /notifySnapshotReady|penecho-widget-snapshot-ready/);
   assert.match(widgetDocument, /parsed\.body\.append\(renderer\)[\s\S]*?penecho-widget-document-ready[\s\S]*?parsed\.body\.append\(ready\)[\s\S]*?policy\.after\(bridge\)/);
-  assert.match(snapshot, /framePresented = await settleSnapshotFrame\(\)[\s\S]*?setRuntimeActive\(false\)[\s\S]*?if \(!framePresented\) flushPendingSnapshotFrame\(\)/);
   assert.match(host, /restoreCompatibleColors\(\)[\s\S]*?restoreSvgStyles\(\)/);
   assert.match(host, /foreignObjectRendering:false/);
   assert.match(host, /penechoDirectRendering:true/);
@@ -555,6 +587,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /hit:"resize"[\s\S]*?hit:"width"[\s\S]*?hit:"height"/);
   assert.match(host, /penecho-widget-state/);
   assert.match(host, /function setRuntimeActive\(active\)/);
+  assert.doesNotMatch(snapshot, /setRuntimeActive|notifyVisibleViewport/);
   assert.match(host, /document\.getAnimations\(\)/);
   assert.match(host, /pauseAnimations/);
   assert.match(host, /penecho-widget-paused/);
@@ -573,7 +606,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /upstreamStatus = Number\(response\.headers\.get\("x-penecho-upstream-status"\)\)/);
   assert.match(server, /"X-PenEcho-Upstream-Status":String\(result\.status\)/);
   assert.match(host, /data-penecho-snapshot-background/);
-  assert.match(host, /finally\s*\{\s*try\s*\{\s*restoreSvgStyles\(\)[\s\S]*?finally\s*\{\s*setRuntimeActive\(widgetState\.active\)/);
+  assert.match(snapshot, /finally\s*\{\s*try\s*\{\s*restoreCompatibleColors\(\);\s*\}\s*finally\s*\{\s*restoreSvgStyles\(\);\s*\}/);
   assert.match(host, /snapshotError\(message\.requestId, message\.error\)/);
   assert.match(flowchart, /injected CSS framework/);
   assert.match(host, /if \(press\.active\)[\s\S]*?event\.preventDefault/);
@@ -596,28 +629,8 @@ test("widget host keeps the active Blob URL across stale iframe load events", ()
   assert.match(host, /releaseInnerDocumentUrl\(\);[\s\S]*?innerDocumentUrl = URL\.createObjectURL[\s\S]*?inner\.src = innerDocumentUrl/);
 });
 
-test("offscreen widget snapshots flush exactly one throttled animation frame", async () => {
-  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
-    pendingAnimationFrames = new Map(),
-    errors = [],
-    frames = [],
-    flush = vm.runInNewContext(`(${functionSource(host, "flushPendingSnapshotFrame")})`, {
-      pendingAnimationFrames,
-      clock:() => 42,
-      recordRuntimeError:error => errors.push(error),
-    });
-  pendingAnimationFrames.set(1, (timestamp) => {
-    frames.push([1, timestamp]);
-    pendingAnimationFrames.set(3, nextTimestamp => frames.push([3, nextTimestamp]));
-  });
-  pendingAnimationFrames.set(2, timestamp => frames.push([2, timestamp]));
-
-  flush();
-
-  assert.deepEqual(frames, [[1, 42], [2, 42]]);
-  assert.deepEqual([...pendingAnimationFrames.keys()], [3]);
-  assert.deepEqual(errors, []);
-
+test("widget snapshots wait for one presented frame without pausing the live runtime", async () => {
+  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8");
   let timerCallback = null,
     frameCallback = null;
   const settle = vm.runInNewContext(`(${functionSource(host, "settleSnapshotFrame")})`, {
@@ -631,6 +644,34 @@ test("offscreen widget snapshots flush exactly one throttled animation frame", a
   const presented = settle();
   frameCallback();
   assert.equal(await presented, true);
+});
+
+test("direct widget snapshots restore live style mutations before rendering continues", () => {
+  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
+    element = {
+      style:"transform: translate3d(10px, 20px, 0)",
+      setAttribute(name, value) { if (name === "style") this.style = value; },
+      removeAttribute(name) { if (name === "style") this.style = null; },
+    };
+  let observer;
+  class TestMutationObserver {
+    constructor(callback) { this.callback = callback; this.records = []; observer = this; }
+    observe() {}
+    takeRecords() { return this.records.splice(0); }
+    disconnect() {}
+  }
+  const restore = vm.runInNewContext(`(${functionSource(host, "captureDirectRendererStyleMutations")})`, {
+    MutationObserver:TestMutationObserver,
+    document:{ documentElement:{} },
+    Map,
+  })();
+  observer.records.push(
+    { target:element, oldValue:"transform: translate3d(10px, 20px, 0)" },
+    { target:element, oldValue:"transform: none" },
+  );
+  element.style = "transform: none; animation-duration: 0s";
+  restore();
+  assert.equal(element.style, "transform: translate3d(10px, 20px, 0)");
 });
 
 test("widget iframe preserves direct interaction while forwarding resize and canvas navigation", () => {

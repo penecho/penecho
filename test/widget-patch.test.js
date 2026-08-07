@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { commandFromWidgetPatch, resolveWidgetEditPatchCommands, widgetPatchFileContent, widgetPatchContract } = require("../src/server/widget-patch.js");
+const { commandFromWidgetPatch, resolveWidgetEditPatchCommands, widgetPatchFileContent, widgetPatchContract, widgetPatchFiles } = require("../src/server/widget-patch.js");
 
 const HTML = "<!doctype html>\n<html>\n<body>\n<h1>Old</h1>\n<p>Keep</p>\n<footer>v1</footer>\n</body>\n</html>\n";
 const SOURCE = "graph LR\nA --> B\nB --> C\n";
@@ -37,7 +37,7 @@ test("widget patch baseline conditionally adds one final newline", () => {
   assert.equal(widgetPatchFileContent(undefined), "");
 });
 
-test("widget patch applies multiple exact hunks and preserves trusted metadata", () => {
+test("widget patch applies multiple exact hunks and preserves host identity and geometry", () => {
   const patch = [
     "--- a/widget.html",
     "+++ b/widget.html",
@@ -90,6 +90,34 @@ test("widget patch applies HTML and source files atomically", () => {
   assert.equal(commandFromWidgetPatch(patchCommand(staleSource), htmlEdit()), null);
 });
 
+test("widget patch accepts the standard dual-file prompt example", () => {
+  const widgetEdit = htmlEdit({
+      html:"<main>\n  <h1>Old</h1>\n</main>\n",
+      source:"page:\n  title: Old\n  enabled: true\n",
+      sourceFormat:"yaml",
+    }),
+    patch = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -1,3 +1,3 @@",
+      " <main>",
+      "-  <h1>Old</h1>",
+      "+  <h1>New</h1>",
+      " </main>",
+      "--- a/widget.source",
+      "+++ b/widget.source",
+      "@@ -1,3 +1,3 @@",
+      " page:",
+      "-  title: Old",
+      "+  title: New",
+      "   enabled: true",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch), widgetEdit);
+  assert.equal(result.html, "<main>\n  <h1>New</h1>\n</main>\n");
+  assert.equal(result.copyText, "page:\n  title: New\n  enabled: true\n");
+});
+
 test("widget patch repairs redundant counts and uniquely relocates exact context", () => {
   const patch = [
     "--- a/widget.html",
@@ -113,6 +141,36 @@ test("widget patch repairs redundant counts and uniquely relocates exact context
 
   const shiftedStart = patch.replace("@@ -2,99 +2,42 @@", "@@ -3,99 +3,42 @@");
   assert.match(commandFromWidgetPatch(patchCommand(shiftedStart), htmlEdit()).html, /Recounted/);
+});
+
+test("widget patch coalesces repeated file sections without adding content", () => {
+  const widgetEdit = htmlEdit({
+      html:"start\none\nmiddle\ntwo\nend",
+      source:"",
+      sourceFormat:"",
+    }),
+    patch = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -2,1 +2,1 @@",
+      "-one",
+      "+ONE",
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -4,1 +4,1 @@",
+      "-two",
+      "+TWO",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch), widgetEdit);
+  assert.equal(result.html, "start\nONE\nmiddle\nTWO\nend");
+  assert.equal(result.html.includes("--- a/widget.html"), false);
+
+  const reversed = patch.replace(
+    "@@ -2,1 +2,1 @@\n-one\n+ONE\n--- a/widget.html\n+++ b/widget.html\n@@ -4,1 +4,1 @@\n-two\n+TWO",
+    "@@ -4,1 +4,1 @@\n-two\n+TWO\n--- a/widget.html\n+++ b/widget.html\n@@ -2,1 +2,1 @@\n-one\n+ONE",
+  );
+  assert.equal(commandFromWidgetPatch(patchCommand(reversed), widgetEdit), null);
 });
 
 test("widget patch repairs one omitted source-indent space only at a unique target", () => {
@@ -201,7 +259,7 @@ test("HTML-backed copy source is implicit and never becomes a duplicate patch fi
       "",
     ].join("\n"),
     result = commandFromWidgetPatch(patchCommand(patch), widgetEdit);
-  assert.deepEqual(widgetPatchContract(widgetEdit), [{ path:"widget.html", widgetEditField:"html" }]);
+  assert.deepEqual(widgetPatchContract(widgetEdit), [{ path:"widget.json" },{ path:"widget.html" },{ path:"widget.source" }]);
   assert.match(result.html, /<h1>New<\/h1>/);
   assert.equal("copyText" in result, false);
   assert.equal("copyLabel" in result, false);
@@ -225,7 +283,137 @@ test("diagram patch reconstructs a complete diagram command", () => {
     source:"graph LR\nA --> B\nB --> C\nC --> D\n",
     diagramKind:"process",
   });
-  assert.deepEqual(widgetPatchContract(widgetEdit), [{ path:"widget.source", widgetEditField:"source" }]);
+  assert.deepEqual(widgetPatchContract(widgetEdit), [{ path:"widget.json" },{ path:"widget.source" }]);
+});
+
+test("widget manifest patch updates all editable diagram metadata without changing host fields", () => {
+  const widgetEdit = htmlEdit({
+      widgetType:"diagram_source",
+      pluginId:"flowchart",
+      title:"Aspirin",
+      sourceFormat:"smiles",
+      diagramKind:"molecular-structure",
+      source:"CC(=O)OC1=CC=CC=C1C(=O)O",
+    });
+  delete widgetEdit.html;
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -3,6 +3,6 @@",
+      '   "pluginId": "flowchart",',
+      '-  "title": "Aspirin",',
+      '+  "title": "Compact aspirin",',
+      '   "refreshSeconds": 0,',
+      '-  "diagramKind": "molecular-structure",',
+      '+  "diagramKind": "molecular-structure-compact",',
+      '   "sourceFormat": "smiles",',
+      '   "sourceFile": "widget.source"',
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch),widgetEdit);
+  assert.equal(result.title,"Compact aspirin");
+  assert.equal(result.diagramKind,"molecular-structure-compact");
+  assert.equal(result.sourceFormat,"smiles");
+  assert.equal(result.source,widgetEdit.source);
+  assert.equal(result.pluginId,widgetEdit.pluginId);
+  assert.deepEqual({ x:result.x,y:result.y,w:result.w,h:result.h },widgetEdit.box);
+});
+
+test("widget manifest patch may change diagram source format with its source", () => {
+  const widgetEdit = htmlEdit({
+      widgetType:"diagram_source",
+      pluginId:"flowchart",
+      sourceFormat:"smiles",
+      diagramKind:"molecular-structure",
+      source:"CCO",
+    });
+  delete widgetEdit.html;
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -5,4 +5,4 @@",
+      '   "refreshSeconds": 0,',
+      '-  "diagramKind": "molecular-structure",',
+      '-  "sourceFormat": "smiles",',
+      '+  "diagramKind": "process",',
+      '+  "sourceFormat": "mermaid",',
+      '   "sourceFile": "widget.source"',
+      "--- a/widget.source",
+      "+++ b/widget.source",
+      "@@ -1 +1,2 @@",
+      "-CCO",
+      "+flowchart LR",
+      "+A --> B",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch),widgetEdit);
+  assert.equal(result.sourceFormat,"mermaid");
+  assert.equal(result.diagramKind,"process");
+  assert.equal(result.source,"flowchart LR\nA --> B");
+});
+
+test("widget manifest patch can add and remove a distinct copy source", () => {
+  const withoutSource = htmlEdit({ source:"",sourceFormat:"",copyLabel:"",html:"<main>Visible</main>" }),
+    emptySourceReference = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -9,3 +9,3 @@",
+      '   "htmlFile": "widget.html",',
+      '-  "copyTextFile": null,',
+      '+  "copyTextFile": "widget.source",',
+      '   "copyLabel": null',
+      "",
+    ].join("\n"),
+    addPatch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -5,7 +5,7 @@",
+      '   "refreshSeconds": 900,',
+      '   "diagramKind": null,',
+      '-  "sourceFormat": null,',
+      '+  "sourceFormat": "yaml",',
+      '   "frameworkVersion": null,',
+      '   "htmlFile": "widget.html",',
+      '-  "copyTextFile": null,',
+      '-  "copyLabel": null',
+      '+  "copyTextFile": "widget.source",',
+      '+  "copyLabel": "Copy YAML"',
+      "--- a/widget.source",
+      "+++ b/widget.source",
+      "@@ -0,0 +1,2 @@",
+      "+page:",
+      "+  title: Visible",
+      "",
+    ].join("\n"),
+    added = commandFromWidgetPatch(patchCommand(addPatch),withoutSource);
+  assert.equal(commandFromWidgetPatch(patchCommand(emptySourceReference),withoutSource),null);
+  assert.equal(added.sourceFormat,"yaml");
+  assert.equal(added.copyText,"page:\n  title: Visible");
+  assert.equal(added.copyLabel,"Copy YAML");
+
+  const removePatch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -8,4 +8,4 @@",
+      '   "frameworkVersion": null,',
+      '   "htmlFile": "widget.html",',
+      '-  "copyTextFile": "widget.source",',
+      '-  "copyLabel": "Copy mermaid"',
+      '+  "copyTextFile": null,',
+      '+  "copyLabel": null',
+      "",
+    ].join("\n"),
+    removed = commandFromWidgetPatch(patchCommand(removePatch),htmlEdit());
+  assert.equal("copyText" in removed,false);
+  assert.equal("copyLabel" in removed,false);
+});
+
+test("widget manifest keeps host identity references immutable", () => {
+  const widgetEdit = htmlEdit(), files = widgetPatchFiles(widgetEdit), manifest = files.find(file => file.path === "widget.json").content,
+    changedPlugin = manifest.replace('"pluginId": "general"','"pluginId": "other"'),
+    patch = `--- a/widget.json\n+++ b/widget.json\n@@ -2,3 +2,3 @@\n   "tool": "html_widget",\n-  "pluginId": "general",\n+  "pluginId": "other",\n   "title": "Existing widget",\n`;
+  assert.notEqual(changedPlugin,manifest);
+  assert.equal(commandFromWidgetPatch(patchCommand(patch),widgetEdit),null);
 });
 
 test("widget patch preserves CRLF and applies against a normalized final newline", () => {
@@ -236,7 +424,7 @@ test("widget patch preserves CRLF and applies against a normalized final newline
 
   const eofPatch = "--- a/widget.html\n+++ b/widget.html\n@@ -1,2 +1,2 @@\n first\n-second\n+updated\n",
     eofResult = commandFromWidgetPatch(patchCommand(eofPatch), htmlEdit({ html:"first\nsecond", source:"", sourceFormat:"" }));
-  assert.equal(eofResult.html, "first\nupdated\n");
+  assert.equal(eofResult.html, "first\nupdated");
 });
 
 test("widget patch accepts standard zero-line insertion coordinates", () => {
@@ -254,12 +442,12 @@ test("widget patch accepts standard zero-line insertion coordinates", () => {
       "",
     ].join("\n"),
     prependResult = commandFromWidgetPatch(patchCommand(prependPatch), widgetEdit);
-  assert.equal(prependResult.html, "<script>prepend()</script>\n<!doctype html><main>Existing</main>\n");
-  assert.equal(prependResult.copyText, "new source\n");
+  assert.equal(prependResult.html, "<script>prepend()</script>\n<!doctype html><main>Existing</main>");
+  assert.equal(prependResult.copyText, "new source");
 
   const appendPatch = "--- a/widget.html\n+++ b/widget.html\n@@ -1,0 +2 @@\n+<script>append()</script>\n",
     appendResult = commandFromWidgetPatch(patchCommand(appendPatch), htmlEdit({ html:"<!doctype html><main>Existing</main>", source:"", sourceFormat:"" }));
-  assert.equal(appendResult.html, "<!doctype html><main>Existing</main>\n<script>append()</script>\n");
+  assert.equal(appendResult.html, "<!doctype html><main>Existing</main>\n<script>append()</script>");
 });
 
 test("widget patch rejects location drift even when jsdiff could find matching text elsewhere", () => {
@@ -272,17 +460,35 @@ test("widget patch rejects location drift even when jsdiff could find matching t
   assert.equal(commandFromWidgetPatch(patchCommand(patch), widgetEdit), null);
 });
 
-test("widget patch rejects untrusted envelopes and full replacements", () => {
+test("widget patch strips non-diff boundary lines but rejects unsafe envelopes and full replacements", () => {
   const validHunk = "@@ -3,3 +3,3 @@\n <body>\n-<h1>Old</h1>\n+<h1>New</h1>\n <p>Keep</p>\n",
     rejected = [
-      `diff --git a/widget.html b/widget.html\n--- a/widget.html\n+++ b/widget.html\n${validHunk}`,
       `--- a/other.html\n+++ b/other.html\n${validHunk}`,
       `--- a/widget.html\n+++ b/renamed.html\n${validHunk}`,
-      `--- a/widget.html\n+++ b/widget.html\n${validHunk}\ntrailing prose`,
-      "--- a/widget.source\n+++ b/widget.source\n@@ -1,3 +1,3 @@\n graph LR\n-A --> B\n+A --> D\n B --> C\n",
+      `--- a/widget.html\n+++ b/widget.html\n@@ -3,4 +3,4 @@\n <body>\n*** invalid inside a hunk\n-<h1>Old</h1>\n+<h1>New</h1>\n <p>Keep</p>\n`,
     ];
   for (const patch of rejected) assert.equal(commandFromWidgetPatch(patchCommand(patch), htmlEdit()), null, patch);
+  const wrapped = `Here is the requested change:\n\`\`\`diff\ndiff --git a/widget.html b/widget.html\n--- a/widget.html\n+++ b/widget.html\n${validHunk}*** generated footer\n\`\`\`\n`,
+    wrappedResult = commandFromWidgetPatch(patchCommand(wrapped), htmlEdit());
+  assert.match(wrappedResult.html, /<h1>New<\/h1>/);
   assert.deepEqual(resolveWidgetEditPatchCommands([{ tool:"html_widget", html:"replacement" }], htmlEdit()), []);
   assert.deepEqual(resolveWidgetEditPatchCommands([patchCommand(`--- a/widget.html\n+++ b/widget.html\n${validHunk}`), patchCommand(`--- a/widget.html\n+++ b/widget.html\n${validHunk}`)], htmlEdit()), []);
   assert.equal(commandFromWidgetPatch({ tool:"widget_patch", patch:`--- a/widget.html\n+++ b/widget.html\n${validHunk}`, title:"model metadata" }, htmlEdit()), null);
+});
+
+test("widget patch accepts non-diff tool boundary lines", () => {
+  const patch = [
+      "*** Begin Patch",
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -3,3 +3,3 @@",
+      " <body>",
+      "-<h1>Old</h1>",
+      "+<h1>Compatible</h1>",
+      " <p>Keep</p>",
+      "*** End Patch",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch), htmlEdit());
+  assert.match(result.html, /<h1>Compatible<\/h1>/);
 });

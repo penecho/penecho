@@ -428,7 +428,7 @@
       async function renderSmiles() {
         await loadScript("https://cdn.jsdelivr.net/npm/smiles-drawer@2.1.7/dist/smiles-drawer.min.js");
         if (!globalThis.SmilesDrawer?.parse || typeof globalThis.SmilesDrawer.SvgDrawer !== "function") throw Error("SMILES renderer did not initialize");
-        const tree = await new Promise((resolve, reject) => globalThis.SmilesDrawer.parse(source, resolve, reject)),
+        const tree = await new Promise((resolve, reject) => globalThis.SmilesDrawer.parse(source.trim(), resolve, reject)),
           svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"),
           width = Math.max(320,stage.clientWidth),
           height = Math.max(220,stage.clientHeight);

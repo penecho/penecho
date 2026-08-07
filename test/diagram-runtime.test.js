@@ -58,6 +58,7 @@ test("each local format maps to one fixed on-demand renderer and unknown formats
   assert.doesNotMatch(geoJson, /\.pd-stage canvas\{/);
   const smiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Aspirin" });
   assert.match(smiles, /new globalThis\.SmilesDrawer\.SvgDrawer/);
+  assert.match(smiles, /SmilesDrawer\.parse\(source\.trim\(\),\s*resolve,\s*reject\)/);
   assert.match(smiles, /compactDrawing:config\.compactDrawing===true/);
   assert.match(smiles, /"compactDrawing":false/);
   assert.match(smiles, /\.draw\(tree,svg,"light",null,false,\[\]\)/);

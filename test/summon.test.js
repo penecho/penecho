@@ -51,15 +51,31 @@ test("thinking placement measures the complete loader and text footprint against
     box = placement.box,
     overlapWidth = Math.min(box.x + box.w, blocker.x + blocker.w) - Math.max(box.x, blocker.x),
     overlapHeight = Math.min(box.y + box.h, blocker.y + blocker.h) - Math.max(box.y, blocker.y),
-    mobile = SUMMON.thinkingFootprint({ x:130, y:180 }, 260);
+    mobile = SUMMON.thinkingFootprint({ x:130, y:180 }, 260),
+    desktop = SUMMON.thinkingFootprint({ x:500, y:250 }, 1000);
   assert.equal(placement.score, 0);
   assert.ok(overlapWidth <= 0 || overlapHeight <= 0);
   assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.w <= 1000 && box.y + box.h <= 640);
   assert.equal(mobile.w, 248);
-  assert.equal(SUMMON.THINKING_LAYOUT.loaderRadius, 43);
-  assert.equal(SUMMON.THINKING_LAYOUT.copyTop, 68);
+  assert.equal(SUMMON.THINKING_LAYOUT.loaderRadius, 32);
+  assert.equal(SUMMON.THINKING_LAYOUT.copyTop, 52);
   assert.equal(SUMMON.THINKING_LAYOUT.copyWidth, 330);
-  assert.ok(SUMMON.THINKING_LAYOUT.copyHeight >= 72);
+  assert.equal(SUMMON.THINKING_LAYOUT.copyHeight, 82);
+  assert.ok(mobile.h > desktop.h);
+});
+
+test("thinking placement finds a content-free slot between blocker edges", () => {
+  const placement = SUMMON.chooseThinkingPlacement({
+    width:1000,
+    height:500,
+    blockers:[
+      { x:0, y:0, w:370, h:500 },
+      { x:724, y:0, w:276, h:500 },
+    ],
+  });
+  assert.equal(placement.score, 0);
+  assert.equal(placement.box.x, 370);
+  assert.equal(placement.box.x + placement.box.w, 724);
 });
 
 test("AI waiting UI combines a clean mathematical loader with two neutral glowing lines", () => {
@@ -82,6 +98,7 @@ test("AI waiting UI combines a clean mathematical loader with two neutral glowin
   assert.match(source, /LOADER_TYPES|buildLoaderPoints|drawLoader|drawTrail|getAiColor|fxCanvas/);
   assert.match(core, /summonLayer|fxCanvas:\s*summonLayer|getAiColor:\s*\(\)\s*=>\s*state\.aiColor/);
   assert.match(core, /function summonControlBlockers\(\)/);
+  assert.match(core, /for \(const item of state\.textBoxes\) rects\.push/);
   assert.match(core, /element\.getBoundingClientRect\(\)/);
   for (const control of ["object-chrome-button", "animation-controls", "image-edit-bar", "selection-context-toolbar", "text-editor", "text-input-hint", "ai-embodiment"])
     assert.match(core, new RegExp(control));

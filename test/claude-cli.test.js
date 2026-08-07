@@ -25,6 +25,7 @@ async function waitForMissing(file, timeout = 5000) {
 test("Claude CLI arguments select one non-interactive image-analysis turn", () => {
   const args = buildClaudeArgs({ systemPrompt:"system instructions", model:"sonnet", effort:"max" });
   assert.deepEqual(args.slice(0, 5), ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
+  assert.ok(args.includes("--include-partial-messages"));
   assert.ok(args.includes("--verbose"));
   assert.equal(args[args.indexOf("--tools") + 1], "");
   assert.equal(args[args.indexOf("--disallowedTools") + 1], "Agent,Task");
@@ -147,6 +148,20 @@ test("Claude CLI returns on the final result event without waiting for process e
   const workDir = fs.readFileSync(marker, "utf8");
   await waitForMissing(workDir);
   assert.equal(fs.existsSync(workDir), false);
+});
+
+test("Claude CLI reports receiving when partial model output starts", { timeout:10000 }, async () => {
+  const directory = temporaryDirectory(), fakeCli = path.join(directory, "fake-claude-stream.js");
+  fs.writeFileSync(fakeCli, `"use strict";process.stdout.write(JSON.stringify({type:"system",subtype:"init",tools:[],mcp_servers:[]})+"\\n");setTimeout(()=>process.stdout.write(JSON.stringify({type:"stream_event",event:{type:"message_start",message:{role:"assistant",content:[]}}})+"\\n"),50);setTimeout(()=>process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:"streamed result"})+"\\n"),150);\n`);
+  let reportReceiving;
+  const receiving = new Promise(resolve => { reportReceiving = resolve; }), request = callClaudeCli({
+    executable:fakeCli,
+    systemPrompt:"system",
+    prompt:"request",
+    onProgress:phase => { if (phase === "receiving") reportReceiving(); },
+  });
+  assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
+  assert.equal(await request, "streamed result");
 });
 
 test("Claude CLI rejects and stops any tool-use event", { timeout:10000 }, async () => {

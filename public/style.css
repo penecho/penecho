@@ -454,10 +454,18 @@ body.changelog-open { overflow: hidden; }
 .corner-left { left: 3px; border-left: 1px solid #c7a45c; border-radius: 12px 0 0; }
 .corner-right { right: 3px; border-right: 1px solid #c7a45c; border-radius: 0 12px 0 0; }
 #viewport { position: relative; height: auto; min-height: 440px; flex: 1 1 auto; overflow: hidden; border: 1px solid #17110d; border-radius: 8px; background: var(--outside); touch-action: none; box-shadow: inset 0 0 35px rgba(0,0,0,.45); }
+.canvas-navigation-lock { position: absolute; z-index: 7; top: 10px; left: 10px; display: grid; width: 30px; height: 30px; padding: 0; place-items: center; color: color-mix(in srgb, var(--ink) 64%, transparent); border: 1px solid transparent; border-radius: 7px; outline: 0; background: transparent; opacity: 0; cursor: pointer; touch-action: manipulation; transition: opacity .2s ease, color .2s ease, border-color .2s ease, background-color .2s ease; }
+.canvas-navigation-lock svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.canvas-navigation-lock .closed { display: none; }
+.canvas-navigation-lock.locked .open { display: none; }
+.canvas-navigation-lock.locked .closed { display: block; }
+#viewport.is-navigating .canvas-navigation-lock, .canvas-navigation-lock:hover, .canvas-navigation-lock:focus-visible { color: color-mix(in srgb, var(--ink) 76%, #2679b8); border-color: color-mix(in srgb, var(--line) 52%, transparent); background: color-mix(in srgb, var(--panel) 62%, transparent); opacity: .58; }
+.canvas-navigation-lock.locked, #viewport.is-navigating .canvas-navigation-lock.locked, .canvas-navigation-lock.locked:hover, .canvas-navigation-lock.locked:focus-visible { color: #2679b8; border-color: color-mix(in srgb, #2679b8 44%, transparent); background: color-mix(in srgb, var(--panel) 68%, transparent); opacity: .76; }
 #screen { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .animation-layer { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .widget-layer { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }
-.canvas-widget { position: absolute; top: 0; left: 0; contain: layout paint style; pointer-events: none; transform-origin: 0 0; }
+.canvas-widget { position: absolute; top: 0; left: 0; contain: layout paint style; pointer-events: none; transform-origin: 0 0; transition: box-shadow .2s ease; }
+#viewport.widget-shadows .canvas-widget { border-radius: 7px; box-shadow: 0 1px 2px rgba(15, 23, 42, .2), 0 7px 16px rgba(15, 23, 42, .14), 0 22px 46px rgba(15, 23, 42, .12); }
 .canvas-widget.widget-offscreen { visibility: hidden; }
 .canvas-widget-frame { display: block; width: 100%; height: 100%; pointer-events: none; color-scheme: light; touch-action: none; border: 0; background: transparent; }
 #viewport.hand-mode .canvas-widget-frame { pointer-events: auto; cursor: default; }
@@ -481,7 +489,7 @@ body.changelog-open { overflow: hidden; }
 .widget-refine-hint[hidden] { display: none; }
 .widget-refine-confirmation { position: absolute; z-index: 8; top: 0; left: 0; display: flex; width: var(--widget-refine-confirm-width, 360px); min-height: 42px; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; pointer-events: auto; color: var(--ink); border: 1px solid color-mix(in srgb, #2563eb 45%, var(--line)); border-radius: 6px; background: color-mix(in srgb, var(--panel-raised) 96%, transparent); font: 600 12px/1.25 system-ui, "Noto Sans SC", sans-serif; transform: translate3d(var(--widget-refine-confirm-x, 8px), var(--widget-refine-confirm-y, 8px), 0); animation: widget-refine-confirm-in .16s ease-out both; }
 .widget-refine-confirmation.no-input { color: var(--muted); border-color: color-mix(in srgb, #6b7280 52%, var(--line)); }
-.widget-refine-confirmation-copy { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget-refine-confirmation-copy { flex: 1 1 auto; min-width: 0; overflow: visible; overflow-wrap: anywhere; white-space: normal; }
 .widget-refine-confirmation-button { display: grid; width: 30px; height: 30px; flex: 0 0 30px; padding: 0; place-items: center; color: currentColor; border: 1px solid currentColor; border-radius: 5px; background: transparent; cursor: pointer; }
 .widget-refine-confirmation-button:hover, .widget-refine-confirmation-button:focus-visible { background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
 .widget-refine-confirmation-button.confirm { color: var(--confirm); }
@@ -559,8 +567,12 @@ body.changelog-open { overflow: hidden; }
 .text-input-hint kbd { padding: 1px 4px; color: var(--gold-bright); border: 1px solid color-mix(in srgb, var(--gold-bright) 65%, var(--line)); border-radius: 3px; font: 700 .63rem/1 ui-monospace, Consolas, monospace; }
 #tip { position: absolute; right: 12px; bottom: 11px; z-index: 3; max-width: min(440px, calc(100% - 24px)); padding: 6px 9px; pointer-events: none; visibility: hidden; color: transparent; border: 1px solid transparent; border-radius: 5px; background: transparent; opacity: 0; font-size: .7rem; line-height: 1.35; letter-spacing: 0; transition: opacity .2s ease, color .2s ease, background .2s ease, border-color .2s ease, visibility 0s linear .2s; }
 #viewport.is-navigating #tip { visibility: visible; color: #f1e5c6; border-color: rgba(198, 163, 91, .38); background: rgba(12, 10, 17,.88); opacity: 1; backdrop-filter: blur(8px); transition-delay: 0s; }
+.canvas-navigation-lock-hint { position: absolute; z-index: 3; right: 12px; bottom: 11px; max-width: calc(100% - 64px); pointer-events: none; visibility: hidden; color: color-mix(in srgb, var(--ink) 48%, var(--muted)); opacity: 0; font: 500 .7rem/1.35 system-ui, "Noto Sans SC", sans-serif; transition: opacity .2s ease, visibility 0s linear .2s; }
+#viewport.navigation-locked .canvas-navigation-lock-hint { visibility: visible; opacity: .78; transition-delay: 0s; }
+#viewport.navigation-locked #tip { visibility: hidden; opacity: 0; }
 
-.ai-embodiment { position: absolute; z-index: 5; top: 12px; right: 13px; width: 58px; height: 58px; pointer-events: none; }
+.ai-embodiment { position: absolute; z-index: 5; top: 12px; right: 13px; width: 58px; height: 58px; pointer-events: none; opacity: 1; transition: opacity .32s ease; }
+.ai-embodiment.idle-dim:not(.working):not(.menu-open):not(:hover):not(:focus-within) { opacity: .36; }
 .ai-orb { position: absolute; z-index: 3; inset: 6px; display: grid; width: 46px; height: 46px; place-items: center; padding: 0; pointer-events: auto; color: inherit; border: 1px solid rgba(246, 217, 139, .76); border-radius: 50%; background: radial-gradient(circle at 34% 28%, #fff5c4 0 4%, #ac8df5 19%, #4d2e7d 45%, #160d2a 72%); box-shadow: 0 0 0 3px rgba(212,177,96,.12), 0 0 19px rgba(180,121,255,.58), inset 0 0 14px rgba(255,255,255,.45); cursor: pointer; touch-action: none; }
 .ai-orb::before { content: ""; position: absolute; width: 75%; height: 75%; border: 1px solid rgba(255,242,181,.65); border-radius: 50%; transform: rotate(35deg); }
 .ai-stop-icon { display: none; width: 14px; height: 14px; border-radius: 2px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.24); }
