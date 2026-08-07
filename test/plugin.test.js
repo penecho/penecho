@@ -574,9 +574,9 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /penecho-widget-snapshot-request/);
   for (const type of [
     "penecho-widget-drag-start", "penecho-widget-drag-move", "penecho-widget-drag-end",
-    "penecho-widget-touch-start", "penecho-widget-touch-move", "penecho-widget-touch-end",
-    "penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end", "penecho-widget-wheel",
+    "penecho-widget-touch-start", "penecho-widget-touch-end",
   ]) assert.match(host, new RegExp(type));
+  assert.doesNotMatch(functionSource(host, "runtime"), /penecho-widget-(?:touch-move|pan-start|pan-move|pan-end|wheel)/);
   assert.match(host, /MOVE_TOLERANCE_PX = 8/);
   assert.match(host, /const presses = new Map\(\)/);
   assert.match(host, /if \(!widgetState\.selected\) return null/);
@@ -595,8 +595,11 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(updatedForwarding, /forwardWidgetState/);
   assert.match(updatedForwarding, /UPDATE_FORWARD_INTERVAL_MS/);
   assert.doesNotMatch(host, /FROZEN_IMAGE_MAX_PIXELS|drawImage\(img/);
-  assert.match(host, /if \(!widgetState\.selected\) parent\.postMessage\(\{ type:"penecho-widget-activate" \}, "\*"\)/);
-  assert.match(host, /message\.type === "penecho-widget-activate"[\s\S]*?parent\.postMessage\(\{ type:message\.type \}, parentOrigin\)/);
+  assert.match(host, /penecho-widget-activate"[\s\S]*?pointerId:event\.pointerId[\s\S]*?pointerType:event\.pointerType[\s\S]*?localX:Number\(event\.clientX\)[\s\S]*?localY:Number\(event\.clientY\)/);
+  assert.match(host, /if \(tapped\) parent\.postMessage\(\{[\s\S]*?penecho-widget-activate[\s\S]*?localX:press\.clientX[\s\S]*?localY:press\.clientY[\s\S]*?\}, "\*"\)[\s\S]*?pointerMessage\(TOUCH_END/);
+  assert.match(host, /validActivateMessage\(message\)[\s\S]*?localX:message\.localX[\s\S]*?localY:message\.localY[\s\S]*?parentOrigin/);
+  assert.match(host, /press\.pointerType === "touch" && \(moved \|\| touchCount\(\) >= 2\)[\s\S]*?press\.navigation = true/);
+  assert.doesNotMatch(host, /pointerMessage\(TOUCH_MOVE|const TOUCH_MOVE/);
   assert.doesNotMatch(host, /penecho-widget-copy-source|copySourceText|updateCopySourceScale|MAX_COPY_TEXT_LENGTH/);
   assert.doesNotMatch(html, /widgetCopySource/);
   assert.match(host, /function inlineSvgComputedStyles\(\)/);
@@ -674,7 +677,7 @@ test("direct widget snapshots restore live style mutations before rendering cont
   assert.equal(element.style, "transform: translate3d(10px, 20px, 0)");
 });
 
-test("widget iframe preserves direct interaction while forwarding resize and canvas navigation", () => {
+test("widget iframe preserves native navigation while forwarding only focus and resize chrome", () => {
   const interactionMessages = harness => harness.messages;
   const navigation = widgetRuntimeHarness();
   navigation.pointer("pointerdown");
@@ -693,7 +696,7 @@ test("widget iframe preserves direct interaction while forwarding resize and can
   selected.select();
   selected.pointer("pointerdown", { pointerType:"pen" });
   selected.pointer("pointermove", { pointerType:"pen", clientX:120, screenX:120 });
-  assert.equal(interactionMessages(selected).length, 0);
+  assert.deepEqual(interactionMessages(selected).map((message) => message.type), ["penecho-widget-activate"]);
 
   for (const [hit, point] of Object.entries({
     width:{ clientX:995, clientY:300, screenX:995, screenY:300 },
@@ -713,19 +716,29 @@ test("widget iframe preserves direct interaction while forwarding resize and can
   pinch.runTimers();
   pinch.pointer("pointermove", { pointerId:1, clientX:80, screenX:80 });
   pinch.pointer("pointermove", { pointerId:2, clientX:220, screenX:220 });
+  pinch.pointer("pointerup", { pointerId:1, clientX:80, screenX:80 });
+  pinch.pointer("pointerup", { pointerId:2, clientX:220, screenX:220 });
   assert.equal(pinch.messages.filter((message) => message.type === "penecho-widget-touch-start").length, 2);
-  assert.equal(pinch.messages.filter((message) => message.type === "penecho-widget-touch-move").length, 2);
+  assert.equal(pinch.messages.filter((message) => message.type === "penecho-widget-touch-move").length, 0);
+  assert.equal(pinch.messages.filter((message) => message.type === "penecho-widget-touch-end").length, 2);
   assert.equal(pinch.messages.some((message) => message.type === "penecho-widget-drag-start"), false);
+  assert.equal(pinch.messages.some((message) => message.type === "penecho-widget-activate"), false);
+
+  const tap = widgetRuntimeHarness();
+  tap.pointer("pointerdown", { pointerId:3 });
+  tap.pointer("pointerup", { pointerId:3 });
+  assert.deepEqual(tap.messages.map((message) => message.type), ["penecho-widget-touch-start", "penecho-widget-activate", "penecho-widget-touch-end"]);
+  assert.deepEqual(
+    { pointerId:tap.messages[1].pointerId, pointerType:tap.messages[1].pointerType, localX:tap.messages[1].localX, localY:tap.messages[1].localY },
+    { pointerId:3, pointerType:"touch", localX:100, localY:100 }
+  );
 
   const middle = widgetRuntimeHarness();
   middle.pointer("pointerdown", { pointerType:"mouse", button:1 });
   middle.pointer("pointermove", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
   middle.pointer("pointerup", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
-  assert.deepEqual(interactionMessages(middle).map((message) => message.type), ["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end"]);
-
-  const wheel = widgetRuntimeHarness();
-  wheel.pointer("wheel", { pointerType:"mouse", deltaY:-120 });
-  assert.equal(wheel.messages.at(-1).type, "penecho-widget-wheel");
+  assert.deepEqual(interactionMessages(middle).map((message) => message.type), []);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"), /addEventListener\("wheel"|penecho-widget-wheel/);
 
   const suspended = widgetRuntimeHarness();
   let frameCount = 0;

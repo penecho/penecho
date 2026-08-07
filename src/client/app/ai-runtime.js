@@ -2782,7 +2782,7 @@
       start: animationBox(result.animation),
       changed: false,
     };
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     setStatusKey("animationSelected");
     requestAnimationLayerRender();
@@ -2822,7 +2822,7 @@
     state.animationGesture = null;
     resetCanvasCursor();
     if (gesture.changed && state.animationEdit) state.animationEdit.changed = true;
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     requestAnimationLayerRender();
     requestInteractionLayerRender();
     return true;

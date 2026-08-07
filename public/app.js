@@ -287,7 +287,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       imageMerged: "Merged into canvas ink — the eraser now works on it",
       imageEditBarLabel: "Image actions",
       imagePlace: "Place image",
-      imagePlaceHint: "Keep it as an image; use Hand and its top handle to edit again",
+      imagePlaceHint: "Keep it as an image; tap it in Hand to reveal its edit controls",
       imageMerge: "Merge into ink",
       imageMergeHint: "Fuse into the canvas; the eraser then works on it",
       imageDelete: "Delete image",
@@ -378,7 +378,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourPluginsTitle: "Real photos and professional diagrams",
       tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is also on by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
-      tourHandBody: "Choose Hand, then use the small top handle to move outlined images, animations, and AI HTML widgets. Hand also lets you click inside HTML widgets; drag empty space to pan.",
+      tourHandBody: "Choose Hand, then tap an image, animation, text box, or AI widget to reveal its controls. HTML widgets remain interactive; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
       tourStudioThemeBody: "Open Theme to switch the canvas's visual style and the AI's response emphasis. The new Studio theme uses a clean, focused interface and favors concise, well-structured, practical answers. You can switch themes at any time.",
       tourLassoTitle: "Work with exactly the content you select",
@@ -386,7 +386,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourTextTitle: "Add editable text and formulas",
       tourTextBody: "Choose Text, then click the canvas to create an input box. Markdown and likely LaTeX are formatted automatically; Preview shows the exact placement before confirmation. Confirm with the check button or Ctrl/Cmd + Enter.",
       tourImageTitle: "Add images and photos",
-      tourImageBody: "Add a picture from your device; large pictures are compressed automatically. In Hand, use its top handle to move it and edge handles to resize. Place keeps it below ink, while Merge makes it erasable.",
+      tourImageBody: "Add a picture from your device; large pictures are compressed automatically. In Hand, tap it to reveal move and resize controls. Place keeps it below ink, while Merge makes it erasable.",
       tourFullscreenTitle: "Give the canvas the whole screen",
       tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
       tourFilesTitle: "Start, export, and save locally",
@@ -401,9 +401,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
       changelogTitle: "Faster refinement and flexible AI connections",
-      changelogIntro: "Version 0.8.2 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.",
+      changelogIntro: "Version 0.9.0 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.",
       changelogConnections: "Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.",
-      changelogRefine: "Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens while preserving undo and confirmation.",
+      changelogRefine: "Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens. Hand stays clear until you tap an object to reveal its controls.",
       changelogStreaming: "API requests now use true SSE streaming, reducing long silent waits, improving responsiveness, and keeping lengthy model responses more stable through compatible gateways.",
       changelogProgress: "The top status area now shows each request stage, live response receipt, retries, long-wait notices, and cancellation; the magic button can stop active requests immediately.",
       changelogEarlierTitle: "Earlier highlights",
@@ -537,6 +537,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       storagePenEchoServer: "PenEcho server",
       storageThisDeviceDescription: "Saved only in this browser on this device. Other devices cannot see it.",
       storagePenEchoServerDescription: "Saved on the computer running PenEcho. Anyone using this PenEcho service can see it after passing its access check.",
+      canvasProject: "Project",
+      canvasProjectAll: "All projects",
+      canvasProjectUncategorized: "Uncategorized",
+      canvasProjectNew: "New project",
+      canvasProjectDelete: "Delete project",
+      canvasProjectMove: "Move to project",
+      canvasProjectName: "Project name",
+      canvasProjectCreated: "Project created",
+      canvasProjectDeleted: "Project deleted; its canvases moved to Uncategorized",
+      canvasProjectMoved: "Canvas moved",
       closeHistory: "Close history",
       newCanvas: "New",
       saveCanvas: "Save canvas",
@@ -544,6 +554,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exportPng: "Export PNG",
       newCanvasTitle: "Start a new canvas?",
       newCanvasDescription: "Save confirmed content and animation scenes before starting over. Unconfirmed AI drafts are not included.",
+      loadCanvasTitle: "Load another canvas?",
+      loadCanvasDescription: "This canvas has unsaved changes. Save them before loading another canvas.",
       currentSnapshot: "Current snapshot: {name} · {location}",
       noCurrentSnapshot: "There is no current snapshot to overwrite.",
       currentSnapshotOtherLocation: "Current snapshot {name} is in {location}. Select that location to overwrite it.",
@@ -552,6 +564,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newWithoutSave: "Don't save",
       saveAsNewAndCreate: "Save as new",
       overwriteAndCreate: "Overwrite current",
+      loadWithoutSave: "Load without saving",
+      saveAsNewAndLoad: "Save as new and load",
+      overwriteAndLoad: "Save and load",
       snapshotName: "Snapshot name (optional)",
       saveSnapshot: "Save New",
       snapshotSaving: "Saving canvas...",
@@ -560,6 +575,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       deleteSnapshot: "Delete",
       emptyDeviceHistory: "No canvases saved on this device yet",
       emptyServerHistory: "No canvases saved on this PenEcho server yet",
+      emptyProjectHistory: "No canvases saved in this project yet",
       emptyCanvas: "The canvas is empty",
       snapshotSaved: "Canvas snapshot saved",
       snapshotOverwritten: "Current snapshot overwritten",
@@ -571,14 +587,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotError: "Canvas history: ",
       snapshotTiles: "canvas tiles",
       snapshotImages: "images",
+      snapshotModified: "Modified {time}",
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
       canvasHintWidgetAdded: "Use Pen to mark changes near a widget, then tap the AI Refine button that appears.",
       canvasHintWidgetAddedAlt: "In Pen, notes anywhere in this view can reveal AI Refine on the target widget.",
       canvasHintRefineInPlace: "In Pen, add an instruction, then tap AI Refine on the target widget.",
       canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
-      canvasHintHand: "Hand pauses Auto AI without stopping a request already in progress.",
-      canvasHintHandAlt: "Select a widget with Hand to reveal its move, copy, and delete controls.",
+      canvasHintHand: "Hand lets you interact directly with widget content.",
+      canvasHintHandAlt: "For pinch or two-finger widget gestures, lock the canvas first.",
       canvasHintWidgetTouchHand: "Switch to Hand to interact directly with this widget's content.",
       canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
       canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
@@ -852,6 +869,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       touches: new Map(),
       touchGesture: null,
       panGesture: null,
+      handToolbarTargets: new Map(),
+      handToolbarActiveKey: null,
+      handToolbarTimer: 0,
+      handHoverKey: null,
+      handPointerFocusKeys: new Map(),
+      handToolbarOperationPointers: new Map(),
+      handWidgetPointerIds: new Set(),
+      handGestureIncludesWidget: false,
       navigationLocked: false,
       textEditors: new Map(),
       textBoxes: [],
@@ -875,7 +900,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selectedWidgetId: null,
       widgetEdit: null,
       widgetGesture: null,
-      widgetHostPan: null,
       widgetHistoryBefore: null,
       widgetRefineCandidate: null,
       widgetRefineHoverCandidate: null,
@@ -957,6 +981,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       currentSnapshotId: null,
       currentSnapshotName: "",
       currentSnapshotLocation: null,
+      currentSnapshotProjectId: null,
+      snapshotSavedRevision: 0,
       restoreGeneration: 0,
       recognitionGeneration: 0,
       userRevision: 0,
@@ -984,7 +1010,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.8.2";
+  const CHANGELOG_VERSION = "0.9.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -2956,7 +2982,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.navigationLocked = Boolean(locked);
     state.panGesture = null;
     state.touchGesture = null;
-    state.widgetHostPan = null;
     const label = t(state.navigationLocked ? "canvasUnlockNavigation" : "canvasLockNavigation");
     view.classList.toggle("navigation-locked", state.navigationLocked);
     canvasNavigationLock.classList.toggle("locked", state.navigationLocked);
@@ -3079,8 +3104,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const WIDGET_REFINE_HOVER_GRACE_MS = 5000;
   const WIDGET_REFINE_HINT_MS = 10000;
   const WIDGET_REFINE_CLICK_PULSE_MS = 900;
+  const HAND_OBJECT_TOOLBAR_VISIBLE_MS = 10000;
+  const HAND_OBJECT_TOOLBAR_FADE_MS = 220;
   // TEMP: Keep enabled only while visually validating dirty-region shrinking.
-  const SHOW_DIRTY_MASK_DEBUG_BOUNDS = true;
+  const SHOW_DIRTY_MASK_DEBUG_BOUNDS = false;
   const objectChromeButtons = new Map();
   const widgetRefineTouchCandidates = new Map();
   let widgetRefineConfirmationElement = null;
@@ -3250,6 +3277,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   async function restoreTextBoxes(items) {
+    clearHandToolbarTargets("text-box");
     clearTextEditors();
     state.textBoxes = [];
     state.nextTextBoxId = 1;
@@ -3330,6 +3358,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!state.imageHistoryBefore) state.imageHistoryBefore = imageHistoryState();
   }
   function restoreImages(items) {
+    clearHandToolbarTargets("image");
     state.images = [];
     state.nextImageId = 1;
     state.selectedImageId = null;
@@ -3399,6 +3428,274 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preserveWidgetRefinement:true,
     });
   }
+  function handToolbarKey(kind, id) {
+    return `${kind}:${id}`;
+  }
+  function handToolbarRecord(target = state.handToolbarActiveKey) {
+    if (typeof target === "string") return state.handToolbarTargets.get(target) || null;
+    if (target?.handToolbarKey) return state.handToolbarTargets.get(target.handToolbarKey) || null;
+    if (target?.kind && target?.id) return state.handToolbarTargets.get(handToolbarKey(target.kind, target.id)) || null;
+    return null;
+  }
+  function handToolbarObject(target = state.handToolbarActiveKey) {
+    const record = handToolbarRecord(target) || target;
+    if (!record) return null;
+    if (record.kind === "widget") return state.widgets.find((item) => item.id === record.id) || null;
+    if (record.kind === "image") return state.images.find((item) => item.id === record.id) || null;
+    if (record.kind === "animation") return state.animations.find((item) => item.id === record.id) || null;
+    if (record.kind === "text-box") return state.textBoxes.find((item) => item.id === record.id) || null;
+    return null;
+  }
+  function handToolbarEditMatches(record) {
+    return Boolean(record && (record.kind === "widget" && state.widgetEdit?.id === record.id
+      || record.kind === "image" && state.imageEdit?.id === record.id
+      || record.kind === "animation" && state.animationEdit?.id === record.id));
+  }
+  function finishHandToolbarEdit(record) {
+    if (!handToolbarEditMatches(record)) return false;
+    if (record.kind === "widget") return acceptWidgetEdit();
+    if (record.kind === "image") return acceptImageEdit({ restoreMode:false });
+    return acceptAnimationEdit();
+  }
+  function scheduleHandObjectToolbarTick() {
+    clearTimeout(state.handToolbarTimer);
+    state.handToolbarTimer = 0;
+    let nextAt = Infinity;
+    for (const record of state.handToolbarTargets.values()) {
+      if (record.holds?.size) continue;
+      nextAt = Math.min(nextAt, record.hiding ? record.hideAt : record.expiresAt);
+    }
+    if (!Number.isFinite(nextAt)) return;
+    state.handToolbarTimer = setTimeout(expireHandObjectToolbars, Math.max(0, nextAt - Date.now()));
+  }
+  function finishHandToolbarHide(key) {
+    const record = state.handToolbarTargets.get(key);
+    if (!record) return false;
+    state.handToolbarTargets.delete(key);
+    if (state.handToolbarActiveKey === key) state.handToolbarActiveKey = null;
+    if (state.handHoverKey === key) state.handHoverKey = null;
+    for (const [pointerId, focus] of state.handPointerFocusKeys) if (focus.key === key) state.handPointerFocusKeys.delete(pointerId);
+    for (const [pointerId, operation] of state.handToolbarOperationPointers) if (operation.key === key) state.handToolbarOperationPointers.delete(pointerId);
+    finishHandToolbarEdit(record);
+    requestInteractionLayerRender();
+    return true;
+  }
+  function expireHandObjectToolbars() {
+    state.handToolbarTimer = 0;
+    const now = Date.now();
+    for (const [key, record] of [...state.handToolbarTargets]) {
+      if (!handToolbarObject(record)) {
+        finishHandToolbarHide(key);
+        continue;
+      }
+      if (record.holds?.size) continue;
+      if (record.hiding && record.hideAt <= now) finishHandToolbarHide(key);
+      else if (!record.hiding && record.expiresAt <= now) {
+        record.hiding = true;
+        record.hideAt = now + HAND_OBJECT_TOOLBAR_FADE_MS;
+      }
+    }
+    requestInteractionLayerRender();
+    scheduleHandObjectToolbarTick();
+  }
+  function clearHandToolbarTarget(kind = "", id = "", options = {}) {
+    const key = kind && id ? handToolbarKey(kind, id) : state.handToolbarActiveKey;
+    if (!key || !state.handToolbarTargets.has(key)) return false;
+    if (options.preserveInactive !== false && kind && id && state.handToolbarActiveKey !== key) return false;
+    state.handToolbarTargets.delete(key);
+    if (state.handToolbarActiveKey === key) state.handToolbarActiveKey = null;
+    if (state.handHoverKey === key) state.handHoverKey = null;
+    for (const [pointerId, focus] of state.handPointerFocusKeys) if (focus.key === key) state.handPointerFocusKeys.delete(pointerId);
+    for (const [pointerId, operation] of state.handToolbarOperationPointers) if (operation.key === key) state.handToolbarOperationPointers.delete(pointerId);
+    scheduleHandObjectToolbarTick();
+    return true;
+  }
+  function clearHandToolbarTargets(kind = "") {
+    let changed = false;
+    for (const [key, record] of [...state.handToolbarTargets]) {
+      if (kind && record.kind !== kind) continue;
+      state.handToolbarTargets.delete(key);
+      if (state.handToolbarActiveKey === key) state.handToolbarActiveKey = null;
+      if (state.handHoverKey === key) state.handHoverKey = null;
+      for (const [pointerId, focus] of state.handPointerFocusKeys) if (focus.key === key) state.handPointerFocusKeys.delete(pointerId);
+      for (const [pointerId, operation] of state.handToolbarOperationPointers) if (operation.key === key) state.handToolbarOperationPointers.delete(pointerId);
+      changed = true;
+    }
+    if (changed) scheduleHandObjectToolbarTick();
+    return changed;
+  }
+  function hideHandObjectToolbar({ key = state.handToolbarActiveKey, animate = true, all = false } = {}) {
+    const keys = all ? [...state.handToolbarTargets.keys()] : key ? [key] : [];
+    if (!keys.length) return false;
+    const now = Date.now();
+    for (const targetKey of keys) {
+      const record = state.handToolbarTargets.get(targetKey);
+      if (!record) continue;
+      if (!animate || HAND_OBJECT_TOOLBAR_FADE_MS <= 0) finishHandToolbarHide(targetKey);
+      else if (!record.hiding) {
+        record.hiding = true;
+        record.hideAt = now + HAND_OBJECT_TOOLBAR_FADE_MS;
+      }
+    }
+    requestInteractionLayerRender();
+    scheduleHandObjectToolbarTick();
+    return true;
+  }
+  function refreshHandObjectToolbar(target = state.handToolbarActiveKey) {
+    const record = handToolbarRecord(target);
+    if (!record || !handToolbarObject(record)) return false;
+    record.expiresAt = Date.now() + HAND_OBJECT_TOOLBAR_VISIBLE_MS;
+    record.hiding = false;
+    record.hideAt = 0;
+    scheduleHandObjectToolbarTick();
+    if (record.kind === "animation" && state.handToolbarActiveKey === handToolbarKey(record.kind, record.id)) showAnimationControls(HAND_OBJECT_TOOLBAR_VISIBLE_MS + HAND_OBJECT_TOOLBAR_FADE_MS);
+    requestInteractionLayerRender();
+    return true;
+  }
+  function ensureHandToolbarRecord(kind, object) {
+    if (state.mode !== "hand" || !object?.id || !["widget", "image", "animation", "text-box"].includes(kind)) return null;
+    const key = handToolbarKey(kind, object.id);
+    let record = state.handToolbarTargets.get(key);
+    if (!record) {
+      record = { kind, id:object.id, expanded:false, expiresAt:Date.now() + HAND_OBJECT_TOOLBAR_VISIBLE_MS, hiding:false, hideAt:0, holds:new Set() };
+      state.handToolbarTargets.set(key, record);
+    }
+    return { key, record };
+  }
+  function setHandToolbarHold(key, token, held) {
+    const record = handToolbarRecord(key);
+    if (!record || !token) return false;
+    if (!(record.holds instanceof Set)) record.holds = new Set();
+    if (held) record.holds.add(token);
+    else record.holds.delete(token);
+    record.expiresAt = Date.now() + HAND_OBJECT_TOOLBAR_VISIBLE_MS;
+    record.hiding = false;
+    record.hideAt = 0;
+    scheduleHandObjectToolbarTick();
+    requestInteractionLayerRender();
+    return true;
+  }
+  function focusHandObject(kind, object, token = "") {
+    const ensured = ensureHandToolbarRecord(kind, object);
+    if (!ensured) return "";
+    if (token) ensured.record.holds.add(token);
+    ensured.record.expiresAt = Date.now() + HAND_OBJECT_TOOLBAR_VISIBLE_MS;
+    ensured.record.hiding = false;
+    ensured.record.hideAt = 0;
+    scheduleHandObjectToolbarTick();
+    requestInteractionLayerRender();
+    return ensured.key;
+  }
+  function releaseHandObjectFocus(key, token) {
+    return setHandToolbarHold(key, token, false);
+  }
+  function beginHandToolbarOperation(pointerId, key) {
+    if (!Number.isInteger(pointerId) || !key) return false;
+    const token = `operation:${pointerId}`;
+    state.handToolbarOperationPointers.set(pointerId, { key, token });
+    return setHandToolbarHold(key, token, true);
+  }
+  function finishHandToolbarOperation(pointerId) {
+    const operation = state.handToolbarOperationPointers.get(pointerId);
+    if (!operation) return false;
+    state.handToolbarOperationPointers.delete(pointerId);
+    return releaseHandObjectFocus(operation.key, operation.token);
+  }
+  function activateHandObjectToolbar(target) {
+    const record = handToolbarRecord(target),
+      object = handToolbarObject(record);
+    if (!record || !object) return false;
+    const key = handToolbarKey(record.kind, record.id),
+      previousKey = state.handToolbarActiveKey,
+      previous = previousKey && previousKey !== key ? handToolbarRecord(previousKey) : null;
+    state.handToolbarActiveKey = key;
+    record.expanded = true;
+    if (previous) finishHandToolbarEdit(previous);
+    let activated = true;
+    if (record.kind === "widget") activated = beginWidgetEdit(object);
+    else if (record.kind === "image") activated = beginImageEdit(object);
+    else if (record.kind === "animation") activated = beginAnimationEdit(object);
+    else activated = state.textBoxes.includes(object) && !state.textEditors.size;
+    if (!activated) {
+      record.expanded = false;
+      state.handToolbarActiveKey = null;
+      return false;
+    }
+    if (record.kind === "animation") showAnimationControls(HAND_OBJECT_TOOLBAR_VISIBLE_MS + HAND_OBJECT_TOOLBAR_FADE_MS);
+    refreshHandObjectToolbar(key);
+    return true;
+  }
+  function showHandObjectToolbar(kind, object) {
+    const ensured = ensureHandToolbarRecord(kind, object);
+    if (!ensured) return false;
+    const { key } = ensured;
+    if (!activateHandObjectToolbar(key)) {
+      state.handToolbarTargets.delete(key);
+      scheduleHandObjectToolbarTick();
+      return false;
+    }
+    requestInteractionLayerRender();
+    return true;
+  }
+  function handObjectToolbarTargetAtPoint(point) {
+    if (!point || !valid(point)) return null;
+    const widgets = visibleWidgets();
+    for (let index = widgets.length - 1; index >= 0; index--) {
+      const widget = widgets[index], box = widgetBox(widget);
+      if (!widget.pending && point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) return { kind:"widget", object:widget };
+    }
+    const animation = animationPointerHit(point)?.animation;
+    if (animation) return { kind:"animation", object:animation };
+    const textBox = textBoxAtPoint(point);
+    if (textBox) return { kind:"text-box", object:textBox };
+    const image = imageAtPoint(point);
+    return image ? { kind:"image", object:image } : null;
+  }
+  function updateHandObjectHover(point) {
+    if (state.mode !== "hand") point = null;
+    const target = point && valid(point) ? handObjectToolbarTargetAtPoint(point) : null,
+      nextKey = target ? handToolbarKey(target.kind, target.object.id) : "",
+      previousKey = state.handHoverKey || "";
+    if (previousKey === nextKey) return Boolean(nextKey);
+    if (previousKey) releaseHandObjectFocus(previousKey, "canvas-hover");
+    state.handHoverKey = nextKey;
+    if (target) focusHandObject(target.kind, target.object, "canvas-hover");
+    return Boolean(nextKey);
+  }
+  function beginHandObjectFocus(event, point) {
+    if (state.mode !== "hand" || Number(event.button) !== 0) return false;
+    const target = handObjectToolbarTargetAtPoint(point);
+    if (!target) return false;
+    const token = `pointer:${event.pointerId}`,
+      key = focusHandObject(target.kind, target.object, token);
+    if (!key) return false;
+    state.handPointerFocusKeys.set(event.pointerId, { key, token });
+    return true;
+  }
+  function updateHandObjectFocus(event) {
+    const focus = state.handPointerFocusKeys.get(event.pointerId);
+    if (!focus) return false;
+    refreshHandObjectToolbar(focus.key);
+    return true;
+  }
+  function finishHandObjectFocus(event) {
+    const focus = state.handPointerFocusKeys.get(event.pointerId);
+    if (!focus) return false;
+    state.handPointerFocusKeys.delete(event.pointerId);
+    releaseHandObjectFocus(focus.key, focus.token);
+    return true;
+  }
+  function beginWidgetOwnedHandGesture(id) {
+    state.handWidgetPointerIds.add(id);
+    state.handGestureIncludesWidget = true;
+    state.panGesture = null;
+    state.touchGesture = null;
+    setNavigating(false);
+  }
+  function finishWidgetOwnedHandGesture(id) {
+    state.handWidgetPointerIds.delete(id);
+    if (!state.handWidgetPointerIds.size && !state.touches.size) state.handGestureIncludesWidget = false;
+  }
   function beginImageEdit(item) {
     if (!item || !state.images.includes(item)) return false;
     if (state.imageEdit?.id === item.id) return true;
@@ -3416,6 +3713,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     options ||= {};
     const restoreMode = options.restoreMode !== false;
     const edit = state.imageEdit;
+    if (edit) clearHandToolbarTarget("image", edit.id);
     state.imageGesture = null;
     state.imageEdit = null;
     state.selectedImageId = null;
@@ -3438,6 +3736,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function cancelImageEdit() {
     const edit = state.imageEdit,
       item = edit ? state.images.find((candidate) => candidate.id === edit.id) : null;
+    if (edit) clearHandToolbarTarget("image", edit.id);
     if (item) Object.assign(item, edit.before);
     state.imageHistoryBefore = null;
     state.imageGesture = null;
@@ -3533,12 +3832,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.imageGesture = null;
     resetCanvasCursor();
     if (gesture.changed && state.imageEdit?.id === gesture.image.id) state.imageEdit.changed = true;
+    refreshHandObjectToolbar();
     requestInteractionLayerRender();
     return true;
   }
   function deleteImage(item) {
     if (!item || !state.images.includes(item)) return false;
     const edited = state.imageEdit?.id === item.id;
+    clearHandToolbarTarget("image", item.id, { preserveInactive:false });
     recordImagesBefore();
     state.images = state.images.filter((candidate) => candidate !== item);
     state.dirtyImageIds.delete(item.id);
@@ -3558,6 +3859,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function mergeImage(item) {
     if (!item || !state.images.includes(item)) return false;
+    clearHandToolbarTarget("image", item.id, { preserveInactive:false });
     const edited = state.imageEdit?.id === item.id;
     recordImagesBefore();
     const box = imageBox(item);
@@ -3787,6 +4089,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   function restoreWidgets(items) {
+    clearHandToolbarTargets("widget");
     if (activeWidgetRefinement()) supersedeActiveAI("widgets-restored");
     if (state.pendingWidget) rejectPendingWidget(AI_CANCELLED, { restoreMode:false, status:false });
     state.pendingWidgetReplacement = null;
@@ -3843,6 +4146,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
+    frame.addEventListener("pointerenter", (event) => {
+      if (state.mode !== "hand" || event.pointerType === "touch") return;
+      focusHandObject("widget", widget, `widget-hover:${event.pointerId}`);
+    });
+    frame.addEventListener("pointerleave", (event) => releaseHandObjectFocus(handToolbarKey("widget", widget.id), `widget-hover:${event.pointerId}`));
+    frame.addEventListener("focus", () => focusHandObject("widget", widget, "widget-focus"));
+    frame.addEventListener("blur", () => releaseHandObjectFocus(handToolbarKey("widget", widget.id), "widget-focus"));
     shell.append(frame);
     widgetLayer.append(shell);
     widget.shell = shell;
@@ -3857,10 +4167,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     positionWidget(widget);
   }
   function unmountWidget(widget) {
-    if (state.widgetHostPan?.widget === widget) {
-      state.widgetHostPan = null;
-      setNavigating(false);
-    }
+    clearHandToolbarTarget("widget", widget.id, { preserveInactive:false });
     removeWidgetStyleRule(widget);
     widget.shell?.remove();
     widget.shell = null;
@@ -4030,15 +4337,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (message.type === "penecho-widget-capture-ready") {
       return;
     }
-    if (message.type === "penecho-widget-activate") {
-      if (state.mode === "hand" && !widget.pending && state.widgets.includes(widget)) beginWidgetEdit(widget);
+    if (validWidgetHostActivate(message)) {
+      if (state.mode === "hand") focusHandObject("widget", widget);
       return;
     }
     if (validWidgetHostDrag(message)) {
       if (message.type === "penecho-widget-drag-start") beginWidgetHostDrag(widget, message);
-      else if (message.type === "penecho-widget-drag-move") {
-        if (!updateWidgetHostDrag(widget, message) && message.pointerType === "touch") updateWidgetHostTouch(widget, { ...message, type:"penecho-widget-touch-move" });
-      }
+      else if (message.type === "penecho-widget-drag-move") updateWidgetHostDrag(widget, message);
       else finishWidgetHostDrag(widget, message);
       return;
     }
@@ -4046,10 +4351,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (message.type === "penecho-widget-touch-start") beginWidgetHostTouch(widget, message);
       else if (message.type === "penecho-widget-touch-move") updateWidgetHostTouch(widget, message);
       else finishWidgetHostTouch(widget, message);
-      return;
-    }
-    if (validWidgetHostNavigation(message)) {
-      handleWidgetHostNavigation(widget, message);
       return;
     }
     if (validWidgetRuntimeDiagnostics(message)) {
@@ -4099,6 +4400,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function acceptWidgetEdit() {
     const edit = state.widgetEdit;
+    if (edit) clearHandToolbarTarget("widget", edit.id);
     state.widgetGesture = null;
     state.widgetEdit = null;
     state.selectedWidgetId = null;
@@ -4114,6 +4416,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function cancelWidgetEdit() {
     const edit = state.widgetEdit,
       widget = edit ? state.widgets.find((item) => item.id === edit.id) : null;
+    if (edit) clearHandToolbarTarget("widget", edit.id);
     if (widget) {
       Object.assign(widget, edit.before);
       positionWidget(widget);
@@ -4249,12 +4552,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       && message.pointerType === "touch"
       && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
-  function validWidgetHostNavigation(message) {
-    if (!message || !["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end", "penecho-widget-wheel"].includes(message.type)) return false;
-    if (message.type === "penecho-widget-wheel")
-      return [message.localX, message.localY, message.deltaY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
-    return Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff && message.pointerType === "mouse"
-      && [message.localX, message.localY, message.screenX, message.screenY].every((value) => Number.isFinite(value) && Math.abs(value) <= 10000000);
+  function validWidgetHostActivate(message) {
+    return message?.type === "penecho-widget-activate"
+      && Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff
+      && ["mouse", "pen", "touch"].includes(message.pointerType)
+      && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
   function validWidgetRuntimeDiagnostics(message) {
     return message && message.type === "penecho-widget-runtime-diagnostics"
@@ -4302,113 +4604,40 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!Number.isFinite(candidate) || candidate <= 0.25 || candidate >= 4) return;
     screenClientRatio = Math.min(4, Math.max(0.25, screenClientRatio * 0.7 + candidate * 0.3));
   }
-  function releaseWidgetHostTouch(widget, pointerId) {
-    const id = widgetHostPointerId(widget, pointerId);
-    finishWidgetRefineTouch(id);
-    widgetHostPointerAnchors.delete(id);
-    state.pointers.delete(id);
-    state.touches.delete(id);
-    if (state.panGesture?.id === id) state.panGesture = null;
-    if (state.touchGesture?.ids?.includes(id)) state.touchGesture = null;
-    if (!state.touches.size) setNavigating(false);
-  }
   function beginWidgetHostTouch(widget, message) {
-    if (state.navigationLocked || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-start") return false;
+    if (state.mode !== "hand" || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-start") return false;
     const point = widgetHostViewportPoint(widget, message);
     if (!point) return false;
     const id = widgetHostPointerId(widget, message.pointerId);
-    state.pointers.set(id, point);
-    state.touches.set(id, point);
     widgetHostPointerAnchors.set(id, { clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY });
-    if (state.touches.size < 2) return true;
-    state.textTap = null;
-    if (state.pendingGesture) state.pendingGesture = null;
-    if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
-    if (state.selectedWidgetId) acceptWidgetEdit();
-    if (state.animationGesture) finishAnimationGesture({ pointerId:state.animationGesture.id });
-    if (state.selectedAnimationId) acceptAnimationEdit();
-    finishDrawing("pen");
-    beginTouchGesture();
+    beginWidgetOwnedHandGesture(id);
+    const token = `pointer:${id}`,
+      key = focusHandObject("widget", widget, token);
+    if (key) state.handPointerFocusKeys.set(id, { key, token });
     return true;
   }
   function updateWidgetHostTouch(widget, message) {
-    if (state.navigationLocked || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-move") return false;
+    if (state.mode !== "hand" || !validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-move") return false;
     const id = widgetHostPointerId(widget, message.pointerId),
-      old = state.pointers.get(id),
       point = widgetHostTrackedPoint(widgetHostPointerAnchors.get(id), message) || widgetHostViewportPoint(widget, message);
-    if (!old || !point || !state.touches.has(id)) return false;
-    state.pointers.set(id, point);
-    state.touches.set(id, point);
-    if (state.touches.size >= 2) {
-      if (!state.touchGesture) beginTouchGesture();
-      return updateTouchGesture();
-    }
-    if (!state.panGesture || state.panGesture.id !== id) state.panGesture = { id, last:old };
-    moveCanvas(point.x - old.x, point.y - old.y);
-    state.panGesture.last = point;
-    setNavigating(true);
-    return true;
+    if (!point || !state.handWidgetPointerIds.has(id)) return false;
+    return updateHandObjectFocus({ pointerId:id });
   }
   function finishWidgetHostTouch(widget, message) {
     if (!validWidgetHostTouch(message) || message.type !== "penecho-widget-touch-end") return false;
     const id = widgetHostPointerId(widget, message.pointerId);
-    if (!state.pointers.has(id) && !state.touches.has(id)) return false;
-    state.pointers.delete(id);
-    state.touches.delete(id);
+    if (!state.handWidgetPointerIds.has(id)) return false;
+    finishHandObjectFocus({ pointerId:id });
+    finishWidgetOwnedHandGesture(id);
     widgetHostPointerAnchors.delete(id);
     finishWidgetRefineTouch(id);
-    state.touchGesture = null;
-    if (state.touches.size === 1) {
-      const [remainingId, point] = state.touches.entries().next().value;
-      state.panGesture = { id:remainingId, last:point };
-    } else state.panGesture = null;
-    if (!state.touches.size) setNavigating(false);
-    return true;
-  }
-  function handleWidgetHostNavigation(widget, message) {
-    if (state.navigationLocked || !validWidgetHostNavigation(message)) return false;
-    if (message.type === "penecho-widget-wheel") {
-      const point = widgetHostViewportPoint(widget, message);
-      if (!point) return false;
-      zoomCanvasAt(point.x, point.y, message.deltaY);
-      return true;
-    }
-    const id = widgetHostPointerId(widget, message.pointerId);
-    if (message.type === "penecho-widget-pan-start") {
-      const point = widgetHostViewportPoint(widget, message);
-      if (!point || state.widgetHostPan) return false;
-      if (state.selectedImageId) acceptImageEdit({ restoreMode:false });
-      if (state.selectedWidgetId) acceptWidgetEdit();
-      if (state.selectedAnimationId) acceptAnimationEdit();
-      state.widgetHostPan = {
-        id,
-        widget,
-        last:point,
-        anchor:{ clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY },
-      };
-      setNavigating(true);
-      return true;
-    }
-    const pan = state.widgetHostPan;
-    if (!pan || pan.id !== id || pan.widget !== widget) return false;
-    if (message.type === "penecho-widget-pan-move") {
-      const point = widgetHostTrackedPoint(pan.anchor, message) || widgetHostViewportPoint(widget, message);
-      if (!point) return false;
-      moveCanvas(point.x - pan.last.x, point.y - pan.last.y);
-      pan.last = point;
-      setNavigating(true);
-      return true;
-    }
-    state.widgetHostPan = null;
-    setNavigating(false);
     return true;
   }
   function beginWidgetHostDrag(widget, message) {
     if (!validWidgetHostDrag(message) || message.type !== "penecho-widget-drag-start") return false;
     if (message.pointerType === "touch") {
       const id = widgetHostPointerId(widget, message.pointerId);
-      if ([...state.touches.keys()].some((pointerId) => pointerId !== id)) return false;
-      releaseWidgetHostTouch(widget, message.pointerId);
+      if ([...state.handWidgetPointerIds].some((pointerId) => pointerId !== id)) return false;
     }
     if (state.widgetGesture || state.pendingGesture || state.animationGesture || state.selectionGesture || state.drawing || state.panGesture || state.touchGesture) return false;
     const pending = widget === state.pendingWidget && widget.pending === true;
@@ -4451,11 +4680,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     resetCanvasCursor();
     if (gesture.changed && !gesture.pending && state.widgetEdit?.id === gesture.widget.id) state.widgetEdit.changed = true;
     positionWidget(gesture.widget);
+    if (!gesture.pending) refreshHandObjectToolbar();
     requestInteractionLayerRender();
     return true;
   }
   function deleteWidget(widget) {
     if (!widget || widget.pending || !state.widgets.includes(widget)) return false;
+    clearHandToolbarTarget("widget", widget.id, { preserveInactive:false });
     recordWidgetsBefore();
     unmountWidget(widget);
     state.widgets = state.widgets.filter((item) => item !== widget);
@@ -4681,6 +4912,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }));
   }
   function restoreAnimations(items) {
+    clearHandToolbarTargets("animation");
     state.animations = [];
     state.selectedAnimationId = null;
     state.animationEdit = null;
@@ -4716,6 +4948,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function acceptAnimationEdit() {
     const edit = state.animationEdit;
+    if (edit) clearHandToolbarTarget("animation", edit.id);
     state.animationGesture = null;
     state.animationEdit = null;
     state.selectedAnimationId = null;
@@ -4732,6 +4965,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function cancelAnimationEdit() {
     const edit = state.animationEdit,
       animation = edit ? state.animations.find((item) => item.id === edit.id) : null;
+    if (edit) clearHandToolbarTarget("animation", edit.id);
     if (animation) {
       Object.assign(animation, edit.before, { startedAt: performance.now() });
     }
@@ -4778,6 +5012,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     const animation = selectedAnimation();
     if (!animation) return;
+    clearHandToolbarTarget("animation", animation.id, { preserveInactive:false });
     recordAnimationsBefore();
     state.animations = state.animations.filter((item) => item !== animation);
     state.selectedAnimationId = null;
@@ -4873,9 +5108,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function positionAnimationControls() {
     const target = animationControlTarget();
     if (!pluginEnabled("animation") || !target) {
+      animationControls.classList.remove("hand-toolbar-hiding");
       if (!animationControls.hidden) animationControls.hidden = true;
       return;
     }
+    const handRecord = target.kind === "confirmed" ? handToolbarRecord({ kind:"animation", id:target.animation.id }) : null;
+    animationControls.classList.toggle("hand-toolbar-hiding", Boolean(handRecord?.hiding));
     if (performance.now() >= state.animationControlsUntil) {
       if (!animationControls.hidden) animationControls.hidden = true;
       if (target.kind === "confirmed") acceptAnimationEdit();
@@ -5154,9 +5392,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.save();
     context.strokeStyle = "#2679b8";
     context.lineWidth = 2 * unit;
-    context.setLineDash([7 * unit, 6 * unit]);
-    context.strokeRect(box.x, box.y, box.w, box.h);
-    context.setLineDash([]);
     context.beginPath();
     drawResizeHandle(context, box, handle);
     context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
@@ -5166,22 +5401,24 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.stroke();
     context.restore();
   }
-  function drawHandModeOutlines(context) {
-    if (state.mode !== "hand") return;
-    const unit = 1 / state.scale,
-      boxes = [
-        ...visibleImages().map(imageBox),
-        ...visibleAnimations().map(animationBox),
-        ...visibleTextBoxes().map(textBoxBox),
-        ...visibleWidgets().map(widgetBox),
-      ];
-    if (!boxes.length) return;
+  function drawHandObjectToolbarOutlines(context) {
+    if (state.mode !== "hand" || !state.handToolbarTargets.size) return;
+    const unit = 1 / state.scale;
     context.save();
-    context.globalAlpha = 0.42;
-    context.strokeStyle = "#2679b8";
+    context.strokeStyle = "rgba(38, 121, 184, 0.42)";
     context.lineWidth = unit;
-    context.setLineDash([4 * unit, 5 * unit]);
-    for (const box of boxes) context.strokeRect(box.x, box.y, box.w, box.h);
+    for (const record of state.handToolbarTargets.values()) {
+      if (!record.expanded) continue;
+      const object = handToolbarObject(record),
+        box = object && (record.kind === "widget" ? widgetBox(object)
+          : record.kind === "image" ? imageBox(object)
+          : record.kind === "animation" ? animationBox(object)
+          : record.kind === "text-box" ? textBoxBox(object)
+          : null);
+      if (!box) continue;
+      context.globalAlpha = record.hiding ? .28 : 1;
+      context.strokeRect(box.x, box.y, box.w, box.h);
+    }
     context.restore();
   }
   function widgetRefineOutlineTarget(widgetId) {
@@ -5302,8 +5539,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.setLineDash([4 * unit, 4 * unit]);
     context.lineCap = context.lineJoin = "round";
     context.strokeRect(box.x, box.y, box.w, box.h);
+    context.strokeStyle = "#007aff";
+    context.lineWidth = 2 * unit;
     context.setLineDash([]);
-    context.globalAlpha *= .72;
     const connector = widgetRefineConnectorPoints(box, widgetBounds);
     if (connector.length > 1) {
       context.beginPath();
@@ -5323,9 +5561,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.save();
     context.strokeStyle = widget.pending ? "#72b7e5" : "#2679b8";
     context.lineWidth = 2 * unit;
-    context.setLineDash([7 * unit, 6 * unit]);
-    context.strokeRect(box.x, box.y, box.w, box.h);
-    context.setLineDash([]);
+    if (widget.pending) {
+      context.setLineDash([7 * unit, 6 * unit]);
+      context.strokeRect(box.x, box.y, box.w, box.h);
+      context.setLineDash([]);
+    }
     context.beginPath();
     drawResizeHandle(context, box, handle);
     context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
@@ -5338,9 +5578,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function positionImageEditBar() {
     const item = state.imageEdit ? selectedImage() : null;
     if (!item) {
+      imageEditBar.classList.remove("hand-toolbar-hiding");
       if (!imageEditBar.hidden) imageEditBar.hidden = true;
       return;
     }
+    imageEditBar.classList.toggle("hand-toolbar-hiding", Boolean(handToolbarRecord({ kind:"image", id:item.id })?.hiding));
     if (imageEditBar.hidden) imageEditBar.hidden = false;
     const rect = view.getBoundingClientRect(),
       box = imageBox(item),
@@ -5368,9 +5610,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.save();
     context.strokeStyle = "#2679b8";
     context.lineWidth = 2 * unit;
-    context.setLineDash([7 * unit, 6 * unit]);
-    context.strokeRect(box.x, box.y, box.w, box.h);
-    context.setLineDash([]);
     context.beginPath();
     drawResizeHandle(context, box, handle);
     context.moveTo(box.x + box.w + handle * 0.08, box.y + box.h / 2 - handle * 0.48);
@@ -5782,6 +6021,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         groupVerticalOffset:index * (34 + gap),
         controlScale,
         baseHeight:34,
+        handToolbar:Boolean(options.handToolbar),
+        handToolbarKey:options.handToolbarKey || "",
+        handToolbarHiding:Boolean(options.handToolbarHiding),
         priority:6,
       });
       horizontalOffset += item.baseWidth + gap;
@@ -5947,6 +6189,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function finishObjectChromeGesture(event) {
+    finishHandToolbarOperation(event.pointerId);
     if (state.pendingGesture?.id === event.pointerId && !state.pendingGesture.copy) {
       state.pendingGesture = null;
       resetCanvasCursor();
@@ -5986,6 +6229,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const refineCandidate = latchWidgetRefineCandidate(gesture.item, "text-box");
       if (state.auto && !refineCandidate) schedule(Math.max(1000, state.autoDelayMs));
       if (refineCandidate) setStatusKey("widgetRefinePending");
+      refreshHandObjectToolbar();
     } else {
       state.textBoxHistoryBefore = null;
       editTextBox(gesture.item);
@@ -6004,6 +6248,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       event.preventDefault();
       event.stopPropagation();
       finishStaleWidgetHostGesture(event);
+      if (button.penechoSpec?.handToolbar) {
+        beginHandToolbarOperation(event.pointerId, button.penechoSpec.handToolbarKey);
+        if (kind === "move") activateHandObjectToolbar(button.penechoSpec.handToolbarKey);
+        refreshHandObjectToolbar(button.penechoSpec.handToolbarKey);
+      }
       if (kind !== "move") {
         try { button.setPointerCapture(event.pointerId); } catch {}
         return;
@@ -6016,6 +6265,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (kind === "move") return;
       if (kind === "refine") triggerWidgetRefineClickPulse(button.penechoSpec?.refineCandidate?.widgetId);
       button.penechoSpec?.activate?.(button);
+    });
+    button.addEventListener("pointerenter", (event) => {
+      const key = button.penechoSpec?.handToolbarKey;
+      if (key) setHandToolbarHold(key, `chrome-hover:${event.pointerId}:${key}`, true);
+    });
+    button.addEventListener("pointerleave", (event) => {
+      const key = button.penechoSpec?.handToolbarKey;
+      if (key) setHandToolbarHold(key, `chrome-hover:${event.pointerId}:${key}`, false);
+    });
+    button.addEventListener("focus", () => {
+      const key = button.penechoSpec?.handToolbarKey;
+      if (key) setHandToolbarHold(key, `chrome-focus:${key}`, true);
+    });
+    button.addEventListener("blur", () => {
+      const key = button.penechoSpec?.handToolbarKey;
+      if (key) setHandToolbarHold(key, `chrome-focus:${key}`, false);
     });
     if (kind === "refine") {
       button.addEventListener("pointerenter", () => {
@@ -6089,24 +6354,29 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return specs;
     }
     const specs = [];
-    if (!state.textEditors.size) for (const item of state.textBoxes) specs.push({ key:`text-box:${item.id}:move`, kind:"move", box:textBoxBox(item), target:"text-box", object:item, priority:2 });
-    for (const image of visibleImages()) specs.push({ key:`image:${image.id}:move`, kind:"move", box:imageBox(image), target:"image", object:image, priority:1 });
-    for (const animation of visibleAnimations()) specs.push({ key:`animation:${animation.id}:move`, kind:"move", box:animationBox(animation), target:"animation", object:animation, priority:1 });
-    for (const widget of visibleWidgets()) specs.push({ key:`widget:${widget.id}:move`, kind:"move", box:widgetBox(widget), target:"widget", object:widget, priority:2 });
-    if (state.animationEdit) {
-      const animation = selectedAnimation();
-      if (animation) {
-        const box = animationBox(animation);
-        specs.push({ key:`animation:${animation.id}:cancel`, kind:"cancel", box, activate:cancelAnimationEdit, priority:3 });
-        specs.push({ key:`animation:${animation.id}:accept`, kind:"accept", box, activate:acceptAnimationEdit, priority:3 });
-      }
-    }
-    if (state.widgetEdit) {
-      if (editWidget) {
-        const box = widgetBox(editWidget);
-        specs.push({ key:`widget:${editWidget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(editWidget), priority:3 });
-        specs.push({ key:`widget:${editWidget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, priority:3 });
-        addWidgetToolSpecs(specs, editWidget, { copy:true });
+    for (const [key, record] of state.handToolbarTargets) {
+      const handTarget = handToolbarObject(record),
+        shared = { handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) };
+      if (!handTarget) continue;
+      if (record.kind === "text-box" && !state.textEditors.size) {
+        specs.push({ key:`text-box:${handTarget.id}:move`, kind:"move", box:textBoxBox(handTarget), target:"text-box", object:handTarget, ...shared, priority:2 });
+      } else if (record.kind === "image") {
+        specs.push({ key:`image:${handTarget.id}:move`, kind:"move", box:imageBox(handTarget), target:"image", object:handTarget, ...shared, priority:2 });
+      } else if (record.kind === "animation") {
+        const box = animationBox(handTarget);
+        specs.push({ key:`animation:${handTarget.id}:move`, kind:"move", box, target:"animation", object:handTarget, ...shared, priority:2 });
+        if (record.expanded && state.handToolbarActiveKey === key && state.animationEdit?.id === handTarget.id) {
+          specs.push({ key:`animation:${handTarget.id}:cancel`, kind:"cancel", box, activate:cancelAnimationEdit, ...shared, priority:3 });
+          specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:acceptAnimationEdit, ...shared, priority:3 });
+        }
+      } else if (record.kind === "widget") {
+        const box = widgetBox(handTarget);
+        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, ...shared, priority:2 });
+        if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
+          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, ...shared, priority:3 });
+          addWidgetToolSpecs(specs, handTarget, { copy:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
+        }
       }
     }
     pendingChromeSpecs(specs, state.pending);
@@ -6134,6 +6404,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
+      button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
+      button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
@@ -6212,11 +6484,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.drawing?.preview) drawPreview(state.drawing.preview, interactionCtx);
     drawPointerPreview(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
-    drawHandModeOutlines(interactionCtx);
     drawDirtyMaskDebugBounds(interactionCtx);
     drawWidgetRefineButtonHoverOutline(interactionCtx);
     drawWidgetRefineClickPulse(interactionCtx);
     drawWidgetRefineConfirmation(interactionCtx);
+    drawHandObjectToolbarOutlines(interactionCtx);
     drawSelectedAnimation(interactionCtx);
     if (state.pending) {
       interactionCtx.save();
@@ -7012,6 +7284,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function editTextBox(item) {
     if (state.mode !== "hand" || !item || !state.textBoxes.includes(item) || state.textEditors.size) return false;
+    clearHandToolbarTarget("text-box", item.id);
     if (state.widgetEdit) acceptWidgetEdit();
     if (state.imageEdit) acceptImageEdit({ restoreMode:false });
     if (state.animationEdit) acceptAnimationEdit();
@@ -7172,12 +7445,37 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const SNAPSHOT_DB = "penecho-canvas-history",
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
-    SNAPSHOT_LOCATIONS = new Set(["device", "server"]);
+    SNAPSHOT_LOCATIONS = new Set(["device", "server"]),
+    SERVER_DEFAULT_PROJECT_ID = "uncategorized",
+    SERVER_ALL_PROJECTS_ID = "all",
+    SERVER_PROJECT_SESSION_KEY = "penecho-selected-canvas-project";
   let snapshotDbPromise = null,
     snapshotItems = [],
     snapshotSaveInProgress = false,
     snapshotListGeneration = 0,
-    historyNoticeTimer = 0;
+    historyNoticeTimer = 0,
+    serverCanvasProjects = [],
+    selectedServerProjectId = storedServerProjectId(),
+    pendingCanvasTransition = null;
+  function validServerProjectSelection(projectId) {
+    return projectId === SERVER_DEFAULT_PROJECT_ID || projectId === SERVER_ALL_PROJECTS_ID || /^project-[a-zA-Z0-9-]{8,64}$/.test(projectId || "");
+  }
+  function storedServerProjectId() {
+    try {
+      const projectId = sessionStorage.getItem(SERVER_PROJECT_SESSION_KEY);
+      return validServerProjectSelection(projectId) ? projectId : SERVER_DEFAULT_PROJECT_ID;
+    } catch {
+      return SERVER_DEFAULT_PROJECT_ID;
+    }
+  }
+  function rememberSelectedServerProject(projectId) {
+    selectedServerProjectId = validServerProjectSelection(projectId) ? projectId : SERVER_DEFAULT_PROJECT_ID;
+    try { sessionStorage.setItem(SERVER_PROJECT_SESSION_KEY, selectedServerProjectId); } catch {}
+    return selectedServerProjectId;
+  }
+  function selectedServerSaveProjectId() {
+    return selectedServerProjectId === SERVER_ALL_PROJECTS_ID ? SERVER_DEFAULT_PROJECT_ID : selectedServerProjectId;
+  }
   function snapshotLocationLabel(location = state.snapshotLocation) {
     return t(location === "server" ? "storagePenEchoServer" : "storageThisDevice");
   }
@@ -7191,6 +7489,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const description = document.querySelector(`#${id}`);
       if (description) description.textContent = t(descriptionKey);
     }
+    renderServerProjectUi();
   }
   function setSnapshotLocation(location) {
     if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
@@ -7254,6 +7553,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       saveButton.setAttribute("aria-busy", String(busy));
     }
     document.querySelectorAll('input[name="historyStorageLocation"]').forEach((input) => (input.disabled = busy));
+    document.querySelectorAll("#serverProjectManager button, #serverProjectManager select").forEach((control) => (control.disabled = busy));
+    if (!busy) renderServerProjectUi();
   }
   async function saveSnapshotFromHistory() {
     if (snapshotSaveInProgress) return;
@@ -7327,7 +7628,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function allSnapshots() {
     const db = await snapshotDb(),
       items = await requestResult(db.transaction(SNAPSHOT_STORE, "readonly").objectStore(SNAPSHOT_STORE).getAll());
-    return items.sort((a, b) => b.createdAt - a.createdAt);
+    return items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
   }
   function blobDataUrl(blob) {
     return new Promise((resolve, reject) => {
@@ -7349,7 +7650,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function snapshotPreviewBlob() {
     try {
-      return await canvasBlob(snapshotPreview());
+      return await canvasBlob(snapshotPreview(), "image/webp", .78);
     } catch (error) {
       console.warn("PenEcho snapshot thumbnail failed; saving with a fallback thumbnail:", error);
       return dataUrlBlob("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
@@ -7362,16 +7663,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return body;
   }
   async function serverSnapshotItems() {
-    const response = await fetch("/api/canvases", {
-        credentials:"same-origin",
-        cache:"no-store",
-        headers:authenticatedApiHeaders(),
-      }),
-      body = await snapshotApiResponse(response);
+    const [canvasResponse, projectResponse] = await Promise.all([
+        fetch("/api/canvases", { credentials:"same-origin", cache:"no-store", headers:authenticatedApiHeaders() }),
+        fetch("/api/canvas-projects", { credentials:"same-origin", cache:"no-store", headers:authenticatedApiHeaders() }),
+      ]),
+      body = await snapshotApiResponse(canvasResponse),
+      projectBody = projectResponse.ok ? await snapshotApiResponse(projectResponse) : null;
+    serverCanvasProjects = Array.isArray(projectBody?.projects) ? projectBody.projects : [{ id:SERVER_DEFAULT_PROJECT_ID, name:"Uncategorized", system:true }];
+    if (!serverCanvasProjects.some((project) => project.id === selectedServerProjectId) && selectedServerProjectId !== SERVER_ALL_PROJECTS_ID) rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
     return Promise.all((Array.isArray(body?.canvases) ? body.canvases : []).map(async (item) => ({
       ...item,
+      projectId:item.projectId || SERVER_DEFAULT_PROJECT_ID,
       preview:dataUrlBlob(item.preview),
-    })));
+    }))).then((items) => items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)));
   }
   async function snapshotsAt(location) {
     return location === "server" ? serverSnapshotItems() : allSnapshots();
@@ -7387,7 +7691,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return bounds;
   }
   function snapshotPreview() {
-    const preview = offscreen(180, 120),
+    const preview = offscreen(640, 426),
       q = preview.getContext("2d"),
       bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), textBoxBounds()), animationBounds()), widgetBounds());
     q.fillStyle = state.paint.paper;
@@ -7565,25 +7869,47 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     tileEntries.forEach(({ k, blob }) => tileStore.put({ id:`${item.id}:${k}`, snapshotId:item.id, k, blob }));
     await transactionDone(transaction);
   }
+  async function snapshotBundleAsset(kind, blob, metadata = {}) {
+    const encoded = await blobDataUrl(blob),
+      match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(encoded);
+    if (!match) throw Error("Could not encode canvas bundle asset");
+    return { kind, contentType:match[1], metadata, dataBase64:match[2] };
+  }
+  function snapshotBundleAssetBlob(asset) {
+    if (!asset || typeof asset.contentType !== "string" || typeof asset.dataBase64 !== "string") throw Error("Canvas bundle contains an invalid asset");
+    return dataUrlBlob(`data:${asset.contentType};base64,${asset.dataBase64}`);
+  }
   async function serverSnapshotPayload(item, tileEntries) {
-    const [preview, serverTiles, serverImages] = await Promise.all([
-      blobDataUrl(item.preview),
-      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, data:await blobDataUrl(blob) }))),
-      Promise.all(item.images.map(async ({ blob, ...image }) => ({ ...image, data:await blobDataUrl(blob) }))),
+    const [previewAsset, tileAssets, imageAssets, widgetAssets] = await Promise.all([
+      snapshotBundleAsset("preview", item.preview, { width:640, height:426 }),
+      Promise.all(tileEntries.map(({ k, blob }) => snapshotBundleAsset("tile", blob, { tileKey:k }))),
+      Promise.all(item.images.map(({ blob, ...image }) => snapshotBundleAsset("resource", blob, { resourceId:image.id, resourceType:"image", ...image }))),
+      Promise.all(item.widgets.map((widget) => snapshotBundleAsset("widget", new Blob([JSON.stringify(widget)], { type:"application/json" }), { widgetId:widget.id, ...(widget.pluginId ? { pluginId:widget.pluginId } : {}) }))),
     ]);
     return {
-      version:1,
+      version:2,
+      bundleVersion:2,
+      mode:"snapshot",
+      formatVersion:1,
+      extensions:{},
       id:item.id,
       createdAt:item.createdAt,
+      updatedAt:item.updatedAt,
       name:item.name,
-      theme:item.theme,
-      view:item.view,
-      animations:item.animations,
-      widgets:item.widgets,
-      textBoxes:item.textBoxes,
-      images:serverImages,
-      tiles:serverTiles,
-      preview,
+      projectId:item.projectId || SERVER_DEFAULT_PROJECT_ID,
+      manifest:{
+        format:"penecho-raster-tiles",
+        formatVersion:1,
+        canvasSize:{ width:SIZE, height:SIZE },
+        tileSize:TILE,
+        theme:item.theme,
+        view:item.view,
+        animations:item.animations,
+        textBoxes:item.textBoxes,
+        savedAt:new Date(item.updatedAt).toISOString(),
+        extensions:{},
+      },
+      assets:[...tileAssets, ...widgetAssets, ...imageAssets, previewAsset],
     };
   }
   async function saveServerSnapshot(item, tileEntries, overwriteId) {
@@ -7611,7 +7937,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
-      createdAt = Date.now(),
+      now = Date.now(),
+      createdAt = overwriteId ? existing?.createdAt || now : now,
+      updatedAt = now,
       animations = serializedAnimations(),
       widgets = serializedWidgets(),
       textBoxes = storedTextBoxes(),
@@ -7620,9 +7948,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preview = await snapshotPreviewBlob(),
       requestedName = String(name === null ? nameInput.value : name).trim().slice(0, 48),
       item = {
+        version:2,
         id,
         createdAt,
+        updatedAt,
         name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : ""),
+        projectId:location === "server"
+          ? overwriteId
+            ? existing?.projectId || state.currentSnapshotProjectId || SERVER_DEFAULT_PROJECT_ID
+            : selectedServerSaveProjectId()
+          : null,
         theme: state.theme,
         view: { scale: state.scale, panX: state.panX, panY: state.panY, navigationLocked:state.navigationLocked },
         tileCount: tileEntries.length,
@@ -7643,6 +7978,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotId = id;
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
+    state.currentSnapshotProjectId = item.projectId;
+    state.snapshotSavedRevision = state.userRevision;
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     return id;
@@ -7663,10 +8000,51 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }),
       body = await snapshotApiResponse(response),
       stored = body?.canvas;
-    if (!stored || !Array.isArray(stored.tiles) || !Array.isArray(stored.images)) throw Error("PenEcho server returned an invalid canvas");
+    if (!stored) throw Error("PenEcho server returned an invalid canvas");
+    const storedVersion = stored.version ?? stored.bundleVersion ?? 1;
+    if (storedVersion === 2) {
+      if (stored.bundleVersion !== 2 || stored.mode !== "snapshot" || stored.formatVersion !== 1 || stored.manifest?.format !== "penecho-raster-tiles" || stored.manifest?.formatVersion !== 1 || !Array.isArray(stored.assets)) throw Error("PenEcho server returned an invalid canvas bundle");
+      const previewAsset = stored.assets.find((asset) => asset.kind === "preview"),
+        tileAssets = stored.assets.filter((asset) => asset.kind === "tile"),
+        imageAssets = stored.assets.filter((asset) => asset.kind === "resource" && asset.metadata?.resourceType === "image"),
+        widgetAssets = stored.assets.filter((asset) => asset.kind === "widget"),
+        widgets = await Promise.all(widgetAssets.map(async (asset) => {
+          const widget = JSON.parse(await snapshotBundleAssetBlob(asset).text());
+          if (!widget?.id || widget.id !== asset.metadata?.widgetId) throw Error("Canvas bundle contains an invalid widget");
+          return widget;
+        })),
+        imageById = new Map(imageAssets.map((asset) => [asset.metadata.resourceId, {
+          ...asset.metadata,
+          id:asset.metadata.resourceId,
+          blob:snapshotBundleAssetBlob(asset),
+        }]));
+      if (!previewAsset) throw Error("Canvas bundle has no preview");
+      return {
+        item:{
+          version:2,
+          id:stored.id,
+          createdAt:stored.createdAt,
+          updatedAt:stored.updatedAt || stored.createdAt,
+          name:stored.name || "",
+          theme:stored.manifest.theme,
+          view:stored.manifest.view,
+          animations:stored.manifest.animations || [],
+          textBoxes:stored.manifest.textBoxes || [],
+          projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
+          preview:snapshotBundleAssetBlob(previewAsset),
+          widgets,
+          images:[...imageById.values()],
+        },
+        tileEntries:tileAssets.map((asset) => ({ k:asset.metadata?.tileKey, blob:snapshotBundleAssetBlob(asset) })),
+      };
+    }
+    if (!Array.isArray(stored.tiles) || !Array.isArray(stored.images)) throw Error("PenEcho server returned an invalid canvas");
     return {
       item:{
         ...stored,
+        version:1,
+        updatedAt:stored.updatedAt || stored.createdAt,
+        projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
         preview:dataUrlBlob(stored.preview),
         images:stored.images.map(({ data, ...image }) => ({ ...image, blob:dataUrlBlob(data) })),
       },
@@ -7728,6 +8106,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotId = item.id;
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
+    state.currentSnapshotProjectId = item.projectId || null;
+    state.snapshotSavedRevision = state.userRevision;
     render();
     closeHistoryPanel();
     setStatusKey("snapshotLoaded");
@@ -7758,14 +8138,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.currentSnapshotId = null;
       state.currentSnapshotName = "";
       state.currentSnapshotLocation = null;
+      state.currentSnapshotProjectId = null;
     }
     await refreshSnapshots();
     setStatusKey("snapshotDeleted");
   }
   function updateNewCanvasDialog() {
     const label = document.querySelector("#currentSnapshotLabel"),
-      overwrite = document.querySelector("#newOverwrite");
+      overwrite = document.querySelector("#newOverwrite"),
+      title = document.querySelector("#newCanvasTitle"),
+      description = document.querySelector("#newCanvasDialog > form > p:not(.current-snapshot)"),
+      discard = document.querySelector("#newDiscard"),
+      saveCopy = document.querySelector("#newSaveCopy"),
+      loading = Boolean(pendingCanvasTransition);
     if (!label || !overwrite) return;
+    if (title) title.textContent = t(loading ? "loadCanvasTitle" : "newCanvasTitle");
+    if (description) description.textContent = t(loading ? "loadCanvasDescription" : "newCanvasDescription");
+    if (discard) discard.textContent = t(loading ? "loadWithoutSave" : "newWithoutSave");
+    if (saveCopy) saveCopy.textContent = t(loading ? "saveAsNewAndLoad" : "saveAsNewAndCreate");
+    overwrite.textContent = t(loading ? "overwriteAndLoad" : "overwriteAndCreate");
     if (!state.currentSnapshotId) label.textContent = t("noCurrentSnapshot");
     else {
       const sameLocation = state.currentSnapshotLocation === state.snapshotLocation,
@@ -7780,7 +8171,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function setNewCanvasDialogBusy(busy) {
     const dialog = document.querySelector("#newCanvasDialog");
     dialog.dataset.busy = String(busy);
-    dialog.querySelectorAll("button, input").forEach((control) => (control.disabled = busy));
+    dialog.querySelectorAll("button, input, select").forEach((control) => (control.disabled = busy));
     if (!busy) updateNewCanvasDialog();
   }
   function startBlankCanvas() {
@@ -7808,6 +8199,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotId = null;
     state.currentSnapshotName = "";
     state.currentSnapshotLocation = null;
+    state.currentSnapshotProjectId = null;
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -7816,6 +8208,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       skipDraftFinalize:true,
       preserveWidgetRefinement:true,
     });
+    state.snapshotSavedRevision = state.userRevision;
+    pendingCanvasTransition = null;
     document.querySelector("#newSnapshotName").value = "";
     if (dialog.open) dialog.close();
     if (document.querySelector("#historyPanel").classList.contains("open")) closeHistoryPanel();
@@ -7823,10 +8217,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("newCanvasReady");
   }
   function openNewCanvasDialog() {
-    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!canvasHasUnsavedChanges()) {
       startBlankCanvas();
       return;
     }
+    pendingCanvasTransition = null;
     const dialog = document.querySelector("#newCanvasDialog");
     document.querySelector("#newSnapshotName").value = "";
     setNewCanvasDialogBusy(false);
@@ -7844,28 +8239,144 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         setNewCanvasDialogBusy(false);
         return;
       }
-      startBlankCanvas();
+      const transition = pendingCanvasTransition;
+      pendingCanvasTransition = null;
+      if (transition) {
+        const dialog = document.querySelector("#newCanvasDialog");
+        if (dialog.open) dialog.close();
+        await loadSnapshot(transition.id, transition.location);
+      } else startBlankCanvas();
     } catch (error) {
       setStatus(`${t("snapshotError")}${error.message}`);
       setNewCanvasDialogBusy(false);
     }
   }
+  function canvasHasUnsavedChanges() {
+    const hasContent = tiles.size || state.images.length || state.textBoxes.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length;
+    return Boolean(hasContent && (state.dirty || state.userRevision !== state.snapshotSavedRevision));
+  }
+  function requestLoadSnapshot(id, location = state.snapshotLocation) {
+    if (!canvasHasUnsavedChanges()) return loadSnapshot(id, location);
+    pendingCanvasTransition = { id, location };
+    const dialog = document.querySelector("#newCanvasDialog");
+    document.querySelector("#newSnapshotName").value = "";
+    setNewCanvasDialogBusy(false);
+    updateNewCanvasDialog();
+    if (!dialog.open) dialog.showModal();
+    return Promise.resolve(false);
+  }
+  function discardCanvasTransition() {
+    const transition = pendingCanvasTransition;
+    pendingCanvasTransition = null;
+    if (!transition) return startBlankCanvas();
+    const dialog = document.querySelector("#newCanvasDialog");
+    if (dialog.open) dialog.close();
+    return loadSnapshot(transition.id, transition.location);
+  }
   function snapshotName(item) {
     return item.name || new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(item.createdAt);
   }
+  function serverProjectName(project) {
+    return project?.id === SERVER_DEFAULT_PROJECT_ID || project?.system ? t("canvasProjectUncategorized") : project?.name || t("canvasProjectUncategorized");
+  }
+  function renderServerProjectUi() {
+    const manager = document.querySelector("#serverProjectManager"),
+      select = document.querySelector("#historyProjectSelect"),
+      remove = document.querySelector("#historyProjectDelete"),
+      dialogField = document.querySelector("#newCanvasProjectField"),
+      dialogSelect = document.querySelector("#newCanvasProjectSelect");
+    if (!manager || !select || !remove) return;
+    const visible = state.snapshotLocation === "server";
+    manager.hidden = !visible;
+    if (dialogField) dialogField.hidden = !visible;
+    if (!visible) return;
+    const projects = serverCanvasProjects.length
+      ? serverCanvasProjects
+      : [{ id:SERVER_DEFAULT_PROJECT_ID, name:"Uncategorized", system:true }];
+    select.replaceChildren();
+    const all = document.createElement("option");
+    all.value = SERVER_ALL_PROJECTS_ID;
+    all.textContent = t("canvasProjectAll");
+    select.append(all);
+    for (const project of projects) {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = serverProjectName(project);
+      select.append(option);
+    }
+    if (serverCanvasProjects.length && ![...select.options].some((option) => option.value === selectedServerProjectId)) rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
+    select.value = selectedServerProjectId;
+    if (!select.value) select.value = SERVER_ALL_PROJECTS_ID;
+    const selected = serverCanvasProjects.find((project) => project.id === selectedServerProjectId);
+    remove.disabled = !selected || selected.id === SERVER_DEFAULT_PROJECT_ID || selected.system === true;
+    if (dialogSelect) {
+      dialogSelect.replaceChildren();
+      for (const project of projects) {
+        const option = document.createElement("option");
+        option.value = project.id;
+        option.textContent = serverProjectName(project);
+        dialogSelect.append(option);
+      }
+      dialogSelect.value = selectedServerSaveProjectId();
+      if (!dialogSelect.value) dialogSelect.value = SERVER_DEFAULT_PROJECT_ID;
+    }
+  }
+  async function createServerProject() {
+    const name = prompt(t("canvasProjectName"), "")?.trim().slice(0, 48);
+    if (!name) return;
+    const response = await fetch("/api/canvas-projects", {
+        method:"POST",
+        credentials:"same-origin",
+        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ name }),
+      }),
+      body = await snapshotApiResponse(response);
+    rememberSelectedServerProject(body.project.id);
+    await refreshSnapshots();
+    showHistoryNoticeKey("canvasProjectCreated", "success");
+  }
+  async function deleteSelectedServerProject() {
+    const project = serverCanvasProjects.find((item) => item.id === selectedServerProjectId);
+    if (!project || project.id === SERVER_DEFAULT_PROJECT_ID || project.system) return;
+    const response = await fetch(`/api/canvas-projects/${encodeURIComponent(project.id)}`, {
+      method:"DELETE",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders(),
+    });
+    await snapshotApiResponse(response);
+    rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
+    await refreshSnapshots();
+    showHistoryNoticeKey("canvasProjectDeleted", "success", 4200);
+  }
+  async function moveServerSnapshot(id, projectId) {
+    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}/project`, {
+      method:"PUT",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+      body:JSON.stringify({ projectId }),
+    });
+    await snapshotApiResponse(response);
+    if (state.currentSnapshotId === id && state.currentSnapshotLocation === "server") state.currentSnapshotProjectId = projectId;
+    await refreshSnapshots();
+    showHistoryNoticeKey("canvasProjectMoved", "success");
+  }
   function renderSnapshotList() {
     const list = document.querySelector("#historyList"),
-      location = state.snapshotLocation;
+      location = state.snapshotLocation,
+      items = location === "server" && selectedServerProjectId !== SERVER_ALL_PROJECTS_ID
+        ? snapshotItems.filter((item) => (item.projectId || SERVER_DEFAULT_PROJECT_ID) === selectedServerProjectId)
+        : snapshotItems;
     if (!list) return;
+    renderServerProjectUi();
     list.replaceChildren();
-    if (!snapshotItems.length) {
+    if (!items.length) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.textContent = t(state.snapshotLocation === "server" ? "emptyServerHistory" : "emptyDeviceHistory");
+      empty.textContent = t(location === "server" && snapshotItems.length ? "emptyProjectHistory" : location === "server" ? "emptyServerHistory" : "emptyDeviceHistory");
       list.append(empty);
       return;
     }
-    for (const item of snapshotItems) {
+    for (const item of items) {
       const card = document.createElement("article"),
         preview = document.createElement("div"),
         image = document.createElement("img"),
@@ -7889,18 +8400,35 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preview.append(image);
       meta.className = "history-meta";
       title.textContent = snapshotName(item);
-      detail.textContent = `${new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.createdAt)} · ${item.tileCount} ${t("snapshotTiles")}`;
+      const modified = new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.updatedAt || item.createdAt);
+      detail.textContent = `${t("snapshotModified").replace("{time}", modified)} · ${item.tileCount} ${t("snapshotTiles")}`;
       if (pluginEnabled("animation") && item.animationCount) detail.textContent += " · " + item.animationCount + " " + t("snapshotAnimations");
       if (item.widgetCount) detail.textContent += " · " + item.widgetCount + " " + t("snapshotWidgets");
       if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
       actions.className = "history-actions";
+      load.className = "history-load";
       load.textContent = t("loadSnapshot");
-      load.onclick = () => runSnapshotAction(() => loadSnapshot(item.id, location));
+      load.onclick = () => runSnapshotAction(() => requestLoadSnapshot(item.id, location));
       remove.className = "history-delete";
       remove.textContent = t("deleteSnapshot");
       remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
       meta.append(title, detail, actions);
+      if (location === "server") {
+        const move = document.createElement("select");
+        move.className = "history-move";
+        move.setAttribute("aria-label", t("canvasProjectMove"));
+        move.title = t("canvasProjectMove");
+        for (const project of serverCanvasProjects) {
+          const option = document.createElement("option");
+          option.value = project.id;
+          option.textContent = `${t("canvasProject")}: ${serverProjectName(project)}`;
+          move.append(option);
+        }
+        move.value = item.projectId || SERVER_DEFAULT_PROJECT_ID;
+        move.onchange = () => runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
+        meta.append(move);
+      }
       card.append(preview, meta);
       list.append(card);
     }
@@ -11421,7 +11949,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       start: animationBox(result.animation),
       changed: false,
     };
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     setStatusKey("animationSelected");
     requestAnimationLayerRender();
@@ -11461,7 +11989,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.animationGesture = null;
     resetCanvasCursor();
     if (gesture.changed && state.animationEdit) state.animationEdit.changed = true;
-    showAnimationControls();
+    if (!refreshHandObjectToolbar()) showAnimationControls();
     requestAnimationLayerRender();
     requestInteractionLayerRender();
     return true;
@@ -11514,8 +12042,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (state.mode === "hand") {
-      const textBox = valid(point) ? textBoxAtPoint(point) : null;
-      if (textBox && editTextBox(textBox)) return;
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -11603,6 +12129,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } catch {}
     calibrateScreenClientRatio(e, false);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const handPoint = state.mode === "hand" ? clientPoint(e) : null;
+    if (handPoint) beginHandObjectFocus(e, handPoint);
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
         touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
@@ -11611,6 +12139,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if (state.mode === "pen") beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
       }
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         state.textTap = null;
         if (state.pendingGesture) state.pendingGesture = null;
@@ -11648,9 +12177,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         return;
       }
     }
-    const point = clientPoint(e);
+    const point = handPoint || clientPoint(e);
     const widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType, false) : null;
     if (widgetResult && ["resize", "width", "height"].includes(widgetResult.hit)) {
+      refreshHandObjectToolbar();
       beginWidgetGesture(e, point, widgetResult);
       return;
     }
@@ -11658,12 +12188,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType, false) : null;
     if (selectedImageResult && selectedImageResult.hit !== "move") {
       if (state.selectedAnimationId) acceptAnimationEdit();
+      refreshHandObjectToolbar();
       beginImageGesture(e, point, selectedImageResult);
       return;
     }
     if (valid(point)) {
       const animationResult = animationPointerHit(point, e.pointerType);
       if (animationResult && animationResult.hit !== "move") {
+        refreshHandObjectToolbar();
         beginAnimationGesture(e, point, animationResult);
         return;
       }
@@ -11677,6 +12209,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    updateHandObjectFocus(e);
+    if (state.mode === "hand" && e.pointerType !== "touch" && Number(e.buttons) === 0) updateHandObjectHover(clientPoint(e));
     updateCanvasPointerPreview(e);
     if (e.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(e));
     if (state.pendingGesture?.id === e.pointerId) {
@@ -11711,6 +12245,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       } else return;
     }
     if (e.pointerType === "touch") {
+      if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         updateTouchGesture();
         return;
@@ -11754,9 +12289,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   });
   function end(e) {
     state.pointers.delete(e.pointerId);
+    finishHandObjectFocus(e);
     if (e.pointerType === "touch") {
       state.touches.delete(e.pointerId);
       finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
+    }
+    if (e.pointerType === "touch" && state.handGestureIncludesWidget) {
+      if (!state.touches.size && !state.handWidgetPointerIds.size) state.handGestureIncludesWidget = false;
+      state.touchGesture = null;
+      state.panGesture = null;
+      if (!state.touches.size) setNavigating(false);
+      return;
     }
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
@@ -11825,11 +12368,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    updateHandObjectHover(null);
     if (!state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
   });
-  view.addEventListener("pointerleave", () => updateWidgetRefinePointer(null));
+  view.addEventListener("pointerleave", () => {
+    updateHandObjectHover(null);
+    updateWidgetRefinePointer(null);
+  });
   screen.addEventListener("contextmenu", (e) => e.preventDefault());
   view.addEventListener(
     "wheel",
@@ -11898,6 +12445,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       } else commitSelection();
     }
     if (state.mode === "hand" && mode !== "hand") {
+      hideHandObjectToolbar({ animate:false, all:true });
+      state.handHoverKey = null;
+      state.handPointerFocusKeys.clear();
+      state.handToolbarOperationPointers.clear();
+      state.handWidgetPointerIds.clear();
+      state.handGestureIncludesWidget = false;
       for (const editor of [...state.textEditors.values()]) void confirmTextEditor(editor);
       if (state.widgetEdit) acceptWidgetEdit();
       if (state.imageEdit) {
@@ -11954,9 +12507,43 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (item) deleteImage(item);
   };
   for (const button of [imagePlaceButton, imageMergeButton, imageDeleteButton]) {
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      refreshHandObjectToolbar();
+    });
     button.addEventListener("click", (event) => event.stopPropagation());
   }
+  function bindHandToolbarSurface(element, kind, currentObject) {
+    const currentKey = () => {
+      const object = currentObject();
+      return object ? handToolbarKey(kind, object.id) : "";
+    };
+    element.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "touch") return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, true);
+    });
+    element.addEventListener("pointerleave", (event) => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, false);
+    });
+    element.addEventListener("pointerdown", (event) => {
+      const key = currentKey();
+      if (key) beginHandToolbarOperation(event.pointerId, key);
+    });
+    element.addEventListener("pointerup", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("pointercancel", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("focusin", () => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, true);
+    });
+    element.addEventListener("focusout", (event) => {
+      if (event.relatedTarget && element.contains(event.relatedTarget)) return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, false);
+    });
+  }
+  bindHandToolbarSurface(imageEditBar, "image", selectedImage);
   imagePickerButton.addEventListener("click", () => {
     if (state.imageImporting) return;
     if (selectionAIBusy()) {
@@ -12077,12 +12664,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
   if (selectionCancelButton) selectionCancelButton.onclick = () => cancelSelection();
-  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => event.stopPropagation()));
+  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    refreshHandObjectToolbar();
+  }));
   animationPlayPause.onclick = toggleSelectedAnimationPlayback;
   animationRestart.onclick = restartSelectedAnimation;
   animationDelete.onclick = deleteSelectedAnimation;
   animationControls.addEventListener("click", (event) => event.stopPropagation());
   animationControls.addEventListener("pointerdown", (event) => event.stopPropagation());
+  bindHandToolbarSurface(animationControls, "animation", selectedAnimation);
 
   document.querySelector("#penSize").oninput = (e) => {
     state.pen = +e.target.value;
@@ -12293,21 +12884,38 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
+  document.querySelector("#historyProjectSelect").onchange = (event) => {
+    rememberSelectedServerProject(event.target.value);
+    renderSnapshotList();
+  };
+  document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
+    rememberSelectedServerProject(event.target.value);
+    renderSnapshotList();
+  };
+  document.querySelector("#historyProjectCreate").onclick = () => runSnapshotAction(createServerProject);
+  document.querySelector("#historyProjectDelete").onclick = () => runSnapshotAction(deleteSelectedServerProject);
   document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (input.checked) setSnapshotLocation(input.value);
     });
   });
-  document.querySelector("#newCanvasClose").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
-  document.querySelector("#newCanvasCancel").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
+  document.querySelector("#newCanvasClose").onclick = () => {
+    pendingCanvasTransition = null;
+    document.querySelector("#newCanvasDialog").close("cancel");
+  };
+  document.querySelector("#newCanvasCancel").onclick = () => {
+    pendingCanvasTransition = null;
+    document.querySelector("#newCanvasDialog").close("cancel");
+  };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
   document.querySelector("#textHelpDone").onclick = closeTextHelp;
   document.querySelector("#textHelpDialog").addEventListener("close", restoreTextEditorAfterHelp);
-  document.querySelector("#newDiscard").onclick = startBlankCanvas;
+  document.querySelector("#newDiscard").onclick = discardCanvasTransition;
   document.querySelector("#newSaveCopy").onclick = () => completeNewCanvas("new");
   document.querySelector("#newOverwrite").onclick = () => completeNewCanvas("overwrite");
   document.querySelector("#newCanvasDialog").addEventListener("cancel", (event) => {
     if (event.currentTarget.dataset.busy === "true") event.preventDefault();
+    else pendingCanvasTransition = null;
   });
   document.querySelector("#historyName").addEventListener("keydown", (event) => {
     if (event.key === "Enter") saveCurrentCanvas();

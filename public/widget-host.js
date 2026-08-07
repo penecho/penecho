@@ -51,12 +51,7 @@
       DRAG_MOVE = "penecho-widget-drag-move",
       DRAG_END = "penecho-widget-drag-end",
       TOUCH_START = "penecho-widget-touch-start",
-      TOUCH_MOVE = "penecho-widget-touch-move",
       TOUCH_END = "penecho-widget-touch-end",
-      PAN_START = "penecho-widget-pan-start",
-      PAN_MOVE = "penecho-widget-pan-move",
-      PAN_END = "penecho-widget-pan-end",
-      WHEEL = "penecho-widget-wheel",
       PUBLIC_FETCH_REQUEST = "penecho-widget-public-fetch-request",
       PUBLIC_FETCH_RESPONSE = "penecho-widget-public-fetch-response",
       RUNTIME_DIAGNOSTICS = "penecho-widget-runtime-diagnostics",
@@ -68,8 +63,7 @@
       PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024;
     let widgetState = { selected:false, active:true, navigationLocked:false, scaleX:1, scaleY:1 },
       widgetStateReceived = false,
-      suppressClickUntil = 0,
-      middlePan = null;
+      suppressClickUntil = 0;
     const presses = new Map(),
       publicFetchRequests = new Map(),
       pausedAnimations = new WeakSet(),
@@ -342,57 +336,42 @@
         const value = Number(event[key]);
         if (Number.isFinite(value)) press[key] = value;
       }
+      const tapped = press.pointerType === "touch" && !cancelled && !press.active && !press.navigation
+        && Math.hypot(press.screenX - press.startX, press.screenY - press.startY) <= MOVE_TOLERANCE_PX
+        && touchCount() === 1;
       if (press.active) {
         event.preventDefault?.();
         event.stopImmediatePropagation?.();
         pointerMessage(DRAG_END, { ...press, cancelled });
         suppressClickUntil = clock() + 650;
       }
-      if (press.pointerType === "touch" && !widgetState.navigationLocked) pointerMessage(TOUCH_END, { ...press, cancelled });
+      if (tapped) parent.postMessage({
+        type:"penecho-widget-activate",
+        pointerId:press.pointerId,
+        pointerType:press.pointerType,
+        localX:press.clientX,
+        localY:press.clientY,
+        screenX:press.screenX,
+        screenY:press.screenY,
+      }, "*");
+      if (press.pointerType === "touch") pointerMessage(TOUCH_END, { ...press, cancelled });
       presses.delete(event.pointerId);
       if (press.captured) try { document.documentElement.releasePointerCapture(press.pointerId); } catch {}
       if (![...presses.values()].some((item) => item.active)) document.documentElement.classList.remove("penecho-widget-dragging");
     }
-    function finishMiddlePan(event, cancelled = false) {
-      if (!middlePan || middlePan.pointerId !== event.pointerId) return false;
-      middlePan.clientX = Number(event.clientX);
-      middlePan.clientY = Number(event.clientY);
-      middlePan.screenX = Number(event.screenX);
-      middlePan.screenY = Number(event.screenY);
-      pointerMessage(PAN_END, { ...middlePan, cancelled });
-      try { document.documentElement.releasePointerCapture(middlePan.pointerId); } catch {}
-      middlePan = null;
-      document.documentElement.classList.remove("penecho-widget-dragging");
-      event.preventDefault?.();
-      event.stopImmediatePropagation?.();
-      return true;
-    }
     addEventListener("pointerdown", (event) => {
-      if (Number(event.button) === 1 && event.pointerType === "mouse" && !middlePan && !widgetState.navigationLocked) {
-        middlePan = {
-          pointerId:event.pointerId,
-          pointerType:event.pointerType,
-          clientX:Number(event.clientX),
-          clientY:Number(event.clientY),
-          screenX:Number(event.screenX),
-          screenY:Number(event.screenY),
-          hit:"canvas-pan",
-        };
-        if (![middlePan.clientX, middlePan.clientY, middlePan.screenX, middlePan.screenY].every(Number.isFinite)) {
-          middlePan = null;
-          return;
-        }
-        try { document.documentElement.setPointerCapture(event.pointerId); } catch {}
-        document.documentElement.classList.add("penecho-widget-dragging");
-        pointerMessage(PAN_START, middlePan);
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
       if (presses.has(event.pointerId) || Number(event.button) !== 0 || !["mouse", "pen", "touch"].includes(event.pointerType)) return;
       const hit = controlHit(Number(event.clientX), Number(event.clientY), event.pointerType);
       if (event.pointerType !== "touch" && !hit) {
-        if (!widgetState.selected) parent.postMessage({ type:"penecho-widget-activate" }, "*");
+        parent.postMessage({
+          type:"penecho-widget-activate",
+          pointerId:event.pointerId,
+          pointerType:event.pointerType,
+          localX:Number(event.clientX),
+          localY:Number(event.clientY),
+          screenX:Number(event.screenX),
+          screenY:Number(event.screenY),
+        }, "*");
         return;
       }
       const press = {
@@ -412,7 +391,7 @@
       };
       if (![press.clientX, press.clientY, press.startX, press.startY].every(Number.isFinite)) return;
       presses.set(event.pointerId, press);
-      if (press.pointerType === "touch" && !widgetState.navigationLocked) {
+      if (press.pointerType === "touch") {
         pointerMessage(TOUCH_START, press);
         if (touchCount() >= 2) cancelAllHoldsForNavigation();
       }
@@ -423,16 +402,6 @@
       }
     }, { capture:true, passive:false });
     addEventListener("pointermove", (event) => {
-      if (middlePan?.pointerId === event.pointerId) {
-        middlePan.clientX = Number(event.clientX);
-        middlePan.clientY = Number(event.clientY);
-        middlePan.screenX = Number(event.screenX);
-        middlePan.screenY = Number(event.screenY);
-        if ([middlePan.clientX, middlePan.clientY, middlePan.screenX, middlePan.screenY].every(Number.isFinite)) pointerMessage(PAN_MOVE, middlePan);
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
       const press = presses.get(event.pointerId);
       if (!press) return;
       const clientX = Number(event.clientX), clientY = Number(event.clientY), screenX = Number(event.screenX), screenY = Number(event.screenY);
@@ -452,38 +421,20 @@
         return;
       }
       const moved = Math.hypot(screenX - press.startX, screenY - press.startY) > MOVE_TOLERANCE_PX;
-      if (press.pointerType === "touch" && !widgetState.navigationLocked && (press.navigation || touchCount() >= 2)) {
-        if (moved || touchCount() >= 2) {
-          clearHoldTimer(press);
-          press.navigation = true;
-          capturePointer(press);
-          suppressClickUntil = clock() + 650;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          pointerMessage(TOUCH_MOVE, press);
-        }
+      if (press.pointerType === "touch" && (moved || touchCount() >= 2)) {
+        clearHoldTimer(press);
+        press.navigation = true;
         return;
       }
     }, { capture:true, passive:false });
-    addEventListener("pointerup", (event) => {
-      if (!finishMiddlePan(event)) finishPress(event);
-    }, { capture:true, passive:false });
-    addEventListener("pointercancel", (event) => {
-      if (!finishMiddlePan(event, true)) finishPress(event, true);
-    }, { capture:true, passive:false });
+    addEventListener("pointerup", (event) => finishPress(event), { capture:true, passive:false });
+    addEventListener("pointercancel", (event) => finishPress(event, true), { capture:true, passive:false });
     addEventListener("lostpointercapture", (event) => {
       if (presses.has(event.pointerId)) finishPress({ pointerId:event.pointerId }, true);
     }, { capture:true });
     addEventListener("blur", () => {
       for (const press of [...presses.values()]) finishPress({ pointerId:press.pointerId }, true);
     });
-    addEventListener("wheel", (event) => {
-      if (!Number.isFinite(event.deltaY) || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
-      if (widgetState.navigationLocked) return;
-      parent.postMessage({ type:WHEEL, localX:event.clientX, localY:event.clientY, deltaY:event.deltaY }, "*");
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }, { capture:true, passive:false });
     addEventListener("click", (event) => {
       if (suppressClickUntil && clock() <= suppressClickUntil) {
         suppressClickUntil = 0;
@@ -1096,11 +1047,10 @@
       && message.pointerType === "touch"
       && [message.localX, message.localY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
-  function validNavigationMessage(message) {
-    if (!message || !["penecho-widget-pan-start", "penecho-widget-pan-move", "penecho-widget-pan-end", "penecho-widget-wheel"].includes(message.type)) return false;
-    if (message.type === "penecho-widget-wheel")
-      return [message.localX, message.localY, message.deltaY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
-    return Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff && message.pointerType === "mouse"
+  function validActivateMessage(message) {
+    return message?.type === "penecho-widget-activate"
+      && Number.isInteger(message.pointerId) && Math.abs(message.pointerId) <= 0x7fffffff
+      && ["mouse", "pen", "touch"].includes(message.pointerType)
       && [message.localX, message.localY, message.screenX, message.screenY].every(value => Number.isFinite(value) && Math.abs(value) <= 10000000);
   }
   function validRuntimeDiagnostics(message) {
@@ -1212,10 +1162,17 @@
         parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height }, parentOrigin);
       }
     } else if (message.type === "penecho-widget-snapshot-error" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error);
-    else if (message.type === "penecho-widget-activate") parent.postMessage({ type:message.type }, parentOrigin);
+    else if (validActivateMessage(message)) parent.postMessage({
+      type:message.type,
+      pointerId:message.pointerId,
+      pointerType:message.pointerType,
+      localX:message.localX,
+      localY:message.localY,
+      screenX:message.screenX,
+      screenY:message.screenY,
+    }, parentOrigin);
     else if (validDragMessage(message)) forwardDragMessage(message);
     else if (validTouchMessage(message)) parent.postMessage(message, parentOrigin);
-    else if (validNavigationMessage(message)) parent.postMessage(message, parentOrigin);
   });
 
   parent.postMessage({ type: "penecho-widget-host-ready" }, parentOrigin);

@@ -74,7 +74,7 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 - Guarda instantáneas en este dispositivo o en el servidor PenEcho y exporta el contenido confirmado como PNG.
 - Elige entre los temas Arcane, Sci-fi, Research y Studio.
 
-## Novedades de la versión 0.8.2
+## Novedades de la versión 0.9.0
 
 - **Varias conexiones de IA con cambio en un clic.** Guarda hasta diez conexiones API o CLI, usa preajustes editables de Kimi y MiniMax, pruébalas en el lienzo y elige una conexión activa distinta en cada cliente del mismo host PenEcho. Los cambios se aplican al instante.
 - **Refine más rápido y flexible.** Escribe instrucciones en cualquier lugar del área visible y elige el widget que quieres modificar. Los diffs unificados estándar envían solo los cambios, reduciendo tokens y tiempo sin perder la confirmación ni Deshacer.

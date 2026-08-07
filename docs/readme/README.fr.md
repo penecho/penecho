@@ -74,7 +74,7 @@ npm start
 - Enregistrez les instantanés sur cet appareil ou sur le serveur PenEcho et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
-## Nouveautés de la version 0.8.2
+## Nouveautés de la version 0.9.0
 
 - **Plusieurs connexions IA, sélectionnables en un clic.** Enregistrez jusqu'à dix connexions API ou CLI, utilisez les préréglages Kimi et MiniMax modifiables, testez-les dans le canevas et choisissez une connexion active propre à chaque client d'un même hôte PenEcho. Les changements s'appliquent immédiatement.
 - **Refine plus rapide et plus souple.** Écrivez des consignes n'importe où dans la zone visible puis choisissez le widget à modifier. Les diffs unifiés standard ne transmettent que les changements, réduisant les tokens et le délai tout en conservant confirmation et annulation.

@@ -70,7 +70,7 @@ Using these links directly supports the project:
 
 - [Quick start](#quick-start)
 - [Think on the canvas](#think-on-the-canvas)
-- [What's new in 0.8.2](#whats-new-in-082)
+- [What's new in 0.9.0](#whats-new-in-090)
 - [Earlier release highlights](#earlier-release-highlights)
 - [Previous releases](#previous-releases)
 - [How it works](#how-it-works)
@@ -188,10 +188,10 @@ Put a question, equation, diagram, or half-formed idea anywhere on the canvas an
 
 PenEcho keeps a small local runtime and only allocates `512 x 512` tiles where ink exists, so the huge logical canvas does not become a huge bitmap.
 
-## What's new in 0.8.2
+## What's new in 0.9.0
 
 - **Multiple AI connections with one-click switching.** Save up to ten API or CLI connections, use editable Kimi and MiniMax regional/Coding Plan presets, test a connection before use, and choose a different active connection on each client connected to the same PenEcho host. API and CLI changes apply immediately.
-- **Faster, more flexible Refine.** Write instructions anywhere in the visible viewport, then choose which nearby widget to improve. Refine sends the widget's editable source when available and uses a standard unified diff instead of regenerating the full widget, substantially reducing tokens and turnaround time while preserving confirmation and undo.
+- **Faster, more flexible Refine.** Write instructions anywhere in the visible viewport, then choose which nearby widget to improve. Refine sends the widget's editable source when available and uses a standard unified diff instead of regenerating the full widget, substantially reducing tokens and turnaround time while preserving confirmation and undo. Hand stays visually clean until an object is tapped to reveal its controls.
 - **True streaming API requests.** OpenAI- and Anthropic-compatible APIs now use end-to-end SSE streaming, so PenEcho can show response receipt immediately, avoid long buffered waits through gateways, and handle lengthy requests more reliably.
 - **Clear request progress and cancellation.** The top status area reports preparation, connection, waiting, streaming, validation, retries, and long-wait timeouts without shifting the canvas. During a request, the magic button becomes a stop control that cancels active work while preserving unsent Refine instructions.
 

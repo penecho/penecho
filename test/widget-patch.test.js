@@ -65,6 +65,43 @@ test("widget patch applies multiple exact hunks and preserves host identity and 
   assert.equal(result.copyText, SOURCE);
 });
 
+test("widget patch removes only exact repeated context between adjacent hunks", () => {
+  const widgetEdit = htmlEdit({
+      html:"start\none\nkeep-a\nkeep-b\ntwo\nend\n",
+      source:"",
+      sourceFormat:"",
+    }),
+    overlappingContext = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -1,4 +1,4 @@",
+      " start",
+      "-one",
+      "+ONE",
+      "+inserted",
+      " keep-a",
+      " keep-b",
+      "@@ -3,4 +3,4 @@",
+      " keep-a",
+      " keep-b",
+      "-two",
+      "+TWO",
+      " end",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(overlappingContext),widgetEdit);
+  assert.equal(result.html,"start\nONE\ninserted\nkeep-a\nkeep-b\nTWO\nend\n");
+
+  for (const invalidPatch of [
+    overlappingContext.replace(" keep-b\n-two", " keep-X\n-two"),
+    overlappingContext.replace(" keep-a\n keep-b\n-two", "-keep-a\n+KEEP-A\n keep-b\n-two"),
+  ]) {
+    const diagnostics = {};
+    assert.equal(commandFromWidgetPatch(patchCommand(invalidPatch),widgetEdit,diagnostics),null);
+    assert.equal(diagnostics.reason,"overlapping-hunk-context");
+  }
+});
+
 test("widget patch applies HTML and source files atomically", () => {
   const patch = [
     "--- a/widget.html",

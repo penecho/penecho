@@ -17,8 +17,6 @@
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (state.mode === "hand") {
-      const textBox = valid(point) ? textBoxAtPoint(point) : null;
-      if (textBox && editTextBox(textBox)) return;
       state.panGesture = {
         id: e.pointerId,
         last: { x: e.clientX, y: e.clientY },
@@ -106,6 +104,8 @@
     } catch {}
     calibrateScreenClientRatio(e, false);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const handPoint = state.mode === "hand" ? clientPoint(e) : null;
+    if (handPoint) beginHandObjectFocus(e, handPoint);
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
         touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
@@ -114,6 +114,7 @@
         if (state.mode === "pen") beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
       }
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         state.textTap = null;
         if (state.pendingGesture) state.pendingGesture = null;
@@ -151,9 +152,10 @@
         return;
       }
     }
-    const point = clientPoint(e);
+    const point = handPoint || clientPoint(e);
     const widgetResult = widgetRuntimeEnabled() && valid(point) ? widgetPointerHit(point, e.pointerType, false) : null;
     if (widgetResult && ["resize", "width", "height"].includes(widgetResult.hit)) {
+      refreshHandObjectToolbar();
       beginWidgetGesture(e, point, widgetResult);
       return;
     }
@@ -161,12 +163,14 @@
     const selectedImageResult = valid(point) ? imagePointerHit(point, e.pointerType, false) : null;
     if (selectedImageResult && selectedImageResult.hit !== "move") {
       if (state.selectedAnimationId) acceptAnimationEdit();
+      refreshHandObjectToolbar();
       beginImageGesture(e, point, selectedImageResult);
       return;
     }
     if (valid(point)) {
       const animationResult = animationPointerHit(point, e.pointerType);
       if (animationResult && animationResult.hit !== "move") {
+        refreshHandObjectToolbar();
         beginAnimationGesture(e, point, animationResult);
         return;
       }
@@ -180,6 +184,8 @@
     calibrateScreenClientRatio(e, true);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    updateHandObjectFocus(e);
+    if (state.mode === "hand" && e.pointerType !== "touch" && Number(e.buttons) === 0) updateHandObjectHover(clientPoint(e));
     updateCanvasPointerPreview(e);
     if (e.pointerType !== "touch") updateWidgetRefinePointer(clientPoint(e));
     if (state.pendingGesture?.id === e.pointerId) {
@@ -214,6 +220,7 @@
       } else return;
     }
     if (e.pointerType === "touch") {
+      if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         updateTouchGesture();
         return;
@@ -257,9 +264,17 @@
   });
   function end(e) {
     state.pointers.delete(e.pointerId);
+    finishHandObjectFocus(e);
     if (e.pointerType === "touch") {
       state.touches.delete(e.pointerId);
       finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
+    }
+    if (e.pointerType === "touch" && state.handGestureIncludesWidget) {
+      if (!state.touches.size && !state.handWidgetPointerIds.size) state.handGestureIncludesWidget = false;
+      state.touchGesture = null;
+      state.panGesture = null;
+      if (!state.touches.size) setNavigating(false);
+      return;
     }
     if (state.widgetGesture?.id === e.pointerId) {
       finishWidgetGesture(e);
@@ -328,11 +343,15 @@
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    updateHandObjectHover(null);
     if (!state.pointerPreview) return;
     state.pointerPreview = null;
     requestInteractionLayerRender();
   });
-  view.addEventListener("pointerleave", () => updateWidgetRefinePointer(null));
+  view.addEventListener("pointerleave", () => {
+    updateHandObjectHover(null);
+    updateWidgetRefinePointer(null);
+  });
   screen.addEventListener("contextmenu", (e) => e.preventDefault());
   view.addEventListener(
     "wheel",
@@ -401,6 +420,12 @@
       } else commitSelection();
     }
     if (state.mode === "hand" && mode !== "hand") {
+      hideHandObjectToolbar({ animate:false, all:true });
+      state.handHoverKey = null;
+      state.handPointerFocusKeys.clear();
+      state.handToolbarOperationPointers.clear();
+      state.handWidgetPointerIds.clear();
+      state.handGestureIncludesWidget = false;
       for (const editor of [...state.textEditors.values()]) void confirmTextEditor(editor);
       if (state.widgetEdit) acceptWidgetEdit();
       if (state.imageEdit) {
@@ -457,9 +482,43 @@
     if (item) deleteImage(item);
   };
   for (const button of [imagePlaceButton, imageMergeButton, imageDeleteButton]) {
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      refreshHandObjectToolbar();
+    });
     button.addEventListener("click", (event) => event.stopPropagation());
   }
+  function bindHandToolbarSurface(element, kind, currentObject) {
+    const currentKey = () => {
+      const object = currentObject();
+      return object ? handToolbarKey(kind, object.id) : "";
+    };
+    element.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "touch") return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, true);
+    });
+    element.addEventListener("pointerleave", (event) => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-hover:${event.pointerId}`, false);
+    });
+    element.addEventListener("pointerdown", (event) => {
+      const key = currentKey();
+      if (key) beginHandToolbarOperation(event.pointerId, key);
+    });
+    element.addEventListener("pointerup", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("pointercancel", (event) => finishHandToolbarOperation(event.pointerId));
+    element.addEventListener("focusin", () => {
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, true);
+    });
+    element.addEventListener("focusout", (event) => {
+      if (event.relatedTarget && element.contains(event.relatedTarget)) return;
+      const key = currentKey();
+      if (key) setHandToolbarHold(key, `${kind}-toolbar-focus`, false);
+    });
+  }
+  bindHandToolbarSurface(imageEditBar, "image", selectedImage);
   imagePickerButton.addEventListener("click", () => {
     if (state.imageImporting) return;
     if (selectionAIBusy()) {
@@ -580,12 +639,16 @@
   if (selectionTypesetButton) selectionTypesetButton.onclick = normalizeSelectionForAI;
   if (selectionDeleteButton) selectionDeleteButton.onclick = deleteSelection;
   if (selectionCancelButton) selectionCancelButton.onclick = () => cancelSelection();
-  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => event.stopPropagation()));
+  [animationPlayPause, animationRestart, animationDelete].forEach((button) => button.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    refreshHandObjectToolbar();
+  }));
   animationPlayPause.onclick = toggleSelectedAnimationPlayback;
   animationRestart.onclick = restartSelectedAnimation;
   animationDelete.onclick = deleteSelectedAnimation;
   animationControls.addEventListener("click", (event) => event.stopPropagation());
   animationControls.addEventListener("pointerdown", (event) => event.stopPropagation());
+  bindHandToolbarSurface(animationControls, "animation", selectedAnimation);
 
   document.querySelector("#penSize").oninput = (e) => {
     state.pen = +e.target.value;
@@ -796,21 +859,38 @@
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
+  document.querySelector("#historyProjectSelect").onchange = (event) => {
+    rememberSelectedServerProject(event.target.value);
+    renderSnapshotList();
+  };
+  document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
+    rememberSelectedServerProject(event.target.value);
+    renderSnapshotList();
+  };
+  document.querySelector("#historyProjectCreate").onclick = () => runSnapshotAction(createServerProject);
+  document.querySelector("#historyProjectDelete").onclick = () => runSnapshotAction(deleteSelectedServerProject);
   document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (input.checked) setSnapshotLocation(input.value);
     });
   });
-  document.querySelector("#newCanvasClose").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
-  document.querySelector("#newCanvasCancel").onclick = () => document.querySelector("#newCanvasDialog").close("cancel");
+  document.querySelector("#newCanvasClose").onclick = () => {
+    pendingCanvasTransition = null;
+    document.querySelector("#newCanvasDialog").close("cancel");
+  };
+  document.querySelector("#newCanvasCancel").onclick = () => {
+    pendingCanvasTransition = null;
+    document.querySelector("#newCanvasDialog").close("cancel");
+  };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
   document.querySelector("#textHelpDone").onclick = closeTextHelp;
   document.querySelector("#textHelpDialog").addEventListener("close", restoreTextEditorAfterHelp);
-  document.querySelector("#newDiscard").onclick = startBlankCanvas;
+  document.querySelector("#newDiscard").onclick = discardCanvasTransition;
   document.querySelector("#newSaveCopy").onclick = () => completeNewCanvas("new");
   document.querySelector("#newOverwrite").onclick = () => completeNewCanvas("overwrite");
   document.querySelector("#newCanvasDialog").addEventListener("cancel", (event) => {
     if (event.currentTarget.dataset.busy === "true") event.preventDefault();
+    else pendingCanvasTransition = null;
   });
   document.querySelector("#historyName").addEventListener("keydown", (event) => {
     if (event.key === "Enter") saveCurrentCanvas();

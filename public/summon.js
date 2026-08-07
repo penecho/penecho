@@ -18,6 +18,7 @@
       copyHeight:82,
       padding:12,
       viewportMargin:14,
+      overlapEpsilon:1e-6,
     });
 
   function clamp01(value) {
@@ -231,7 +232,7 @@
         for (const blocker of blockers) {
           const overlapWidth = Math.min(box.x + box.w, blocker.x + blocker.w) - Math.max(box.x, blocker.x),
             overlapHeight = Math.min(box.y + box.h, blocker.y + blocker.h) - Math.max(box.y, blocker.y);
-          if (overlapWidth > 0 && overlapHeight > 0)
+          if (overlapWidth > THINKING_LAYOUT.overlapEpsilon && overlapHeight > THINKING_LAYOUT.overlapEpsilon)
             score += overlapWidth * overlapHeight * Math.max(1, Number(blocker.weight) || 1);
         }
         return score;
@@ -268,13 +269,14 @@
           const merged = [];
           for (const interval of intervals) {
             const previous = merged[merged.length - 1];
-            if (previous && interval.start < previous.end) previous.end = Math.max(previous.end, interval.end);
+            if (previous && interval.start < previous.end - THINKING_LAYOUT.overlapEpsilon) previous.end = Math.max(previous.end, interval.end);
             else merged.push({ ...interval });
           }
           const gaps = [];
           let cursor = minLeft;
           for (const interval of merged) {
-            if (interval.start >= cursor) gaps.push({ start:cursor, end:interval.start });
+            if (interval.start + THINKING_LAYOUT.overlapEpsilon >= cursor)
+              gaps.push({ start:cursor, end:Math.max(cursor, interval.start) });
             cursor = Math.max(cursor, interval.end);
           }
           if (cursor <= maxLeft) gaps.push({ start:cursor, end:maxLeft });

@@ -79,6 +79,7 @@ const REQUEST_TRACE_DIR = path.join(LOG_DIR, "requests");
 const SHARED_CANVAS_DIRECTORY = STATE_DIRECTORY
   ? path.join(STATE_DIRECTORY, "canvases", "shared")
   : path.join(os.homedir(), ".penecho", "canvases", "shared");
+const SHARED_CANVAS_PROJECTS_FILE = path.join(SHARED_CANVAS_DIRECTORY, "projects.json");
 const MAX_LOG = 2 * 1024 * 1024;
 const MAX_SHARED_CANVAS_BYTES = 96 * 1024 * 1024;
 const MAX_SHARED_CANVASES = 200;
@@ -113,6 +114,8 @@ const PUBLIC_FETCH_MAX_REDIRECTS = 4;
 const PUBLIC_FETCH_MAX_CONCURRENT = 20;
 const PLUGIN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CANVAS_SNAPSHOT_ID_PATTERN = /^\d{10,16}-[a-zA-Z0-9-]{8,64}$/;
+const CANVAS_PROJECT_ID_PATTERN = /^project-[a-zA-Z0-9-]{8,64}$/;
+const DEFAULT_CANVAS_PROJECT_ID = "uncategorized";
 // These Markdown contracts ship with PenEcho. Files created through the local
 // authoring endpoint are deliberately outside this set and may be removed.
 const BUILTIN_PLUGIN_IDS = new Set([
@@ -783,18 +786,22 @@ function sharedCanvasFiles() {
       .map(entry=>entry.name.slice(0,-10));
   } catch { return []; }
 }
-function sharedCanvasMetadata(snapshot) {
+function sharedCanvasMetadata(snapshot, projectId = DEFAULT_CANVAS_PROJECT_ID, identity = snapshot) {
+  const logical=sharedCanvasLogicalSnapshot(snapshot,identity);
   return {
-    id:snapshot.id,
-    createdAt:snapshot.createdAt,
-    name:snapshot.name,
-    theme:snapshot.theme,
-    tileCount:snapshot.tiles.length,
-    animationCount:snapshot.animations.length,
-    widgetCount:snapshot.widgets.length,
-    textBoxCount:snapshot.textBoxes.length,
-    imageCount:snapshot.images.length,
-    preview:snapshot.preview,
+    version:snapshot.version??snapshot.bundleVersion??1,
+    id:logical.id,
+    createdAt:logical.createdAt,
+    updatedAt:logical.updatedAt||logical.createdAt,
+    name:logical.name,
+    theme:logical.theme,
+    projectId,
+    tileCount:logical.tiles.length,
+    animationCount:logical.animations.length,
+    widgetCount:logical.widgets.length,
+    textBoxCount:logical.textBoxes.length,
+    imageCount:logical.images.length,
+    preview:logical.preview,
   };
 }
 function validSnapshotDataUrl(value, allowedTypes, maximumBytes) {
@@ -803,19 +810,21 @@ function validSnapshotDataUrl(value, allowedTypes, maximumBytes) {
   if(!match||!allowedTypes.has(match[1].toLowerCase())||match[2].length>Math.ceil(maximumBytes/3)*4+4)return false;
   try{return Buffer.from(match[2],"base64").length<=maximumBytes}catch{return false}
 }
-function canonicalSharedCanvas(value) {
-  if(!value||typeof value!=="object"||Array.isArray(value)||value.version!==1||typeof value.id!=="string"||!CANVAS_SNAPSHOT_ID_PATTERN.test(value.id))return null;
+function canonicalSharedCanvasV1(value) {
+  const version=value?.version??value?.bundleVersion??1;
+  if(!value||typeof value!=="object"||Array.isArray(value)||version!==1||typeof value.id!=="string"||!CANVAS_SNAPSHOT_ID_PATTERN.test(value.id))return null;
   const createdAt=Number(value.createdAt),name=typeof value.name==="string"?value.name.trim().slice(0,48):"",
+    updatedAt=Number(value.updatedAt||createdAt),
     theme=["arcane","scifi","research","studio"].includes(value.theme)?value.theme:"studio",
     view=value.view&&[value.view.scale,value.view.panX,value.view.panY].every(Number.isFinite)
       ?{scale:Math.max(.03,Math.min(2,value.view.scale)),panX:value.view.panX,panY:value.view.panY,navigationLocked:value.view.navigationLocked===true}:null,
     animations=Array.isArray(value.animations)&&value.animations.length<=100?value.animations:null,
     widgets=Array.isArray(value.widgets)&&value.widgets.length<=100?value.widgets:null,
     textBoxes=value.textBoxes===undefined?[]:Array.isArray(value.textBoxes)&&value.textBoxes.length<=50?value.textBoxes:null,
-    images=Array.isArray(value.images)&&value.images.length<=100?value.images:null,
+    images=value.images===undefined?[]:Array.isArray(value.images)&&value.images.length<=100?value.images:null,
     tiles=Array.isArray(value.tiles)&&value.tiles.length<=1600?value.tiles:null;
-  if(!Number.isSafeInteger(createdAt)||createdAt<1||createdAt>Date.now()+86400000||!view||!animations||!widgets||!textBoxes||!images||!tiles)return null;
-  if(!validSnapshotDataUrl(value.preview,new Set(["image/png"]),2*1024*1024))return null;
+  if(!Number.isSafeInteger(createdAt)||createdAt<1||createdAt>Date.now()+86400000||!Number.isSafeInteger(updatedAt)||updatedAt<createdAt||updatedAt>Date.now()+86400000||!view||!animations||!widgets||!textBoxes||!images||!tiles)return null;
+  if(!validSnapshotDataUrl(value.preview,new Set(["image/png","image/webp"]),2*1024*1024))return null;
   const seenTiles=new Set();
   for(const tile of tiles) {
     if(!tile||typeof tile!=="object"||typeof tile.k!=="string"||!/^\d{1,2},\d{1,2}$/.test(tile.k)||seenTiles.has(tile.k)||!validSnapshotDataUrl(tile.data,new Set(["image/png"]),4*1024*1024))return null;
@@ -839,7 +848,7 @@ function canonicalSharedCanvas(value) {
   const serializedWidgets=JSON.stringify(widgets),serializedAnimations=JSON.stringify(animations),serializedTextBoxes=JSON.stringify(canonicalTextBoxes);
   if(Buffer.byteLength(serializedWidgets,"utf8")>5*1024*1024||Buffer.byteLength(serializedAnimations,"utf8")>2*1024*1024||Buffer.byteLength(serializedTextBoxes,"utf8")>256*1024)return null;
   return {
-    version:1,id:value.id,createdAt,name,theme,view,
+    version:1,id:value.id,createdAt,updatedAt,name,theme,view,
     animations,widgets,textBoxes:canonicalTextBoxes,
     images:images.map(image=>({
       id:image.id,x:Math.round(image.x),y:Math.round(image.y),w:Math.round(image.w),h:Math.round(image.h),
@@ -851,6 +860,146 @@ function canonicalSharedCanvas(value) {
     preview:value.preview,
   };
 }
+function plainObject(value) {
+  return value&&typeof value==="object"&&!Array.isArray(value)?value:null;
+}
+function bundleDataUrl(asset, allowedTypes, maximumBytes) {
+  if(!plainObject(asset)||typeof asset.contentType!=="string"||typeof asset.dataBase64!=="string")return null;
+  const contentType=asset.contentType.toLowerCase(),url=`data:${contentType};base64,${asset.dataBase64}`;
+  return validSnapshotDataUrl(url,allowedTypes,maximumBytes)?url:null;
+}
+function dataUrlParts(value) {
+  const match=/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value||"");
+  return match?{contentType:match[1].toLowerCase(),dataBase64:match[2]}:null;
+}
+function canvasBundleAssetKey(asset,index) {
+  const metadata=plainObject(asset?.metadata)||{};
+  if(asset?.kind==="preview")return "preview";
+  if(asset?.kind==="tile"&&typeof metadata.tileKey==="string")return `tile:${metadata.tileKey}`;
+  if(asset?.kind==="widget"&&typeof metadata.widgetId==="string")return `widget:${metadata.widgetId}`;
+  if(typeof metadata.resourceId==="string")return `resource:${metadata.resourceId}`;
+  if(typeof metadata.id==="string")return `${asset?.kind||"asset"}:${metadata.id}`;
+  return `${asset?.kind||"asset"}:${index}`;
+}
+function canvasBundleToV1(value, identity = value) {
+  if(!plainObject(value)||(value.version!==undefined&&value.version!==2)||value.bundleVersion!==2||value.mode!=="snapshot"||value.formatVersion!==1||!plainObject(value.manifest)||!Array.isArray(value.assets)||value.assets.length>4096)return null;
+  const manifest=value.manifest,seen=new Set(),tiles=[],widgets=[],images=[];
+  if(manifest.format!=="penecho-raster-tiles"||manifest.formatVersion!==1||manifest.tileSize!==512||manifest.canvasSize?.width!==CANVAS_SIZE||manifest.canvasSize?.height!==CANVAS_SIZE)return null;
+  let preview=null;
+  for(let index=0;index<value.assets.length;index++) {
+    const asset=value.assets[index],metadata=plainObject(asset?.metadata)||{},key=canvasBundleAssetKey(asset,index);
+    if(!plainObject(asset)||seen.has(key)||typeof asset.kind!=="string"||!plainObject(asset.metadata))return null;
+    seen.add(key);
+    if(asset.kind==="preview") {
+      if(preview)return null;
+      preview=bundleDataUrl(asset,new Set(["image/png","image/webp"]),2*1024*1024);
+      if(!preview)return null;
+    } else if(asset.kind==="tile") {
+      const data=bundleDataUrl(asset,new Set(["image/png"]),4*1024*1024);
+      if(!data||typeof metadata.tileKey!=="string")return null;
+      tiles.push({k:metadata.tileKey,data});
+    } else if(asset.kind==="widget") {
+      const data=bundleDataUrl(asset,new Set(["application/json"]),1024*1024);
+      if(!data||typeof metadata.widgetId!=="string")return null;
+      let widget;
+      try{widget=JSON.parse(Buffer.from(dataUrlParts(data).dataBase64,"base64").toString("utf8"))}catch{return null}
+      if(!plainObject(widget)||widget.id!==metadata.widgetId)return null;
+      widgets.push(widget);
+    } else if(asset.kind==="resource"&&metadata.resourceType==="image") {
+      const data=bundleDataUrl(asset,new Set(["image/png","image/jpeg","image/webp","image/gif"]),32*1024*1024);
+      if(!data||typeof metadata.resourceId!=="string")return null;
+      images.push({...metadata,id:metadata.resourceId,data});
+    } else {
+      const data=bundleDataUrl(asset,new Set([String(asset.contentType||"").toLowerCase()]),32*1024*1024);
+      if(!data)return null;
+    }
+  }
+  if(!preview)return null;
+  const metadata=plainObject(identity)||{},id=metadata.id??value.id??manifest.id,
+    createdAt=metadata.createdAt??value.createdAt??manifest.createdAt,
+    updatedAt=metadata.updatedAt??value.updatedAt??manifest.updatedAt??createdAt,
+    name=metadata.name??value.name??manifest.name??"";
+  return {
+    version:1,
+    id,createdAt,updatedAt,name,
+    theme:manifest.theme,
+    view:manifest.view,
+    animations:manifest.animations||[],
+    widgets,
+    textBoxes:manifest.textBoxes||[],
+    images,
+    tiles,
+    preview,
+  };
+}
+function v1ToCanvasBundle(snapshot, source={}) {
+  const coreKinds=new Set(["preview","tile","widget"]),
+    extensionAssets=Array.isArray(source.assets)?source.assets.filter(asset=>!coreKinds.has(asset?.kind)&&!(asset?.kind==="resource"&&asset?.metadata?.resourceType==="image")):[],
+    preview=dataUrlParts(snapshot.preview);
+  return {
+    version:2,
+    bundleVersion:2,
+    mode:"snapshot",
+    formatVersion:1,
+    extensions:plainObject(source.extensions)||{},
+    manifest:{
+      format:"penecho-raster-tiles",
+      formatVersion:1,
+      canvasSize:{width:CANVAS_SIZE,height:CANVAS_SIZE},
+      tileSize:512,
+      theme:snapshot.theme,
+      view:snapshot.view,
+      animations:snapshot.animations,
+      textBoxes:snapshot.textBoxes,
+      savedAt:new Date(snapshot.updatedAt||snapshot.createdAt).toISOString(),
+      extensions:plainObject(source.manifest?.extensions)||{},
+    },
+    assets:[
+      ...snapshot.tiles.map(tile=>{const data=dataUrlParts(tile.data);return {kind:"tile",contentType:data.contentType,metadata:{tileKey:tile.k},dataBase64:data.dataBase64}}),
+      ...snapshot.widgets.map(widget=>({kind:"widget",contentType:"application/json",metadata:{widgetId:widget.id,...(widget.pluginId?{pluginId:widget.pluginId}:{})},dataBase64:Buffer.from(JSON.stringify(widget),"utf8").toString("base64")})),
+      ...snapshot.images.map(image=>{const data=dataUrlParts(image.data),{data:ignored,...metadata}=image;return {kind:"resource",contentType:data.contentType,metadata:{resourceId:image.id,resourceType:"image",...metadata},dataBase64:data.dataBase64}}),
+      ...extensionAssets,
+      {kind:"preview",contentType:preview.contentType,metadata:{width:640,height:426},dataBase64:preview.dataBase64},
+    ],
+  };
+}
+function sharedCanvasLogicalSnapshot(snapshot, identity = snapshot) {
+  return (snapshot?.version??snapshot?.bundleVersion??1)===2?canvasBundleToV1(snapshot,identity):snapshot;
+}
+function canonicalSharedCanvas(value, identity = value) {
+  const version=value?.version??value?.bundleVersion??1;
+  if(version===1)return canonicalSharedCanvasV1({...value,version:1});
+  if(version!==2)return null;
+  const logical=canvasBundleToV1(value,identity),canonical=logical&&canonicalSharedCanvasV1(logical);
+  return canonical?v1ToCanvasBundle(canonical,value):null;
+}
+function sharedCanvasProjects() {
+  const fallback={id:DEFAULT_CANVAS_PROJECT_ID,name:"Uncategorized",system:true,createdAt:0};
+  try {
+    const stored=JSON.parse(fs.readFileSync(SHARED_CANVAS_PROJECTS_FILE,"utf8")),projects=Array.isArray(stored?.projects)?stored.projects:[];
+    const valid=projects.filter(project=>plainObject(project)&&CANVAS_PROJECT_ID_PATTERN.test(project.id)&&typeof project.name==="string"&&project.name.trim())
+      .slice(0,99).map(project=>({id:project.id,name:project.name.trim().slice(0,48),system:false,createdAt:Number.isSafeInteger(project.createdAt)?project.createdAt:0}));
+    return [fallback,...valid];
+  } catch{return [fallback]}
+}
+function saveSharedCanvasProjects(projects) {
+  atomicJsonWrite(SHARED_CANVAS_PROJECTS_FILE,{version:1,projects:projects.filter(project=>!project.system).map(project=>({id:project.id,name:project.name,createdAt:project.createdAt}))});
+}
+function sharedCanvasProject(id) {
+  return sharedCanvasProjects().find(project=>project.id===id)||null;
+}
+function canonicalSharedCanvasMetadata(item,id) {
+  if(!plainObject(item)||item.id!==id||!Number.isSafeInteger(item.createdAt)||!validSnapshotDataUrl(item.preview,new Set(["image/png","image/webp"]),2*1024*1024))return null;
+  const updatedAt=Number.isSafeInteger(item.updatedAt)?item.updatedAt:item.createdAt,
+    count=(key)=>item[key]===undefined?0:item[key];
+  if(updatedAt<item.createdAt||["tileCount","animationCount","widgetCount","textBoxCount","imageCount"].some(key=>!Number.isSafeInteger(count(key))||count(key)<0))return null;
+  return {
+    version:item.version===2?2:1,id,createdAt:item.createdAt,updatedAt,
+    name:typeof item.name==="string"?item.name.slice(0,48):"",theme:["arcane","scifi","research","studio"].includes(item.theme)?item.theme:"studio",
+    projectId:sharedCanvasProject(item.projectId)?item.projectId:DEFAULT_CANVAS_PROJECT_ID,
+    tileCount:count("tileCount"),animationCount:count("animationCount"),widgetCount:count("widgetCount"),textBoxCount:count("textBoxCount"),imageCount:count("imageCount"),preview:item.preview,
+  };
+}
 function listSharedCanvases() {
   const items=[];
   for(const id of sharedCanvasFiles()) {
@@ -858,11 +1007,47 @@ function listSharedCanvases() {
     try {
       const stat=fs.statSync(file);
       if(!stat.isFile()||stat.size>3*1024*1024)continue;
-      const item=JSON.parse(fs.readFileSync(file,"utf8"));
-      if(item?.id===id)items.push(item);
+      const item=canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(file,"utf8")),id);
+      if(item)items.push(item);
     } catch {}
   }
-  return items.sort((a,b)=>b.createdAt-a.createdAt);
+  return items.sort((a,b)=>b.updatedAt-a.updatedAt);
+}
+function listSharedCanvasProjects() {
+  const canvases=listSharedCanvases();
+  return sharedCanvasProjects().map(project=>{
+    const members=canvases.filter(canvas=>canvas.projectId===project.id);
+    return {...project,canvasCount:members.length,updatedAt:members.reduce((latest,canvas)=>Math.max(latest,canvas.updatedAt),project.createdAt||0)};
+  }).sort((a,b)=>a.system?-1:b.system?1:b.updatedAt-a.updatedAt||a.name.localeCompare(b.name));
+}
+function createSharedCanvasProject(value) {
+  const projects=sharedCanvasProjects(),name=typeof value?.name==="string"?value.name.trim().slice(0,48):"";
+  if(!name)throw Object.assign(new Error("Project name is required."),{status:400});
+  if(projects.length>=100)throw Object.assign(new Error("The PenEcho server can retain up to 100 canvas projects."),{status:409});
+  const project={id:`project-${crypto.randomUUID()}`,name,system:false,createdAt:Date.now()};
+  projects.push(project);
+  saveSharedCanvasProjects(projects);
+  return project;
+}
+function moveSharedCanvas(id,projectId) {
+  if(!sharedCanvasProject(projectId))throw Object.assign(new Error("Canvas project was not found."),{status:404});
+  const metadataFile=canvasSnapshotPath(id,true);
+  if(!metadataFile)throw Object.assign(new Error("Invalid canvas id."),{status:400});
+  let metadata;
+  try{metadata=canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(metadataFile,"utf8")),id)}catch{}
+  if(!metadata)throw Object.assign(new Error("Canvas was not found."),{status:404});
+  metadata.projectId=projectId;
+  atomicJsonWrite(metadataFile,metadata);
+  return metadata;
+}
+function deleteSharedCanvasProject(id) {
+  if(id===DEFAULT_CANVAS_PROJECT_ID)throw Object.assign(new Error("The Uncategorized project cannot be deleted."),{status:409});
+  const projects=sharedCanvasProjects(),project=projects.find(item=>item.id===id);
+  if(!project)throw Object.assign(new Error("Canvas project was not found."),{status:404});
+  let moved=0;
+  for(const canvas of listSharedCanvases())if(canvas.projectId===id){moveSharedCanvas(canvas.id,DEFAULT_CANVAS_PROJECT_ID);moved++}
+  saveSharedCanvasProjects(projects.filter(item=>item.id!==id));
+  return {id,movedTo:DEFAULT_CANVAS_PROJECT_ID,movedCanvasCount:moved};
 }
 function readSharedCanvas(id) {
   const file=canvasSnapshotPath(id);
@@ -870,28 +1055,49 @@ function readSharedCanvas(id) {
   let stat;
   try{stat=fs.statSync(file)}catch{throw Object.assign(new Error("Canvas was not found."),{status:404})}
   if(!stat.isFile()||stat.size>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Stored canvas is invalid."),{status:500});
-  const snapshot=canonicalSharedCanvas(JSON.parse(fs.readFileSync(file,"utf8")));
+  let metadata=null;
+  try{metadata=canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(canvasSnapshotPath(id,true),"utf8")),id)}catch{}
+  const snapshot=canonicalSharedCanvas(JSON.parse(fs.readFileSync(file,"utf8")),metadata||{});
   if(!snapshot)throw Object.assign(new Error("Stored canvas is invalid."),{status:500});
-  return snapshot;
+  const details=metadata||sharedCanvasMetadata(snapshot,DEFAULT_CANVAS_PROJECT_ID);
+  return snapshot.bundleVersion===2
+    ?{...snapshot,id,createdAt:details.createdAt,updatedAt:details.updatedAt,name:details.name,projectId:details.projectId}
+    :{...snapshot,projectId:metadata?.projectId||DEFAULT_CANVAS_PROJECT_ID};
 }
 function saveSharedCanvas(value, overwriteId = null) {
-  const snapshot=canonicalSharedCanvas(value);
+  let existingMetadata=null;
+  if(overwriteId)try{existingMetadata=canonicalSharedCanvasMetadata(JSON.parse(fs.readFileSync(canvasSnapshotPath(overwriteId,true),"utf8")),overwriteId)}catch{}
+  const now=Date.now(),suppliedId=value?.id??value?.manifest?.id,
+    suppliedCreatedAt=Number(value?.createdAt??value?.manifest?.createdAt),
+    suppliedUpdatedAt=Number(value?.updatedAt??value?.manifest?.updatedAt),
+    identity={
+      id:overwriteId||suppliedId||`${now}-${crypto.randomUUID()}`,
+      createdAt:existingMetadata?.createdAt||(Number.isSafeInteger(suppliedCreatedAt)?suppliedCreatedAt:now),
+      updatedAt:Number.isSafeInteger(suppliedUpdatedAt)?suppliedUpdatedAt:now,
+      name:typeof value?.name==="string"?value.name:existingMetadata?.name||"",
+    };
+  if(overwriteId&&suppliedId&&suppliedId!==overwriteId)throw Object.assign(new Error("Canvas id does not match the request."),{status:400});
+  if(identity.updatedAt<identity.createdAt)identity.updatedAt=now;
+  const snapshot=canonicalSharedCanvas(value,identity);
   if(!snapshot)throw Object.assign(new Error("Invalid shared canvas snapshot."),{status:400});
-  if(overwriteId&&overwriteId!==snapshot.id)throw Object.assign(new Error("Canvas id does not match the request."),{status:400});
-  const file=canvasSnapshotPath(snapshot.id),metadataFile=canvasSnapshotPath(snapshot.id,true),
+  const logical=sharedCanvasLogicalSnapshot(snapshot,identity);
+  if(overwriteId&&overwriteId!==logical.id)throw Object.assign(new Error("Canvas id does not match the request."),{status:400});
+  const file=canvasSnapshotPath(logical.id),metadataFile=canvasSnapshotPath(logical.id,true),
     exists=fs.existsSync(file);
   if(overwriteId&&!exists)throw Object.assign(new Error("Canvas was not found."),{status:404});
   if(!overwriteId&&exists)throw Object.assign(new Error("A canvas with this id already exists."),{status:409});
   if(!exists&&sharedCanvasFiles().length>=MAX_SHARED_CANVASES)throw Object.assign(new Error(`The PenEcho server can retain up to ${MAX_SHARED_CANVASES} shared canvases.`),{status:409});
   const serialized=JSON.stringify(snapshot);
   if(Buffer.byteLength(serialized,"utf8")>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Shared canvas is too large."),{status:413});
+  const requestedProjectId=typeof value.projectId==="string"?value.projectId:existingMetadata?.projectId||DEFAULT_CANVAS_PROJECT_ID;
+  if(!sharedCanvasProject(requestedProjectId))throw Object.assign(new Error("Canvas project was not found."),{status:404});
   atomicJsonWrite(file,snapshot);
-  try{atomicJsonWrite(metadataFile,sharedCanvasMetadata(snapshot))}
+  try{atomicJsonWrite(metadataFile,sharedCanvasMetadata(snapshot,requestedProjectId,identity))}
   catch(error){
     if(!exists)try{fs.unlinkSync(file)}catch{}
     throw error;
   }
-  return sharedCanvasMetadata(snapshot);
+  return sharedCanvasMetadata(snapshot,requestedProjectId,identity);
 }
 function deleteSharedCanvas(id) {
   const file=canvasSnapshotPath(id),metadataFile=canvasSnapshotPath(id,true);
@@ -1661,7 +1867,7 @@ Every hunk must be based on the original content of its own file. Before returni
 - exact --- a/<listed-path> and +++ b/<listed-path> headers;
 - complete @@ -oldStart,oldCount +newStart,newCount @@ headers;
 - copy every context line and the full text after each minus marker verbatim from the original file; keep the leading space or minus as the diff marker and preserve every original indentation, sign and other character after it; never reconstruct or normalize removed lines, and compare each one character-for-character before returning;
-- counts match the hunk body; hunks are ordered, non-overlapping and independent; include at least three unchanged context lines when available;
+- counts match the hunk body; hunks are ordered, non-overlapping and independent; include at least three unchanged context lines when available. If nearby edits would produce overlapping or touching context, combine them into one hunk. Never repeat an original line across two hunks;
 - no unlisted files, full-file replacement, Markdown fences, diff --git/index metadata, wrapper headers or footers, rename/create/delete operations or prose. Return the bare unified diff only.
 
 Example only when all three listed files need the same semantic change:
@@ -1886,6 +2092,13 @@ function traceAttemptResponse(trace, attempt, model) {
     if(!record)return;
     record.completedAt=new Date().toISOString();
     record.response={provider:model.provider,model:model.model,status:model.status,upstream:model.upstream||null,rawContent:model.content,parsed:JSON.parse(JSON.stringify(model.result))};
+  });
+}
+function traceAttemptLocalValidation(trace, attempt, accepted, reason = null) {
+  updateRequestTrace(trace,data=>{
+    const record=data.attempts.find(item=>item.attempt===attempt);
+    if(!record)return;
+    record.localValidation={accepted:Boolean(accepted),reason:accepted?null:String(reason||"model-command-rejected")};
   });
 }
 function traceErrorDetails(error) {
@@ -2186,8 +2399,8 @@ function filterWidgetEditCommands(commands, widgetEdit) {
   const widget = commands[0];
   return commands.length === 1 && widget?.tool === widgetEdit.widgetType && widget.pluginId === widgetEdit.pluginId ? [widget] : [];
 }
-function resolveModelWidgetEditCommands(result, widgetEdit) {
-  return resolveWidgetEditPatchCommands(normalizeCommands(result), widgetEdit);
+function resolveModelWidgetEditCommands(result, widgetEdit, diagnostics = null) {
+  return resolveWidgetEditPatchCommands(normalizeCommands(result), widgetEdit, diagnostics);
 }
 function commandsForAction(result, action) {
   const commands=normalizeCommands(result);
@@ -2614,6 +2827,29 @@ const server = http.createServer(async (req, res) => {
       res.removeListener("close", abortForDisconnect);
     }
   }
+  const sharedCanvasProjectMatch=/^\/api\/canvas-projects\/(project-[a-zA-Z0-9-]{8,64})$/.exec(url.pathname),
+    sharedCanvasMoveMatch=/^\/api\/canvases\/(\d{10,16}-[a-zA-Z0-9-]{8,64})\/project$/.exec(url.pathname);
+  if(url.pathname==="/api/canvas-projects"||sharedCanvasProjectMatch||sharedCanvasMoveMatch) {
+    try {
+      const mutation=req.method!=="GET",authorizationError=mutation?browserRequestError(req):sharedCanvasReadError(req);
+      if(authorizationError)return send(res,403,{error:authorizationError});
+      if(req.method==="GET"&&url.pathname==="/api/canvas-projects")return send(res,200,{projects:listSharedCanvasProjects()});
+      if(req.method==="POST"&&url.pathname==="/api/canvas-projects") {
+        if(!isJsonRequest(req))return send(res,415,{error:"Canvas project storage requires application/json."});
+        return send(res,201,{project:createSharedCanvasProject(await readJson(req,64*1024))});
+      }
+      if(req.method==="DELETE"&&sharedCanvasProjectMatch)return send(res,200,{project:deleteSharedCanvasProject(sharedCanvasProjectMatch[1])});
+      if(req.method==="PUT"&&sharedCanvasMoveMatch) {
+        if(!isJsonRequest(req))return send(res,415,{error:"Canvas project storage requires application/json."});
+        const input=await readJson(req,64*1024);
+        return send(res,200,{canvas:moveSharedCanvas(sharedCanvasMoveMatch[1],input?.projectId)});
+      }
+      return send(res,405,{error:"Method Not Allowed"});
+    } catch(error) {
+      const status=Number.isInteger(error?.status)?error.status:error?.message==="Request too large"?413:400;
+      return send(res,status,{error:error?.message||"Unable to access the PenEcho server canvas project."});
+    }
+  }
   const sharedCanvasMatch=/^\/api\/canvases\/(\d{10,16}-[a-zA-Z0-9-]{8,64})$/.exec(url.pathname);
   if(url.pathname==="/api/canvases"||sharedCanvasMatch) {
     try {
@@ -2866,18 +3102,22 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
       let model=await requestModel();
       if (providerSnapshot.local) ensureCurrentLocalRequest(localRun);
       saveLatestModelExchange(requestId,attempts,modelInput,"",model);
-      const pluginCommandContext={changedBox:payload.changedBox,widgetEdit:payload.widgetEdit};
-      model.result.commands=filterWidgetEditCommands(filterCapabilityCommands(resolveModelWidgetEditCommands(model.result,payload.widgetEdit),payload.animationEnabled,payload.plugins,Boolean(payload.widgetEdit),modelInput.widgetGeometry,pluginCommandContext),payload.widgetEdit);
+      const pluginCommandContext={changedBox:payload.changedBox,widgetEdit:payload.widgetEdit},widgetPatchValidation={};
+      model.result.commands=filterWidgetEditCommands(filterCapabilityCommands(resolveModelWidgetEditCommands(model.result,payload.widgetEdit,widgetPatchValidation),payload.animationEnabled,payload.plugins,Boolean(payload.widgetEdit),modelInput.widgetGeometry,pluginCommandContext),payload.widgetEdit);
+      if(payload.widgetEdit)traceAttemptLocalValidation(requestTrace,attempts,model.result.commands.length>0,widgetPatchValidation.reason);
       const invalidTextLayout=hasInvalidTextLayout(model.result),invalidDraw=hasInvalidDrawCommand(model.result),manualEmpty=payload.userAction!=="auto"&&commandsForAction(model.result,payload.userAction).length===0,plotMissing=payload.userAction==="plot"&&!hasVisualCommand(model.result);
       if(payload.userAction!=="normalize"&&(invalidTextLayout||invalidDraw||manualEmpty||plotMissing)){
-        const reason=invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
+        const reason=payload.widgetEdit&&manualEmpty?widgetPatchValidation.reason||"widget-patch-rejected":invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
         log({type:"ai-retry",requestId,ip,action:payload.userAction,reason});
         const retry=payload.widgetEdit?"Your previous widget patch was missing or failed strict validation. Re-read the original virtual files and rebuild exactly one widget_patch using the supplied widgetEdit.patchFiles manifest. Copy every context line and the full text after each minus marker verbatim from the original, including every sign and indentation character; compare every removed line character-for-character before returning. Emit each path under exactly one ---/+++ header pair with all its hunks below it. Verify exact listed paths, standard file headers, complete hunk headers, correct counts, and ordered non-overlapping hunks all based on the original files. Return the bare unified diff inside the widget_patch command with no prose, Markdown fences, diff metadata, wrapper headers or footers, unlisted files, full widget command or second command.":invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild it once and verify that types and items have equal lengths, every coordinate is an integer, each item matches the documented native draw encoding, and all geometry stays inside the canvas. Keep native draw to about 10 or fewer basic primitives or line segments; use General HTML SVG instead if the visual is larger or dynamic.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For another visual, use native draw only when it is a very simple static sketch of about 10 or fewer basic primitives or line segments; otherwise return one General HTML html_widget with inline SVG. Do not answer with prose or draw_formula alone.":manualEmpty?MANUAL_EMPTY_RETRY:REINSPECTION_RETRY;
         model=await requestModel(retry);
         if (providerSnapshot.local) ensureCurrentLocalRequest(localRun);
         saveLatestModelExchange(requestId,attempts,modelInput,retry,model);
-        model.result.commands=filterWidgetEditCommands(filterCapabilityCommands(resolveModelWidgetEditCommands(model.result,payload.widgetEdit),payload.animationEnabled,payload.plugins,Boolean(payload.widgetEdit),modelInput.widgetGeometry,pluginCommandContext),payload.widgetEdit);
+        const retryWidgetPatchValidation={};
+        model.result.commands=filterWidgetEditCommands(filterCapabilityCommands(resolveModelWidgetEditCommands(model.result,payload.widgetEdit,retryWidgetPatchValidation),payload.animationEnabled,payload.plugins,Boolean(payload.widgetEdit),modelInput.widgetGeometry,pluginCommandContext),payload.widgetEdit);
+        if(payload.widgetEdit)traceAttemptLocalValidation(requestTrace,attempts,model.result.commands.length>0,retryWidgetPatchValidation.reason);
         if(payload.widgetEdit&&model.result.commands.length===0){
+          log({type:"ai-command-rejected",requestId,ip,reason:retryWidgetPatchValidation.reason||"widget-patch-rejected",attempt:attempts});
           const error=new Error("Model returned a widget patch that failed strict validation after retry.");
           error.name="ModelWidgetPatchError";
           throw error;

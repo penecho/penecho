@@ -306,6 +306,28 @@ function validSharedCanvas(id = `${Date.now()}-123e4567-e89b-12d3-a456-426614174
   };
 }
 
+function validSharedCanvasBundle(id = `${Date.now()}-123e4567-e89b-12d3-a456-426614174200`, overrides = {}) {
+  const createdAt=Date.now(),widget={id:"widget-1",pluginId:"general",widgetType:"html_widget",html:"<!doctype html><p>Portable</p>"};
+  return {
+    version:2,
+    bundleVersion:2,
+    mode:"snapshot",
+    formatVersion:1,
+    extensions:{"example.test":{portable:true}},
+    id,createdAt,updatedAt:createdAt,name:"Portable bundle",
+    manifest:{
+      format:"penecho-raster-tiles",formatVersion:1,canvasSize:{width:20000,height:20000},tileSize:512,theme:"studio",
+      view:{scale:.5,panX:120,panY:240,navigationLocked:false},animations:[],textBoxes:[],savedAt:new Date(createdAt).toISOString(),extensions:{},
+    },
+    assets:[
+      {kind:"preview",contentType:"image/png",metadata:{width:1,height:1},dataBase64:PNG.split(",",2)[1]},
+      {kind:"tile",contentType:"image/png",metadata:{tileKey:"0,0"},dataBase64:PNG.split(",",2)[1]},
+      {kind:"widget",contentType:"application/json",metadata:{widgetId:widget.id},dataBase64:Buffer.from(JSON.stringify(widget)).toString("base64")},
+    ],
+    ...overrides,
+  };
+}
+
 function weatherPluginDescriptor() {
   return {
     id:"weather",
@@ -1008,7 +1030,7 @@ test("PIN authentication leaves the API provider request behavior unchanged", { 
 test("shared PenEcho server canvases support authorized metadata-first CRUD", { timeout:20000 }, async () => {
   const stateDir=testStateDir({}),
     {child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
-    snapshot=validSharedCanvas(undefined,{view:{scale:0.5,panX:120,panY:240,navigationLocked:true}}),
+    snapshot=validSharedCanvas(undefined,{version:undefined,view:{scale:0.5,panX:120,panY:240,navigationLocked:true}}),
     mutationHeaders={"Content-Type":"application/json",Origin:origin};
   try {
     const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers:mutationHeaders,body:JSON.stringify(snapshot)}),
@@ -1032,6 +1054,7 @@ test("shared PenEcho server canvases support authorized metadata-first CRUD", { 
     assert.equal(loaded.status,200);
     assert.deepEqual(loadedBody.canvas.tiles,snapshot.tiles);
     assert.deepEqual(loadedBody.canvas.widgets,[]);
+    assert.equal(loadedBody.canvas.version,1);
     assert.equal(loadedBody.canvas.view.navigationLocked,true);
 
     const changed={...snapshot,name:"Updated shared design",createdAt:Date.now(),view:{scale:0.5,panX:120,panY:240}};
@@ -1054,6 +1077,66 @@ test("shared PenEcho server canvases support authorized metadata-first CRUD", { 
   } finally {
     await stopServer(child);
   }
+});
+
+test("shared canvas v2 is one portable bundle and server projects move without rewriting it", { timeout:20000 }, async () => {
+  const stateDir=testStateDir({}),{child,origin}=await startServer(serverEnv({PENECHO_STATE_DIR:stateDir})),
+    headers={"Content-Type":"application/json",Origin:origin},bundle=validSharedCanvasBundle();
+  try {
+    const initialProjects=await fetch(`${origin}/api/canvas-projects`).then(response=>response.json());
+    assert.deepEqual(initialProjects.projects.map(project=>project.id),["uncategorized"]);
+    const createdProjectResponse=await fetch(`${origin}/api/canvas-projects`,{method:"POST",headers,body:JSON.stringify({name:"Research"})}),
+      createdProject=(await createdProjectResponse.json()).project;
+    assert.equal(createdProjectResponse.status,201);
+    assert.match(createdProject.id,/^project-/);
+
+    const created=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify({...bundle,projectId:createdProject.id})}),
+      createdBody=await created.json();
+    assert.equal(created.status,201,JSON.stringify(createdBody));
+    assert.equal(createdBody.canvas.version,2);
+    assert.equal(createdBody.canvas.projectId,createdProject.id);
+    assert.equal(createdBody.canvas.widgetCount,1);
+
+    const bundleFile=path.join(stateDir,"canvases","shared",`${bundle.id}.json`),
+      stored=JSON.parse(await fs.promises.readFile(bundleFile,"utf8")),beforeMove=await fs.promises.readFile(bundleFile,"utf8");
+    assert.equal(stored.version,2);
+    assert.equal(stored.bundleVersion,2);
+    assert.equal(stored.assets.filter(asset=>asset.kind==="widget").length,1);
+    assert.equal(Object.hasOwn(stored,"projectId"),false);
+    assert.equal(Object.hasOwn(stored,"id"),false);
+    assert.deepEqual(stored.extensions,bundle.extensions);
+    assert.deepEqual(stored.manifest.canvasSize,{width:20000,height:20000});
+
+    const loaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}`).then(response=>response.json());
+    assert.equal(loaded.canvas.version,2);
+    assert.equal(loaded.canvas.id,bundle.id);
+    assert.equal(loaded.canvas.projectId,createdProject.id);
+    assert.equal(loaded.canvas.assets.find(asset=>asset.kind==="widget").metadata.widgetId,"widget-1");
+
+    const moved=await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}/project`,{method:"PUT",headers,body:JSON.stringify({projectId:"uncategorized"})});
+    assert.equal(moved.status,200,await moved.text());
+    assert.equal(await fs.promises.readFile(bundleFile,"utf8"),beforeMove);
+
+    await fetch(`${origin}/api/canvases/${encodeURIComponent(bundle.id)}/project`,{method:"PUT",headers,body:JSON.stringify({projectId:createdProject.id})});
+    const removed=await fetch(`${origin}/api/canvas-projects/${encodeURIComponent(createdProject.id)}`,{method:"DELETE",headers:{Origin:origin}}),removedBody=await removed.json();
+    assert.equal(removed.status,200,JSON.stringify(removedBody));
+    assert.equal(removedBody.project.movedCanvasCount,1);
+    const listed=await fetch(`${origin}/api/canvases`).then(response=>response.json());
+    assert.equal(listed.canvases[0].projectId,"uncategorized");
+    assert.equal(await fs.promises.readFile(bundleFile,"utf8"),beforeMove);
+
+    const cloudBundle=structuredClone(bundle);
+    for(const key of ["version","id","createdAt","updatedAt","name"])delete cloudBundle[key];
+    const importedResponse=await fetch(`${origin}/api/canvases`,{method:"POST",headers,body:JSON.stringify(cloudBundle)}),
+      imported=(await importedResponse.json()).canvas;
+    assert.equal(importedResponse.status,201);
+    assert.match(imported.id,/^\d{13}-[a-f0-9-]{36}$/);
+    assert.equal(imported.version,2);
+    assert.equal(imported.projectId,"uncategorized");
+    const importedBundle=await fetch(`${origin}/api/canvases/${encodeURIComponent(imported.id)}`).then(response=>response.json());
+    assert.equal(importedBundle.canvas.manifest.format,"penecho-raster-tiles");
+    assert.equal(importedBundle.canvas.assets.find(asset=>asset.kind==="widget").metadata.widgetId,"widget-1");
+  } finally { await stopServer(child); }
 });
 
 test("shared PenEcho server canvases retain up to one hundred widgets, images, and animations", { timeout:20000 }, async () => {
@@ -1656,6 +1739,7 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?File names, extensions and file count are not fixed/);
     assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
     assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
+    assert.match(modelInput.widgetEditPolicy, /nearby edits would produce overlapping or touching context[\s\S]*?Never repeat an original line across two hunks/);
     assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?bare unified diff only/);
     assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
     assert.match(modelInput.widgetEditPolicy, /newly added or replaced HTML[\s\S]*?one long or minified line[\s\S]*?below 160 characters/);
@@ -1765,6 +1849,61 @@ test("widget refinement applies an exact uniquely located patch without a model 
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("widget refinement traces a strict overlapping-hunk rejection before retry", { timeout:20000 }, async () => {
+  const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-overlapping-hunk-trace-")),
+    patch=[
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -2,4 +2,4 @@",
+      " <main>",
+      "-one",
+      "+ONE",
+      " keep-a",
+      " keep-b",
+      "@@ -4,4 +4,4 @@",
+      " keep-a",
+      " keep-X",
+      "-two",
+      "+TWO",
+      " </main>",
+      "",
+    ].join("\n"),
+    upstream=await startApiServer(JSON.stringify({intent:"answer",commands:[{tool:"widget_patch",patch}]})),
+    running=await startServer(apiServerEnv(upstream.origin,{PENECHO_STATE_DIR:directory,PENECHO_REQUEST_TRACE:"true",PENECHO_AI_IMAGE_FORMAT:"png"})),
+    payload=validPayload();
+  payload.trigger="manual";
+  payload.userAction="answer";
+  payload.plugins=[builtInPluginDescriptor("general")];
+  payload.widgetEdit={
+    mode:"replace",
+    widgetType:"html_widget",
+    pluginId:"general",
+    title:"Existing widget",
+    instructionMode:"nearby-dirty",
+    box:{x:120,y:240,w:1200,h:700},
+    html:"<!doctype html>\n<main>\none\nkeep-a\nkeep-b\ntwo\n</main>\n",
+    sourceFormat:"html",
+    sourceMirrorsHtml:true,
+    refreshSeconds:0,
+  };
+  try {
+    const response=await fetch(`${running.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
+      body=await response.json(),root=path.join(directory,"logs","requests"),
+      name=(await fs.promises.readdir(root)).find(entry=>entry.endsWith(body.requestId)),
+      trace=JSON.parse(await fs.promises.readFile(path.join(root,name,"trace.json"),"utf8"));
+    assert.equal(response.status,502);
+    assert.equal(trace.attempts.length,2);
+    assert.deepEqual(trace.attempts.map(attempt=>attempt.localValidation),[
+      {accepted:false,reason:"overlapping-hunk-context"},
+      {accepted:false,reason:"overlapping-hunk-context"},
+    ]);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+    await fs.promises.rm(directory,{recursive:true,force:true});
   }
 });
 

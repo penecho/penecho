@@ -74,7 +74,7 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Speichere Schnappschüsse auf diesem Gerät oder dem PenEcho-Server und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
-## Neu in Version 0.8.2
+## Neu in Version 0.9.0
 
 - **Mehrere KI-Verbindungen mit Ein-Klick-Wechsel.** Speichere bis zu zehn API- oder CLI-Verbindungen, nutze bearbeitbare Kimi- und MiniMax-Voreinstellungen, teste Verbindungen im Canvas und wähle auf jedem Client desselben PenEcho-Hosts eine eigene aktive Verbindung. Änderungen gelten sofort.
 - **Schnelleres, flexibleres Refine.** Schreibe Anweisungen an eine beliebige Stelle des sichtbaren Bereichs und wähle das zu ändernde Widget. Standardisierte Unified Diffs übertragen nur Änderungen statt des vollständigen Widgets und reduzieren so Tokenbedarf und Wartezeit; Bestätigung und Rückgängig bleiben erhalten.

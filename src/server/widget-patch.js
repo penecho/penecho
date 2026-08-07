@@ -154,12 +154,35 @@ function uniquelyLocatedPatchSequence(lines, entries, minimumStart) {
   return omittedIndentStart === null ? null : { start:omittedIndentStart, repaired:true };
 }
 
+function setPatchDiagnostic(diagnostics, reason) {
+  if (diagnostics && typeof diagnostics === "object" && !diagnostics.reason) diagnostics.reason = reason;
+}
+
+function patchBodyCounts(body) {
+  let oldLines = 0, newLines = 0;
+  for (const line of body) {
+    if (line[0] === " ") {
+      oldLines++;
+      newLines++;
+    } else if (line[0] === "-") oldLines++;
+    else if (line[0] === "+") newLines++;
+  }
+  return { oldLines, newLines };
+}
+
+function trailingContextLines(body) {
+  const result = [];
+  for (let index = body.length - 1; index >= 0 && body[index][0] === " "; index--) result.unshift(body[index]);
+  return result;
+}
+
 // Hunk line counts are redundant with the prefixed body lines and models
 // occasionally miscount them or omit the coordinates as a bare @@ header.
 // Canonicalize counts and uniquely infer missing coordinates before parsing;
-// also repair one swallowed source-indent space only at a unique target.
-// Paths, body prefixes, additions, and the complete envelope remain strict.
-function canonicalPatchCounts(patchText, widgetEdit) {
+// repair one swallowed source-indent space only at a unique target, and trim
+// only exact unchanged context repeated across two ordered adjacent hunks.
+// Paths, changed lines, additions, and the complete envelope remain strict.
+function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
   const lines = patchText.split("\n"), finalNewline = lines.at(-1) === "";
   if (finalNewline) lines.pop();
   const files = new Map(patchFilesForWidgetEdit(widgetEdit).map(file => [file.path, file])), output = [];
@@ -171,7 +194,7 @@ function canonicalPatchCounts(patchText, widgetEdit) {
     cursor += 2;
     fileCount++;
     const sourceLines = files.get(path).content.replace(/\r\n/g, "\n").split("\n");
-    let hunkCount = 0, previousEnd = 0, lineOffset = 0;
+    let hunkCount = 0, previousEnd = 0, previousHunkStart = 0, previousTrailingContext = [], lineOffset = 0;
     while (cursor < lines.length && !/^--- a\//.test(lines[cursor])) {
       const rawHeader = lines[cursor] || "",
         header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(rawHeader),
@@ -180,7 +203,7 @@ function canonicalPatchCounts(patchText, widgetEdit) {
       let oldStart = header ? Number(header[1]) : null, newStart = header ? Number(header[2]) : null;
       if (header && (!Number.isSafeInteger(oldStart) || !Number.isSafeInteger(newStart))) return "";
       cursor++;
-      const body = [];
+      let body = [];
       let oldLines = 0, newLines = 0;
       while (cursor < lines.length && !/^@@(?: |$)/.test(lines[cursor]) && !/^--- a\//.test(lines[cursor])) {
         const line = lines[cursor++], operation = line[0];
@@ -198,14 +221,52 @@ function canonicalPatchCounts(patchText, widgetEdit) {
       const expectedEntries = body
         .map((line, bodyIndex) => ({ operation:line[0], content:line.slice(1), bodyIndex }))
         .filter(entry => entry.operation === " " || entry.operation === "-");
-      const expected = expectedEntries.map(entry => entry.content);
+      let currentExpectedEntries = expectedEntries,
+        expected = currentExpectedEntries.map(entry => entry.content);
       let locatedStart;
       if (expected.length) {
-        const located = uniquelyLocatedPatchSequence(sourceLines, expectedEntries, previousEnd);
-        if (!located) return "";
-        locatedStart = located.start;
-        if (located.repaired) {
-          expectedEntries.forEach((entry, index) => {
+        const declaredStart = header && oldLines > 0 ? oldStart - 1 : null,
+          overlap = hunkCount && declaredStart !== null && declaredStart >= previousHunkStart ? previousEnd - declaredStart : 0;
+        if (overlap > 0) {
+          const repeatedPrefix = body.slice(0,overlap),
+            previousSuffix = previousTrailingContext.slice(-overlap),
+            exactContextOverlap = repeatedPrefix.length === overlap
+              && previousSuffix.length === overlap
+              && repeatedPrefix.every((line,index) => line[0] === " " && line === previousSuffix[index]);
+          if (!exactContextOverlap) {
+            setPatchDiagnostic(diagnostics,"overlapping-hunk-context");
+            return "";
+          }
+          body = body.slice(overlap);
+          if (!body.length || !body.some(line => line[0] === "+" || line[0] === "-")) {
+            setPatchDiagnostic(diagnostics,"overlapping-hunk-context");
+            return "";
+          }
+          ({ oldLines, newLines } = patchBodyCounts(body));
+          currentExpectedEntries = body
+            .map((line, bodyIndex) => ({ operation:line[0], content:line.slice(1), bodyIndex }))
+            .filter(entry => entry.operation === " " || entry.operation === "-");
+          expected = currentExpectedEntries.map(entry => entry.content);
+          locatedStart = expected.length ? uniqueSequenceStart(sourceLines,expected,previousEnd) : previousEnd;
+          if (locatedStart !== previousEnd) {
+            setPatchDiagnostic(diagnostics,"overlapping-hunk-context");
+            return "";
+          }
+          oldStart = oldLines === 0 ? locatedStart : locatedStart + 1;
+          newStart = locatedStart + lineOffset + (newLines === 0 ? 0 : 1);
+        } else {
+          const located = uniquelyLocatedPatchSequence(sourceLines, currentExpectedEntries, previousEnd);
+          if (!located) return "";
+          locatedStart = located.start;
+          if (located.repaired) {
+            currentExpectedEntries.forEach((entry, index) => {
+              body[entry.bodyIndex] = `${entry.operation}${sourceLines[locatedStart + index]}`;
+            });
+          }
+        }
+        if (currentExpectedEntries.length && body.length) {
+          currentExpectedEntries.forEach((entry, index) => {
+            if (body[entry.bodyIndex].slice(1) === sourceLines[locatedStart + index]) return;
             body[entry.bodyIndex] = `${entry.operation}${sourceLines[locatedStart + index]}`;
           });
         }
@@ -219,7 +280,9 @@ function canonicalPatchCounts(patchText, widgetEdit) {
         newStart = oldStart + lineOffset;
       }
       output.push(`@@ -${oldStart},${oldLines} +${newStart},${newLines} @@${header?.[3] || ""}`, ...body);
+      previousHunkStart = locatedStart;
       previousEnd = locatedStart + expected.length;
+      previousTrailingContext = trailingContextLines(body);
       lineOffset += newLines - oldLines;
       hunkCount++;
     }
@@ -343,12 +406,12 @@ function widgetCommandFromFiles(contents, widgetEdit) {
   };
 }
 
-function parsedWidgetPatch(command, widgetEdit) {
+function parsedWidgetPatch(command, widgetEdit, diagnostics = null) {
   if (!command || typeof command !== "object" || Array.isArray(command)
     || command.tool !== "widget_patch" || Object.keys(command).some(key => !["tool", "patch"].includes(key))) return null;
   const normalized = normalizedPatchText(command.patch, widgetEdit),
     submittedPatchText = coalescedPatchFileSections(normalized, widgetEdit),
-    patchText = canonicalPatchCounts(submittedPatchText, widgetEdit);
+    patchText = canonicalPatchCounts(submittedPatchText, widgetEdit, diagnostics);
   if (!submittedPatchText || !patchText) return null;
   let patches;
   try {
@@ -374,8 +437,8 @@ function parsedWidgetPatch(command, widgetEdit) {
   return hasChange && hunkCount <= MAX_WIDGET_PATCH_HUNKS && lineCount <= MAX_WIDGET_PATCH_LINES ? { patches, allowed } : null;
 }
 
-function commandFromWidgetPatch(command, widgetEdit) {
-  const parsed = parsedWidgetPatch(command, widgetEdit);
+function commandFromWidgetPatch(command, widgetEdit, diagnostics = null) {
+  const parsed = parsedWidgetPatch(command, widgetEdit, diagnostics);
   if (!parsed) return null;
   const updated = new Map(), files = patchFilesForWidgetEdit(widgetEdit);
   for (const patch of parsed.patches) {
@@ -402,10 +465,14 @@ function commandFromWidgetPatch(command, widgetEdit) {
   return updatedCommand;
 }
 
-function resolveWidgetEditPatchCommands(commands, widgetEdit) {
+function resolveWidgetEditPatchCommands(commands, widgetEdit, diagnostics = null) {
   if (!widgetEdit) return commands;
-  if (!Array.isArray(commands) || commands.length !== 1) return [];
-  const command = commandFromWidgetPatch(commands[0], widgetEdit);
+  if (!Array.isArray(commands) || commands.length !== 1) {
+    setPatchDiagnostic(diagnostics,"widget-patch-command-count");
+    return [];
+  }
+  const command = commandFromWidgetPatch(commands[0], widgetEdit, diagnostics);
+  if (!command) setPatchDiagnostic(diagnostics,"widget-patch-rejected");
   return command ? [command] : [];
 }
 

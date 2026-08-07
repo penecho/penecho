@@ -194,11 +194,20 @@
         </div>
         <p id="historyStorageDescription" class="snapshot-location-description"></p>
       </fieldset>
+      <section id="serverProjectManager" class="history-projects" hidden>
+        <label for="historyProjectSelect"><span data-i18n="canvasProject">Project</span>
+          <select id="historyProjectSelect"></select>
+        </label>
+        <button id="historyProjectCreate" type="button" data-i18n="canvasProjectNew">New project</button>
+        <button id="historyProjectDelete" class="history-project-delete" type="button" data-i18n="canvasProjectDelete">Delete project</button>
+      </section>
       <div class="history-save-row">
         <input id="historyName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)" data-i18n-aria="snapshotName" aria-label="Snapshot name">
-        <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
-        <button id="historySave" type="button" data-i18n="saveSnapshot">Save New</button>
-        <button id="historyNew" type="button" data-i18n="newCanvas">New</button>
+        <div class="history-save-actions">
+          <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
+          <button id="historySave" type="button" data-i18n="saveSnapshot">Save New</button>
+          <button id="historyNew" type="button" data-i18n="newCanvas">New</button>
+        </div>
         <div id="historyNotice" class="history-notice" role="status" aria-live="polite" aria-atomic="true"></div>
       </div>
       <div id="historyList" class="history-list" aria-live="polite"></div>
@@ -220,14 +229,19 @@
           </div>
           <p id="newCanvasStorageDescription" class="snapshot-location-description"></p>
         </fieldset>
+        <label id="newCanvasProjectField" class="new-canvas-project" for="newCanvasProjectSelect" hidden><span data-i18n="canvasProject">Project</span>
+          <select id="newCanvasProjectSelect"></select>
+        </label>
         <label class="new-snapshot-name" for="newSnapshotName"><span data-i18n="newSnapshotName">Name for new snapshot (optional)</span>
           <input id="newSnapshotName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)">
         </label>
         <div class="new-canvas-actions">
-          <button id="newCanvasCancel" type="button" data-i18n="cancel">Cancel</button>
           <button id="newDiscard" class="new-canvas-discard" type="button" data-i18n="newWithoutSave">Don't save</button>
-          <button id="newSaveCopy" class="new-canvas-primary" type="button" data-i18n="saveAsNewAndCreate">Save as new</button>
-          <button id="newOverwrite" type="button" data-i18n="overwriteAndCreate">Overwrite current</button>
+          <div class="new-canvas-action-group">
+            <button id="newCanvasCancel" type="button" data-i18n="cancel">Cancel</button>
+            <button id="newOverwrite" type="button" data-i18n="overwriteAndCreate">Overwrite current</button>
+            <button id="newSaveCopy" class="new-canvas-primary" type="button" data-i18n="saveAsNewAndCreate">Save as new</button>
+          </div>
         </div>
       </form>
     </dialog>
@@ -575,7 +589,7 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">0.8.2</span>
+          <span class="changelog-version">0.9.0</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -583,12 +597,12 @@
       </header>
       <div class="changelog-scroll">
         <h2 id="changelogTitle" data-i18n="changelogTitle">Faster refinement and flexible AI connections</h2>
-        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.8.2 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.</p>
+        <p id="changelogIntro" class="changelog-intro" data-i18n="changelogIntro">Version 0.9.0 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.</p>
         <div class="changelog-demo">
           <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" loading="eager" decoding="async">
         </div>
         <section class="changelog-release" aria-labelledby="changelogCurrentVersion">
-          <h3 id="changelogCurrentVersion">0.8.2</h3>
+          <h3 id="changelogCurrentVersion">0.9.0</h3>
           <ul>
             <li data-i18n="changelogConnections">Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.</li>
             <li data-i18n="changelogRefine">Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens while preserving undo and confirmation.</li>

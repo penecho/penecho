@@ -78,6 +78,32 @@ test("thinking placement finds a content-free slot between blocker edges", () =>
   assert.equal(placement.box.x + placement.box.w, 724);
 });
 
+test("thinking placement avoids canvas text across the full caption width", () => {
+  const blocker = { x:360, y:300, w:80, h:42 },
+    placement = SUMMON.chooseThinkingPlacement({
+      width:1000,
+      height:640,
+      blockers:[blocker],
+    }),
+    box = placement.box,
+    overlapWidth = Math.min(box.x + box.w, blocker.x + blocker.w) - Math.max(box.x, blocker.x),
+    overlapHeight = Math.min(box.y + box.h, blocker.y + blocker.h) - Math.max(box.y, blocker.y);
+  assert.equal(placement.score, 0);
+  assert.ok(overlapWidth <= 0 || overlapHeight <= 0);
+  assert.notEqual(placement.x, 500, "a blank loader center must not hide caption overlap");
+});
+
+test("thinking placement keeps a numerically stable gap at blocker edges", () => {
+  const blockers = [
+      { x:0, y:0, w:370.3, h:500 },
+      { x:724.3, y:0, w:275.7, h:500 },
+    ],
+    placement = SUMMON.chooseThinkingPlacement({ width:1000, height:500, blockers });
+  assert.equal(placement.score, 0);
+  assert.ok(Math.abs(placement.box.x - 370.3) < 1e-6);
+  assert.ok(Math.abs(placement.box.x + placement.box.w - 724.3) < 1e-6);
+});
+
 test("AI waiting UI combines a clean mathematical loader with two neutral glowing lines", () => {
   const html = read("public/index.html"),
     css = read("public/style.css"),
@@ -92,6 +118,7 @@ test("AI waiting UI combines a clean mathematical loader with two neutral glowin
   assert.match(css, /\.summon-caption,\s*\.summon-hint\s*\{[^}]*ui-rounded/);
   assert.match(css, /\.summon-caption\s*\{[^}]*rgba\(22,\s*27,\s*34,\s*\.76\)/);
   assert.match(css, /\.summon-hint\s*\{[^}]*rgba\(67,\s*73,\s*82,\s*\.62\)/);
+  assert.match(css, /\.summon-copy\s*\{[^}]*calc\(100% - 36px\)[^}]*overflow-wrap:\s*anywhere/);
   assert.match(css, /@keyframes summonBlueGlow[\s\S]*?text-shadow:[\s\S]*?rgba\(42,\s*139,\s*255,\s*\.5\)/);
   assert.match(css, /\.summon-caption\.caption-swap\s*\{[^}]*summonTextIn 1\.35s[^}]*summonBlueGlow 3\.2s/);
   assert.match(css, /\.summon-hint\.hint-swap\s*\{[^}]*summonTipIn 1\.5s[^}]*summonBlueGlow 3\.2s/);
