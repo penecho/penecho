@@ -31,7 +31,7 @@ Prefer `diagram_source` whenever one of these built-in local renderers faithfull
 - `dot`: Graphviz DOT for software or cloud architecture, network topology, dependencies, data lineage, causal structures and other directed graphs.
 - `bpmn-xml`: complete BPMN 2.0 XML, including diagram geometry, for business processes, events, gateways, tasks, pools and lanes.
 - `vega-lite`: complete Vega-Lite JSON for statistical, scientific, financial, operational and comparative charts.
-- `geojson`: complete WGS84 GeoJSON for maps, routes, regions, geographic features and spatial topology; never pre-shift coordinates for a basemap.
+- `geojson`: complete WGS84 GeoJSON for maps, routes, regions, geographic features and spatial topology; never pre-shift coordinates for a basemap. For a transparent map without tiles, set the top-level foreign member `"basemap":"none"`; otherwise PenEcho uses its normal basemap.
 - `smiles`: valid SMILES for a locally rendered 2D molecular structure.
 - `cytoscape-json`: complete Cytoscape elements JSON for biological pathways, clinical or causal networks, dependency networks and other node-link systems.
 
@@ -41,6 +41,7 @@ Return:
 
 PenEcho owns fixed renderer versions and loads only the selected renderer. Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`. Self-check syntax, escaping, required fields and semantic completeness.
 Do not return HTML alongside a supported local format. PenEcho needs only the professional `source`; it creates the complete visual document locally.
+Keep the diagram background transparent by default. Use an opaque diagram background only when it is visually necessary or the user explicitly requests one.
 SMILES structures render functional groups expanded by default. Preserve explicit atoms and hydrogens needed by the depiction. Only when the user explicitly asks for an abbreviated or contracted structure, use `diagramKind:"molecular-structure-compact"`.
 
 ### B. Directly rendered HTML: `html_widget`
@@ -71,7 +72,7 @@ The examples above are not a whitelist and do not limit this plugin. The user ma
 
 PenEcho injects the full CSS at runtime; do not repeat it in HTML. Use `.pd-root` with palette `standard`, `cool`, `warm`, `mono`, or `high-contrast` and density `comfortable` or `compact`. Reuse `.pd-header`, `.pd-title`, `.pd-subtitle`, `.pd-stage`, `.pd-cluster`, `.pd-lane`, `.pd-node` and semantic modifiers (`--start`, `--end`, `--process`, `--decision`, `--event`, `--service`, `--database`, `--success`, `--warning`, `--danger`), plus `.pd-class`, `.pd-lifeline`, `.pd-edge`, `.pd-legend`, `.pd-note`, `.pd-badge`, and the `--pd-*` surface/text/border/accent/info/success/warning/danger variables. Generic SVG is allowed when no component fits. Keep labels readable, use a stable `viewBox`, routed connectors, explicit node sizes and no outer dashboard chrome.
 
-For more than about 10 nodes, partition into 3–5 meaningful phases, lanes, clusters or subgraphs rather than one long track. For responsive Mermaid flowcharts add `%% penecho:responsive`, use top-level `flowchart LR`, and use `direction TB` inside phase subgraphs. For responsive DOT add `// penecho:responsive`; PenEcho compares horizontal and vertical Graphviz layouts as the widget changes shape and uses the one with the largest readable scale. Use `// penecho:fixed-layout` only when the user explicitly requires a fixed DOT orientation. Preserve groups during refinement. Do not repeat the trusted widget title as a Mermaid or Graphviz diagram title.
+For more than about 10 nodes, use 3–5 meaningful phases, lanes, clusters or subgraphs only when most inter-phase flow stays forward; otherwise prefer fewer groups and a compact primary path. Keep rework, exception and rejection branches beside the decision that creates them. Avoid distant catch-all groups and backward edges that span the whole diagram; when a literal return edge would dominate the layout, use a clearly labeled local return/reference node without losing the relationship. For a multi-stage business process with repeated cross-phase returns, prefer `bpmn-xml` with explicit diagram geometry instead of forcing it into Mermaid. For responsive Mermaid flowcharts add `%% penecho:responsive`, start with top-level `flowchart LR`, and use `direction TB` inside phase subgraphs. PenEcho reflows the diagram automatically as the widget is resized. For responsive DOT add `// penecho:responsive`; PenEcho likewise adapts Graphviz layout to the widget shape. Use the corresponding fixed-layout marker only when the user explicitly requires a fixed orientation. Preserve groups during refinement. Do not repeat the trusted widget title as a Mermaid or Graphviz diagram title.
 
 ## HTML rendering
 

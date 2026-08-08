@@ -353,10 +353,14 @@ test("every built-in plugin uses a directory bundle", () => {
   for (const format of ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"])
     assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
+  assert.match(flowchart.document, /diagram background transparent by default[\s\S]*opaque diagram background only when it is visually necessary or the user explicitly requests one/);
+  assert.match(flowchart.document, /use 3–5 meaningful phases[\s\S]*only when most inter-phase flow stays forward[\s\S]*Keep rework, exception and rejection branches beside the decision/);
+  assert.match(flowchart.document, /multi-stage business process with repeated cross-phase returns[\s\S]*prefer `bpmn-xml` with explicit diagram geometry/);
+  assert.match(flowchart.document, /reflows the diagram automatically as the widget is resized/);
   assert.match(flowchart.document, /unlisted need[\s\S]*?return `html_widget`[\s\S]*?There is no library whitelist/);
   assert.match(flowchart.document, /teaching-only JSON[\s\S]*?KiCad, SPICE/);
   assert.match(flowchart.document, /HTML is the primary human-readable visualization[\s\S]*?do not make JSON, XML, YAML, SQL, DSL, code, or a `<pre>` dump the main visible content[\s\S]*?complete professional source in `copyText`/);
-  assert.match(flowchart.document, /more than about 10 nodes[\s\S]*?responsive Mermaid[\s\S]*?responsive DOT[\s\S]*?largest readable scale/);
+  assert.match(flowchart.document, /more than about 10 nodes[\s\S]*?responsive Mermaid[\s\S]*?resized[\s\S]*?responsive DOT/);
   assert.match(flowchart.document, /`widget_patch`[\s\S]*?preserve the existing tool and `sourceFormat`[\s\S]*?smallest complete modification/);
   assert.doesNotMatch(flowchart.document, /never a patch/);
   assert.match(flowchart.document, /copyText/);

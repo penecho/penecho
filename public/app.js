@@ -21,6 +21,8 @@
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
     widgetLayer = document.querySelector("#widgetLayer"),
+    placedContentLayer = document.querySelector("#placedContentLayer"),
+    placedContentCtx = placedContentLayer.getContext("2d"),
     summonLayer = document.querySelector("#summonLayer"),
     inkLayer = document.querySelector("#inkLayer"),
     inkCtx = inkLayer.getContext("2d"),
@@ -260,6 +262,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       guideStudio: "Studio assistant",
       boardTools: "Board tools",
       hand: "Hand tool: move canvas and objects",
+      handAutoAIManual: "Hand mode pauses Auto AI · Use the AI button to run it manually.",
       pen: "Pen",
       eraser: "Eraser",
       select: "Lasso select",
@@ -527,6 +530,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonTip18: "Tip: History can update the current snapshot or save a separate new copy.",
       summonTip19: "Tip: zoom with the wheel, pan with the middle mouse button—the canvas spans twenty thousand squares.",
       summonTip20: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
+      summonTip21: "Tip: write changes anywhere in this view, then choose a widget and use AI Refine.",
+      summonTip22: "Tip: tap a widget, or hover it with a mouse, to reveal AI Refine.",
+      summonTip23: "Tip: AI Refine uses the newest strokes, text, and images in this view as instructions.",
+      summonTip24: "Tip: use AI Refine to update a widget in place; regular AI adds a new widget.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
       history: "Canvas history",
@@ -596,7 +603,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
       canvasHintHand: "Hand lets you interact directly with widget content.",
       canvasHintHandAlt: "For pinch or two-finger widget gestures, lock the canvas first.",
-      canvasHintWidgetTouchHand: "Switch to Hand to interact directly with this widget's content.",
+      canvasHintWidgetTouchHand: "Use Hand mode to interact directly with this widget's content.",
       canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
       canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
       canvasHintText: "Text supports Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
@@ -779,6 +786,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     zh: ZH,
   };
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
+    SUPPORTED_THEMES = new Set(["arcane", "scifi", "research", "studio"]),
     DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
     DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
     BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([]);
@@ -790,6 +798,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     screenCalibration = new Map();
   let diagramRuntimePromise = null;
   let screenClientRatio = 1;
+  function normalizeTheme(theme) {
+    return SUPPORTED_THEMES.has(theme) ? theme : "studio";
+  }
   function storedPluginSettings() {
     let stored = {};
     try {
@@ -817,7 +828,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
     initialLanguage = TOUR.resolveInitialLanguage(storedPrimaryLanguage, storedLegacyLanguage),
-    initialTheme = ["arcane", "scifi", "research", "studio"].includes(storedTheme) ? storedTheme : "studio",
+    initialTheme = normalizeTheme(storedTheme),
     initialGrid = storedGrid === null ? true : storedGrid === "true",
     initialResearchGrid = storedResearchGrid === "true",
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
@@ -2937,6 +2948,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.setAttribute("title", label);
   }
   function applyTheme(theme) {
+    theme = normalizeTheme(theme);
     state.theme = theme;
     document.body.dataset.theme = theme;
     embodiment.dataset.theme = theme;
@@ -3106,11 +3118,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const WIDGET_REFINE_CLICK_PULSE_MS = 900;
   const HAND_OBJECT_TOOLBAR_VISIBLE_MS = 10000;
   const HAND_OBJECT_TOOLBAR_FADE_MS = 220;
+  const HAND_WIDGET_GESTURE_RESET_TAP_PX = 8;
   // TEMP: Keep enabled only while visually validating dirty-region shrinking.
   const SHOW_DIRTY_MASK_DEBUG_BOUNDS = false;
   const objectChromeButtons = new Map();
   const widgetRefineTouchCandidates = new Map();
   let widgetRefineConfirmationElement = null;
+  let canvasWidgetGestureResetTap = null;
   let nextObjectChromeStyleId = 1;
   function normalizedWidgetSource(value) {
     return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
@@ -3639,6 +3653,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function handObjectToolbarTargetAtPoint(point) {
     if (!point || !valid(point)) return null;
+    const textBox = textBoxAtPoint(point);
+    if (textBox) return { kind:"text-box", object:textBox };
+    const image = imageAtPoint(point);
+    if (image) return { kind:"image", object:image };
     const widgets = visibleWidgets();
     for (let index = widgets.length - 1; index >= 0; index--) {
       const widget = widgets[index], box = widgetBox(widget);
@@ -3646,10 +3664,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     const animation = animationPointerHit(point)?.animation;
     if (animation) return { kind:"animation", object:animation };
-    const textBox = textBoxAtPoint(point);
-    if (textBox) return { kind:"text-box", object:textBox };
-    const image = imageAtPoint(point);
-    return image ? { kind:"image", object:image } : null;
+    return null;
   }
   function updateHandObjectHover(point) {
     if (state.mode !== "hand") point = null;
@@ -3695,6 +3710,62 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function finishWidgetOwnedHandGesture(id) {
     state.handWidgetPointerIds.delete(id);
     if (!state.handWidgetPointerIds.size && !state.touches.size) state.handGestureIncludesWidget = false;
+  }
+  function clearWidgetOwnedHandGestures(widget = null) {
+    const pointerPrefix = widget ? `widget-host:${widget.id}:` : "",
+      belongsToWidget = (id) => !pointerPrefix || String(id).startsWith(pointerPrefix),
+      ids = new Set([...state.handWidgetPointerIds, ...widgetHostPointerAnchors.keys()].filter(belongsToWidget)),
+      ownsDrag = Boolean(widget && state.widgetGesture?.widget === widget),
+      hadWidgetGesture = ownsDrag || ids.size > 0 || !widget && state.handGestureIncludesWidget;
+    if (!hadWidgetGesture) return false;
+    for (const id of ids) {
+      finishHandObjectFocus({ pointerId:id });
+      finishWidgetRefineTouch(id);
+    }
+    if (widget) {
+      for (const id of ids) {
+        state.handWidgetPointerIds.delete(id);
+        widgetHostPointerAnchors.delete(id);
+      }
+      if (ownsDrag) {
+        state.widgetGesture = null;
+        resetCanvasCursor();
+      }
+      state.handGestureIncludesWidget = Boolean(state.handWidgetPointerIds.size || widgetHostPointerAnchors.size);
+    } else {
+      state.handWidgetPointerIds.clear();
+      widgetHostPointerAnchors.clear();
+      state.handGestureIncludesWidget = false;
+    }
+    return true;
+  }
+  function beginCanvasWidgetGestureResetTap(event, point) {
+    canvasWidgetGestureResetTap = null;
+    if (state.mode !== "hand" || !state.handGestureIncludesWidget && !state.handWidgetPointerIds.size && !widgetHostPointerAnchors.size) return false;
+    if (!["mouse", "touch"].includes(event.pointerType) || event.pointerType === "mouse" && Number(event.button) !== 0) return false;
+    if (event.isPrimary === false || state.pointers.size || !point || !valid(point) || handObjectToolbarTargetAtPoint(point)) return false;
+    canvasWidgetGestureResetTap = { id:event.pointerId, startX:event.clientX, startY:event.clientY };
+    return true;
+  }
+  function updateCanvasWidgetGestureResetTap(event) {
+    const tap = canvasWidgetGestureResetTap;
+    if (!tap || tap.id !== event.pointerId) return false;
+    if (state.pointers.size > 1 || Math.hypot(event.clientX - tap.startX, event.clientY - tap.startY) > HAND_WIDGET_GESTURE_RESET_TAP_PX) {
+      canvasWidgetGestureResetTap = null;
+      return false;
+    }
+    return true;
+  }
+  function finishCanvasWidgetGestureResetTap(event) {
+    const tap = canvasWidgetGestureResetTap;
+    if (!tap || tap.id !== event.pointerId) return false;
+    canvasWidgetGestureResetTap = null;
+    if (state.mode !== "hand" || event.type === "pointercancel" || state.pointers.size || state.touches.size
+      || Math.hypot(event.clientX - tap.startX, event.clientY - tap.startY) > HAND_WIDGET_GESTURE_RESET_TAP_PX) return false;
+    return clearWidgetOwnedHandGestures();
+  }
+  function cancelCanvasWidgetGestureResetTap() {
+    canvasWidgetGestureResetTap = null;
   }
   function beginImageEdit(item) {
     if (!item || !state.images.includes(item)) return false;
@@ -4148,9 +4219,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     frame.src = widgetHostUrl(manifest);
     frame.addEventListener("pointerenter", (event) => {
       if (state.mode !== "hand" || event.pointerType === "touch") return;
-      focusHandObject("widget", widget, `widget-hover:${event.pointerId}`);
+      updateHandObjectHover(clientPoint(event));
     });
-    frame.addEventListener("pointerleave", (event) => releaseHandObjectFocus(handToolbarKey("widget", widget.id), `widget-hover:${event.pointerId}`));
+    frame.addEventListener("pointerleave", () => updateHandObjectHover(null));
     frame.addEventListener("focus", () => focusHandObject("widget", widget, "widget-focus"));
     frame.addEventListener("blur", () => releaseHandObjectFocus(handToolbarKey("widget", widget.id), "widget-focus"));
     shell.append(frame);
@@ -4167,6 +4238,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     positionWidget(widget);
   }
   function unmountWidget(widget) {
+    clearWidgetOwnedHandGestures(widget);
     clearHandToolbarTarget("widget", widget.id, { preserveInactive:false });
     removeWidgetStyleRule(widget);
     widget.shell?.remove();
@@ -4338,7 +4410,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     if (validWidgetHostActivate(message)) {
-      if (state.mode === "hand") focusHandObject("widget", widget);
+      if (state.mode === "hand") {
+        const target = handObjectToolbarTargetFromWidgetMessage(widget, message);
+        if (target) focusHandObject(target.kind, target.object);
+      }
       return;
     }
     if (validWidgetHostDrag(message)) {
@@ -4583,6 +4658,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       y:rect.top + message.localY * rect.height / widget.contentH,
     };
   }
+  function handObjectToolbarTargetFromWidgetMessage(widget, message) {
+    const viewportPoint = widgetHostViewportPoint(widget, message);
+    if (!viewportPoint) return { kind:"widget", object:widget };
+    return handObjectToolbarTargetAtPoint(clientPoint({ clientX:viewportPoint.x, clientY:viewportPoint.y })) || { kind:"widget", object:widget };
+  }
   function widgetHostTrackedPoint(anchor, message) {
     if (!anchor) return null;
     return {
@@ -4612,7 +4692,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetHostPointerAnchors.set(id, { clientX:point.x, clientY:point.y, screenX:message.screenX, screenY:message.screenY });
     beginWidgetOwnedHandGesture(id);
     const token = `pointer:${id}`,
-      key = focusHandObject("widget", widget, token);
+      target = handObjectToolbarTargetFromWidgetMessage(widget, message),
+      key = focusHandObject(target.kind, target.object, token);
     if (key) state.handPointerFocusKeys.set(id, { key, token });
     return true;
   }
@@ -4747,6 +4828,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("merged");
     resolve?.(true);
     if (restoreMode) finishAIDraftHandMode();
+    if (!replacement && restoreMode) showCanvasHint("canvasHintWidgetTouchHand");
   }
   function rejectPendingWidget(result = AI_REJECTED, options) {
     options ||= {};
@@ -5294,6 +5376,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     screen.height = Math.round(r.height * d);
     animationLayer.width = screen.width;
     animationLayer.height = screen.height;
+    placedContentLayer.width = screen.width;
+    placedContentLayer.height = screen.height;
     inkLayer.width = screen.width;
     inkLayer.height = screen.height;
     interactionLayer.width = screen.width;
@@ -5307,6 +5391,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     updateCoordinates();
     requestRender();
+  }
+  function renderPlacedContentLayer(region = null) {
+    const d = devicePixelRatio || 1,
+      r = view.getBoundingClientRect(),
+      visible = region || {
+        x:Math.max(0, -state.panX / state.scale),
+        y:Math.max(0, -state.panY / state.scale),
+        w:Math.min(SIZE, (r.width - state.panX) / state.scale) - Math.max(0, -state.panX / state.scale),
+        h:Math.min(SIZE, (r.height - state.panY) / state.scale) - Math.max(0, -state.panY / state.scale),
+      };
+    placedContentCtx.setTransform(d, 0, 0, d, 0, 0);
+    placedContentCtx.clearRect(0, 0, r.width, r.height);
+    if (visible.w <= 0 || visible.h <= 0) return;
+    placedContentCtx.save();
+    placedContentCtx.translate(state.panX, state.panY);
+    placedContentCtx.scale(state.scale, state.scale);
+    placedContentCtx.beginPath();
+    placedContentCtx.rect(0, 0, SIZE, SIZE);
+    placedContentCtx.clip();
+    drawImagesToContext(placedContentCtx, visible, state.widgetShadowEnabled);
+    drawTextBoxesToContext(placedContentCtx, visible);
+    placedContentCtx.restore();
   }
   function renderInkLayer(region = null) {
     const d = devicePixelRatio || 1,
@@ -5370,13 +5476,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       ctx.stroke();
     }
-    drawImagesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t }, state.widgetShadowEnabled);
-    drawTextBoxesToContext(ctx, { x:l, y:t, w:rr - l, h:b - t });
     ctx.restore();
     ctx.strokeStyle = state.paint.border;
     ctx.lineWidth = 2 / state.scale;
     ctx.strokeRect(0, 0, SIZE, SIZE);
     ctx.restore();
+    renderPlacedContentLayer({ x:l, y:t, w:rr - l, h:b - t });
     renderInkLayer({ x:l, y:t, w:rr - l, h:b - t });
     renderInteractionLayer();
     positionWidgets();
@@ -5425,17 +5530,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const widget = visibleWidgets().find((item) => item.id === widgetId);
     return widget?.shell && !widget.pending && widget.renderActive !== false ? widget : null;
   }
-  function strokeWidgetRefineOutline(context, widget, opacity = 1, muted = false) {
+  function strokeWidgetRefineOutline(context, widget, opacity = 1, muted = false, solid = false) {
     const box = widgetBox(widget),
       unit = 1 / state.scale;
     context.save();
     context.globalAlpha *= opacity;
-    if (muted) context.strokeStyle = "rgba(107, 114, 128, 0.38)";
+    if (muted) context.strokeStyle = solid ? "#6b7280" : "rgba(107, 114, 128, 0.38)";
     else {
-      context.strokeStyle = "rgba(0, 122, 255, 0.34)";
+      context.strokeStyle = solid ? "#007aff" : "rgba(0, 122, 255, 0.34)";
     }
-    context.lineWidth = unit;
-    context.setLineDash([4 * unit, 4 * unit]);
+    context.lineWidth = (solid ? 2 : 1) * unit;
+    context.setLineDash(solid ? [] : [4 * unit, 4 * unit]);
     context.lineCap = context.lineJoin = "round";
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.restore();
@@ -5528,15 +5633,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!confirmation) return;
     const widget = widgetRefineOutlineTarget(confirmation.widgetId);
     if (!widget) return;
-    strokeWidgetRefineOutline(context, widget, 1, !confirmation.hasDirty);
+    strokeWidgetRefineOutline(context, widget, 1, !confirmation.hasDirty, true);
     if (!confirmation.dirtyBox) return;
     const box = confirmation.dirtyBox,
       widgetBounds = widgetBox(widget),
       unit = 1 / state.scale;
     context.save();
-    context.strokeStyle = "rgba(0, 122, 255, 0.34)";
-    context.lineWidth = unit;
-    context.setLineDash([4 * unit, 4 * unit]);
+    context.strokeStyle = "#007aff";
+    context.lineWidth = 2 * unit;
+    context.setLineDash([]);
     context.lineCap = context.lineJoin = "round";
     context.strokeRect(box.x, box.y, box.w, box.h);
     context.strokeStyle = "#007aff";
@@ -7445,6 +7550,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const SNAPSHOT_DB = "penecho-canvas-history",
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
+    SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
     SNAPSHOT_LOCATIONS = new Set(["device", "server"]),
     SERVER_DEFAULT_PROJECT_ID = "uncategorized",
     SERVER_ALL_PROJECTS_ID = "all",
@@ -7704,6 +7810,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const captureTime = performance.now();
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
+    drawAnimationsToContext(q, bounds, captureTime);
+    drawWidgetsToContext(q, bounds);
     drawImagesToContext(q, bounds);
     drawTextBoxesToContext(q, bounds);
     q.restore();
@@ -7717,8 +7825,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawSharpOverlays(q, bounds);
-    drawAnimationsToContext(q, bounds, captureTime);
-    drawWidgetsToContext(q, bounds);
     q.restore();
     return preview;
   }
@@ -7780,6 +7886,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       context.stroke();
     }
+    drawAnimationsToContext(context, region, captureTime);
+    drawWidgetsToContext(context, region);
     drawImagesToContext(context, region);
     drawTextBoxesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
@@ -7789,8 +7897,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (intersection({ x, y, w: TILE, h: TILE }, region)) context.drawImage(tileCanvas, x, y);
     }
     drawSharpOverlays(context, region);
-    drawAnimationsToContext(context, region, captureTime);
-    drawWidgetsToContext(context, region);
     const selection = state.selection;
     if (selection?.phase === "active")
       for (const fragment of selection.fragments) {
@@ -7847,6 +7953,50 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       };
       image.src = url;
     });
+  }
+  function releaseSnapshotTileCanvases(canvases) {
+    for (const canvas of canvases.values()) canvas.width = canvas.height = 1;
+    canvases.clear();
+  }
+  function waitForSnapshotTileFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent) {
+    const decodedTiles = new Map();
+    try {
+      for (let start = 0; start < tileEntries.length; start += SNAPSHOT_TILE_DECODE_BATCH_SIZE) {
+        const end = Math.min(tileEntries.length, start + SNAPSHOT_TILE_DECODE_BATCH_SIZE),
+          batch = await Promise.all(tileEntries.slice(start, end).map(async ({ k, blob }) => ({ k, image:await imageFromBlob(blob) })));
+        if (!isCurrent()) {
+          batch.length = 0;
+          releaseSnapshotTileCanvases(decodedTiles);
+          return null;
+        }
+        for (const { k, image } of batch) {
+          const canvas = offscreen(TILE, TILE),
+            context = canvas.getContext("2d");
+          if (!context) throw Error("Could not restore snapshot tile");
+          context.drawImage(image, 0, 0);
+          const previous = decodedTiles.get(k);
+          if (previous) previous.width = previous.height = 1;
+          decodedTiles.set(k, canvas);
+        }
+        // Drop this batch's decoded image references before yielding. The tile
+        // canvases retain the pixels needed for the atomic swap below.
+        batch.length = 0;
+        if (end < tileEntries.length) {
+          await waitForSnapshotTileFrame();
+          if (!isCurrent()) {
+            releaseSnapshotTileCanvases(decodedTiles);
+            return null;
+          }
+        }
+      }
+      return decodedTiles;
+    } catch (error) {
+      releaseSnapshotTileCanvases(decodedTiles);
+      throw error;
+    }
   }
   async function finalizeCanvasForSnapshot() {
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
@@ -8065,17 +8215,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       stored = await readSnapshot(location, id);
     if (!stored) return;
     const { item, tileEntries } = stored;
-    const [decoded, images] = await Promise.all([
-      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) }))),
+    const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision;
+    if (!loadIsCurrent()) return;
+    await enableSnapshotWidgetPlugins(item.widgets);
+    if (!loadIsCurrent()) return;
+    const [decodedTiles, images] = await Promise.all([
+      decodeSnapshotTilesInBatches(tileEntries, loadIsCurrent),
       decodeStoredImages(item.images),
     ]);
-    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
-    await enableSnapshotWidgetPlugins(item.widgets);
-    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
+    if (!decodedTiles || !loadIsCurrent()) {
+      if (decodedTiles) releaseSnapshotTileCanvases(decodedTiles);
+      return;
+    }
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
     clearTextEditors();
+    for (const canvas of tiles.values()) canvas.width = canvas.height = 1;
     tiles.clear();
     clearSharpOverlays();
     state.inkBounds.clear();
@@ -8086,14 +8242,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.historyBefore.clear();
     state.imageHistoryBefore = null;
     state.textBoxHistoryBefore = null;
-    for (const { k, image } of decoded) {
-      const canvas = offscreen(TILE, TILE);
-      canvas.getContext("2d").drawImage(image, 0, 0);
-      tiles.set(k, canvas);
-    }
+    for (const [k, canvas] of decodedTiles) tiles.set(k, canvas);
+    decodedTiles.clear();
     restoreAnimations(item.animations);
     restoreWidgets(item.widgets);
-    if (["arcane", "scifi", "research", "studio"].includes(item.theme)) applyTheme(item.theme);
+    applyTheme(item.theme);
     restoreImages(images);
     await restoreTextBoxes(item.textBoxes);
     if (item.view) {
@@ -8203,6 +8356,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
+    setCanvasNavigationLocked(false);
     setCanvasMode("pen", {
       preserveSelection:true,
       skipDraftFinalize:true,
@@ -8401,19 +8555,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       meta.className = "history-meta";
       title.textContent = snapshotName(item);
       const modified = new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.updatedAt || item.createdAt);
-      detail.textContent = `${t("snapshotModified").replace("{time}", modified)} · ${item.tileCount} ${t("snapshotTiles")}`;
-      if (pluginEnabled("animation") && item.animationCount) detail.textContent += " · " + item.animationCount + " " + t("snapshotAnimations");
-      if (item.widgetCount) detail.textContent += " · " + item.widgetCount + " " + t("snapshotWidgets");
-      if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
+      detail.textContent = t("snapshotModified").replace("{time}", modified);
+      const stats = document.createElement("div"),
+        counts = [[item.tileCount, "snapshotTiles"]];
+      if (pluginEnabled("animation") && item.animationCount) counts.push([item.animationCount, "snapshotAnimations"]);
+      if (item.widgetCount) counts.push([item.widgetCount, "snapshotWidgets"]);
+      if (item.imageCount) counts.push([item.imageCount, "snapshotImages"]);
+      stats.className = "history-stats";
+      for (const [count, key] of counts) {
+        const chip = document.createElement("span");
+        chip.className = "history-stat";
+        chip.textContent = `${count} ${t(key)}`;
+        stats.append(chip);
+      }
       actions.className = "history-actions";
       load.className = "history-load";
       load.textContent = t("loadSnapshot");
-      load.onclick = () => runSnapshotAction(() => requestLoadSnapshot(item.id, location));
+      load.onclick = () => runSnapshotLoadAction(load, () => requestLoadSnapshot(item.id, location));
       remove.className = "history-delete";
       remove.textContent = t("deleteSnapshot");
       remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
-      meta.append(title, detail, actions);
+      meta.append(title, detail, stats, actions);
       if (location === "server") {
         const move = document.createElement("select");
         move.className = "history-move";
@@ -8446,6 +8609,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       await action();
     } catch (error) {
       setStatus(`${t("snapshotError")}${error.message}`);
+    }
+  }
+  async function runSnapshotLoadAction(button, action) {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      await runSnapshotAction(action);
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
     }
   }
   function openHistoryPanel() {
@@ -9755,23 +9929,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.fillRect(0, 0, out.width, out.height);
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
+    drawAnimationsToContext(q, sourceRect, captureTime);
+    drawWidgetsToContext(q, sourceRect);
     drawImagesToContext(q, sourceRect);
     drawTextBoxesToContext(q, sourceRect);
-    drawWidgetsToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
-    drawAnimationsToContext(q, sourceRect, captureTime);
     q.globalAlpha = 1;
     q.save();
     q.beginPath();
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
+    drawAnimationsToContext(q, latestVisible, captureTime);
+    drawWidgetsToContext(q, latestVisible);
     drawImagesToContext(q, latestVisible);
     drawTextBoxesToContext(q, latestVisible);
-    drawWidgetsToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
-    drawAnimationsToContext(q, latestVisible, captureTime);
     q.restore();
     const focusInset = FOCUS_INSET_ENABLED ? drawFocusInset(out, latestVisible, sourceRect, imageScale, captureTime) : null,
       hotspotGrid = mapHotspots(sourceRect, imageSize, hotspotPoints);
@@ -12128,8 +12302,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       screen.setPointerCapture(e.pointerId);
     } catch {}
     calibrateScreenClientRatio(e, false);
-    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const handPoint = state.mode === "hand" ? clientPoint(e) : null;
+    beginCanvasWidgetGestureResetTap(e, handPoint);
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (handPoint) beginHandObjectFocus(e, handPoint);
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
@@ -12204,6 +12379,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    updateCanvasWidgetGestureResetTap(e);
     if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
@@ -12294,6 +12470,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.touches.delete(e.pointerId);
       finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
     }
+    finishCanvasWidgetGestureResetTap(e);
     if (e.pointerType === "touch" && state.handGestureIncludesWidget) {
       if (!state.touches.size && !state.handWidgetPointerIds.size) state.handGestureIncludesWidget = false;
       state.touchGesture = null;
@@ -12368,6 +12545,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    cancelCanvasWidgetGestureResetTap();
     updateHandObjectHover(null);
     if (!state.pointerPreview) return;
     state.pointerPreview = null;
@@ -12477,6 +12655,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
+    if (mode === "hand" && options.showHint && !state.busy && (!state.statusKey || state.statusKey === "ready" || state.statusKey === "handAutoAIManual")) {
+      setStatusKey("handAutoAIManual");
+    }
     if (options.showHint) {
       const hintKey = {
         hand:["canvasHintHand", "canvasHintHandAlt"],

@@ -54,6 +54,10 @@ test("each local format maps to one fixed on-demand renderer and unknown formats
   const geoJson = runtime.documentFor({ sourceFormat:"geojson", source:"{}", title:"Map" });
   assert.match(geoJson, /mt1\.google\.com[\s\S]*?is\.autonavi\.com/);
   assert.match(geoJson, /wgs84ToGcj02[\s\S]*?activateProvider/);
+  assert.match(geoJson, /geoJson\.basemap === "none"/);
+  assert.match(geoJson, /if \(noBasemap\) \{[\s\S]*?stage\.style\.background = "transparent";[\s\S]*?notify\(\);[\s\S]*?\} else activateProvider\(0\)/);
+  assert.match(geoJson, /\.pd-status\[hidden\]\{display:none\}/);
+  assert.match(geoJson, /render\(\)\.then\(\(\) => \{[\s\S]*?finish\(\);/);
   assert.match(geoJson, /\.pd-stage>canvas\{/);
   assert.doesNotMatch(geoJson, /\.pd-stage canvas\{/);
   const smiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Aspirin" });
@@ -91,9 +95,11 @@ flowchart LR
     wide = runtime.responsiveMermaidSource(source, 1400, 700),
     narrow = runtime.responsiveMermaidSource(source, 600, 1000);
   assert.equal(wide.direction, "LR");
+  assert.equal(wide.responsive, true);
   assert.match(wide.source, /^flowchart LR/m);
   assert.equal((wide.source.match(/direction TB/g) || []).length, 3);
   assert.equal(narrow.direction, "TB");
+  assert.equal(narrow.responsive, true);
   assert.match(narrow.source, /^flowchart TB/m);
   assert.equal((narrow.source.match(/direction LR/g) || []).length, 3);
 });
@@ -116,6 +122,7 @@ test("complex Graphviz diagrams provide horizontal and vertical layouts for the 
   const inserted = runtime.responsiveDotSource(`// penecho:responsive\ndigraph G { a -> b; }`, 500, 900);
   assert.equal(inserted.direction, "TB");
   assert.match(inserted.source, /\{\n  graph \[rankdir=TB\];/);
+  assert.match(inserted.source, /graph \[bgcolor="transparent"\]/);
 
   const quoted = runtime.responsiveDotSource(`// penecho:responsive\ndigraph G { graph [rankdir="LR"]; a -> b; }`, 500, 900);
   assert.match(quoted.source, /rankdir="TB"/);
@@ -123,6 +130,14 @@ test("complex Graphviz diagrams provide horizontal and vertical layouts for the 
   const fixed = runtime.responsiveDotSource(`// penecho:fixed-layout\ndigraph G { graph [rankdir=LR]; a -> b; }`, 500, 900);
   assert.equal(fixed.responsive, false);
   assert.equal(fixed.source.includes("rankdir=LR"), true);
+  assert.match(fixed.source, /graph \[bgcolor="transparent"\]/);
+
+  const explicitBackground = runtime.responsiveDotSource(`digraph G { graph [bgcolor="#f5f5f5"]; a -> b; }`, 800, 600);
+  assert.match(explicitBackground.source, /bgcolor="#f5f5f5"/);
+  assert.doesNotMatch(explicitBackground.source, /bgcolor="transparent"/);
+
+  const clusterBackgroundOnly = runtime.responsiveDotSource(`digraph G { subgraph cluster_a { bgcolor="#f5f5f5"; a -> b; } }`, 800, 600);
+  assert.match(clusterBackgroundOnly.source, /graph \[bgcolor="transparent"\]/);
 });
 
 test("Graphviz renderer selects the layout with the largest readable fit on resize", () => {
@@ -130,6 +145,30 @@ test("Graphviz renderer selects the layout with the largest readable fit on resi
   assert.match(html, /responsiveDotSource/);
   assert.match(html, /Math\.min\(width \/ layout\.intrinsicWidth, height \/ layout\.intrinsicHeight\)/);
   assert.match(html, /resizeRender = paint/);
+});
+
+test("responsive Mermaid reflows one rendered diagram as the widget changes shape", () => {
+  const html = runtime.documentFor({ sourceFormat:"mermaid", source:"%% penecho:responsive\nflowchart LR\nA-->B", title:"Flow" });
+  assert.match(html, /flowchart:\{ defaultRenderer:"elk" \}/);
+  assert.match(html, /responsiveMermaidSource\(source, stage\.clientWidth, stage\.clientHeight\)/);
+  assert.match(html, /renderedDirection = next\.direction/);
+  assert.match(html, /resizeRender = \(\) => void paint\(\)\.catch/);
+});
+
+test("every local renderer defaults its outer visualization surface to transparent", () => {
+  const vegaDefault = runtime.vegaLiteSpecWithDefaultBackground({ mark:"bar" }),
+    explicitVega = runtime.vegaLiteSpecWithDefaultBackground({ background:"#fff", mark:"bar" }),
+    configuredVega = runtime.vegaLiteSpecWithDefaultBackground({ config:{ background:"black" }, mark:"bar" }),
+    html = runtime.documentFor({ sourceFormat:"mermaid", source:"flowchart LR\nA-->B", title:"Transparent" });
+  assert.equal(vegaDefault.background, "transparent");
+  assert.equal(explicitVega.background, "#fff");
+  assert.equal(configuredVega.config.background, "black");
+  assert.equal(Object.prototype.hasOwnProperty.call(configuredVega, "background"), false);
+  assert.match(html, /themeVariables:\{ background:"transparent" \}/);
+  assert.match(html, /svg\.style\.background="transparent"/);
+  assert.match(html, /stage\.style\.background = "transparent"/);
+  assert.match(html, /\.pd-stage\{[^}]*background:transparent/);
+  assert.match(html, /vegaLiteSpecWithDefaultBackground\(parseJson\(\)\)/);
 });
 
 test("diagram source is persisted canonically and regenerated through the widget iframe", () => {

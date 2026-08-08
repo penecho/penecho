@@ -135,6 +135,21 @@ function outboundModelText(rawRequest) {
   return request.messages[1].content.find(part => part.type === "text").text;
 }
 
+function decodeLineNumberedReadView(readView, logicalLines, endsWithNewline) {
+  if (!readView) {
+    assert.equal(logicalLines, 0);
+    return "";
+  }
+  const numberedLines = readView.split("\n");
+  assert.equal(numberedLines.length, logicalLines);
+  const lines = numberedLines.map((line,index) => {
+    const prefix = `${String(index+1).padStart(6," ")}\t`;
+    assert.equal(line.startsWith(prefix), true);
+    return line.slice(prefix.length);
+  });
+  return `${lines.join("\n")}${endsWithNewline ? "\n" : ""}`;
+}
+
 function parseRefineModelText(text) {
   const stablePrefix = "PenEcho Refine stable context (JSON; cacheable across edits of this target):\n",
     filesIntroduction = "\n\nPenEcho virtual files follow.",
@@ -146,18 +161,16 @@ function parseRefineModelText(text) {
   assert.ok(cursor > stableEnd);
   while (text.startsWith("\n\nPenEcho virtual file:\n", cursor)) {
     cursor += 2;
-    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\npatchBaselineEndsWithNewline: (true|false)\noriginalEndsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
+    const header = /^PenEcho virtual file:\npath: ([^\n]+)\nutf8Bytes: (\d+)\nlogicalLines: (\d+)\nnumbering: nl -ba -w6 -s TAB\npatchBaselineEndsWithNewline: (true|false)\noriginalEndsWithNewline: (true|false)\n<<<BEGIN (PENECHO_VIRTUAL_FILE_[a-f0-9]{64})>>>\n/.exec(text.slice(cursor));
     assert.ok(header);
     const contentStart = cursor + header[0].length, endMarker = `\n<<<END ${header[6]}>>>`, contentEnd = text.indexOf(endMarker, contentStart);
     assert.ok(contentEnd >= contentStart);
-    const content = text.slice(contentStart, contentEnd), endsWithNewline = /(?:\r\n|\r|\n)$/.test(content),
-      separators = content.match(/\r\n|\r|\n/g)?.length || 0,
-      logicalLines = content.length ? separators + (endsWithNewline ? 0 : 1) : 0;
+    const readView = text.slice(contentStart, contentEnd), logicalLines = Number(header[3]),
+      patchBaselineEndsWithNewline = header[4] === "true",
+      content = decodeLineNumberedReadView(readView,logicalLines,patchBaselineEndsWithNewline);
     assert.equal(Buffer.byteLength(content, "utf8"), Number(header[2]));
-    assert.equal(logicalLines, Number(header[3]));
-    assert.equal(endsWithNewline, header[4] === "true");
     assert.equal(content.includes(header[6]), false);
-    files.push({ path:header[1], content, utf8Bytes:Number(header[2]), logicalLines, patchBaselineEndsWithNewline:endsWithNewline, originalEndsWithNewline:header[5] === "true", boundary:header[6] });
+    files.push({ path:header[1], content, readView, utf8Bytes:Number(header[2]), logicalLines, patchBaselineEndsWithNewline, originalEndsWithNewline:header[5] === "true", boundary:header[6] });
     cursor = contentEnd + endMarker.length;
   }
   const currentPrefix = "\n\nPenEcho current Refine request context (JSON; applies to the virtual files above):\n";
@@ -748,6 +761,8 @@ test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and tempo
     assert.ok(saved.args.includes("--agent-file"));
     assert.match(saved.agent,/tools: \[\]/);
     assert.match(saved.agent,/subagents: \[\]/);
+    assert.match(saved.agent,/Use only content supplied in the prompt, including virtual-file read views/);
+    assert.doesNotMatch(saved.agent,/must not attempt to read files/);
     assert.equal(saved.args[saved.args.indexOf("--model")+1],"kimi-code/k3");
   } finally {
     await stopServer(child);
@@ -843,11 +858,13 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.match(request.system,/Never spend more than one half of the available output-token allowance on internal reasoning/);
     assert.match(request.system,/reserve at least the other half for one complete final response/);
     const fallbackStart=request.system.indexOf("Mandatory final visible-response fallback"),
+      refineGateStart=request.system.indexOf("Refine mode gate:"),
       schemaStart=request.system.lastIndexOf('{"$schema":"https://json-schema.org/draft/2020-12/schema"');
     assert.ok(fallbackStart > request.system.indexOf("reserve at least the other half"));
     assert.match(request.system.slice(fallbackStart,schemaStart),/their absence is not evidence that there is no new input/);
     assert.match(request.system.slice(fallbackStart,schemaStart),/entire attached input image within sourceRect/);
-    assert.ok(schemaStart > fallbackStart);
+    assert.match(request.system.slice(refineGateStart,schemaStart),/modelInput\.widgetEdit[\s\S]*?exactly one widget_patch command[\s\S]*?write_text fallback rules do not apply/);
+    assert.ok(schemaStart > refineGateStart && refineGateStart > fallbackStart);
     const responseSchema=JSON.parse(request.system.slice(schemaStart));
     assert.equal(responseSchema.properties.commands.minItems,1);
   } finally { await stopServer(anthropicServer.child); await new Promise(resolve=>anthropic.server.close(resolve)); }
@@ -1057,13 +1074,15 @@ test("shared PenEcho server canvases support authorized metadata-first CRUD", { 
     assert.equal(loadedBody.canvas.version,1);
     assert.equal(loadedBody.canvas.view.navigationLocked,true);
 
-    const changed={...snapshot,name:"Updated shared design",createdAt:Date.now(),view:{scale:0.5,panX:120,panY:240}};
+    const changed={...snapshot,name:"Updated shared design",theme:"future-theme",createdAt:Date.now(),view:{scale:0.5,panX:120,panY:240}};
     const updated=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`,{method:"PUT",headers:mutationHeaders,body:JSON.stringify(changed)}),
       updatedBody=await updated.json();
     assert.equal(updated.status,200,JSON.stringify(updatedBody));
     assert.equal(updatedBody.canvas.name,"Updated shared design");
+    assert.equal(updatedBody.canvas.theme,"studio");
     const legacyLoaded=await fetch(`${origin}/api/canvases/${encodeURIComponent(snapshot.id)}`).then(response=>response.json());
     assert.equal(legacyLoaded.canvas.view.navigationLocked,false);
+    assert.equal(legacyLoaded.canvas.theme,"studio");
 
     const invalidId=await fetch(`${origin}/api/canvases/../../package.json`);
     assert.equal(invalidId.status,404);
@@ -1268,7 +1287,8 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.match(modelInput.widgetRenderingPolicy, /verify the longest labels and every section at the actual widget dimensions/);
     assert.match(modelInput.widgetRenderingPolicy, /For SVG, size text relative to its viewBox, not browser defaults/);
     assert.doesNotMatch(modelInput.widgetRenderingPolicy, /180-240px|at least 100px|at least 80px/);
-    assert.match(modelInput.widgetRenderingPolicy, /transparent[\s\S]*no outer background, border, corner radius, or box shadow/);
+    assert.match(modelInput.widgetRenderingPolicy, /visualization backdrop transparent by default[\s\S]*opaque backdrop only when visually necessary or explicitly requested/);
+    assert.match(modelInput.widgetRenderingPolicy, /no outer background, border, corner radius, or box shadow/);
 
     const disabledResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(validPayload()) }),
       disabled = await disabledResponse.json();
@@ -1553,13 +1573,16 @@ test("professional diagrams accept local source renderers and keep unknown forma
     assert.equal("source" in modelInput.widgetEdit, false);
     assert.equal("html" in modelInput.widgetEdit, false);
     assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.source" }]);
+    assert.equal(modelInput.actionMeaning, "refine the supplied target widget in place using the newest instructions; return only the required widget_patch command");
     assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /nl -ba -w6 -s TAB read views[\s\S]*?first ASCII TAB[\s\S]*?display metadata[\s\S]*?never copy either into diff lines/);
+    assert.match(modelInput.widgetEditPolicy, /input `    42<TAB>  <p>x<\/p>`[\s\S]*?removal line is `-  <p>x<\/p>`[\s\S]*?never `-<TAB>/);
     assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
-    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?File names, extensions and file count are not fixed/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?widget\.json is editable only through its existing keys; never add manifest keys/);
     assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
     assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
     assert.match(modelInput.widgetEditPolicy, /never reconstruct or normalize removed lines[\s\S]*?character-for-character/);
-    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?bare unified diff only/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?patch field must contain only the bare unified diff[\s\S]*?final response remains the required JSON object/);
     assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
     assert.equal(retryInstruction, "");
     assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
@@ -1573,7 +1596,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
       sourceFormat:"mermaid",
       sourceFile:"widget.source",
     });
-    assert.match(modelText, /<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\nflowchart LR\nA --> B\n\n<<<END/);
+    assert.equal(files[1].readView, "     1\tflowchart LR\n     2\tA --> B");
+    assert.match(modelText, /numbering: nl -ba -w6 -s TAB\n[\s\S]*?<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\n     1\tflowchart LR\n     2\tA --> B\n<<<END/);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -1676,7 +1700,7 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     box:{ x:120, y:240, w:1200, h:700 },
     html:"<!doctype html><main class=\"custom-node\">Existing</main>",
     sourceFormat:"d2",
-    source:"client -> api -> database",
+    source:"client -> api\n\napi -> database",
     targetId:"client-only-widget-id",
     runtimeDiagnostics:{
       errors:[{
@@ -1735,12 +1759,16 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
       { path:"widget.source" },
     ]);
     assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);
+    assert.match(modelInput.widgetEditPolicy, /Required response-shape example \(replace <path> with an exact widgetEdit\.patchFiles path\):[\s\S]*?"intent":"answer"[\s\S]*?"commands"[\s\S]*?"tool":"widget_patch"/);
+    assert.match(modelInput.widgetEditPolicy, /Every changed file starts with --- and \+\+\+; no other file-section marker is valid/);
+    assert.match(modelInput.widgetEditPolicy, /nl -ba -w6 -s TAB read views[\s\S]*?first ASCII TAB[\s\S]*?display metadata[\s\S]*?never copy either into diff lines/);
+    assert.match(modelInput.widgetEditPolicy, /input `    42<TAB>  <p>x<\/p>`[\s\S]*?removal line is `-  <p>x<\/p>`[\s\S]*?never `-<TAB>/);
     assert.match(modelInput.widgetEditPolicy, /Canvas annotations request a visible content change[\s\S]*?widget\.json-only patch only when the user explicitly requests metadata alone/);
-    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?File names, extensions and file count are not fixed/);
+    assert.match(modelInput.widgetEditPolicy, /virtual-file list in widgetEdit\.patchFiles is the sole authority[\s\S]*?widget\.json is editable only through its existing keys; never add manifest keys/);
     assert.match(modelInput.widgetEditPolicy, /complete @@ -oldStart,oldCount \+newStart,newCount @@ headers/);
     assert.match(modelInput.widgetEditPolicy, /leading space or minus as the diff marker[\s\S]*?original indentation/);
     assert.match(modelInput.widgetEditPolicy, /nearby edits would produce overlapping or touching context[\s\S]*?Never repeat an original line across two hunks/);
-    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?bare unified diff only/);
+    assert.match(modelInput.widgetEditPolicy, /wrapper headers or footers[\s\S]*?patch field must contain only the bare unified diff[\s\S]*?final response remains the required JSON object/);
     assert.match(modelInput.widgetEditPolicy, /Example only when all three listed files need the same semantic change:[\s\S]*?--- a\/widget\.json[\s\S]*?--- a\/widget\.html[\s\S]*?--- a\/widget\.source/);
     assert.match(modelInput.widgetEditPolicy, /newly added or replaced HTML[\s\S]*?one long or minified line[\s\S]*?below 160 characters/);
     assert.match(modelInput.widgetEditPolicy, /runtimeDiagnostics[\s\S]*?try to repair JavaScript errors[\s\S]*?display or interaction[\s\S]*?preserving unrelated behavior/);
@@ -1748,6 +1776,8 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     assert.equal(retryInstruction, "");
     assert.deepEqual(files.map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })),
       widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => ({ path:file.path, content:file.content, originalEndsWithNewline:file.originalEndsWithNewline })));
+    assert.equal(files.find(file => file.path === "widget.source").readView,
+      "     1\tclient -> api\n     2\t\n     3\tapi -> database");
 
     const shiftedPayload = { ...payload, widgetEdit:{ ...payload.widgetEdit, box:{ ...payload.widgetEdit.box, x:payload.widgetEdit.box.x + 1 } } },
       ambiguousResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(shiftedPayload) }),
@@ -1763,9 +1793,9 @@ test("custom plugin widget refinement applies one patch and rejects ambiguous pa
     assert.notEqual(firstText.slice(firstCurrent), shiftedText.slice(shiftedCurrent));
     const retryRequest = parseRefineModelText(outboundModelText(upstream.requests[2]));
     assert.deepEqual(retryRequest.files.map(file => file.content),widgetPatchFiles({ ...payload.widgetEdit,widgetType:"html_widget" }).map(file => file.content));
-    assert.match(retryRequest.retryInstruction, /previous widget patch[\s\S]*?original virtual files[\s\S]*?widgetEdit\.patchFiles manifest/);
-    assert.match(retryRequest.retryInstruction, /standard file headers[\s\S]*?complete hunk headers[\s\S]*?ordered non-overlapping hunks/);
-    assert.match(retryRequest.retryInstruction, /bare unified diff[\s\S]*?wrapper headers or footers/);
+    assert.match(retryRequest.retryInstruction, /failed local validation: widget-patch-command-count[\s\S]*?original virtual files[\s\S]*?widgetEdit\.patchFiles paths/);
+    assert.match(retryRequest.retryInstruction, /standard ---\/\+\+\+ section[\s\S]*?complete, correctly counted, ordered, non-overlapping hunks/);
+    assert.match(retryRequest.retryInstruction, /bare unified diff[\s\S]*?no prose, fences, metadata, wrappers/);
     assert.ok(outboundModelText(upstream.requests[2]).endsWith(retryRequest.retryInstruction));
 
     const oversizedResponse = await fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
@@ -1975,8 +2005,9 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /inspect and use the entire attached input image within sourceRect as the current input/);
   assert.match(source, /return one short write_text clarification question asking what the user wants done with the visible content/);
   assert.match(source, /commands contains at least one renderable command/);
+  assert.match(source, /Return only one compact final JSON object needed by PenEcho[\s\S]*?Omit drafts, reasoning, progress or status updates, alternatives, duplicate objects, Markdown, and any wrapper text/);
   assert.match(source, /"commands":\{"type":"array","minItems":1,"maxItems":16/);
-  assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
+  assert.match(source, /return \[base, literalTypeset \? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, REFINE_MODE_GATE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT\]/);
   assert.match(source, /const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles/);
   assert.match(source, /Do not minify generated HTML[\s\S]*?stable multiline formatting[\s\S]*?below 160 characters/);
   assert.match(source, /reusable source is the HTML document itself[\s\S]*?omit copyText and copyLabel[\s\S]*?Copy HTML/);
@@ -2358,7 +2389,7 @@ test("request tracing preserves an upstream response that fails model parsing", 
   }
 });
 
-test("model parsing recovers the first complete JSON object from trailing junk", { timeout: 20000 }, async () => {
+test("model parsing recovers a complete final JSON object from wrapper text and trailing junk", { timeout: 20000 }, async () => {
   const message='Keep literal braces { and }, a backslash \\, and an escaped quote " intact.',command={tool:"write_text",x:10,y:10,text:"Recovered",fontSize:80,maxWidth:400,lineHeight:1.35},responseContent=`Model response:\n${JSON.stringify({intent:"answer",observedText:"robust JSON",message,commands:[command]})}]}`,
     upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
   try {
@@ -2368,6 +2399,36 @@ test("model parsing recovers the first complete JSON object from trailing junk",
     assert.equal(body.commands.length,1);
     assert.equal(body.commands[0].tool,"write_text");
     assert.equal(body.commands[0].text,"Recovered");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("model parsing ignores unrelated JSON objects before the final response", { timeout: 20000 }, async () => {
+  const command={tool:"write_text",x:10,y:10,text:"Final",fontSize:80,maxWidth:400,lineHeight:1.35},responseContent=`${JSON.stringify({status:"finished",detail:"intermediate metadata"})}\n${JSON.stringify({intent:"answer",commands:[command]})}`,
+    upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,1);
+    assert.equal(body.commands.length,1);
+    assert.equal(body.commands[0].text,"Final");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("model parsing selects the last schema-valid top-level response object", { timeout: 20000 }, async () => {
+  const command=text=>({tool:"write_text",x:10,y:10,text,fontSize:80,maxWidth:400,lineHeight:1.35}),responseContent=`${JSON.stringify({intent:"answer",commands:[command("Draft")]})}\n${JSON.stringify({intent:"answer",commands:[command("Final")]})}`,
+    upstream=await startApiServer(responseContent),{child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.attempts,1);
+    assert.equal(body.commands.length,1);
+    assert.equal(body.commands[0].text,"Final");
   } finally {
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));

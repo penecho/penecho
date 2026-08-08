@@ -95,8 +95,22 @@ function possiblyUnifiedDiffLine(line) {
 
 function normalizedPatchText(value, widgetEdit) {
   if (typeof value !== "string" || !value.trim() || Buffer.byteLength(value, "utf8") > MAX_WIDGET_PATCH_BYTES) return "";
-  const lines = value.replace(/\r\n/g, "\n").split("\n"),
-    paths = new Set(patchFilesForWidgetEdit(widgetEdit).map(file => file.path)),
+  const paths = new Set(patchFilesForWidgetEdit(widgetEdit).map(file => file.path)),
+    lines = [];
+  for (const line of value.replace(/\r\n/g, "\n").split("\n")) {
+    const updateFile = /^\*\*\* Update File: (.+)$/.exec(line);
+    if (updateFile) {
+      const path = updateFile[1];
+      if (!paths.has(path)) return "";
+      lines.push(`--- a/${path}`, `+++ b/${path}`);
+      continue;
+    }
+    // Tolerate only the common existing-file marker. Creation, deletion and
+    // moves remain outside the Refine contract and must never be normalized.
+    if (/^\*\*\* (?:Add|Delete) File:/.test(line) || /^\*\*\* Move to:/.test(line)) return "";
+    lines.push(line);
+  }
+  const
     firstHeader = lines.findIndex((line, index) => {
       const match = /^--- a\/(.+)$/.exec(line), path = match?.[1];
       return Boolean(path && paths.has(path) && lines[index + 1] === `+++ b/${path}`);
@@ -154,6 +168,29 @@ function uniquelyLocatedPatchSequence(lines, entries, minimumStart) {
   return omittedIndentStart === null ? null : { start:omittedIndentStart, repaired:true };
 }
 
+// An nl read view places one metadata TAB before every source line. Repair it
+// only when the model copied that TAB onto every diff body line, the submitted
+// old side has no exact match, and removing exactly one TAB yields the unique
+// declared source location. Requiring at least one non-TAB source line proves
+// that this is a systematic metadata prefix, not legitimate uniform indentation.
+function repairedNumberingTabBody(body, sourceLines, minimumStart, declaredStart) {
+  const diffLines = body.filter(line => line !== "\\ No newline at end of file"),
+    expected = diffLines.filter(line => line[0] === " " || line[0] === "-").map(line => line.slice(1));
+  if (!Number.isSafeInteger(declaredStart) || declaredStart < minimumStart || !expected.length
+    || diffLines.some(line => ![" ","-","+"].includes(line[0]) || line[1] !== "\t")) return null;
+  const exactMatches = [];
+  for (let candidate = minimumStart; candidate + expected.length <= sourceLines.length; candidate++) {
+    if (expected.every((line,index) => sourceLines[candidate + index] === line)) exactMatches.push(candidate);
+    if (exactMatches.length > 1) break;
+  }
+  if (exactMatches.length) return null;
+  const repairedExpected = expected.map(line => line.slice(1));
+  if (!repairedExpected.some(line => !line.startsWith("\t"))) return null;
+  const repairedStart = uniqueSequenceStart(sourceLines,repairedExpected,minimumStart);
+  if (repairedStart === null || repairedStart !== declaredStart) return null;
+  return body.map(line => line === "\\ No newline at end of file" ? line : `${line[0]}${line.slice(2)}`);
+}
+
 function setPatchDiagnostic(diagnostics, reason) {
   if (diagnostics && typeof diagnostics === "object" && !diagnostics.reason) diagnostics.reason = reason;
 }
@@ -179,8 +216,9 @@ function trailingContextLines(body) {
 // Hunk line counts are redundant with the prefixed body lines and models
 // occasionally miscount them or omit the coordinates as a bare @@ header.
 // Canonicalize counts and uniquely infer missing coordinates before parsing;
-// repair one swallowed source-indent space only at a unique target, and trim
-// only exact unchanged context repeated across two ordered adjacent hunks.
+// repair one swallowed source-indent space or one proven nl metadata TAB only
+// at a unique target, and trim only exact unchanged context repeated across
+// two ordered adjacent hunks.
 // Paths, changed lines, additions, and the complete envelope remain strict.
 function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
   const lines = patchText.split("\n"), finalNewline = lines.at(-1) === "";
@@ -218,6 +256,8 @@ function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
         body.push(line);
       }
       if (!body.length) return "";
+      const tabRepairedBody = repairedNumberingTabBody(body,sourceLines,previousEnd,header && oldLines > 0 ? oldStart - 1 : null);
+      if (tabRepairedBody) body = tabRepairedBody;
       const expectedEntries = body
         .map((line, bodyIndex) => ({ operation:line[0], content:line.slice(1), bodyIndex }))
         .filter(entry => entry.operation === " " || entry.operation === "-");
@@ -333,7 +373,7 @@ function optionalManifestString(value) {
   return value === undefined || value === null ? null : typeof value === "string" ? value : false;
 }
 
-function parsedWidgetManifest(content, widgetEdit) {
+function parsedWidgetManifest(content, widgetEdit, diagnostics = null) {
   let manifest;
   try {
     manifest = JSON.parse(content);
@@ -347,8 +387,13 @@ function parsedWidgetManifest(content, widgetEdit) {
     typeKeys = widgetEdit.widgetType === "diagram_source"
       ? ["sourceFile"]
       : ["frameworkVersion","htmlFile","copyTextFile","copyLabel"],
-    allowedKeys = new Set([...commonKeys,...typeKeys]);
-  if (Object.keys(manifest).some(key => !allowedKeys.has(key))) return null;
+    allowedKeys = new Set([...commonKeys,...typeKeys]),
+    unsupportedKey = Object.keys(manifest).find(key => !allowedKeys.has(key));
+  if (unsupportedKey !== undefined) {
+    const safeKey = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(unsupportedKey) ? unsupportedKey : "";
+    setPatchDiagnostic(diagnostics,safeKey ? `unsupported-manifest-field:${safeKey}` : "unsupported-manifest-field");
+    return null;
+  }
   for (const field of ["diagramKind","sourceFormat",...(widgetEdit.widgetType === "html_widget" ? ["frameworkVersion","copyLabel"] : [])]) {
     const value = optionalManifestString(manifest[field]);
     if (value === false) return null;
@@ -370,8 +415,8 @@ function optionalCommandField(value) {
   return typeof value === "string" && value ? value : "";
 }
 
-function widgetCommandFromFiles(contents, widgetEdit) {
-  const manifest = parsedWidgetManifest(contents.get(WIDGET_MANIFEST_PATH),widgetEdit);
+function widgetCommandFromFiles(contents, widgetEdit, diagnostics = null) {
+  const manifest = parsedWidgetManifest(contents.get(WIDGET_MANIFEST_PATH),widgetEdit,diagnostics);
   if (!manifest) return null;
   const diagramKind = optionalCommandField(manifest.diagramKind),
     sourceFormat = optionalCommandField(manifest.sourceFormat);
@@ -460,7 +505,7 @@ function commandFromWidgetPatch(command, widgetEdit, diagnostics = null) {
       return [file.path,restoredPatchFileContent(file,result)];
     })),
     originalCommand = widgetCommandFromFiles(originalContents,widgetEdit),
-    updatedCommand = widgetCommandFromFiles(finalContents,widgetEdit);
+    updatedCommand = widgetCommandFromFiles(finalContents,widgetEdit,diagnostics);
   if (!originalCommand || !updatedCommand || JSON.stringify(updatedCommand) === JSON.stringify(originalCommand)) return null;
   return updatedCommand;
 }

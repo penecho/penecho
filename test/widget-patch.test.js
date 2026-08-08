@@ -127,6 +127,56 @@ test("widget patch applies HTML and source files atomically", () => {
   assert.equal(commandFromWidgetPatch(patchCommand(staleSource), htmlEdit()), null);
 });
 
+test("widget patch narrowly normalizes common Update File markers", () => {
+  const patch = [
+      "*** Begin Patch",
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -2,3 +2,3 @@",
+      " <html>",
+      " <body>",
+      "-<h1>Old</h1>",
+      "+<h1>Compatible</h1>",
+      "*** Update File: widget.source",
+      "@@ -1,3 +1,4 @@",
+      " graph LR",
+      " A --> B",
+      " B --> C",
+      "+C --> D",
+      "*** End Patch",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch), htmlEdit());
+  assert.match(result.html, /<h1>Compatible<\/h1>/);
+  assert.equal(result.copyText, "graph LR\nA --> B\nB --> C\nC --> D\n");
+
+  const updateFileOnly = patch
+    .replace("--- a/widget.html\n+++ b/widget.html", "*** Update File: widget.html");
+  assert.deepEqual(commandFromWidgetPatch(patchCommand(updateFileOnly), htmlEdit()), result);
+
+  const unlisted = patch.replace("*** Update File: widget.source", "*** Update File: other.source");
+  assert.equal(commandFromWidgetPatch(patchCommand(unlisted), htmlEdit()), null);
+  assert.equal(commandFromWidgetPatch(patchCommand(`*** Delete File: widget.source\n${patch}`), htmlEdit()), null);
+});
+
+test("widget patch reports unsupported manifest fields precisely", () => {
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -5,6 +5,7 @@",
+      "   \"refreshSeconds\": 900,",
+      "   \"diagramKind\": null,",
+      "   \"sourceFormat\": \"mermaid\",",
+      "+  \"background\": \"transparent\",",
+      "   \"frameworkVersion\": null,",
+      "   \"htmlFile\": \"widget.html\",",
+      "   \"copyTextFile\": \"widget.source\",",
+      "",
+    ].join("\n"), diagnostics = {};
+  assert.equal(commandFromWidgetPatch(patchCommand(patch),htmlEdit(),diagnostics),null);
+  assert.equal(diagnostics.reason,"unsupported-manifest-field:background");
+});
+
 test("widget patch accepts the standard dual-file prompt example", () => {
   const widgetEdit = htmlEdit({
       html:"<main>\n  <h1>Old</h1>\n</main>\n",
@@ -234,6 +284,43 @@ test("widget patch repairs one omitted source-indent space only at a unique targ
       "",
     ].join("\n"), result = commandFromWidgetPatch(patchCommand(patch), widgetEdit);
   assert.equal(result.html, ".button {\n color:blue;\n padding:0;\n}\nrun();\n if (ready) {\n  launch();\n }\n");
+});
+
+test("widget patch narrowly removes one copied nl metadata TAB from a complete hunk", () => {
+  const widgetEdit = htmlEdit({
+      html:"<section>\n\t<p>Old</p>\n</section>\n",
+      source:"",
+      sourceFormat:"",
+    }),
+    patch = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -1,3 +1,3 @@",
+      " \t<section>",
+      "-\t\t<p>Old</p>",
+      "+\t\t<p>New</p>",
+      " \t</section>",
+      "",
+    ].join("\n"),
+    result = commandFromWidgetPatch(patchCommand(patch),widgetEdit);
+  assert.equal(result.html,"<section>\n\t<p>New</p>\n</section>\n");
+});
+
+test("widget patch keeps real TAB indentation and rejects partial or ambiguous metadata repair", () => {
+  const tabIndented = htmlEdit({ html:"\told\n",source:"",sourceFormat:"" }),
+    exactPatch = "--- a/widget.html\n+++ b/widget.html\n@@ -1 +1 @@\n-\told\n+\tnew\n";
+  assert.equal(commandFromWidgetPatch(patchCommand(exactPatch),tabIndented).html,"\tnew\n");
+
+  const plain = htmlEdit({ html:"<section>\nold\n</section>\n",source:"",sourceFormat:"" }),
+    partialLeak = "--- a/widget.html\n+++ b/widget.html\n@@ -1,3 +1,3 @@\n \t<section>\n-\told\n+new\n \t</section>\n";
+  assert.equal(commandFromWidgetPatch(patchCommand(partialLeak),plain),null);
+
+  const wrongCoordinate = "--- a/widget.html\n+++ b/widget.html\n@@ -2,3 +2,3 @@\n \t<section>\n-\told\n+\tnew\n \t</section>\n";
+  assert.equal(commandFromWidgetPatch(patchCommand(wrongCoordinate),plain),null);
+
+  const repeated = htmlEdit({ html:"start\nold\nend\nstart\nold\nend\n",source:"",sourceFormat:"" }),
+    ambiguousLeak = "--- a/widget.html\n+++ b/widget.html\n@@ -1,3 +1,3 @@\n \tstart\n-\told\n+\tnew\n \tend\n";
+  assert.equal(commandFromWidgetPatch(patchCommand(ambiguousLeak),repeated),null);
 });
 
 test("widget patch rejects broader or ambiguous whitespace repair", () => {

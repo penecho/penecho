@@ -183,32 +183,34 @@
     <aside id="historyPanel" class="history-panel" aria-hidden="true" aria-labelledby="historyTitle" inert>
       <header>
         <div><span class="history-kicker">PenEcho</span><h2 id="historyTitle" data-i18n="historyTitle">Canvas history</h2></div>
-        <button id="historyClose" type="button" data-i18n-aria="closeHistory" aria-label="Close history" data-i18n-title="closeHistory" title="Close history">×</button>
+        <button id="historyClose" type="button" data-i18n-aria="closeHistory" aria-label="Close history" data-i18n-title="closeHistory" title="Close history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </header>
       <p data-i18n="historyDescription">Stores confirmed canvas content only. Unconfirmed AI drafts are excluded.</p>
-      <fieldset class="snapshot-location" aria-describedby="historyStorageDescription">
-        <legend data-i18n="saveLocation">Save location</legend>
-        <div class="snapshot-location-options">
-          <label><input type="radio" name="historyStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
-          <label><input type="radio" name="historyStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
+      <div class="history-composer">
+        <fieldset class="snapshot-location" aria-describedby="historyStorageDescription">
+          <legend data-i18n="saveLocation">Save location</legend>
+          <div class="snapshot-location-options">
+            <label><input type="radio" name="historyStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
+            <label><input type="radio" name="historyStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
+          </div>
+          <p id="historyStorageDescription" class="snapshot-location-description"></p>
+        </fieldset>
+        <section id="serverProjectManager" class="history-projects" hidden>
+          <label for="historyProjectSelect"><span data-i18n="canvasProject">Project</span>
+            <select id="historyProjectSelect"></select>
+          </label>
+          <button id="historyProjectCreate" type="button" data-i18n="canvasProjectNew">New project</button>
+          <button id="historyProjectDelete" class="history-project-delete" type="button" data-i18n="canvasProjectDelete">Delete project</button>
+        </section>
+        <div class="history-save-row">
+          <input id="historyName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)" data-i18n-aria="snapshotName" aria-label="Snapshot name">
+          <div class="history-save-actions">
+            <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
+            <button id="historySave" type="button" data-i18n="saveSnapshot">Save New</button>
+            <button id="historyNew" type="button" data-i18n="newCanvas">New</button>
+          </div>
+          <div id="historyNotice" class="history-notice" role="status" aria-live="polite" aria-atomic="true"></div>
         </div>
-        <p id="historyStorageDescription" class="snapshot-location-description"></p>
-      </fieldset>
-      <section id="serverProjectManager" class="history-projects" hidden>
-        <label for="historyProjectSelect"><span data-i18n="canvasProject">Project</span>
-          <select id="historyProjectSelect"></select>
-        </label>
-        <button id="historyProjectCreate" type="button" data-i18n="canvasProjectNew">New project</button>
-        <button id="historyProjectDelete" class="history-project-delete" type="button" data-i18n="canvasProjectDelete">Delete project</button>
-      </section>
-      <div class="history-save-row">
-        <input id="historyName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)" data-i18n-aria="snapshotName" aria-label="Snapshot name">
-        <div class="history-save-actions">
-          <button id="historySaveCurrent" type="button" data-i18n="saveCurrentSnapshot">Save</button>
-          <button id="historySave" type="button" data-i18n="saveSnapshot">Save New</button>
-          <button id="historyNew" type="button" data-i18n="newCanvas">New</button>
-        </div>
-        <div id="historyNotice" class="history-notice" role="status" aria-live="polite" aria-atomic="true"></div>
       </div>
       <div id="historyList" class="history-list" aria-live="polite"></div>
     </aside>
@@ -217,24 +219,26 @@
       <form method="dialog">
         <header>
           <div><span class="history-kicker">PenEcho</span><h2 id="newCanvasTitle" data-i18n="newCanvasTitle">Start a new canvas?</h2></div>
-          <button id="newCanvasClose" class="new-canvas-close" type="button" data-i18n-aria="cancel" aria-label="Cancel" data-i18n-title="cancel" title="Cancel">×</button>
+          <button id="newCanvasClose" class="new-canvas-close" type="button" data-i18n-aria="cancel" aria-label="Cancel" data-i18n-title="cancel" title="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </header>
         <p data-i18n="newCanvasDescription">Save confirmed content before starting over. Unconfirmed AI drafts are not included.</p>
         <p id="currentSnapshotLabel" class="current-snapshot"></p>
-        <fieldset class="snapshot-location" aria-describedby="newCanvasStorageDescription">
-          <legend data-i18n="saveLocation">Save location</legend>
-          <div class="snapshot-location-options">
-            <label><input type="radio" name="newCanvasStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
-            <label><input type="radio" name="newCanvasStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
-          </div>
-          <p id="newCanvasStorageDescription" class="snapshot-location-description"></p>
-        </fieldset>
-        <label id="newCanvasProjectField" class="new-canvas-project" for="newCanvasProjectSelect" hidden><span data-i18n="canvasProject">Project</span>
-          <select id="newCanvasProjectSelect"></select>
-        </label>
-        <label class="new-snapshot-name" for="newSnapshotName"><span data-i18n="newSnapshotName">Name for new snapshot (optional)</span>
-          <input id="newSnapshotName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)">
-        </label>
+        <div class="new-canvas-fields">
+          <fieldset class="snapshot-location" aria-describedby="newCanvasStorageDescription">
+            <legend data-i18n="saveLocation">Save location</legend>
+            <div class="snapshot-location-options">
+              <label><input type="radio" name="newCanvasStorageLocation" value="device"><span data-i18n="storageThisDevice">This device</span></label>
+              <label><input type="radio" name="newCanvasStorageLocation" value="server"><span data-i18n="storagePenEchoServer">PenEcho server</span></label>
+            </div>
+            <p id="newCanvasStorageDescription" class="snapshot-location-description"></p>
+          </fieldset>
+          <label id="newCanvasProjectField" class="new-canvas-project" for="newCanvasProjectSelect" hidden><span data-i18n="canvasProject">Project</span>
+            <select id="newCanvasProjectSelect"></select>
+          </label>
+          <label class="new-snapshot-name" for="newSnapshotName"><span data-i18n="newSnapshotName">Name for new snapshot (optional)</span>
+            <input id="newSnapshotName" type="text" maxlength="48" data-i18n-placeholder="snapshotName" placeholder="Snapshot name (optional)">
+          </label>
+        </div>
         <div class="new-canvas-actions">
           <button id="newDiscard" class="new-canvas-discard" type="button" data-i18n="newWithoutSave">Don't save</button>
           <div class="new-canvas-action-group">
@@ -285,6 +289,7 @@
         <canvas id="screen"></canvas>
         <canvas id="animationLayer" class="animation-layer" aria-hidden="true"></canvas>
         <div id="widgetLayer" class="widget-layer" hidden aria-live="polite"></div>
+        <canvas id="placedContentLayer" class="placed-content-layer" aria-hidden="true"></canvas>
         <canvas id="summonLayer" class="summon-layer" hidden aria-hidden="true"></canvas>
         <canvas id="inkLayer" class="ink-layer" aria-hidden="true"></canvas>
         <canvas id="interactionLayer" class="interaction-layer" aria-hidden="true"></canvas>

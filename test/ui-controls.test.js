@@ -41,8 +41,10 @@ test("canvas file actions are in the top-right header and available in History",
   assert.match(app, /completeNewCanvas\("overwrite"\)/);
   assert.match(app, /function startBlankCanvas\(\)/);
   assert.match(functionSource(app, "startBlankCanvas"), /clearTextEditors\(\)/);
-  assert.match(functionSource(app, "startBlankCanvas"), /state\.aiDraftReturnMode = null[\s\S]*?setCanvasMode\("pen", \{/);
+  assert.match(functionSource(app, "startBlankCanvas"), /state\.aiDraftReturnMode = null[\s\S]*?setCanvasNavigationLocked\(false\)[\s\S]*?setCanvasMode\("pen", \{/);
   assert.match(functionSource(app, "loadSnapshot"), /clearTextEditors\(\)/);
+  assert.match(functionSource(app, "renderSnapshotList"), /runSnapshotLoadAction\(load, \(\) => requestLoadSnapshot\(item\.id, location\)\)/);
+  assert.match(functionSource(app, "runSnapshotLoadAction"), /if \(button\.disabled\) return;[\s\S]*?button\.disabled = true[\s\S]*?await runSnapshotAction\(action\)[\s\S]*?button\.disabled = false/);
 });
 
 test("canvas connection editor uses editable Kimi and MiniMax presets without connection names", () => {
@@ -92,6 +94,7 @@ test("canvas photos use one picker, editable image records, side action bar, and
     loadSnapshot = functionSource(app, "loadSnapshot"),
     startBlankCanvas = functionSource(app, "startBlankCanvas"),
     renderExportCanvas = functionSource(app, "renderExportCanvas"),
+    snapshotPreview = functionSource(app, "snapshotPreview"),
     prepareImportedImage = functionSource(app, "prepareImportedImage");
 
   assert.match(html, /id="imagePickerBtn"/);
@@ -151,6 +154,8 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(startBlankCanvas, /restoreImages\(\[\]\)/);
   assert.match(save, /imagesBefore[\s\S]*?imagesAfter[\s\S]*?const entry = \{[^}]*imagesBefore, imagesAfter[^}]*\}[\s\S]*?state\.history\.push\(entry\)/);
   assert.match(renderExportCanvas, /drawImagesToContext\(context, region\)/);
+  assert.ok(renderExportCanvas.indexOf("drawWidgetsToContext(context, region)") < renderExportCanvas.indexOf("drawImagesToContext(context, region)"));
+  assert.ok(snapshotPreview.indexOf("drawWidgetsToContext(q, bounds)") < snapshotPreview.indexOf("drawImagesToContext(q, bounds)"));
   assert.doesNotMatch(end, /imageTouchHold|cancelImageTouchHold/);
   assert.ok(end.indexOf("state.imageGesture") < end.indexOf("state.pendingGesture"));
   assert.equal((app.match(/imagePickerButton\.addEventListener\("click"/g) || []).length, 1);
@@ -186,7 +191,10 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
   assert.match(app, /mode:\s*"pen"/);
   assert.match(app, /hand:\s*"Hand tool: move canvas and objects"/);
   assert.match(zh, /hand:\s*"小手：移动画布和对象"/);
+  assert.match(app, /handAutoAIManual:\s*"Hand mode pauses Auto AI · Use the AI button to run it manually\."/);
+  assert.match(zh, /handAutoAIManual:\s*"Hand 模式暂停自动 AI · 请点击 AI 按钮手动运行"/);
   assert.match(mode, /if \(mode === "hand"\) \{[\s\S]*?clearTimeout\(state\.timer\);[\s\S]*?state\.timer = 0/);
+  assert.match(mode, /if \(mode === "hand" && options\.showHint && !state\.busy[\s\S]*?setStatusKey\("handAutoAIManual"\)/);
   assert.doesNotMatch(mode, /state\.autoEligible|supersedeActiveAI|controller\.abort/);
   assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
   assert.match(mode, /requestInteractionLayerRender\(\)/);
@@ -219,7 +227,7 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
   assert.match(functionSource(app, "widgetRefineOutlineTarget"), /visibleWidgets\(\)\.find\(\(item\) => item\.id === widgetId\)/);
   assert.doesNotMatch(refineHoverOutline, /widgetRefineHoveredWidgetId|widgetRefineHintHovered/);
   const refineOutline = functionSource(app, "strokeWidgetRefineOutline");
-  assert.match(refineOutline, /widgetBox\(widget\)[\s\S]*?strokeStyle = "rgba\(0, 122, 255, 0\.34\)"[\s\S]*?lineWidth = unit[\s\S]*?setLineDash\(\[4 \* unit, 4 \* unit\]\)[\s\S]*?strokeRect/);
+  assert.match(refineOutline, /widgetBox\(widget\)[\s\S]*?strokeStyle = solid \? "#007aff" : "rgba\(0, 122, 255, 0\.34\)"[\s\S]*?lineWidth = \(solid \? 2 : 1\) \* unit[\s\S]*?setLineDash\(solid \? \[\] : \[4 \* unit, 4 \* unit\]\)[\s\S]*?strokeRect/);
   assert.doesNotMatch(refineOutline, /shadowColor|shadowBlur/);
   assert.match(css, /\.object-chrome-button\.refine:hover[^\{]*\{[^}]*box-shadow:\s*none/);
   assert.match(css, /\.widget-refine-hint\s*\{[^}]*box-shadow:\s*none/);
@@ -279,7 +287,8 @@ test("contextual footer hints persist, settle from blue, and follow widget and t
     showHint = functionSource(app, "showCanvasHint"),
     renderHint = functionSource(app, "renderCanvasHint"),
     mode = functionSource(app, "setCanvasMode"),
-    startWidget = functionSource(app, "startPendingWidget");
+    startWidget = functionSource(app, "startPendingWidget"),
+    acceptWidget = functionSource(app, "acceptPendingWidget");
   assert.match(html, /id="canvasHint" class="canvas-hint" role="status" aria-live="polite" hidden/);
   assert.doesNotMatch(html, /data-i18n="footerTip"|AI drafts: move the whole group/);
   assert.match(renderHint, /`Hint: \$\{t\(state\.canvasHintKey\)\}`[\s\S]*?canvasHint\.hidden = false/);
@@ -289,6 +298,7 @@ test("contextual footer hints persist, settle from blue, and follow widget and t
   assert.match(css, /\.canvas-hint\.is-new\s*\{[^}]*animation:\s*canvasHintSettle 10s/);
   assert.match(css, /@keyframes canvasHintSettle\s*\{[\s\S]*?#2f80ed[\s\S]*?var\(--muted\)/);
   assert.match(startWidget, /widget\.widgetType === "html_widget"[\s\S]*?showCanvasHint\(\["canvasHintWidgetAdded", "canvasHintWidgetAddedAlt", "canvasHintRefineInPlace", "canvasHintAIAddsOnly"\]\)/);
+  assert.match(acceptWidget, /if \(restoreMode\) finishAIDraftHandMode\(\);[\s\S]*?if \(!replacement && restoreMode\) showCanvasHint\("canvasHintWidgetTouchHand"\)/);
   assert.match(mode, /hand:\["canvasHintHand", "canvasHintHandAlt"\][\s\S]*?select:\["canvasHintLasso", "canvasHintLassoAlt"\][\s\S]*?text:\["canvasHintText", "canvasHintTextAlt"\][\s\S]*?eraser:\["canvasHintEraser", "canvasHintEraserAlt"\]/);
   assert.match(app, /button\.onclick = \(\) => setCanvasMode\(button\.dataset\.mode, \{ showHint:true \}\)/);
   assert.match(app, /e\.pointerType === "touch"[\s\S]*?touchWidget = valid\(touchPoint\) \? widgetAtRefinePoint\(touchPoint\) : null[\s\S]*?state\.mode !== "hand"\) showCanvasHint\("canvasHintWidgetTouchHand"\)/);
@@ -318,7 +328,7 @@ test("widget shadows are an optional device display preference", () => {
   assert.match(setter, /localStorage\.setItem\("penecho-widget-shadow"[\s\S]*?view\.classList\.toggle\("widget-shadows"[\s\S]*?requestRender\(\)/);
   assert.match(css, /#viewport\.widget-shadows \.canvas-widget\s*\{[^}]*box-shadow:[^}]*0 1px 2px[^}]*0 7px 16px[^}]*0 22px 46px/);
   assert.match(drawImages, /withShadow = false[\s\S]*?shadowColor = "rgba\(15, 23, 42, \.24\)"[\s\S]*?shadowBlur = 18[\s\S]*?shadowOffsetY = 7[\s\S]*?drawImage[\s\S]*?restore/);
-  assert.match(render, /drawImagesToContext\(ctx, \{ x:l, y:t, w:rr - l, h:b - t \}, state\.widgetShadowEnabled\)/);
+  assert.match(functionSource(app, "renderPlacedContentLayer"), /drawImagesToContext\(placedContentCtx, visible, state\.widgetShadowEnabled\)[\s\S]*?drawTextBoxesToContext\(placedContentCtx, visible\)/);
   assert.doesNotMatch(mergeImage, /shadow(?:Color|Blur|Offset)|widgetShadowEnabled/);
 });
 
@@ -330,7 +340,10 @@ test("pen ink stays above widgets and the eraser exposes a dashed footprint", ()
     preview = functionSource(app, "drawPointerPreview"),
     cursor = functionSource(app, "resetCanvasCursor");
   assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="inkLayer"'));
+  assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="placedContentLayer"'));
+  assert.ok(html.indexOf('id="placedContentLayer"') < html.indexOf('id="inkLayer"'));
   assert.match(css, /\.widget-layer\s*\{[^}]*z-index:\s*1/);
+  assert.match(css, /\.placed-content-layer\s*\{[^}]*z-index:\s*2[^}]*pointer-events:\s*none/);
   assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
   assert.match(css, /#screen\.cursor-pen\s*\{[^}]*data:image\/svg\+xml/);
   assert.match(css, /#screen\.cursor-eraser\s*\{\s*cursor:\s*none/);
@@ -382,6 +395,8 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.match(css, /\.canvas-navigation-lock\s*\{[^}]*top:\s*10px[^}]*left:\s*10px[^}]*width:\s*30px[^}]*height:\s*30px[^}]*opacity:\s*\.3/);
   assert.match(css, /#viewport\.is-navigating \.canvas-navigation-lock[^}]*opacity:\s*\.58/);
   assert.match(css, /\.canvas-navigation-lock\.locked[^}]*opacity:\s*\.76/);
+  assert.match(css, /body\[data-theme="arcane"\] \.canvas-navigation-lock:not\(\.locked\)[\s\S]*?body\[data-theme="scifi"\] \.canvas-navigation-lock:not\(\.locked\)\s*\{[^}]*var\(--outside\)[^}]*opacity:\s*\.52/);
+  assert.match(css, /body\[data-theme="arcane"\] #viewport\.is-navigating \.canvas-navigation-lock:not\(\.locked\)[\s\S]*?opacity:\s*\.68/);
   assert.match(css, /\.canvas-navigation-lock-hint\s*\{[^}]*right:\s*12px[^}]*bottom:\s*11px[^}]*color:[^}]*opacity:\s*0/);
   assert.match(css, /#viewport\.navigation-locked \.canvas-navigation-lock-hint\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*\.78/);
   assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
@@ -403,14 +418,16 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
 test("declarative scenes and widgets render below the dedicated ink and interaction layers", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css");
   assert.ok(html.indexOf('src="animation.js"') < html.indexOf('src="app.js"'));
-  for (const id of ["animationLayer", "inkLayer", "interactionLayer", "objectChromeLayer", "animationControls", "animationPlayPause", "animationRestart", "animationDelete"]) {
+  for (const id of ["animationLayer", "placedContentLayer", "inkLayer", "interactionLayer", "objectChromeLayer", "animationControls", "animationPlayPause", "animationRestart", "animationDelete"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.ok(html.indexOf('id="screen"') < html.indexOf('id="animationLayer"'));
-  assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="inkLayer"'));
+  assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="placedContentLayer"'));
+  assert.ok(html.indexOf('id="placedContentLayer"') < html.indexOf('id="inkLayer"'));
   assert.ok(html.indexOf('id="inkLayer"') < html.indexOf('id="interactionLayer"'));
   assert.ok(html.indexOf('id="animationLayer"') < html.indexOf('id="interactionLayer"'));
   assert.match(css, /\.animation-layer\s*\{[^}]*z-index:\s*1/);
+  assert.match(css, /\.placed-content-layer\s*\{[^}]*z-index:\s*2/);
   assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
   assert.match(css, /\.interaction-layer\s*\{[^}]*z-index:\s*3/);
   assert.match(functionSource(app, "renderInkLayer"), /forTiles[\s\S]*?drawSharpOverlays/);
@@ -423,7 +440,12 @@ test("declarative scenes and widgets render below the dedicated ink and interact
   assert.match(app, /renderObjectCount = playing\.reduce[\s\S]*?minimumFrameMs = 1000 \/ \(renderObjectCount > 24 \? 30 : 60\)/);
   assert.match(functionSource(app, "renderAnimationLayer"), /mergeAnimationDirtyRects[\s\S]*?clearRect\(region\.x, region\.y, region\.w, region\.h\)/);
   assert.match(functionSource(app, "renderInteractionLayer"), /drawPreview[\s\S]*?drawSelection[\s\S]*?drawSelectedAnimation[\s\S]*?drawPending/);
-  assert.match(app, /for \(const \{ k, image \} of decoded\) \{[\s\S]*?tiles\.set\(k, canvas\);\s*\}\s*restoreAnimations\(item\.animations\);/);
+  assert.match(app, /SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8/);
+  const decodeTiles = functionSource(app, "decodeSnapshotTilesInBatches"),
+    loadSnapshot = functionSource(app, "loadSnapshot");
+  assert.match(decodeTiles, /Promise\.all\(tileEntries\.slice\(start, end\)[\s\S]*?context\.drawImage\(image, 0, 0\)[\s\S]*?batch\.length = 0[\s\S]*?waitForSnapshotTileFrame\(\)/);
+  assert.match(loadSnapshot, /decodeSnapshotTilesInBatches\(tileEntries, loadIsCurrent\)[\s\S]*?for \(const \[k, canvas\] of decodedTiles\) tiles\.set\(k, canvas\);[\s\S]*?restoreWidgets\(item\.widgets\)/);
+  assert.doesNotMatch(loadSnapshot, /Promise\.all\(tileEntries\.map/);
 
   const end = functionSource(app, "end"),
     captureSelection = functionSource(app, "captureSelection"),
@@ -678,6 +700,7 @@ test("new canvases open 1.5 times closer without overriding restored views", () 
     state = { scale:0.1, panX:0, panY:0, viewInitialized:false, animationFullRedraw:false },
     screen = {},
     animationLayer = {},
+    placedContentLayer = {},
     inkLayer = {},
     interactionLayer = {},
     fit = vm.runInNewContext(`(${fitSource})`, {
@@ -687,6 +710,7 @@ test("new canvases open 1.5 times closer without overriding restored views", () 
       view:{ getBoundingClientRect:() => ({ width:1200, height:800 }) },
       screen,
       animationLayer,
+      placedContentLayer,
       inkLayer,
       interactionLayer,
       state,
@@ -980,20 +1004,74 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(messageHandler, /validWidgetHostDrag\(message\)[\s\S]*?beginWidgetHostDrag\(widget, message\)[\s\S]*?updateWidgetHostDrag\(widget, message\)[\s\S]*?finishWidgetHostDrag\(widget, message\)/);
   assert.match(messageHandler, /validWidgetHostTouch\(message\)[\s\S]*?beginWidgetHostTouch\(widget, message\)[\s\S]*?updateWidgetHostTouch\(widget, message\)[\s\S]*?finishWidgetHostTouch\(widget, message\)/);
   assert.doesNotMatch(messageHandler, /validWidgetHostNavigation|handleWidgetHostNavigation/);
-  assert.match(messageHandler, /validWidgetHostActivate\(message\)[\s\S]*?state\.mode === "hand"\) focusHandObject\("widget", widget\)/);
+  assert.match(messageHandler, /validWidgetHostActivate\(message\)[\s\S]*?handObjectToolbarTargetFromWidgetMessage\(widget, message\)[\s\S]*?focusHandObject\(target\.kind, target\.object\)/);
   assert.doesNotMatch(messageHandler, /penecho-widget-copy-source/);
   assert.match(functionSource(app, "sendWidgetHostState"), /selected[\s\S]*?penecho-widget-state[\s\S]*?scaleX[\s\S]*?scaleY/);
   assert.match(functionSource(app, "beginWidgetHostDrag"), /state\.handWidgetPointerIds[\s\S]*?source:"widget-host"[\s\S]*?hit:message\.hit[\s\S]*?startPoint:clientPoint/);
   assert.match(functionSource(app, "updateWidgetHostDrag"), /widgetHostViewportPoint[\s\S]*?updateWidgetGesturePoint/);
   assert.match(functionSource(app, "finishWidgetHostDrag"), /finishWidgetGesture/);
-  assert.match(functionSource(app, "handObjectToolbarTargetAtPoint"), /visibleWidgets\(\)[\s\S]*?widgetBox\(widget\)[\s\S]*?kind:"widget"/);
-  assert.match(functionSource(app, "beginWidgetHostTouch"), /beginWidgetOwnedHandGesture\(id\)[\s\S]*?focusHandObject\("widget", widget, token\)[\s\S]*?handPointerFocusKeys\.set/);
+  const handTarget = functionSource(app, "handObjectToolbarTargetAtPoint");
+  assert.ok(handTarget.indexOf("textBoxAtPoint(point)") < handTarget.indexOf("imageAtPoint(point)"));
+  assert.ok(handTarget.indexOf("imageAtPoint(point)") < handTarget.indexOf("visibleWidgets()"));
+  assert.ok(handTarget.indexOf("visibleWidgets()") < handTarget.indexOf("animationPointerHit(point)"));
+  assert.match(functionSource(app, "handObjectToolbarTargetFromWidgetMessage"), /widgetHostViewportPoint\(widget, message\)[\s\S]*?handObjectToolbarTargetAtPoint\(clientPoint[\s\S]*?kind:"widget"/);
+  assert.match(functionSource(app, "beginWidgetHostTouch"), /beginWidgetOwnedHandGesture\(id\)[\s\S]*?handObjectToolbarTargetFromWidgetMessage\(widget, message\)[\s\S]*?focusHandObject\(target\.kind, target\.object, token\)[\s\S]*?handPointerFocusKeys\.set/);
   assert.doesNotMatch(functionSource(app, "beginWidgetHostTouch"), /state\.touches|beginTouchGesture|moveCanvas/);
   assert.match(functionSource(app, "updateWidgetHostTouch"), /handWidgetPointerIds\.has\(id\)[\s\S]*?updateHandObjectFocus/);
   assert.doesNotMatch(functionSource(app, "updateWidgetHostTouch"), /updateTouchGesture|moveCanvas/);
   assert.match(functionSource(app, "finishWidgetHostTouch"), /finishHandObjectFocus[\s\S]*?finishWidgetOwnedHandGesture[\s\S]*?widgetHostPointerAnchors\.delete/);
   assert.match(functionSource(app, "beginWidgetOwnedHandGesture"), /handGestureIncludesWidget = true[\s\S]*?panGesture = null[\s\S]*?touchGesture = null/);
-  assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointerenter"[\s\S]*?focusHandObject\("widget", widget[\s\S]*?frame\.addEventListener\("pointerleave"[\s\S]*?releaseHandObjectFocus/);
+  const clearWidgetOwned = functionSource(app, "clearWidgetOwnedHandGestures"),
+    beginResetTap = functionSource(app, "beginCanvasWidgetGestureResetTap"),
+    updateResetTap = functionSource(app, "updateCanvasWidgetGestureResetTap"),
+    finishResetTap = functionSource(app, "finishCanvasWidgetGestureResetTap");
+  assert.match(clearWidgetOwned, /handWidgetPointerIds[\s\S]*?widgetHostPointerAnchors[\s\S]*?finishHandObjectFocus[\s\S]*?finishWidgetRefineTouch[\s\S]*?handWidgetPointerIds\.clear\(\)[\s\S]*?widgetHostPointerAnchors\.clear\(\)[\s\S]*?handGestureIncludesWidget = false/);
+  assert.match(clearWidgetOwned, /pointerPrefix[\s\S]*?widget-host:[^\n]*widget\.id[\s\S]*?state\.widgetGesture\?\.widget === widget[\s\S]*?handWidgetPointerIds\.delete[\s\S]*?widgetHostPointerAnchors\.delete[\s\S]*?state\.widgetGesture = null/);
+  assert.match(functionSource(app, "unmountWidget"), /clearWidgetOwnedHandGestures\(widget\)[\s\S]*?widget\.shell\?\.remove\(\)/);
+  assert.match(beginResetTap, /state\.mode !== "hand"[\s\S]*?\["mouse", "touch"\][\s\S]*?event\.isPrimary === false[\s\S]*?state\.pointers\.size[\s\S]*?handObjectToolbarTargetAtPoint\(point\)/);
+  assert.match(updateResetTap, /state\.pointers\.size > 1[\s\S]*?Math\.hypot[\s\S]*?HAND_WIDGET_GESTURE_RESET_TAP_PX/);
+  assert.match(finishResetTap, /state\.mode !== "hand"[\s\S]*?event\.type === "pointercancel"[\s\S]*?state\.pointers\.size[\s\S]*?state\.touches\.size[\s\S]*?clearWidgetOwnedHandGestures\(\)/);
+  assert.match(pointerDown, /beginCanvasWidgetGestureResetTap\(e, handPoint\)[\s\S]*?state\.pointers\.set/);
+  assert.match(app, /screen\.addEventListener\("pointermove"[\s\S]*?updateCanvasWidgetGestureResetTap\(e\)[\s\S]*?finishReleasedWidgetGesture\(e\)/);
+  assert.match(functionSource(app, "end"), /state\.pointers\.delete[\s\S]*?state\.touches\.delete[\s\S]*?finishCanvasWidgetGestureResetTap\(e\)[\s\S]*?handGestureIncludesWidget/);
+  const resetState = {
+      mode:"hand",
+      handGestureIncludesWidget:true,
+      handWidgetPointerIds:new Set(["widget-touch:1"]),
+      pointers:new Map(),
+      touches:new Map(),
+    },
+    resetAnchors = new Map([["widget-touch:1", {}]]),
+    resetFinished = [],
+    resetHarness = vm.runInNewContext(`(() => {
+      const HAND_WIDGET_GESTURE_RESET_TAP_PX = 8;
+      let canvasWidgetGestureResetTap = null;
+      ${clearWidgetOwned}
+      ${beginResetTap}
+      ${updateResetTap}
+      ${finishResetTap}
+      return { beginCanvasWidgetGestureResetTap, updateCanvasWidgetGestureResetTap, finishCanvasWidgetGestureResetTap };
+    })()`, {
+      state:resetState,
+      widgetHostPointerAnchors:resetAnchors,
+      valid:() => true,
+      handObjectToolbarTargetAtPoint:() => null,
+      finishHandObjectFocus:({ pointerId }) => resetFinished.push(`focus:${pointerId}`),
+      finishWidgetRefineTouch:(pointerId) => resetFinished.push(`refine:${pointerId}`),
+    }),
+    resetPointer = { pointerId:7, pointerType:"touch", isPrimary:true, button:0, clientX:100, clientY:120 };
+  assert.equal(resetHarness.beginCanvasWidgetGestureResetTap(resetPointer, { x:10, y:20 }), true);
+  assert.equal(resetHarness.finishCanvasWidgetGestureResetTap({ ...resetPointer, type:"pointerup" }), true);
+  assert.equal(resetState.handGestureIncludesWidget, false);
+  assert.equal(resetState.handWidgetPointerIds.size, 0);
+  assert.equal(resetAnchors.size, 0);
+  assert.deepEqual(resetFinished, ["focus:widget-touch:1", "refine:widget-touch:1"]);
+  resetState.mode = "pen";
+  resetState.handGestureIncludesWidget = true;
+  resetState.handWidgetPointerIds.add("widget-touch:2");
+  assert.equal(resetHarness.beginCanvasWidgetGestureResetTap(resetPointer, { x:10, y:20 }), false);
+  assert.equal(resetState.handWidgetPointerIds.has("widget-touch:2"), true);
+  assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointerenter"[\s\S]*?updateHandObjectHover\(clientPoint\(event\)\)[\s\S]*?frame\.addEventListener\("pointerleave"[\s\S]*?updateHandObjectHover\(null\)/);
   const trackedPoint = vm.runInNewContext(`(${functionSource(app, "widgetHostTrackedPoint")})`, { screenClientRatio:0.5 });
   assert.deepEqual({ ...trackedPoint({ clientX:100, clientY:200, screenX:500, screenY:600 }, { screenX:540, screenY:660 }) }, { x:120, y:230 });
   assert.equal(trackedPoint(null, { screenX:0, screenY:0 }), null);
@@ -1079,8 +1157,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(functionSource(app, "createObjectChromeButton"), /activate\?\.\(button\)/);
   assert.match(functionSource(app, "confirmWidgetRefinement"), /requestWidgetRefinement\(confirmation\.widget, confirmation\.instructionMode\)/);
   assert.match(functionSource(app, "cancelWidgetRefineConfirmation"), /clearWidgetRefineCandidate\(\)[\s\S]*?state\.auto[\s\S]*?state\.dirty[\s\S]*?state\.autoEligible[\s\S]*?schedule\(state\.autoDelayMs\)/);
-  assert.match(functionSource(app, "drawWidgetRefineConfirmation"), /strokeWidgetRefineOutline[\s\S]*?strokeRect\(box\.x, box\.y, box\.w, box\.h\)[\s\S]*?widgetRefineConnectorPoints\(box, widgetBounds\)[\s\S]*?connector\.slice\(1\)/);
-  assert.match(functionSource(app, "drawWidgetRefineConfirmation"), /strokeRect\(box\.x, box\.y, box\.w, box\.h\)[\s\S]*?strokeStyle = "#007aff"[\s\S]*?lineWidth = 2 \* unit[\s\S]*?setLineDash\(\[\]\)[\s\S]*?widgetRefineConnectorPoints/);
+  assert.match(functionSource(app, "drawWidgetRefineConfirmation"), /strokeWidgetRefineOutline\(context, widget, 1, !confirmation\.hasDirty, true\)[\s\S]*?strokeRect\(box\.x, box\.y, box\.w, box\.h\)[\s\S]*?widgetRefineConnectorPoints\(box, widgetBounds\)[\s\S]*?connector\.slice\(1\)/);
+  assert.match(functionSource(app, "drawWidgetRefineConfirmation"), /strokeStyle = "#007aff"[\s\S]*?lineWidth = 2 \* unit[\s\S]*?setLineDash\(\[\]\)[\s\S]*?strokeRect\(box\.x, box\.y, box\.w, box\.h\)[\s\S]*?widgetRefineConnectorPoints/);
   assert.match(functionSource(app, "widgetRefineConnectorPoints"), /widgetRefineEdgeMidpoints\(fromBox\)[\s\S]*?Math\.hypot[\s\S]*?middleX[\s\S]*?middleY/);
   assert.doesNotMatch(functionSource(app, "drawWidgetRefineConfirmation"), /box\.x \+ box\.w \/ 2[\s\S]*?widgetBounds\.x \+ widgetBounds\.w \/ 2/);
   assert.match(css, /\.widget-refine-confirmation-copy\s*\{[^}]*overflow:\s*visible[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/);
@@ -1162,7 +1240,7 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(app, /move:'<svg[^']*?<path d="M12 9V3M9 6l3-3 3 3[\s\S]*?M15 12h6M18 9l3 3-3 3/);
   assert.match(read("public/style.css"), /\.object-chrome-button\.move \{ width: 34px; height: 34px;/);
   assert.match(read("public/style.css"), /\.object-chrome-button \{[^}]*box-shadow: none;[^}]*backdrop-filter: none;/);
-  assert.match(read("public/style.css"), /\.object-chrome-button\.widget-tool \{[^}]*height: var\(--object-control-height, 34px\)[^}]*border-style: dashed;[^}]*border-radius: 5px;[^}]*background: color-mix\(in srgb, var\(--panel\) 86%, transparent\)/);
+  assert.match(read("public/style.css"), /\.object-chrome-button\.widget-tool \{[^}]*height: var\(--object-control-height, 34px\)[^}]*border-style: dashed;[^}]*border-radius: 5px;[^}]*background: rgba\(255, 255, 255, \.9\)/);
   assert.match(read("public/style.css"), /object-chrome-button[^}]*scale\(var\(--object-control-scale, 1\)\)/);
 });
 
@@ -1180,7 +1258,7 @@ test("widget Refine discovery stays in the parent canvas and leaves iframe event
   assert.match(pointer, /\["pen", "hand"\]\.includes\(state\.mode\) \? widgetAtRefinePoint\(state\.widgetRefinePointer\) : null/);
   assert.match(hitTest, /visibleWidgets\(\)[\s\S]*?widgetBox\(widget\)[\s\S]*?point\.x[\s\S]*?point\.y/);
   assert.doesNotMatch(hitTest, /contentWindow|postMessage|addEventListener/);
-  assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointerenter"[\s\S]*?focusHandObject\("widget", widget[\s\S]*?frame\.addEventListener\("pointerleave"[\s\S]*?releaseHandObjectFocus/);
+  assert.match(functionSource(app, "mountWidget"), /frame\.addEventListener\("pointerenter"[\s\S]*?updateHandObjectHover\(clientPoint\(event\)\)[\s\S]*?frame\.addEventListener\("pointerleave"[\s\S]*?updateHandObjectHover\(null\)/);
   assert.doesNotMatch(widgetHost, /penecho-widget-hover|widget-refine/i);
   assert.doesNotMatch(messageHandler, /refine|hover/i);
   assert.match(frameRule, /pointer-events:\s*none/);
@@ -1324,8 +1402,10 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   assert.match(functionSource(app, "requestLoadSnapshot"), /canvasHasUnsavedChanges\(\)[\s\S]*?pendingCanvasTransition = \{ id, location \}[\s\S]*?showModal/);
   assert.match(functionSource(app, "openNewCanvasDialog"), /!canvasHasUnsavedChanges\(\)[\s\S]*?startBlankCanvas\(\)[\s\S]*?showModal/);
   assert.match(functionSource(app, "canvasHasUnsavedChanges"), /state\.dirty \|\| state\.userRevision !== state\.snapshotSavedRevision/);
-  assert.match(css, /\.history-card\s*\{[^}]*grid-template-columns:\s*156px/);
-  assert.match(css, /\.history-preview\s*\{[^}]*width:\s*156px[^}]*height:\s*104px/);
+  assert.match(css, /\.history-card\s*\{[^}]*grid-template-columns:\s*124px/);
+  assert.match(css, /\.history-preview\s*\{[^}]*width:\s*124px[^}]*height:\s*80px/);
+  assert.match(css, /\.history-save-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.history-meta\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/);
   assert.match(css, /\.snapshot-location-options\s*\{[^}]*grid-template-columns:\s*repeat\(2/);
 });
 
@@ -1359,13 +1439,16 @@ test("Studio theme is wired through initialization, localization, and snapshots"
   assert.match(html, /<body\b[^>]*\bdata-theme="studio"/);
   assert.match(html, /<meta\b[^>]*\bname="theme-color"[^>]*\bcontent="#eef0f3"/);
   assert.match(html, /<div\b[^>]*\bid="aiEmbodiment"[^>]*\bdata-theme="studio"/);
-  assert.match(app, /initialTheme\s*=\s*\[[^\]]*"studio"[^\]]*\]\.includes\(storedTheme\)\s*\?\s*storedTheme\s*:\s*"studio"/);
+  assert.match(app, /SUPPORTED_THEMES\s*=\s*new Set\(\[[^\]]*"studio"[^\]]*\]\)/);
+  assert.match(app, /function normalizeTheme\(theme\)\s*\{\s*return SUPPORTED_THEMES\.has\(theme\) \? theme : "studio";/);
+  assert.match(app, /initialTheme\s*=\s*normalizeTheme\(storedTheme\)/);
 
   const themeCopy = functionSource(app, "updateThemeCopy"), embodimentCopy = functionSource(app, "updateEmbodimentLabel"), loadSnapshot = functionSource(app, "loadSnapshot");
   assert.match(themeCopy, /studio:\s*"taglineStudio"/);
   assert.match(themeCopy, /studio:\s*"themeFocusStudio"/);
   assert.match(embodimentCopy, /studio:\s*"guideStudio"/);
-  assert.match(loadSnapshot, /\[[^\]]*"studio"[^\]]*\]\.includes\(item\.theme\)\)\s*applyTheme\(item\.theme\)/);
+  assert.match(loadSnapshot, /applyTheme\(item\.theme\)/);
+  assert.match(functionSource(app, "applyTheme"), /theme\s*=\s*normalizeTheme\(theme\)/);
 
   for (const key of ["taglineStudio", "themeStudio", "themeFocusStudio", "guideStudio"]) {
     assert.match(app, new RegExp(`\\b${key}:\\s*"`));
@@ -1769,6 +1852,7 @@ test("every manual magic action sends the complete current viewport without requ
   assert.match(plan, /right = useFullViewport \? captureRect\.x \+ captureRect\.w/);
   assert.match(plan, /latestVisible = latestBox \? intersection\(latestBox, sourceRect\) \|\| \{ \.\.\.sourceRect \}/);
   assert.match(build, /globalAlpha = 0\.42[\s\S]*?drawWidgetsToContext\(q, sourceRect\)[\s\S]*?drawWidgetsToContext\(q, latestVisible\)/);
+  assert.ok(build.indexOf("drawWidgetsToContext(q, sourceRect)") < build.indexOf("drawImagesToContext(q, sourceRect)"));
   assert.match(build, /scope: captureCurrentViewport \? "current-viewport" : "visible-content"/);
   assert.match(request, /typedInput = !isolatedSelection[\s\S]*?containsRect\(packed\?\.sourceRect, state\.latestTypedInput\.box\)/);
   assert.match(request, /state\.dirty = null;[\s\S]*?state\.hotspotTrail\.splice\(0, hotspotCount\);[\s\S]*?state\.latestTypedInput = null/);

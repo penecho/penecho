@@ -20,6 +20,8 @@
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
     widgetLayer = document.querySelector("#widgetLayer"),
+    placedContentLayer = document.querySelector("#placedContentLayer"),
+    placedContentCtx = placedContentLayer.getContext("2d"),
     summonLayer = document.querySelector("#summonLayer"),
     inkLayer = document.querySelector("#inkLayer"),
     inkCtx = inkLayer.getContext("2d"),
@@ -259,6 +261,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       guideStudio: "Studio assistant",
       boardTools: "Board tools",
       hand: "Hand tool: move canvas and objects",
+      handAutoAIManual: "Hand mode pauses Auto AI · Use the AI button to run it manually.",
       pen: "Pen",
       eraser: "Eraser",
       select: "Lasso select",
@@ -526,6 +529,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonTip18: "Tip: History can update the current snapshot or save a separate new copy.",
       summonTip19: "Tip: zoom with the wheel, pan with the middle mouse button—the canvas spans twenty thousand squares.",
       summonTip20: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
+      summonTip21: "Tip: write changes anywhere in this view, then choose a widget and use AI Refine.",
+      summonTip22: "Tip: tap a widget, or hover it with a mouse, to reveal AI Refine.",
+      summonTip23: "Tip: AI Refine uses the newest strokes, text, and images in this view as instructions.",
+      summonTip24: "Tip: use AI Refine to update a widget in place; regular AI adds a new widget.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
       history: "Canvas history",
@@ -595,7 +602,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintAIAddsOnly: "Auto AI and manual AI add new widgets; they do not replace existing widgets in place.",
       canvasHintHand: "Hand lets you interact directly with widget content.",
       canvasHintHandAlt: "For pinch or two-finger widget gestures, lock the canvas first.",
-      canvasHintWidgetTouchHand: "Switch to Hand to interact directly with this widget's content.",
+      canvasHintWidgetTouchHand: "Use Hand mode to interact directly with this widget's content.",
       canvasHintLasso: "Lasso handwriting to move, resize, or send only that selection to AI.",
       canvasHintLassoAlt: "Drag an edge to resize one axis, or a corner to scale uniformly.",
       canvasHintText: "Text supports Markdown and LaTeX; press Ctrl/Cmd + Enter to confirm.",
@@ -778,6 +785,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     zh: ZH,
   };
   const PLUGIN_STORAGE_KEY = "penecho-plugins",
+    SUPPORTED_THEMES = new Set(["arcane", "scifi", "research", "studio"]),
     DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
     DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
     BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([]);
@@ -789,6 +797,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     screenCalibration = new Map();
   let diagramRuntimePromise = null;
   let screenClientRatio = 1;
+  function normalizeTheme(theme) {
+    return SUPPORTED_THEMES.has(theme) ? theme : "studio";
+  }
   function storedPluginSettings() {
     let stored = {};
     try {
@@ -816,7 +827,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAiEffort = storedAiEffortText === "xhigh" ? "max" : storedAiEffortText,
     storedAutoDelay = storedAutoDelayText === null ? NaN : Number(storedAutoDelayText),
     initialLanguage = TOUR.resolveInitialLanguage(storedPrimaryLanguage, storedLegacyLanguage),
-    initialTheme = ["arcane", "scifi", "research", "studio"].includes(storedTheme) ? storedTheme : "studio",
+    initialTheme = normalizeTheme(storedTheme),
     initialGrid = storedGrid === null ? true : storedGrid === "true",
     initialResearchGrid = storedResearchGrid === "true",
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
@@ -2936,6 +2947,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.setAttribute("title", label);
   }
   function applyTheme(theme) {
+    theme = normalizeTheme(theme);
     state.theme = theme;
     document.body.dataset.theme = theme;
     embodiment.dataset.theme = theme;

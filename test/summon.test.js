@@ -21,7 +21,7 @@ test("thinking indicator randomizes mathematical loaders and copy without immedi
 });
 
 test("thinking copy changes at a calm pace", () => {
-  assert.match(read("public/summon.js"), /TIP_KEYS = Array\.from\(\{ length:20 \}/);
+  assert.match(read("public/summon.js"), /TIP_KEYS = Array\.from\(\{ length:24 \}/);
   assert.ok(SUMMON.TEXT_INTERVALS.phrase >= 5600 * 2);
   assert.ok(SUMMON.TEXT_INTERVALS.tip >= 10800 * 2);
   assert.equal(SUMMON.TEXT_INTERVALS.phrase, 12000);

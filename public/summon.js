@@ -7,7 +7,7 @@
   const TAU = Math.PI * 2,
     LOADER_TYPES = ["lemniscate", "rose", "superellipse", "golden-spiral", "deltoid"],
     PHRASE_KEYS = Array.from({ length:12 }, (_, i) => `summonPhrase${i + 1}`),
-    TIP_KEYS = Array.from({ length:20 }, (_, i) => `summonTip${i + 1}`),
+    TIP_KEYS = Array.from({ length:24 }, (_, i) => `summonTip${i + 1}`),
     PHRASE_MS = 12000,
     TIP_MS = 26000,
     TEXT_INTERVALS = Object.freeze({ phrase:PHRASE_MS, tip:TIP_MS }),

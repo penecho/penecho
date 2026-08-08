@@ -103,8 +103,9 @@
       screen.setPointerCapture(e.pointerId);
     } catch {}
     calibrateScreenClientRatio(e, false);
-    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const handPoint = state.mode === "hand" ? clientPoint(e) : null;
+    beginCanvasWidgetGestureResetTap(e, handPoint);
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (handPoint) beginHandObjectFocus(e, handPoint);
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
@@ -179,6 +180,7 @@
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    updateCanvasWidgetGestureResetTap(e);
     if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
     calibrateScreenClientRatio(e, true);
@@ -269,6 +271,7 @@
       state.touches.delete(e.pointerId);
       finishWidgetRefineTouch(`canvas-touch:${e.pointerId}`);
     }
+    finishCanvasWidgetGestureResetTap(e);
     if (e.pointerType === "touch" && state.handGestureIncludesWidget) {
       if (!state.touches.size && !state.handWidgetPointerIds.size) state.handGestureIncludesWidget = false;
       state.touchGesture = null;
@@ -343,6 +346,7 @@
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
   screen.addEventListener("pointerleave", () => {
+    cancelCanvasWidgetGestureResetTap();
     updateHandObjectHover(null);
     if (!state.pointerPreview) return;
     state.pointerPreview = null;
@@ -452,6 +456,9 @@
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
+    if (mode === "hand" && options.showHint && !state.busy && (!state.statusKey || state.statusKey === "ready" || state.statusKey === "handAutoAIManual")) {
+      setStatusKey("handAutoAIManual");
+    }
     if (options.showHint) {
       const hintKey = {
         hand:["canvasHintHand", "canvasHintHandAlt"],

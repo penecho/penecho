@@ -2,6 +2,7 @@
   const SNAPSHOT_DB = "penecho-canvas-history",
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
+    SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
     SNAPSHOT_LOCATIONS = new Set(["device", "server"]),
     SERVER_DEFAULT_PROJECT_ID = "uncategorized",
     SERVER_ALL_PROJECTS_ID = "all",
@@ -261,6 +262,8 @@
     const captureTime = performance.now();
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
+    drawAnimationsToContext(q, bounds, captureTime);
+    drawWidgetsToContext(q, bounds);
     drawImagesToContext(q, bounds);
     drawTextBoxesToContext(q, bounds);
     q.restore();
@@ -274,8 +277,6 @@
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawSharpOverlays(q, bounds);
-    drawAnimationsToContext(q, bounds, captureTime);
-    drawWidgetsToContext(q, bounds);
     q.restore();
     return preview;
   }
@@ -337,6 +338,8 @@
       }
       context.stroke();
     }
+    drawAnimationsToContext(context, region, captureTime);
+    drawWidgetsToContext(context, region);
     drawImagesToContext(context, region);
     drawTextBoxesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
@@ -346,8 +349,6 @@
       if (intersection({ x, y, w: TILE, h: TILE }, region)) context.drawImage(tileCanvas, x, y);
     }
     drawSharpOverlays(context, region);
-    drawAnimationsToContext(context, region, captureTime);
-    drawWidgetsToContext(context, region);
     const selection = state.selection;
     if (selection?.phase === "active")
       for (const fragment of selection.fragments) {
@@ -404,6 +405,50 @@
       };
       image.src = url;
     });
+  }
+  function releaseSnapshotTileCanvases(canvases) {
+    for (const canvas of canvases.values()) canvas.width = canvas.height = 1;
+    canvases.clear();
+  }
+  function waitForSnapshotTileFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent) {
+    const decodedTiles = new Map();
+    try {
+      for (let start = 0; start < tileEntries.length; start += SNAPSHOT_TILE_DECODE_BATCH_SIZE) {
+        const end = Math.min(tileEntries.length, start + SNAPSHOT_TILE_DECODE_BATCH_SIZE),
+          batch = await Promise.all(tileEntries.slice(start, end).map(async ({ k, blob }) => ({ k, image:await imageFromBlob(blob) })));
+        if (!isCurrent()) {
+          batch.length = 0;
+          releaseSnapshotTileCanvases(decodedTiles);
+          return null;
+        }
+        for (const { k, image } of batch) {
+          const canvas = offscreen(TILE, TILE),
+            context = canvas.getContext("2d");
+          if (!context) throw Error("Could not restore snapshot tile");
+          context.drawImage(image, 0, 0);
+          const previous = decodedTiles.get(k);
+          if (previous) previous.width = previous.height = 1;
+          decodedTiles.set(k, canvas);
+        }
+        // Drop this batch's decoded image references before yielding. The tile
+        // canvases retain the pixels needed for the atomic swap below.
+        batch.length = 0;
+        if (end < tileEntries.length) {
+          await waitForSnapshotTileFrame();
+          if (!isCurrent()) {
+            releaseSnapshotTileCanvases(decodedTiles);
+            return null;
+          }
+        }
+      }
+      return decodedTiles;
+    } catch (error) {
+      releaseSnapshotTileCanvases(decodedTiles);
+      throw error;
+    }
   }
   async function finalizeCanvasForSnapshot() {
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
@@ -622,17 +667,23 @@
       stored = await readSnapshot(location, id);
     if (!stored) return;
     const { item, tileEntries } = stored;
-    const [decoded, images] = await Promise.all([
-      Promise.all(tileEntries.map(async ({ k, blob }) => ({ k, image: await imageFromBlob(blob) }))),
+    const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision;
+    if (!loadIsCurrent()) return;
+    await enableSnapshotWidgetPlugins(item.widgets);
+    if (!loadIsCurrent()) return;
+    const [decodedTiles, images] = await Promise.all([
+      decodeSnapshotTilesInBatches(tileEntries, loadIsCurrent),
       decodeStoredImages(item.images),
     ]);
-    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
-    await enableSnapshotWidgetPlugins(item.widgets);
-    if(loadGeneration!==state.snapshotLoadGeneration||state.userRevision!==expectedRevision)return;
+    if (!decodedTiles || !loadIsCurrent()) {
+      if (decodedTiles) releaseSnapshotTileCanvases(decodedTiles);
+      return;
+    }
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
     clearTextEditors();
+    for (const canvas of tiles.values()) canvas.width = canvas.height = 1;
     tiles.clear();
     clearSharpOverlays();
     state.inkBounds.clear();
@@ -643,14 +694,11 @@
     state.historyBefore.clear();
     state.imageHistoryBefore = null;
     state.textBoxHistoryBefore = null;
-    for (const { k, image } of decoded) {
-      const canvas = offscreen(TILE, TILE);
-      canvas.getContext("2d").drawImage(image, 0, 0);
-      tiles.set(k, canvas);
-    }
+    for (const [k, canvas] of decodedTiles) tiles.set(k, canvas);
+    decodedTiles.clear();
     restoreAnimations(item.animations);
     restoreWidgets(item.widgets);
-    if (["arcane", "scifi", "research", "studio"].includes(item.theme)) applyTheme(item.theme);
+    applyTheme(item.theme);
     restoreImages(images);
     await restoreTextBoxes(item.textBoxes);
     if (item.view) {
@@ -760,6 +808,7 @@
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
+    setCanvasNavigationLocked(false);
     setCanvasMode("pen", {
       preserveSelection:true,
       skipDraftFinalize:true,
@@ -958,19 +1007,28 @@
       meta.className = "history-meta";
       title.textContent = snapshotName(item);
       const modified = new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.updatedAt || item.createdAt);
-      detail.textContent = `${t("snapshotModified").replace("{time}", modified)} · ${item.tileCount} ${t("snapshotTiles")}`;
-      if (pluginEnabled("animation") && item.animationCount) detail.textContent += " · " + item.animationCount + " " + t("snapshotAnimations");
-      if (item.widgetCount) detail.textContent += " · " + item.widgetCount + " " + t("snapshotWidgets");
-      if (item.imageCount) detail.textContent += " · " + item.imageCount + " " + t("snapshotImages");
+      detail.textContent = t("snapshotModified").replace("{time}", modified);
+      const stats = document.createElement("div"),
+        counts = [[item.tileCount, "snapshotTiles"]];
+      if (pluginEnabled("animation") && item.animationCount) counts.push([item.animationCount, "snapshotAnimations"]);
+      if (item.widgetCount) counts.push([item.widgetCount, "snapshotWidgets"]);
+      if (item.imageCount) counts.push([item.imageCount, "snapshotImages"]);
+      stats.className = "history-stats";
+      for (const [count, key] of counts) {
+        const chip = document.createElement("span");
+        chip.className = "history-stat";
+        chip.textContent = `${count} ${t(key)}`;
+        stats.append(chip);
+      }
       actions.className = "history-actions";
       load.className = "history-load";
       load.textContent = t("loadSnapshot");
-      load.onclick = () => runSnapshotAction(() => requestLoadSnapshot(item.id, location));
+      load.onclick = () => runSnapshotLoadAction(load, () => requestLoadSnapshot(item.id, location));
       remove.className = "history-delete";
       remove.textContent = t("deleteSnapshot");
       remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
-      meta.append(title, detail, actions);
+      meta.append(title, detail, stats, actions);
       if (location === "server") {
         const move = document.createElement("select");
         move.className = "history-move";
@@ -1003,6 +1061,17 @@
       await action();
     } catch (error) {
       setStatus(`${t("snapshotError")}${error.message}`);
+    }
+  }
+  async function runSnapshotLoadAction(button, action) {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      await runSnapshotAction(action);
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
     }
   }
   function openHistoryPanel() {

@@ -46,10 +46,10 @@
     function responsiveMermaidSource(value, width, height) {
       const source = String(value || ""),
         directive = /^(\s*(?:(?:%%[^\n]*)\n\s*)*)(flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/im.exec(source);
-      if (!directive || /%%\s*penecho:fixed-layout\b/i.test(source)) return { source, direction:"" };
+      if (!directive || /%%\s*penecho:fixed-layout\b/i.test(source)) return { source, direction:"", responsive:false };
       const connectors = source.match(/-->|---|-\.-?>|==>/g)?.length || 0,
         responsive = /%%\s*penecho:responsive\b/i.test(source) || connectors > 10;
-      if (!responsive) return { source, direction:directive[3].toUpperCase() };
+      if (!responsive) return { source, direction:directive[3].toUpperCase(), responsive:false };
       const original = directive[3].toUpperCase(),
         horizontal = original === "RL" ? "RL" : "LR",
         vertical = original === "BT" ? "BT" : "TB",
@@ -58,7 +58,7 @@
       let responsiveDiagram = source.replace(directive[0], `${directive[1]}${directive[2]} ${direction}`);
       if (/%%\s*penecho:responsive\b/i.test(source))
         responsiveDiagram = responsiveDiagram.replace(/^(\s*direction\s+)(LR|RL|TB|TD|BT)\b/gim, `$1${innerDirection}`);
-      return { source:responsiveDiagram, direction };
+      return { source:responsiveDiagram, direction, responsive:true };
     }
     function responsiveDotSource(value, width, height) {
       const source = String(value || ""),
@@ -69,7 +69,9 @@
         transformed = "",
         index = 0,
         replaced = false,
-        openingBrace = -1;
+        openingBrace = -1,
+        braceDepth = 0,
+        hasExplicitBackground = false;
       const directionPattern = /^(LR|RL|TB|TD|BT)$/i,
         isIdentifierStart = (character) => /[A-Za-z_]/.test(character || ""),
         isIdentifierPart = (character) => /[A-Za-z0-9_]/.test(character || "");
@@ -106,12 +108,21 @@
           transformed += source.slice(start, index);
           continue;
         }
-        if (openingBrace < 0 && character === "{") openingBrace = transformed.length;
+        if (character === "{") {
+          if (openingBrace < 0) openingBrace = transformed.length;
+          braceDepth += 1;
+        } else if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
         if (isIdentifierStart(character)) {
           const start = index++;
           while (isIdentifierPart(source[index])) index += 1;
-          const identifier = source.slice(start, index);
-          if (identifier.toLowerCase() === "rankdir") {
+          const identifier = source.slice(start, index),
+            normalizedIdentifier = identifier.toLowerCase();
+          if (normalizedIdentifier === "bgcolor" && braceDepth === 1) {
+            let cursor = index;
+            while (/\s/.test(source[cursor] || "")) cursor += 1;
+            if (source[cursor] === "=") hasExplicitBackground = true;
+          }
+          if (normalizedIdentifier === "rankdir") {
             let cursor = index;
             while (/\s/.test(source[cursor] || "")) cursor += 1;
             if (source[cursor] === "=") {
@@ -145,11 +156,20 @@
       const horizontal = originalDirection === "RL" ? "RL" : "LR",
         vertical = originalDirection === "BT" ? "BT" : "TB",
         direction = responsive ? width >= height * 1.35 ? horizontal : vertical : originalDirection;
+      if (!hasExplicitBackground && openingBrace >= 0)
+        transformed = `${transformed.slice(0, openingBrace + 1)}\n  graph [bgcolor="transparent"];${transformed.slice(openingBrace + 1)}`;
       if (responsive && !replaced && openingBrace >= 0)
         transformed = `${transformed.slice(0, openingBrace + 1)}\n  graph [rankdir=${direction}];${transformed.slice(openingBrace + 1)}`;
-      return { source:responsive ? transformed : source, direction, responsive };
+      return { source:transformed, direction, responsive };
     }
-    function frameRuntime(config, responsiveMermaidSource, responsiveDotSource) {
+    function vegaLiteSpecWithDefaultBackground(value) {
+      const spec = typeof value === "string" ? JSON.parse(value) : value;
+      if (!spec || typeof spec !== "object" || Array.isArray(spec)) return spec;
+      const hasBackground = Object.prototype.hasOwnProperty.call(spec, "background")
+        || spec.config && typeof spec.config === "object" && Object.prototype.hasOwnProperty.call(spec.config, "background");
+      return hasBackground ? spec : { ...spec, background:"transparent" };
+    }
+    function frameRuntime(config, responsiveMermaidSource, responsiveDotSource, vegaLiteSpecWithDefaultBackground) {
       const stage = document.querySelector("#diagram-stage"),
         status = document.querySelector("#diagram-status"),
         root = document.querySelector(".pd-root"),
@@ -196,8 +216,15 @@
         catch { throw Error(`${format} source is not valid JSON`); }
       };
       async function renderMermaid() {
-        const { default:mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs");
-        mermaid.initialize({ startOnLoad:false, securityLevel:"strict", theme:"base" });
+        const { default:mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs"),
+          initial = responsiveMermaidSource(source, stage.clientWidth, stage.clientHeight);
+        mermaid.initialize({
+          startOnLoad:false,
+          securityLevel:"strict",
+          theme:"base",
+          themeVariables:{ background:"transparent" },
+          ...(initial.responsive ? { flowchart:{ defaultRenderer:"elk" } } : {}),
+        });
         let renderedDirection = "",
           renderVersion = 0;
         const paint = async () => {
@@ -210,18 +237,19 @@
             rendered.bindFunctions?.(stage);
             const svg = stage.querySelector("svg");
             if (svg) {
+              svg.removeAttribute("width");
               svg.removeAttribute("height");
+              svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
               svg.style.width = "100%";
               svg.style.height = "100%";
               svg.style.maxWidth = "100%";
+              svg.style.maxHeight = "100%";
             }
             renderedDirection = next.direction;
             notify();
           };
         await paint();
-        resizeRender = () => {
-          void paint().catch(() => {});
-        };
+        resizeRender = () => void paint().catch(() => {});
       }
       async function renderDot() {
         const { instance } = await import("https://cdn.jsdelivr.net/npm/@viz-js/viz@3.9.0/lib/viz-standalone.mjs"),
@@ -279,6 +307,7 @@
           loadScript("https://cdn.jsdelivr.net/npm/bpmn-js@17.11.1/dist/bpmn-viewer.development.js"),
         ]);
         if (typeof globalThis.BpmnJS !== "function") throw Error("BPMN renderer did not initialize");
+        stage.style.background = "transparent";
         const viewer = new globalThis.BpmnJS({ container:stage });
         await viewer.importXML(source);
         const fit = () => {
@@ -292,7 +321,7 @@
         await loadScript("https://cdn.jsdelivr.net/npm/vega-lite@5.20.1/build/vega-lite.min.js");
         await loadScript("https://cdn.jsdelivr.net/npm/vega-embed@6.26.0/build/vega-embed.min.js");
         if (typeof globalThis.vegaEmbed !== "function") throw Error("Vega-Lite renderer did not initialize");
-        const result = await globalThis.vegaEmbed(stage, parseJson(), { actions:false, renderer:"svg" });
+        const result = await globalThis.vegaEmbed(stage, vegaLiteSpecWithDefaultBackground(parseJson()), { actions:false, renderer:"svg" });
         resizeRender = () => result.view?.resize?.().runAsync?.().then(notify).catch(() => {});
       }
       function wgs84ToGcj02(lng, lat) {
@@ -344,6 +373,7 @@
         ]);
         if (!globalThis.L?.map) throw Error("GeoJSON renderer did not initialize");
         const geoJson = parseJson(),
+          noBasemap = geoJson && typeof geoJson === "object" && !Array.isArray(geoJson) && geoJson.basemap === "none",
           map = globalThis.L.map(stage, { attributionControl:true, zoomControl:true, preferCanvas:true }),
           vectorOptions = {
             style:{ color:"#2563eb", weight:3, opacity:.9, fillColor:"#93c5fd", fillOpacity:.22 },
@@ -418,7 +448,10 @@
           layer.addTo(map);
           vectorLayer.bringToFront();
         };
-        activateProvider(0);
+        if (noBasemap) {
+          stage.style.background = "transparent";
+          notify();
+        } else activateProvider(0);
         resizeRender = () => {
           map.invalidateSize(false);
           const bounds = vectorLayer?.getBounds();
@@ -442,11 +475,13 @@
         svg.style.height="100%";
         svg.style.maxWidth="100%";
         svg.style.maxHeight="100%";
+        svg.style.background="transparent";
         stage.replaceChildren(svg);
       }
       async function renderCytoscape() {
         await loadScript("https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js");
         if (typeof globalThis.cytoscape !== "function") throw Error("Cytoscape renderer did not initialize");
+        stage.style.background = "transparent";
         const parsed = parseJson(),
           cy = globalThis.cytoscape({
             container:stage,
@@ -509,10 +544,12 @@
     body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033}
     .pd-root{box-sizing:border-box;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;width:100%;height:100%;padding:18px;background:transparent}
     .pd-title{margin:0;font-size:clamp(20px,3.2cqw,38px);line-height:1.15;font-weight:700;color:var(--pd-text,#172033)}
-    .pd-stage{position:relative;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden}
+    .pd-stage{position:relative;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden;background:transparent}
+    .pd-stage>.djs-container,.pd-stage>.vega-embed,.pd-stage>.vega-embed>div{background:transparent}
     .pd-stage>svg,.pd-stage>.vega-embed,.pd-stage>.vega-embed>div{display:block;width:100%;height:100%;max-width:100%;max-height:100%}
     .pd-stage>canvas{display:block;max-width:100%;max-height:100%}
     .pd-status{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:clamp(15px,2.1cqw,24px);line-height:1.4;color:var(--pd-muted,#5f6b7a);background:rgba(255,255,255,.94)}
+    .pd-status[hidden]{display:none}
     .pd-status.is-error{color:var(--pd-danger,#b42318)}
     @container (max-width:560px){.pd-root{padding:12px;gap:8px}}
   </style>
@@ -524,7 +561,7 @@
       <p id="diagram-status" class="pd-status">Rendering ${escapeHtml(format.label)}...</p>
     </section>
   </main>
-  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveMermaidSource.toString()},${responsiveDotSource.toString()});</script>
+  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveMermaidSource.toString()},${responsiveDotSource.toString()},${vegaLiteSpecWithDefaultBackground.toString()});</script>
 </body>
 </html>`;
     }
@@ -537,6 +574,7 @@
       copyLabel,
       responsiveMermaidSource,
       responsiveDotSource,
+      vegaLiteSpecWithDefaultBackground,
       documentFor,
     });
   })();

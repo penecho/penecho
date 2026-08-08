@@ -142,7 +142,7 @@ const DIAGRAM_SOURCE_FORMAT_ALIASES = new Map([
   ["cytoscape-json", "cytoscape-json"],
   ["cytoscape-elements-json", "cytoscape-json"],
 ]);
-const WIDGET_RENDERING_POLICY = "An html_widget is direct content on a zoomable canvas, not a dashboard card. Layout and typography must be designed together for the widget's declared width and height. Use responsive sizing, such as clamp() with container- or viewport-relative units, and maintain a clear but restrained visual hierarchy. Width-only or height-only resizing changes the layout viewport: reflow or regroup for its new aspect ratio instead of merely scaling a fixed-size wide or tall scene, and keep SVG or professional-graphic bounds tight on every side with only slight padding. Primary content should be prominent without crowding the layout; body text and labels must remain comfortably readable at normal canvas scale. Unless the user requests otherwise, use roughly clamp(36px,1.2cqw,52px) for body text, at least 28px for secondary text, and clamp(52px,2cqw,80px) for headings; these are zoomable-canvas widget pixels, so ordinary browser defaults such as 14–16px are too small. Do not fix overflow by making text excessively small, and do not use oversized text that causes wrapping, clipping, overlap, or wasted space. Prefer reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size. Before returning, verify the longest labels and every section at the actual widget dimensions. For SVG, size text relative to its viewBox, not browser defaults. Keep html, body, and the outermost layout transparent, with no outer background, border, corner radius, or box shadow, so the result blends into the canvas. Keep user-facing text natively selectable and do not globally disable text selection. Use high-contrast text and avoid dense tables, tiny legends, and decorative chrome.";
+const WIDGET_RENDERING_POLICY = "An html_widget is direct content on a zoomable canvas, not a dashboard card. Layout and typography must be designed together for the widget's declared width and height. Use responsive sizing, such as clamp() with container- or viewport-relative units, and maintain a clear but restrained visual hierarchy. Width-only or height-only resizing changes the layout viewport: reflow or regroup for its new aspect ratio instead of merely scaling a fixed-size wide or tall scene, and keep SVG or professional-graphic bounds tight on every side with only slight padding. Primary content should be prominent without crowding the layout; body text and labels must remain comfortably readable at normal canvas scale. Unless the user requests otherwise, use roughly clamp(36px,1.2cqw,52px) for body text, at least 28px for secondary text, and clamp(52px,2cqw,80px) for headings; these are zoomable-canvas widget pixels, so ordinary browser defaults such as 14–16px are too small. Do not fix overflow by making text excessively small, and do not use oversized text that causes wrapping, clipping, overlap, or wasted space. Prefer reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size. Before returning, verify the longest labels and every section at the actual widget dimensions. For SVG, size text relative to its viewBox, not browser defaults. Keep html, body, the outermost layout, and the visualization backdrop transparent by default, with no outer background, border, corner radius, or box shadow, so the result blends into the canvas. Use an opaque backdrop only when visually necessary or explicitly requested by the user. Keep user-facing text natively selectable and do not globally disable text selection. Use high-contrast text and avoid dense tables, tiny legends, and decorative chrome.";
 const PLUGIN_AUTHORING_SYSTEM = `You edit one PenEcho plugin capability contract written as Markdown with YAML frontmatter. The document and its optional plugin CSS are injected into the canvas model only while that plugin is enabled; they tell the model when the capability applies, what data and base components are available, and how to return exactly one html_widget command. The browser, not PenEcho, executes generated HTML in a sandbox. PenEcho automatically retries eligible public HTTPS GET requests through a bounded server channel when ordinary browser fetch throws because of CORS or network failure; it never supplies credentials or an HTML template.
 
 Return only a JSON object with exactly two string fields: "document" and "styles". Do not add fences or commentary. document is the complete improved plugin Markdown, starts with a YAML --- line, stays under 12000 UTF-8 bytes, and does not include a full HTML example. styles is the complete optional plugin CSS, stays under 32000 UTF-8 bytes, and must not contain style tags, @import, or url(). Preserve useful existing CSS; add or change CSS only when reusable base components, variables, or a coherent visual language materially improve the capability. Preserve a valid existing id when possible. Required frontmatter: penecho-plugin: 1, lowercase kebab-case id, English name, version, concise description, category, source, connect as a YAML list of zero to eight exact HTTPS data origins, and recommended-refresh-seconds from 60 to 86400. Use a bare connect: line for no data API. Prefer public browser-CORS APIs that need no key; never invent credentials, hide a proxy, or claim an API is reliable when uncertain.
@@ -667,8 +667,10 @@ For userAction plot, always return at least one visual command. If the handwriti
 
 You are responsible for text layout. Every write_text command MUST explicitly choose x and y as the top-left start position and maxWidth as the intended initial wrapping width. Inspect the image and choose the blank area where the response is most useful. Do not mechanically append text at the end of the newest handwriting. For arrow/box requests, align x/y with the arrow destination. For ordinary questions, choose a nearby blank area that preserves reading flow and avoids all existing writing. The chosen x/y must normally remain inside captureRect and near latestInput.globalRect or the final arrow destination. Never place an explanation at canvas y=0 or at the top edge merely because that area is blank when the referenced content is far below. maxWidth must fit the available blank region and should usually be wide enough for readable paragraphs; the user may freely resize the draft afterward. Match fontSize approximately to nearby handwriting; lineHeight is a multiplier such as 1.35, not pixels. Do not return color for write_text, draw_formula, plot_function, or draw; the client applies the user's selected AI color. The logical canvas is 20000 by 20000. ALL returned coordinates must be finite global logical coordinates, never image coordinates. If the newest input is non-empty but unclear, incomplete, or lacks enough context, return one short write_text clarification question stating what is missing. Use intent none with an empty commands array only when there is genuinely no new input. Every command MUST identify its tool with property "tool". Always available non-plugin tools: write_text {tool:"write_text",x,y,text,fontSize,maxWidth,lineHeight}; draw_formula {tool:"draw_formula",x,y,latex,fontSize}; plot_function {tool:"plot_function",x,y,w,h,expression}; draw {tool:"draw",origin:[x,y],types:["line|smooth|rect|ellipse|circle|arc",...],items:[[...],...],width?,tension?,closed?,fill?,arrows?}; erase {tool:"erase",mode:"rect",x,y,w,h} or {tool:"erase",mode:"path",points:[[x,y],...],size}. General HTML is always enabled for visuals beyond native draw. Keep within canvas, use at most 16 commands, and keep text and formulas short.`;
 
-const JSON_RESPONSE_SCHEMA_PROMPT = `Return exactly one JSON object that conforms to the following final and authoritative JSON Schema. Do not wrap it in Markdown and do not write prose before or after it.
+const JSON_RESPONSE_SCHEMA_PROMPT = `Return only one compact final JSON object needed by PenEcho. Omit drafts, reasoning, progress or status updates, alternatives, duplicate objects, Markdown, and any wrapper text. The object must conform to this final and authoritative JSON Schema.
 {"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["intent","commands"],"properties":{"intent":{"type":"string","enum":["none","hint","continue","explain","plot","correct","erase","answer","typeset"]},"observedText":{"type":"string"},"message":{"type":"string"},"commands":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","required":["tool"],"properties":{"tool":{"type":"string"}},"additionalProperties":true}}}}`;
+
+const REFINE_MODE_GATE_PROMPT = `Refine mode gate: when modelInput.widgetEdit is present, this is a Refine request. Follow modelInput.widgetEditPolicy and return the required final JSON with exactly one widget_patch command. New-widget generation, geometry, rendering-policy and write_text fallback rules do not apply.`;
 
 const MANDATORY_VISIBLE_RESPONSE_PROMPT = `Mandatory final visible-response fallback: every request that reaches you represents a confirmed current user input or explicit user action, so you MUST return at least one displayable command. Empty hotspotGrid.hotspots, absent typedInput, absent focusInset, clipped or fragmentary content, nonsensical content, and content that is not phrased as a question or request NEVER permit intent none or an empty commands array. Hotspots only help refine reading order; their absence is not evidence that there is no new input. When no metadata signal identifies a more specific input, treat all visible content inside latestInput.imageRect as the current input. If that region is blank, clipped, or still ambiguous, inspect and use the entire attached input image within sourceRect as the current input. Infer a concise useful response from that overall input. If no specific task can be inferred, return one short write_text clarification question asking what the user wants done with the visible content. This is the final fallback and overrides any earlier wording that conditions an auto response on meaningful content or enough information. Before returning, verify that commands contains at least one renderable command.`;
 
@@ -694,11 +696,11 @@ function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
 
 function activeSystemPrompt(literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
   const base = systemPromptBase(animationEnabled, pluginsEnabled);
-  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, REFINE_MODE_GATE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 
 function anthropicSystemPrompt(effort, literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
-  return [systemPromptBase(animationEnabled, pluginsEnabled), literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [systemPromptBase(animationEnabled, pluginsEnabled), literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, REFINE_MODE_GATE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 
 const THEME_PERSONAS = {
@@ -707,6 +709,10 @@ const THEME_PERSONAS = {
   arcane: "Warm interdisciplinary knowledge guide. Favor intuition, memorable analogies, creative synthesis, conceptual connections across science and humanities, and exploratory alternatives while keeping facts and reasoning precise.",
   studio: "Minimal, well-organized general-purpose studio assistant. Prioritize clear structure, legible formatting, concise step-by-step reasoning, and practical actionable answers. Keep visual output clean and uncluttered; avoid decorative flourishes.",
 };
+const SUPPORTED_CANVAS_THEMES = new Set(Object.keys(THEME_PERSONAS));
+function normalizeCanvasTheme(theme) {
+  return SUPPORTED_CANVAS_THEMES.has(theme) ? theme : "studio";
+}
 
 function send(res, code, data, type = "application/json; charset=utf-8", extraHeaders = {}) { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", ...extraHeaders }); res.end(typeof data === "string" ? data : JSON.stringify(data)); }
 function aiProgressStream(req, res, requestId) {
@@ -815,7 +821,7 @@ function canonicalSharedCanvasV1(value) {
   if(!value||typeof value!=="object"||Array.isArray(value)||version!==1||typeof value.id!=="string"||!CANVAS_SNAPSHOT_ID_PATTERN.test(value.id))return null;
   const createdAt=Number(value.createdAt),name=typeof value.name==="string"?value.name.trim().slice(0,48):"",
     updatedAt=Number(value.updatedAt||createdAt),
-    theme=["arcane","scifi","research","studio"].includes(value.theme)?value.theme:"studio",
+    theme=normalizeCanvasTheme(value.theme),
     view=value.view&&[value.view.scale,value.view.panX,value.view.panY].every(Number.isFinite)
       ?{scale:Math.max(.03,Math.min(2,value.view.scale)),panX:value.view.panX,panY:value.view.panY,navigationLocked:value.view.navigationLocked===true}:null,
     animations=Array.isArray(value.animations)&&value.animations.length<=100?value.animations:null,
@@ -995,7 +1001,7 @@ function canonicalSharedCanvasMetadata(item,id) {
   if(updatedAt<item.createdAt||["tileCount","animationCount","widgetCount","textBoxCount","imageCount"].some(key=>!Number.isSafeInteger(count(key))||count(key)<0))return null;
   return {
     version:item.version===2?2:1,id,createdAt:item.createdAt,updatedAt,
-    name:typeof item.name==="string"?item.name.slice(0,48):"",theme:["arcane","scifi","research","studio"].includes(item.theme)?item.theme:"studio",
+    name:typeof item.name==="string"?item.name.slice(0,48):"",theme:normalizeCanvasTheme(item.theme),
     projectId:sharedCanvasProject(item.projectId)?item.projectId:DEFAULT_CANVAS_PROJECT_ID,
     tileCount:count("tileCount"),animationCount:count("animationCount"),widgetCount:count("widgetCount"),textBoxCount:count("textBoxCount"),imageCount:count("imageCount"),preview:item.preview,
   };
@@ -1710,12 +1716,15 @@ function ensureCurrentLocalRequest(run) {
 function finishLocalRequest(run) {
   if (run && activeLocalRequests.get(run.clientKey) === run) activeLocalRequests.delete(run.clientKey);
 }
-function extractJson(text) {
-  const raw=String(text??""),fenced=raw.match(/```(?:json)?\s*([\s\S]*?)```/i),source=fenced?fenced[1]:raw,start=source.indexOf("{");
-  if(start<0)return JSON.parse(source);
-  let depth=0,inString=false,escaped=false;
-  for(let index=start;index<source.length;index++){
+function completeTopLevelJsonObjects(text) {
+  const source=String(text??""),objects=[];
+  let start=-1,depth=0,inString=false,escaped=false;
+  for(let index=0;index<source.length;index++){
     const character=source[index];
+    if(start<0){
+      if(character==="{"){start=index;depth=1}
+      continue;
+    }
     if(inString){
       if(escaped)escaped=false;
       else if(character==="\\")escaped=true;
@@ -1726,15 +1735,18 @@ function extractJson(text) {
     if(character==="{"){depth++;continue}
     if(character!=="}")continue;
     depth--;
-    if(depth===0)return JSON.parse(source.slice(start,index+1));
+    if(depth!==0)continue;
+    try { objects.push(JSON.parse(source.slice(start,index+1))); } catch {}
+    start=-1;
   }
-  return JSON.parse(source.slice(start));
+  return objects;
+}
+function isFinalModelResponse(value) {
+  return Boolean(value && typeof value==="object" && !Array.isArray(value) && DEBUG_INTENTS.has(value.intent) && Object.prototype.hasOwnProperty.call(value,"commands") && Array.isArray(value.commands));
 }
 function parsedModelResponse(content) {
-  const result=extractJson(content);
-  if (!result || typeof result!=="object" || Array.isArray(result)) throw new Error("Model returned a non-object JSON response.");
-  if (result.commands===undefined) result.commands=[];
-  if (!Array.isArray(result.commands)) throw new Error("Model response commands must be an array.");
+  const candidates=completeTopLevelJsonObjects(content).filter(isFinalModelResponse),result=candidates[candidates.length-1];
+  if (!result) throw new Error("Model response did not contain a complete final JSON object with intent and commands.");
   return result;
 }
 function saveLatestAtlas(dataUrl, metadata) {
@@ -1844,6 +1856,12 @@ function logicalFileLineCount(content) {
   const separators = content.match(/\r\n|\r|\n/g)?.length || 0;
   return separators + (/(?:\r\n|\r|\n)$/.test(content) ? 0 : 1);
 }
+function lineNumberedFileView(content) {
+  if (!content) return "";
+  const lines = content.split(/\r\n|\r|\n/);
+  if (/(?:\r\n|\r|\n)$/.test(content)) lines.pop();
+  return lines.map((line,index) => `${String(index + 1).padStart(6, " ")}\t${line}`).join("\n");
+}
 function widgetPromptBoundary(file) {
   for (let salt = 0; ; salt++) {
     const digest = crypto.createHash("sha256")
@@ -1857,18 +1875,22 @@ function widgetPromptBoundary(file) {
     if (!file.content.includes(boundary)) return boundary;
   }
 }
-const WIDGET_PATCH_FORMAT_POLICY = `Return exactly one command {tool:"widget_patch",patch:"..."} and no prose or second command. patch must be a standard unified diff.
+const WIDGET_PATCH_FORMAT_POLICY = `Return the required final JSON with exactly one command {tool:"widget_patch",patch:"..."} and no prose or second command. The patch string must be a standard unified diff.
+Required response-shape example (replace <path> with an exact widgetEdit.patchFiles path): {"intent":"answer","commands":[{"tool":"widget_patch","patch":"--- a/<path>\\n+++ b/<path>\\n@@ -1,1 +1,1 @@\\n-old\\n+new\\n"}]}
 
 Canvas annotations request a visible content change: patch the authoritative renderer or source, never substitute a manifest-only title or metadata edit. Use a widget.json-only patch only when the user explicitly requests metadata alone.
 
-The supplied virtual-file list in widgetEdit.patchFiles is the sole authority for file paths. File names, extensions and file count are not fixed. widget.json is an editable manifest: preserve tool, pluginId and the fixed htmlFile or sourceFile identity reference, but update any other manifest field needed by the request just as you would in a complete widget response. A null copyTextFile means no distinct copy source, widget.html means HTML is also the copy source, and widget.source means the separately listed source is used; copyTextFile may change when the requested result needs a different copy-source mode. Patch only listed files using their exact paths. Emit exactly one unified-diff file section for every listed file that needs modification, with all hunks for that path below its single ---/+++ header pair, and keep related changes across files semantically consistent. An empty listed content file may be populated with a standard zero-line insertion hunk when the manifest is updated to reference it.
+The supplied virtual-file list in widgetEdit.patchFiles is the sole authority for file paths. File names, extensions and file count are not fixed. widget.json is editable only through its existing keys; never add manifest keys. Preserve tool, pluginId and the fixed htmlFile or sourceFile identity reference. A null copyTextFile means no distinct copy source, widget.html means HTML is also the copy source, and widget.source means the separately listed source is used; copyTextFile may change when the requested result needs a different copy-source mode. Patch only listed files using their exact paths. Emit exactly one unified-diff file section for every listed file that needs modification, with all hunks for that path below its single ---/+++ header pair, and keep related changes across files semantically consistent. An empty listed content file may be populated with a standard zero-line insertion hunk when the manifest is updated to reference it.
+Every changed file starts with --- and +++; no other file-section marker is valid.
+
+Virtual file bodies use complete nl -ba -w6 -s TAB read views. The six-column right-aligned line number and first ASCII TAB are display metadata, not file content; use the number only for hunk coordinates and never copy either into diff lines. For example, input \`    42<TAB>  <p>x</p>\` means file content \`  <p>x</p>\`; its removal line is \`-  <p>x</p>\`, never \`-<TAB>  <p>x</p>\`.
 
 Every hunk must be based on the original content of its own file. Before returning, verify:
 - exact --- a/<listed-path> and +++ b/<listed-path> headers;
 - complete @@ -oldStart,oldCount +newStart,newCount @@ headers;
 - copy every context line and the full text after each minus marker verbatim from the original file; keep the leading space or minus as the diff marker and preserve every original indentation, sign and other character after it; never reconstruct or normalize removed lines, and compare each one character-for-character before returning;
 - counts match the hunk body; hunks are ordered, non-overlapping and independent; include at least three unchanged context lines when available. If nearby edits would produce overlapping or touching context, combine them into one hunk. Never repeat an original line across two hunks;
-- no unlisted files, full-file replacement, Markdown fences, diff --git/index metadata, wrapper headers or footers, rename/create/delete operations or prose. Return the bare unified diff only.
+- no unlisted files, full-file replacement, Markdown fences, diff --git/index metadata, wrapper headers or footers, rename/create/delete operations or prose inside patch. The patch field must contain only the bare unified diff; the final response remains the required JSON object.
 
 Example only when all three listed files need the same semantic change:
 --- a/widget.json
@@ -1934,7 +1956,7 @@ function widgetRefineRequestText(modelInput, retryInstruction) {
   currentMetadata.widgetEdit = { box, instructionMode, ...(runtimeDiagnostics ? { runtimeDiagnostics } : {}) };
   const sections = [
       `PenEcho Refine stable context (JSON; cacheable across edits of this target):\n${JSON.stringify(stableMetadata)}`,
-      "PenEcho virtual files follow. Their contents are the authoritative patch baseline. widget.json is the editable widget manifest; its content-file references bind metadata to widget.html and widget.source. Each file body is verbatim UTF-8, not a JSON string. The LF immediately after a BEGIN delimiter and the LF immediately before its matching END delimiter are framing only and are not file content. A non-empty content file without an original final newline receives one synthetic LF only in the patch baseline; PenEcho removes that one normalization LF after applying the patch. Use utf8Bytes, logicalLines, patchBaselineEndsWithNewline, and originalEndsWithNewline to preserve the file boundary.",
+      "PenEcho virtual files follow. Their contents are the authoritative patch baseline. widget.json is the editable widget manifest; its content-file references bind metadata to widget.html and widget.source. Each complete body is an nl -ba -w6 -s TAB read view, not a JSON string: the six-column line number and its first ASCII TAB are metadata, and everything after that TAB is original line content. Use the number only for hunk coordinates; never include the number or separator in a diff line. The LF immediately after a BEGIN delimiter and the LF immediately before its matching END delimiter are framing only and are not file content. A non-empty content file without an original final newline receives one synthetic LF only in the patch baseline; PenEcho removes that one normalization LF after applying the patch. Use utf8Bytes, logicalLines, patchBaselineEndsWithNewline, and originalEndsWithNewline to preserve the file boundary.",
       ...files.map(file => {
         const boundary = widgetPromptBoundary(file), patchBaselineEndsWithNewline = /(?:\r\n|\r|\n)$/.test(file.content);
         return [
@@ -1942,10 +1964,11 @@ function widgetRefineRequestText(modelInput, retryInstruction) {
           `path: ${file.path}`,
           `utf8Bytes: ${Buffer.byteLength(file.content, "utf8")}`,
           `logicalLines: ${logicalFileLineCount(file.content)}`,
+          "numbering: nl -ba -w6 -s TAB",
           `patchBaselineEndsWithNewline: ${patchBaselineEndsWithNewline}`,
           `originalEndsWithNewline: ${file.originalEndsWithNewline}`,
           `<<<BEGIN ${boundary}>>>`,
-          file.content,
+          lineNumberedFileView(file.content),
           `<<<END ${boundary}>>>`,
         ].join("\n");
       }),
@@ -1967,7 +1990,7 @@ function modelRequestText(modelInput, retryInstruction="") {
 const LOCAL_CLI_IMAGE_POLICY = "Operate only as an image-analysis model for PenEcho. Do not inspect files, run commands, or modify the temporary workspace. Analyze the attached canvas image and return only the requested JSON object as your final response.";
 function localCliSystemPrompt(literalTypeset = false, animationEnabled = false, pluginsEnabled = false) {
   const base = `${systemPromptBase(animationEnabled, pluginsEnabled)}\n\n${LOCAL_CLI_IMAGE_POLICY}`;
-  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
+  return [base, literalTypeset ? NORMALIZE_TYPESET_POLICY : "", MANDATORY_VISIBLE_RESPONSE_PROMPT, REFINE_MODE_GATE_PROMPT, JSON_RESPONSE_SCHEMA_PROMPT].filter(Boolean).join("\n\n");
 }
 function localCliRequestPrompt(text) {
   return `Request metadata:\n${text}`;
@@ -3031,7 +3054,7 @@ const server = http.createServer(async (req, res) => {
       const effort=providerEffort(payload.reasoningEffort,providerSnapshot),modelInput = {
         trigger:payload.trigger,
         userAction:payload.userAction,
-        actionMeaning:{
+        actionMeaning:payload.widgetEdit ? "refine the supplied target widget in place using the newest instructions; return only the required widget_patch command" : ({
           auto:"respond naturally to the newest meaningful handwriting or spatial editing gesture",
           hint:"for an actual problem offer a clue; for conversation respond naturally",
           continue:"continue the newest user content",
@@ -3039,7 +3062,7 @@ const server = http.createServer(async (req, res) => {
           plot:"produce at least one renderable visual command; use plot_function for y=f(x), native draw for a very simple static sketch, otherwise General HTML with SVG",
           answer:"directly answer the newest question or spatial request",
           normalize:"make a faithful, clean, copyable Typeset reproduction of only the selected visible source under normalizePolicy",
-        }[payload.userAction]||"respond appropriately",
+        }[payload.userAction]||"respond appropriately"),
         languagePolicy:"follow the newest substantive user content; for control-only gestures follow the language of selected or referenced content",
         ...(payload.widgetEdit ? {
           widgetEdit:{ ...payload.widgetEdit, patchFiles:widgetPatchContract(payload.widgetEdit) },
@@ -3109,7 +3132,8 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
       if(payload.userAction!=="normalize"&&(invalidTextLayout||invalidDraw||manualEmpty||plotMissing)){
         const reason=payload.widgetEdit&&manualEmpty?widgetPatchValidation.reason||"widget-patch-rejected":invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
         log({type:"ai-retry",requestId,ip,action:payload.userAction,reason});
-        const retry=payload.widgetEdit?"Your previous widget patch was missing or failed strict validation. Re-read the original virtual files and rebuild exactly one widget_patch using the supplied widgetEdit.patchFiles manifest. Copy every context line and the full text after each minus marker verbatim from the original, including every sign and indentation character; compare every removed line character-for-character before returning. Emit each path under exactly one ---/+++ header pair with all its hunks below it. Verify exact listed paths, standard file headers, complete hunk headers, correct counts, and ordered non-overlapping hunks all based on the original files. Return the bare unified diff inside the widget_patch command with no prose, Markdown fences, diff metadata, wrapper headers or footers, unlisted files, full widget command or second command.":invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild it once and verify that types and items have equal lengths, every coordinate is an integer, each item matches the documented native draw encoding, and all geometry stays inside the canvas. Keep native draw to about 10 or fewer basic primitives or line segments; use General HTML SVG instead if the visual is larger or dynamic.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For another visual, use native draw only when it is a very simple static sketch of about 10 or fewer basic primitives or line segments; otherwise return one General HTML html_widget with inline SVG. Do not answer with prose or draw_formula alone.":manualEmpty?MANUAL_EMPTY_RETRY:REINSPECTION_RETRY;
+        const safePatchReason=/^[a-z0-9-]+(?::[A-Za-z0-9_.-]{1,64})?$/.test(widgetPatchValidation.reason||"")?widgetPatchValidation.reason:"widget-patch-rejected",
+          retry=payload.widgetEdit?`Your widget patch failed local validation: ${safePatchReason}. Re-read the original virtual files and return the required final JSON with exactly one widget_patch command. Use only widgetEdit.patchFiles paths and existing widget.json keys. Copy context and removed lines character-for-character. Use one standard ---/+++ section per changed file with complete, correctly counted, ordered, non-overlapping hunks. The patch field must contain only the bare unified diff: no prose, fences, metadata, wrappers, unlisted files or full widget command.`:invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild it once and verify that types and items have equal lengths, every coordinate is an integer, each item matches the documented native draw encoding, and all geometry stays inside the canvas. Keep native draw to about 10 or fewer basic primitives or line segments; use General HTML SVG instead if the visual is larger or dynamic.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For another visual, use native draw only when it is a very simple static sketch of about 10 or fewer basic primitives or line segments; otherwise return one General HTML html_widget with inline SVG. Do not answer with prose or draw_formula alone.":manualEmpty?MANUAL_EMPTY_RETRY:REINSPECTION_RETRY;
         model=await requestModel(retry);
         if (providerSnapshot.local) ensureCurrentLocalRequest(localRun);
         saveLatestModelExchange(requestId,attempts,modelInput,retry,model);

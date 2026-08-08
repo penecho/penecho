@@ -588,23 +588,23 @@
     q.fillRect(0, 0, out.width, out.height);
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
+    drawAnimationsToContext(q, sourceRect, captureTime);
+    drawWidgetsToContext(q, sourceRect);
     drawImagesToContext(q, sourceRect);
     drawTextBoxesToContext(q, sourceRect);
-    drawWidgetsToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
-    drawAnimationsToContext(q, sourceRect, captureTime);
     q.globalAlpha = 1;
     q.save();
     q.beginPath();
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
+    drawAnimationsToContext(q, latestVisible, captureTime);
+    drawWidgetsToContext(q, latestVisible);
     drawImagesToContext(q, latestVisible);
     drawTextBoxesToContext(q, latestVisible);
-    drawWidgetsToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
-    drawAnimationsToContext(q, latestVisible, captureTime);
     q.restore();
     const focusInset = FOCUS_INSET_ENABLED ? drawFocusInset(out, latestVisible, sourceRect, imageScale, captureTime) : null,
       hotspotGrid = mapHotspots(sourceRect, imageSize, hotspotPoints);

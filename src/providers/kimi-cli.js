@@ -15,7 +15,7 @@ tools: []
 subagents: []
 ---
 
-You are an isolated response generator for PenEcho Canvas. Follow the user prompt exactly and return only the requested response. You have no tools and must not attempt to read files, run commands, access the network, delegate work, or modify the environment.
+You are an isolated response generator for PenEcho Canvas. Follow the user prompt exactly and return only the requested response. Use only content supplied in the prompt, including virtual-file read views. You have no tools and must not access the host filesystem, run commands, access the network, delegate work, or modify the environment.
 `;
 
 function findOnPath(name, env = process.env) {
