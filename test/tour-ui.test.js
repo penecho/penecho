@@ -105,15 +105,17 @@ test("0.9.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
   assert.match(css, /\.changelog-demo\s*\{[^}]*margin-bottom:\s*14px/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogConnections", "changelogRefine", "changelogStreaming", "changelogProgress", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogDone"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogConnections", "changelogProjects", "changelogRefine", "changelogStreaming", "changelogProgress", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogDone"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
   assert.match(layer, /class="changelog-demo"[\s\S]*data-i18n="changelogConnections"[\s\S]*data-i18n="changelogProgress"/);
   assert.match(app, /changelogConnections:[^\n]*ten API or CLI connections[^\n]*one click/);
+  assert.match(app, /changelogProjects:[^\n]*server canvases[^\n]*v2 bundles/);
   assert.match(app, /changelogRefine:[^\n]*standard unified diff[^\n]*reduces tokens/);
   assert.match(app, /changelogStreaming:[^\n]*SSE streaming[^\n]*stable/);
   assert.match(zh, /changelogConnections:[^\n]*十套 API 或 CLI 连接[^\n]*一键切换/);
+  assert.match(zh, /changelogProjects:[^\n]*项目[^\n]*v2 Bundle/);
   assert.match(zh, /changelogRefine:[^\n]*unified diff[^\n]*减少 token/);
 });
 

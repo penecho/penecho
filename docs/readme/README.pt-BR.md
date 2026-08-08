@@ -77,7 +77,9 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 ## Novidades da versão 0.9.0
 
 - **Várias conexões de IA com troca em um clique.** Salve até dez conexões API ou CLI, use predefinições editáveis de Kimi e MiniMax, teste-as na tela e escolha uma conexão ativa diferente em cada cliente do mesmo host PenEcho. As alterações são aplicadas imediatamente.
-- **Refine mais rápido e flexível.** Escreva instruções em qualquer lugar da área visível e escolha o widget a alterar. Diffs unificados padrão enviam apenas as mudanças, reduzindo tokens e espera sem perder confirmação e Desfazer.
+- **Telas compartilhadas organizadas por projetos.** Organize as telas do servidor em projetos, mova o trabalho entre eles e navegue por prévias maiores ordenadas pela última modificação. O bundle v2 versionado mantém blocos, widgets, imagens posicionadas, recursos e metadados de prévia juntos; telas v1 continuam compatíveis e são atualizadas quando salvas novamente.
+- **Refine guiado e aplicado no próprio widget.** Escreva ou posicione novas instruções em qualquer lugar da área visível e escolha o widget que elas devem atualizar. O PenEcho conecta visualmente a área das instruções ao destino e pede confirmação; cancelamentos ou falhas preservam as instruções, e uma edição concluída ainda pode ser confirmada ou desfeita.
+- **Alterações incrementais menores com unified diff padrão.** O Refine envia os arquivos editáveis completos do widget, mas o modelo devolve apenas os hunks alterados, sem regenerar o widget inteiro. Isso reduz bastante os tokens de saída e a espera, mantendo atômicas as alterações de HTML, fonte e metadados do widget.
 - **Streaming real da API.** APIs compatíveis com OpenAI e Anthropic agora usam SSE de ponta a ponta para mostrar o recebimento imediatamente e tornar solicitações longas mais estáveis em gateways compatíveis.
 - **Progresso e cancelamento claros.** O status superior mostra preparação, conexão, espera, recebimento, validação, novas tentativas e tempo limite. Durante uma solicitação, o botão mágico interrompe o trabalho ativo imediatamente.
 

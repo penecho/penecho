@@ -688,6 +688,7 @@
     if (edit) setStatusKey("ready");
     if (edit && restoreMode) finishManualImageHandMode();
     else if (edit) state.imageHandReturnMode = null;
+    if (edit && options.showHint) showHandStatusHint("image-confirmed", ["handImageConfirmedHint", "handAutoAIManual"]);
     if (edit && state.mode !== "hand" && !refineCandidate) schedule();
     return Boolean(edit);
   }
@@ -815,7 +816,8 @@
     setStatusKey("imageDeleted");
     return true;
   }
-  function mergeImage(item) {
+  function mergeImage(item, options = null) {
+    options ||= {};
     if (!item || !state.images.includes(item)) return false;
     clearHandToolbarTarget("image", item.id, { preserveInactive:false });
     const edited = state.imageEdit?.id === item.id;
@@ -854,6 +856,7 @@
     save();
     requestRender();
     setStatusKey("imageMerged");
+    if (options.showHint) showHandStatusHint("image-merged", ["handImageMergedHint", "handAutoAIManual"]);
     return true;
   }
   function importedImagePlacement(naturalW, naturalH) {
@@ -1360,7 +1363,8 @@
     requestInteractionLayerRender();
     return true;
   }
-  function acceptWidgetEdit() {
+  function acceptWidgetEdit(options = null) {
+    options ||= {};
     const edit = state.widgetEdit;
     if (edit) clearHandToolbarTarget("widget", edit.id);
     state.widgetGesture = null;
@@ -1373,6 +1377,7 @@
     syncWidgetHostStates();
     requestInteractionLayerRender();
     if (edit) setStatusKey("ready");
+    if (edit && options.showHint) showHandStatusHint("widget-confirmed", ["handWidgetConfirmedHint", "handAutoAIManual"]);
     return Boolean(edit);
   }
   function cancelWidgetEdit() {
@@ -1458,7 +1463,7 @@
   }
   function beginWidgetGesture(event, point, result) {
     if (!result?.widget) return false;
-    if (result.hit === "accept") return (result.pending ? acceptPendingWidget() : acceptWidgetEdit()) || true;
+    if (result.hit === "accept") return (result.pending ? acceptPendingWidget({ showHint:true }) : acceptWidgetEdit({ showHint:true })) || true;
     if (result.hit === "cancel") return (result.pending ? rejectPendingWidget() : deleteWidget(result.widget)) || true;
     if (!result.pending) beginWidgetEdit(result.widget);
     state.widgetGesture = {
@@ -1715,6 +1720,7 @@
     setStatusKey("merged");
     resolve?.(true);
     if (restoreMode) finishAIDraftHandMode();
+    if (options.showHint) showHandStatusHint("widget-draft-confirmed", ["handWidgetConfirmedHint", "handAutoAIManual"]);
     if (!replacement && restoreMode) showCanvasHint("canvasHintWidgetTouchHand");
   }
   function rejectPendingWidget(result = AI_REJECTED, options) {
@@ -1915,7 +1921,8 @@
     };
     return true;
   }
-  function acceptAnimationEdit() {
+  function acceptAnimationEdit(options = null) {
+    options ||= {};
     const edit = state.animationEdit;
     if (edit) clearHandToolbarTarget("animation", edit.id);
     state.animationGesture = null;
@@ -1929,6 +1936,7 @@
     requestAnimationLayerRender();
     requestInteractionLayerRender();
     if (edit) setStatusKey("ready");
+    if (edit && options.showHint) showHandStatusHint("animation-confirmed", ["handAnimationConfirmedHint", "handAutoAIManual"]);
     return Boolean(edit);
   }
   function cancelAnimationEdit() {
@@ -3329,7 +3337,7 @@
     const add = (key, box, itemIndex = null, target = pending) => {
       specs.push({ key:`${key}:move`, kind:"move", box, target:"pending", itemIndex, object:target, priority:4 });
       specs.push({ key:`${key}:cancel`, kind:"cancel", box, activate:() => itemIndex === null ? rejectPending() : rejectPendingItem(itemIndex), priority:5 });
-      specs.push({ key:`${key}:accept`, kind:"accept", box, activate:() => itemIndex === null ? acceptPending() : acceptPendingItem(itemIndex), priority:5 });
+      specs.push({ key:`${key}:accept`, kind:"accept", box, activate:() => itemIndex === null ? acceptPending({ showHint:true }) : acceptPendingItem(itemIndex), priority:5 });
       if (pendingCopyable(target)) specs.push({ key:`${key}:copy`, kind:"copy", box, activate:() => void copyPendingText(itemIndex), priority:5 });
     };
     if (pending.items) pending.items.forEach((item, index) => add(`pending-item:${index}`, pendingItemBounds(item), index, item));
@@ -3359,14 +3367,14 @@
         specs.push({ key:`animation:${handTarget.id}:move`, kind:"move", box, target:"animation", object:handTarget, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.animationEdit?.id === handTarget.id) {
           specs.push({ key:`animation:${handTarget.id}:cancel`, kind:"cancel", box, activate:cancelAnimationEdit, ...shared, priority:3 });
-          specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:acceptAnimationEdit, ...shared, priority:3 });
+          specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptAnimationEdit({ showHint:true }), ...shared, priority:3 });
         }
       } else if (record.kind === "widget") {
         const box = widgetBox(handTarget);
         specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
           specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
-          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
           addWidgetToolSpecs(specs, handTarget, { copy:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
         }
       }
@@ -3377,7 +3385,7 @@
         box = widgetBox(widget);
       specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
       specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
-      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:acceptPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
       addWidgetToolSpecs(specs, widget, { copy:true });
     }
     return specs;
@@ -4000,7 +4008,8 @@
     return { x: left + 8, y: top + 8 };
   }
 
-  async function confirmTextEditor(editor) {
+  async function confirmTextEditor(editor, options = null) {
+    options ||= {};
     if (!editor) return;
     if (editor.commitPromise) return editor.commitPromise;
     const text = editor.textarea.value;
@@ -4074,6 +4083,7 @@
       setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
       if (state.auto && !refineCandidate) schedule(Math.max(1000, state.autoDelayMs));
       if (refineCandidate) setStatusKey("widgetRefinePending");
+      else if (!mixedFallback && options.showHint) showHandStatusHint("text-confirmed", ["handTextConfirmedHint", "handAutoAIManual"]);
     })();
     editor.commitPromise = commitPromise;
     try {
@@ -4234,7 +4244,7 @@
     textarea.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
-        confirmTextEditor(editor);
+        confirmTextEditor(editor, { showHint:true });
       }
     });
     preview.addEventListener("focus", () => focusTextEditor(editor));
@@ -4242,7 +4252,7 @@
     preview.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
-        confirmTextEditor(editor);
+        confirmTextEditor(editor, { showHint:true });
       }
     });
     helpButton.addEventListener("click", (event) => {
@@ -4258,7 +4268,7 @@
     acceptButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      confirmTextEditor(editor);
+      confirmTextEditor(editor, { showHint:true });
     });
     cancelButton.addEventListener("click", (event) => {
       event.preventDefault();

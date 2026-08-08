@@ -1908,6 +1908,7 @@
     setStatusKey("merged");
     resolvePending(p, p.items ? { acceptedCount } : true);
     if (restoreMode) finishAIDraftHandMode();
+    if (options.showHint) showHandStatusHint("ai-draft-confirmed", ["handDraftConfirmedHint", "handAutoAIManual"]);
   }
   function acceptPendingItem(index) {
     const p = state.pending,

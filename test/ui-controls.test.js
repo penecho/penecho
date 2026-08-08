@@ -145,8 +145,8 @@ test("canvas photos use one picker, editable image records, side action bar, and
   assert.match(css, /\.image-action-hint \{/);
   assert.match(app, /function positionImageEditBar\(\)/);
   assert.match(renderInteractionLayer, /positionImageEditBar\(\)/);
-  assert.match(app, /imagePlaceButton\.onclick = \(\) => acceptImageEdit\(\)/);
-  assert.match(app, /imageMergeButton\.onclick =[\s\S]{0,80}?mergeImage\(item\)/);
+  assert.match(app, /imagePlaceButton\.onclick = \(\) => acceptImageEdit\(\{ showHint:true \}\)/);
+  assert.match(app, /imageMergeButton\.onclick =[\s\S]{0,100}?mergeImage\(item, \{ showHint:true \}\)/);
   assert.match(app, /imageDeleteButton\.onclick =[\s\S]{0,80}?deleteImage\(item\)/);
   assert.match(app, /images = storedImages\(\)/);
   assert.match(loadSnapshot, /decodeStoredImages\(item\.images\)/);
@@ -174,6 +174,15 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
     penIndex = html.indexOf('data-mode="pen"'),
     pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
     mode = functionSource(app, "setCanvasMode"),
+    autoControl = functionSource(app, "updateAutoControl"),
+    handStatusHint = functionSource(app, "showHandStatusHint"),
+    acceptImageEdit = functionSource(app, "acceptImageEdit"),
+    mergeImage = functionSource(app, "mergeImage"),
+    acceptWidgetEdit = functionSource(app, "acceptWidgetEdit"),
+    acceptPendingWidget = functionSource(app, "acceptPendingWidget"),
+    acceptAnimationEdit = functionSource(app, "acceptAnimationEdit"),
+    confirmTextEditor = functionSource(app, "confirmTextEditor"),
+    acceptPending = functionSource(app, "acceptPending"),
     refineHoverOutline = functionSource(app, "drawWidgetRefineButtonHoverOutline"),
     refineClickPulse = functionSource(app, "drawWidgetRefineClickPulse"),
     createChromeButton = functionSource(app, "createObjectChromeButton"),
@@ -193,9 +202,31 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
   assert.match(zh, /hand:\s*"小手：移动画布和对象"/);
   assert.match(app, /handAutoAIManual:\s*"Hand mode pauses Auto AI · Use the AI button to run it manually\."/);
   assert.match(zh, /handAutoAIManual:\s*"Hand 模式暂停自动 AI · 请点击 AI 按钮手动运行"/);
+  for (const key of ["handAutoAIResume", "handWidgetConfirmedHint", "handImageConfirmedHint", "handImageMergedHint", "handAnimationConfirmedHint", "handTextConfirmedHint", "handDraftConfirmedHint"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
+  assert.match(autoControl, /disabled = state\.mode === "hand" && state\.auto/);
+  assert.match(autoControl, /button\.disabled = disabled/);
+  assert.match(autoControl, /button\.setAttribute\("aria-disabled", String\(disabled\)\)/);
+  assert.match(handStatusHint, /state\.mode !== "hand" \|\| state\.busy/);
+  assert.match(handStatusHint, /statusHintRotation\.get\(action\)[\s\S]*?% candidates\.length/);
+  assert.match(handStatusHint, /setStatusKey\(candidates\[index\]\)/);
   assert.match(mode, /if \(mode === "hand"\) \{[\s\S]*?clearTimeout\(state\.timer\);[\s\S]*?state\.timer = 0/);
-  assert.match(mode, /if \(mode === "hand" && options\.showHint && !state\.busy[\s\S]*?setStatusKey\("handAutoAIManual"\)/);
-  assert.doesNotMatch(mode, /state\.autoEligible|supersedeActiveAI|controller\.abort/);
+  assert.match(mode, /state\.mode = mode;[\s\S]*?updateAutoControl\(\)/);
+  assert.match(mode, /if \(mode === "hand" && options\.showHint && !state\.busy\)[\s\S]*?showHandStatusHint\("hand-mode", \["handAutoAIManual", "handAutoAIResume"\]\)/);
+  assert.doesNotMatch(mode, /setAutoEnabled|state\.autoEligible|supersedeActiveAI|controller\.abort/);
+  assert.match(acceptImageEdit, /options\.showHint[\s\S]*?showHandStatusHint\("image-confirmed"/);
+  assert.match(mergeImage, /options\.showHint[\s\S]*?showHandStatusHint\("image-merged"/);
+  assert.match(acceptWidgetEdit, /options\.showHint[\s\S]*?showHandStatusHint\("widget-confirmed"/);
+  assert.match(acceptPendingWidget, /options\.showHint[\s\S]*?showHandStatusHint\("widget-draft-confirmed"/);
+  assert.match(acceptAnimationEdit, /options\.showHint[\s\S]*?showHandStatusHint\("animation-confirmed"/);
+  assert.match(confirmTextEditor, /options\.showHint[\s\S]*?showHandStatusHint\("text-confirmed"/);
+  assert.match(acceptPending, /options\.showHint[\s\S]*?showHandStatusHint\("ai-draft-confirmed"/);
+  assert.match(app, /imagePlaceButton\.onclick = \(\) => acceptImageEdit\(\{ showHint:true \}\)/);
+  assert.match(app, /mergeImage\(item, \{ showHint:true \}\)/);
+  assert.match(app, /acceptPending\(\{ showHint:true \}\)/);
+  assert.match(app, /acceptPendingWidget\(\{ showHint:true \}\)/);
   assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
   assert.match(mode, /requestInteractionLayerRender\(\)/);
   assert.match(mode, /leavingDraftHand[\s\S]*?acceptPending\(\{ restoreMode:false \}\)/);
@@ -395,8 +426,11 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.match(css, /\.canvas-navigation-lock\s*\{[^}]*top:\s*10px[^}]*left:\s*10px[^}]*width:\s*30px[^}]*height:\s*30px[^}]*opacity:\s*\.3/);
   assert.match(css, /#viewport\.is-navigating \.canvas-navigation-lock[^}]*opacity:\s*\.58/);
   assert.match(css, /\.canvas-navigation-lock\.locked[^}]*opacity:\s*\.76/);
-  assert.match(css, /body\[data-theme="arcane"\] \.canvas-navigation-lock:not\(\.locked\)[\s\S]*?body\[data-theme="scifi"\] \.canvas-navigation-lock:not\(\.locked\)\s*\{[^}]*var\(--outside\)[^}]*opacity:\s*\.52/);
+  assert.match(css, /body\[data-theme="arcane"\] \.canvas-navigation-lock:not\(\.locked\)\s*\{[^}]*var\(--outside\)[^}]*opacity:\s*\.52/);
   assert.match(css, /body\[data-theme="arcane"\] #viewport\.is-navigating \.canvas-navigation-lock:not\(\.locked\)[\s\S]*?opacity:\s*\.68/);
+  assert.match(css, /body\[data-theme="scifi"\] \.canvas-navigation-lock:not\(\.locked\)\s*\{[^}]*var\(--outside\) 78%[^}]*opacity:\s*\.38/);
+  assert.match(css, /body\[data-theme="scifi"\] #viewport\.is-navigating \.canvas-navigation-lock:not\(\.locked\)\s*\{[^}]*opacity:\s*\.5/);
+  assert.match(css, /body\[data-theme="scifi"\] \.canvas-navigation-lock:not\(\.locked\):hover[\s\S]*?opacity:\s*\.66/);
   assert.match(css, /\.canvas-navigation-lock-hint\s*\{[^}]*right:\s*12px[^}]*bottom:\s*11px[^}]*color:[^}]*opacity:\s*0/);
   assert.match(css, /#viewport\.navigation-locked \.canvas-navigation-lock-hint\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*\.78/);
   assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);

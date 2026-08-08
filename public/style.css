@@ -566,14 +566,14 @@ body.changelog-open { overflow: hidden; }
 .canvas-navigation-lock.locked .closed { display: block; }
 #viewport.is-navigating .canvas-navigation-lock, .canvas-navigation-lock:hover, .canvas-navigation-lock:focus-visible { color: color-mix(in srgb, var(--ink) 76%, #2679b8); border-color: color-mix(in srgb, var(--line) 52%, transparent); background: color-mix(in srgb, var(--panel) 62%, transparent); opacity: .58; }
 .canvas-navigation-lock.locked, #viewport.is-navigating .canvas-navigation-lock.locked, .canvas-navigation-lock.locked:hover, .canvas-navigation-lock.locked:focus-visible { color: #2679b8; border-color: color-mix(in srgb, #2679b8 44%, transparent); background: color-mix(in srgb, var(--panel) 68%, transparent); opacity: .76; }
-body[data-theme="arcane"] .canvas-navigation-lock:not(.locked),
-body[data-theme="scifi"] .canvas-navigation-lock:not(.locked) { color: color-mix(in srgb, var(--outside) 72%, #2679b8); opacity: .52; }
+body[data-theme="arcane"] .canvas-navigation-lock:not(.locked) { color: color-mix(in srgb, var(--outside) 72%, #2679b8); opacity: .52; }
 body[data-theme="arcane"] #viewport.is-navigating .canvas-navigation-lock:not(.locked),
-body[data-theme="scifi"] #viewport.is-navigating .canvas-navigation-lock:not(.locked),
 body[data-theme="arcane"] .canvas-navigation-lock:not(.locked):hover,
+body[data-theme="arcane"] .canvas-navigation-lock:not(.locked):focus-visible { opacity: .68; }
+body[data-theme="scifi"] .canvas-navigation-lock:not(.locked) { color: color-mix(in srgb, var(--outside) 78%, #2679b8); opacity: .38; }
+body[data-theme="scifi"] #viewport.is-navigating .canvas-navigation-lock:not(.locked) { opacity: .5; }
 body[data-theme="scifi"] .canvas-navigation-lock:not(.locked):hover,
-body[data-theme="arcane"] .canvas-navigation-lock:not(.locked):focus-visible,
-body[data-theme="scifi"] .canvas-navigation-lock:not(.locked):focus-visible { opacity: .68; }
+body[data-theme="scifi"] .canvas-navigation-lock:not(.locked):focus-visible { opacity: .66; }
 #screen { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .animation-layer { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .widget-layer { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }

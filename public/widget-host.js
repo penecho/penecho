@@ -60,12 +60,18 @@
       CONTROL_RADIUS_PX = 26,
       MAX_SNAPSHOT_DIMENSION = 2400,
       MAX_SNAPSHOT_PIXELS = 4800000,
+      SNAPSHOT_GENERATED_PSEUDOS = [
+        { selector:"::before", placement:"prepend" },
+        { selector:"::after", placement:"append" },
+      ],
       PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024;
     let widgetState = { selected:false, active:true, navigationLocked:false, scaleX:1, scaleY:1 },
       widgetStateReceived = false,
       suppressClickUntil = 0;
     const presses = new Map(),
       publicFetchRequests = new Map(),
+      imageFallbackAttempts = new WeakMap(),
+      imageFallbackReplays = new WeakSet(),
       pausedAnimations = new WeakSet(),
       pausedSvgRoots = new WeakSet(),
       pendingAnimationFrames = new Map(),
@@ -138,6 +144,7 @@
       if (!diagnosticsTimer) diagnosticsTimer = setTimeout(sendRuntimeDiagnostics, 100);
     }
     addEventListener("error", (event) => {
+      if (beginImageFallback(event)) return;
       const target = event.target;
       if (target && target !== globalThis && String(target.tagName || "").toUpperCase() === "SCRIPT") {
         recordRuntimeError({
@@ -228,10 +235,61 @@
         return "";
       }
     }
+    function imageFallbackUrl(image) {
+      return publicHttpsLink(image?.currentSrc || image?.getAttribute?.("src") || image?.src);
+    }
+    function replayImageError(image) {
+      imageFallbackReplays.add(image);
+      try { image.dispatchEvent?.(new Event("error")); }
+      finally { imageFallbackReplays.delete(image); }
+    }
+    async function proxyImageFallback(image, sourceUrl) {
+      try {
+        const response = await globalThis.penechoFetchPublic(sourceUrl);
+        if (!response.ok) throw Error(`Image request failed with status ${response.status}`);
+        const blob = await response.blob();
+        if (!blob.size) throw Error("Image response was empty");
+        const currentUrl = imageFallbackUrl(image);
+        if (currentUrl && currentUrl !== sourceUrl) return;
+        const objectUrl = URL.createObjectURL(blob);
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          URL.revokeObjectURL(objectUrl);
+        };
+        image.addEventListener?.("load", release, { once:true });
+        image.addEventListener?.("error", release, { once:true });
+        image.removeAttribute?.("srcset");
+        image.removeAttribute?.("crossorigin");
+        if (String(image.parentElement?.tagName || "").toUpperCase() === "PICTURE") {
+          for (const source of image.parentElement.querySelectorAll?.("source[srcset]") || []) source.removeAttribute("srcset");
+        }
+        image.src = objectUrl;
+      } catch {
+        if (imageFallbackUrl(image) === sourceUrl) replayImageError(image);
+      }
+    }
+    function beginImageFallback(event) {
+      const image = event?.target;
+      if (!image || String(image.tagName || "").toUpperCase() !== "IMG" || imageFallbackReplays.has(image)) return false;
+      const sourceUrl = imageFallbackUrl(image);
+      if (!sourceUrl || imageFallbackAttempts.get(image) === sourceUrl) return false;
+      imageFallbackAttempts.set(image, sourceUrl);
+      event.preventDefault?.();
+      event.stopImmediatePropagation?.();
+      void proxyImageFallback(image, sourceUrl);
+      return true;
+    }
     if (nativeFetch) {
       const directFirstFetch = async (input, init) => {
         try {
-          return await nativeFetch(input, init);
+          const response = await nativeFetch(input, init);
+          if (response.ok) return response;
+          const url = publicFetchFallbackUrl(input, init);
+          if (!url) return response;
+          try { return await globalThis.penechoFetchPublic(url); }
+          catch { return response; }
         } catch (error) {
           const url = publicFetchFallbackUrl(input, init);
           if (!url) throw error;
@@ -608,6 +666,68 @@
         }
       };
     }
+    function snapshotPseudoContentText(value, element) {
+      const source = String(value || "").trim();
+      if (!source || ["none", "normal", "-moz-alt-content"].includes(source)) return null;
+      if (source === '""' || source === "''") return "";
+      const attribute = source.match(/^attr\(\s*([^\s)]+)\s*\)$/i);
+      if (attribute) return element.getAttribute?.(attribute[1]) || "";
+      let result = "",
+        matched = false;
+      source.replace(/(["'])((?:\\.|(?!\1)[^\\])*)\1/g, (_match, _quote, text) => {
+        matched = true;
+        result += text.replace(/\\([0-9a-f]{1,6})\s?|\\(.)/gi, (_escape, hex, escaped) => {
+          if (hex) {
+            const codePoint = Number.parseInt(hex, 16);
+            return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : "�";
+          }
+          return escaped || "";
+        });
+        return _match;
+      });
+      return matched ? result : "";
+    }
+    function materializeSnapshotGeneratedContent() {
+      const inserted = [],
+        elements = [document.documentElement, ...document.querySelectorAll("*")];
+      try {
+        for (const element of elements) {
+          if (!element || element.namespaceURI && element.namespaceURI !== "http://www.w3.org/1999/xhtml") continue;
+          for (const pseudo of SNAPSHOT_GENERATED_PSEUDOS) {
+            let computed;
+            try {
+              computed = getComputedStyle(element, pseudo.selector);
+            } catch {
+              continue;
+            }
+            const content = snapshotPseudoContentText(computed?.getPropertyValue("content"), element);
+            if (content === null || computed.getPropertyValue("display") === "none" || computed.getPropertyValue("visibility") === "hidden") continue;
+            const node = document.createElement("penecho-snapshot-pseudo");
+            node.setAttribute("data-penecho-snapshot-pseudo", pseudo.selector.slice(2));
+            node.setAttribute("aria-hidden", "true");
+            node.textContent = content;
+            for (let index = 0; index < computed.length; index++) {
+              const property = computed.item(index);
+              if (!property || property === "content") continue;
+              const propertyValue = computed.getPropertyValue(property);
+              if (propertyValue) node.style.setProperty(property, propertyValue, "important");
+            }
+            node.style.setProperty("animation", "none", "important");
+            node.style.setProperty("transition", "none", "important");
+            node.style.setProperty("pointer-events", "none", "important");
+            if (pseudo.placement === "prepend") element.insertBefore(node, element.firstChild);
+            else element.appendChild(node);
+            inserted.push(node);
+          }
+        }
+      } catch (error) {
+        for (const node of inserted) node.remove();
+        throw error;
+      }
+      return () => {
+        for (const node of inserted) node.remove();
+      };
+    }
     function settleSnapshotFrame() {
       return new Promise((resolve) => {
         let settled = false;
@@ -723,9 +843,11 @@
           if (!canvas) {
             const domSnapshotRenderer = globalThis.html2canvas;
             if (typeof domSnapshotRenderer !== "function") throw Error("Widget renderer is unavailable");
-            const restoreDirectRendererStyles = captureDirectRendererStyleMutations();
+            const restoreGeneratedContent = materializeSnapshotGeneratedContent();
+            let restoreDirectRendererStyles = () => {};
             let rendering;
             try {
+              restoreDirectRendererStyles = captureDirectRendererStyleMutations();
               rendering = domSnapshotRenderer(document.documentElement, {
                 backgroundColor:null,
                 width:requestedWidth,
@@ -747,6 +869,7 @@
               // the live DOM. Restore them before the browser can paint so a
               // save cannot blank maps or move other rendered widget content.
               restoreDirectRendererStyles();
+              restoreGeneratedContent();
             }
             canvas = await rendering;
           }

@@ -263,6 +263,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       boardTools: "Board tools",
       hand: "Hand tool: move canvas and objects",
       handAutoAIManual: "Hand mode pauses Auto AI · Use the AI button to run it manually.",
+      handAutoAIResume: "Auto AI resumes when you leave Hand mode.",
+      handWidgetConfirmedHint: "Widget confirmed · Tap it again to reveal its controls.",
+      handImageConfirmedHint: "Image confirmed · Tap it again to move, resize, merge, or delete.",
+      handImageMergedHint: "Image merged · It now behaves like canvas ink.",
+      handAnimationConfirmedHint: "Animation confirmed · Tap it again to move, resize, or play.",
+      handTextConfirmedHint: "Text confirmed · Tap it again to edit, move, or resize.",
+      handDraftConfirmedHint: "AI result confirmed · Auto AI remains paused in Hand.",
       pen: "Pen",
       eraser: "Eraser",
       select: "Lasso select",
@@ -403,10 +410,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Faster refinement and flexible AI connections",
-      changelogIntro: "Version 0.9.0 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.",
+      changelogTitle: "Refine, projects, and flexible AI connections",
+      changelogIntro: "Version 0.9.0 adds guided in-place editing, project-based shared canvases, and a more flexible and dependable AI workflow.",
       changelogConnections: "Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.",
-      changelogRefine: "Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens. Hand stays clear until you tap an object to reveal its controls.",
+      changelogProjects: "Organize shared server canvases into projects and browse larger previews by modification time. Versioned v2 bundles keep every canvas asset together while remaining compatible with existing saves.",
+      changelogRefine: "Write or place instructions anywhere in the current viewport, choose the widget to update, and apply a standard unified diff that reduces tokens while preserving confirmation, undo, and pending instructions after failure or cancellation.",
       changelogStreaming: "API requests now use true SSE streaming, reducing long silent waits, improving responsiveness, and keeping lengthy model responses more stable through compatible gateways.",
       changelogProgress: "The top status area now shows each request stage, live response receipt, retries, long-wait notices, and cancellation; the magic button can stop active requests immediately.",
       changelogEarlierTitle: "Earlier highlights",
@@ -1109,6 +1117,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       choices = alternatives.length ? alternatives : candidates;
     state.canvasHintKey = choices[Math.floor(Math.random() * choices.length)];
     renderCanvasHint(true);
+  }
+  const statusHintRotation = new Map();
+  function showHandStatusHint(action, keys) {
+    if (state.mode !== "hand" || state.busy) return false;
+    const candidates = (Array.isArray(keys) ? keys : [keys]).filter((key) => key && (I18N[state.language][key] || I18N.zh[key]));
+    if (!candidates.length) return false;
+    const index = ((statusHintRotation.get(action) ?? -1) + 1) % candidates.length;
+    statusHintRotation.set(action, index);
+    setStatusKey(candidates[index]);
+    return true;
   }
   const summonFX = SUMMON?.create({
     fxCanvas:summonLayer,
@@ -2026,9 +2044,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateAutoControl() {
     const button = document.querySelector("#auto"),
       range = document.querySelector("#autoDelayRange"),
-      value = document.querySelector("#autoDelayValue");
+      value = document.querySelector("#autoDelayValue"),
+      disabled = state.mode === "hand" && state.auto;
     button.classList.toggle("active", state.auto);
     button.setAttribute("aria-pressed", String(state.auto));
+    button.disabled = disabled;
+    button.setAttribute("aria-disabled", String(disabled));
     document.querySelector("#autoLabel").textContent = state.auto ? t("autoEnabled").replace("{delay}", autoDelayText()) : t("autoDisabled");
     range.value = String(state.autoDelayMs / 1000);
     value.textContent = `${autoDelayText()} s`;
@@ -3801,6 +3822,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (edit) setStatusKey("ready");
     if (edit && restoreMode) finishManualImageHandMode();
     else if (edit) state.imageHandReturnMode = null;
+    if (edit && options.showHint) showHandStatusHint("image-confirmed", ["handImageConfirmedHint", "handAutoAIManual"]);
     if (edit && state.mode !== "hand" && !refineCandidate) schedule();
     return Boolean(edit);
   }
@@ -3928,7 +3950,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("imageDeleted");
     return true;
   }
-  function mergeImage(item) {
+  function mergeImage(item, options = null) {
+    options ||= {};
     if (!item || !state.images.includes(item)) return false;
     clearHandToolbarTarget("image", item.id, { preserveInactive:false });
     const edited = state.imageEdit?.id === item.id;
@@ -3967,6 +3990,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     save();
     requestRender();
     setStatusKey("imageMerged");
+    if (options.showHint) showHandStatusHint("image-merged", ["handImageMergedHint", "handAutoAIManual"]);
     return true;
   }
   function importedImagePlacement(naturalW, naturalH) {
@@ -4473,7 +4497,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestInteractionLayerRender();
     return true;
   }
-  function acceptWidgetEdit() {
+  function acceptWidgetEdit(options = null) {
+    options ||= {};
     const edit = state.widgetEdit;
     if (edit) clearHandToolbarTarget("widget", edit.id);
     state.widgetGesture = null;
@@ -4486,6 +4511,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     syncWidgetHostStates();
     requestInteractionLayerRender();
     if (edit) setStatusKey("ready");
+    if (edit && options.showHint) showHandStatusHint("widget-confirmed", ["handWidgetConfirmedHint", "handAutoAIManual"]);
     return Boolean(edit);
   }
   function cancelWidgetEdit() {
@@ -4571,7 +4597,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function beginWidgetGesture(event, point, result) {
     if (!result?.widget) return false;
-    if (result.hit === "accept") return (result.pending ? acceptPendingWidget() : acceptWidgetEdit()) || true;
+    if (result.hit === "accept") return (result.pending ? acceptPendingWidget({ showHint:true }) : acceptWidgetEdit({ showHint:true })) || true;
     if (result.hit === "cancel") return (result.pending ? rejectPendingWidget() : deleteWidget(result.widget)) || true;
     if (!result.pending) beginWidgetEdit(result.widget);
     state.widgetGesture = {
@@ -4828,6 +4854,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("merged");
     resolve?.(true);
     if (restoreMode) finishAIDraftHandMode();
+    if (options.showHint) showHandStatusHint("widget-draft-confirmed", ["handWidgetConfirmedHint", "handAutoAIManual"]);
     if (!replacement && restoreMode) showCanvasHint("canvasHintWidgetTouchHand");
   }
   function rejectPendingWidget(result = AI_REJECTED, options) {
@@ -5028,7 +5055,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
     return true;
   }
-  function acceptAnimationEdit() {
+  function acceptAnimationEdit(options = null) {
+    options ||= {};
     const edit = state.animationEdit;
     if (edit) clearHandToolbarTarget("animation", edit.id);
     state.animationGesture = null;
@@ -5042,6 +5070,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestAnimationLayerRender();
     requestInteractionLayerRender();
     if (edit) setStatusKey("ready");
+    if (edit && options.showHint) showHandStatusHint("animation-confirmed", ["handAnimationConfirmedHint", "handAutoAIManual"]);
     return Boolean(edit);
   }
   function cancelAnimationEdit() {
@@ -6442,7 +6471,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const add = (key, box, itemIndex = null, target = pending) => {
       specs.push({ key:`${key}:move`, kind:"move", box, target:"pending", itemIndex, object:target, priority:4 });
       specs.push({ key:`${key}:cancel`, kind:"cancel", box, activate:() => itemIndex === null ? rejectPending() : rejectPendingItem(itemIndex), priority:5 });
-      specs.push({ key:`${key}:accept`, kind:"accept", box, activate:() => itemIndex === null ? acceptPending() : acceptPendingItem(itemIndex), priority:5 });
+      specs.push({ key:`${key}:accept`, kind:"accept", box, activate:() => itemIndex === null ? acceptPending({ showHint:true }) : acceptPendingItem(itemIndex), priority:5 });
       if (pendingCopyable(target)) specs.push({ key:`${key}:copy`, kind:"copy", box, activate:() => void copyPendingText(itemIndex), priority:5 });
     };
     if (pending.items) pending.items.forEach((item, index) => add(`pending-item:${index}`, pendingItemBounds(item), index, item));
@@ -6472,14 +6501,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         specs.push({ key:`animation:${handTarget.id}:move`, kind:"move", box, target:"animation", object:handTarget, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.animationEdit?.id === handTarget.id) {
           specs.push({ key:`animation:${handTarget.id}:cancel`, kind:"cancel", box, activate:cancelAnimationEdit, ...shared, priority:3 });
-          specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:acceptAnimationEdit, ...shared, priority:3 });
+          specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptAnimationEdit({ showHint:true }), ...shared, priority:3 });
         }
       } else if (record.kind === "widget") {
         const box = widgetBox(handTarget);
         specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
           specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
-          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:acceptWidgetEdit, ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
           addWidgetToolSpecs(specs, handTarget, { copy:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
         }
       }
@@ -6490,7 +6519,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         box = widgetBox(widget);
       specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
       specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
-      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:acceptPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
       addWidgetToolSpecs(specs, widget, { copy:true });
     }
     return specs;
@@ -7113,7 +7142,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return { x: left + 8, y: top + 8 };
   }
 
-  async function confirmTextEditor(editor) {
+  async function confirmTextEditor(editor, options = null) {
+    options ||= {};
     if (!editor) return;
     if (editor.commitPromise) return editor.commitPromise;
     const text = editor.textarea.value;
@@ -7187,6 +7217,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setStatusKey(mixedFallback ? "textMixedModeError" : "ready");
       if (state.auto && !refineCandidate) schedule(Math.max(1000, state.autoDelayMs));
       if (refineCandidate) setStatusKey("widgetRefinePending");
+      else if (!mixedFallback && options.showHint) showHandStatusHint("text-confirmed", ["handTextConfirmedHint", "handAutoAIManual"]);
     })();
     editor.commitPromise = commitPromise;
     try {
@@ -7347,7 +7378,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     textarea.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
-        confirmTextEditor(editor);
+        confirmTextEditor(editor, { showHint:true });
       }
     });
     preview.addEventListener("focus", () => focusTextEditor(editor));
@@ -7355,7 +7386,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     preview.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
-        confirmTextEditor(editor);
+        confirmTextEditor(editor, { showHint:true });
       }
     });
     helpButton.addEventListener("click", (event) => {
@@ -7371,7 +7402,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     acceptButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      confirmTextEditor(editor);
+      confirmTextEditor(editor, { showHint:true });
     });
     cancelButton.addEventListener("click", (event) => {
       event.preventDefault();
@@ -11249,6 +11280,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("merged");
     resolvePending(p, p.items ? { acceptedCount } : true);
     if (restoreMode) finishAIDraftHandMode();
+    if (options.showHint) showHandStatusHint("ai-draft-confirmed", ["handDraftConfirmedHint", "handAutoAIManual"]);
   }
   function acceptPendingItem(index) {
     const p = state.pending,
@@ -12641,8 +12673,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (mode === "hand") {
       clearTimeout(state.timer);
       state.timer = 0;
+      hideAutoDelayControl();
     }
     state.mode = mode;
+    updateAutoControl();
     if (!["pen", "hand"].includes(mode)) updateWidgetRefinePointer(null);
     else refreshWidgetRefineHoverCandidate();
     if (mode !== "eraser") state.pointerPreview = null;
@@ -12655,8 +12689,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
-    if (mode === "hand" && options.showHint && !state.busy && (!state.statusKey || state.statusKey === "ready" || state.statusKey === "handAutoAIManual")) {
-      setStatusKey("handAutoAIManual");
+    if (mode === "hand" && options.showHint && !state.busy) {
+      showHandStatusHint("hand-mode", ["handAutoAIManual", "handAutoAIResume"]);
     }
     if (options.showHint) {
       const hintKey = {
@@ -12678,10 +12712,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
   });
-  imagePlaceButton.onclick = () => acceptImageEdit();
+  imagePlaceButton.onclick = () => acceptImageEdit({ showHint:true });
   imageMergeButton.onclick = () => {
     const item = selectedImage();
-    if (item) mergeImage(item);
+    if (item) mergeImage(item, { showHint:true });
   };
   imageDeleteButton.onclick = () => {
     const item = selectedImage();

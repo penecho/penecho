@@ -442,8 +442,10 @@
     if (mode === "hand") {
       clearTimeout(state.timer);
       state.timer = 0;
+      hideAutoDelayControl();
     }
     state.mode = mode;
+    updateAutoControl();
     if (!["pen", "hand"].includes(mode)) updateWidgetRefinePointer(null);
     else refreshWidgetRefineHoverCandidate();
     if (mode !== "eraser") state.pointerPreview = null;
@@ -456,8 +458,8 @@
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
-    if (mode === "hand" && options.showHint && !state.busy && (!state.statusKey || state.statusKey === "ready" || state.statusKey === "handAutoAIManual")) {
-      setStatusKey("handAutoAIManual");
+    if (mode === "hand" && options.showHint && !state.busy) {
+      showHandStatusHint("hand-mode", ["handAutoAIManual", "handAutoAIResume"]);
     }
     if (options.showHint) {
       const hintKey = {
@@ -479,10 +481,10 @@
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
   });
-  imagePlaceButton.onclick = () => acceptImageEdit();
+  imagePlaceButton.onclick = () => acceptImageEdit({ showHint:true });
   imageMergeButton.onclick = () => {
     const item = selectedImage();
-    if (item) mergeImage(item);
+    if (item) mergeImage(item, { showHint:true });
   };
   imageDeleteButton.onclick = () => {
     const item = selectedImage();

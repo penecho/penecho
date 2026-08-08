@@ -40,6 +40,7 @@ function parsePlugin(relativePath) {
 function widgetRuntimeHarness(options = {}) {
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
     listeners = new Map(), messages = [], timers = new Map(), frames = new Map(), parent = {}, classes = new Set(), opened = [], directFetches = [], dispatched = [],
+    createdObjectUrls = [], revokedObjectUrls = [],
     animation = {
       playState:"running",
       pause() { this.playState = "paused"; },
@@ -57,12 +58,19 @@ function widgetRuntimeHarness(options = {}) {
       classList:{ add(name) { classes.add(name); }, remove(name) { classes.delete(name); } },
       setPointerCapture() {},
       releasePointerCapture() {},
-    };
+    },
+    RuntimeURL = class RuntimeURL extends URL {};
+  RuntimeURL.createObjectURL = () => {
+    const value = `blob:http://127.0.0.1/fallback-${createdObjectUrls.length + 1}`;
+    createdObjectUrls.push(value);
+    return value;
+  };
+  RuntimeURL.revokeObjectURL = value => revokedObjectUrls.push(value);
   let nextTimer = 1, nextFrame = 1;
   const sandbox = {
     document:{ baseURI:"blob:http://127.0.0.1/widget", documentElement, getSelection:() => ({ removeAllRanges() {} }), getAnimations:() => [animation], querySelectorAll:() => [svg] },
     parent,
-    URL,
+    URL:RuntimeURL,
     open(...args) { opened.push(args); return {}; },
     fetch(...args) {
       directFetches.push(args);
@@ -77,6 +85,7 @@ function widgetRuntimeHarness(options = {}) {
     requestAnimationFrame(callback) { const id = nextFrame++; frames.set(id, callback); return id; },
     cancelAnimationFrame(id) { frames.delete(id); },
     ArrayBuffer,
+    Blob,
     Headers,
     Request,
     Response,
@@ -114,6 +123,17 @@ function widgetRuntimeHarness(options = {}) {
     fetchPublic(url) { return sandbox.penechoFetchPublic(url); },
     fetch(url, init = { credentials:"omit" }) { return sandbox.fetch(url, init); },
     open(url) { return sandbox.open(url); },
+    resourceError(target) {
+      let prevented = false, stopped = false;
+      listeners.get("error")({
+        target,
+        preventDefault() { prevented = true; },
+        stopImmediatePropagation() { stopped = true; },
+      });
+      return { prevented, stopped };
+    },
+    createdObjectUrls,
+    revokedObjectUrls,
     click(target) {
       let prevented = false;
       listeners.get("click")({ target, preventDefault() { prevented = true; }, stopImmediatePropagation() {} });
@@ -169,16 +189,40 @@ test("widget public-data bridge preserves binary image responses", async () => {
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [...bytes]);
 });
 
-test("widget fetch tries the source directly and falls back to the public-data bridge after CORS failure", async () => {
+test("widget fetch tries the source directly and falls back to the public-data bridge after HTTP or CORS failure", async () => {
   const direct = widgetRuntimeHarness(), directResponse = await direct.fetch("https://example.com/direct.json");
   assert.equal(await directResponse.text(), "direct response");
   assert.equal(direct.directFetches.length, 1);
   assert.equal(direct.messages.some(message => message.type === "penecho-widget-public-fetch-request"), false);
 
   const notFound = widgetRuntimeHarness({ fetch:() => Promise.resolve(new Response("missing", { status:404 })) }),
-    notFoundResponse = await notFound.fetch("https://example.com/missing.json");
-  assert.equal(notFoundResponse.status, 404);
-  assert.equal(notFound.messages.some(message => message.type === "penecho-widget-public-fetch-request"), false);
+    notFoundPending = notFound.fetch("https://example.com/missing.json");
+  await new Promise(resolve => setImmediate(resolve));
+  const notFoundRequest = notFound.messages.at(-1);
+  assert.equal(notFoundRequest.type, "penecho-widget-public-fetch-request");
+  notFound.respond({
+    type:"penecho-widget-public-fetch-response",
+    requestId:notFoundRequest.requestId,
+    status:200,
+    body:'{"source":"proxy"}',
+    contentType:"application/json",
+    finalUrl:notFoundRequest.url,
+  });
+  const notFoundResponse = await notFoundPending;
+  assert.deepEqual(await notFoundResponse.json(), { source:"proxy" });
+
+  const unavailable = widgetRuntimeHarness({ fetch:() => Promise.resolve(new Response("original unavailable", { status:503 })) }),
+    unavailablePending = unavailable.fetch("https://example.com/unavailable.json");
+  await new Promise(resolve => setImmediate(resolve));
+  const unavailableRequest = unavailable.messages.at(-1);
+  unavailable.respond({
+    type:"penecho-widget-public-fetch-response",
+    requestId:unavailableRequest.requestId,
+    error:"The public data request failed",
+  });
+  const unavailableResponse = await unavailablePending;
+  assert.equal(unavailableResponse.status, 503);
+  assert.equal(await unavailableResponse.text(), "original unavailable");
 
   const corsBlocked = widgetRuntimeHarness({ fetch:() => Promise.reject(new TypeError("Failed to fetch")) }),
     pending = corsBlocked.fetch("https://www.reddit.com/hot.json?limit=10&raw_json=1");
@@ -197,6 +241,38 @@ test("widget fetch tries the source directly and falls back to the public-data b
   const fallbackResponse = await pending;
   assert.equal(fallbackResponse.ok, true);
   assert.deepEqual(await fallbackResponse.json(), { data:{ children:[] } });
+});
+
+test("widget image loads fall back through the public-data bridge and use a local blob URL", async () => {
+  const runtime = widgetRuntimeHarness(), imageListeners = new Map(), removedAttributes = [],
+    image = {
+      tagName:"IMG",
+      currentSrc:"https://images.example.com/chart.png",
+      src:"https://images.example.com/chart.png",
+      parentElement:null,
+      getAttribute:name => name === "src" ? "https://images.example.com/chart.png" : null,
+      removeAttribute:name => removedAttributes.push(name),
+      addEventListener:(type, listener) => imageListeners.set(type, listener),
+      dispatchEvent() {},
+    },
+    intercepted = runtime.resourceError(image);
+  assert.deepEqual(intercepted, { prevented:true, stopped:true });
+  const request = runtime.messages.at(-1);
+  assert.equal(request.type, "penecho-widget-public-fetch-request");
+  assert.equal(request.url, "https://images.example.com/chart.png");
+  runtime.respond({
+    type:"penecho-widget-public-fetch-response",
+    requestId:request.requestId,
+    status:200,
+    body:Uint8Array.from([137, 80, 78, 71]).buffer,
+    contentType:"image/png",
+    finalUrl:request.url,
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(image.src, runtime.createdObjectUrls[0]);
+  assert.deepEqual(removedAttributes, ["srcset", "crossorigin"]);
+  imageListeners.get("load")();
+  assert.deepEqual(runtime.revokedObjectUrls, runtime.createdObjectUrls);
 });
 
 test("widget fetch does not proxy credentialed, body-bearing, or aborted requests", async () => {
@@ -520,7 +596,9 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /context\.drawImage\(image, 0, 0, canvas\.width, canvas\.height\)/);
   assert.match(snapshot, /await settleSnapshotFrame\(\)[\s\S]*?inlineSvgComputedStyles\(\)[\s\S]*?inlineSnapshotCompatibleColors\(\)/);
   assert.match(host, /function captureDirectRendererStyleMutations\(\)[\s\S]*?attributeFilter:\["style"\][\s\S]*?observer\.takeRecords\(\)[\s\S]*?element\.setAttribute\("style", value\)/);
-  assert.match(snapshot, /restoreDirectRendererStyles = captureDirectRendererStyleMutations\(\)[\s\S]*?rendering = domSnapshotRenderer\([\s\S]*?finally\s*\{[\s\S]*?restoreDirectRendererStyles\(\)[\s\S]*?canvas = await rendering/);
+  assert.match(host, /SNAPSHOT_GENERATED_PSEUDOS[\s\S]*?selector:"::before"[\s\S]*?selector:"::after"/);
+  assert.match(host, /function materializeSnapshotGeneratedContent\(\)[\s\S]*?getComputedStyle\(element, pseudo\.selector\)[\s\S]*?data-penecho-snapshot-pseudo[\s\S]*?node\.style\.setProperty\(property, propertyValue, "important"\)/);
+  assert.match(snapshot, /restoreGeneratedContent = materializeSnapshotGeneratedContent\(\)[\s\S]*?restoreDirectRendererStyles = \(\) => \{\}[\s\S]*?restoreDirectRendererStyles = captureDirectRendererStyleMutations\(\)[\s\S]*?rendering = domSnapshotRenderer\([\s\S]*?finally\s*\{[\s\S]*?restoreDirectRendererStyles\(\)[\s\S]*?restoreGeneratedContent\(\)[\s\S]*?canvas = await rendering/);
   assert.match(host, /unsupportedSnapshotColor = \/\\b\(\?:color\|lab\|lch\|oklab\|oklch\|hwb\)[\s\S]*?getImageData\(0, 0, 1, 1\)/);
   assert.match(host, /function inlineSnapshotCompatibleColors\(\)[\s\S]*?background-image[\s\S]*?box-shadow/);
   assert.doesNotMatch(host, /snapshotSemanticFallback|createTreeWalker/);
@@ -547,7 +625,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(snapshot, /penecho-widget-snapshot", runtimeVersion/);
   assert.match(host, /for \(const requestId of \[\.\.\.pendingSnapshots\.keys\(\)\]\) snapshotError\(requestId, "Widget changed during snapshot"\)/);
   assert.match(host, /globalThis\.penechoFetchPublic/);
-  assert.match(host, /return await nativeFetch\(input, init\)[\s\S]*?globalThis\.penechoFetchPublic\(url\)/);
+  assert.match(host, /response = await nativeFetch\(input, init\)[\s\S]*?if \(response\.ok\) return response[\s\S]*?globalThis\.penechoFetchPublic\(url\)/);
+  assert.match(host, /function beginImageFallback\(event\)[\s\S]*?proxyImageFallback\(image, sourceUrl\)/);
   assert.match(host, /penecho-widget-public-fetch-request/);
   assert.match(host, /MAX_RUNTIME_ERRORS = 5/);
   assert.match(host, /addEventListener\("error"[\s\S]*?recordRuntimeError/);
@@ -679,6 +758,71 @@ test("direct widget snapshots restore live style mutations before rendering cont
   element.style = "transform: none; animation-duration: 0s";
   restore();
   assert.equal(element.style, "transform: translate3d(10px, 20px, 0)");
+});
+
+test("direct widget snapshots materialize generated pseudo-element graphics and text only during parsing", () => {
+  const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
+    snapshotPseudoContentText = vm.runInNewContext(`(${functionSource(host, "snapshotPseudoContentText")})`),
+    target = testElement(),
+    root = testElement(),
+    computed = (values) => {
+      const properties = Object.keys(values);
+      return {
+        length:properties.length,
+        item:index => properties[index],
+        getPropertyValue:property => values[property] || "",
+      };
+    },
+    hidden = computed({ content:"none", display:"none" }),
+    before = computed({ content:'""', display:"block", visibility:"visible", position:"absolute", width:"7px", transform:"matrix(1, 0, 0, 1, 0, 0)" }),
+    after = computed({ content:'"\\2192"', display:"block", visibility:"visible", position:"absolute", width:"2px" }),
+    document = {
+      documentElement:root,
+      querySelectorAll:() => [target],
+      createElement:() => testElement(),
+    },
+    materialize = vm.runInNewContext(`(${functionSource(host, "materializeSnapshotGeneratedContent")})`, {
+      SNAPSHOT_GENERATED_PSEUDOS:[
+        { selector:"::before", placement:"prepend" },
+        { selector:"::after", placement:"append" },
+      ],
+      snapshotPseudoContentText,
+      document,
+      getComputedStyle:(element, selector) => element === target ? selector === "::before" ? before : after : hidden,
+    }),
+    restore = materialize();
+  assert.equal(target.children.length, 2);
+  assert.equal(target.children[0].attributes.get("data-penecho-snapshot-pseudo"), "before");
+  assert.equal(target.children[0].styles.get("position").value, "absolute");
+  assert.equal(target.children[1].attributes.get("data-penecho-snapshot-pseudo"), "after");
+  assert.equal(target.children[1].textContent, "→");
+  assert.equal(target.children[1].styles.get("pointer-events").value, "none");
+  restore();
+  assert.equal(target.children.length, 0);
+
+  function testElement() {
+    const children = [],
+      attributes = new Map(),
+      styles = new Map(),
+      element = {
+        namespaceURI:"http://www.w3.org/1999/xhtml",
+        children,
+        attributes,
+        styles,
+        textContent:"",
+        style:{ setProperty(property, value, priority) { styles.set(property, { value, priority }); } },
+        setAttribute(name, value) { attributes.set(name, value); },
+        getAttribute(name) { return attributes.get(name) || null; },
+        insertBefore(node) { node.parent = element; children.unshift(node); },
+        appendChild(node) { node.parent = element; children.push(node); },
+        remove() {
+          const index = this.parent?.children.indexOf(this) ?? -1;
+          if (index >= 0) this.parent.children.splice(index, 1);
+        },
+      };
+    Object.defineProperty(element, "firstChild", { get:() => children[0] || null });
+    return element;
+  }
 });
 
 test("widget iframe preserves native navigation while forwarding only focus and resize chrome", () => {

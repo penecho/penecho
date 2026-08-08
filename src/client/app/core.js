@@ -262,6 +262,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       boardTools: "Board tools",
       hand: "Hand tool: move canvas and objects",
       handAutoAIManual: "Hand mode pauses Auto AI · Use the AI button to run it manually.",
+      handAutoAIResume: "Auto AI resumes when you leave Hand mode.",
+      handWidgetConfirmedHint: "Widget confirmed · Tap it again to reveal its controls.",
+      handImageConfirmedHint: "Image confirmed · Tap it again to move, resize, merge, or delete.",
+      handImageMergedHint: "Image merged · It now behaves like canvas ink.",
+      handAnimationConfirmedHint: "Animation confirmed · Tap it again to move, resize, or play.",
+      handTextConfirmedHint: "Text confirmed · Tap it again to edit, move, or resize.",
+      handDraftConfirmedHint: "AI result confirmed · Auto AI remains paused in Hand.",
       pen: "Pen",
       eraser: "Eraser",
       select: "Lasso select",
@@ -402,10 +409,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Faster refinement and flexible AI connections",
-      changelogIntro: "Version 0.9.0 makes AI setup, switching, and visual refinement faster, clearer, and more reliable.",
+      changelogTitle: "Refine, projects, and flexible AI connections",
+      changelogIntro: "Version 0.9.0 adds guided in-place editing, project-based shared canvases, and a more flexible and dependable AI workflow.",
       changelogConnections: "Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.",
-      changelogRefine: "Write instructions anywhere in the current viewport, choose the widget to update, and refine it with a standard unified diff that reduces tokens. Hand stays clear until you tap an object to reveal its controls.",
+      changelogProjects: "Organize shared server canvases into projects and browse larger previews by modification time. Versioned v2 bundles keep every canvas asset together while remaining compatible with existing saves.",
+      changelogRefine: "Write or place instructions anywhere in the current viewport, choose the widget to update, and apply a standard unified diff that reduces tokens while preserving confirmation, undo, and pending instructions after failure or cancellation.",
       changelogStreaming: "API requests now use true SSE streaming, reducing long silent waits, improving responsiveness, and keeping lengthy model responses more stable through compatible gateways.",
       changelogProgress: "The top status area now shows each request stage, live response receipt, retries, long-wait notices, and cancellation; the magic button can stop active requests immediately.",
       changelogEarlierTitle: "Earlier highlights",
@@ -1108,6 +1116,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       choices = alternatives.length ? alternatives : candidates;
     state.canvasHintKey = choices[Math.floor(Math.random() * choices.length)];
     renderCanvasHint(true);
+  }
+  const statusHintRotation = new Map();
+  function showHandStatusHint(action, keys) {
+    if (state.mode !== "hand" || state.busy) return false;
+    const candidates = (Array.isArray(keys) ? keys : [keys]).filter((key) => key && (I18N[state.language][key] || I18N.zh[key]));
+    if (!candidates.length) return false;
+    const index = ((statusHintRotation.get(action) ?? -1) + 1) % candidates.length;
+    statusHintRotation.set(action, index);
+    setStatusKey(candidates[index]);
+    return true;
   }
   const summonFX = SUMMON?.create({
     fxCanvas:summonLayer,
@@ -2025,9 +2043,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateAutoControl() {
     const button = document.querySelector("#auto"),
       range = document.querySelector("#autoDelayRange"),
-      value = document.querySelector("#autoDelayValue");
+      value = document.querySelector("#autoDelayValue"),
+      disabled = state.mode === "hand" && state.auto;
     button.classList.toggle("active", state.auto);
     button.setAttribute("aria-pressed", String(state.auto));
+    button.disabled = disabled;
+    button.setAttribute("aria-disabled", String(disabled));
     document.querySelector("#autoLabel").textContent = state.auto ? t("autoEnabled").replace("{delay}", autoDelayText()) : t("autoDisabled");
     range.value = String(state.autoDelayMs / 1000);
     value.textContent = `${autoDelayText()} s`;
