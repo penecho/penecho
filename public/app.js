@@ -550,8 +550,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       saveLocation: "Save location",
       storageThisDevice: "This device",
       storagePenEchoServer: "PenEcho server",
+      storagePenEchoCloud: "PenEcho Cloud",
       storageThisDeviceDescription: "Saved only in this browser on this device. Other devices cannot see it.",
       storagePenEchoServerDescription: "Saved on the computer running PenEcho. Anyone using this PenEcho service can see it after passing its access check.",
+      storagePenEchoCloudDescription: "Private, versioned Cloud storage for this account. Open the same project from desktop, macOS, and future iOS clients.",
       canvasProject: "Project",
       canvasProjectAll: "All projects",
       canvasProjectUncategorized: "Uncategorized",
@@ -561,6 +563,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasProjectName: "Project name",
       canvasProjectCreated: "Project created",
       canvasProjectDeleted: "Project deleted; its canvases moved to Uncategorized",
+      deleteCloudProjectConfirm: "Delete project “{name}”? Its Canvases will move to Uncategorized and no saved content will be deleted.",
       canvasProjectMoved: "Canvas moved",
       closeHistory: "Close history",
       newCanvas: "New",
@@ -590,10 +593,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       deleteSnapshot: "Delete",
       emptyDeviceHistory: "No canvases saved on this device yet",
       emptyServerHistory: "No canvases saved on this PenEcho server yet",
+      emptyCloudHistory: "No canvases saved to PenEcho Cloud yet",
       emptyProjectHistory: "No canvases saved in this project yet",
       emptyCanvas: "The canvas is empty",
       snapshotSaved: "Canvas snapshot saved",
       snapshotOverwritten: "Current snapshot overwritten",
+      cloudCanvasConflict: "This Cloud Canvas changed on another device. The library was refreshed; load the latest version or save your work as a new Canvas.",
       snapshotLoaded: "Canvas snapshot loaded",
       snapshotDeleted: "Canvas snapshot deleted",
       newCanvasReady: "New canvas ready",
@@ -605,6 +610,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotModified: "Modified {time}",
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
+      deleteSnapshotConfirmCloud: "Move this Cloud Canvas to Trash? It remains recoverable from PenEcho Cloud.",
       canvasHintWidgetAdded: "Use Pen to mark changes near a widget, then tap the AI Refine button that appears.",
       canvasHintWidgetAddedAlt: "In Pen, notes anywhere in this view can reveal AI Refine on the target widget.",
       canvasHintRefineInPlace: "In Pen, add an instruction, then tap AI Refine on the target widget.",
@@ -848,7 +854,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
     initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
-    initialSnapshotLocation = storedSnapshotLocation === "server" ? "server" : "device",
+    initialSnapshotLocation = ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function canvasClientId() {
@@ -1001,6 +1007,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       currentSnapshotName: "",
       currentSnapshotLocation: null,
       currentSnapshotProjectId: null,
+      currentSnapshotRevisionId: null,
+      currentSnapshotBundleExtensions: {},
+      currentSnapshotManifestExtensions: {},
       snapshotSavedRevision: 0,
       restoreGeneration: 0,
       recognitionGeneration: 0,
@@ -7638,10 +7647,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
     SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
-    SNAPSHOT_LOCATIONS = new Set(["device", "server"]),
+    SNAPSHOT_LOCATIONS = new Set(["device", "server", "cloud"]),
     SERVER_DEFAULT_PROJECT_ID = "uncategorized",
     SERVER_ALL_PROJECTS_ID = "all",
-    SERVER_PROJECT_SESSION_KEY = "penecho-selected-canvas-project";
+    SERVER_PROJECT_SESSION_KEY = "penecho-selected-canvas-project",
+    CLOUD_ALL_PROJECTS_ID = "all",
+    CLOUD_PROJECT_SESSION_KEY = "penecho-selected-cloud-project";
   let snapshotDbPromise = null,
     snapshotItems = [],
     snapshotSaveInProgress = false,
@@ -7649,6 +7660,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     historyNoticeTimer = 0,
     serverCanvasProjects = [],
     selectedServerProjectId = storedServerProjectId(),
+    cloudCanvasProjects = [],
+    selectedCloudProjectId = storedCloudProjectId(),
     pendingCanvasTransition = null;
   function validServerProjectSelection(projectId) {
     return projectId === SERVER_DEFAULT_PROJECT_ID || projectId === SERVER_ALL_PROJECTS_ID || /^project-[a-zA-Z0-9-]{8,64}$/.test(projectId || "");
@@ -7669,12 +7682,34 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function selectedServerSaveProjectId() {
     return selectedServerProjectId === SERVER_ALL_PROJECTS_ID ? SERVER_DEFAULT_PROJECT_ID : selectedServerProjectId;
   }
+  function validCloudProjectSelection(projectId) {
+    return projectId === CLOUD_ALL_PROJECTS_ID || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId || "");
+  }
+  function storedCloudProjectId() {
+    try {
+      const projectId = sessionStorage.getItem(CLOUD_PROJECT_SESSION_KEY);
+      return validCloudProjectSelection(projectId) ? projectId : CLOUD_ALL_PROJECTS_ID;
+    } catch {
+      return CLOUD_ALL_PROJECTS_ID;
+    }
+  }
+  function rememberSelectedCloudProject(projectId) {
+    selectedCloudProjectId = validCloudProjectSelection(projectId) ? projectId : CLOUD_ALL_PROJECTS_ID;
+    try { sessionStorage.setItem(CLOUD_PROJECT_SESSION_KEY, selectedCloudProjectId); } catch {}
+    return selectedCloudProjectId;
+  }
+  function cloudDefaultProjectId() {
+    return cloudCanvasProjects.find((project) => project.systemKey === "uncategorized")?.id || cloudCanvasProjects[0]?.id || null;
+  }
+  function selectedCloudSaveProjectId() {
+    return selectedCloudProjectId === CLOUD_ALL_PROJECTS_ID ? cloudDefaultProjectId() : selectedCloudProjectId;
+  }
   function snapshotLocationLabel(location = state.snapshotLocation) {
-    return t(location === "server" ? "storagePenEchoServer" : "storageThisDevice");
+    return t(location === "server" ? "storagePenEchoServer" : location === "cloud" ? "storagePenEchoCloud" : "storageThisDevice");
   }
   function updateSnapshotLocationUi() {
     const location = SNAPSHOT_LOCATIONS.has(state.snapshotLocation) ? state.snapshotLocation : "device",
-      descriptionKey = location === "server" ? "storagePenEchoServerDescription" : "storageThisDeviceDescription";
+      descriptionKey = location === "server" ? "storagePenEchoServerDescription" : location === "cloud" ? "storagePenEchoCloudDescription" : "storageThisDeviceDescription";
     document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
       input.checked = input.value === location;
     });
@@ -7861,10 +7896,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return dataUrlBlob("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
     }
   }
+  async function cloudSnapshotPreviewBlob() {
+    const canvas = snapshotPreview();
+    try {
+      for (const quality of [.78, .66, .54, .42]) {
+        const blob = await canvasBlob(canvas, "image/webp", quality);
+        if (blob.type === "image/webp" && blob.size <= 512 * 1024) return blob;
+      }
+      throw Error("The Cloud preview is too detailed. Zoom out or simplify the visible Canvas, then save again.");
+    } finally {
+      canvas.width = canvas.height = 1;
+    }
+  }
   async function snapshotApiResponse(response) {
     let body = null;
     try { body = await response.json(); } catch {}
-    if (!response.ok) throw Error(body?.error || `PenEcho server returned HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = Error(body?.error || `PenEcho server returned HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = body?.code || null;
+      throw error;
+    }
     return body;
   }
   async function serverSnapshotItems() {
@@ -7882,8 +7934,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preview:dataUrlBlob(item.preview),
     }))).then((items) => items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)));
   }
+  async function cloudSnapshotItems() {
+    const response = await fetch("/api/cloud/library", { credentials:"same-origin", cache:"no-store", headers:authenticatedApiHeaders() }),
+      body = await snapshotApiResponse(response);
+    if (body?.sync?.bundleVersion !== 2 || body.sync.conflictPolicy !== "base-revision-required") throw Error("PenEcho Cloud does not support this Canvas sync version");
+    cloudCanvasProjects = Array.isArray(body.projects) ? body.projects : [];
+    const selectedExists = selectedCloudProjectId === CLOUD_ALL_PROJECTS_ID || cloudCanvasProjects.some((project) => project.id === selectedCloudProjectId);
+    if (!selectedExists) rememberSelectedCloudProject(cloudDefaultProjectId() || CLOUD_ALL_PROJECTS_ID);
+    return (Array.isArray(body.canvases) ? body.canvases : []).map((item) => ({
+      ...item,
+      preview:typeof item.previewDataUrl === "string" && item.previewDataUrl ? dataUrlBlob(item.previewDataUrl) : null,
+    })).sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+  }
   async function snapshotsAt(location) {
-    return location === "server" ? serverSnapshotItems() : allSnapshots();
+    return location === "server" ? serverSnapshotItems() : location === "cloud" ? cloudSnapshotItems() : allSnapshots();
   }
   function animationBounds(region = null) {
     if (!pluginEnabled("animation")) return null;
@@ -8124,6 +8188,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!match) throw Error("Could not encode canvas bundle asset");
     return { kind, contentType:match[1], metadata, dataBase64:match[2] };
   }
+  function snapshotExtensionObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    try {
+      const encoded = JSON.stringify(value);
+      return encoded.length <= 64 * 1024 ? JSON.parse(encoded) : {};
+    } catch {
+      return {};
+    }
+  }
   function snapshotBundleAssetBlob(asset) {
     if (!asset || typeof asset.contentType !== "string" || typeof asset.dataBase64 !== "string") throw Error("Canvas bundle contains an invalid asset");
     return dataUrlBlob(`data:${asset.contentType};base64,${asset.dataBase64}`);
@@ -8140,7 +8213,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bundleVersion:2,
       mode:"snapshot",
       formatVersion:1,
-      extensions:{},
+      extensions:snapshotExtensionObject(item.bundleExtensions),
       id:item.id,
       createdAt:item.createdAt,
       updatedAt:item.updatedAt,
@@ -8156,7 +8229,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         animations:item.animations,
         textBoxes:item.textBoxes,
         savedAt:new Date(item.updatedAt).toISOString(),
-        extensions:{},
+        extensions:snapshotExtensionObject(item.manifestExtensions),
       },
       assets:[...tileAssets, ...widgetAssets, ...imageAssets, previewAsset],
     };
@@ -8204,6 +8277,38 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
     await snapshotApiResponse(response);
   }
+  async function saveCloudSnapshot(item, tileEntries, overwriteId) {
+    const bundle = await serverSnapshotPayload(item, tileEntries);
+    if (overwriteId) {
+      const existing = snapshotItems.find((entry) => entry.id === overwriteId),
+        baseRevisionId = existing?.currentRevisionId || state.currentSnapshotRevisionId || null,
+        response = await fetch(`/api/cloud/canvases/${encodeURIComponent(overwriteId)}/save`, {
+          method:"POST",
+          credentials:"same-origin",
+          headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+          body:JSON.stringify({ baseRevisionId, bundle }),
+        }),
+        body = await snapshotApiResponse(response).catch(async (error) => {
+          if (error.status === 409) {
+            await refreshSnapshots();
+            throw Error(t("cloudCanvasConflict"));
+          }
+          throw error;
+        });
+      return { id:overwriteId, revisionId:body?.revision?.id || null };
+    }
+    const projectId = item.projectId || selectedCloudSaveProjectId();
+    if (!projectId) throw Error("Create a Cloud project before saving this Canvas");
+    const response = await fetch(`/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
+        method:"POST",
+        credentials:"same-origin",
+        headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ name:item.name || "Untitled Canvas", bundle }),
+      }),
+      body = await snapshotApiResponse(response);
+    if (!body?.canvas?.id || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid save confirmation");
+    return { id:body.canvas.id, revisionId:body.revision.id };
+  }
   async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation } = {}) {
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
@@ -8228,18 +8333,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textBoxes = storedTextBoxes(),
       images = storedImages(),
       tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob: await canvasBlob(canvas) }))),
-      preview = await snapshotPreviewBlob(),
+      preview = location === "cloud" ? await cloudSnapshotPreviewBlob() : await snapshotPreviewBlob(),
       requestedName = String(name === null ? nameInput.value : name).trim().slice(0, 48),
       item = {
         version:2,
         id,
         createdAt,
         updatedAt,
-        name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : ""),
+        name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : location === "cloud" ? "Untitled Canvas" : ""),
         projectId:location === "server"
           ? overwriteId
             ? existing?.projectId || state.currentSnapshotProjectId || SERVER_DEFAULT_PROJECT_ID
             : selectedServerSaveProjectId()
+          : location === "cloud"
+            ? overwriteId
+              ? existing?.projectId || state.currentSnapshotProjectId || selectedCloudSaveProjectId()
+              : selectedCloudSaveProjectId()
           : null,
         theme: state.theme,
         view: { scale: state.scale, panX: state.panX, panY: state.panY, navigationLocked:state.navigationLocked },
@@ -8253,19 +8362,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         imageCount: images.length,
         images,
         preview,
+        bundleExtensions:snapshotExtensionObject(state.currentSnapshotBundleExtensions),
+        manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
       };
     if (overwriteId && !existing && overwriteId !== state.currentSnapshotId) throw Error(t("noCurrentSnapshot"));
+    let storedId = id,
+      storedRevisionId = null;
     if (location === "server") await saveServerSnapshot(item, tileEntries, overwriteId);
-    else await saveDeviceSnapshot(item, tileEntries, overwriteId);
+    else if (location === "cloud") {
+      const saved = await saveCloudSnapshot(item, tileEntries, overwriteId);
+      storedId = saved.id;
+      storedRevisionId = saved.revisionId;
+    } else await saveDeviceSnapshot(item, tileEntries, overwriteId);
     nameInput.value = "";
-    state.currentSnapshotId = id;
+    state.currentSnapshotId = storedId;
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
     state.currentSnapshotProjectId = item.projectId;
+    state.currentSnapshotRevisionId = storedRevisionId;
+    state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
+    state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
     state.snapshotSavedRevision = state.userRevision;
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
-    return id;
+    return storedId;
   }
   async function readDeviceSnapshot(id) {
     const db = await snapshotDb(),
@@ -8304,6 +8424,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         animations:stored.manifest.animations || [],
         textBoxes:stored.manifest.textBoxes || [],
         projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
+        bundleExtensions:snapshotExtensionObject(stored.extensions),
+        manifestExtensions:snapshotExtensionObject(stored.manifest.extensions),
         preview:snapshotBundleAssetBlob(previewAsset),
         widgets,
         images:[...imageById.values()],
@@ -8335,8 +8457,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tileEntries:stored.tiles.map(({ k, data }) => ({ k, blob:dataUrlBlob(data) })),
     };
   }
+  async function readCloudSnapshot(id) {
+    const response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:authenticatedApiHeaders(),
+      }),
+      body = await snapshotApiResponse(response);
+    if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
+    const parsed = await readSnapshotBundle(body.bundle),
+      metadata = snapshotItems.find((item) => item.id === id);
+    parsed.item = {
+      ...parsed.item,
+      id,
+      name:metadata?.name || parsed.item.name,
+      projectId:metadata?.projectId || parsed.item.projectId,
+      currentRevisionId:body.revision.id,
+      updatedAt:metadata?.updatedAt || parsed.item.updatedAt,
+    };
+    return parsed;
+  }
   async function readSnapshot(location, id) {
-    return location === "server" ? readServerSnapshot(id) : readDeviceSnapshot(id);
+    return location === "server" ? readServerSnapshot(id) : location === "cloud" ? readCloudSnapshot(id) : readDeviceSnapshot(id);
   }
   async function loadSnapshot(id, location = state.snapshotLocation) {
     const loadGeneration=++state.snapshotLoadGeneration;
@@ -8394,6 +8536,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotName = snapshotName(item);
     state.currentSnapshotLocation = location;
     state.currentSnapshotProjectId = item.projectId || null;
+    state.currentSnapshotRevisionId = location === "cloud" ? item.currentRevisionId || null : null;
+    state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
+    state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
     state.snapshotSavedRevision = state.userRevision;
     render();
     closeHistoryPanel();
@@ -8417,15 +8562,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
     await snapshotApiResponse(response);
   }
+  async function deleteCloudSnapshot(id) {
+    const response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+      method:"DELETE",
+      credentials:"same-origin",
+      headers:authenticatedApiHeaders(),
+    });
+    if (!response.ok) await snapshotApiResponse(response);
+  }
   async function deleteSnapshot(id, location = state.snapshotLocation) {
-    if (!confirm(t(location === "server" ? "deleteSnapshotConfirmServer" : "deleteSnapshotConfirmDevice"))) return;
+    if (!confirm(t(location === "server" ? "deleteSnapshotConfirmServer" : location === "cloud" ? "deleteSnapshotConfirmCloud" : "deleteSnapshotConfirmDevice"))) return;
     if (location === "server") await deleteServerSnapshot(id);
+    else if (location === "cloud") await deleteCloudSnapshot(id);
     else await deleteDeviceSnapshot(id);
     if (state.currentSnapshotId === id && state.currentSnapshotLocation === location) {
       state.currentSnapshotId = null;
       state.currentSnapshotName = "";
       state.currentSnapshotLocation = null;
       state.currentSnapshotProjectId = null;
+      state.currentSnapshotRevisionId = null;
+      state.currentSnapshotBundleExtensions = {};
+      state.currentSnapshotManifestExtensions = {};
     }
     await refreshSnapshots();
     setStatusKey("snapshotDeleted");
@@ -8487,6 +8644,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotName = "";
     state.currentSnapshotLocation = null;
     state.currentSnapshotProjectId = null;
+    state.currentSnapshotRevisionId = null;
+    state.currentSnapshotBundleExtensions = {};
+    state.currentSnapshotManifestExtensions = {};
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -8553,6 +8713,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!dialog.open) dialog.showModal();
     return Promise.resolve(false);
   }
+  async function openCloudProjectHistory(projectId = null) {
+    if (projectId && validCloudProjectSelection(projectId)) rememberSelectedCloudProject(projectId);
+    setSnapshotLocation("cloud");
+    await refreshSnapshots();
+    openHistoryPanel();
+    return true;
+  }
+  async function openCloudCanvas(canvasId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(canvasId || ""))) throw Error("Invalid Cloud Canvas");
+    setSnapshotLocation("cloud");
+    await refreshSnapshots();
+    return requestLoadSnapshot(canvasId, "cloud");
+  }
   function discardCanvasTransition() {
     const transition = pendingCanvasTransition;
     pendingCanvasTransition = null;
@@ -8565,7 +8738,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return item.name || new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(item.createdAt);
   }
   function serverProjectName(project) {
-    return project?.id === SERVER_DEFAULT_PROJECT_ID || project?.system ? t("canvasProjectUncategorized") : project?.name || t("canvasProjectUncategorized");
+    return project?.id === SERVER_DEFAULT_PROJECT_ID || project?.system || project?.systemKey === "uncategorized" ? t("canvasProjectUncategorized") : project?.name || t("canvasProjectUncategorized");
   }
   function renderServerProjectUi() {
     const manager = document.querySelector("#serverProjectManager"),
@@ -8574,16 +8747,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       dialogField = document.querySelector("#newCanvasProjectField"),
       dialogSelect = document.querySelector("#newCanvasProjectSelect");
     if (!manager || !select || !remove) return;
-    const visible = state.snapshotLocation === "server";
+    const location = state.snapshotLocation,
+      visible = location === "server" || location === "cloud";
     manager.hidden = !visible;
     if (dialogField) dialogField.hidden = !visible;
     if (!visible) return;
-    const projects = serverCanvasProjects.length
-      ? serverCanvasProjects
-      : [{ id:SERVER_DEFAULT_PROJECT_ID, name:"Uncategorized", system:true }];
+    const isCloud = location === "cloud",
+      projects = isCloud ? cloudCanvasProjects : serverCanvasProjects.length
+        ? serverCanvasProjects
+        : [{ id:SERVER_DEFAULT_PROJECT_ID, name:"Uncategorized", system:true }],
+      allProjectId = isCloud ? CLOUD_ALL_PROJECTS_ID : SERVER_ALL_PROJECTS_ID,
+      selectedProjectId = isCloud ? selectedCloudProjectId : selectedServerProjectId;
     select.replaceChildren();
     const all = document.createElement("option");
-    all.value = SERVER_ALL_PROJECTS_ID;
+    all.value = allProjectId;
     all.textContent = t("canvasProjectAll");
     select.append(all);
     for (const project of projects) {
@@ -8592,11 +8769,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       option.textContent = serverProjectName(project);
       select.append(option);
     }
-    if (serverCanvasProjects.length && ![...select.options].some((option) => option.value === selectedServerProjectId)) rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
-    select.value = selectedServerProjectId;
-    if (!select.value) select.value = SERVER_ALL_PROJECTS_ID;
-    const selected = serverCanvasProjects.find((project) => project.id === selectedServerProjectId);
-    remove.disabled = !selected || selected.id === SERVER_DEFAULT_PROJECT_ID || selected.system === true;
+    if (projects.length && ![...select.options].some((option) => option.value === selectedProjectId)) {
+      if (isCloud) rememberSelectedCloudProject(cloudDefaultProjectId() || CLOUD_ALL_PROJECTS_ID);
+      else rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
+    }
+    select.value = isCloud ? selectedCloudProjectId : selectedServerProjectId;
+    if (!select.value) select.value = allProjectId;
+    const selected = projects.find((project) => project.id === select.value);
+    remove.disabled = !selected || selected.id === SERVER_DEFAULT_PROJECT_ID || selected.system === true || selected.systemKey === "uncategorized";
     if (dialogSelect) {
       dialogSelect.replaceChildren();
       for (const project of projects) {
@@ -8605,8 +8785,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         option.textContent = serverProjectName(project);
         dialogSelect.append(option);
       }
-      dialogSelect.value = selectedServerSaveProjectId();
-      if (!dialogSelect.value) dialogSelect.value = SERVER_DEFAULT_PROJECT_ID;
+      dialogSelect.value = isCloud ? selectedCloudSaveProjectId() : selectedServerSaveProjectId();
+      if (!dialogSelect.value) dialogSelect.value = isCloud ? cloudDefaultProjectId() || "" : SERVER_DEFAULT_PROJECT_ID;
     }
   }
   function openServerProjectDialog() {
@@ -8628,41 +8808,49 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return false;
     }
     input.setCustomValidity("");
-    const response = await fetch("/api/canvas-projects", {
+    const isCloud = state.snapshotLocation === "cloud",
+      response = await fetch(isCloud ? "/api/cloud/projects" : "/api/canvas-projects", {
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
         body:JSON.stringify({ name }),
       }),
       body = await snapshotApiResponse(response);
-    rememberSelectedServerProject(body.project.id);
+    if (isCloud) rememberSelectedCloudProject(body.project.id);
+    else rememberSelectedServerProject(body.project.id);
     await refreshSnapshots();
     if (dialog.open) dialog.close("created");
     showHistoryNoticeKey("canvasProjectCreated", "success");
     return true;
   }
   async function deleteSelectedServerProject() {
-    const project = serverCanvasProjects.find((item) => item.id === selectedServerProjectId);
-    if (!project || project.id === SERVER_DEFAULT_PROJECT_ID || project.system) return;
-    const response = await fetch(`/api/canvas-projects/${encodeURIComponent(project.id)}`, {
+    const isCloud = state.snapshotLocation === "cloud",
+      projects = isCloud ? cloudCanvasProjects : serverCanvasProjects,
+      selectedProjectId = isCloud ? selectedCloudProjectId : selectedServerProjectId,
+      project = projects.find((item) => item.id === selectedProjectId);
+    if (!project || project.id === SERVER_DEFAULT_PROJECT_ID || project.system || project.systemKey === "uncategorized") return;
+    if (isCloud && !confirm(t("deleteCloudProjectConfirm").replace("{name}", project.name || t("canvasProjectUncategorized")))) return;
+    const response = await fetch(isCloud ? `/api/cloud/projects/${encodeURIComponent(project.id)}` : `/api/canvas-projects/${encodeURIComponent(project.id)}`, {
       method:"DELETE",
       credentials:"same-origin",
       headers:authenticatedApiHeaders(),
     });
     await snapshotApiResponse(response);
-    rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
+    if (isCloud) rememberSelectedCloudProject(CLOUD_ALL_PROJECTS_ID);
+    else rememberSelectedServerProject(SERVER_DEFAULT_PROJECT_ID);
     await refreshSnapshots();
     showHistoryNoticeKey("canvasProjectDeleted", "success", 4200);
   }
   async function moveServerSnapshot(id, projectId) {
-    const response = await fetch(`/api/canvases/${encodeURIComponent(id)}/project`, {
-      method:"PUT",
+    const isCloud = state.snapshotLocation === "cloud",
+      response = await fetch(isCloud ? `/api/cloud/canvases/${encodeURIComponent(id)}` : `/api/canvases/${encodeURIComponent(id)}/project`, {
+      method:isCloud ? "PATCH" : "PUT",
       credentials:"same-origin",
       headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
       body:JSON.stringify({ projectId }),
     });
     await snapshotApiResponse(response);
-    if (state.currentSnapshotId === id && state.currentSnapshotLocation === "server") state.currentSnapshotProjectId = projectId;
+    if (state.currentSnapshotId === id && state.currentSnapshotLocation === state.snapshotLocation) state.currentSnapshotProjectId = projectId;
     await refreshSnapshots();
     showHistoryNoticeKey("canvasProjectMoved", "success");
   }
@@ -8671,6 +8859,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       location = state.snapshotLocation,
       items = location === "server" && selectedServerProjectId !== SERVER_ALL_PROJECTS_ID
         ? snapshotItems.filter((item) => (item.projectId || SERVER_DEFAULT_PROJECT_ID) === selectedServerProjectId)
+        : location === "cloud" && selectedCloudProjectId !== CLOUD_ALL_PROJECTS_ID
+          ? snapshotItems.filter((item) => item.projectId === selectedCloudProjectId)
         : snapshotItems;
     if (!list) return;
     renderServerProjectUi();
@@ -8678,7 +8868,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!items.length) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.textContent = t(location === "server" && snapshotItems.length ? "emptyProjectHistory" : location === "server" ? "emptyServerHistory" : "emptyDeviceHistory");
+      empty.textContent = t((location === "server" || location === "cloud") && snapshotItems.length ? "emptyProjectHistory" : location === "server" ? "emptyServerHistory" : location === "cloud" ? "emptyCloudHistory" : "emptyDeviceHistory");
       list.append(empty);
       return;
     }
@@ -8709,7 +8899,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const modified = new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" }).format(item.updatedAt || item.createdAt);
       detail.textContent = t("snapshotModified").replace("{time}", modified);
       const stats = document.createElement("div"),
-        counts = [[item.tileCount, "snapshotTiles"]];
+        counts = Number.isFinite(item.tileCount) ? [[item.tileCount, "snapshotTiles"]] : [];
       if (pluginEnabled("animation") && item.animationCount) counts.push([item.animationCount, "snapshotAnimations"]);
       if (item.widgetCount) counts.push([item.widgetCount, "snapshotWidgets"]);
       if (item.imageCount) counts.push([item.imageCount, "snapshotImages"]);
@@ -8729,18 +8919,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       remove.onclick = () => runSnapshotAction(() => deleteSnapshot(item.id, location));
       actions.append(load, remove);
       meta.append(title, detail, stats, actions);
-      if (location === "server") {
+      if (location === "server" || location === "cloud") {
         const move = document.createElement("select");
         move.className = "history-move";
         move.setAttribute("aria-label", t("canvasProjectMove"));
         move.title = t("canvasProjectMove");
-        for (const project of serverCanvasProjects) {
+        const projects = location === "cloud" ? cloudCanvasProjects : serverCanvasProjects;
+        for (const project of projects) {
           const option = document.createElement("option");
           option.value = project.id;
           option.textContent = `${t("canvasProject")}: ${serverProjectName(project)}`;
           move.append(option);
         }
-        move.value = item.projectId || SERVER_DEFAULT_PROJECT_ID;
+        move.value = item.projectId || (location === "cloud" ? cloudDefaultProjectId() || "" : SERVER_DEFAULT_PROJECT_ID);
         move.onchange = () => runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
         meta.append(move);
       }
@@ -13228,11 +13419,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
   document.querySelector("#historyProjectSelect").onchange = (event) => {
-    rememberSelectedServerProject(event.target.value);
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
   document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
-    rememberSelectedServerProject(event.target.value);
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
   document.querySelector("#historyProjectCreate").onclick = openServerProjectDialog;
@@ -13590,6 +13783,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasArtifact:communityCanvasArtifact,
     importWidget:importCommunityWidgetArtifact,
     importCanvas:importCommunityCanvasArtifact,
+  });
+  window.PenEchoCloudProjects = Object.freeze({
+    openHistory:openCloudProjectHistory,
+    openCanvas:openCloudCanvas,
   });
   setPluginTemplate("simple");
   applyLanguage();

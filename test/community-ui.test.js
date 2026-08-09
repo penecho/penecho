@@ -20,7 +20,14 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(item\.id\)\}\/preview/);
   assert.match(cloud, /priceCredits:Number\(price\.value \|\| 0\)/);
   assert.match(cloud, /Your public link is ready/);
+  assert.match(cloud, /Cloud Projects/);
+  assert.match(cloud, /Private cross-device work/);
+  assert.match(cloud, /\/api\/cloud\/library/);
+  assert.match(cloud, /Save current Canvas/);
+  assert.match(cloud, /window\.PenEchoCloudProjects/);
+  assert.match(cloud, /base-revision-required/);
   assert.match(css, /\.cloud-item-preview/);
+  assert.match(css, /\.cloud-project-card/);
 });
 
 test("community artifacts have bounded WebP previews and import both Widgets and Canvases locally", () => {

@@ -734,6 +734,31 @@ test("cloud Canvas save reconciles latest when both completion responses are los
   }
 });
 
+test("a failed first Cloud Canvas save is moved to recoverable Trash", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-create-save-test-"));
+  const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}) });
+  const canvasId = "55555555-5555-4555-8555-555555555555";
+  let trashed = null;
+  try {
+    connector.createCloudCanvas = async (projectId, input) => {
+      assert.equal(projectId, "66666666-6666-4666-8666-666666666666");
+      assert.deepEqual(input, { name:"Cross-device draft" });
+      return { canvas:{ id:canvasId, name:input.name } };
+    };
+    connector.saveCloudCanvas = async () => { throw Object.assign(new Error("upload interrupted"), { status:503 }); };
+    connector.trashCloudCanvas = async (id) => { trashed = id; };
+    await assert.rejects(() => connector.createAndSaveCloudCanvas({
+      projectId:"66666666-6666-4666-8666-666666666666",
+      name:"Cross-device draft",
+      bundle:{ bundleVersion:2, manifest:{}, assets:[] },
+    }), /upload interrupted/);
+    assert.equal(trashed, canvasId);
+  } finally {
+    connector.close();
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("Cloud Canvas loading downloads one verified bundle and preserves asset order", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-parallel-load-test-"));
   const originalFetch = global.fetch;

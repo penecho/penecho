@@ -543,8 +543,20 @@ class CloudConnector {
     return this.cloudRequest("/api/v1/device-sync/projects", { method: "POST", body: input });
   }
 
+  updateCloudProject(projectId, input) {
+    return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}`, { method:"PATCH", body:input });
+  }
+
+  deleteCloudProject(projectId) {
+    return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}`, { method:"DELETE" });
+  }
+
   createCloudCanvas(projectId, input) {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}/canvases`, { method: "POST", body: input });
+  }
+
+  updateCloudCanvas(canvasId, input) {
+    return this.cloudRequest(`/api/v1/device-sync/canvases/${encodeURIComponent(canvasId)}`, { method:"PATCH", body:input });
   }
 
   trashCloudCanvas(canvasId) {
@@ -585,6 +597,21 @@ class CloudConnector {
     });
     await this.assetRequest(reservation.bundle.upload, { method: "PUT", bytes: bundleBytes });
     return this.completeCloudCanvasRevision(canvasId, reservation.revisionId);
+  }
+
+  async createAndSaveCloudCanvas({ projectId, name, bundle }) {
+    const created = await this.createCloudCanvas(projectId, { name });
+    const canvas = created?.canvas;
+    if (!canvas?.id) throw new Error("PenEcho Cloud did not create the Canvas.");
+    try {
+      const saved = await this.saveCloudCanvas({ canvasId:canvas.id, baseRevisionId:null, bundle });
+      return { canvas:{ ...canvas, currentRevisionId:saved.revision.id, updatedAt:saved.revision.completedAt || Date.now() }, revision:saved.revision };
+    } catch (error) {
+      // Creation and object upload are separate Cloud operations. Keep a failed
+      // first save out of the active library while retaining recoverability.
+      try { await this.trashCloudCanvas(canvas.id); } catch {}
+      throw error;
+    }
   }
 
   async completeCloudCanvasRevision(canvasId, revisionId) {

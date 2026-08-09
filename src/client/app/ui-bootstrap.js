@@ -876,11 +876,13 @@
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
   document.querySelector("#historyNew").onclick = openNewCanvasDialog;
   document.querySelector("#historyProjectSelect").onchange = (event) => {
-    rememberSelectedServerProject(event.target.value);
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
   document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
-    rememberSelectedServerProject(event.target.value);
+    if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
+    else rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
   document.querySelector("#historyProjectCreate").onclick = openServerProjectDialog;
@@ -1238,6 +1240,10 @@
     canvasArtifact:communityCanvasArtifact,
     importWidget:importCommunityWidgetArtifact,
     importCanvas:importCommunityCanvasArtifact,
+  });
+  window.PenEchoCloudProjects = Object.freeze({
+    openHistory:openCloudProjectHistory,
+    openCanvas:openCloudCanvas,
   });
   setPluginTemplate("simple");
   applyLanguage();

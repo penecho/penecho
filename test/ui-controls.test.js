@@ -1431,14 +1431,14 @@ test("Save canvas exposes non-blocking progress and completion feedback", () => 
   assert.match(app, /async function saveSnapshot\(\{ overwriteId = null, name = null, location = state\.snapshotLocation \} = \{\}\) \{[\s\S]*?selectionAIBusy\(\)[\s\S]*?await finalizeCanvasForSnapshot\(\)[\s\S]*?if \(!tiles\.size/);
   assert.match(app, /async function saveSnapshot\([\s\S]*?prepareVisibleWidgetSnapshots\(null, false\)/);
   assert.match(functionSource(app, "snapshotPreviewBlob"), /canvasBlob\(snapshotPreview\(\), "image\/webp", \.78\)[\s\S]*?fallback thumbnail[\s\S]*?data:image\/png;base64/);
-  assert.match(app, /async function saveSnapshot\([\s\S]*?preview = await snapshotPreviewBlob\(\)/);
+  assert.match(app, /async function saveSnapshot\([\s\S]*?preview = location === "cloud" \? await cloudSnapshotPreviewBlob\(\) : await snapshotPreviewBlob\(\)/);
   assert.match(functionSource(app, "loadSnapshot"), /state\.currentSnapshotId = item\.id/);
   assert.match(functionSource(app, "loadSnapshot"), /state\.currentSnapshotLocation = location/);
-  assert.match(app, /async function saveSnapshot\([\s\S]*?state\.currentSnapshotId = id/);
+  assert.match(app, /async function saveSnapshot\([\s\S]*?state\.currentSnapshotId = storedId/);
   assert.match(app, /querySelector\("#saveCanvasBtn"\)\.onclick = saveCurrentCanvas/);
 });
 
-test("canvas history clearly separates device-only and shared PenEcho server storage", () => {
+test("canvas history clearly separates device, server, and private cross-device Cloud storage", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
   const closeHistory = functionSource(app, "closeHistoryPanel"), openHistory = functionSource(app, "openHistoryPanel");
   assert.match(html, /id="historyPanel"[^>]*aria-hidden="true"[^>]*\sinert/);
@@ -1447,8 +1447,9 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   for (const name of ["historyStorageLocation", "newCanvasStorageLocation"]) {
     assert.match(html, new RegExp(`name="${name}" value="device"`));
     assert.match(html, new RegExp(`name="${name}" value="server"`));
+    assert.match(html, new RegExp(`name="${name}" value="cloud"`));
   }
-  for (const key of ["saveLocation", "storageThisDevice", "storagePenEchoServer", "storageThisDeviceDescription", "storagePenEchoServerDescription"]) {
+  for (const key of ["saveLocation", "storageThisDevice", "storagePenEchoServer", "storagePenEchoCloud", "storageThisDeviceDescription", "storagePenEchoServerDescription", "storagePenEchoCloudDescription", "cloudCanvasConflict"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
@@ -1457,8 +1458,10 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   assert.match(app, /state\.currentSnapshotLocation !== state\.snapshotLocation/);
   const serverPayload = functionSource(app, "serverSnapshotPayload"), readServer = functionSource(app, "readServerSnapshot"), readBundle = functionSource(app, "readSnapshotBundle");
   assert.match(serverPayload, /snapshotBundleAsset\("preview"[\s\S]*?snapshotBundleAsset\("tile"[\s\S]*?snapshotBundleAsset\("resource"[\s\S]*?snapshotBundleAsset\("widget"[\s\S]*?version:2[\s\S]*?bundleVersion:2[\s\S]*?mode:"snapshot"[\s\S]*?format:"penecho-raster-tiles"[\s\S]*?canvasSize:[\s\S]*?tileSize:TILE[\s\S]*?assets:\[\.\.\.tileAssets, \.\.\.widgetAssets, \.\.\.imageAssets, previewAsset\]/);
+  assert.match(serverPayload, /extensions:snapshotExtensionObject\(item\.bundleExtensions\)[\s\S]*?extensions:snapshotExtensionObject\(item\.manifestExtensions\)/);
   assert.match(readServer, /stored\.version \?\? stored\.bundleVersion \?\? 1[\s\S]*?readSnapshotBundle\(stored\)/);
   assert.match(readBundle, /stored\.manifest\?\.format !== "penecho-raster-tiles"[\s\S]*?snapshotBundleAssetBlob\(previewAsset\)[\s\S]*?widgets,[\s\S]*?images:\[\.\.\.imageById\.values\(\)\]/);
+  assert.match(readBundle, /bundleExtensions:snapshotExtensionObject\(stored\.extensions\)[\s\S]*?manifestExtensions:snapshotExtensionObject\(stored\.manifest\.extensions\)/);
   const enableSnapshotPlugins = functionSource(app, "enableSnapshotWidgetPlugins"),
     loadSnapshot = functionSource(app, "loadSnapshot");
   assert.match(enableSnapshotPlugins, /new Set[\s\S]*?item\?\.pluginId[\s\S]*?state\.plugins\[pluginId\] = true/);
@@ -1469,9 +1472,13 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   assert.match(functionSource(app, "serverSnapshotItems"), /fetch\("\/api\/canvas-projects"/);
   assert.match(functionSource(app, "saveServerSnapshot"), /method:overwriteId \? "PUT" : "POST"/);
   assert.match(functionSource(app, "deleteServerSnapshot"), /method:"DELETE"/);
+  assert.match(functionSource(app, "cloudSnapshotItems"), /\/api\/cloud\/library[\s\S]*?bundleVersion !== 2[\s\S]*?conflictPolicy !== "base-revision-required"/);
+  assert.match(functionSource(app, "saveCloudSnapshot"), /baseRevisionId[\s\S]*?\/api\/cloud\/canvases\/[\s\S]*?status === 409[\s\S]*?cloudCanvasConflict[\s\S]*?\/api\/cloud\/projects\//);
+  assert.match(functionSource(app, "readCloudSnapshot"), /\/api\/cloud\/canvases\/[\s\S]*?body\?\.revision\?\.id[\s\S]*?readSnapshotBundle/);
+  assert.match(functionSource(app, "openCloudProjectHistory"), /setSnapshotLocation\("cloud"\)[\s\S]*?refreshSnapshots\(\)[\s\S]*?openHistoryPanel\(\)/);
   for (const id of ["serverProjectManager", "historyProjectSelect", "historyProjectCreate", "historyProjectDelete", "projectDialog", "projectForm", "projectName", "projectDialogCancel", "projectDialogCreate", "newCanvasProjectField", "newCanvasProjectSelect"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(functionSource(app, "openServerProjectDialog"), /projectDialog[\s\S]*?showModal\(\)[\s\S]*?input\.focus\(\)/);
-  assert.match(functionSource(app, "createServerProject"), /projectName[\s\S]*?input\.value\.trim\(\)\.slice\(0, 48\)[\s\S]*?fetch\("\/api\/canvas-projects"[\s\S]*?dialog\.close\("created"\)/);
+  assert.match(functionSource(app, "createServerProject"), /projectName[\s\S]*?input\.value\.trim\(\)\.slice\(0, 48\)[\s\S]*?fetch\(isCloud \? "\/api\/cloud\/projects" : "\/api\/canvas-projects"[\s\S]*?dialog\.close\("created"\)/);
   assert.doesNotMatch(app, /\bprompt\s*\(/);
   assert.match(functionSource(app, "storedServerProjectId"), /sessionStorage\.getItem\(SERVER_PROJECT_SESSION_KEY\)/);
   assert.match(functionSource(app, "rememberSelectedServerProject"), /sessionStorage\.setItem\(SERVER_PROJECT_SESSION_KEY, selectedServerProjectId\)/);
@@ -1486,7 +1493,7 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   assert.match(css, /\.history-preview\s*\{[^}]*width:\s*124px[^}]*height:\s*80px/);
   assert.match(css, /\.history-save-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
   assert.match(css, /\.history-meta\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/);
-  assert.match(css, /\.snapshot-location-options\s*\{[^}]*grid-template-columns:\s*repeat\(2/);
+  assert.match(css, /\.snapshot-location-options\s*\{[^}]*grid-template-columns:\s*repeat\(3/);
 });
 
 test("local snapshot database upgrades preserve existing canvas records", () => {

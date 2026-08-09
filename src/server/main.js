@@ -119,6 +119,7 @@ const PUBLIC_FETCH_MAX_CONCURRENT = 20;
 const PLUGIN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CANVAS_SNAPSHOT_ID_PATTERN = /^\d{10,16}-[a-zA-Z0-9-]{8,64}$/;
 const CANVAS_PROJECT_ID_PATTERN = /^project-[a-zA-Z0-9-]{8,64}$/;
+const CLOUD_RESOURCE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_CANVAS_PROJECT_ID = "uncategorized";
 // These Markdown contracts ship with PenEcho. Files created through the local
 // authoring endpoint are deliberately outside this set and may be removed.
@@ -2811,6 +2812,51 @@ const server = http.createServer(async (req, res) => {
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/enable")return send(res,200,cloudConnector.enable());
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/disable")return send(res,200,cloudConnector.disconnect());
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/revoke")return send(res,200,await cloudConnector.revokeDevice());
+      if(req.method==="GET"&&url.pathname==="/api/cloud/library")return send(res,200,await cloudConnector.library());
+      if(req.method==="POST"&&url.pathname==="/api/cloud/projects"){
+        const body=await readJson(req,64*1024),name=String(body?.name||"").trim().slice(0,160);
+        if(!name)return send(res,400,{error:"Enter a project name."});
+        return send(res,201,await cloudConnector.createCloudProject({name}));
+      }
+      const cloudProjectMatch=url.pathname.match(/^\/api\/cloud\/projects\/([0-9a-f-]{36})$/i),
+        cloudProjectSaveMatch=url.pathname.match(/^\/api\/cloud\/projects\/([0-9a-f-]{36})\/save$/i),
+        cloudCanvasMatch=url.pathname.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})$/i),
+        cloudCanvasSaveMatch=url.pathname.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})\/save$/i),
+        cloudCanvasThumbnailMatch=url.pathname.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})\/thumbnail$/i);
+      if(cloudProjectMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudProjectMatch[1])){
+        if(req.method==="PATCH"){
+          const body=await readJson(req,64*1024),name=body?.name===undefined?undefined:String(body.name||"").trim().slice(0,160);
+          if(name!==undefined&&!name)return send(res,400,{error:"Enter a project name."});
+          return send(res,200,await cloudConnector.updateCloudProject(cloudProjectMatch[1],{...(name===undefined?{}:{name})}));
+        }
+        if(req.method==="DELETE")return send(res,200,await cloudConnector.deleteCloudProject(cloudProjectMatch[1]));
+      }
+      if(cloudProjectSaveMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudProjectSaveMatch[1])&&req.method==="POST"){
+        const body=await readJson(req,35*1024*1024),name=String(body?.name||"").trim().slice(0,160);
+        if(!name||!body?.bundle)return send(res,400,{error:"A Canvas name and bundle are required."});
+        return send(res,201,await cloudConnector.createAndSaveCloudCanvas({projectId:cloudProjectSaveMatch[1],name,bundle:body.bundle}));
+      }
+      if(cloudCanvasThumbnailMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasThumbnailMatch[1])&&req.method==="GET"){
+        const result=await cloudConnector.cloudCanvasThumbnail(cloudCanvasThumbnailMatch[1]);
+        if(!result)return send(res,404,{error:"Cloud Canvas preview was not found."});
+        res.writeHead(200,{"Content-Type":result.contentType,"Content-Length":result.bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
+        return res.end(result.bytes);
+      }
+      if(cloudCanvasSaveMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasSaveMatch[1])&&req.method==="POST"){
+        const body=await readJson(req,35*1024*1024);
+        if(!body?.bundle)return send(res,400,{error:"A Canvas bundle is required."});
+        return send(res,200,await cloudConnector.saveCloudCanvas({canvasId:cloudCanvasSaveMatch[1],baseRevisionId:body.baseRevisionId||null,bundle:body.bundle}));
+      }
+      if(cloudCanvasMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasMatch[1])){
+        if(req.method==="GET")return send(res,200,await cloudConnector.loadCloudCanvas(cloudCanvasMatch[1]));
+        if(req.method==="PATCH"){
+          const body=await readJson(req,64*1024),changes={};
+          if(body?.name!==undefined){changes.name=String(body.name||"").trim().slice(0,160);if(!changes.name)return send(res,400,{error:"Enter a Canvas name."});}
+          if(body?.projectId!==undefined){if(!CLOUD_RESOURCE_ID_PATTERN.test(String(body.projectId)))return send(res,400,{error:"Select a valid Cloud project."});changes.projectId=String(body.projectId);}
+          return send(res,200,await cloudConnector.updateCloudCanvas(cloudCanvasMatch[1],changes));
+        }
+        if(req.method==="DELETE")return send(res,204,await cloudConnector.trashCloudCanvas(cloudCanvasMatch[1]));
+      }
       if(req.method==="GET"&&url.pathname==="/api/cloud/community"){
         return send(res,200,await cloudConnector.communityItems(Object.fromEntries(url.searchParams)));
       }
