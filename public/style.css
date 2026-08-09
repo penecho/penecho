@@ -346,7 +346,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .history-composer > * + * { border-top: 1px solid var(--sheet-hairline); }
 .snapshot-location { min-width: 0; margin: 0; padding: 9px var(--sheet-gutter) 8px; border: 0; }
 .snapshot-location legend { margin-bottom: 6px; padding: 0; color: var(--muted); font: 700 .6rem/1.2 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.history-composer > .snapshot-location legend { float: left; width: 100%; }
 .snapshot-location-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 3px; border: 1px solid var(--sheet-hairline); border-radius: 10px; background: var(--sheet-well); }
+.history-composer > .snapshot-location .snapshot-location-options { clear: both; }
 .snapshot-location-options label { position: relative; min-width: 0; cursor: pointer; }
 .snapshot-location-options input { position: absolute; opacity: 0; pointer-events: none; }
 .snapshot-location-options span { display: flex; min-height: 30px; align-items: center; justify-content: center; gap: 7px; padding: 5px 9px; color: var(--muted); border: 1px solid transparent; border-radius: 7px; font: 650 .72rem/1.2 system-ui, sans-serif; text-align: center; transition: color .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease; }
