@@ -49,7 +49,7 @@
   width: min(1120px, 96vw);
 }
 
-.penecho-cloud-dialog.share { max-width: 540px; }
+.penecho-cloud-dialog.share { max-width: 720px; }
 .penecho-cloud-dialog header { align-items: center; border-bottom: 1px solid var(--line, #d2d8e2); display: flex; gap: .75rem; padding: 1rem 1.1rem; }
 .penecho-cloud-dialog header h2 { font-size: 1.1rem; margin: 0; }
 .penecho-cloud-dialog header p { color: var(--muted, #667081); font-size: .8rem; margin: .15rem 0 0; }
@@ -132,6 +132,18 @@
 .cloud-message.error { color: #ad3434; }
 .cloud-message.success { color: #28724d; }
 .cloud-share-note { background: #eef5ff; border-radius: .65rem; color: #3c5e8a; font-size: .78rem; line-height: 1.45; margin-bottom: .75rem; padding: .7rem .75rem; }
+.cloud-share-preview { align-items: center; aspect-ratio: 16 / 9; background: linear-gradient(135deg, #e9eff7, #f8fafc); border: 1px solid var(--line, #d2d8e2); border-radius: .75rem; display: flex; justify-content: center; margin-bottom: .7rem; overflow: hidden; position: relative; }
+.cloud-share-preview img { height: 100%; object-fit: contain; width: 100%; }
+.cloud-share-preview img:not([src]) { display: none; }
+.cloud-share-preview span { background: rgb(20 34 52 / 76%); border-radius: 999px; bottom: .55rem; color: #fff; font-size: .68rem; left: .55rem; padding: .3rem .48rem; position: absolute; }
+.cloud-share-preview.error span { background: #a64141; }
+.cloud-share-ai-row { align-items: center; background: color-mix(in srgb, #e8f1ff 72%, var(--panel, #fff)); border: 1px solid #bfd2eb; border-radius: .68rem; display: flex; gap: .65rem; margin-bottom: .35rem; padding: .55rem; }
+.cloud-share-ai-row span { color: var(--muted, #667081); font-size: .7rem; line-height: 1.35; }
+.cloud-ai-fill { color: #285e9e; flex: none; }
+.cloud-tags-input { display: grid; gap: .24rem; }
+.cloud-tag-count { color: var(--muted, #667081); font-size: .65rem; justify-self: end; }
+.penecho-cloud-dialog.share .cloud-field-row { grid-template-columns: 1.15fr 1fr 1fr; }
+.cloud-community-guest { background: #f0f6ff; border-radius: .6rem; padding: .58rem .65rem; }
 .cloud-share-actions { align-items: center; display: flex; gap: .55rem; justify-content: flex-end; margin-top: .9rem; }
 .cloud-share-status { color: var(--muted, #667081); font-size: .76rem; margin-right: auto; }
 .cloud-public-link { background: linear-gradient(135deg, #edf5ff, #f8fbff); border: 1px solid #b8cee9; border-radius: .82rem; color: #285e9e; display: grid; gap: .2rem; margin-top: .8rem; padding: .78rem .85rem; text-decoration: none; }
@@ -182,6 +194,8 @@
   .cloud-kind-tabs { grid-template-columns: 1fr; }
   .cloud-section-tabs { grid-template-columns: 1fr; }
   .cloud-item-actions { grid-template-columns: 1fr; }
+  .penecho-cloud-dialog.share .cloud-field-row { grid-template-columns: 1fr; }
+  .cloud-share-ai-row { align-items: stretch; flex-direction: column; }
   .cloud-panel-heading { align-items: stretch; flex-direction: column; }
   .cloud-project-toolbar { align-items: stretch; flex-direction: column; }
   .cloud-project-toolbar input, .cloud-project-toolbar .cloud-button { box-sizing: border-box; width: 100%; }

@@ -17,8 +17,11 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /\["canvas", "Canvases"/);
   for (const sort of ["recommended", "newest", "downloads", "favorites", "price_low", "price_high"]) assert.match(cloud, new RegExp(`value:\"${sort}\"`));
   for (const pricing of ["all", "free", "paid"]) assert.match(cloud, new RegExp(`value:\"${pricing}\"`));
-  assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(item\.id\)\}\/preview/);
-  assert.match(cloud, /priceCredits:Number\(price\.value \|\| 0\)/);
+  assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(item\.id\)\}\/thumbnail/);
+  assert.match(cloud, /priceCredits:pricing\.value==="paid"\?Number\(price\.value\|\|0\):0/);
+  assert.match(cloud, /Auto-fill with current AI/);
+  assert.match(cloud, /there is no image upload step/);
+  assert.match(cloud, /Browse every creation and open its large read-only screenshot/);
   assert.match(cloud, /Your public link is ready/);
   assert.match(cloud, /Cloud Projects/);
   assert.match(cloud, /Private cross-device work/);
@@ -32,9 +35,12 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
 
 test("community artifacts have bounded WebP previews and import both Widgets and Canvases locally", () => {
   const app = read("public/app.js"), main = read("src/server/main.js");
-  assert.match(app, /maximumBytes=4\*1024\*1024/);
+  assert.match(app, /maximumBytes:4\*1024\*1024/);
+  assert.match(app, /maximumBytes:768\*1024/);
   assert.match(app, /snapshotPreview\(2048,1365\)/);
-  assert.match(app, /communityPreviewForCanvas\(canvas, \.82\)/);
+  assert.match(app, /communityImagesForCanvas\(canvas, \.82\)/);
+  assert.match(app, /communityThumbnail/);
+  assert.match(app, /suggestMetadata:suggestCommunityMetadata/);
   assert.match(app, /async function importCommunityCanvasArtifact/);
   assert.match(app, /importCanvas:importCommunityCanvasArtifact/);
   assert.match(main, /PENECHO_CLOUD_ENV/);

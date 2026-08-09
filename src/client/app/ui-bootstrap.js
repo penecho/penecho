@@ -1238,6 +1238,7 @@
   window.PenEchoCommunityCanvas = Object.freeze({
     widgetArtifact:communityWidgetArtifact,
     canvasArtifact:communityCanvasArtifact,
+    suggestMetadata:suggestCommunityMetadata,
     importWidget:importCommunityWidgetArtifact,
     importCanvas:importCommunityCanvasArtifact,
   });

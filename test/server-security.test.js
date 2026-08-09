@@ -2076,6 +2076,29 @@ test("personal plugins use the writable desktop directory and remain fetchable",
   }
 });
 
+test("community metadata uses the active local AI connection and validates the automatic WebP thumbnail", { timeout:20000 }, async () => {
+  const generated={name:"Solar System Learning Map",description:"A clear visual map for exploring planets and their relationships.",category:"education",tags:["solar system","planets","learning"]},
+    upstream=await startApiServer(JSON.stringify(generated)),running=await startServer(apiServerEnv(upstream.origin)),image=await sharp({create:{width:96,height:64,channels:4,background:{r:35,g:92,b:155,alpha:1}}}).webp({quality:80}).toBuffer(),
+    payload={kind:"canvas",language:"en",preview:{contentType:"image/webp",width:96,height:64,dataBase64:image.toString("base64")},current:{name:"Map",description:"",category:"productivity",tags:[]},context:{title:"Map"}};
+  try {
+    const response=await fetch(`${running.origin}/api/community/metadata`,{method:"POST",headers:{Origin:running.origin,"Content-Type":"application/json","X-PenEcho-Connection":"default"},body:JSON.stringify(payload)}),body=await response.json();
+    assert.equal(response.status,200);
+    assert.deepEqual(body.metadata,generated);
+    assert.equal(upstream.requests.length,1);
+    const outbound=JSON.parse(upstream.requests[0]);
+    assert.match(outbound.messages[0].content,/marketplace metadata/);
+    assert.match(outbound.messages[1].content[1].image_url.url,/^data:image\/webp;base64,/);
+    assert.doesNotMatch(JSON.stringify(outbound),/priceCredits|apiKey/);
+
+    const invalid=await fetch(`${running.origin}/api/community/metadata`,{method:"POST",headers:{Origin:running.origin,"Content-Type":"application/json"},body:JSON.stringify({...payload,preview:{...payload.preview,width:97}})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
 test("Studio client persona is accepted and exact-match enforced", { timeout:20000 }, async () => {
   const app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"),
     personaBlock = /persona:\s*\{([\s\S]*?)\}\[state\.theme\]/.exec(app)?.[1],

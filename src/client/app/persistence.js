@@ -197,17 +197,52 @@
   function canvasBlob(canvas, type = "image/png", quality) {
     return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), type, quality));
   }
-  async function communityPreviewForCanvas(canvas, initialQuality = .82) {
-    const maximumBytes=4*1024*1024,qualities=[initialQuality,.72,.62,.52,.42];
+  function communityCanvasHasContent(canvas) {
+    const sample=document.createElement("canvas"),width=Math.min(64,canvas.width),height=Math.min(64,canvas.height);
+    sample.width=Math.max(1,width);
+    sample.height=Math.max(1,height);
+    const context=sample.getContext("2d",{willReadFrequently:true});
+    context.drawImage(canvas,0,0,sample.width,sample.height);
+    const pixels=context.getImageData(0,0,sample.width,sample.height).data;
+    sample.width=sample.height=1;
+    let visible=0,nonWhite=0,min=255,max=0;
+    for(let offset=0;offset<pixels.length;offset+=4){
+      const alpha=pixels[offset+3];
+      if(alpha<12)continue;
+      visible++;
+      const luminance=(pixels[offset]*299+pixels[offset+1]*587+pixels[offset+2]*114)/1000;
+      min=Math.min(min,luminance);
+      max=Math.max(max,luminance);
+      if(luminance<246)nonWhite++;
+    }
+    return visible>0&&(nonWhite>0||max-min>5);
+  }
+  async function communityImageForCanvas(canvas,{maximumBytes,initialQuality}) {
+    if(!(canvas instanceof HTMLCanvasElement)||!Number.isInteger(canvas.width)||!Number.isInteger(canvas.height)
+      ||canvas.width<1||canvas.height<1||canvas.width>2048||canvas.height>2048)throw Error("The generated community image must be between 1 and 2048 pixels on each side.");
+    if(!communityCanvasHasContent(canvas))throw Error("The generated community image does not contain visible content.");
+    const qualities=[initialQuality,.78,.70,.62,.54,.46,.38];
     for (const quality of qualities) {
       const blob=await canvasBlob(canvas,"image/webp",quality);
       if (blob.type !== "image/webp") throw Error("This browser could not create the required WebP community preview.");
       if (blob.size<=maximumBytes) {
+        const decoded=await imageFromBlob(blob),width=decoded.naturalWidth||decoded.width,height=decoded.naturalHeight||decoded.height;
+        if(width!==canvas.width||height!==canvas.height)throw Error("The generated WebP image failed dimension validation.");
         const dataUrl=await blobDataUrl(blob);
-        return { contentType:"image/webp",width:canvas.width,height:canvas.height,dataBase64:dataUrl.split(",",2)[1] };
+        return { contentType:"image/webp",width,height,dataBase64:dataUrl.split(",",2)[1] };
       }
     }
     throw Error("This preview is too detailed to share. Simplify the view or zoom out, then try again.");
+  }
+  async function communityImagesForCanvas(canvas,initialQuality=.82) {
+    const preview=await communityImageForCanvas(canvas,{maximumBytes:4*1024*1024,initialQuality}),maximum=1200,
+      scale=Math.min(1,maximum/canvas.width,maximum/canvas.height),thumbnailCanvas=document.createElement("canvas");
+    thumbnailCanvas.width=Math.max(1,Math.round(canvas.width*scale));
+    thumbnailCanvas.height=Math.max(1,Math.round(canvas.height*scale));
+    thumbnailCanvas.getContext("2d").drawImage(canvas,0,0,thumbnailCanvas.width,thumbnailCanvas.height);
+    const thumbnail=await communityImageForCanvas(thumbnailCanvas,{maximumBytes:768*1024,initialQuality:.78});
+    thumbnailCanvas.width=thumbnailCanvas.height=1;
+    return { communityPreview:preview,communityThumbnail:thumbnail };
   }
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -595,7 +630,7 @@
     await finalizeCanvasForSnapshot();
     if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) throw Error(t("emptyCanvas"));
     await prepareVisibleWidgetSnapshots(null, false);
-    const previewCanvas=snapshotPreview(2048,1365),communityPreview=await communityPreviewForCanvas(previewCanvas,.78);
+    const previewCanvas=snapshotPreview(2048,1365),communityImages=await communityImagesForCanvas(previewCanvas,.78);
     previewCanvas.width=previewCanvas.height=1;
     const stamp=Date.now(),animations=serializedAnimations(),widgets=serializedWidgets(),textBoxes=storedTextBoxes(),images=storedImages(),
       tileEntries=await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob:await canvasBlob(canvas) }))),
@@ -614,7 +649,30 @@
         images,
         preview,
     };
-    return { ...(await serverSnapshotPayload(item, tileEntries)), communityPreview };
+    return { ...(await serverSnapshotPayload(item, tileEntries)), ...communityImages };
+  }
+  async function suggestCommunityMetadata({kind,artifact,current={}}) {
+    const preview=artifact?.communityThumbnail||artifact?.communityPreview;
+    if(!["widget","canvas"].includes(kind)||!preview)throw Error("Prepare the automatic share preview before using AI auto-fill.");
+    const response=await fetch("/api/community/metadata",{
+      method:"POST",
+      credentials:"same-origin",
+      headers:aiRequestHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify({
+        kind,
+        preview,
+        language:document.documentElement.lang==="zh"?"zh":"en",
+        current:{
+          name:String(current.name||"").slice(0,160),
+          description:String(current.description||"").slice(0,1200),
+          category:String(current.category||"productivity"),
+          tags:Array.isArray(current.tags)?current.tags.slice(0,8):[],
+        },
+        context:kind==="widget"?{title:String(artifact?.widget?.title||"").slice(0,120),pluginId:String(artifact?.widget?.pluginId||"").slice(0,64)}:{title:String(artifact?.name||"").slice(0,160)},
+      }),
+    }),body=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(body.error||`AI auto-fill failed (HTTP ${response.status}).`);
+    return body.metadata;
   }
   async function importCommunityCanvasArtifact(artifact) {
     const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,

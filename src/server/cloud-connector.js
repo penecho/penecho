@@ -121,11 +121,12 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, logger = null }) {
+  constructor({ stateDir, executeRequest, logger = null, defaultOrigin = "https://penecho.ai" }) {
     this.stateDir = stateDir;
     this.file = path.join(stateDir, "cloud-device.json");
     this.executeRequest = executeRequest;
     this.logger = logger;
+    this.defaultOrigin = normalizedOrigin(defaultOrigin);
     this.configuration = this.readConfiguration();
     this.socket = null;
     this.heartbeatTimer = null;
@@ -282,6 +283,23 @@ class CloudConnector {
       if (response.status === 401 && this.configuration?.accountToken && !this.configuration?.legacyAccountAccess) this.clearAccountSession();
       const error = new Error(payload.message || `Cloud account request failed (HTTP ${response.status}).`);
       error.status = response.status;
+      throw error;
+    }
+    return payload;
+  }
+
+  async communityRequest(pathname) {
+    if(!String(pathname).startsWith("/api/v1/community/"))throw new Error("Unsupported public community request.");
+    this.expireAccountSessionIfNeeded();
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),response=await fetch(`${origin}${pathname}`,{
+      method:"GET",
+      redirect:"error",
+      headers:{accept:"application/json",...(token?{authorization:`Bearer ${token}`}:{})},
+    }),payload=await response.json().catch(()=>({}));
+    if(!response.ok){
+      if(response.status===401&&token&&!this.configuration?.legacyAccountAccess)this.clearAccountSession();
+      const error=new Error(payload.message||`Community request failed (HTTP ${response.status}).`);
+      error.status=response.status;
       throw error;
     }
     return payload;
@@ -477,26 +495,31 @@ class CloudConnector {
   communityItems(query = {}) {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
-    return this.cloudRequest(`/api/v1/community/items${search.size ? `?${search}` : ""}`);
+    return this.communityRequest(`/api/v1/community/items${search.size ? `?${search}` : ""}`);
   }
 
   communityItem(itemId) {
-    return this.cloudRequest(`/api/v1/community/items/${encodeURIComponent(itemId)}`);
+    return this.communityRequest(`/api/v1/community/items/${encodeURIComponent(itemId)}`);
   }
 
-  async communityPreview(itemId) {
-    const configuration = this.requireCloudAccount();
-    const response = await fetch(`${configuration.origin}/api/v1/community/items/${encodeURIComponent(itemId)}/preview`, { method:"GET", redirect:"error", headers:{ accept:"image/webp" } });
+  async communityImage(itemId,variant="preview") {
+    this.expireAccountSessionIfNeeded();
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),suffix=variant==="thumbnail"?"thumbnail":"preview";
+    const response = await fetch(`${origin}/api/v1/community/items/${encodeURIComponent(itemId)}/${suffix}`, { method:"GET", redirect:"error", headers:{ accept:"image/webp",...(token?{authorization:`Bearer ${token}`}:{}) } });
     if (!response.ok) throw Object.assign(new Error(`Community preview request failed (HTTP ${response.status}).`), { status:response.status });
     const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].toLowerCase(), bytes = Buffer.from(await response.arrayBuffer());
     if (contentType !== "image/webp" || !bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error("PenEcho Cloud returned an invalid community preview.");
     return { contentType, bytes };
   }
 
+  communityPreview(itemId) { return this.communityImage(itemId,"preview"); }
+
+  communityThumbnail(itemId) { return this.communityImage(itemId,"thumbnail"); }
+
   async shareCommunityItem({ kind, name, description = "", category, tags = [], priceCredits = 0, artifact }) {
     if (!["widget", "canvas"].includes(kind) || !artifact || typeof artifact !== "object") throw new Error("The community share is invalid.");
     const bytes = Buffer.from(JSON.stringify(artifact));
-    const maximum = kind === "widget" ? 6 * 1024 * 1024 : MAX_CLOUD_BUNDLE_BYTES;
+    const maximum = kind === "widget" ? 10 * 1024 * 1024 : MAX_CLOUD_BUNDLE_BYTES;
     if (!bytes.length || bytes.length > maximum) throw new Error(`The shared ${kind} is too large.`);
     const reservation = await this.cloudRequest("/api/v1/community/items", {
       method:"POST",

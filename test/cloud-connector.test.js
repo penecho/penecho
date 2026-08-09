@@ -58,6 +58,26 @@ test("public Cloud messages are bounded and reject unsafe links", async () => {
   }
 });
 
+test("signed-out users browse public community metadata and thumbnails without an account token", async () => {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-public-community-test-")),originalFetch=global.fetch;
+  try {
+    const connector=new CloudConnector({stateDir,executeRequest:async()=>({}),defaultOrigin:"http://127.0.0.1:18082"}),requests=[];
+    global.fetch=async(url,options)=>{
+      requests.push({url:String(url),headers:options.headers});
+      if(String(url).endsWith("/thumbnail"))return new Response(Buffer.from("webp-thumbnail"),{status:200,headers:{"content-type":"image/webp"}});
+      return new Response(JSON.stringify({items:[{id:"11111111-1111-4111-8111-111111111111",name:"Public Widget"}]}),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const listed=await connector.communityItems({kind:"widget",scope:"community"}),thumbnail=await connector.communityThumbnail("11111111-1111-4111-8111-111111111111");
+    assert.equal(listed.items[0].name,"Public Widget");
+    assert.deepEqual(thumbnail.bytes,Buffer.from("webp-thumbnail"));
+    assert.match(requests[0].url,/\/api\/v1\/community\/items\?kind=widget&scope=community$/);
+    assert.equal(requests.some(request=>request.headers.authorization),false);
+  } finally {
+    global.fetch=originalFetch;
+    fs.rmSync(stateDir,{recursive:true,force:true});
+  }
+});
+
 test("device credentials are stored separately and never returned by status", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-test-"));
   try {

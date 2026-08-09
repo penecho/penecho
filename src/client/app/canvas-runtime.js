@@ -1082,9 +1082,9 @@
     canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
     canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
     canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-    const communityPreview = await communityPreviewForCanvas(canvas, .82);
+    const communityImages = await communityImagesForCanvas(canvas, .82);
     canvas.width = canvas.height = 1;
-    return { format:"penecho-widget", formatVersion:1, widget:serialized, communityPreview };
+    return { format:"penecho-widget", formatVersion:1, widget:serialized, ...communityImages };
   }
   async function importCommunityWidgetArtifact(artifact) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
