@@ -285,6 +285,8 @@ The configuration center writes these settings to `~/.penecho/config.env`, or to
 | `AUTO_AI_DELAY_SECONDS` | Initial delay before automatic recognition; the browser control can override it from 0 to 10 seconds |
 | `PENECHO_REQUEST_TRACE` | Save local per-request image, outbound request, response, and outcome traces; disabled by default |
 | `PENECHO_REQUEST_TRACE_LIMIT` | Number of local request traces retained, default 100 and maximum 1000 |
+| `PENECHO_CLOUD_ENV` | One global Cloud target switch: `uat` uses the local Docker UAT origin; every other value uses production |
+| `PENECHO_CLOUD_ORIGIN` | Optional explicit Cloud origin override; takes precedence over `PENECHO_CLOUD_ENV` |
 | `HOST` / `PORT` | Listening interface and port, default `0.0.0.0:3888` |
 
 For installed CLI starts, `--model` overrides the selected executor's model setting and `--effort` overrides `AI_EFFORT` for that process only. Command-line options and process environment variables take precedence over the selected configuration file.

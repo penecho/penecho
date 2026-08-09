@@ -171,6 +171,18 @@
   function canvasBlob(canvas, type = "image/png", quality) {
     return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), type, quality));
   }
+  async function communityPreviewForCanvas(canvas, initialQuality = .82) {
+    const maximumBytes=4*1024*1024,qualities=[initialQuality,.72,.62,.52,.42];
+    for (const quality of qualities) {
+      const blob=await canvasBlob(canvas,"image/webp",quality);
+      if (blob.type !== "image/webp") throw Error("This browser could not create the required WebP community preview.");
+      if (blob.size<=maximumBytes) {
+        const dataUrl=await blobDataUrl(blob);
+        return { contentType:"image/webp",width:canvas.width,height:canvas.height,dataBase64:dataUrl.split(",",2)[1] };
+      }
+    }
+    throw Error("This preview is too detailed to share. Simplify the view or zoom out, then try again.");
+  }
   function requestResult(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
@@ -248,8 +260,8 @@
     }
     return bounds;
   }
-  function snapshotPreview() {
-    const preview = offscreen(640, 426),
+  function snapshotPreview(width = 640, height = 426) {
+    const preview = offscreen(width, height),
       q = preview.getContext("2d"),
       bounds = unionLocalBounds(unionLocalBounds(unionLocalBounds(unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()), textBoxBounds()), animationBounds()), widgetBounds());
     q.fillStyle = state.paint.paper;
@@ -514,6 +526,40 @@
       assets:[...tileAssets, ...widgetAssets, ...imageAssets, previewAsset],
     };
   }
+  async function communityCanvasArtifact(name = "") {
+    if (selectionAIBusy()) throw Error(t(selectionAIStatusKey()));
+    await finalizeCanvasForSnapshot();
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) throw Error(t("emptyCanvas"));
+    await prepareVisibleWidgetSnapshots(null, false);
+    const previewCanvas=snapshotPreview(2048,1365),communityPreview=await communityPreviewForCanvas(previewCanvas,.78);
+    previewCanvas.width=previewCanvas.height=1;
+    const stamp=Date.now(),animations=serializedAnimations(),widgets=serializedWidgets(),textBoxes=storedTextBoxes(),images=storedImages(),
+      tileEntries=await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob:await canvasBlob(canvas) }))),
+      preview=await snapshotPreviewBlob(),item={
+        version:2,
+        id:`community-${crypto.randomUUID?.() || stamp}`,
+        createdAt:stamp,
+        updatedAt:stamp,
+        name:String(name || state.currentSnapshotName || "").trim().slice(0, 160),
+        projectId:null,
+        theme:state.theme,
+        view:{ scale:state.scale, panX:state.panX, panY:state.panY, navigationLocked:state.navigationLocked },
+        animations,
+        widgets,
+        textBoxes,
+        images,
+        preview,
+    };
+    return { ...(await serverSnapshotPayload(item, tileEntries)), communityPreview };
+  }
+  async function importCommunityCanvasArtifact(artifact) {
+    const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,
+      item={ ...parsed.item,id,createdAt:stamp,updatedAt:stamp,name:String(parsed.item.name || "Community Canvas").slice(0,160),projectId:null };
+    await saveDeviceSnapshot(item, parsed.tileEntries, null);
+    await refreshSnapshots();
+    await loadSnapshot(id, "device");
+    return { id, name:item.name };
+  }
   async function saveServerSnapshot(item, tileEntries, overwriteId) {
     const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {
       method:overwriteId ? "PUT" : "POST",
@@ -594,6 +640,42 @@
       [item, tileEntries] = await Promise.all([requestResult(itemRequest), requestResult(tilesRequest)]);
     return item ? { item, tileEntries } : null;
   }
+  async function readSnapshotBundle(stored) {
+    if (!stored || stored.bundleVersion !== 2 || stored.mode !== "snapshot" || stored.formatVersion !== 1 || stored.manifest?.format !== "penecho-raster-tiles" || stored.manifest?.formatVersion !== 1 || !Array.isArray(stored.assets)) throw Error("PenEcho returned an invalid canvas bundle");
+    const previewAsset = stored.assets.find((asset) => asset.kind === "preview"),
+      tileAssets = stored.assets.filter((asset) => asset.kind === "tile"),
+      imageAssets = stored.assets.filter((asset) => asset.kind === "resource" && asset.metadata?.resourceType === "image"),
+      widgetAssets = stored.assets.filter((asset) => asset.kind === "widget"),
+      widgets = await Promise.all(widgetAssets.map(async (asset) => {
+        const widget = JSON.parse(await snapshotBundleAssetBlob(asset).text());
+        if (!widget?.id || widget.id !== asset.metadata?.widgetId) throw Error("Canvas bundle contains an invalid widget");
+        return widget;
+      })),
+      imageById = new Map(imageAssets.map((asset) => [asset.metadata.resourceId, {
+        ...asset.metadata,
+        id:asset.metadata.resourceId,
+        blob:snapshotBundleAssetBlob(asset),
+      }]));
+    if (!previewAsset) throw Error("Canvas bundle has no preview");
+    return {
+      item:{
+        version:2,
+        id:stored.id,
+        createdAt:stored.createdAt,
+        updatedAt:stored.updatedAt || stored.createdAt,
+        name:stored.name || "",
+        theme:stored.manifest.theme,
+        view:stored.manifest.view,
+        animations:stored.manifest.animations || [],
+        textBoxes:stored.manifest.textBoxes || [],
+        projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
+        preview:snapshotBundleAssetBlob(previewAsset),
+        widgets,
+        images:[...imageById.values()],
+      },
+      tileEntries:tileAssets.map((asset) => ({ k:asset.metadata?.tileKey, blob:snapshotBundleAssetBlob(asset) })),
+    };
+  }
   async function readServerSnapshot(id) {
     const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
@@ -604,42 +686,7 @@
       stored = body?.canvas;
     if (!stored) throw Error("PenEcho server returned an invalid canvas");
     const storedVersion = stored.version ?? stored.bundleVersion ?? 1;
-    if (storedVersion === 2) {
-      if (stored.bundleVersion !== 2 || stored.mode !== "snapshot" || stored.formatVersion !== 1 || stored.manifest?.format !== "penecho-raster-tiles" || stored.manifest?.formatVersion !== 1 || !Array.isArray(stored.assets)) throw Error("PenEcho server returned an invalid canvas bundle");
-      const previewAsset = stored.assets.find((asset) => asset.kind === "preview"),
-        tileAssets = stored.assets.filter((asset) => asset.kind === "tile"),
-        imageAssets = stored.assets.filter((asset) => asset.kind === "resource" && asset.metadata?.resourceType === "image"),
-        widgetAssets = stored.assets.filter((asset) => asset.kind === "widget"),
-        widgets = await Promise.all(widgetAssets.map(async (asset) => {
-          const widget = JSON.parse(await snapshotBundleAssetBlob(asset).text());
-          if (!widget?.id || widget.id !== asset.metadata?.widgetId) throw Error("Canvas bundle contains an invalid widget");
-          return widget;
-        })),
-        imageById = new Map(imageAssets.map((asset) => [asset.metadata.resourceId, {
-          ...asset.metadata,
-          id:asset.metadata.resourceId,
-          blob:snapshotBundleAssetBlob(asset),
-        }]));
-      if (!previewAsset) throw Error("Canvas bundle has no preview");
-      return {
-        item:{
-          version:2,
-          id:stored.id,
-          createdAt:stored.createdAt,
-          updatedAt:stored.updatedAt || stored.createdAt,
-          name:stored.name || "",
-          theme:stored.manifest.theme,
-          view:stored.manifest.view,
-          animations:stored.manifest.animations || [],
-          textBoxes:stored.manifest.textBoxes || [],
-          projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
-          preview:snapshotBundleAssetBlob(previewAsset),
-          widgets,
-          images:[...imageById.values()],
-        },
-        tileEntries:tileAssets.map((asset) => ({ k:asset.metadata?.tileKey, blob:snapshotBundleAssetBlob(asset) })),
-      };
-    }
+    if (storedVersion === 2) return readSnapshotBundle(stored);
     if (!Array.isArray(stored.tiles) || !Array.isArray(stored.images)) throw Error("PenEcho server returned an invalid canvas");
     return {
       item:{

@@ -88,6 +88,8 @@ For responses containing multiple commands, a dashed union outline and four-way 
 
 API credentials are loaded only by the Node.js process. They are never serialized into client responses or static files. Both local CLI adapters use restricted child environments that omit PenEcho API credentials.
 
+The top-right Cloud Center is separate from local Settings. It owns account sign-in, credit balance, device linking, community discovery, favorites, redemption, and Widget/Canvas publishing. `PENECHO_CLOUD_ENV=uat` selects the local Docker UAT service at `http://127.0.0.1:18082`; production is the default and selects `https://penecho.ai`. `PENECHO_CLOUD_ORIGIN` is the single explicit override for unusual test deployments. Cloud credentials remain in the local Node process and community artifacts pass through checksum-verifying local proxy routes.
+
 ## Model Executors
 
 `penecho configure` is the interactive configuration center. Its main menu separates LLM source selection from runtime settings, and every provider page saves before checking the result. Codex checks first validate version and login and use `codex debug models --bundled` to reject an unavailable explicit model before spending tokens; all providers then run the shared small-image connection check described below. Check failure never rolls back the saved values. The default store is `~/.penecho/config.env`; `--config FILE` replaces it for configuration, diagnostics, and startup. Project and package `.env` files are not loaded implicitly. A first interactive `penecho` launch opens the configuration center when no global file or explicit process configuration exists.

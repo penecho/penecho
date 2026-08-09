@@ -27,6 +27,7 @@ const { DEFAULT_REASONING_EFFORT, apiReasoningParameters, normalizeReasoningEffo
 const { testConfiguredProvider } = require("../cli/main.js");
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const { resolveWidgetEditPatchCommands, widgetSourceMirrorsHtml, widgetPatchContract, widgetPatchFiles } = require("./widget-patch.js");
+const { CloudConnector } = require("./cloud-connector.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
 let sharp = null;
@@ -36,6 +37,9 @@ const ROOT = path.resolve(__dirname, "../..");
 const PUBLIC = path.join(ROOT, "public");
 const PLUGIN_DIRECTORY = path.join(PUBLIC, "plugins");
 const STATE_DIRECTORY = process.env.PENECHO_STATE_DIR ? path.resolve(process.env.PENECHO_STATE_DIR) : null;
+const CLOUD_STATE_DIRECTORY = STATE_DIRECTORY || path.join(os.homedir(), ".penecho");
+const PENECHO_CLOUD_ENV = String(process.env.PENECHO_CLOUD_ENV || "prod").trim().toLowerCase() === "uat" ? "uat" : "prod";
+const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "http://127.0.0.1:18082" : "https://penecho.ai")).replace(/\/$/, "");
 const PRIVATE_PLUGIN_DIRECTORY = process.env.PENECHO_PRIVATE_PLUGIN_DIR
   ? path.resolve(process.env.PENECHO_PRIVATE_PLUGIN_DIR)
   : STATE_DIRECTORY
@@ -226,6 +230,7 @@ const localAccessVerificationClients = new Set();
 const publicFetchQueue = [];
 const activeLocalRequests = new Map();
 let activePublicFetches = 0;
+let cloudConnector = null;
 
 function firstNonEmpty(...values) {
   return values.map(value=>String(value || "").trim()).find(Boolean) || undefined;
@@ -715,6 +720,15 @@ function normalizeCanvasTheme(theme) {
 }
 
 function send(res, code, data, type = "application/json; charset=utf-8", extraHeaders = {}) { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", ...extraHeaders }); res.end(typeof data === "string" ? data : JSON.stringify(data)); }
+function sendCloudSignInResult(res, ok) {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  const title = ok ? "PenEcho sign-in complete" : "PenEcho sign-in could not be completed";
+  const detail = ok ? "You can close this window and return to your local Canvas." : "Return to your local Canvas and start the sign-in again.";
+  const message = JSON.stringify({ type:"penecho:cloud-sign-in-result", ok });
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style nonce="${nonce}">:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f5f6f8;color:#1b1e25;font:15px/1.5 system-ui,sans-serif}.result{width:min(440px,100%);padding:28px;border:1px solid #dfe2e8;border-radius:8px;background:#fff;box-shadow:0 18px 50px #19202d1f}.mark{display:grid;place-items:center;width:36px;height:36px;margin-bottom:18px;border-radius:50%;color:#fff;background:${ok ? "#27875b" : "#b94a4a"};font-weight:800}h1{margin:0 0 8px;font-size:21px}p{margin:0;color:#606774}</style></head><body><main class="result"><span class="mark" aria-hidden="true">${ok ? "✓" : "!"}</span><h1>${title}</h1><p>${detail}</p></main><script nonce="${nonce}">if(window.opener){window.opener.postMessage(${message},window.location.origin)}${ok ? "setTimeout(()=>window.close(),700);" : ""}</script></body></html>`;
+  res.writeHead(200, { "Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
+  res.end(html);
+}
 function aiProgressStream(req, res, requestId) {
   const enabled=String(req.headers.accept||"").split(",").some(value=>value.trim().split(";",1)[0]==="application/x-ndjson");
   let started=false,lastActivitySentAt=0,heartbeatTimer=0;
@@ -1604,6 +1618,17 @@ function browserRequestError(req) {
   const sameOrigin = isLoopbackHostname(host.hostname) ? isLoopbackHostname(origin.hostname) && hostMatchesOrigin(host, origin) : origin.origin === expectedOrigin.origin;
   if (!sameOrigin || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) return "AI requests require the PenEcho page origin.";
   if (localAccessMode !== "open" && !hasAiSession(req)) return "PenEcho access has expired. Refresh the page and unlock it again.";
+  return null;
+}
+function cloudBrowserRequestError(req, requireOrigin = false) {
+  const host=requestHost(req),expectedOrigin=canonicalRequestOrigin(req);
+  if(!expectedOrigin||!isLanClient(req.socket.remoteAddress)||!isAllowedCliHost(host?.hostname)||!hasAiSession(req))return"Refresh this PenEcho page and try again.";
+  if(!requireOrigin)return null;
+  const originText=typeof req.headers.origin==="string"?req.headers.origin.trim():"";
+  let origin;
+  try { origin=new URL(originText); } catch { return"Refresh this PenEcho page and try again."; }
+  const sameOrigin=isLoopbackHostname(host.hostname)?isLoopbackHostname(origin.hostname)&&hostMatchesOrigin(host,origin):origin.origin===expectedOrigin.origin;
+  if(!sameOrigin||origin.username||origin.password||origin.pathname!=="/"||origin.search||origin.hash)return"Refresh this PenEcho page and try again.";
   return null;
 }
 function providerBrowserRequestError(req, provider) {
@@ -2665,6 +2690,17 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
   if (LOCAL_CLI && !canonicalRequestOrigin(req)) return send(res, 421, { error:"Request Host does not match the configured PenEcho origin." });
+  if (req.method === "GET" && url.pathname === "/api/cloud/sign-in/callback") {
+    const host=requestHost(req),localOrigin=canonicalRequestOrigin(req),keys=[...url.searchParams.keys()],validQuery=keys.length===2&&keys.includes("state")&&keys.includes("code")&&url.searchParams.getAll("state").length===1&&url.searchParams.getAll("code").length===1;
+    if(!cloudConnector||!localOrigin||!isLanClient(req.socket.remoteAddress)||!isAllowedCliHost(host?.hostname)||!validQuery)return sendCloudSignInResult(res,false);
+    try {
+      await cloudConnector.completeBrowserSignIn({state:url.searchParams.get("state"),code:url.searchParams.get("code"),callbackOrigin:localOrigin.origin});
+      return sendCloudSignInResult(res,true);
+    } catch(error) {
+      log({type:"cloud-account",event:"browser-sign-in-callback-failed",error:String(error?.message||"Cloud sign-in failed").slice(0,240)});
+      return sendCloudSignInResult(res,false);
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/local-access/status") {
     const accessError=localAccessRequestError(req);
     if(accessError)return send(res,403,{error:accessError});
@@ -2748,6 +2784,60 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res,404,{error:"Not found"});
   }
+  if (url.pathname.startsWith("/api/cloud/")) {
+    const mutation=req.method!=="GET",localError=cloudBrowserRequestError(req,mutation);
+    if(localError)return send(res,403,{error:localError});
+    if(!cloudConnector)return send(res,503,{error:"Cloud connector is still starting."});
+    try {
+      if(req.method==="GET"&&url.pathname==="/api/cloud/status")return send(res,200,cloudConnector.status());
+      if(req.method==="GET"&&url.pathname==="/api/cloud/account")return send(res,200,await cloudConnector.refreshAccount({force:true}));
+      if(req.method==="POST"&&url.pathname==="/api/cloud/sign-in/start"){
+        const body=await readJson(req,64*1024),origin=String(body?.origin||DEFAULT_CLOUD_ORIGIN).trim(),localOrigin=canonicalRequestOrigin(req);
+        if(!localOrigin)return send(res,403,{error:"Refresh this PenEcho page and try again."});
+        const callbackUrl=new URL("/api/cloud/sign-in/callback",localOrigin);
+        return send(res,201,cloudConnector.beginBrowserSignIn({origin,callbackUrl:callbackUrl.toString()}));
+      }
+      if(req.method==="POST"&&url.pathname==="/api/cloud/sign-in"){
+        const body=await readJson(req,64*1024),code=String(body?.code||"").trim(),origin=String(body?.origin||DEFAULT_CLOUD_ORIGIN).trim();
+        if(code.length<24||code.length>256)return send(res,400,{error:"Enter the one-time local sign-in code from PenEcho Cloud."});
+        return send(res,200,await cloudConnector.signIn({origin,code}));
+      }
+      if(req.method==="POST"&&url.pathname==="/api/cloud/sign-out")return send(res,200,await cloudConnector.signOut());
+      if(req.method==="POST"&&url.pathname==="/api/cloud/pair"){
+        const body=await readJson(req,64*1024),code=String(body?.code||"").trim(),origin=String(body?.origin||DEFAULT_CLOUD_ORIGIN).trim();
+        if(code.length<8||code.length>32)return send(res,400,{error:"Enter the one-time pairing key from PenEcho Cloud."});
+        return send(res,200,await cloudConnector.pair({origin,code,name:String(body?.name||"").trim()||undefined,platform:String(body?.platform||"").trim()||undefined}));
+      }
+      if(req.method==="POST"&&url.pathname==="/api/cloud/device/enable")return send(res,200,cloudConnector.enable());
+      if(req.method==="POST"&&url.pathname==="/api/cloud/device/disable")return send(res,200,cloudConnector.disconnect());
+      if(req.method==="POST"&&url.pathname==="/api/cloud/device/revoke")return send(res,200,await cloudConnector.revokeDevice());
+      if(req.method==="GET"&&url.pathname==="/api/cloud/community"){
+        return send(res,200,await cloudConnector.communityItems(Object.fromEntries(url.searchParams)));
+      }
+      if(req.method==="POST"&&url.pathname==="/api/cloud/community/share"){
+        const body=await readJson(req,35*1024*1024);
+        return send(res,201,await cloudConnector.shareCommunityItem(body));
+      }
+      const communityItem=url.pathname.match(/^\/api\/cloud\/community\/([0-9a-f-]{36})$/i);
+      if(communityItem&&req.method==="GET")return send(res,200,await cloudConnector.communityItem(communityItem[1]));
+      const preview=url.pathname.match(/^\/api\/cloud\/community\/([0-9a-f-]{36})\/preview$/i);
+      if(preview&&req.method==="GET"){
+        const result=await cloudConnector.communityPreview(preview[1]);
+        res.writeHead(200,{"Content-Type":result.contentType,"Content-Length":result.bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
+        return res.end(result.bytes);
+      }
+      const favorite=url.pathname.match(/^\/api\/cloud\/community\/([0-9a-f-]{36})\/favorite$/i);
+      if(favorite&&["POST","DELETE"].includes(req.method))return send(res,200,await cloudConnector.favoriteCommunityItem(favorite[1],req.method==="POST"));
+      const redeem=url.pathname.match(/^\/api\/cloud\/community\/([0-9a-f-]{36})\/redeem$/i);
+      if(redeem&&req.method==="POST")return send(res,200,await cloudConnector.redeemCommunityItem(redeem[1]));
+      const artifact=url.pathname.match(/^\/api\/cloud\/community\/([0-9a-f-]{36})\/artifact$/i);
+      if(artifact&&req.method==="GET")return send(res,200,await cloudConnector.downloadCommunityItem(artifact[1]));
+      return send(res,405,{error:"Method Not Allowed"});
+    } catch(error) {
+      const status=Number.isInteger(error?.status)?error.status:/sign|pair|share|redeem/.test(url.pathname)?400:502;
+      return send(res,status,{error:error.message||"PenEcho Cloud request failed."});
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort() });
   if (url.pathname === "/api/settings") {
     const settingsError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
@@ -2796,7 +2886,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config.js") {
-    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort()};
+    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN};
     if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
     return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
   }
@@ -3205,6 +3295,21 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
   if (req.method === "HEAD") return res.end();
   fs.createReadStream(file).pipe(res);
 });
+async function executeCloudCommand(payload, timeoutMs) {
+  const address=server.address();
+  if(!address||typeof address!=="object")throw new Error("Local PenEcho server is not listening.");
+  const port=address.port,origin=`http://127.0.0.1:${port}`,host=`127.0.0.1:${port}`,
+    cookieName=`${AI_SESSION_COOKIE_PREFIX}_${crypto.createHash("sha256").update(host).digest("hex").slice(0,12)}`,
+    controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),Math.max(10000,Math.min(Number(timeoutMs)||AI_REQUEST_TIMEOUT_MS,AI_REQUEST_TIMEOUT_MS)));
+  try {
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",signal:controller.signal,headers:{"content-type":"application/json",accept:"application/json",origin,cookie:`${cookieName}=${AI_SESSION_TOKEN}`},body:JSON.stringify(payload)});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok){const error=new Error(body.error||`Local AI request failed (HTTP ${response.status}).`);error.code=body.errorCode||"local_ai_error";error.status=response.status;throw error}
+    return body;
+  } finally { clearTimeout(timeout); }
+}
+server.on("close",()=>cloudConnector?.close());
+
 const configuredPort = Number(process.env.PORT), PORT = Number.isInteger(configuredPort) && configuredPort >= 0 && configuredPort <= 65535 ? configuredPort : 3888;
 const HOST = process.env.HOST || "0.0.0.0";
 const startupConfigurationError = LOCAL_CLI ? providerConfigurationError() : null;
@@ -3215,6 +3320,8 @@ if (startupConfigurationError) {
   process.exitCode = 1;
 } else server.listen(PORT, HOST, () => {
   const address = server.address(), listeningPort = typeof address === "object" && address ? address.port : PORT;
+  cloudConnector = new CloudConnector({ stateDir:CLOUD_STATE_DIRECTORY, executeRequest:executeCloudCommand, logger:log });
+  cloudConnector.start();
   console.log(`PenEcho: http://${HOST}:${listeningPort} (${AI_PROVIDER || "invalid provider"})`);
   if (HOST.trim() === "0.0.0.0") {
     const lanUrls = [...LAN_IPV4_ADDRESSES].sort((a,b) => a.localeCompare(b, undefined, { numeric:true })).map(ip => `http://${ip}:${listeningPort}`);

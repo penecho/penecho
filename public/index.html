@@ -7,6 +7,7 @@
   <link rel="icon" href="data:,">
   <title>PenEcho | Handwritten AI Canvas</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="cloud-connect.css">
   <script src="mathjax-config.js"></script>
   <script
     defer
@@ -53,6 +54,9 @@
           <button id="saveCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="saveCanvas" aria-label="Save canvas" data-i18n-title="saveCanvas" title="Save canvas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
           </button>
+          <button id="shareCanvasBtn" class="icon-button utility-icon cloud-share-canvas" type="button" aria-label="Share canvas to PenEcho Cloud" title="Share canvas to PenEcho Cloud">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.3 10.8 7.4-4.5M8.3 13.2l7.4 4.5"/></svg>
+          </button>
           <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
           </button>
@@ -60,6 +64,11 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="M8 5V3h8v2M8 10h8M8 14h6"/></svg>
           </button>
         </span>
+        <button id="cloudAccountBtn" class="cloud-account-button" type="button" aria-label="PenEcho Cloud" title="PenEcho Cloud" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .4-8A6.2 6.2 0 0 0 6 9.2 4.7 4.7 0 0 0 7 18.5Z"/></svg>
+          <span class="cloud-account-label">Cloud</span>
+          <span class="cloud-account-dot" aria-hidden="true"></span>
+        </button>
         <button id="settingsBtn" class="icon-button utility-icon" type="button" data-i18n-aria="settingsTitle" aria-label="Settings" data-i18n-title="settingsTitle" title="Settings" aria-expanded="false" aria-controls="settingsPanel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/></svg>
         </button>
@@ -660,5 +669,6 @@
   <script src="plugins.js"></script>
   <script src="summon.js"></script>
   <script src="app.js"></script>
+  <script src="cloud-connect.js"></script>
 </body>
 </html>

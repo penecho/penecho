@@ -1,0 +1,790 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { createHash } = require("node:crypto");
+const { test } = require("node:test");
+const { WebSocket, WebSocketServer } = require("ws");
+const { CloudConnector, accountSessionExpired, normalizedOrigin, publicCanvasMessage, reconnectDelayMs } = require("../src/server/cloud-connector.js");
+
+async function eventually(predicate, message, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(message);
+}
+
+test("cloud origin requires HTTPS except for loopback development", () => {
+  assert.equal(normalizedOrigin("https://penecho.ai"), "https://penecho.ai");
+  assert.equal(normalizedOrigin("http://127.0.0.1:8080"), "http://127.0.0.1:8080");
+  assert.throws(() => normalizedOrigin("http://example.com"), /HTTPS/);
+  assert.throws(() => normalizedOrigin("https://penecho.ai/path"), /without a path/);
+});
+
+test("cloud relay reconnect delays step from ten seconds to one minute and then five minutes", () => {
+  for (const attempt of [0, 1, 2]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 10_000);
+  for (const attempt of [3, 4, 5, 6, 7]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 60_000);
+  for (const attempt of [8, 9, 100_000]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 300_000);
+  assert.equal(reconnectDelayMs(0, () => 0), 8_000);
+  assert.equal(reconnectDelayMs(0, () => 1), 12_000);
+  assert.equal(reconnectDelayMs(8, () => 0), 240_000);
+  assert.equal(reconnectDelayMs(8, () => 1), 360_000);
+});
+
+test("public Cloud messages are bounded and reject unsafe links", async () => {
+  assert.deepEqual(publicCanvasMessage({ title:{ en:"Offer", zh:"推介" }, body:{ en:"Free sync", zh:"免费同步" }, actionLabel:{ en:"Open", zh:"打开" }, actionUrl:"https://penecho.ai/offer", updatedAt:123 }), {
+    title:{ en:"Offer", zh:"推介" }, body:{ en:"Free sync", zh:"免费同步" }, actionLabel:{ en:"Open", zh:"打开" }, actionUrl:"https://penecho.ai/offer", updatedAt:123,
+  });
+  assert.equal(publicCanvasMessage(null), null);
+  assert.equal(publicCanvasMessage({ body:{ en:"", zh:"" } }), null);
+  assert.throws(() => publicCanvasMessage({ body:{ en:"Message" }, actionUrl:"javascript:alert(1)" }), /unsafe link/);
+
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-message-test-")), originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}) });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "http://127.0.0.1:8080/api/v1/public/canvas-cloud-message");
+      assert.equal(options.headers.authorization, undefined);
+      return new Response(JSON.stringify({ message:{ body:{ en:"Service notice", zh:"服务消息" } } }), { status:200, headers:{ "content-type":"application/json" } });
+    };
+    assert.equal((await connector.publicCanvasMessage({ origin:"http://127.0.0.1:8080" })).message.body.zh, "服务消息");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("device credentials are stored separately and never returned by status", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-test-"));
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 1,
+      origin: "https://penecho.ai",
+      token: "device-secret-token",
+      deviceId: "device-id",
+      deviceName: "Test device",
+      enabled: false,
+    });
+    const status = connector.status();
+    assert.equal(status.configured, true);
+    assert.equal(status.deviceId, "device-id");
+    assert.equal("token" in status, false);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.deviceToken, "device-secret-token");
+    assert.equal(saved.token, undefined);
+    assert.equal(saved.AI_API_KEY, undefined);
+    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+    connector.disconnect({ forget: true });
+    assert.equal(fs.existsSync(path.join(stateDir, "cloud-device.json")), false);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("legacy device files migrate without exposing the credential", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-migration-test-"));
+  try {
+    fs.writeFileSync(path.join(stateDir, "cloud-device.json"), JSON.stringify({
+      version: 1,
+      origin: "https://penecho.ai",
+      token: "legacy-device-secret",
+      deviceId: "legacy-device",
+      enabled: false,
+    }), { mode: 0o644 });
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    assert.equal(connector.status().configured, true);
+    assert.equal(connector.status().accountSession.credential, "legacy-device");
+    assert.equal(connector.configuration.deviceToken, "legacy-device-secret");
+    assert.equal("token" in connector.configuration, false);
+    assert.doesNotMatch(JSON.stringify(connector.status()), /legacy-device-secret/);
+    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("expired local account sessions fail closed without revoking the paired device", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-expired-session-test-"));
+  const file = path.join(stateDir, "cloud-device.json");
+  try {
+    fs.writeFileSync(file, JSON.stringify({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "expired-account-token",
+      accountExpiresAt: "2099-01-01T00:00:00.000Z",
+      account: { id: "account-id", name: "Ada", credits: 1000 },
+      deviceToken: "still-paired-device-token",
+      deviceId: "device-id",
+      enabled: false,
+    }), { mode: 0o600 });
+
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.configuration.accountExpiresAt = "2020-01-01T00:00:00.000Z";
+    assert.throws(() => connector.requireCloudAccount(), (error) => {
+      assert.match(error.message, /session expired/);
+      assert.equal(error.status, 401);
+      return true;
+    });
+    const status = connector.status();
+    assert.equal(status.accountSession.signedIn, false);
+    assert.equal(status.account, null);
+    assert.equal(status.device.configured, true);
+    assert.throws(() => connector.requireCloudAccount(), /Connect your PenEcho Cloud account/);
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(saved.accountToken, undefined);
+    assert.equal(saved.accountExpiresAt, undefined);
+    assert.equal(saved.deviceToken, "still-paired-device-token");
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("local account expiry validation rejects elapsed or malformed timestamps", () => {
+  const future = { accountToken: "token", accountExpiresAt: "2030-01-01T00:00:00.000Z" };
+  assert.equal(accountSessionExpired(future, Date.parse("2029-01-01T00:00:00.000Z")), false);
+  assert.equal(accountSessionExpired(future, Date.parse("2030-01-01T00:00:00.000Z")), true);
+  assert.equal(accountSessionExpired({ accountToken: "token", accountExpiresAt: "not-a-date" }), true);
+  assert.equal(accountSessionExpired({ accountToken: "legacy-without-expiry" }), false);
+  assert.equal(accountSessionExpired({ accountToken: "token", accountExpiresAt: "2020-01-01", legacyAccountAccess: true }), false);
+});
+
+test("local account sign-in and sign-out are independent from the paired device", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-account-session-test-"));
+  const originalFetch = global.fetch;
+  const calls = [];
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      deviceToken: "paired-device-token",
+      deviceId: "paired-device",
+      deviceName: "Paired device",
+      enabled: false,
+    });
+    global.fetch = async (url, options = {}) => {
+      calls.push({ url, method: options.method, authorization: options.headers?.authorization });
+      if (url.endsWith("/api/v1/local-access/session") && options.method === "POST") {
+        return new Response(JSON.stringify({
+          accessToken: "independent-account-token",
+          expiresAt: "2030-01-01T00:00:00.000Z",
+          account: { id: "account-id", name: "Ada", credits: 1000, email: "hidden@example.com" },
+        }), { status: 201, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/api/v1/local-access/session") && options.method === "DELETE") return new Response(null, { status: 204 });
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    };
+
+    const signedIn = await connector.signIn({ origin: "https://penecho.ai", code: "local-authorization-code-with-enough-entropy" });
+    assert.equal(signedIn.accountSession.signedIn, true);
+    assert.equal(signedIn.account.name, "Ada");
+    assert.equal(signedIn.account.email, undefined);
+    assert.equal(signedIn.device.configured, true);
+    let saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "independent-account-token");
+    assert.equal(saved.deviceToken, "paired-device-token");
+
+    const signedOut = await connector.signOut();
+    assert.equal(signedOut.accountSession.signedIn, false);
+    assert.equal(signedOut.account, null);
+    assert.equal(signedOut.device.configured, true);
+    saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, undefined);
+    assert.equal(saved.deviceToken, "paired-device-token");
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "DELETE"]);
+    assert.equal(calls[1].authorization, "Bearer independent-account-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("browser account sign-in preserves the current LAN callback before storing the global local token", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-browser-signin-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    const started = connector.beginBrowserSignIn({
+      origin: "https://penecho.ai",
+      callbackUrl: "http://192.168.1.20:3888/api/cloud/sign-in/callback",
+    });
+    const authorizationUrl = new URL(started.authorizationUrl);
+    assert.equal(authorizationUrl.origin, "https://penecho.ai");
+    assert.equal(authorizationUrl.pathname, "/dashboard.html");
+    assert.equal(authorizationUrl.hash, "#devices");
+    const callbackUrl = new URL(authorizationUrl.searchParams.get("local_callback"));
+    assert.equal(callbackUrl.origin, "http://192.168.1.20:3888");
+    assert.equal(callbackUrl.pathname, "/api/cloud/sign-in/callback");
+    assert.ok(callbackUrl.searchParams.get("state").length >= 32);
+    assert.equal(connector.status().browserSignIn.pending, true);
+    assert.equal("state" in connector.status().browserSignIn, false);
+
+    global.fetch = async (url, options = {}) => {
+      assert.equal(url, "https://penecho.ai/api/v1/local-access/session");
+      assert.equal(options.method, "POST");
+      return new Response(JSON.stringify({
+        accessToken: "browser-local-access-token",
+        expiresAt: "2030-01-01T00:00:00.000Z",
+        account: { id: "account-id", name: "Browser User", credits: 1000 },
+      }), { status: 201, headers: { "content-type": "application/json" } });
+    };
+    const signedIn = await connector.completeBrowserSignIn({
+      state: callbackUrl.searchParams.get("state"),
+      code: "one-time-browser-authorization-code",
+      callbackOrigin: callbackUrl.origin,
+    });
+    assert.equal(signedIn.accountSession.signedIn, true);
+    assert.equal(signedIn.account.name, "Browser User");
+    assert.equal(signedIn.browserSignIn.pending, false);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "browser-local-access-token");
+    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("browser account sign-in rejects public callbacks, mismatched state, and a changed return origin", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-browser-state-test-"));
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    assert.throws(() => connector.beginBrowserSignIn({
+      origin: "https://penecho.ai",
+      callbackUrl: "https://attacker.example/api/cloud/sign-in/callback",
+    }), /local PenEcho server/);
+    const started=connector.beginBrowserSignIn({
+      origin: "https://penecho.ai",
+      callbackUrl: "http://localhost:3888/api/cloud/sign-in/callback",
+    });
+    const callbackUrl=new URL(new URL(started.authorizationUrl).searchParams.get("local_callback"));
+    await assert.rejects(
+      connector.completeBrowserSignIn({ state: "wrong-state", code: "one-time-browser-authorization-code", callbackOrigin:callbackUrl.origin }),
+      /expired|state/i
+    );
+    assert.equal(connector.status().browserSignIn.pending, true);
+    await assert.rejects(
+      connector.completeBrowserSignIn({ state:callbackUrl.searchParams.get("state"),code:"one-time-browser-authorization-code",callbackOrigin:"http://127.0.0.1:3888" }),
+      /different local Canvas address/
+    );
+    assert.equal(connector.status().browserSignIn.pending, true);
+    assert.equal(connector.status().accountSession.signedIn, false);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("failed remote sign-out still clears the local account session and preserves device pairing", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-signout-retry-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "retryable-account-token",
+      account: { id: "account-id", name: "Ada", credits: 1000 },
+      deviceToken: "paired-device-token",
+      deviceId: "paired-device",
+      enabled: false,
+    });
+    global.fetch = async () => new Response(JSON.stringify({ message: "Service unavailable" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    });
+
+    const signOut = connector.signOut();
+    assert.equal(connector.status().accountSession.signedIn, false);
+    const status = await signOut;
+    assert.equal(status.accountSession.signedIn, false);
+    assert.equal(status.device.configured, true);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, undefined);
+    assert.equal(saved.deviceToken, "paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("disconnect and device revocation preserve an independent local account session", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-device-lifecycle-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "account-session-token",
+      account: { id: "account-id", name: "Ada", credits: 1000 },
+      deviceToken: "device-revoke-token",
+      deviceId: "device-id",
+      enabled: true,
+    });
+    const disconnected = connector.disconnect();
+    assert.equal(disconnected.enabled, false);
+    assert.equal(disconnected.accountSession.signedIn, true);
+    assert.equal(disconnected.device.configured, true);
+
+    global.fetch = async (url, options = {}) => {
+      assert.equal(url, "https://penecho.ai/api/v1/device-sync/device");
+      assert.equal(options.method, "DELETE");
+      assert.equal(options.headers.authorization, "Bearer device-revoke-token");
+      return new Response(null, { status: 204 });
+    };
+    const revoked = await connector.revokeDevice();
+    assert.equal(revoked.device.configured, false);
+    assert.equal(revoked.accountSession.signedIn, true);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.deviceToken, undefined);
+    assert.equal(saved.accountToken, "account-session-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("legacy account library requests keep credentials on the local server and omit email from browser status", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-library-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 1,
+      origin: "https://penecho.ai",
+      token: "device-account-token",
+      deviceId: "device-id",
+      deviceName: "Test device",
+      enabled: false,
+    });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://penecho.ai/api/v1/device-sync/library");
+      assert.equal(options.headers.authorization, "Bearer device-account-token");
+      return new Response(JSON.stringify({
+        account: { id: "account-id", name: "Ada", email: "ada@example.com", credits: 1000 },
+        folders: [],
+        projects: [],
+        canvases: [{ id: "11111111-1111-4111-8111-111111111111", previewDataUrl: "data:image/webp;base64,cHJldmlldw==" }],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const library = await connector.library();
+    assert.equal(library.account.email, undefined);
+    assert.equal(library.canvases[0].previewDataUrl, "data:image/webp;base64,cHJldmlldw==");
+    assert.deepEqual(connector.status().account, { id: "account-id", name: "Ada", credits: 1000, workspace: undefined });
+    assert.equal("token" in connector.status(), false);
+    await assert.rejects(
+      connector.assetRequest({ url: "https://127.0.0.1/private-object" }),
+      /unsafe asset URL/
+    );
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("Cloud Canvas deletion uses the recoverable device-sync trash endpoint", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-delete-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "account-delete-token",
+    });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://penecho.ai/api/v1/device-sync/canvases/11111111-1111-4111-8111-111111111111");
+      assert.equal(options.method, "DELETE");
+      assert.equal(options.headers.authorization, "Bearer account-delete-token");
+      return new Response(null, { status: 204 });
+    };
+    await connector.trashCloudCanvas("11111111-1111-4111-8111-111111111111");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("Cloud Canvas thumbnails stay behind the local account proxy and enforce compact WebP", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-thumbnail-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({ version: 2, origin: "https://penecho.ai", accountToken: "thumbnail-account-token" });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://penecho.ai/api/v1/device-sync/canvases/11111111-1111-4111-8111-111111111111/thumbnail");
+      assert.equal(options.headers.authorization, "Bearer thumbnail-account-token");
+      return new Response(Buffer.from("small-webp"), { status: 200, headers: { "content-type": "image/webp" } });
+    };
+    const result = await connector.cloudCanvasThumbnail("11111111-1111-4111-8111-111111111111");
+    assert.equal(result.contentType, "image/webp");
+    assert.deepEqual(result.bytes, Buffer.from("small-webp"));
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("device pairing requires a local Cloud account session", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-pair-account-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    let requested = false;
+    global.fetch = async () => { requested = true; throw new Error("unexpected request"); };
+    await assert.rejects(
+      connector.pair({ origin: "https://penecho.ai", code: "PEN-ABCD-2345" }),
+      /Connect your PenEcho Cloud account/,
+    );
+    assert.equal(requested, false);
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("re-pairing replaces an existing relay before connecting the new credential", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-repair-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    let closeArgs = null;
+    connector.socket = { readyState: 1, close: (...args) => { closeArgs = args; } };
+    connector.connectionState = "connected";
+    connector.writeConfiguration({
+      version: 2,
+      origin: "http://127.0.0.1:8080",
+      accountToken: "local-account-token",
+      account: { id: "account-id", name: "Ada", credits: 1000 },
+      deviceToken: "old-device-token",
+      deviceId: "old-device",
+      enabled: true,
+    });
+    let connectCalls = 0;
+    connector.connect = () => { connectCalls += 1; };
+    global.fetch = async (url, options) => {
+      assert.equal(options.headers.authorization, "Bearer local-account-token");
+      return new Response(JSON.stringify({
+      token: "replacement-token",
+      device: { id: "replacement-device", userId: "account-id", name: "Replacement", platform: "test" },
+      }), { status: 201, headers: { "content-type": "application/json" } });
+    };
+
+    const status = await connector.pair({
+      origin: "http://127.0.0.1:8080",
+      code: "PEN-ABCD-2345",
+      name: "Replacement",
+      platform: "test",
+    });
+
+    assert.deepEqual(closeArgs, [1000, "device re-paired"]);
+    assert.equal(connectCalls, 1);
+    assert.equal(connector.socket, null);
+    assert.equal(status.deviceId, "replacement-device");
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.deviceToken, "replacement-token");
+    assert.equal(saved.token, undefined);
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an offline cloud relay keeps credentials and schedules a reconnect without blocking local work", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-offline-test-"));
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 1,
+      origin: "https://penecho.ai",
+      token: "offline-device-token",
+      deviceId: "offline-device",
+      deviceName: "Offline test device",
+      enabled: true,
+    });
+    connector.scheduleReconnect();
+    const status = connector.status();
+    assert.equal(status.state, "waiting");
+    assert.equal(status.configured, true);
+    assert.equal(status.enabled, true);
+    assert.equal("token" in status, false);
+    assert.ok(connector.reconnectTimer);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.deviceToken, "offline-device-token");
+    connector.stop();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("relay reports connected only after the Cloud authentication hello", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-hello-test-"));
+  const server = new WebSocketServer({ host:"127.0.0.1", port:0 });
+  await new Promise((resolve) => server.once("listening", resolve));
+  let remoteSocket;
+  const accepted = new Promise((resolve) => server.once("connection", (socket) => {
+    remoteSocket = socket;
+    resolve();
+  }));
+  const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+  try {
+    connector.writeConfiguration({
+      version: 2,
+      origin: `http://127.0.0.1:${server.address().port}`,
+      deviceToken: "hello-device-token",
+      deviceId: "hello-device",
+      deviceName: "Hello device",
+      enabled: true,
+    });
+    connector.start();
+    await accepted;
+    assert.equal(connector.status().state, "connecting");
+    assert.equal(connector.status().connected, false);
+    assert.equal(connector.lastConnectedAt, null);
+
+    remoteSocket.send(JSON.stringify({ type:"hello", protocol:1, deviceId:"hello-device", heartbeatSeconds:30 }));
+    await eventually(() => connector.status().connected, "relay did not become connected after hello");
+    assert.ok(connector.lastConnectedAt);
+  } finally {
+    connector.close();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("a revoked relay credential becomes invalid without ever reporting connected", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-revoked-test-"));
+  const server = new WebSocketServer({ host:"127.0.0.1", port:0 });
+  await new Promise((resolve) => server.once("listening", resolve));
+  server.once("connection", (socket) => socket.close(4003, "device revoked"));
+  const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+  try {
+    connector.writeConfiguration({
+      version: 2,
+      origin: `http://127.0.0.1:${server.address().port}`,
+      deviceToken: "revoked-device-token",
+      deviceId: "revoked-device",
+      deviceName: "Revoked device",
+      enabled: true,
+    });
+    connector.start();
+    await eventually(() => connector.status().state === "invalid", "revoked relay did not become invalid");
+    assert.equal(connector.status().connected, false);
+    assert.equal(connector.lastConnectedAt, null);
+    assert.equal(connector.reconnectTimer, null);
+  } finally {
+    connector.close();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("cloud relay requests execute through the local model callback without exposing device credentials", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-relay-test-"));
+  try {
+    let receivedPayload = null;
+    const connector = new CloudConnector({
+      stateDir,
+      executeRequest: async (payload, timeoutMs) => {
+        receivedPayload = { payload, timeoutMs };
+        return { result: { intent: "answer", commands: [] }, provider: "codex-cli" };
+      },
+    });
+    connector.writeConfiguration({
+      version: 1,
+      origin: "https://penecho.ai",
+      token: "relay-device-token",
+      deviceId: "relay-device",
+      deviceName: "Relay test device",
+      enabled: false,
+    });
+    let sent = null;
+    const socket = { readyState: WebSocket.OPEN, send: (value) => { sent = JSON.parse(value); } };
+    await connector.handleRequest(socket, { type: "request", requestId: "request-1", timeoutMs: 12345, payload: { userAction: "answer" } });
+    assert.deepEqual(receivedPayload, { payload: { userAction: "answer" }, timeoutMs: 12345 });
+    assert.equal(sent.ok, true);
+    assert.equal(sent.payload.provider, "codex-cli");
+    assert.doesNotMatch(JSON.stringify(sent), /relay-device-token/);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("cloud Canvas save and load preserve animation manifests and widget assets", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-canvas-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const origin = "http://127.0.0.1:8080";
+    const canvasId = "11111111-1111-4111-8111-111111111111";
+    const revisionId = "22222222-2222-4222-8222-222222222222";
+    const storage = new Map();
+    const uploadedPaths = [];
+    let reservationBody = null;
+    let completionAttempts = 0;
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 1,
+      origin,
+      token: "canvas-device-token",
+      deviceId: "canvas-device",
+      deviceName: "Canvas test device",
+      enabled: false,
+    });
+    global.fetch = async (url, options = {}) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.startsWith("/api/v1/device-sync/")) assert.equal(options.headers.authorization, "Bearer canvas-device-token");
+      if (options.method === "POST" && parsed.pathname.endsWith(`/canvases/${canvasId}/revisions`)) {
+        reservationBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          revisionId,
+          bundle: { upload: { url: `${origin}/storage/bundle` } },
+        }), { status: 201, headers: { "content-type": "application/json" } });
+      }
+      if (options.method === "PUT" && parsed.pathname.startsWith("/storage/")) {
+        uploadedPaths.push(parsed.pathname);
+        storage.set(parsed.pathname, Buffer.from(options.body));
+        return new Response(null, { status: 200 });
+      }
+      if (options.method === "POST" && parsed.pathname.endsWith(`/canvas-revisions/${revisionId}/complete`)) {
+        completionAttempts += 1;
+        if (completionAttempts === 1) throw new Error("Simulated lost completion response");
+        return new Response(JSON.stringify({ revision: { id: revisionId, status: "complete" } }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (options.method === "GET" && parsed.pathname.endsWith(`/canvases/${canvasId}/revisions/latest`)) {
+        const bundleBytes = storage.get("/storage/bundle");
+        return new Response(JSON.stringify({
+          revision: { id: revisionId },
+          bundle: {
+            download: { url: `${origin}/storage/bundle` },
+            sha256: createHash("sha256").update(bundleBytes).digest("hex"),
+            sizeBytes: bundleBytes.length,
+            contentType: "application/json",
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if ((!options.method || options.method === "GET") && parsed.pathname.startsWith("/storage/")) {
+        const bytes = storage.get(parsed.pathname);
+        return new Response(bytes, { status: bytes ? 200 : 404, headers: { "content-type": "application/octet-stream" } });
+      }
+      throw new Error(`Unexpected test request: ${options.method || "GET"} ${url}`);
+    };
+    const widget = { id: "widget-1", pluginId: "flowchart", x: 100, y: 200, w: 800, h: 500, contentW: 800, contentH: 500, title: "Flowchart", refreshSeconds: 86400, html: "<!doctype html><title>Flowchart</title>", copyText: "flowchart TD\nA-->B", copyLabel: "Copy Mermaid" };
+    const animations = [{ id: "animation-1", rendererVersion: 1, transform: { x: 300, y: 400, w: 600, h: 400 }, scene: { tool: "animate_scene", version: 1, w: 600, h: 400, durationMs: 2000, loop: true, objects: [], motions: [] }, playback: { playheadMs: 500, paused: false } }];
+    const bundle = {
+      bundleVersion: 2,
+      mode: "snapshot",
+      formatVersion: 1,
+      manifest: { format: "penecho-raster-tiles", formatVersion: 1, animations },
+      assets: [
+        { kind: "tile", contentType: "image/png", metadata: { tileKey: "1,2" }, dataBase64: Buffer.from("tile-bytes").toString("base64") },
+        { kind: "widget", contentType: "application/json", metadata: { widgetId: widget.id, pluginId: widget.pluginId }, dataBase64: Buffer.from(JSON.stringify(widget)).toString("base64") },
+        { kind: "preview", contentType: "image/webp", metadata: { width: 640, height: 426 }, dataBase64: Buffer.from("preview-bytes").toString("base64") },
+      ],
+    };
+    const saved = await connector.saveCloudCanvas({ canvasId, bundle });
+    assert.equal(saved.revision.id, revisionId);
+    assert.equal(completionAttempts, 2);
+    const uploadedBundle = storage.get("/storage/bundle");
+    assert.deepEqual(uploadedPaths, ["/storage/bundle"]);
+    assert.equal(reservationBody.mode, "snapshot");
+    assert.equal(reservationBody.bundle.sizeBytes, uploadedBundle.length);
+    assert.equal(reservationBody.bundle.sha256, createHash("sha256").update(uploadedBundle).digest("hex"));
+    const loaded = await connector.loadCloudCanvas(canvasId);
+    assert.deepEqual(loaded.bundle.manifest.animations, animations);
+    assert.deepEqual(loaded.bundle.assets.map((item) => item.kind), ["tile", "widget", "preview"]);
+    assert.deepEqual(JSON.parse(Buffer.from(loaded.bundle.assets[1].dataBase64, "base64").toString("utf8")), widget);
+    assert.equal(Buffer.from(loaded.bundle.assets[0].dataBase64, "base64").toString(), "tile-bytes");
+    assert.equal(Buffer.from(loaded.bundle.assets[2].dataBase64, "base64").toString(), "preview-bytes");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("cloud Canvas save reconciles latest when both completion responses are lost", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-canvas-reconcile-test-"));
+  const canvasId = "33333333-3333-4333-8333-333333333333";
+  const revisionId = "44444444-4444-4444-8444-444444444444";
+  const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+  let completionAttempts = 0;
+  try {
+    connector.cloudRequest = async (pathname) => {
+      if (pathname.endsWith(`/canvas-revisions/${revisionId}/complete`)) {
+        completionAttempts += 1;
+        throw new Error("Simulated lost completion response");
+      }
+      if (pathname.endsWith(`/canvases/${canvasId}/revisions/latest`)) {
+        return { revision: { id: revisionId, status: "complete" } };
+      }
+      throw new Error(`Unexpected reconciliation request: ${pathname}`);
+    };
+    const result = await connector.completeCloudCanvasRevision(canvasId, revisionId);
+    assert.equal(completionAttempts, 2);
+    assert.deepEqual(result, { revision: { id: revisionId, status: "complete" } });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("Cloud Canvas loading downloads one verified bundle and preserves asset order", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-parallel-load-test-"));
+  const originalFetch = global.fetch;
+  const origin = "https://penecho.ai";
+  const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+  connector.writeConfiguration({ version: 2, origin, accountToken: "parallel-load-account-token" });
+  const assetCount = 12;
+  const bundle = {
+    bundleVersion: 2,
+    mode: "snapshot",
+    formatVersion: 1,
+    manifest: { format: "penecho-raster-tiles", formatVersion: 1 },
+    assets: Array.from({ length: assetCount }, (_, index) => ({
+      kind: "tile",
+      contentType: "image/webp",
+      metadata: { tileKey: `${index},0` },
+      dataBase64: Buffer.from(`asset-${index}`).toString("base64"),
+    })),
+  };
+  const bundleBytes = Buffer.from(JSON.stringify(bundle));
+  const bundleHash = createHash("sha256").update(bundleBytes).digest("hex");
+  let latestRequests = 0;
+  let bundleDownloads = 0;
+  global.fetch = async (url, options = {}) => {
+    const parsed = new URL(url, origin);
+    if (parsed.pathname.endsWith("/revisions/latest")) {
+      latestRequests += 1;
+      return new Response(JSON.stringify({
+        revision: { id: "22222222-2222-4222-8222-222222222222", formatVersion: 1 },
+        bundle: {
+          download: { url: `${origin}/storage/bundle` },
+          sha256: bundleHash,
+          sizeBytes: bundleBytes.length,
+          contentType: "application/json",
+        },
+      }), { status:200, headers:{ "content-type":"application/json" } });
+    }
+    if (parsed.pathname === "/storage/bundle") {
+      bundleDownloads += 1;
+      return new Response(bundleBytes, { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected Cloud request: ${url} ${options.method || "GET"}`);
+  };
+  try {
+    const loaded = await connector.loadCloudCanvas("11111111-1111-4111-8111-111111111111");
+    assert.equal(latestRequests, 1);
+    assert.equal(bundleDownloads, 1);
+    assert.deepEqual(loaded.bundle.assets.map((item) => Buffer.from(item.dataBase64, "base64").toString()), Array.from({ length:assetCount }, (_, index) => `asset-${index}`));
+  } finally {
+    connector.close();
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

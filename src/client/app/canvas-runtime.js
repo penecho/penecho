@@ -1070,6 +1070,42 @@
       if (pluginEnabled(widget.pluginId)) mountWidget(widget);
     }
   }
+  async function communityWidgetArtifact(widgetId) {
+    const widget = state.widgets.find((item) => item.id === widgetId);
+    if (!widget) throw Error("Select a Widget on the Canvas first.");
+    const serialized = serializedWidgets().find((item) => item.id === widget.id);
+    if (!serialized) throw Error("This Widget could not be prepared for sharing.");
+    const image = await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true),
+      maximum = 2048,
+      scale = Math.min(1, maximum / Math.max(1, image.naturalWidth || image.width), maximum / Math.max(1, image.naturalHeight || image.height)),
+      canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const communityPreview = await communityPreviewForCanvas(canvas, .82);
+    canvas.width = canvas.height = 1;
+    return { format:"penecho-widget", formatVersion:1, widget:serialized, communityPreview };
+  }
+  async function importCommunityWidgetArtifact(artifact) {
+    if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
+    if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+    if (state.widgetEdit) acceptWidgetEdit();
+    const visible = viewportRect(), source = { ...artifact.widget };
+    delete source.id;
+    source.x = Math.max(0, Math.min(SIZE - Number(source.w || 300), visible.x + Math.max(0, (visible.w - Number(source.w || 300)) / 2)));
+    source.y = Math.max(0, Math.min(SIZE - Number(source.h || 200), visible.y + Math.max(0, (visible.h - Number(source.h || 200)) / 2)));
+    await enableSnapshotWidgetPlugins([source]);
+    const widget = widgetRecord(source);
+    if (!widget) throw Error("The community Widget is not compatible with this PenEcho version.");
+    recordWidgetsBefore();
+    state.widgets.push(widget);
+    if (pluginEnabled(widget.pluginId)) mountWidget(widget);
+    state.userRevision++;
+    state.autoEligible = false;
+    save();
+    requestRender();
+    return { id:widget.id, title:widget.title };
+  }
   function widgetHostUrl(manifest) {
     const url = new URL("widget-host.html", location.href);
     if (url.hostname === "localhost") {
@@ -2964,6 +3000,8 @@
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
+    favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
+    share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
   });
   function screenObjectBox(box) {
     return {
@@ -2996,6 +3034,22 @@
       refineCandidate:options.refine,
       activate:(button) => void beginWidgetRefineConfirmation(options.refine, objectChromeAnchor(button)),
     });
+    if (options.community && window.PenEchoCommunityUI) {
+      items.push({
+        key:`widget:${widget.id}:tool-favorite`,
+        kind:"favorite",
+        label:window.PenEchoCommunityUI.label?.("favoriteWidget") || "Favorite",
+        baseWidth:112,
+        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:widget.id } })),
+      });
+      items.push({
+        key:`widget:${widget.id}:tool-share`,
+        kind:"share",
+        label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        baseWidth:104,
+        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
+      });
+    }
     if (!items.length) return;
     const gap = 4,
       groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
@@ -3096,6 +3150,8 @@
     if (kind === "cancel") return t("cancel");
     if (kind === "copy") return t("copyText");
     if (kind === "refine") return t("widgetRefine");
+    if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
+    if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
     return t("hand");
   }
   function widgetRefineConfirmationPosition(anchor, width, height, viewportWidth, viewportHeight) {
@@ -3242,7 +3298,7 @@
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = ["copy", "refine"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine", "favorite", "share"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -3375,7 +3431,7 @@
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
           specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
           specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
-          addWidgetToolSpecs(specs, handTarget, { copy:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
+          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
         }
       }
     }
@@ -3413,7 +3469,7 @@
       button.setAttribute("aria-label", label);
       if (spec.kind === "refine") button.removeAttribute("title");
       else button.title = label;
-      if (["copy", "refine"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
+      if (["copy", "refine", "favorite", "share"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
       if (spec.kind === "refine") {
         const hint = button.querySelector(".widget-refine-hint"),
           visible = widgetRefineHintVisible(spec.refineCandidate),

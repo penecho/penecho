@@ -1233,6 +1233,12 @@
   });
 
   document.querySelectorAll(".radial-action").forEach((button) => button.setAttribute("tabindex", "-1"));
+  window.PenEchoCommunityCanvas = Object.freeze({
+    widgetArtifact:communityWidgetArtifact,
+    canvasArtifact:communityCanvasArtifact,
+    importWidget:importCommunityWidgetArtifact,
+    importCanvas:importCommunityCanvasArtifact,
+  });
   setPluginTemplate("simple");
   applyLanguage();
   setWidgetShadowEnabled(state.widgetShadowEnabled);
