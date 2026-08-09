@@ -1681,7 +1681,7 @@
     if (!widget) return;
     const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
-    if (widget.revision !== state.userRevision) {
+    if (!options.allowRevisionMismatch && widget.revision !== state.userRevision) {
       rejectPendingWidget(AI_CANCELLED);
       setStatusKey("canvasChanged");
       return;

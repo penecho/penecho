@@ -927,9 +927,25 @@
       if (!dialogSelect.value) dialogSelect.value = SERVER_DEFAULT_PROJECT_ID;
     }
   }
+  function openServerProjectDialog() {
+    const dialog = document.querySelector("#projectDialog"),
+      input = document.querySelector("#projectName");
+    input.value = "";
+    input.setCustomValidity("");
+    dialog.dataset.busy = "false";
+    if (!dialog.open) dialog.showModal();
+    queueMicrotask(() => input.focus());
+  }
   async function createServerProject() {
-    const name = prompt(t("canvasProjectName"), "")?.trim().slice(0, 48);
-    if (!name) return;
+    const dialog = document.querySelector("#projectDialog"),
+      input = document.querySelector("#projectName"),
+      name = input.value.trim().slice(0, 48);
+    if (!name) {
+      input.setCustomValidity(t("canvasProjectName"));
+      input.reportValidity();
+      return false;
+    }
+    input.setCustomValidity("");
     const response = await fetch("/api/canvas-projects", {
         method:"POST",
         credentials:"same-origin",
@@ -939,7 +955,9 @@
       body = await snapshotApiResponse(response);
     rememberSelectedServerProject(body.project.id);
     await refreshSnapshots();
+    if (dialog.open) dialog.close("created");
     showHistoryNoticeKey("canvasProjectCreated", "success");
+    return true;
   }
   async function deleteSelectedServerProject() {
     const project = serverCanvasProjects.find((item) => item.id === selectedServerProjectId);

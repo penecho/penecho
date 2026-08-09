@@ -398,6 +398,13 @@
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
+    const finalizingPendingWidgetForEraser = mode === "eraser" && ["hand", "pen"].includes(state.mode)
+      && !options.skipDraftFinalize && Boolean(state.pendingWidget);
+    if (finalizingPendingWidgetForEraser) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      acceptPendingWidget({ restoreMode:false, allowRevisionMismatch:true });
+    }
     const staysInWidgetRefineModes = ["pen", "hand"].includes(state.mode) && ["pen", "hand"].includes(mode);
     if (mode !== state.mode && !staysInWidgetRefineModes && !options.preserveWidgetRefinement && (activeWidgetRefinement() || state.pendingWidgetReplacement)) {
       state.aiDraftReturnMode = null;
@@ -876,8 +883,32 @@
     rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
-  document.querySelector("#historyProjectCreate").onclick = () => runSnapshotAction(createServerProject);
+  document.querySelector("#historyProjectCreate").onclick = openServerProjectDialog;
   document.querySelector("#historyProjectDelete").onclick = () => runSnapshotAction(deleteSelectedServerProject);
+  const projectDialog = document.querySelector("#projectDialog"),
+    projectForm = document.querySelector("#projectForm"),
+    closeProjectDialog = () => {
+      if (projectDialog.dataset.busy !== "true" && projectDialog.open) projectDialog.close("cancel");
+    };
+  document.querySelector("#projectDialogClose").onclick = closeProjectDialog;
+  document.querySelector("#projectDialogCancel").onclick = closeProjectDialog;
+  document.querySelector("#projectName").addEventListener("input", (event) => event.currentTarget.setCustomValidity(""));
+  projectDialog.addEventListener("cancel", (event) => {
+    if (projectDialog.dataset.busy === "true") event.preventDefault();
+  });
+  projectForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (projectDialog.dataset.busy === "true") return;
+    projectDialog.dataset.busy = "true";
+    const buttons = [...projectForm.querySelectorAll("button")];
+    buttons.forEach((button) => (button.disabled = true));
+    try {
+      await runSnapshotAction(createServerProject);
+    } finally {
+      projectDialog.dataset.busy = "false";
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  });
   document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (input.checked) setSnapshotLocation(input.value);

@@ -4815,7 +4815,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!widget) return;
     const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
-    if (widget.revision !== state.userRevision) {
+    if (!options.allowRevisionMismatch && widget.revision !== state.userRevision) {
       rejectPendingWidget(AI_CANCELLED);
       setStatusKey("canvasChanged");
       return;
@@ -8506,9 +8506,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (!dialogSelect.value) dialogSelect.value = SERVER_DEFAULT_PROJECT_ID;
     }
   }
+  function openServerProjectDialog() {
+    const dialog = document.querySelector("#projectDialog"),
+      input = document.querySelector("#projectName");
+    input.value = "";
+    input.setCustomValidity("");
+    dialog.dataset.busy = "false";
+    if (!dialog.open) dialog.showModal();
+    queueMicrotask(() => input.focus());
+  }
   async function createServerProject() {
-    const name = prompt(t("canvasProjectName"), "")?.trim().slice(0, 48);
-    if (!name) return;
+    const dialog = document.querySelector("#projectDialog"),
+      input = document.querySelector("#projectName"),
+      name = input.value.trim().slice(0, 48);
+    if (!name) {
+      input.setCustomValidity(t("canvasProjectName"));
+      input.reportValidity();
+      return false;
+    }
+    input.setCustomValidity("");
     const response = await fetch("/api/canvas-projects", {
         method:"POST",
         credentials:"same-origin",
@@ -8518,7 +8534,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       body = await snapshotApiResponse(response);
     rememberSelectedServerProject(body.project.id);
     await refreshSnapshots();
+    if (dialog.open) dialog.close("created");
     showHistoryNoticeKey("canvasProjectCreated", "success");
+    return true;
   }
   async function deleteSelectedServerProject() {
     const project = serverCanvasProjects.find((item) => item.id === selectedServerProjectId);
@@ -12629,6 +12647,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     options ||= {};
     const button = document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
+    const finalizingPendingWidgetForEraser = mode === "eraser" && ["hand", "pen"].includes(state.mode)
+      && !options.skipDraftFinalize && Boolean(state.pendingWidget);
+    if (finalizingPendingWidgetForEraser) {
+      state.aiDraftReturnMode = null;
+      state.pendingHistoryRestored = false;
+      acceptPendingWidget({ restoreMode:false, allowRevisionMismatch:true });
+    }
     const staysInWidgetRefineModes = ["pen", "hand"].includes(state.mode) && ["pen", "hand"].includes(mode);
     if (mode !== state.mode && !staysInWidgetRefineModes && !options.preserveWidgetRefinement && (activeWidgetRefinement() || state.pendingWidgetReplacement)) {
       state.aiDraftReturnMode = null;
@@ -13107,8 +13132,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     rememberSelectedServerProject(event.target.value);
     renderSnapshotList();
   };
-  document.querySelector("#historyProjectCreate").onclick = () => runSnapshotAction(createServerProject);
+  document.querySelector("#historyProjectCreate").onclick = openServerProjectDialog;
   document.querySelector("#historyProjectDelete").onclick = () => runSnapshotAction(deleteSelectedServerProject);
+  const projectDialog = document.querySelector("#projectDialog"),
+    projectForm = document.querySelector("#projectForm"),
+    closeProjectDialog = () => {
+      if (projectDialog.dataset.busy !== "true" && projectDialog.open) projectDialog.close("cancel");
+    };
+  document.querySelector("#projectDialogClose").onclick = closeProjectDialog;
+  document.querySelector("#projectDialogCancel").onclick = closeProjectDialog;
+  document.querySelector("#projectName").addEventListener("input", (event) => event.currentTarget.setCustomValidity(""));
+  projectDialog.addEventListener("cancel", (event) => {
+    if (projectDialog.dataset.busy === "true") event.preventDefault();
+  });
+  projectForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (projectDialog.dataset.busy === "true") return;
+    projectDialog.dataset.busy = "true";
+    const buttons = [...projectForm.querySelectorAll("button")];
+    buttons.forEach((button) => (button.disabled = true));
+    try {
+      await runSnapshotAction(createServerProject);
+    } finally {
+      projectDialog.dataset.busy = "false";
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  });
   document.querySelectorAll('input[name="historyStorageLocation"], input[name="newCanvasStorageLocation"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (input.checked) setSnapshotLocation(input.value);

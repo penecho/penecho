@@ -229,6 +229,7 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
   assert.match(app, /acceptPendingWidget\(\{ showHint:true \}\)/);
   assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
   assert.match(mode, /requestInteractionLayerRender\(\)/);
+  assert.match(mode, /finalizingPendingWidgetForEraser = mode === "eraser"[\s\S]*?\["hand", "pen"\]\.includes\(state\.mode\)[\s\S]*?acceptPendingWidget\(\{ restoreMode:false, allowRevisionMismatch:true \}\)/);
   assert.match(mode, /leavingDraftHand[\s\S]*?acceptPending\(\{ restoreMode:false \}\)/);
   assert.match(functionSource(app, "beginCanvasPointerAction"), /state\.mode === "hand"[\s\S]*?state\.panGesture[\s\S]*?setCanvasCursor\("grabbing"\)/);
   assert.ok(pointerDown.indexOf('state.mode !== "hand"') < pointerDown.indexOf("widgetPointerHit(point"));
@@ -311,6 +312,46 @@ test("AI drafts temporarily enter Hand, restore the prior tool, and undo back to
   assert.match(restore, /setCanvasMode\("hand", \{ preserveSelection:true, skipDraftFinalize:true \}\)/);
   assert.match(applyHistory, /restorePendingHistoryState\(entry, side\)/);
   assert.match(app, /state\.pendingHistoryRestored && \(a === "undo" \|\| a === "redo"\)/);
+});
+
+test("switching from Pen to Eraser finalizes a pending widget regardless of revision drift", () => {
+  const setCanvasMode = functionSource(read("public/app.js"), "setCanvasMode"),
+    button = { classList:{ toggle() {} }, setAttribute() {} },
+    state = {
+      mode:"pen",
+      pending:null,
+      pendingWidget:{ id:"widget-1", revision:4 },
+      pendingWidgetReplacement:null,
+      aiDraftReturnMode:"pen",
+      pendingHistoryRestored:false,
+      selection:null,
+      pointerPreview:null,
+      busy:false,
+    };
+  let accepted = 0;
+  vm.runInNewContext(`(${setCanvasMode})("eraser")`, {
+    state,
+    document:{
+      querySelector:() => button,
+      querySelectorAll:() => [button],
+    },
+    activeWidgetRefinement:() => null,
+    acceptPendingWidget:(options) => {
+      assert.equal(options.restoreMode, false);
+      assert.equal(options.allowRevisionMismatch, true);
+      accepted++;
+      state.pendingWidget = null;
+    },
+    updateWidgetRefinePointer() {},
+    updateAutoControl() {},
+    deselectAnimation() {},
+    view:{ classList:{ toggle() {} } },
+    resetCanvasCursor() {},
+    requestInteractionLayerRender() {},
+  });
+  assert.equal(accepted, 1);
+  assert.equal(state.mode, "eraser");
+  assert.equal(state.pendingWidget, null);
 });
 
 test("contextual footer hints persist, settle from blue, and follow widget and tool behavior", () => {
@@ -994,6 +1035,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(functionSource(app, "widgetBounds"), /capturableWidgets\(region\)/);
   assert.match(functionSource(app, "drawWidgetsToContext"), /capturableWidgets\(region\)/);
   assert.match(functionSource(app, "renderExportCanvas"), /prepareVisibleWidgetSnapshots\(null, false\)[\s\S]*?scale = Math\.min\(1, EXPORT_MAX_DIMENSION \/ region\.w[\s\S]*?Math\.sqrt\(EXPORT_MAX_PIXELS \/ \(region\.w \* region\.h\)\)/);
+  assert.match(acceptPendingWidget, /!options\.allowRevisionMismatch && widget\.revision !== state\.userRevision[\s\S]*?rejectPendingWidget\(AI_CANCELLED\)/);
   assert.match(acceptPendingWidget, /if \(replacement\) \{[\s\S]*?unmountWidget\(widget\)[\s\S]*?\} else \{[\s\S]*?state\.widgets\.push\(widget\)[\s\S]*?widget\.shell\.classList\.remove\("pending"\)[\s\S]*?sendWidgetHostState\(widget/);
   assert.doesNotMatch(prepareSnapshots, /snapshotVersion === widget\.contentVersion/);
   assert.doesNotMatch(finishWidgetGesture, /requestWidgetSnapshot|scheduleWidgetSnapshot/);
@@ -1426,7 +1468,10 @@ test("canvas history clearly separates device-only and shared PenEcho server sto
   assert.match(functionSource(app, "serverSnapshotItems"), /fetch\("\/api\/canvas-projects"/);
   assert.match(functionSource(app, "saveServerSnapshot"), /method:overwriteId \? "PUT" : "POST"/);
   assert.match(functionSource(app, "deleteServerSnapshot"), /method:"DELETE"/);
-  for (const id of ["serverProjectManager", "historyProjectSelect", "historyProjectCreate", "historyProjectDelete", "newCanvasProjectField", "newCanvasProjectSelect"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["serverProjectManager", "historyProjectSelect", "historyProjectCreate", "historyProjectDelete", "projectDialog", "projectForm", "projectName", "projectDialogCancel", "projectDialogCreate", "newCanvasProjectField", "newCanvasProjectSelect"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(functionSource(app, "openServerProjectDialog"), /projectDialog[\s\S]*?showModal\(\)[\s\S]*?input\.focus\(\)/);
+  assert.match(functionSource(app, "createServerProject"), /projectName[\s\S]*?input\.value\.trim\(\)\.slice\(0, 48\)[\s\S]*?fetch\("\/api\/canvas-projects"[\s\S]*?dialog\.close\("created"\)/);
+  assert.doesNotMatch(app, /\bprompt\s*\(/);
   assert.match(functionSource(app, "storedServerProjectId"), /sessionStorage\.getItem\(SERVER_PROJECT_SESSION_KEY\)/);
   assert.match(functionSource(app, "rememberSelectedServerProject"), /sessionStorage\.setItem\(SERVER_PROJECT_SESSION_KEY, selectedServerProjectId\)/);
   assert.match(functionSource(app, "selectedServerSaveProjectId"), /selectedServerProjectId === SERVER_ALL_PROJECTS_ID \? SERVER_DEFAULT_PROJECT_ID/);

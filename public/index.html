@@ -215,6 +215,27 @@
       <div id="historyList" class="history-list" aria-live="polite"></div>
     </aside>
 
+    <dialog id="projectDialog" class="new-canvas-dialog project-dialog" aria-labelledby="projectDialogTitle">
+      <form id="projectForm">
+        <header>
+          <div><span class="history-kicker">PenEcho</span><h2 id="projectDialogTitle" data-i18n="canvasProjectNew">New project</h2></div>
+          <button id="projectDialogClose" class="new-canvas-close" type="button" data-i18n-aria="cancel" aria-label="Cancel" data-i18n-title="cancel" title="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </header>
+        <div class="new-canvas-fields project-dialog-fields">
+          <label class="new-snapshot-name" for="projectName"><span data-i18n="canvasProjectName">Project name</span>
+            <input id="projectName" type="text" maxlength="48" required data-i18n-placeholder="canvasProjectName" placeholder="Project name" autocomplete="off">
+          </label>
+        </div>
+        <div class="new-canvas-actions">
+          <div></div>
+          <div class="new-canvas-action-group">
+            <button id="projectDialogCancel" type="button" data-i18n="cancel">Cancel</button>
+            <button id="projectDialogCreate" class="new-canvas-primary" type="submit" data-i18n="canvasProjectNew">New project</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="newCanvasDialog" class="new-canvas-dialog" aria-labelledby="newCanvasTitle">
       <form method="dialog">
         <header>

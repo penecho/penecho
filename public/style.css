@@ -467,8 +467,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .new-canvas-actions button { min-height: 36px; padding: 8px 13px; color: var(--ink); border: 1px solid var(--sheet-edge); border-radius: 9px; background: color-mix(in srgb, var(--panel-raised) 72%, transparent); font: 650 .72rem/1.1 system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: color .14s ease, border-color .14s ease, background .14s ease; }
 .new-canvas-actions button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--gold-bright) 48%, var(--line)); background: var(--panel-raised); }
 .new-canvas-actions button:disabled { cursor: not-allowed; opacity: .42; }
-.new-canvas-actions #newCanvasCancel { color: var(--muted); border-color: transparent; background: transparent; }
-.new-canvas-actions #newCanvasCancel:hover:not(:disabled) { color: var(--ink); border-color: var(--sheet-hairline); background: color-mix(in srgb, var(--panel-raised) 66%, transparent); }
+.new-canvas-actions #newCanvasCancel, .new-canvas-actions #projectDialogCancel { color: var(--muted); border-color: transparent; background: transparent; }
+.new-canvas-actions #newCanvasCancel:hover:not(:disabled), .new-canvas-actions #projectDialogCancel:hover:not(:disabled) { color: var(--ink); border-color: var(--sheet-hairline); background: color-mix(in srgb, var(--panel-raised) 66%, transparent); }
 .new-canvas-actions .new-canvas-primary { color: var(--accent-ink); border-color: transparent; background: linear-gradient(180deg, var(--gold-bright), var(--gold)); font-weight: 700; box-shadow: 0 1px 2px rgba(0, 0, 0, .2), inset 0 1px rgba(255, 255, 255, .14); }
 .new-canvas-actions .new-canvas-primary:hover:not(:disabled) { border-color: transparent; background: linear-gradient(180deg, color-mix(in srgb, var(--gold-bright) 88%, #fff), var(--gold-bright)); }
 .new-canvas-actions .new-canvas-discard { padding-inline: 9px; color: var(--danger); border-color: transparent; background: transparent; }
@@ -485,6 +485,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   .new-canvas-project select, .new-snapshot-name input { min-height: 42px; }
 }
 .text-help-dialog { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; border-radius: 14px; }
+.project-dialog { width: min(420px, calc(100vw - 32px)); }
+.project-dialog-fields { margin-top: 14px; }
 .text-help-dialog ul { margin: 0; padding-left: 19px; color: var(--ink); font: .76rem/1.6 system-ui, sans-serif; }
 .text-help-dialog li + li { margin-top: 4px; }
 .text-help-example { margin-top: 14px; }
