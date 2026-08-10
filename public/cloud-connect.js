@@ -30,10 +30,14 @@
   }
 
   function apiHeaders(json = false) {
+    const csrf = window.PENECHO_CONFIG?.runtime === "cloud"
+      ? document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || ""
+      : "";
     return {
       accept:"application/json",
       ...(json ? { "content-type":"application/json" } : {}),
       ...(sessionToken ? { "x-penecho-session":sessionToken } : {}),
+      ...(csrf ? { "x-penecho-csrf":decodeURIComponent(csrf) } : {}),
     };
   }
 

@@ -1116,6 +1116,7 @@
       url.searchParams.set("parent-origin", location.origin);
     }
     if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
+    if (window.PENECHO_CONFIG?.runtime === "cloud") url.searchParams.set("remote-canvas", "1");
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }

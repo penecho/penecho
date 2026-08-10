@@ -638,6 +638,27 @@ test("cloud relay requests execute through the local model callback without expo
   }
 });
 
+test("Remote Canvas relay operations use the isolated HTTP callback", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-remote-canvas-relay-test-"));
+  try {
+    const calls = [];
+    const connector = new CloudConnector({
+      stateDir,
+      executeRequest:async () => { calls.push("model"); return {}; },
+      executeHttpRequest:async (payload, timeoutMs) => { calls.push({ payload, timeoutMs }); return { status:200, contentType:"application/json", body:{ canvases:[] } }; },
+    });
+    let sent;
+    const socket = { readyState:WebSocket.OPEN, send:value => { sent = JSON.parse(value); } };
+    const payload = { operation:"canvas.http", request:{ method:"GET", path:"/api/canvases" } };
+    await connector.handleRequest(socket, { type:"request", requestId:"remote-1", timeoutMs:15_000, payload });
+    assert.deepEqual(calls, [{ payload, timeoutMs:15_000 }]);
+    assert.equal(sent.ok, true);
+    assert.deepEqual(sent.payload.body, { canvases:[] });
+  } finally {
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("cloud Canvas save and load preserve animation manifests and widget assets", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-canvas-test-"));
   const originalFetch = global.fetch;

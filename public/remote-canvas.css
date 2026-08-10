@@ -1,0 +1,55 @@
+.remote-canvas-status {
+  align-items: center;
+  background: color-mix(in srgb, #0f766e 10%, white);
+  border: 1px solid color-mix(in srgb, #0f766e 32%, transparent);
+  border-radius: 999px;
+  color: #115e59;
+  display: inline-flex;
+  font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+  gap: 7px;
+  max-width: min(260px, 30vw);
+  min-height: 36px;
+  padding: 7px 11px;
+}
+.remote-canvas-status::before { background: #10b981; border-radius: 50%; box-shadow: 0 0 0 4px rgb(16 185 129 / .14); content: ""; flex: 0 0 7px; height: 7px; width: 7px; }
+.remote-canvas-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-canvas-gate {
+  align-items: center;
+  background: rgb(15 23 42 / .46);
+  backdrop-filter: blur(12px);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 100000;
+}
+.remote-canvas-gate[hidden] { display: none; }
+.remote-canvas-card {
+  background: #fff;
+  border: 1px solid #dbe2ea;
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgb(15 23 42 / .2);
+  color: #172033;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  max-width: 560px;
+  padding: clamp(24px, 5vw, 42px);
+  width: 100%;
+}
+.remote-canvas-card .eyebrow { color: #2563eb; font-size: 12px; font-weight: 800; letter-spacing: .12em; margin: 0 0 10px; text-transform: uppercase; }
+.remote-canvas-card h2 { font-size: clamp(26px, 5vw, 38px); letter-spacing: -.035em; line-height: 1.05; margin: 0; }
+.remote-canvas-card > p { color: #667085; font-size: 16px; line-height: 1.65; margin: 16px 0 0; }
+.remote-canvas-card ol { color: #344054; display: grid; gap: 10px; line-height: 1.5; margin: 22px 0 0; padding-left: 22px; }
+.remote-canvas-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.remote-canvas-actions a, .remote-canvas-actions button { align-items: center; border: 1px solid #cfd8e3; border-radius: 12px; box-sizing: border-box; color: #172033; cursor: pointer; display: inline-flex; font: 750 14px/1 ui-sans-serif, system-ui, sans-serif; justify-content: center; min-height: 44px; padding: 0 16px; text-decoration: none; }
+.remote-canvas-actions .primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.remote-canvas-detail { background: #f7f9fc; border-radius: 12px; color: #667085; font-size: 13px; line-height: 1.5; margin-top: 18px; overflow-wrap: anywhere; padding: 12px 14px; }
+@media (max-width: 720px) {
+  .remote-canvas-gate { padding: 12px; }
+  .remote-canvas-card { border-radius: 18px; padding: 24px; }
+  .remote-canvas-actions { display: grid; }
+  .remote-canvas-actions a, .remote-canvas-actions button { width: 100%; }
+  .remote-canvas-status { max-width: 44px; padding: 7px 12px; }
+  .remote-canvas-status span { position: absolute; clip: rect(0 0 0 0); }
+}
+@media (prefers-reduced-motion: reduce) { .remote-canvas-gate { backdrop-filter: none; } }

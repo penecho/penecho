@@ -28,6 +28,7 @@ const { testConfiguredProvider } = require("../cli/main.js");
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const { resolveWidgetEditPatchCommands, widgetSourceMirrorsHtml, widgetPatchContract, widgetPatchFiles } = require("./widget-patch.js");
 const { CloudConnector } = require("./cloud-connector.js");
+const { createRemoteCanvasHttpExecutor } = require("./remote-canvas-http.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
 let sharp = null;
@@ -3475,6 +3476,13 @@ async function executeCloudCommand(payload, timeoutMs) {
     return body;
   } finally { clearTimeout(timeout); }
 }
+function remoteCanvasHttpExecutor() {
+  const address=server.address();
+  if(!address||typeof address!=="object")throw new Error("Local PenEcho server is not listening.");
+  const port=address.port,origin=`http://127.0.0.1:${port}`,host=`127.0.0.1:${port}`,
+    cookieName=`${AI_SESSION_COOKIE_PREFIX}_${crypto.createHash("sha256").update(host).digest("hex").slice(0,12)}`;
+  return createRemoteCanvasHttpExecutor({ origin, sessionCookie:`${cookieName}=${AI_SESSION_TOKEN}` });
+}
 server.on("close",()=>cloudConnector?.close());
 
 const configuredPort = Number(process.env.PORT), PORT = Number.isInteger(configuredPort) && configuredPort >= 0 && configuredPort <= 65535 ? configuredPort : 3888;
@@ -3487,7 +3495,7 @@ if (startupConfigurationError) {
   process.exitCode = 1;
 } else server.listen(PORT, HOST, () => {
   const address = server.address(), listeningPort = typeof address === "object" && address ? address.port : PORT;
-  cloudConnector = new CloudConnector({ stateDir:CLOUD_STATE_DIRECTORY, executeRequest:executeCloudCommand, logger:log, defaultOrigin:DEFAULT_CLOUD_ORIGIN });
+  cloudConnector = new CloudConnector({ stateDir:CLOUD_STATE_DIRECTORY, executeRequest:executeCloudCommand, executeHttpRequest:remoteCanvasHttpExecutor(), logger:log, defaultOrigin:DEFAULT_CLOUD_ORIGIN });
   cloudConnector.start();
   console.log(`PenEcho: http://${HOST}:${listeningPort} (${AI_PROVIDER || "invalid provider"})`);
   if (HOST.trim() === "0.0.0.0") {

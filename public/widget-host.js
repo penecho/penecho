@@ -21,7 +21,9 @@
       }
     })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
-    publicFetchUrl = new URL("api/widget-fetch", location.href).href,
+    remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
+    cloudCsrf = remoteCanvas ? document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || "" : "",
+    publicFetchUrl = remoteCanvas ? new URL("/api/v1/remote-canvas/http?path=%2Fapi%2Fwidget-fetch", location.href).href : new URL("api/widget-fetch", location.href).href,
     connect = new URL(location.href).searchParams.getAll("connect"),
     inner = document.createElement("iframe");
   let initialized = false,
@@ -947,7 +949,7 @@
           method:"POST",
           credentials:"same-origin",
           cache:"no-store",
-          headers:{ "Content-Type":"application/json", ...(accessSession ? { "X-PenEcho-Session":accessSession } : {}) },
+          headers:{ "Content-Type":"application/json", ...(accessSession ? { "X-PenEcho-Session":accessSession } : {}), ...(cloudCsrf ? { "X-PenEcho-CSRF":decodeURIComponent(cloudCsrf) } : {}) },
           body:JSON.stringify({ url:message.url }),
         }),
         body = await response.arrayBuffer(),

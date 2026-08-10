@@ -7,7 +7,7 @@ const net = require("net");
 const { createHash, randomBytes, timingSafeEqual } = require("crypto");
 const { WebSocket } = require("ws");
 
-const MAX_RELAY_MESSAGE_BYTES = 20 * 1024 * 1024;
+const MAX_RELAY_MESSAGE_BYTES = 140 * 1024 * 1024;
 const MAX_CLOUD_BUNDLE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_HEARTBEAT_SECONDS = 20;
 const ACCOUNT_REFRESH_INTERVAL_MS = 5 * 60_000;
@@ -121,10 +121,11 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, logger = null, defaultOrigin = "https://penecho.ai" }) {
+  constructor({ stateDir, executeRequest, executeHttpRequest = null, logger = null, defaultOrigin = "https://penecho.ai" }) {
     this.stateDir = stateDir;
     this.file = path.join(stateDir, "cloud-device.json");
     this.executeRequest = executeRequest;
+    this.executeHttpRequest = executeHttpRequest;
     this.logger = logger;
     this.defaultOrigin = normalizedOrigin(defaultOrigin);
     this.configuration = this.readConfiguration();
@@ -886,7 +887,9 @@ class CloudConnector {
 
   async handleRequest(socket, message) {
     try {
-      const payload = await this.executeRequest(message.payload, Number(message.timeoutMs) || 210_000);
+      const executor = message.payload?.operation === "canvas.http" ? this.executeHttpRequest : this.executeRequest;
+      if (typeof executor !== "function") throw Object.assign(new Error("This PenEcho version does not support Remote Canvas."), { code:"remote_canvas_unsupported" });
+      const payload = await executor(message.payload, Number(message.timeoutMs) || 210_000);
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response", requestId: message.requestId, ok: true, payload }));
     } catch (error) {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({
