@@ -8530,6 +8530,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         headers:authenticatedApiHeaders(),
       }),
       body = await snapshotApiResponse(response);
+    if (!body?.revision && !body?.bundle) return null;
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
       metadata = snapshotItems.find((item) => item.id === id);
@@ -8790,6 +8791,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(canvasId || ""))) throw Error("Invalid Cloud Canvas");
     setSnapshotLocation("cloud");
     await refreshSnapshots();
+    const metadata = snapshotItems.find((item) => item.id === canvasId);
+    if (!metadata) throw Error("Cloud Canvas not found");
+    if (!metadata.currentRevisionId) {
+      startBlankCanvas();
+      setSnapshotLocation("cloud");
+      state.currentSnapshotId = metadata.id;
+      state.currentSnapshotName = metadata.name || "Untitled Canvas";
+      state.currentSnapshotLocation = "cloud";
+      state.currentSnapshotProjectId = metadata.projectId || null;
+      state.currentSnapshotRevisionId = null;
+      renderSnapshotList();
+      updateNewCanvasDialog();
+      setStatusKey("snapshotLoaded");
+      return true;
+    }
     return requestLoadSnapshot(canvasId, "cloud");
   }
   function discardCanvasTransition() {

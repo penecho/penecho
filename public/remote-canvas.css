@@ -39,7 +39,12 @@
 .remote-canvas-card .eyebrow { color: #2563eb; font-size: 12px; font-weight: 800; letter-spacing: .12em; margin: 0 0 10px; text-transform: uppercase; }
 .remote-canvas-card h2 { font-size: clamp(26px, 5vw, 38px); letter-spacing: -.035em; line-height: 1.05; margin: 0; }
 .remote-canvas-card > p { color: #667085; font-size: 16px; line-height: 1.65; margin: 16px 0 0; }
-.remote-canvas-card ol { color: #344054; display: grid; gap: 10px; line-height: 1.5; margin: 22px 0 0; padding-left: 22px; }
+.remote-canvas-flow { align-items: stretch; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); margin-top: 24px; }
+.remote-canvas-flow > div { background: #f7f9fc; border: 1px solid #dfe6ef; border-radius: 12px; display: grid; gap: 4px; min-width: 0; padding: 14px; }
+.remote-canvas-flow span { color: #2563eb; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.remote-canvas-flow b { color: #172033; font-size: 14px; overflow-wrap: anywhere; }
+.remote-canvas-flow small { color: #667085; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.remote-canvas-flow > i { align-self: center; color: #8290a4; font-style: normal; }
 .remote-canvas-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
 .remote-canvas-actions a, .remote-canvas-actions button { align-items: center; border: 1px solid #cfd8e3; border-radius: 12px; box-sizing: border-box; color: #172033; cursor: pointer; display: inline-flex; font: 750 14px/1 ui-sans-serif, system-ui, sans-serif; justify-content: center; min-height: 44px; padding: 0 16px; text-decoration: none; }
 .remote-canvas-actions .primary { background: #2563eb; border-color: #2563eb; color: #fff; }
@@ -49,6 +54,8 @@
   .remote-canvas-card { border-radius: 18px; padding: 24px; }
   .remote-canvas-actions { display: grid; }
   .remote-canvas-actions a, .remote-canvas-actions button { width: 100%; }
+  .remote-canvas-flow { grid-template-columns: 1fr; }
+  .remote-canvas-flow > i { text-align: center; transform: rotate(90deg); }
   .remote-canvas-status { max-width: 44px; padding: 7px 12px; }
   .remote-canvas-status span { position: absolute; clip: rect(0 0 0 0); }
 }
