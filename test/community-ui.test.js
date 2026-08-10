@@ -17,7 +17,11 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /\["canvas", "Canvases"/);
   for (const sort of ["recommended", "newest", "downloads", "favorites", "price_low", "price_high"]) assert.match(cloud, new RegExp(`value:\"${sort}\"`));
   for (const pricing of ["all", "free", "paid"]) assert.match(cloud, new RegExp(`value:\"${pricing}\"`));
-  assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(item\.id\)\}\/thumbnail/);
+  assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(itemId\)\}\/thumbnail/);
+  assert.match(cloud, /async function apiImage/);
+  assert.match(cloud, /x-penecho-session/);
+  assert.match(cloud, /URL\.createObjectURL\(blob\)/);
+  assert.doesNotMatch(cloud, /el\("img", \{ src:`\/api\/cloud\/community/);
   assert.match(cloud, /priceCredits:pricing\.value==="paid"\?Number\(price\.value\|\|0\):0/);
   assert.match(cloud, /Auto-fill with current AI/);
   assert.match(cloud, /there is no image upload step/);
@@ -30,7 +34,10 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /window\.PenEchoCloudProjects/);
   assert.match(cloud, /base-revision-required/);
   assert.match(css, /\.cloud-item-preview/);
+  assert.match(css, /\.cloud-item-preview img:not\(\[src\]\)/);
   assert.match(css, /\.cloud-project-card/);
+  assert.match(css, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(css, /overflow-wrap: anywhere/);
 });
 
 test("community artifacts have bounded WebP previews and import both Widgets and Canvases locally", () => {
@@ -45,6 +52,6 @@ test("community artifacts have bounded WebP previews and import both Widgets and
   assert.match(app, /importCanvas:importCommunityCanvasArtifact/);
   assert.match(main, /PENECHO_CLOUD_ENV/);
   assert.match(main, /PENECHO_CLOUD_ORIGIN/);
-  assert.match(main, /http:\/\/127\.0\.0\.1:18082/);
+  assert.match(main, /https:\/\/internaltest\.penecho\.ai/);
   assert.match(main, /https:\/\/penecho\.ai/);
 });

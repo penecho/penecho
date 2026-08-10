@@ -88,7 +88,7 @@ For responses containing multiple commands, a dashed union outline and four-way 
 
 API credentials are loaded only by the Node.js process. They are never serialized into client responses or static files. Both local CLI adapters use restricted child environments that omit PenEcho API credentials.
 
-The top-right Cloud Center is separate from local Settings. It owns account sign-in, credit balance, device linking, community discovery, favorites, redemption, and Widget/Canvas publishing. `PENECHO_CLOUD_ENV=uat` selects the local Docker UAT service at `http://127.0.0.1:18082`; production is the default and selects `https://penecho.ai`. `PENECHO_CLOUD_ORIGIN` is the single explicit override for unusual test deployments. Cloud credentials remain in the local Node process and community artifacts pass through checksum-verifying local proxy routes.
+The top-right Cloud Center is separate from local Settings. It owns account sign-in, credit balance, device linking, community discovery, favorites, redemption, and Widget/Canvas publishing. `PENECHO_CLOUD_ENV=uat` selects the dedicated HTTPS UAT service at `https://internaltest.penecho.ai`; production is the default and selects `https://penecho.ai`. `PENECHO_CLOUD_ORIGIN` is the single explicit override for unusual test deployments. Cloud credentials remain in the local Node process and community artifacts pass through checksum-verifying local proxy routes. UAT Cloud credentials use a separate state directory so they cannot replace or silently reuse a production account or device link.
 
 ## Model Executors
 

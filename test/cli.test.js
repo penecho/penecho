@@ -66,7 +66,7 @@ function scriptedUi(script = {}) {
 }
 
 function expectedArgs(overrides = {}) {
-  return { command:"start", provider:null, port:null, model:null, effort:null, config:null, help:false, version:false, ...overrides };
+  return { command:"start", provider:null, port:null, model:null, effort:null, config:null, uat:false, help:false, version:false, ...overrides };
 }
 
 test("parses commands, provider overrides, and explicit config files", () => {
@@ -76,10 +76,24 @@ test("parses commands, provider overrides, and explicit config files", () => {
   assert.deepEqual(parseArgs(["configure"]), expectedArgs({ command:"configure" }));
   assert.deepEqual(parseArgs(["configure", "--claude", "--config", "team.env"]), expectedArgs({ command:"configure", provider:"claude-cli", config:"team.env" }));
   assert.deepEqual(parseArgs(["--codex", "--model", "gpt-5.6-sol", "--effort=xhigh", "--config=custom.env"]), expectedArgs({ provider:"codex-cli", model:"gpt-5.6-sol", effort:"xhigh", config:"custom.env" }));
+  assert.deepEqual(parseArgs(["--uat"]), expectedArgs({ uat:true }));
   assert.throws(() => parseArgs(["--api", "--codex"]), /cannot be used together/);
   assert.throws(() => parseArgs(["--port", "65536"]), /0 to 65535/);
   assert.throws(() => parseArgs(["--config"]), /requires a file path/);
   assert.throws(() => parseArgs(["doctor", "configure"]), /Only one command/);
+  assert.throws(() => parseArgs(["doctor", "--uat"]), /only supported when starting/);
+});
+
+test("hidden UAT mode forces the public UAT origin and isolates Cloud credentials", () => {
+  const directory = temporaryDirectory(), home = path.join(directory, "home"), cwd = path.join(directory, "cwd"), stateDir = path.join(home, ".penecho");
+  fs.mkdirSync(stateDir, { recursive:true }); fs.mkdirSync(cwd, { recursive:true });
+  fs.writeFileSync(path.join(stateDir, "config.env"), "AI_PROVIDER=codex-cli\nCODEX_CLI_MODEL=gpt-5.6-sol\nPENECHO_CLOUD_ORIGIN=https://penecho.ai\n");
+  const configuration = resolveConfiguration(parseArgs(["--uat"]), { env:{ PENECHO_CLOUD_ENV:"prod" }, home, cwd, packageRoot:ROOT });
+  assert.equal(configuration.env.PENECHO_CLOUD_ENV, "uat");
+  assert.equal(configuration.env.PENECHO_CLOUD_ORIGIN, "https://internaltest.penecho.ai");
+  assert.equal(configuration.env.PENECHO_CLOUD_STATE_DIR, path.join(stateDir, "cloud-uat"));
+  assert.equal(configuration.env.CODEX_CLI_MODEL, "gpt-5.6-sol");
+  assert.doesNotMatch(helpText(), /--uat/);
 });
 
 test("default startup reads only the global config and ignores project env files", () => {

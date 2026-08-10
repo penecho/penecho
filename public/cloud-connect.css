@@ -56,6 +56,7 @@
 .penecho-cloud-dialog .cloud-dialog-close { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 1.4rem; margin-left: auto; padding: .25rem .45rem; }
 .penecho-cloud-body { min-height: 0; overflow: auto; padding: 1rem 1.1rem 1.2rem; }
 .penecho-cloud-layout { display: grid; gap: 1rem; grid-template-columns: minmax(250px, .64fr) minmax(0, 1.7fr); }
+.penecho-cloud-layout > *, .penecho-cloud-panel > *, .cloud-workspace > * { min-width: 0; }
 .cloud-workspace { min-width: 0; }
 .cloud-section-tabs { display: grid; gap: .55rem; grid-template-columns: 1fr 1fr; margin-bottom: .7rem; }
 .cloud-section-tab { background: color-mix(in srgb, var(--panel, #fff) 94%, #8eb6ec 6%); border: 1px solid var(--line, #cbd2dc); border-radius: .75rem; color: inherit; cursor: pointer; display: grid; gap: .16rem; padding: .66rem .75rem; text-align: left; }
@@ -64,15 +65,16 @@
 .cloud-section-tab.active { background: linear-gradient(135deg, #e4f0ff, #f5f9ff); border-color: #6e9bd8; box-shadow: inset 0 0 0 1px rgb(69 119 186 / 12%); color: #285e9e; }
 .penecho-cloud-panel { background: color-mix(in srgb, var(--panel, #fff) 94%, #92b8ee 6%); border: 1px solid var(--line, #d2d8e2); border-radius: .85rem; padding: .9rem; }
 .penecho-cloud-panel h3 { font-size: .92rem; margin: 0 0 .7rem; }
-.penecho-cloud-panel p { color: var(--muted, #667081); font-size: .8rem; line-height: 1.45; margin: .4rem 0; }
+.penecho-cloud-panel p { color: var(--muted, #667081); font-size: .8rem; line-height: 1.45; margin: .4rem 0; overflow-wrap: anywhere; }
 .penecho-cloud-panel + .penecho-cloud-panel { margin-top: .8rem; }
 .cloud-account-summary { align-items: center; display: flex; gap: .65rem; margin-bottom: .75rem; }
 .cloud-avatar { align-items: center; background: #e4efff; border-radius: .75rem; color: #3265a8; display: flex; font-size: 1.1rem; font-weight: 800; height: 2.6rem; justify-content: center; width: 2.6rem; }
-.cloud-account-summary strong, .cloud-account-summary span { display: block; }
+.cloud-account-summary > div:last-child { min-width: 0; }
+.cloud-account-summary strong, .cloud-account-summary span { display: block; overflow-wrap: anywhere; }
 .cloud-account-summary span { color: var(--muted, #667081); font-size: .76rem; margin-top: .12rem; }
 .cloud-environment { align-items: center; background: color-mix(in srgb, #7da8dc 9%, var(--panel, #fff)); border: 1px solid var(--line, #d2d8e2); border-radius: .58rem; display: flex; gap: .5rem; margin: .55rem 0; min-width: 0; padding: .5rem .58rem; }
 .cloud-environment span { background: #356fc2; border-radius: 999px; color: #fff; font-size: .61rem; font-weight: 800; padding: .19rem .38rem; text-transform: uppercase; }
-.cloud-environment code { color: var(--muted, #667081); font-size: .68rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-environment code { color: var(--muted, #667081); font-size: .68rem; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .cloud-field { display: grid; gap: .32rem; margin: .7rem 0; }
 .cloud-field > span { color: var(--muted, #667081); font-size: .75rem; font-weight: 700; }
 .cloud-field input, .cloud-field select, .cloud-field textarea {
@@ -87,6 +89,7 @@
   resize: vertical;
   width: 100%;
 }
+.cloud-field input, .cloud-field select, .cloud-field textarea { max-width: 100%; min-width: 0; }
 .cloud-field-row { display: grid; gap: .7rem; grid-template-columns: 1fr 1fr; }
 .cloud-button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
 .cloud-button, .cloud-tab, .cloud-item-action {
@@ -99,6 +102,10 @@
   font-size: .78rem;
   font-weight: 700;
   padding: .52rem .7rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .cloud-button { align-items: center; display: inline-flex; justify-content: center; text-decoration: none; }
 .cloud-button.primary, .cloud-item-action.primary { background: #356fc2; border-color: #356fc2; color: #fff; }
@@ -111,12 +118,14 @@
 .cloud-kind-tab strong { font-size: .8rem; }
 .cloud-kind-tab span { color: var(--muted, #667081); font-size: .68rem; }
 .cloud-kind-tab.active { background: linear-gradient(135deg, #e7f1ff, #f6f9ff); border-color: #6c99d6; box-shadow: inset 0 0 0 1px rgb(69 119 186 / 12%); color: #285e9e; }
-.cloud-community-tools { align-items: end; display: grid; gap: .55rem; grid-template-columns: minmax(105px, .72fr) minmax(95px, .62fr) minmax(135px, .9fr) minmax(145px, 1fr); margin-bottom: .85rem; }
+.cloud-community-tools { align-items: end; display: grid; gap: .55rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: .85rem; }
 .cloud-community-tools .cloud-field { margin: 0; }
+.cloud-community-tools .cloud-field:last-child { grid-column: 1 / -1; }
 .cloud-community-grid { display: grid; gap: .75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cloud-item { background: var(--panel, #fff); border: 1px solid var(--line, #d2d8e2); border-radius: .8rem; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .cloud-item-preview { aspect-ratio: 16 / 9; background: #e7edf5; border: 0; cursor: pointer; display: block; overflow: hidden; padding: 0; position: relative; width: 100%; }
 .cloud-item-preview img { display: block; height: 100%; object-fit: cover; transition: transform .2s ease; width: 100%; }
+.cloud-item-preview img:not([src]) { display: none; }
 .cloud-item-preview:hover img { transform: scale(1.025); }
 .cloud-item-preview span { background: rgb(14 28 46 / 78%); border-radius: 999px; bottom: .5rem; color: #fff; font-size: .63rem; font-weight: 800; left: .5rem; letter-spacing: .07em; padding: .25rem .42rem; position: absolute; text-transform: uppercase; }
 .cloud-item-body { display: flex; flex: 1; flex-direction: column; min-height: 168px; padding: .72rem .78rem .78rem; }
@@ -125,7 +134,7 @@
 .cloud-item-description { color: var(--muted, #667081); display: -webkit-box; font-size: .76rem; line-height: 1.4; margin: 0 0 .55rem; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .cloud-item-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .65rem; }
 .cloud-item-tags span { background: color-mix(in srgb, #80a9dd 12%, var(--panel, #fff)); border-radius: 999px; color: var(--muted, #667081); font-size: .66rem; padding: .2rem .4rem; }
-.cloud-item-meta { color: var(--muted, #667081); display: flex; font-size: .7rem; gap: .65rem; margin-top: auto; }
+.cloud-item-meta { color: var(--muted, #667081); display: flex; flex-wrap: wrap; font-size: .7rem; gap: .65rem; margin-top: auto; }
 .cloud-item-actions { display: grid; gap: .38rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: .65rem; }
 .cloud-item-action { flex: 1; padding: .45rem .5rem; }
 .cloud-empty, .cloud-message { color: var(--muted, #667081); font-size: .82rem; padding: 1.2rem .25rem; text-align: center; }
@@ -153,6 +162,7 @@
 .cloud-share-result strong { color: #28724d; font-size: .8rem; }
 .cloud-share-result input { background: var(--panel, #fff); border: 1px solid #b9c8bf; border-radius: .48rem; box-sizing: border-box; color: inherit; font: inherit; font-size: .75rem; padding: .52rem .58rem; width: 100%; }
 .cloud-panel-heading { align-items: center; display: flex; gap: .8rem; justify-content: space-between; }
+.cloud-panel-heading > * { min-width: 0; }
 .cloud-panel-heading h3 { margin-bottom: .15rem; }
 .cloud-panel-heading p { margin: 0; }
 .cloud-project-toolbar { align-items: center; display: flex; gap: .5rem; margin: .85rem 0; }

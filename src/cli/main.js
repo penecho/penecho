@@ -19,6 +19,7 @@ const PACKAGE_ROOT = path.resolve(__dirname, "../..");
 const PACKAGE_JSON = require("../../package.json");
 const DEFAULT_PORT = 3888;
 const DEFAULT_TIMEOUT_SECONDS = 180;
+const UAT_CLOUD_ORIGIN = "https://internaltest.penecho.ai";
 const MAX_COMMAND_OUTPUT = 1024 * 1024;
 const REQUIRED_ASSETS = [
   "server.js",
@@ -48,7 +49,7 @@ function parseTextOption(name, value) {
 }
 
 function parseArgs(argv = []) {
-  const result = { command: "start", provider: null, port: null, model: null, effort: null, config: null, help: false, version: false };
+  const result = { command: "start", provider: null, port: null, model: null, effort: null, config: null, uat: false, help: false, version: false };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
     if (argument === "doctor" || argument === "configure") {
@@ -86,6 +87,8 @@ function parseArgs(argv = []) {
       result.config = parseTextOption("--config", argv[++index]);
     } else if (argument.startsWith("--config=")) {
       result.config = parseTextOption("--config", argument.slice("--config=".length));
+    } else if (argument === "--uat") {
+      result.uat = true;
     } else if (argument === "--help" || argument === "-h") {
       result.help = true;
     } else if (argument === "--version" || argument === "-v") {
@@ -96,6 +99,7 @@ function parseArgs(argv = []) {
       throw new Error(`Unknown command: ${argument}`);
     }
   }
+  if (result.uat && result.command !== "start") throw new Error("--uat is only supported when starting PenEcho.");
   return result;
 }
 
@@ -155,6 +159,11 @@ function resolveConfiguration(args, options = {}) {
       throw new Error("--model and --effort are only supported with Kimi, Codex, or Claude CLI mode.");
     }
     if (args.effort !== null) env.AI_EFFORT = args.effort;
+  }
+  if (args.uat) {
+    env.PENECHO_CLOUD_ENV = "uat";
+    env.PENECHO_CLOUD_ORIGIN = UAT_CLOUD_ORIGIN;
+    env.PENECHO_CLOUD_STATE_DIR = path.join(stateDir, "cloud-uat");
   }
   env.PENECHO_STATE_DIR = stateDir;
   return {
@@ -573,7 +582,10 @@ async function main(argv = process.argv.slice(2), options = {}) {
   catch (error) { errorOutput.write(`PenEcho: ${error.message}\nRun \`penecho --help\` for usage.\n`); return 1; }
   if (args.help) { output.write(helpText()); return 0; }
   if (args.version) { output.write(`${PACKAGE_JSON.version}\n`); return 0; }
-  if (args.command === "start") output.write(`PenEcho v${PACKAGE_JSON.version}\n`);
+  if (args.command === "start") {
+    output.write(`PenEcho v${PACKAGE_JSON.version}\n`);
+    if (args.uat) output.write(`PenEcho Cloud target: UAT (${UAT_CLOUD_ORIGIN})\n`);
+  }
   let configuration;
   try { configuration = resolveConfiguration(args, options); }
   catch (error) { errorOutput.write(`PenEcho configuration error: ${error.message}\n`); return 1; }

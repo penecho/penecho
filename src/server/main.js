@@ -37,9 +37,11 @@ const ROOT = path.resolve(__dirname, "../..");
 const PUBLIC = path.join(ROOT, "public");
 const PLUGIN_DIRECTORY = path.join(PUBLIC, "plugins");
 const STATE_DIRECTORY = process.env.PENECHO_STATE_DIR ? path.resolve(process.env.PENECHO_STATE_DIR) : null;
-const CLOUD_STATE_DIRECTORY = STATE_DIRECTORY || path.join(os.homedir(), ".penecho");
+const CLOUD_STATE_DIRECTORY = process.env.PENECHO_CLOUD_STATE_DIR
+  ? path.resolve(process.env.PENECHO_CLOUD_STATE_DIR)
+  : STATE_DIRECTORY || path.join(os.homedir(), ".penecho");
 const PENECHO_CLOUD_ENV = String(process.env.PENECHO_CLOUD_ENV || "prod").trim().toLowerCase() === "uat" ? "uat" : "prod";
-const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "http://127.0.0.1:18082" : "https://penecho.ai")).replace(/\/$/, "");
+const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "https://internaltest.penecho.ai" : "https://penecho.ai")).replace(/\/$/, "");
 const PRIVATE_PLUGIN_DIRECTORY = process.env.PENECHO_PRIVATE_PLUGIN_DIR
   ? path.resolve(process.env.PENECHO_PRIVATE_PLUGIN_DIR)
   : STATE_DIRECTORY

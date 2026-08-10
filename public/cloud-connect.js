@@ -10,7 +10,7 @@
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
   const requestedCommunityItem = new URLSearchParams(location.search).get("community");
-  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", kind:"widget", sort:"recommended", pricing:"all", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false };
+  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", kind:"widget", sort:"recommended", pricing:"all", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
 
   function cloudOrigin() {
     return configuredCloudOrigin.replace(/\/$/, "");
@@ -47,6 +47,37 @@
     return payload;
   }
 
+  async function apiImage(path) {
+    const response = await fetch(path, { headers:{ ...apiHeaders(false), accept:"image/webp" } });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || payload.message || `Cloud image request failed (HTTP ${response.status}).`);
+    }
+    const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+    if (contentType !== "image/webp") throw new Error("Cloud preview is not a WebP image.");
+    const blob = await response.blob();
+    if (!blob.size || blob.size > 4 * 1024 * 1024) throw new Error("Cloud preview has an invalid size.");
+    return URL.createObjectURL(blob);
+  }
+
+  function releaseCommunityPreviews() {
+    state.previewGeneration++;
+    for (const url of state.previewObjectUrls) URL.revokeObjectURL(url);
+    state.previewObjectUrls.clear();
+    return state.previewGeneration;
+  }
+
+  async function loadCommunityThumbnail(image, itemId, generation) {
+    try {
+      const objectUrl = await apiImage(`/api/cloud/community/${encodeURIComponent(itemId)}/thumbnail`);
+      if (generation !== state.previewGeneration || !image.isConnected) return URL.revokeObjectURL(objectUrl);
+      state.previewObjectUrls.add(objectUrl);
+      image.src = objectUrl;
+    } catch {
+      image.removeAttribute("src");
+    }
+  }
+
   function el(tag, attributes = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attributes)) {
@@ -60,6 +91,7 @@
   }
 
   function closeOverlay(overlay) {
+    releaseCommunityPreviews();
     overlay?.remove();
     cloudButton.setAttribute("aria-expanded", "false");
   }
@@ -282,12 +314,14 @@
     return panel;
   }
 
-  function itemCard(item, renderItems) {
+  function itemCard(item, renderItems, previewGeneration) {
     const card = el("article", { class:"cloud-item" });
+    const previewImage = el("img", { alt:`Preview of ${item.name}`, loading:"lazy" });
     card.append(el("button", { class:"cloud-item-preview", type:"button", "aria-label":`View the large screenshot for ${item.name}`, onclick:() => window.open(communityUrl(item), "_blank", "noopener") }, [
-      el("img", { src:`/api/cloud/community/${encodeURIComponent(item.id)}/thumbnail`, alt:`Preview of ${item.name}`, loading:"lazy" }),
+      previewImage,
       el("span", { text:item.kind === "widget" ? "Widget" : "Canvas" }),
     ]));
+    void loadCommunityThumbnail(previewImage, item.id, previewGeneration);
     const details = el("div", { class:"cloud-item-body" });
     details.append(el("span", { class:"cloud-item-kind", text:`${item.category} · ${item.author?.name || "PenEcho creator"}` }));
     details.append(el("h4", { text:item.name }));
@@ -373,9 +407,10 @@
       }
     }
     function renderItems() {
+      const previewGeneration = releaseCommunityPreviews();
       if (!state.items.length) return content.replaceChildren(el("div", { class:"cloud-empty", text:"Nothing here yet. Share the first useful building block." }));
       const grid = el("div", { class:"cloud-community-grid" });
-      for (const item of state.items) grid.append(itemCard(item, renderItems));
+      for (const item of state.items) grid.append(itemCard(item, renderItems, previewGeneration));
       content.replaceChildren(grid);
     }
     for (const [scope, label] of accountSignedIn() ? [["community", "Discover"], ["favorites", "Favorites"], ["shared", "My shares"]] : [["community", "Discover"]]) {
