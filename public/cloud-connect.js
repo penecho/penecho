@@ -182,7 +182,7 @@
     const panel = el("section", { class:"penecho-cloud-panel" });
     panel.append(el("h3", { text:"Link this device" }));
     if (!accountSignedIn()) {
-      panel.append(el("p", { text:"Sign in first, then use a one-time pairing key from Cloud. Linking lets Cloud send AI work to this local PenEcho without uploading API credentials." }));
+      panel.append(el("p", { text:"Sign in first, then use a one-time pairing key from Cloud. Linking makes this the one private host your signed-in browsers and apps can reach; API credentials stay here." }));
       return panel;
     }
     const device = state.status.device || {};
@@ -235,7 +235,7 @@
   function cloudProjectsPanel() {
     const panel = el("section", { class:"penecho-cloud-panel cloud-projects-panel" });
     panel.append(el("div", { class:"cloud-panel-heading" }, [
-      el("div", {}, [el("h3", { text:"Cloud Projects" }), el("p", { text:"Private, versioned Canvases available on every linked device." })]),
+      el("div", {}, [el("h3", { text:"Cloud Projects" }), el("p", { text:"Private, versioned Canvases available in every signed-in PenEcho app." })]),
       el("button", { class:"cloud-button primary", type:"button", text:"Save current Canvas", onclick:async () => {
         const bridge = window.PenEchoCloudProjects;
         if (!bridge?.openHistory) return window.alert("Cloud project saving is not ready yet.");

@@ -72,9 +72,9 @@
 .cloud-account-summary > div:last-child { min-width: 0; }
 .cloud-account-summary strong, .cloud-account-summary span { display: block; overflow-wrap: anywhere; }
 .cloud-account-summary span { color: var(--muted, #667081); font-size: .76rem; margin-top: .12rem; }
-.cloud-environment { align-items: center; background: color-mix(in srgb, #7da8dc 9%, var(--panel, #fff)); border: 1px solid var(--line, #d2d8e2); border-radius: .58rem; display: flex; gap: .5rem; margin: .55rem 0; min-width: 0; padding: .5rem .58rem; }
+.cloud-environment { align-items: flex-start; background: color-mix(in srgb, #7da8dc 9%, var(--panel, #fff)); border: 1px solid var(--line, #d2d8e2); border-radius: .58rem; display: flex; flex-direction: column; gap: .35rem; margin: .55rem 0; min-width: 0; padding: .5rem .58rem; }
 .cloud-environment span { background: #356fc2; border-radius: 999px; color: #fff; font-size: .61rem; font-weight: 800; padding: .19rem .38rem; text-transform: uppercase; }
-.cloud-environment code { color: var(--muted, #667081); font-size: .68rem; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.cloud-environment code { color: var(--muted, #667081); display: block; font-size: .65rem; line-height: 1.35; max-width: 100%; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .cloud-field { display: grid; gap: .32rem; margin: .7rem 0; }
 .cloud-field > span { color: var(--muted, #667081); font-size: .75rem; font-weight: 700; }
 .cloud-field input, .cloud-field select, .cloud-field textarea {
