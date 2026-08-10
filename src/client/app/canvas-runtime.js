@@ -1107,7 +1107,7 @@
     return { id:widget.id, title:widget.title };
   }
   function widgetHostUrl(manifest) {
-    const url = new URL("widget-host.html", location.href);
+    const url = new URL(canvasAssetUrl("widget-host.html"));
     if (url.hostname === "localhost") {
       url.hostname = "127.0.0.1";
       url.searchParams.set("parent-origin", location.origin);

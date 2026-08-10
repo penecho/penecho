@@ -880,6 +880,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function aiRequestHeaders(headers = {}) {
     return { ...authenticatedApiHeaders(headers), "X-PenEcho-Connection":selectedAiConnectionId() };
   }
+  function canvasAssetUrl(name) {
+    const base = window.PENECHO_CONFIG?.runtime === "cloud" ? new URL("/canvas/", location.origin) : location.href;
+    return new URL(name, base).href;
+  }
   const tiles = new Map(),
     state = {
       mode: "pen",
@@ -2594,7 +2598,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
     if (!pluginStylesPreview.getAttribute("src")) {
       pluginStylesPreviewReady = false;
-      pluginStylesPreview.src = new URL("widget-host.html", location.href).href;
+      pluginStylesPreview.src = canvasAssetUrl("widget-host.html");
     }
     sendPluginStylesPreview();
   }
