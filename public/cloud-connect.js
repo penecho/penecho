@@ -10,7 +10,7 @@
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
   const requestedCommunityItem = new URLSearchParams(location.search).get("community");
-  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", kind:"widget", sort:"recommended", pricing:"all", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
+  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", kind:"widget", sort:"recommended", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
 
   function cloudOrigin() {
     return configuredCloudOrigin.replace(/\/$/, "");
@@ -334,12 +334,12 @@
     for (const tag of item.tags || []) tags.append(el("span", { text:tag }));
     details.append(tags);
     details.append(el("div", { class:"cloud-item-meta" }, [
-      el("span", { text:`♡ ${Number(item.favoriteCount || 0)}` }),
-      el("span", { text:`↓ ${Number(item.downloadCount || 0)}` }),
-      el("span", { text:item.priceCredits ? `${item.priceCredits} credits` : "Free" }),
+      el("span", { text:`${Number(item.favoriteCount || 0)} favorites` }),
+      el("span", { text:`${Number(item.downloadCount || 0)} downloads` }),
+      el("span", { text:"Free to use" }),
     ]));
     const actions = el("div", { class:"cloud-item-actions" });
-    if (accountSignedIn()) actions.append(el("button", { class:"cloud-item-action", type:"button", text:item.isFavorite ? "★ Saved" : "☆ Favorite", onclick:async () => action(renderItems, async () => {
+    if (accountSignedIn()) actions.append(el("button", { class:"cloud-item-action", type:"button", text:item.isFavorite ? "Saved" : "Add to Favorites", onclick:async () => action(renderItems, async () => {
         const result = await api(`/api/cloud/community/${item.id}/favorite`, { method:item.isFavorite ? "DELETE" : "POST", ...(item.isFavorite ? {} : { body:"{}" }) });
         Object.assign(item, result.item || {});
       }) }));
@@ -350,14 +350,8 @@
       else { await copyText(url); window.alert("Public share link copied."); }
     } }));
     if (accountSignedIn()) {
-      const importText = item.canDownload ? (item.kind === "canvas" ? "Add Canvas" : "Add Widget") : `Redeem ${item.priceCredits}`;
+      const importText = item.kind === "canvas" ? "Add Canvas" : "Add Widget";
       actions.append(el("button", { class:"cloud-item-action primary", type:"button", text:importText, onclick:async () => action(renderItems, async () => {
-      if (!item.canDownload) {
-        if (!window.confirm(`Redeem “${item.name}” for ${item.priceCredits} credits? 80% rewards its creator.`)) return;
-        const result = await api(`/api/cloud/community/${item.id}/redeem`, { method:"POST", body:"{}" });
-        Object.assign(item, result.item || {}, { canDownload:true, isEntitled:true });
-        await refreshStatus(true).catch(() => {});
-      }
       const downloaded = await api(`/api/cloud/community/${item.id}/artifact`);
       if (item.kind === "widget") {
         if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error("This Canvas cannot import community Widgets yet.");
@@ -383,15 +377,11 @@
     const kindTabs = el("div", { class:"cloud-kind-tabs", role:"tablist", "aria-label":"Community content type" });
     const content = el("div");
     const category = el("select", {}, [el("option", { value:"", text:"All categories" }), ...CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) }))]);
-    const pricing = el("select", {}, [el("option", { value:"all", text:"Free + paid" }), el("option", { value:"free", text:"Free" }), el("option", { value:"paid", text:"Paid" })]);
-    pricing.value = state.pricing;
     const sort = el("select", {}, [
       el("option", { value:"recommended", text:"Recommended" }),
       el("option", { value:"newest", text:"Newest" }),
       el("option", { value:"downloads", text:"Most downloaded" }),
       el("option", { value:"favorites", text:"Most favorited" }),
-      el("option", { value:"price_low", text:"Price: low to high" }),
-      el("option", { value:"price_high", text:"Price: high to low" }),
     ]);
     sort.value = state.sort;
     const search = el("input", { type:"search", placeholder:"Search community" });
@@ -400,7 +390,7 @@
     async function load() {
       content.replaceChildren(el("div", { class:"cloud-message", text:"Loading community…" }));
       try {
-        const query = new URLSearchParams({ scope:state.scope, kind:state.kind, sort:sort.value, pricing:pricing.value });
+        const query = new URLSearchParams({ scope:state.scope, kind:state.kind, sort:sort.value });
         if (category.value) query.set("category", category.value);
         if (search.value.trim()) query.set("q", search.value.trim());
         const result = await api(`/api/cloud/community?${query}`);
@@ -437,9 +427,8 @@
     let searchTimer;
     search.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 300); });
     category.addEventListener("change", load);
-    pricing.addEventListener("change", () => { state.pricing = pricing.value; load(); });
     sort.addEventListener("change", () => { state.sort = sort.value; load(); });
-    panel.append(tabs, kindTabs, el("div", { class:"cloud-community-tools" }, [field("Category", category), field("Price", pricing), field("Sort by", sort), field("Search", search)]), content);
+    panel.append(tabs, kindTabs, el("div", { class:"cloud-community-tools" }, [field("Category", category), field("Sort by", sort), field("Search", search)]), content);
     queueMicrotask(load);
     return panel;
   }
@@ -490,17 +479,14 @@
     const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) })));
     category.value = "productivity";
     const tags = el("input", { type:"text", maxlength:"260", placeholder:"planning, dashboard, learning" }),tagCount=el("small", { class:"cloud-tag-count", text:"0 / 8 tags" });
-    const pricing = el("select", {}, [el("option", { value:"free", text:"Free · recommended" }),el("option", { value:"paid", text:"Paid with credits" })]),price=el("input", { type:"number", min:"1", max:"10000", step:"1", value:"50" }),priceField=field("Credit price",price);
-    priceField.hidden=true;
     const status = el("span", { class:"cloud-share-status", text:"Generating preview…" }),previewImage=el("img", { alt:`Automatic ${kind} share preview` }),previewMeta=el("span", { text:"WebP · validating content" }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
-    const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:"✨ Auto-fill with current AI", disabled:"" });
+    const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:"Auto-fill with current AI", disabled:"" });
     let artifact=null;
     function parsedTags(){return tags.value.split(",").map(value=>value.trim()).filter(Boolean).slice(0,8);}
     function refreshTagCount(){tagCount.textContent=`${parsedTags().length} / 8 tags`;}
     tags.addEventListener("input",refreshTagCount);
-    pricing.addEventListener("change",()=>{priceField.hidden=pricing.value!=="paid";});
-    shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho automatically captures this ${kind}; there is no image upload step. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a separate clear list thumbnail.` }),previewPanel);
-    shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), el("div", { class:"cloud-field-row" }, [field("Category", category), field("Pricing", pricing),priceField]),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
+    shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho automatically captures this ${kind}; there is no image upload step. Community launch shares are free to use. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a separate clear list thumbnail.` }),previewPanel);
+    shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), field("Category", category),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
     const publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish & favorite" : "Publish", onclick:async () => {
       publish.disabled = true;
       status.className = "cloud-share-status";
@@ -513,7 +499,6 @@
           description:description.value.trim(),
           category:category.value,
           tags:parsedTags(),
-          priceCredits:pricing.value==="paid"?Number(price.value||0):0,
           artifact,
         };
         if (!payload.name) throw new Error("Enter a name before publishing.");

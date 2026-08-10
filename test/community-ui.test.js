@@ -15,16 +15,17 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(html, /id="shareCanvasBtn"/);
   assert.match(cloud, /\["widget", "Widgets"/);
   assert.match(cloud, /\["canvas", "Canvases"/);
-  for (const sort of ["recommended", "newest", "downloads", "favorites", "price_low", "price_high"]) assert.match(cloud, new RegExp(`value:\"${sort}\"`));
-  for (const pricing of ["all", "free", "paid"]) assert.match(cloud, new RegExp(`value:\"${pricing}\"`));
+  for (const sort of ["recommended", "newest", "downloads", "favorites"]) assert.match(cloud, new RegExp(`value:\"${sort}\"`));
+  for (const removed of ["price_low", "price_high", "Free + paid", "Paid with credits", "Redeem ", "80% rewards"]) assert.doesNotMatch(cloud, new RegExp(removed));
   assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(itemId\)\}\/thumbnail/);
   assert.match(cloud, /async function apiImage/);
   assert.match(cloud, /x-penecho-session/);
   assert.match(cloud, /URL\.createObjectURL\(blob\)/);
   assert.doesNotMatch(cloud, /el\("img", \{ src:`\/api\/cloud\/community/);
-  assert.match(cloud, /priceCredits:pricing\.value==="paid"\?Number\(price\.value\|\|0\):0/);
+  assert.doesNotMatch(cloud, /priceCredits|Credit price|field\("Pricing"/);
   assert.match(cloud, /Auto-fill with current AI/);
   assert.match(cloud, /there is no image upload step/);
+  assert.match(cloud, /Community launch shares are free to use/);
   assert.match(cloud, /Browse every creation and open its large read-only screenshot/);
   assert.match(cloud, /Your public link is ready/);
   assert.match(cloud, /Cloud Projects/);
@@ -38,6 +39,8 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(css, /\.cloud-project-card/);
   assert.match(css, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(css, /overflow-wrap: anywhere/);
+  assert.match(html, /Share to Community · Coming soon/);
+  assert.doesNotMatch(html, /points-priced|Share for points|earn points/);
 });
 
 test("community artifacts have bounded WebP previews and import both Widgets and Canvases locally", () => {
@@ -54,4 +57,6 @@ test("community artifacts have bounded WebP previews and import both Widgets and
   assert.match(main, /PENECHO_CLOUD_ORIGIN/);
   assert.match(main, /https:\/\/internaltest\.penecho\.ai/);
   assert.match(main, /https:\/\/penecho\.ai/);
+  assert.match(app, /Free community plugins/);
+  assert.doesNotMatch(app, /points-priced|Share for points|earn points/);
 });
