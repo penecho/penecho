@@ -4140,6 +4140,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.communityOriginItemId ? { communityOriginItemId:widget.communityOriginItemId } : {}),
+      ...(widget.communityRootItemId ? { communityRootItemId:widget.communityRootItemId } : {}),
     }));
   }
   function recordWidgetsBefore() {
@@ -4170,6 +4172,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
     if (widgetType !== "diagram_source" && allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
     if (widgetType !== "diagram_source" && allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    const communityOriginItemId = typeof item.communityOriginItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityOriginItemId) ? item.communityOriginItemId : null,
+      communityRootItemId = typeof item.communityRootItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityRootItemId) ? item.communityRootItemId : null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
       widgetType,
@@ -4197,6 +4201,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hostOrigin: null,
       pending: false,
       runtimeDiagnostics: null,
+      communityOriginItemId,
+      communityRootItemId,
     };
   }
   function restoreWidgets(items) {
@@ -4236,7 +4242,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvas.width = canvas.height = 1;
     return { format:"penecho-widget", formatVersion:1, widget:serialized, ...communityImages };
   }
-  async function importCommunityWidgetArtifact(artifact) {
+  async function importCommunityWidgetArtifact(artifact, origin = null) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     if (state.widgetEdit) acceptWidgetEdit();
@@ -4247,6 +4253,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     await enableSnapshotWidgetPlugins([source]);
     const widget = widgetRecord(source);
     if (!widget) throw Error("The community Widget is not compatible with this PenEcho version.");
+    if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
+      widget.communityOriginItemId = origin.id;
+      widget.communityRootItemId = origin.rootItemId || origin.id;
+    }
     recordWidgetsBefore();
     state.widgets.push(widget);
     if (pluginEnabled(widget.pluginId)) mountWidget(widget);
@@ -8300,6 +8310,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         textBoxes,
         images,
         preview,
+        bundleExtensions:snapshotExtensionObject(state.currentSnapshotBundleExtensions),
+        manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
     };
     return { ...(await serverSnapshotPayload(item, tileEntries)), ...communityImages };
   }
@@ -8326,13 +8338,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(!response.ok)throw Error(body.error||`AI auto-fill failed (HTTP ${response.status}).`);
     return body.metadata;
   }
-  async function importCommunityCanvasArtifact(artifact) {
+  async function importCommunityCanvasArtifact(artifact, origin = null) {
     const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,
       item={ ...parsed.item,id,createdAt:stamp,updatedAt:stamp,name:String(parsed.item.name || "Community Canvas").slice(0,160),projectId:null };
+    if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
+      item.bundleExtensions = {
+        ...snapshotExtensionObject(item.bundleExtensions),
+        penechoCommunity:{ originItemId:origin.id, rootItemId:origin.rootItemId || origin.id },
+      };
+    }
     await saveDeviceSnapshot(item, parsed.tileEntries, null);
     await refreshSnapshots();
     await loadSnapshot(id, "device");
     return { id, name:item.name };
+  }
+
+  function communityLineageForArtifact(kind, artifact) {
+    const lineage = kind === "widget"
+      ? { originItemId:artifact?.widget?.communityOriginItemId, rootItemId:artifact?.widget?.communityRootItemId }
+      : artifact?.extensions?.penechoCommunity;
+    return lineage && /^[0-9a-f-]{36}$/i.test(String(lineage.originItemId || ""))
+      ? { parentItemId:lineage.originItemId, rootItemId:lineage.rootItemId || lineage.originItemId }
+      : null;
   }
   async function saveServerSnapshot(item, tileEntries, overwriteId) {
     const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {
@@ -8530,7 +8557,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         headers:authenticatedApiHeaders(),
       }),
       body = await snapshotApiResponse(response);
-    if (!body?.revision && !body?.bundle) return null;
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
       metadata = snapshotItems.find((item) => item.id === id);
@@ -8791,21 +8817,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(canvasId || ""))) throw Error("Invalid Cloud Canvas");
     setSnapshotLocation("cloud");
     await refreshSnapshots();
-    const metadata = snapshotItems.find((item) => item.id === canvasId);
-    if (!metadata) throw Error("Cloud Canvas not found");
-    if (!metadata.currentRevisionId) {
-      startBlankCanvas();
-      setSnapshotLocation("cloud");
-      state.currentSnapshotId = metadata.id;
-      state.currentSnapshotName = metadata.name || "Untitled Canvas";
-      state.currentSnapshotLocation = "cloud";
-      state.currentSnapshotProjectId = metadata.projectId || null;
-      state.currentSnapshotRevisionId = null;
-      renderSnapshotList();
-      updateNewCanvasDialog();
-      setStatusKey("snapshotLoaded");
-      return true;
-    }
     return requestLoadSnapshot(canvasId, "cloud");
   }
   function discardCanvasTransition() {
@@ -13866,6 +13877,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     suggestMetadata:suggestCommunityMetadata,
     importWidget:importCommunityWidgetArtifact,
     importCanvas:importCommunityCanvasArtifact,
+    lineageForArtifact:communityLineageForArtifact,
   });
   window.PenEchoCloudProjects = Object.freeze({
     openHistory:openCloudProjectHistory,

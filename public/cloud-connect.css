@@ -155,6 +155,10 @@
 .cloud-community-guest { background: #f0f6ff; border-radius: .6rem; padding: .58rem .65rem; }
 .cloud-share-actions { align-items: center; display: flex; gap: .55rem; justify-content: flex-end; margin-top: .9rem; }
 .cloud-share-status { color: var(--muted, #667081); font-size: .76rem; margin-right: auto; }
+.cloud-lineage-notice { background: color-mix(in srgb, #e6f5ed 82%, var(--panel, #fff)); border: 1px solid #a8d3bb; border-radius: .68rem; color: #28724d; font-size: .76rem; line-height: 1.45; margin: .65rem 0 .2rem; padding: .65rem .72rem; }
+.cloud-publication-consent { align-items: flex-start; background: color-mix(in srgb, #fff8e7 76%, var(--panel, #fff)); border: 1px solid #e4cf9d; border-radius: .68rem; color: var(--muted, #667081); display: flex; font-size: .7rem; gap: .58rem; line-height: 1.5; margin-top: .8rem; overflow-wrap: anywhere; padding: .68rem .72rem; }
+.cloud-publication-consent input { flex: 0 0 auto; height: 1rem; margin: .12rem 0 0; width: 1rem; }
+.cloud-publication-consent a { color: #285e9e; font-weight: 750; }
 .cloud-public-link { background: linear-gradient(135deg, #edf5ff, #f8fbff); border: 1px solid #b8cee9; border-radius: .82rem; color: #285e9e; display: grid; gap: .2rem; margin-top: .8rem; padding: .78rem .85rem; text-decoration: none; }
 .cloud-public-link strong { font-size: .79rem; }
 .cloud-public-link span { color: #5b7393; font-size: .7rem; line-height: 1.4; }

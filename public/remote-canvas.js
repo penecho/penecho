@@ -2,8 +2,11 @@
 
 (() => {
   const canvasMatch = location.pathname.match(/^\/canvas\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  if (window.PENECHO_CONFIG?.runtime !== "cloud" || !canvasMatch) return;
-  const requestedCanvasId = canvasMatch[1];
+  const communityMatch = location.pathname.match(/^\/canvas\/community\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
+  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch)) return;
+  const requestedCanvasId = canvasMatch?.[1] || null;
+  const requestedCommunityItemId = communityMatch?.[1] || null;
+  const isCommunityCraft = Boolean(requestedCommunityItemId);
 
   const nativeFetch = window.fetch.bind(window);
   const bridgedPaths = [
@@ -63,6 +66,21 @@
     dashboard:"Link Device", projects:"Back to Cloud Projects", download:"Download PenEcho", retry:"Try again",
     connected:"Protected remote connection", unavailable:"No device is linked yet. Install PenEcho, then connect one main computer from Link Device.", opening:"Host online. Opening your Cloud Canvas…",
   };
+  if (isCommunityCraft) Object.assign(copy, zh ? {
+    eyebrow:"公开 Craft", checking:"正在连接你的 PenEcho 主机…", noHost:"连接一台 PenEcho 主机后继续创作",
+    failed:"暂时无法继续这个 Craft",
+    body:"PenEcho Cloud 只提供公开预览、身份验证和安全桥接；画布素材会导入到你连接的电脑，并始终在那里运行。云服务器不会运行画布。",
+    nodes:["公开 Craft", "PenEcho Cloud 桥接", "你的 PenEcho 主机"],
+    nodeDetails:["选择一个想法", "验证身份并中继", "导入并继续创作"],
+    projects:"返回 Explore", opening:"主机在线，正在导入这个 Craft…",
+  } : {
+    eyebrow:"Public Craft", checking:"Connecting to your PenEcho host…", noHost:"Connect one PenEcho host to take this further",
+    failed:"This Craft could not be continued right now",
+    body:"PenEcho Cloud provides the public preview, identity check, and protected bridge only. The artifact is imported into your linked computer and runs there; Cloud never runs the Canvas.",
+    nodes:["Public Craft", "PenEcho Cloud Bridge", "Your PenEcho host"],
+    nodeDetails:["Choose an idea", "Authenticates + relays", "Imports + continues locally"],
+    projects:"Back to Explore", opening:"Host online. Importing this Craft…",
+  });
 
   const gate = document.createElement("div");
   gate.className = "remote-canvas-gate";
@@ -88,11 +106,12 @@
 
   async function openRequestedCanvas() {
     const deadline = Date.now() + 15_000;
-    while (!window.PenEchoCloudProjects?.openCanvas) {
+    while (isCommunityCraft ? !window.PenEchoCommunityUI?.takeFurther : !window.PenEchoCloudProjects?.openCanvas) {
       if (Date.now() >= deadline) throw new Error("PenEcho Canvas did not finish loading.");
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    await window.PenEchoCloudProjects.openCanvas(requestedCanvasId);
+    if (isCommunityCraft) await window.PenEchoCommunityUI.takeFurther(requestedCommunityItemId);
+    else await window.PenEchoCloudProjects.openCanvas(requestedCanvasId);
   }
 
   async function connect() {
@@ -127,6 +146,10 @@
       title.textContent = copy.failed;
       detail.textContent = String(error?.message || error || copy.unavailable).slice(0, 500);
     }
+  }
+  if (isCommunityCraft) {
+    const back = gate.querySelector('.remote-canvas-actions a[href="/dashboard.html#projects"]');
+    if (back) back.href = "/community";
   }
   gate.querySelector("[data-remote-retry]").addEventListener("click", connect);
   void connect();

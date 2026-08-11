@@ -6,6 +6,7 @@
   if (!cloudButton || !shareCanvasButton) return;
 
   const CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other"];
+  const PUBLICATION_TERMS_VERSION = "2026-08-11";
   const sessionToken = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || "");
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
@@ -334,9 +335,9 @@
     for (const tag of item.tags || []) tags.append(el("span", { text:tag }));
     details.append(tags);
     details.append(el("div", { class:"cloud-item-meta" }, [
-      el("span", { text:`${Number(item.favoriteCount || 0)} favorites` }),
-      el("span", { text:`${Number(item.downloadCount || 0)} downloads` }),
-      el("span", { text:"Free to use" }),
+      el("span", { text:`${Number(item.forkCount || 0)} further` }),
+      el("span", { text:`${Number(item.favoriteCount || 0)} saved` }),
+      el("span", { text:item.generation ? `Step ${Number(item.generation) + 1}` : "First stroke" }),
     ]));
     const actions = el("div", { class:"cloud-item-actions" });
     if (accountSignedIn()) actions.append(el("button", { class:"cloud-item-action", type:"button", text:item.isFavorite ? "Saved" : "Add to Favorites", onclick:async () => action(renderItems, async () => {
@@ -349,21 +350,7 @@
       if (navigator.share) await navigator.share({ title:item.name, text:item.description || `Explore this ${item.kind} on PenEcho`, url }).catch((error) => { if (error?.name !== "AbortError") throw error; });
       else { await copyText(url); window.alert("Public share link copied."); }
     } }));
-    if (accountSignedIn()) {
-      const importText = item.kind === "canvas" ? "Add Canvas" : "Add Widget";
-      actions.append(el("button", { class:"cloud-item-action primary", type:"button", text:importText, onclick:async () => action(renderItems, async () => {
-      const downloaded = await api(`/api/cloud/community/${item.id}/artifact`);
-      if (item.kind === "widget") {
-        if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error("This Canvas cannot import community Widgets yet.");
-        await window.PenEchoCommunityCanvas.importWidget(downloaded.artifact);
-        closeOverlay(document.querySelector(".penecho-cloud-overlay"));
-      } else {
-        if (!window.PenEchoCommunityCanvas?.importCanvas) throw new Error("This PenEcho version cannot open community Canvases yet.");
-        await window.PenEchoCommunityCanvas.importCanvas(downloaded.artifact);
-        closeOverlay(document.querySelector(".penecho-cloud-overlay"));
-      }
-      }) }));
-    }
+    if (accountSignedIn() && item.takeFurtherUrl) actions.append(el("button", { class:"cloud-item-action primary", type:"button", text:"Take it further", onclick:async () => action(renderItems, () => takeFurther(item.id)) }));
     details.append(actions);
     card.append(details);
     return card;
@@ -371,8 +358,8 @@
 
   function communityPanel() {
     const panel = el("section", { class:"penecho-cloud-panel" });
-    panel.append(el("h3", { text:"Community library" }));
-    if (!accountSignedIn()) panel.append(el("p", { class:"cloud-community-guest", text:"Browse every creation and open its large read-only screenshot. Sign in to save Favorites or use it in a PenEcho app." }));
+    panel.append(el("h3", { text:"Explore Crafts" }));
+    if (!accountSignedIn()) panel.append(el("p", { class:"cloud-community-guest", text:"Browse public ideas and their lineage. Sign in to save one or take it further in PenEcho." }));
     const tabs = el("div", { class:"cloud-tabs" });
     const kindTabs = el("div", { class:"cloud-kind-tabs", role:"tablist", "aria-label":"Community content type" });
     const content = el("div");
@@ -402,7 +389,7 @@
     }
     function renderItems() {
       const previewGeneration = releaseCommunityPreviews();
-      if (!state.items.length) return content.replaceChildren(el("div", { class:"cloud-empty", text:"Nothing here yet. Share the first useful building block." }));
+      if (!state.items.length) return content.replaceChildren(el("div", { class:"cloud-empty", text:"Nothing here yet. One useful stroke can begin the first Craft." }));
       const grid = el("div", { class:"cloud-community-grid" });
       for (const item of state.items) grid.append(itemCard(item, renderItems, previewGeneration));
       content.replaceChildren(grid);
@@ -414,7 +401,7 @@
         load();
       } }));
     }
-    for (const [kind, label, description] of [["widget", "Widgets", "Reusable interactive building blocks"], ["canvas", "Canvases", "Complete canvases ready to remix"]]) {
+    for (const [kind, label, description] of [["widget", "Widgets", "Reusable building blocks to take further"], ["canvas", "Canvases", "Visual ideas with an open lineage"]]) {
       kindTabs.append(el("button", { class:`cloud-kind-tab${state.kind === kind ? " active" : ""}`, type:"button", role:"tab", "aria-selected":String(state.kind === kind), onclick:(event) => {
         state.kind = kind;
         for (const button of kindTabs.children) {
@@ -453,12 +440,12 @@
     function render() {
       const accountColumn = el("div", {}, [accountPanel(render), devicePanel(render)]);
       accountColumn.append(el("a", { class:"cloud-public-link", href:new URL("/community", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener" }, [
-        el("strong", { text:"Open Community on the web ↗" }),
-        el("span", { text:"Browse and share public links without opening the Canvas." }),
+        el("strong", { text:"Explore public Crafts ↗" }),
+        el("span", { text:"See how ideas grow, then continue one in PenEcho." }),
       ]));
       const workspace = el("div", { class:"cloud-workspace" });
       const sections = el("div", { class:"cloud-section-tabs", role:"tablist", "aria-label":"PenEcho Cloud area" });
-      for (const [section, label, description] of [["projects", "Cloud Projects", "Private cross-device work"], ["community", "Community", "Widgets and shared Canvases"]]) {
+      for (const [section, label, description] of [["projects", "Cloud Projects", "Private cross-device work"], ["community", "Explore", "Public Widgets and Canvas Crafts"]]) {
         sections.append(el("button", { class:`cloud-section-tab${state.section === section ? " active" : ""}`, type:"button", role:"tab", "aria-selected":String(state.section === section), onclick:() => { state.section = section; render(); } }, [el("strong", { text:label }), el("span", { text:description })]));
       }
       workspace.append(sections, state.section === "projects" ? cloudProjectsPanel() : communityPanel());
@@ -472,8 +459,8 @@
       openCloud();
       return;
     }
-    const title = kind === "widget" ? "Share this Widget" : "Share this Canvas", bridge=window.PenEchoCommunityCanvas;
-    const shell = dialogShell({ title, subtitle:"Review the automatic preview and publish in a few clicks.", share:true });
+    const title = kind === "widget" ? "Publish this Widget" : "Publish this Canvas", bridge=window.PenEchoCommunityCanvas;
+    const shell = dialogShell({ title, subtitle:"Add one clear note, review the automatic preview, and open this Craft for others to build on.", share:true });
     const name = el("input", { type:"text", maxlength:"160", placeholder:kind === "widget" ? "Widget name" : "Canvas name" });
     const description = el("textarea", { rows:"3", maxlength:"1200", placeholder:"A short, useful introduction" });
     const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) })));
@@ -481,11 +468,20 @@
     const tags = el("input", { type:"text", maxlength:"260", placeholder:"planning, dashboard, learning" }),tagCount=el("small", { class:"cloud-tag-count", text:"0 / 8 tags" });
     const status = el("span", { class:"cloud-share-status", text:"Generating preview…" }),previewImage=el("img", { alt:`Automatic ${kind} share preview` }),previewMeta=el("span", { text:"WebP · validating content" }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
     const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:"Auto-fill with current AI", disabled:"" });
-    let artifact=null;
+    const contribution = el("textarea", { rows:"3", maxlength:"500", placeholder:"What did you move forward?" });
+    const permission = el("input", { type:"checkbox" });
+    const permissionLabel = el("label", { class:"cloud-publication-consent" }, [permission, el("span", {}, [
+      document.createTextNode("I have the right to publish this work. Its visual and written content is shared under "),
+      el("a", { href:"https://creativecommons.org/licenses/by/4.0/", target:"_blank", rel:"noopener", text:"CC BY 4.0" }),
+      document.createTextNode(", embedded source under "),
+      el("a", { href:"https://opensource.org/license/mit", target:"_blank", rel:"noopener", text:"MIT" }),
+      document.createTextNode(". Others may Take it further with attribution; published versions and existing lineage cannot be withdrawn."),
+    ])]);
+    let artifact=null,lineage=null;
     function parsedTags(){return tags.value.split(",").map(value=>value.trim()).filter(Boolean).slice(0,8);}
     function refreshTagCount(){tagCount.textContent=`${parsedTags().length} / 8 tags`;}
     tags.addEventListener("input",refreshTagCount);
-    shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho automatically captures this ${kind}; there is no image upload step. Community launch shares are free to use. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a separate clear list thumbnail.` }),previewPanel);
+    shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho captures this ${kind} automatically; there is no image upload step. Every launch Craft is free. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a clear list thumbnail.` }),previewPanel);
     shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), field("Category", category),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
     const publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish & favorite" : "Publish", onclick:async () => {
       publish.disabled = true;
@@ -500,16 +496,22 @@
           category:category.value,
           tags:parsedTags(),
           artifact,
+          parentItemId:lineage?.parentItemId || null,
+          contributionNote:lineage ? contribution.value.trim() : "",
+          publicationTermsAccepted:permission.checked,
+          publicationTermsVersion:PUBLICATION_TERMS_VERSION,
         };
         if (!payload.name) throw new Error("Enter a name before publishing.");
-        status.textContent = "Uploading to your community library…";
+        if (lineage && !payload.contributionNote) throw new Error("Tell the next Crafter what you moved forward.");
+        if (!permission.checked) throw new Error("Confirm the publication rights and open licenses before publishing.");
+        status.textContent = lineage ? "Adding your step to the Craft lineage…" : "Publishing the first step of this Craft…";
         const result = await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
         if (favoriteAfterShare && result.item?.id) await api(`/api/cloud/community/${result.item.id}/favorite`, { method:"POST", body:"{}" });
         status.className = "cloud-share-status success";
-        status.textContent = favoriteAfterShare ? "Published and saved to Favorites." : "Published to the community.";
+        status.textContent = favoriteAfterShare ? "Craft published and saved." : "Craft published. Others can now take it further.";
         const url = communityUrl(result.item);
         const resultPanel = el("div", { class:"cloud-share-result" }, [
-          el("strong", { text:"Your public link is ready" }),
+          el("strong", { text:"Your Craft is now part of the public commons" }),
           el("input", { value:url, readonly:"", "aria-label":"Public community link" }),
           el("div", { class:"cloud-button-row" }, [
             el("button", { class:"cloud-button", type:"button", text:"Copy link", onclick:async () => { await copyText(url); status.textContent = "Public link copied."; } }),
@@ -525,7 +527,7 @@
         publish.disabled = false;
       }
     } });
-    shell.body.append(el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:"Cancel", onclick:() => closeOverlay(shell.overlay) }), publish]));
+    shell.body.append(permissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:"Cancel", onclick:() => closeOverlay(shell.overlay) }), publish]));
     publish.disabled=true;
     autoFill.addEventListener("click",async()=>{
       autoFill.disabled=true;
@@ -547,6 +549,11 @@
       try{
         if(!bridge)throw new Error("The Canvas community bridge is not ready.");
         artifact=kind==="widget"?await bridge.widgetArtifact(widgetId):await bridge.canvasArtifact();
+        lineage=bridge.lineageForArtifact?.(kind,artifact)||null;
+        if(lineage){
+          shell.body.insertBefore(field("Your contribution to this Craft",contribution),permissionLabel);
+          shell.body.insertBefore(el("div", { class:"cloud-lineage-notice", text:"Building on a published Craft. The original attribution and this new step will stay connected." }),contribution.closest("label"));
+        }
         const preview=artifact.communityPreview,base64=preview?.dataBase64;
         if(!base64)throw new Error("The automatic preview was not created.");
         previewImage.src=`data:image/webp;base64,${base64}`;
@@ -555,12 +562,31 @@
         const suggestedName=kind==="widget"?artifact.widget?.title:artifact.name;
         if(!name.value.trim())name.value=String(suggestedName||`Untitled ${kind==="widget"?"Widget":"Canvas"}`).slice(0,160);
         if(!description.value.trim())description.value=kind==="widget"?"A reusable Widget for the PenEcho community.":"A reusable Canvas for the PenEcho community.";
-        publish.disabled=false;
+        publish.disabled=!permission.checked;
         autoFill.disabled=false;
         status.textContent="Preview ready.";
       }catch(error){previewPanel.classList.add("error");previewMeta.textContent=error.message||"Could not generate the preview.";status.className="cloud-share-status error";status.textContent="Sharing is unavailable until the preview is valid.";}
     });
+    permission.addEventListener("change",()=>{ publish.disabled=!artifact||!permission.checked; });
   }
+
+  async function takeFurther(itemId) {
+    await refreshStatus();
+    if (!accountSignedIn()) { openCloud(); throw new Error("Sign in to take this Craft further."); }
+    const downloaded = await api(`/api/cloud/community/${encodeURIComponent(itemId)}/artifact`);
+    const item = downloaded.item;
+    if (item?.kind === "widget") {
+      if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error("This PenEcho version cannot import community Widgets yet.");
+      await window.PenEchoCommunityCanvas.importWidget(downloaded.artifact, item);
+    } else if (item?.kind === "canvas") {
+      if (!window.PenEchoCommunityCanvas?.importCanvas) throw new Error("This PenEcho version cannot import community Canvases yet.");
+      await window.PenEchoCommunityCanvas.importCanvas(downloaded.artifact, item);
+    } else throw new Error("This Craft is not compatible with this PenEcho version.");
+    closeOverlay(document.querySelector(".penecho-cloud-overlay"));
+    return item;
+  }
+
+  window.PenEchoCommunityUI = Object.freeze({ takeFurther });
 
   cloudButton.addEventListener("click", openCloud);
   shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); shareDialog({ kind:"canvas" }); });

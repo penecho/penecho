@@ -990,6 +990,8 @@
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
       ...(widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
+      ...(widget.communityOriginItemId ? { communityOriginItemId:widget.communityOriginItemId } : {}),
+      ...(widget.communityRootItemId ? { communityRootItemId:widget.communityRootItemId } : {}),
     }));
   }
   function recordWidgetsBefore() {
@@ -1020,6 +1022,8 @@
     if (diagramKind.length > 80 || sourceFormat.length > 80 || frameworkVersion.length > 120) return null;
     if (widgetType !== "diagram_source" && allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
     if (widgetType !== "diagram_source" && allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
+    const communityOriginItemId = typeof item.communityOriginItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityOriginItemId) ? item.communityOriginItemId : null,
+      communityRootItemId = typeof item.communityRootItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityRootItemId) ? item.communityRootItemId : null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
       widgetType,
@@ -1047,6 +1051,8 @@
       hostOrigin: null,
       pending: false,
       runtimeDiagnostics: null,
+      communityOriginItemId,
+      communityRootItemId,
     };
   }
   function restoreWidgets(items) {
@@ -1086,7 +1092,7 @@
     canvas.width = canvas.height = 1;
     return { format:"penecho-widget", formatVersion:1, widget:serialized, ...communityImages };
   }
-  async function importCommunityWidgetArtifact(artifact) {
+  async function importCommunityWidgetArtifact(artifact, origin = null) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     if (state.widgetEdit) acceptWidgetEdit();
@@ -1097,6 +1103,10 @@
     await enableSnapshotWidgetPlugins([source]);
     const widget = widgetRecord(source);
     if (!widget) throw Error("The community Widget is not compatible with this PenEcho version.");
+    if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
+      widget.communityOriginItemId = origin.id;
+      widget.communityRootItemId = origin.rootItemId || origin.id;
+    }
     recordWidgetsBefore();
     state.widgets.push(widget);
     if (pluginEnabled(widget.pluginId)) mountWidget(widget);

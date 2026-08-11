@@ -648,6 +648,8 @@
         textBoxes,
         images,
         preview,
+        bundleExtensions:snapshotExtensionObject(state.currentSnapshotBundleExtensions),
+        manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
     };
     return { ...(await serverSnapshotPayload(item, tileEntries)), ...communityImages };
   }
@@ -674,13 +676,28 @@
     if(!response.ok)throw Error(body.error||`AI auto-fill failed (HTTP ${response.status}).`);
     return body.metadata;
   }
-  async function importCommunityCanvasArtifact(artifact) {
+  async function importCommunityCanvasArtifact(artifact, origin = null) {
     const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,
       item={ ...parsed.item,id,createdAt:stamp,updatedAt:stamp,name:String(parsed.item.name || "Community Canvas").slice(0,160),projectId:null };
+    if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
+      item.bundleExtensions = {
+        ...snapshotExtensionObject(item.bundleExtensions),
+        penechoCommunity:{ originItemId:origin.id, rootItemId:origin.rootItemId || origin.id },
+      };
+    }
     await saveDeviceSnapshot(item, parsed.tileEntries, null);
     await refreshSnapshots();
     await loadSnapshot(id, "device");
     return { id, name:item.name };
+  }
+
+  function communityLineageForArtifact(kind, artifact) {
+    const lineage = kind === "widget"
+      ? { originItemId:artifact?.widget?.communityOriginItemId, rootItemId:artifact?.widget?.communityRootItemId }
+      : artifact?.extensions?.penechoCommunity;
+    return lineage && /^[0-9a-f-]{36}$/i.test(String(lineage.originItemId || ""))
+      ? { parentItemId:lineage.originItemId, rootItemId:lineage.rootItemId || lineage.originItemId }
+      : null;
   }
   async function saveServerSnapshot(item, tileEntries, overwriteId) {
     const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {
