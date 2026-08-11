@@ -2077,7 +2077,7 @@ test("personal plugins use the writable desktop directory and remain fetchable",
 });
 
 test("community metadata uses the active local AI connection and validates the automatic WebP thumbnail", { timeout:20000 }, async () => {
-  const generated={name:"Solar System Learning Map",description:"A clear visual map for exploring planets and their relationships.",category:"education",tags:["solar system","planets","learning"]},
+  const generated={name:"Solar System Learning Map",description:"A clear visual map for exploring planets and their relationships.",category:"education",tags:["solar system","planets","learning"],continuationPrompt:"Which orbital relationship should the next Crafter explain?"},
     upstream=await startApiServer(JSON.stringify(generated)),running=await startServer(apiServerEnv(upstream.origin)),image=await sharp({create:{width:96,height:64,channels:4,background:{r:35,g:92,b:155,alpha:1}}}).webp({quality:80}).toBuffer(),
     payload={kind:"canvas",language:"en",preview:{contentType:"image/webp",width:96,height:64,dataBase64:image.toString("base64")},current:{name:"Map",description:"",category:"productivity",tags:[]},context:{title:"Map"}};
   try {
@@ -2086,7 +2086,7 @@ test("community metadata uses the active local AI connection and validates the a
     assert.deepEqual(body.metadata,generated);
     assert.equal(upstream.requests.length,1);
     const outbound=JSON.parse(upstream.requests[0]);
-    assert.match(outbound.messages[0].content,/marketplace metadata/);
+    assert.match(outbound.messages[0].content,/public Craft metadata/);
     assert.match(outbound.messages[1].content[1].image_url.url,/^data:image\/webp;base64,/);
     assert.doesNotMatch(JSON.stringify(outbound),/priceCredits|apiKey/);
 

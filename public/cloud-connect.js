@@ -6,12 +6,12 @@
   if (!cloudButton || !shareCanvasButton) return;
 
   const CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other"];
-  const PUBLICATION_TERMS_VERSION = "2026-08-11";
+  const PUBLICATION_TERMS_VERSION = "2026-08-12";
   const sessionToken = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || "");
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
   const requestedCommunityItem = new URLSearchParams(location.search).get("community");
-  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", kind:"widget", sort:"recommended", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
+  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", surface:"discover", kind:"widget", sort:"recommended", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
 
   function cloudOrigin() {
     return configuredCloudOrigin.replace(/\/$/, "");
@@ -377,7 +377,7 @@
     async function load() {
       content.replaceChildren(el("div", { class:"cloud-message", text:"Loading community…" }));
       try {
-        const query = new URLSearchParams({ scope:state.scope, kind:state.kind, sort:sort.value });
+        const query = new URLSearchParams({ scope:state.scope, surface:state.surface, kind:state.kind, sort:sort.value });
         if (category.value) query.set("category", category.value);
         if (search.value.trim()) query.set("q", search.value.trim());
         const result = await api(`/api/cloud/community?${query}`);
@@ -394,9 +394,10 @@
       for (const item of state.items) grid.append(itemCard(item, renderItems, previewGeneration));
       content.replaceChildren(grid);
     }
-    for (const [scope, label] of accountSignedIn() ? [["community", "Discover"], ["favorites", "Favorites"], ["shared", "My shares"]] : [["community", "Discover"]]) {
-      tabs.append(el("button", { class:`cloud-tab${state.scope === scope ? " active" : ""}`, type:"button", text:label, onclick:(event) => {
+    for (const [scope, surface, label] of accountSignedIn() ? [["community","discover","Discover"],["community","commons","Commons"],["community","archive","Archive"],["favorites","discover","Favorites"],["shared","discover","My shares"]] : [["community","discover","Discover"],["community","commons","Commons"],["community","archive","Archive"]]) {
+      tabs.append(el("button", { class:`cloud-tab${state.scope === scope && (scope!=="community"||state.surface===surface) ? " active" : ""}`, type:"button", text:label, onclick:(event) => {
         state.scope = scope;
+        state.surface = surface;
         for (const button of tabs.children) button.classList.toggle("active", button === event.currentTarget);
         load();
       } }));
@@ -459,8 +460,8 @@
       openCloud();
       return;
     }
-    const title = kind === "widget" ? "Publish this Widget" : "Publish this Canvas", bridge=window.PenEchoCommunityCanvas;
-    const shell = dialogShell({ title, subtitle:"Add one clear note, review the automatic preview, and open this Craft for others to build on.", share:true });
+    const title = "Preserve this moment", bridge=window.PenEchoCommunityCanvas;
+    const shell = dialogShell({ title, subtitle:"It does not need to be finished. It only needs to be worth understanding or taking further.", share:true });
     const name = el("input", { type:"text", maxlength:"160", placeholder:kind === "widget" ? "Widget name" : "Canvas name" });
     const description = el("textarea", { rows:"3", maxlength:"1200", placeholder:"A short, useful introduction" });
     const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) })));
@@ -469,29 +470,37 @@
     const status = el("span", { class:"cloud-share-status", text:"Generating preview…" }),previewImage=el("img", { alt:`Automatic ${kind} share preview` }),previewMeta=el("span", { text:"WebP · validating content" }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
     const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:"Auto-fill with current AI", disabled:"" });
     const contribution = el("textarea", { rows:"3", maxlength:"500", placeholder:"What did you move forward?" });
+    const continuation = el("textarea", { rows:"3", maxlength:"500", placeholder:"What question, detail, or direction should the next Crafter take further?" });
     const permission = el("input", { type:"checkbox" });
     const permissionLabel = el("label", { class:"cloud-publication-consent" }, [permission, el("span", {}, [
       document.createTextNode("I have the right to publish this work. Its visual and written content is shared under "),
-      el("a", { href:"https://creativecommons.org/licenses/by/4.0/", target:"_blank", rel:"noopener", text:"CC BY 4.0" }),
+      el("a", { href:"https://creativecommons.org/licenses/by-sa/4.0/", target:"_blank", rel:"noopener", text:"CC BY-SA 4.0" }),
       document.createTextNode(", embedded source under "),
       el("a", { href:"https://opensource.org/license/mit", target:"_blank", rel:"noopener", text:"MIT" }),
-      document.createTextNode(". Others may Take it further with attribution; published versions and existing lineage cannot be withdrawn."),
+      document.createTextNode(", and listing metadata under CC0. Others may Take it further with attribution and the same visual license; published versions and existing lineage cannot be withdrawn."),
+    ])]);
+    const trainingPermission=el("input", { type:"checkbox" });
+    const trainingPermissionLabel=el("label", { class:"cloud-publication-consent" }, [trainingPermission,el("span", {}, [
+      document.createTextNode("I separately allow PenEcho to use this public Craft to build, train, evaluate, improve, and commercialize PenEcho models and services under the "),
+      el("a", { href:new URL("/terms.html#public-craft-training",`${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:"Public Craft ML License" }),
+      document.createTextNode(". Private projects, drafts, Link Device traffic, API keys, and private model requests are not included."),
     ])]);
     let artifact=null,lineage=null,draftKey=null,publish=null;
     function parsedTags(){const seen=new Set();return tags.value.split(",").map(value=>value.trim()).filter(value=>{const key=value.toLocaleLowerCase();if(!value||seen.has(key))return false;seen.add(key);return true;});}
     function tagIssue(){const values=parsedTags();if(values.length>8)return "Use no more than 8 tags.";if(values.some(value=>value.length>32))return "Each tag must be 32 characters or fewer.";if(values.some(value=>!/^\p{L}[\p{L}\p{N} ._+-]*$/u.test(value)&&!/^\p{N}[\p{L}\p{N} ._+-]*$/u.test(value)))return "Tags must start with a letter or number.";return "";}
-    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!permission.checked||Boolean(tagIssue());}
+    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!permission.checked||!trainingPermission.checked||!continuation.value.trim()||Boolean(tagIssue());}
     function refreshTagCount(){const values=parsedTags(),issue=tagIssue();tagCount.textContent=issue||`${values.length} / 8 tags`;tagCount.classList.toggle("error",Boolean(issue));updatePublishAvailability();}
-    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value};}
+    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value,continuation:continuation.value};}
     function saveDraft(){if(!draftKey)return;try{sessionStorage.setItem(draftKey,JSON.stringify(draftPayload()));}catch{}}
-    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"productivity";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
+    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"productivity";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value=String(saved.continuation||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
     function clearDraft(){if(!draftKey)return;try{sessionStorage.removeItem(draftKey);}catch{}}
-    for(const input of [name,description,tags,contribution])input.addEventListener("input",saveDraft);
+    for(const input of [name,description,tags,contribution,continuation])input.addEventListener("input",()=>{saveDraft();updatePublishAvailability();});
     category.addEventListener("change",saveDraft);
     tags.addEventListener("input",refreshTagCount);
-    shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho captures this ${kind} automatically; there is no image upload step. Every launch Craft is free. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a clear list thumbnail.` }),previewPanel);
+    shell.body.append(el("div", { class:"cloud-share-note", text:`A rough sketch can be the first surviving record of a great idea. PenEcho captures this ${kind} automatically—no image upload—and preserves every attributed step. The validated WebP is at most 2048 × 2048 and 4 MB.` }),previewPanel);
     shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), field("Category", category),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
-    publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish & favorite" : "Publish", onclick:async () => {
+    shell.body.append(field("What should the next Crafter take further?",continuation));
+    publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish this stroke & save" : "Publish this stroke", onclick:async () => {
       publish.disabled = true;
       status.className = "cloud-share-status";
       status.textContent = "Validating and uploading…";
@@ -506,13 +515,18 @@
           artifact,
           parentItemId:lineage?.parentItemId || null,
           contributionNote:lineage ? contribution.value.trim() : "",
+          continuationPrompt:continuation.value.trim(),
           publicationTermsAccepted:permission.checked,
+          publicationRightsAccepted:permission.checked,
+          modelTrainingAccepted:trainingPermission.checked,
           publicationTermsVersion:PUBLICATION_TERMS_VERSION,
         };
         if (!payload.name) throw new Error("Enter a name before publishing.");
         if (tagIssue()) throw new Error(tagIssue());
         if (lineage && !payload.contributionNote) throw new Error("Tell the next Crafter what you moved forward.");
+        if (!payload.continuationPrompt) throw new Error("Tell the next Crafter what is worth taking further.");
         if (!permission.checked) throw new Error("Confirm the publication rights and open licenses before publishing.");
+        if (!trainingPermission.checked) throw new Error("Review and confirm the separate public model-training permission before publishing.");
         status.textContent = lineage ? "Adding your step to the Craft lineage…" : "Publishing the first step of this Craft…";
         const result = await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
         if (!result.item?.id) throw new Error("PenEcho Cloud did not return the published Craft.");
@@ -567,18 +581,19 @@
         publish.disabled = false;
       }
     } });
-    shell.body.append(permissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:"Cancel", onclick:() => closeOverlay(shell.overlay) }), publish]));
+    shell.body.append(permissionLabel,trainingPermissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:"Cancel", onclick:() => closeOverlay(shell.overlay) }), publish]));
     publish.disabled=true;
     autoFill.addEventListener("click",async()=>{
       autoFill.disabled=true;
       status.className="cloud-share-status";
       status.textContent="Asking your current AI to improve the listing…";
       try{
-        const metadata=await bridge.suggestMetadata({kind,artifact,current:{name:name.value,description:description.value,category:category.value,tags:parsedTags()}});
+        const metadata=await bridge.suggestMetadata({kind,artifact,current:{name:name.value,description:description.value,category:category.value,tags:parsedTags(),continuationPrompt:continuation.value}});
         name.value=metadata.name;
         description.value=metadata.description;
         category.value=CATEGORIES.includes(metadata.category)?metadata.category:"productivity";
         tags.value=(metadata.tags||[]).slice(0,8).join(", ");
+        continuation.value=String(metadata.continuationPrompt||continuation.value).slice(0,500);
         refreshTagCount();
         saveDraft();
         status.className="cloud-share-status success";
@@ -613,6 +628,7 @@
       }catch(error){previewPanel.classList.add("error");previewMeta.textContent=error.message||"Could not generate the preview.";status.className="cloud-share-status error";status.textContent="Sharing is unavailable until the preview is valid.";}
     });
     permission.addEventListener("change",updatePublishAvailability);
+    trainingPermission.addEventListener("change",updatePublishAvailability);
   }
 
   async function takeFurther(itemId) {

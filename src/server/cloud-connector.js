@@ -517,7 +517,7 @@ class CloudConnector {
 
   communityThumbnail(itemId) { return this.communityImage(itemId,"thumbnail"); }
 
-  async shareCommunityItem({ kind, name, description = "", category, tags = [], artifact, parentItemId = null, contributionNote = "", publicationTermsAccepted = false, publicationTermsVersion = "" }) {
+  async shareCommunityItem({ kind, name, description = "", category, tags = [], artifact, parentItemId = null, contributionNote = "", continuationPrompt = "", publicationTermsAccepted = false, publicationRightsAccepted = false, modelTrainingAccepted = false, publicationTermsVersion = "" }) {
     if (!["widget", "canvas"].includes(kind) || !artifact || typeof artifact !== "object") throw new Error("The community share is invalid.");
     const bytes = Buffer.from(JSON.stringify(artifact));
     const maximum = kind === "widget" ? 10 * 1024 * 1024 : MAX_CLOUD_BUNDLE_BYTES;
@@ -533,7 +533,10 @@ class CloudConnector {
         priceCredits:0,
         parentItemId:parentItemId || null,
         contributionNote:String(contributionNote || "").trim(),
+        continuationPrompt:String(continuationPrompt || "").trim(),
         publicationTermsAccepted:publicationTermsAccepted === true,
+        publicationRightsAccepted:publicationRightsAccepted === true,
+        modelTrainingAccepted:modelTrainingAccepted === true,
         publicationTermsVersion:String(publicationTermsVersion || ""),
         formatVersion:Number(artifact.formatVersion || 1),
         artifact:{ sha256:sha256(bytes), sizeBytes:bytes.length, contentType:"application/json" },

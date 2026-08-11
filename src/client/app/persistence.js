@@ -669,6 +669,7 @@
           description:String(current.description||"").slice(0,1200),
           category:String(current.category||"productivity"),
           tags:Array.isArray(current.tags)?current.tags.slice(0,8):[],
+          continuationPrompt:String(current.continuationPrompt||"").slice(0,500),
         },
         context:kind==="widget"?{title:String(artifact?.widget?.title||"").slice(0,120),pluginId:String(artifact?.widget?.pluginId||"").slice(0,64)}:{title:String(artifact?.name||"").slice(0,160)},
       }),
