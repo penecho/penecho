@@ -11,7 +11,24 @@
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
   const requestedCommunityItem = new URLSearchParams(location.search).get("community");
-  const state = { status:null, section:requestedCommunityItem ? "community" : "projects", scope:"community", surface:"discover", kind:"widget", sort:"recommended", focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null, focusQuery:"", items:[], library:null, busy:false, previewGeneration:0, previewObjectUrls:new Set() };
+  const BROWSER_SIGN_IN_POLL_MS = 800;
+  const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
+  const state = {
+    status:null,
+    section:requestedCommunityItem ? "community" : "projects",
+    scope:"community",
+    surface:"discover",
+    kind:"widget",
+    sort:"recommended",
+    focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null,
+    focusQuery:"",
+    items:[],
+    library:null,
+    busy:false,
+    previewGeneration:0,
+    previewObjectUrls:new Set(),
+    browserSignIn:{ id:0, timer:0, poll:null, polling:false, active:false, expiresAt:0, popup:null, authorizationUrl:"", popupBlocked:false, tone:"", message:"" },
+  };
 
   function cloudOrigin() {
     return configuredCloudOrigin.replace(/\/$/, "");
@@ -138,6 +155,73 @@
     }
   }
 
+  function stopBrowserSignInWatch() {
+    state.browserSignIn.id++;
+    clearTimeout(state.browserSignIn.timer);
+    state.browserSignIn.timer = 0;
+    state.browserSignIn.poll = null;
+    state.browserSignIn.polling = false;
+    state.browserSignIn.active = false;
+    state.browserSignIn.expiresAt = 0;
+    state.browserSignIn.popup = null;
+    state.browserSignIn.authorizationUrl = "";
+    state.browserSignIn.popupBlocked = false;
+  }
+
+  function browserSignInMessage(message, tone = "") {
+    state.browserSignIn.message = message;
+    state.browserSignIn.tone = tone;
+  }
+
+  function startBrowserSignInWatch({ started, popup, render }) {
+    stopBrowserSignInWatch();
+    const id = state.browserSignIn.id;
+    const serverExpiry = Number(started?.expiresAt || 0);
+    state.browserSignIn.active = true;
+    state.browserSignIn.expiresAt = Math.min(
+      Number.isFinite(serverExpiry) && serverExpiry > Date.now() ? serverExpiry : Date.now() + BROWSER_SIGN_IN_TIMEOUT_MS,
+      Date.now() + BROWSER_SIGN_IN_TIMEOUT_MS,
+    );
+    state.browserSignIn.popup = popup || null;
+    state.browserSignIn.authorizationUrl = String(started?.authorizationUrl || "");
+    state.browserSignIn.popupBlocked = !popup;
+    browserSignInMessage(popup
+      ? "Complete sign-in in the browser. PenEcho will connect here automatically."
+      : "Your browser blocked the sign-in window. Select Open sign-in page below; PenEcho will still connect automatically.", popup ? "" : "error");
+
+    const renderIfOpen = () => {
+      if (document.querySelector(".penecho-cloud-overlay")) render?.();
+    };
+    const poll = async () => {
+      if (id !== state.browserSignIn.id || !state.browserSignIn.active || state.browserSignIn.polling) return;
+      state.browserSignIn.polling = true;
+      try {
+        await refreshStatus();
+        if (id !== state.browserSignIn.id) return;
+        if (accountSignedIn()) {
+          const popupWindow = state.browserSignIn.popup;
+          stopBrowserSignInWatch();
+          browserSignInMessage("Signed in. Your Cloud account is ready.", "success");
+          try { if (popupWindow && !popupWindow.closed) popupWindow.close(); } catch {}
+          renderIfOpen();
+          return;
+        }
+        if (Date.now() >= state.browserSignIn.expiresAt) {
+          stopBrowserSignInWatch();
+          browserSignInMessage("Browser sign-in expired. Select Sign in with browser to try again.", "error");
+          renderIfOpen();
+          return;
+        }
+        const delay = document.visibilityState === "visible" ? BROWSER_SIGN_IN_POLL_MS : 1500;
+        state.browserSignIn.timer = setTimeout(poll, delay);
+      } finally {
+        if (id === state.browserSignIn.id) state.browserSignIn.polling = false;
+      }
+    };
+    state.browserSignIn.poll = poll;
+    state.browserSignIn.timer = setTimeout(poll, BROWSER_SIGN_IN_POLL_MS);
+  }
+
   function accountPanel(render) {
     const panel = el("section", { class:"penecho-cloud-panel" });
     panel.append(el("h3", { text:"Cloud account" }));
@@ -156,17 +240,31 @@
 
     panel.append(el("div", { class:"cloud-environment" }, [el("span", { text:configuredCloudEnvironment === "uat" ? "UAT" : "Production" }), el("code", { text:cloudOrigin() })]));
     panel.append(el("p", { text:"Sign in locally. Your API keys stay on this device; private projects, community items and relayed requests use Cloud." }));
-    const message = el("div", { class:"cloud-message", text:"" });
-    const signIn = el("button", { class:"cloud-button primary", type:"button", text:"Sign in with browser", onclick:async () => {
+    const browserSignIn = state.browserSignIn;
+    const message = el("div", {
+      class:`cloud-message${browserSignIn.tone ? ` ${browserSignIn.tone}` : ""}`,
+      text:browserSignIn.message,
+      role:browserSignIn.tone === "error" ? "alert" : "status",
+      "aria-live":browserSignIn.tone === "error" ? "assertive" : "polite",
+    });
+    const signIn = el("button", { class:"cloud-button primary", type:"button", text:browserSignIn.active ? "Waiting for browser…" : "Sign in with browser", ...(browserSignIn.active ? { disabled:"" } : {}), onclick:async () => {
+      const popup = window.open("about:blank", "penecho-cloud-sign-in", "popup,width=760,height=760");
       await action(render, async () => {
-        const started = await api("/api/cloud/sign-in/start", { method:"POST", body:JSON.stringify({ origin:cloudOrigin() }) });
-        const popup = window.open(started.authorizationUrl, "penecho-cloud-sign-in", "popup,width=760,height=760");
-        message.className = "cloud-message";
-        message.textContent = popup ? "Complete sign-in in the Cloud window…" : "Open the Cloud authorization URL in a new tab, then return here.";
-        if (!popup) window.open(started.authorizationUrl, "_blank", "noopener");
+        try {
+          const started = await api("/api/cloud/sign-in/start", { method:"POST", body:JSON.stringify({ origin:cloudOrigin() }) });
+          if (popup) popup.location.replace(started.authorizationUrl);
+          startBrowserSignInWatch({ started, popup, render });
+        } catch (error) {
+          try { popup?.close(); } catch {}
+          throw error;
+        }
       });
     } });
-    panel.append(el("div", { class:"cloud-button-row" }, signIn), message);
+    const browserActions = el("div", { class:"cloud-button-row" }, signIn);
+    if (browserSignIn.active && browserSignIn.authorizationUrl) {
+      browserActions.append(el("a", { class:"cloud-button", href:browserSignIn.authorizationUrl, target:"_blank", rel:"noopener", text:browserSignIn.popupBlocked ? "Open sign-in page ↗" : "Open again ↗" }));
+    }
+    panel.append(browserActions, message);
     const details = el("details");
     details.append(el("summary", { text:"Use a one-time code instead" }));
     const code = el("input", { type:"text", autocomplete:"one-time-code", placeholder:"Paste local sign-in code" });
@@ -659,11 +757,24 @@
     shareDialog({ kind:"widget", widgetId, favoriteAfterShare:actionName === "favorite" });
   });
   window.addEventListener("message", async (event) => {
-    if (event.source && event.data?.type === "penecho:cloud-sign-in-result") {
-      await refreshStatus(true).catch(() => {});
+    if (event.origin !== location.origin || event.data?.type !== "penecho:cloud-sign-in-result") return;
+    await refreshStatus();
+    if (accountSignedIn()) {
+      stopBrowserSignInWatch();
+      browserSignInMessage("Signed in. Your Cloud account is ready.", "success");
       document.querySelector(".penecho-cloud-overlay")?.remove();
-      if (accountSignedIn()) openCloud();
+      openCloud();
+      return;
     }
+    if (event.data.ok) return;
+    stopBrowserSignInWatch();
+    browserSignInMessage("Cloud sign-in could not be completed. Please try again.", "error");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !state.browserSignIn.active || !state.browserSignIn.poll) return;
+    clearTimeout(state.browserSignIn.timer);
+    state.browserSignIn.timer = 0;
+    void state.browserSignIn.poll();
   });
   refreshStatus().then(() => { if (state.focusItem) openCloud(); });
 })();
