@@ -63,6 +63,9 @@ test("community artifacts have bounded WebP previews and import both Widgets and
   assert.match(app, /communityOriginItemId/);
   assert.match(app, /penechoCommunity/);
   assert.match(app, /lineageForArtifact:communityLineageForArtifact/);
+  assert.match(app, /markPublishedOrigin:markPublishedCommunityOrigin/);
+  assert.match(app, /communityOriginGeneration/);
+  assert.match(app, /persistCurrentCanvasCommunityOrigin/);
   assert.match(main, /PENECHO_CLOUD_ENV/);
   assert.match(main, /PENECHO_CLOUD_ORIGIN/);
   assert.match(main, /https:\/\/internaltest\.penecho\.ai/);

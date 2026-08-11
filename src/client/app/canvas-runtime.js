@@ -992,6 +992,8 @@
       ...(widget.widgetType !== "diagram_source" && widget.pluginId !== "image-search" && widget.copyText ? { copyText:widget.copyText, copyLabel:widget.copyLabel } : {}),
       ...(widget.communityOriginItemId ? { communityOriginItemId:widget.communityOriginItemId } : {}),
       ...(widget.communityRootItemId ? { communityRootItemId:widget.communityRootItemId } : {}),
+      ...(widget.communityOriginName ? { communityOriginName:widget.communityOriginName } : {}),
+      ...(Number.isInteger(widget.communityOriginGeneration) ? { communityOriginGeneration:widget.communityOriginGeneration } : {}),
     }));
   }
   function recordWidgetsBefore() {
@@ -1023,7 +1025,9 @@
     if (widgetType !== "diagram_source" && allowCopy && item.copyText !== undefined && (typeof item.copyText !== "string" || !item.copyText.trim() || item.copyText.length > MAX_WIDGET_COPY_TEXT_LENGTH)) return null;
     if (widgetType !== "diagram_source" && allowCopy && item.copyLabel !== undefined && (typeof item.copyLabel !== "string" || !item.copyLabel.trim() || item.copyLabel.length > 80)) return null;
     const communityOriginItemId = typeof item.communityOriginItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityOriginItemId) ? item.communityOriginItemId : null,
-      communityRootItemId = typeof item.communityRootItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityRootItemId) ? item.communityRootItemId : null;
+      communityRootItemId = typeof item.communityRootItemId === "string" && /^[0-9a-f-]{36}$/i.test(item.communityRootItemId) ? item.communityRootItemId : null,
+      communityOriginName = typeof item.communityOriginName === "string" ? item.communityOriginName.trim().slice(0, 160) : "",
+      communityOriginGeneration = Number.isInteger(item.communityOriginGeneration) && item.communityOriginGeneration >= 0 && item.communityOriginGeneration <= 100000 ? item.communityOriginGeneration : null;
     return {
       id: typeof item.id === "string" && /^widget-\d+$/.test(item.id) ? item.id : `widget-${state.nextWidgetId++}`,
       widgetType,
@@ -1053,6 +1057,8 @@
       runtimeDiagnostics: null,
       communityOriginItemId,
       communityRootItemId,
+      communityOriginName,
+      communityOriginGeneration,
     };
   }
   function restoreWidgets(items) {
@@ -1106,6 +1112,8 @@
     if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
       widget.communityOriginItemId = origin.id;
       widget.communityRootItemId = origin.rootItemId || origin.id;
+      widget.communityOriginName = String(origin.name || "").trim().slice(0, 160);
+      widget.communityOriginGeneration = Number.isInteger(origin.generation) && origin.generation >= 0 ? origin.generation : 0;
     }
     recordWidgetsBefore();
     state.widgets.push(widget);

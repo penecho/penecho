@@ -1242,6 +1242,7 @@
     importWidget:importCommunityWidgetArtifact,
     importCanvas:importCommunityCanvasArtifact,
     lineageForArtifact:communityLineageForArtifact,
+    markPublishedOrigin:markPublishedCommunityOrigin,
   });
   window.PenEchoCloudProjects = Object.freeze({
     openHistory:openCloudProjectHistory,

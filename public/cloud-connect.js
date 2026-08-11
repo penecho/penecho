@@ -477,13 +477,21 @@
       el("a", { href:"https://opensource.org/license/mit", target:"_blank", rel:"noopener", text:"MIT" }),
       document.createTextNode(". Others may Take it further with attribution; published versions and existing lineage cannot be withdrawn."),
     ])]);
-    let artifact=null,lineage=null;
-    function parsedTags(){return tags.value.split(",").map(value=>value.trim()).filter(Boolean).slice(0,8);}
-    function refreshTagCount(){tagCount.textContent=`${parsedTags().length} / 8 tags`;}
+    let artifact=null,lineage=null,draftKey=null,publish=null;
+    function parsedTags(){const seen=new Set();return tags.value.split(",").map(value=>value.trim()).filter(value=>{const key=value.toLocaleLowerCase();if(!value||seen.has(key))return false;seen.add(key);return true;});}
+    function tagIssue(){const values=parsedTags();if(values.length>8)return "Use no more than 8 tags.";if(values.some(value=>value.length>32))return "Each tag must be 32 characters or fewer.";if(values.some(value=>!/^\p{L}[\p{L}\p{N} ._+-]*$/u.test(value)&&!/^\p{N}[\p{L}\p{N} ._+-]*$/u.test(value)))return "Tags must start with a letter or number.";return "";}
+    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!permission.checked||Boolean(tagIssue());}
+    function refreshTagCount(){const values=parsedTags(),issue=tagIssue();tagCount.textContent=issue||`${values.length} / 8 tags`;tagCount.classList.toggle("error",Boolean(issue));updatePublishAvailability();}
+    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value};}
+    function saveDraft(){if(!draftKey)return;try{sessionStorage.setItem(draftKey,JSON.stringify(draftPayload()));}catch{}}
+    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"productivity";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
+    function clearDraft(){if(!draftKey)return;try{sessionStorage.removeItem(draftKey);}catch{}}
+    for(const input of [name,description,tags,contribution])input.addEventListener("input",saveDraft);
+    category.addEventListener("change",saveDraft);
     tags.addEventListener("input",refreshTagCount);
     shell.body.append(el("div", { class:"cloud-share-note", text:`PenEcho captures this ${kind} automatically; there is no image upload step. Every launch Craft is free. The full screenshot is validated WebP, at most 2048 × 2048 and 4 MB, with a clear list thumbnail.` }),previewPanel);
     shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), field("Category", category),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
-    const publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish & favorite" : "Publish", onclick:async () => {
+    publish = el("button", { class:"cloud-button primary", type:"button", text:favoriteAfterShare ? "Publish & favorite" : "Publish", onclick:async () => {
       publish.disabled = true;
       status.className = "cloud-share-status";
       status.textContent = "Validating and uploading…";
@@ -502,22 +510,54 @@
           publicationTermsVersion:PUBLICATION_TERMS_VERSION,
         };
         if (!payload.name) throw new Error("Enter a name before publishing.");
+        if (tagIssue()) throw new Error(tagIssue());
         if (lineage && !payload.contributionNote) throw new Error("Tell the next Crafter what you moved forward.");
         if (!permission.checked) throw new Error("Confirm the publication rights and open licenses before publishing.");
         status.textContent = lineage ? "Adding your step to the Craft lineage…" : "Publishing the first step of this Craft…";
         const result = await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
-        if (favoriteAfterShare && result.item?.id) await api(`/api/cloud/community/${result.item.id}/favorite`, { method:"POST", body:"{}" });
-        status.className = "cloud-share-status success";
-        status.textContent = favoriteAfterShare ? "Craft published and saved." : "Craft published. Others can now take it further.";
+        if (!result.item?.id) throw new Error("PenEcho Cloud did not return the published Craft.");
+        clearDraft();
+        let originError=null,favoriteError=null;
+        try { await bridge.markPublishedOrigin?.(kind, artifact, result.item); }
+        catch (error) { originError=error; }
+        if (favoriteAfterShare) {
+          try { await api(`/api/cloud/community/${result.item.id}/favorite`, { method:"POST", body:"{}" }); }
+          catch (error) { favoriteError=error; }
+        }
+        status.className = `cloud-share-status ${originError||favoriteError?"error":"success"}`;
+        status.textContent = originError
+          ? "Craft published safely, but its local continuation link needs attention below. Do not publish again."
+          : favoriteError
+            ? "Craft published safely. Saving it to Favorites can be retried from its public page."
+            : favoriteAfterShare ? "Craft published and saved." : "Craft published. Your local work now continues from this step.";
         const url = communityUrl(result.item);
+        const localSourceMessage=el("span", { text:originError
+          ? `The public Craft is safe. Retry linking this local ${kind === "widget" ? "Widget" : "Canvas"} so its next publish extends Step ${Number(result.item.generation || 0)+1}.`
+          : `${result.item.generation ? `Step ${Number(result.item.generation) + 1}` : "First stroke"} is now this local ${kind === "widget" ? "Widget's" : "Canvas's"} source. Your next publish will extend it, not create a sibling branch.` });
+        const resultActions=el("div", { class:"cloud-button-row" });
+        if(originError){
+          const retryOrigin=el("button", { class:"cloud-button", type:"button", text:"Retry local link", onclick:async()=>{
+            retryOrigin.disabled=true;
+            try{
+              await bridge.markPublishedOrigin?.(kind,artifact,result.item);
+              localSourceMessage.textContent=`Local source linked to Step ${Number(result.item.generation||0)+1}. Your next publish will extend it.`;
+              status.className="cloud-share-status success";
+              status.textContent="Craft published and local continuation link restored.";
+              retryOrigin.remove();
+            }catch(error){status.className="cloud-share-status error";status.textContent=error.message||"The local link still could not be restored.";retryOrigin.disabled=false;}
+          }});
+          resultActions.append(retryOrigin);
+        }
+        resultActions.append(
+          el("button", { class:"cloud-button", type:"button", text:"Copy link", onclick:async () => { await copyText(url); status.textContent = "Public link copied."; } }),
+          el("a", { class:"cloud-button", href:url, target:"_blank", rel:"noopener", text:"View public page ↗" }),
+          el("button", { class:"cloud-button primary", type:"button", text:"Done", onclick:() => closeOverlay(shell.overlay) }),
+        );
         const resultPanel = el("div", { class:"cloud-share-result" }, [
           el("strong", { text:"Your Craft is now part of the public commons" }),
+          localSourceMessage,
           el("input", { value:url, readonly:"", "aria-label":"Public community link" }),
-          el("div", { class:"cloud-button-row" }, [
-            el("button", { class:"cloud-button", type:"button", text:"Copy link", onclick:async () => { await copyText(url); status.textContent = "Public link copied."; } }),
-            el("a", { class:"cloud-button", href:url, target:"_blank", rel:"noopener", text:"View public page ↗" }),
-            el("button", { class:"cloud-button primary", type:"button", text:"Done", onclick:() => closeOverlay(shell.overlay) }),
-          ]),
+          resultActions,
         ]);
         shell.body.insertBefore(resultPanel, shell.body.lastElementChild);
         publish.remove();
@@ -540,6 +580,7 @@
         category.value=CATEGORIES.includes(metadata.category)?metadata.category:"productivity";
         tags.value=(metadata.tags||[]).slice(0,8).join(", ");
         refreshTagCount();
+        saveDraft();
         status.className="cloud-share-status success";
         status.textContent="Listing optimized. Review it, then publish.";
       }catch(error){status.className="cloud-share-status error";status.textContent=error.message||"AI auto-fill failed.";}
@@ -550,9 +591,12 @@
         if(!bridge)throw new Error("The Canvas community bridge is not ready.");
         artifact=kind==="widget"?await bridge.widgetArtifact(widgetId):await bridge.canvasArtifact();
         lineage=bridge.lineageForArtifact?.(kind,artifact)||null;
+        const draftIdentity=lineage?.parentItemId||(kind==="widget"?artifact.widget?.id:artifact.name)||"current";
+        draftKey=`penecho.community.publish.${kind}.${String(draftIdentity).slice(0,180)}`;
         if(lineage){
           shell.body.insertBefore(field("Your contribution to this Craft",contribution),permissionLabel);
-          shell.body.insertBefore(el("div", { class:"cloud-lineage-notice", text:"Building on a published Craft. The original attribution and this new step will stay connected." }),contribution.closest("label"));
+          const parentStep=Number.isInteger(lineage.parentGeneration)?`Step ${lineage.parentGeneration+1}`:"a published step", parentName=lineage.parentName?` “${lineage.parentName}”`:"";
+          shell.body.insertBefore(el("div", { class:"cloud-lineage-notice", text:`Building on ${parentStep}${parentName}. The original attribution and this new step will stay connected.` }),contribution.closest("label"));
         }
         const preview=artifact.communityPreview,base64=preview?.dataBase64;
         if(!base64)throw new Error("The automatic preview was not created.");
@@ -562,12 +606,13 @@
         const suggestedName=kind==="widget"?artifact.widget?.title:artifact.name;
         if(!name.value.trim())name.value=String(suggestedName||`Untitled ${kind==="widget"?"Widget":"Canvas"}`).slice(0,160);
         if(!description.value.trim())description.value=kind==="widget"?"A reusable Widget for the PenEcho community.":"A reusable Canvas for the PenEcho community.";
-        publish.disabled=!permission.checked;
+        const recovered=restoreDraft();
+        updatePublishAvailability();
         autoFill.disabled=false;
-        status.textContent="Preview ready.";
+        status.textContent=recovered?"Preview ready. Your unfinished listing was restored.":"Preview ready.";
       }catch(error){previewPanel.classList.add("error");previewMeta.textContent=error.message||"Could not generate the preview.";status.className="cloud-share-status error";status.textContent="Sharing is unavailable until the preview is valid.";}
     });
-    permission.addEventListener("change",()=>{ publish.disabled=!artifact||!permission.checked; });
+    permission.addEventListener("change",updatePublishAvailability);
   }
 
   async function takeFurther(itemId) {

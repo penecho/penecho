@@ -682,7 +682,12 @@
     if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
       item.bundleExtensions = {
         ...snapshotExtensionObject(item.bundleExtensions),
-        penechoCommunity:{ originItemId:origin.id, rootItemId:origin.rootItemId || origin.id },
+        penechoCommunity:{
+          originItemId:origin.id,
+          rootItemId:origin.rootItemId || origin.id,
+          originName:String(origin.name || "").trim().slice(0, 160),
+          originGeneration:Number.isInteger(origin.generation) && origin.generation >= 0 ? origin.generation : 0,
+        },
       };
     }
     await saveDeviceSnapshot(item, parsed.tileEntries, null);
@@ -693,11 +698,57 @@
 
   function communityLineageForArtifact(kind, artifact) {
     const lineage = kind === "widget"
-      ? { originItemId:artifact?.widget?.communityOriginItemId, rootItemId:artifact?.widget?.communityRootItemId }
+      ? {
+          originItemId:artifact?.widget?.communityOriginItemId,
+          rootItemId:artifact?.widget?.communityRootItemId,
+          originName:artifact?.widget?.communityOriginName,
+          originGeneration:artifact?.widget?.communityOriginGeneration,
+        }
       : artifact?.extensions?.penechoCommunity;
     return lineage && /^[0-9a-f-]{36}$/i.test(String(lineage.originItemId || ""))
-      ? { parentItemId:lineage.originItemId, rootItemId:lineage.rootItemId || lineage.originItemId }
+      ? {
+          parentItemId:lineage.originItemId,
+          rootItemId:lineage.rootItemId || lineage.originItemId,
+          parentName:String(lineage.originName || "").trim().slice(0, 160),
+          parentGeneration:Number.isInteger(lineage.originGeneration) && lineage.originGeneration >= 0 ? lineage.originGeneration : null,
+        }
       : null;
+  }
+  function publishedCommunityOrigin(item) {
+    if (!item || !/^[0-9a-f-]{36}$/i.test(String(item.id || ""))) throw Error("PenEcho Cloud returned an invalid Craft confirmation.");
+    return {
+      originItemId:item.id,
+      rootItemId:/^[0-9a-f-]{36}$/i.test(String(item.rootItemId || "")) ? item.rootItemId : item.id,
+      originName:String(item.name || "").trim().slice(0, 160),
+      originGeneration:Number.isInteger(item.generation) && item.generation >= 0 ? item.generation : 0,
+    };
+  }
+  async function persistCurrentCanvasCommunityOrigin(origin) {
+    state.currentSnapshotBundleExtensions = {
+      ...snapshotExtensionObject(state.currentSnapshotBundleExtensions),
+      penechoCommunity:origin,
+    };
+    if (state.currentSnapshotLocation !== "device" || !state.currentSnapshotId) return;
+    const db = await snapshotDb(), transaction = db.transaction(SNAPSHOT_STORE, "readwrite"), store = transaction.objectStore(SNAPSHOT_STORE), item = await requestResult(store.get(state.currentSnapshotId));
+    if (!item) return;
+    item.bundleExtensions = { ...snapshotExtensionObject(item.bundleExtensions), penechoCommunity:origin };
+    store.put(item);
+    await transactionDone(transaction);
+  }
+  async function markPublishedCommunityOrigin(kind, artifact, item) {
+    const origin = publishedCommunityOrigin(item);
+    if (kind === "widget") {
+      const widgetId = artifact?.widget?.id, widget = state.widgets.find((candidate) => candidate.id === widgetId);
+      if (!widget) throw Error("The published Widget is no longer on this Canvas.");
+      widget.communityOriginItemId = origin.originItemId;
+      widget.communityRootItemId = origin.rootItemId;
+      widget.communityOriginName = origin.originName;
+      widget.communityOriginGeneration = origin.originGeneration;
+      save();
+      requestRender();
+    } else if (kind === "canvas") await persistCurrentCanvasCommunityOrigin(origin);
+    else throw Error("Unsupported Craft type.");
+    return origin;
   }
   async function saveServerSnapshot(item, tileEntries, overwriteId) {
     const response = await fetch(overwriteId ? `/api/canvases/${encodeURIComponent(overwriteId)}` : "/api/canvases", {

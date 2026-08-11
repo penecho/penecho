@@ -151,6 +151,7 @@
 .cloud-ai-fill { color: #285e9e; flex: none; }
 .cloud-tags-input { display: grid; gap: .24rem; }
 .cloud-tag-count { color: var(--muted, #667081); font-size: .65rem; justify-self: end; }
+.cloud-tag-count.error { color: #ad3434; font-weight: 750; }
 .penecho-cloud-dialog.share .cloud-field-row { grid-template-columns: 1.15fr 1fr 1fr; }
 .cloud-community-guest { background: #f0f6ff; border-radius: .6rem; padding: .58rem .65rem; }
 .cloud-share-actions { align-items: center; display: flex; gap: .55rem; justify-content: flex-end; margin-top: .9rem; }
