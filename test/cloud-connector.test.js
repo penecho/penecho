@@ -264,6 +264,9 @@ test("browser account sign-in preserves the current LAN callback before storing 
     global.fetch = async (url, options = {}) => {
       assert.equal(url, "https://penecho.ai/api/v1/local-access/session");
       assert.equal(options.method, "POST");
+      const exchange = JSON.parse(options.body);
+      assert.equal(exchange.callback, callbackUrl.toString());
+      assert.equal(exchange.code, "one-time-browser-authorization-code");
       return new Response(JSON.stringify({
         accessToken: "browser-local-access-token",
         expiresAt: "2030-01-01T00:00:00.000Z",

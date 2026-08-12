@@ -1457,7 +1457,7 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(app, /currentSnapshotLocation:\s*null/);
   assert.match(app, /state\.currentSnapshotLocation !== state\.snapshotLocation/);
   const serverPayload = functionSource(app, "serverSnapshotPayload"), readServer = functionSource(app, "readServerSnapshot"), readBundle = functionSource(app, "readSnapshotBundle");
-  assert.match(serverPayload, /snapshotBundleAsset\("preview"[\s\S]*?snapshotBundleAsset\("tile"[\s\S]*?snapshotBundleAsset\("resource"[\s\S]*?snapshotBundleAsset\("widget"[\s\S]*?version:2[\s\S]*?bundleVersion:2[\s\S]*?mode:"snapshot"[\s\S]*?format:"penecho-raster-tiles"[\s\S]*?canvasSize:[\s\S]*?tileSize:TILE[\s\S]*?assets:\[\.\.\.tileAssets, \.\.\.widgetAssets, \.\.\.imageAssets, previewAsset\]/);
+  assert.match(serverPayload, /snapshotBundleAsset\("preview"[\s\S]*?snapshotBundleAsset\("tile"[\s\S]*?snapshotBundleAsset\("resource"[\s\S]*?snapshotBundleAsset\("widget"[\s\S]*?version:2[\s\S]*?bundleVersion:2[\s\S]*?mode:"snapshot"[\s\S]*?format:"penecho-raster-tiles"[\s\S]*?canvasSize:[\s\S]*?tileSize:TILE[\s\S]*?assets:\[\.\.\.snapshotPreservedAssets\(item\.preservedAssets\), \.\.\.tileAssets, \.\.\.widgetAssets, \.\.\.imageAssets, previewAsset\]/);
   assert.match(serverPayload, /extensions:snapshotExtensionObject\(item\.bundleExtensions\)[\s\S]*?extensions:snapshotExtensionObject\(item\.manifestExtensions\)/);
   assert.match(readServer, /stored\.version \?\? stored\.bundleVersion \?\? 1[\s\S]*?readSnapshotBundle\(stored\)/);
   assert.match(readBundle, /stored\.manifest\?\.format !== "penecho-raster-tiles"[\s\S]*?snapshotBundleAssetBlob\(previewAsset\)[\s\S]*?widgets,[\s\S]*?images:\[\.\.\.imageById\.values\(\)\]/);

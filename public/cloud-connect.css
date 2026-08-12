@@ -54,6 +54,7 @@
 .penecho-cloud-dialog header h2 { font-size: 1.1rem; margin: 0; }
 .penecho-cloud-dialog header p { color: var(--muted, #667081); font-size: .8rem; margin: .15rem 0 0; }
 .penecho-cloud-dialog .cloud-dialog-close { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 1.4rem; margin-left: auto; padding: .25rem .45rem; }
+.penecho-cloud-dialog :is(a,button,input,select,textarea):focus-visible { outline: 3px solid color-mix(in srgb, #4d8de2 82%, white); outline-offset: 2px; }
 .penecho-cloud-body { min-height: 0; overflow: auto; padding: 1rem 1.1rem 1.2rem; }
 .penecho-cloud-layout { display: grid; gap: 1rem; grid-template-columns: minmax(250px, .64fr) minmax(0, 1.7fr); }
 .penecho-cloud-layout > *, .penecho-cloud-panel > *, .cloud-workspace > * { min-width: 0; }
@@ -113,16 +114,16 @@
 .cloud-button.danger { color: #ad3434; }
 .cloud-button:disabled { cursor: wait; opacity: .55; }
 .cloud-empty, .cloud-message { color: var(--muted, #667081); font-size: .82rem; padding: 1.2rem .25rem; text-align: center; }
-.cloud-message.error { color: #ad3434; }
-.cloud-message.success { color: #28724d; }
-.cloud-share-note { background: #eef5ff; border-radius: .65rem; color: #3c5e8a; font-size: .78rem; line-height: 1.45; margin-bottom: .75rem; padding: .7rem .75rem; }
+.cloud-message.error { color: color-mix(in srgb, var(--ink, #202631) 78%, #e23c3c); font-weight: 700; }
+.cloud-message.success { color: color-mix(in srgb, var(--ink, #202631) 76%, #19a267); font-weight: 700; }
+.cloud-share-note { background: color-mix(in srgb, var(--panel, #fff) 88%, #5c94dd); border-radius: .65rem; color: var(--ink, #202631); font-size: .78rem; line-height: 1.45; margin-bottom: .75rem; padding: .7rem .75rem; }
 .cloud-share-preview { align-items: center; aspect-ratio: 16 / 9; background: linear-gradient(135deg, #e9eff7, #f8fafc); border: 1px solid var(--line, #d2d8e2); border-radius: .75rem; display: flex; justify-content: center; margin-bottom: .7rem; overflow: hidden; position: relative; }
 .cloud-share-preview img { height: 100%; object-fit: contain; width: 100%; }
 .cloud-share-preview img:not([src]) { display: none; }
 .cloud-share-preview span { background: rgb(20 34 52 / 76%); border-radius: 999px; bottom: .55rem; color: #fff; font-size: .68rem; left: .55rem; padding: .3rem .48rem; position: absolute; }
 .cloud-share-preview.error span { background: #a64141; }
 .cloud-share-ai-row { align-items: center; background: color-mix(in srgb, #e8f1ff 72%, var(--panel, #fff)); border: 1px solid #bfd2eb; border-radius: .68rem; display: flex; gap: .65rem; margin-bottom: .35rem; padding: .55rem; }
-.cloud-share-ai-row span { color: var(--muted, #667081); font-size: .7rem; line-height: 1.35; }
+.cloud-share-ai-row span { color: var(--ink, #202631); font-size: .7rem; line-height: 1.35; }
 .cloud-ai-fill { color: #285e9e; flex: none; }
 .cloud-tags-input { display: grid; gap: .24rem; }
 .cloud-tag-count { color: var(--muted, #667081); font-size: .65rem; justify-self: end; }
@@ -131,7 +132,7 @@
 .cloud-share-actions { align-items: center; display: flex; gap: .55rem; justify-content: flex-end; margin-top: .9rem; }
 .cloud-share-status { color: var(--muted, #667081); font-size: .76rem; margin-right: auto; }
 .cloud-lineage-notice { background: color-mix(in srgb, #e6f5ed 82%, var(--panel, #fff)); border: 1px solid #a8d3bb; border-radius: .68rem; color: #28724d; font-size: .76rem; line-height: 1.45; margin: .65rem 0 .2rem; padding: .65rem .72rem; }
-.cloud-publication-consent { align-items: flex-start; background: color-mix(in srgb, #fff8e7 76%, var(--panel, #fff)); border: 1px solid #e4cf9d; border-radius: .68rem; color: var(--muted, #667081); display: flex; font-size: .7rem; gap: .58rem; line-height: 1.5; margin-top: .8rem; overflow-wrap: anywhere; padding: .68rem .72rem; }
+.cloud-publication-consent { align-items: flex-start; background: color-mix(in srgb, var(--panel, #fff) 88%, #dcae43); border: 1px solid color-mix(in srgb, var(--line, #d2d8e2) 62%, #d5a23c); border-radius: .68rem; color: var(--ink, #202631); display: flex; font-size: .72rem; gap: .58rem; line-height: 1.5; margin-top: .8rem; overflow-wrap: anywhere; padding: .68rem .72rem; }
 .cloud-publication-consent input { flex: 0 0 auto; height: 1rem; margin: .12rem 0 0; width: 1rem; }
 .cloud-publication-consent a { color: #285e9e; font-weight: 750; }
 .cloud-share-result { background: color-mix(in srgb, #e6f5ed 78%, var(--panel, #fff)); border: 1px solid #a8d3bb; border-radius: .7rem; display: grid; gap: .5rem; margin-top: .8rem; padding: .75rem; }

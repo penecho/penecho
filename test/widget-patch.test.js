@@ -572,6 +572,10 @@ test("widget patch accepts standard zero-line insertion coordinates", () => {
   const appendPatch = "--- a/widget.html\n+++ b/widget.html\n@@ -1,0 +2 @@\n+<script>append()</script>\n",
     appendResult = commandFromWidgetPatch(patchCommand(appendPatch), htmlEdit({ html:"<!doctype html><main>Existing</main>", source:"", sourceFormat:"" }));
   assert.equal(appendResult.html, "<!doctype html><main>Existing</main>\n<script>append()</script>");
+
+  const middlePatch = "--- a/widget.html\n+++ b/widget.html\n@@ -1,0 +2 @@\n+<script>middle()</script>\n",
+    middleSource = htmlEdit({ html:"first\nsecond\nthird", source:"", sourceFormat:"" });
+  assert.equal(commandFromWidgetPatch(patchCommand(middlePatch), middleSource), null);
 });
 
 test("widget patch rejects location drift even when jsdiff could find matching text elsewhere", () => {

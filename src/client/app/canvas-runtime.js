@@ -1938,13 +1938,19 @@
     return target?.kind === "confirmed" ? animationPlayhead(target.animation, now) : playbackPlayhead(target.scene, target.playback, now);
   }
   function serializedAnimations(now = performance.now()) {
-    return state.animations.map((animation) => ({
+    const current = state.animations.map((animation) => ({
       id: animation.id,
       rendererVersion: 1,
       transform: animationBox(animation),
       scene: ANIMATION.serialize(animation.scene),
       playback: { playheadMs: animationPlayhead(animation, now), paused: Boolean(animation.paused) },
     }));
+    if (current.length) return current;
+    try {
+      return JSON.parse(JSON.stringify(state.preservedSnapshotAnimations || []));
+    } catch {
+      return [];
+    }
   }
   function restoreAnimations(items) {
     clearHandToolbarTargets("animation");
@@ -1952,8 +1958,13 @@
     state.selectedAnimationId = null;
     state.animationEdit = null;
     hideAnimationControls();
-    // Legacy declarative animation scenes are intentionally no longer loaded.
-    // Keeping this tolerant hook lets snapshots from older releases open silently.
+    // Legacy declarative scenes are not executed by the current renderer, but they
+    // remain opaque round-trip data so loading and re-saving never destroys them.
+    try {
+      state.preservedSnapshotAnimations = JSON.parse(JSON.stringify(Array.isArray(items) ? items : []));
+    } catch {
+      state.preservedSnapshotAnimations = [];
+    }
     requestAnimationLayerRender();
   }
   function recordAnimationsBefore() {

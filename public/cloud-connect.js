@@ -71,14 +71,22 @@
     return node;
   }
 
+  function focusableElements(dialog) {
+    return [...dialog.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+      .filter((node) => !node.hidden && node.getClientRects().length);
+  }
+
   function closeOverlay(overlay) {
     stopCloudStatusWatch();
+    const restoreFocus = overlay?._restoreFocus;
     overlay?.remove();
     cloudButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus?.isConnected) restoreFocus.focus({ preventScroll:true });
   }
 
   function dialogShell({ title, subtitle = "", share = false }) {
     const overlay = el("div", { class:"penecho-cloud-overlay" });
+    overlay._restoreFocus = document.activeElement;
     const dialog = el("section", { class:`penecho-cloud-dialog${share ? " share" : ""}`, role:"dialog", "aria-modal":"true", "aria-label":title });
     const close = el("button", { class:"cloud-dialog-close", type:"button", text:"×", "aria-label":"Close", onclick:() => closeOverlay(overlay) });
     const heading = el("div", {}, [el("h2", { text:title }), subtitle ? el("p", { text:subtitle }) : null]);
@@ -87,6 +95,19 @@
     dialog.append(body);
     overlay.append(dialog);
     overlay.addEventListener("mousedown", (event) => { if (event.target === overlay) closeOverlay(overlay); });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeOverlay(overlay);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(dialog);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
     document.body.append(overlay);
     close.focus();
     return { overlay, dialog, body };
@@ -476,7 +497,7 @@
     ])]);
     const trainingPermission=el("input", { type:"checkbox" });
     const trainingPermissionLabel=el("label", { class:"cloud-publication-consent" }, [trainingPermission,el("span", {}, [
-      document.createTextNode("I separately allow PenEcho to use this public Craft to build, train, evaluate, improve, and commercialize PenEcho models and services under the "),
+      document.createTextNode("I understand this is required to Publish. I allow PenEcho to use this public Craft to build, train, evaluate, improve, and commercialize PenEcho models and services under the "),
       el("a", { href:new URL("/terms.html#public-craft-training",`${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:"Public Craft ML License" }),
       document.createTextNode(". Private projects, drafts, Link Device traffic, API keys, and private model requests are not included."),
     ])]);
@@ -521,7 +542,7 @@
         if (lineage && !payload.contributionNote) throw new Error("Tell the next Crafter what you moved forward.");
         if (!payload.continuationPrompt) throw new Error("Tell the next Crafter what is worth taking further.");
         if (!permission.checked) throw new Error("Confirm the publication rights and open licenses before publishing.");
-        if (!trainingPermission.checked) throw new Error("Review and confirm the separate public model-training permission before publishing.");
+        if (!trainingPermission.checked) throw new Error("Confirm the required public model-training permission before publishing.");
         status.textContent = lineage ? "Adding your step to the Craft lineage…" : "Publishing the first step of this Craft…";
         const result = await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
         if (!result.item?.id) throw new Error("PenEcho Cloud did not return the published Craft.");

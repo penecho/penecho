@@ -9,9 +9,8 @@ const PROJECT_ID = "project-[a-zA-Z0-9-]{8,64}";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 
 const ROUTES = [
-  { pattern:/^\/api\/settings$/, methods:new Set(["GET", "POST"]) },
-  { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET", "POST"]) },
-  { pattern:/^\/api\/settings\/connections\/test$/, methods:new Set(["POST"]) },
+  { pattern:/^\/api\/settings$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/widget-fetch$/, methods:new Set(["GET", "POST"]), query:true },
   { pattern:/^\/api\/canvas-projects$/, methods:new Set(["GET", "POST"]) },
   { pattern:new RegExp(`^/api/canvas-projects/${PROJECT_ID}$`), methods:new Set(["DELETE"]) },
@@ -22,14 +21,12 @@ const ROUTES = [
   { pattern:/^\/api\/plugins\/[a-z0-9]+(?:-[a-z0-9]+)*$/, methods:new Set(["DELETE"]) },
   { pattern:/^\/api\/community\/metadata$/, methods:new Set(["POST"]) },
   { pattern:/^\/api\/cloud\/(?:status|account|library)$/, methods:new Set(["GET"]) },
-  { pattern:/^\/api\/cloud\/(?:sign-in\/start|sign-in|sign-out|pair|device\/(?:enable|disable|revoke))$/, methods:new Set(["POST"]) },
   { pattern:/^\/api\/cloud\/projects$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/projects/${UUID}$`, "i"), methods:new Set(["POST", "DELETE"]) },
   { pattern:new RegExp(`^/api/cloud/projects/${UUID}/save$`, "i"), methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/canvases/${UUID}$`, "i"), methods:new Set(["GET", "POST", "DELETE"]) },
   { pattern:new RegExp(`^/api/cloud/canvases/${UUID}/(?:save|thumbnail)$`, "i"), methods:new Set(["GET", "POST"]) },
   { pattern:/^\/api\/cloud\/community$/, methods:new Set(["GET"]), query:true },
-  { pattern:/^\/api\/cloud\/community\/share$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}$`, "i"), methods:new Set(["GET"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}/(?:thumbnail|preview|artifact)$`, "i"), methods:new Set(["GET"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}/favorite$`, "i"), methods:new Set(["POST", "DELETE"]) },

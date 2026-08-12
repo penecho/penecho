@@ -147,23 +147,24 @@ function coalescedPatchFileSections(patchText, widgetEdit) {
   return `${output.join("\n")}${finalNewline ? "\n" : ""}`;
 }
 
-function uniqueSequenceStart(lines, expected, minimumStart, matchesLine = (actual, submitted) => actual === submitted) {
+function uniqueSequenceStart(lines, expected, minimumStart, matchesLine = (actual, submitted) => actual === submitted, preferredStart = null) {
   const matches = [];
   for (let candidate = minimumStart; candidate + expected.length <= lines.length; candidate++) {
     if (expected.every((line, index) => matchesLine(lines[candidate + index], line))) matches.push(candidate);
-    if (matches.length > 1) return null;
   }
+  if (matches.length > 1 && Number.isSafeInteger(preferredStart) && matches.includes(preferredStart)) return preferredStart;
   return matches.length === 1 ? matches[0] : null;
 }
 
-function uniquelyLocatedPatchSequence(lines, entries, minimumStart) {
-  const expected = entries.map(entry => entry.content), exactStart = uniqueSequenceStart(lines, expected, minimumStart);
+function uniquelyLocatedPatchSequence(lines, entries, minimumStart, preferredStart = null) {
+  const expected = entries.map(entry => entry.content), exactStart = uniqueSequenceStart(lines, expected, minimumStart, undefined, preferredStart);
   if (exactStart !== null) return { start:exactStart, repaired:false };
   const omittedIndentStart = uniqueSequenceStart(
     lines,
     expected,
     minimumStart,
     (actual, submitted) => actual === submitted || actual === ` ${submitted}`,
+    preferredStart,
   );
   return omittedIndentStart === null ? null : { start:omittedIndentStart, repaired:true };
 }
@@ -295,7 +296,7 @@ function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
           oldStart = oldLines === 0 ? locatedStart : locatedStart + 1;
           newStart = locatedStart + lineOffset + (newLines === 0 ? 0 : 1);
         } else {
-          const located = uniquelyLocatedPatchSequence(sourceLines, currentExpectedEntries, previousEnd);
+          const located = uniquelyLocatedPatchSequence(sourceLines, currentExpectedEntries, previousEnd, declaredStart);
           if (!located) return "";
           locatedStart = located.start;
           if (located.repaired) {
@@ -313,7 +314,13 @@ function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
       } else {
         if (bareHeader) return "";
         locatedStart = oldLines === 0 ? oldStart : oldStart - 1;
-        if (locatedStart < previousEnd || locatedStart > sourceLines.length) return "";
+        const logicalEnd = sourceLines.at(-1) === "" ? sourceLines.length - 1 : sourceLines.length;
+        // A context-free insertion is safe only at an unambiguous file edge.
+        // Middle insertions must include surrounding source lines.
+        if (locatedStart < previousEnd || locatedStart > logicalEnd || ![0,logicalEnd].includes(locatedStart)) {
+          setPatchDiagnostic(diagnostics,"unanchored-insertion");
+          return "";
+        }
       }
       if (bareHeader) {
         oldStart = locatedStart + 1;

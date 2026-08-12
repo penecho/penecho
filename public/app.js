@@ -1029,6 +1029,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       currentSnapshotRevisionId: null,
       currentSnapshotBundleExtensions: {},
       currentSnapshotManifestExtensions: {},
+      currentSnapshotPreservedAssets: [],
+      preservedSnapshotAnimations: [],
       snapshotSavedRevision: 0,
       restoreGeneration: 0,
       recognitionGeneration: 0,
@@ -5100,13 +5102,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return target?.kind === "confirmed" ? animationPlayhead(target.animation, now) : playbackPlayhead(target.scene, target.playback, now);
   }
   function serializedAnimations(now = performance.now()) {
-    return state.animations.map((animation) => ({
+    const current = state.animations.map((animation) => ({
       id: animation.id,
       rendererVersion: 1,
       transform: animationBox(animation),
       scene: ANIMATION.serialize(animation.scene),
       playback: { playheadMs: animationPlayhead(animation, now), paused: Boolean(animation.paused) },
     }));
+    if (current.length) return current;
+    try {
+      return JSON.parse(JSON.stringify(state.preservedSnapshotAnimations || []));
+    } catch {
+      return [];
+    }
   }
   function restoreAnimations(items) {
     clearHandToolbarTargets("animation");
@@ -5114,8 +5122,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.selectedAnimationId = null;
     state.animationEdit = null;
     hideAnimationControls();
-    // Legacy declarative animation scenes are intentionally no longer loaded.
-    // Keeping this tolerant hook lets snapshots from older releases open silently.
+    // Legacy declarative scenes are not executed by the current renderer, but they
+    // remain opaque round-trip data so loading and re-saving never destroys them.
+    try {
+      state.preservedSnapshotAnimations = JSON.parse(JSON.stringify(Array.isArray(items) ? items : []));
+    } catch {
+      state.preservedSnapshotAnimations = [];
+    }
     requestAnimationLayerRender();
   }
   function recordAnimationsBefore() {
@@ -8360,10 +8373,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function snapshotExtensionObject(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     try {
-      const encoded = JSON.stringify(value);
-      return encoded.length <= 64 * 1024 ? JSON.parse(encoded) : {};
+      return JSON.parse(JSON.stringify(value));
     } catch {
       return {};
+    }
+  }
+  function snapshotPreservedAssets(value) {
+    if (!Array.isArray(value)) return [];
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return [];
     }
   }
   function snapshotBundleAssetBlob(asset) {
@@ -8400,13 +8420,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         savedAt:new Date(item.updatedAt).toISOString(),
         extensions:snapshotExtensionObject(item.manifestExtensions),
       },
-      assets:[...tileAssets, ...widgetAssets, ...imageAssets, previewAsset],
+      assets:[...snapshotPreservedAssets(item.preservedAssets), ...tileAssets, ...widgetAssets, ...imageAssets, previewAsset],
     };
   }
   async function communityCanvasArtifact(name = "") {
     if (selectionAIBusy()) throw Error(t(selectionAIStatusKey()));
     await finalizeCanvasForSnapshot();
-    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) throw Error(t("emptyCanvas"));
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) throw Error(t("emptyCanvas"));
     await prepareVisibleWidgetSnapshots(null, false);
     const previewCanvas=snapshotPreview(2048,1365),communityImages=await communityImagesForCanvas(previewCanvas,.78);
     previewCanvas.width=previewCanvas.height=1;
@@ -8578,11 +8598,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!SNAPSHOT_LOCATIONS.has(location)) throw Error("Invalid snapshot location");
     if (overwriteId && state.currentSnapshotLocation !== location) throw Error(t("noCurrentSnapshot"));
     await finalizeCanvasForSnapshot();
-    if (!tiles.size && !state.images.length && !state.textBoxes.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    if (!tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
       setStatusKey("emptyCanvas");
       return null;
     }
     await prepareVisibleWidgetSnapshots(null, false);
+    const savedUserRevision = state.userRevision;
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -8625,6 +8646,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         preview,
         bundleExtensions:snapshotExtensionObject(state.currentSnapshotBundleExtensions),
         manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
+        preservedAssets:snapshotPreservedAssets(state.currentSnapshotPreservedAssets),
       };
     if (overwriteId && !existing && overwriteId !== state.currentSnapshotId) throw Error(t("noCurrentSnapshot"));
     let storedId = id,
@@ -8643,7 +8665,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotRevisionId = storedRevisionId;
     state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
     state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
-    state.snapshotSavedRevision = state.userRevision;
+    state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
+    state.snapshotSavedRevision = savedUserRevision;
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     return storedId;
@@ -8671,7 +8694,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         ...asset.metadata,
         id:asset.metadata.resourceId,
         blob:snapshotBundleAssetBlob(asset),
-      }]));
+      }])),
+      knownAssets = new Set([previewAsset, ...tileAssets, ...imageAssets, ...widgetAssets]),
+      preservedAssets = stored.assets.filter((asset) => !knownAssets.has(asset));
     if (!previewAsset) throw Error("Canvas bundle has no preview");
     return {
       item:{
@@ -8687,6 +8712,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         projectId:stored.projectId || SERVER_DEFAULT_PROJECT_ID,
         bundleExtensions:snapshotExtensionObject(stored.extensions),
         manifestExtensions:snapshotExtensionObject(stored.manifest.extensions),
+        preservedAssets:snapshotPreservedAssets(preservedAssets),
         preview:snapshotBundleAssetBlob(previewAsset),
         widgets,
         images:[...imageById.values()],
@@ -8827,6 +8853,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.currentSnapshotRevisionId = location === "cloud" ? item.currentRevisionId || null : null;
       state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
+      state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
       state.snapshotSavedRevision = state.userRevision;
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
@@ -8883,6 +8910,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.currentSnapshotRevisionId = null;
       state.currentSnapshotBundleExtensions = {};
       state.currentSnapshotManifestExtensions = {};
+      state.currentSnapshotPreservedAssets = [];
     }
     await refreshSnapshots();
     setStatusKey("snapshotDeleted");
@@ -8947,6 +8975,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotRevisionId = null;
     state.currentSnapshotBundleExtensions = {};
     state.currentSnapshotManifestExtensions = {};
+    state.currentSnapshotPreservedAssets = [];
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -9000,7 +9029,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function canvasHasUnsavedChanges() {
-    const hasContent = tiles.size || state.images.length || state.textBoxes.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length;
+    const hasContent = tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length;
     return Boolean(hasContent && (state.dirty || state.userRevision !== state.snapshotSavedRevision));
   }
   function requestLoadSnapshot(id, location = state.snapshotLocation) {

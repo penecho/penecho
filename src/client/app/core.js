@@ -1028,6 +1028,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       currentSnapshotRevisionId: null,
       currentSnapshotBundleExtensions: {},
       currentSnapshotManifestExtensions: {},
+      currentSnapshotPreservedAssets: [],
+      preservedSnapshotAnimations: [],
       snapshotSavedRevision: 0,
       restoreGeneration: 0,
       recognitionGeneration: 0,

@@ -365,7 +365,7 @@ class CloudConnector {
     return response;
   }
 
-  async signIn({ origin, code }) {
+  async signIn({ origin, code, callback = null }) {
     const cloudOrigin = normalizedOrigin(origin);
     if (this.configuration?.origin && this.configuration.origin !== cloudOrigin && deviceToken(this.configuration)) {
       throw new Error("Disconnect or revoke the device linked to the current Cloud address before signing in to another address.");
@@ -374,7 +374,7 @@ class CloudConnector {
       method: "POST",
       redirect: "error",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, ...(callback ? { callback } : {}) }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.accessToken || !payload.account?.id) {
@@ -417,7 +417,7 @@ class CloudConnector {
     authorizationUrl.searchParams.set("local_callback", callback.toString());
     authorizationUrl.searchParams.set("local_client", "penecho-canvas");
     authorizationUrl.hash = "devices";
-    this.browserAuthorizations.set(state, { state, origin: cloudOrigin, callbackOrigin: callback.origin, expiresAt });
+    this.browserAuthorizations.set(state, { state, origin: cloudOrigin, callback:callback.toString(), callbackOrigin: callback.origin, expiresAt });
     return { authorizationUrl: authorizationUrl.toString(), expiresAt };
   }
 
@@ -436,7 +436,7 @@ class CloudConnector {
     const authorizationCode = String(code || "").trim();
     if (authorizationCode.length < 24 || authorizationCode.length > 256) throw Object.assign(new Error("The Cloud authorization code is invalid."), { status: 400 });
     this.browserAuthorizations.delete(stateValue);
-    return this.signIn({ origin: pending.origin, code: authorizationCode });
+    return this.signIn({ origin: pending.origin, code: authorizationCode, callback:pending.callback });
   }
 
   async refreshAccount({ force = false } = {}) {
@@ -659,8 +659,15 @@ class CloudConnector {
         bundle: { sha256: bundleHash, sizeBytes: bundleBytes.length, contentType: "application/json" },
       },
     });
-    await this.assetRequest(reservation.bundle.upload, { method: "PUT", bytes: bundleBytes });
-    return this.completeCloudCanvasRevision(canvasId, reservation.revisionId);
+    try {
+      await this.assetRequest(reservation.bundle.upload, { method: "PUT", bytes: bundleBytes });
+      return await this.completeCloudCanvasRevision(canvasId, reservation.revisionId);
+    } catch (error) {
+      // A best-effort cancel releases the Cloud quota reservation. If completion
+      // actually succeeded, Cloud treats this as a no-op and keeps the revision.
+      try { await this.cloudRequest(`/api/v1/device-sync/canvas-revisions/${encodeURIComponent(reservation.revisionId)}`, { method:"DELETE" }); } catch {}
+      throw error;
+    }
   }
 
   async createAndSaveCloudCanvas({ projectId, name, bundle }) {

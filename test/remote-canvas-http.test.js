@@ -11,6 +11,12 @@ test("Remote Canvas allows only reviewed local routes and methods", () => {
   assert.throws(() => remoteCanvasTarget("GET", "/api/settings?secret=1"), /not available/);
   assert.throws(() => remoteCanvasTarget("GET", "/api/local-access"), /not available/);
   assert.throws(() => remoteCanvasTarget("POST", "/api/ai/command"), /not available/);
+  for (const target of [
+    "/api/settings", "/api/settings/connections", "/api/settings/connections/test",
+    "/api/cloud/sign-in/start", "/api/cloud/sign-in", "/api/cloud/sign-out", "/api/cloud/pair",
+    "/api/cloud/device/enable", "/api/cloud/device/disable", "/api/cloud/device/revoke",
+    "/api/cloud/community/share",
+  ]) assert.throws(() => remoteCanvasTarget("POST", target), /not available/);
   assert.throws(() => remoteCanvasTarget("PATCH", "/api/canvases"), /method/);
   assert.throws(() => remoteCanvasTarget("GET", "https://example.com/api/canvases"), /invalid/);
 });
