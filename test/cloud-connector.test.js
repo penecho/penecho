@@ -597,6 +597,31 @@ test("relay reports connected only after the Cloud authentication hello", async 
   }
 });
 
+test("relay reports only a bounded non-sensitive model capability after authentication", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-capabilities-test-"));
+  const server = new WebSocketServer({ host:"127.0.0.1", port:0 });
+  let connector;
+  try {
+    await new Promise((resolve) => server.once("listening", resolve));
+    const address = server.address();
+    connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:`http://127.0.0.1:${address.port}`, capabilities:{ modelConfigured:true, provider:"must-not-leave-device" } });
+    connector.writeConfiguration({ origin:`http://127.0.0.1:${address.port}`, deviceToken:"capability-device-token", deviceId:"capability-device", deviceName:"Capability host", enabled:true });
+    const accepted = new Promise((resolve) => server.once("connection", resolve));
+    connector.start();
+    const remoteSocket = await accepted;
+    const capabilityMessage = new Promise((resolve) => remoteSocket.on("message", (raw) => {
+      const message = JSON.parse(raw.toString("utf8"));
+      if (message.type === "capabilities") resolve(message);
+    }));
+    remoteSocket.send(JSON.stringify({ type:"hello", protocol:1, deviceId:"capability-device", heartbeatSeconds:30 }));
+    assert.deepEqual(await capabilityMessage, { type:"capabilities", capabilities:{ modelConfigured:true } });
+  } finally {
+    connector?.close();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("a revoked relay credential becomes invalid without ever reporting connected", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-revoked-test-"));
   const server = new WebSocketServer({ host:"127.0.0.1", port:0 });

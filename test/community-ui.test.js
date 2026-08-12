@@ -52,6 +52,10 @@ test("Cloud Center keeps projects local to the app and sends Explore to PenEcho 
   assert.match(cloud, /document\.visibilityState === "visible"/);
   assert.match(cloud, /visibilitychange/);
   assert.match(cloud, /event\.origin !== location\.origin/);
+  assert.match(cloud, /startCloudStatusWatch\(shell\.overlay, render\)/);
+  assert.match(cloud, /CLOUD_STATUS_POLL_MS = 1500/);
+  assert.match(cloud, /Boolean\(device\.connected\)/);
+  assert.match(cloud, /if \(current !== previous\)/);
   assert.match(main, /window\.location\.replace\("\/"\)/);
   assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
   assert.match(css, /\.cloud-section-tab\[href\]/);

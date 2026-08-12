@@ -12,6 +12,7 @@
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
   const BROWSER_SIGN_IN_POLL_MS = 800;
   const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
+  const CLOUD_STATUS_POLL_MS = 1500;
   const state = {
     status:null,
     library:null,
@@ -71,6 +72,7 @@
   }
 
   function closeOverlay(overlay) {
+    stopCloudStatusWatch();
     overlay?.remove();
     cloudButton.setAttribute("aria-expanded", "false");
   }
@@ -110,6 +112,51 @@
       cloudButton.dataset.state = "signed-out";
       return null;
     }
+  }
+
+  let cloudStatusTimer = 0;
+  let cloudStatusPolling = false;
+
+  function cloudStatusSignature() {
+    const device = state.status?.device || {};
+    const account = state.status?.account || {};
+    return JSON.stringify([
+      Boolean(state.status?.accountSession?.signedIn),
+      account.name || "",
+      Number(account.credits || 0),
+      Boolean(device.configured),
+      Boolean(device.enabled),
+      Boolean(device.connected),
+      device.state || "",
+      device.id || "",
+    ]);
+  }
+
+  function stopCloudStatusWatch() {
+    clearTimeout(cloudStatusTimer);
+    cloudStatusTimer = 0;
+    cloudStatusPolling = false;
+  }
+
+  function startCloudStatusWatch(overlay, render) {
+    stopCloudStatusWatch();
+    let previous = cloudStatusSignature();
+    const poll = async () => {
+      if (!overlay.isConnected || cloudStatusPolling) return;
+      cloudStatusPolling = true;
+      try {
+        await refreshStatus();
+        const current = cloudStatusSignature();
+        if (current !== previous) {
+          previous = current;
+          render();
+        }
+      } finally {
+        cloudStatusPolling = false;
+        if (overlay.isConnected) cloudStatusTimer = setTimeout(poll, document.visibilityState === "visible" ? CLOUD_STATUS_POLL_MS : 5000);
+      }
+    };
+    cloudStatusTimer = setTimeout(poll, CLOUD_STATUS_POLL_MS);
   }
 
   function stopBrowserSignInWatch() {
@@ -400,6 +447,7 @@
       layout.replaceChildren(accountColumn, workspace);
     }
     render();
+    startCloudStatusWatch(shell.overlay, render);
   }
 
   function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {

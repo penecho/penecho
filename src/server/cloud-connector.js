@@ -133,13 +133,14 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, executeHttpRequest = null, logger = null, defaultOrigin = "https://penecho.ai" }) {
+  constructor({ stateDir, executeRequest, executeHttpRequest = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null }) {
     this.stateDir = stateDir;
     this.file = path.join(stateDir, "cloud-device.json");
     this.executeRequest = executeRequest;
     this.executeHttpRequest = executeHttpRequest;
     this.logger = logger;
     this.defaultOrigin = normalizedOrigin(defaultOrigin);
+    this.capabilities = Object.freeze({ modelConfigured:Boolean(capabilities?.modelConfigured) });
     this.configuration = this.readConfiguration();
     this.socket = null;
     this.heartbeatTimer = null;
@@ -878,6 +879,7 @@ class CloudConnector {
         this.lastSeenAt = Date.now();
         this.lastError = null;
         this.reconnectAttempt = 0;
+        socket.send(JSON.stringify({ type:"capabilities", capabilities:this.capabilities }));
         this.startHeartbeat(Number(message.heartbeatSeconds) || DEFAULT_HEARTBEAT_SECONDS);
         if (accountToken(this.configuration)) this.refreshAccount({ force: true }).catch((error) => this.log("account-refresh-failed", { error: safeMessage(error) }));
         this.log("connected", { deviceId: this.configuration.deviceId });
