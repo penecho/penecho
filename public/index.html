@@ -223,6 +223,11 @@
           <div id="historyNotice" class="history-notice" role="status" aria-live="polite" aria-atomic="true"></div>
         </div>
       </div>
+      <section id="historyActivity" class="history-activity" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <span class="history-activity-icon" aria-hidden="true"></span>
+        <div class="history-activity-copy"><strong id="historyActivityTitle"></strong><small id="historyActivityDetail"></small></div>
+        <progress id="historyActivityProgress" max="100"></progress>
+      </section>
       <div id="historyList" class="history-list" aria-live="polite"></div>
     </aside>
 

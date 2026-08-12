@@ -185,9 +185,14 @@
     state.selectedTextBoxId = null;
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_TEXT_BOXES) : []) {
       let record = null;
-      if (item?.image) {
-        record = textBoxHistoryRecord(item);
-      } else record = await renderedTextBoxRecord(item);
+      try {
+        if (item?.image) record = textBoxHistoryRecord(item);
+        else record = await renderedTextBoxRecord(item);
+      } catch {
+        // One invalid or unsupported text box must not make an otherwise valid
+        // saved Canvas impossible to restore.
+        continue;
+      }
       if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
       const numbered = /^text-box-(\d+)$/.exec(record.id);
       if (numbered) state.nextTextBoxId = Math.max(state.nextTextBoxId, Number(numbered[1]) + 1);

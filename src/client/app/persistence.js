@@ -3,6 +3,7 @@
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
     SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
+    SNAPSHOT_IMAGE_DECODE_BATCH_SIZE = 4,
     SNAPSHOT_LOCATIONS = new Set(["device", "server", "cloud"]),
     SERVER_DEFAULT_PROJECT_ID = "uncategorized",
     SERVER_ALL_PROJECTS_ID = "all",
@@ -14,6 +15,11 @@
     snapshotSaveInProgress = false,
     snapshotListGeneration = 0,
     historyNoticeTimer = 0,
+    historyActivityTimer = 0,
+    snapshotListInProgress = false,
+    snapshotLoadInProgress = false,
+    snapshotLoadingId = null,
+    snapshotItemsLocation = null,
     serverCanvasProjects = [],
     selectedServerProjectId = storedServerProjectId(),
     cloudCanvasProjects = [],
@@ -75,16 +81,24 @@
     }
     renderServerProjectUi();
   }
-  function setSnapshotLocation(location) {
+  function setSnapshotLocation(location, { refresh = true } = {}) {
     if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
       updateSnapshotLocationUi();
-      return;
+      return refresh ? refreshSnapshots() : Promise.resolve(false);
     }
     state.snapshotLocation = location;
     localStorage.setItem("penecho-snapshot-location", location);
+    snapshotItems = [];
+    snapshotItemsLocation = null;
+    if (location === "cloud") cloudCanvasProjects = [];
+    else if (location === "server") serverCanvasProjects = [];
     updateSnapshotLocationUi();
     updateNewCanvasDialog();
-    refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+    renderSnapshotListLoading(location);
+    if (!refresh) return Promise.resolve(true);
+    const request = refreshSnapshots();
+    request.catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+    return request;
   }
   function updateHistorySaveFeedbackLanguage() {
     const button = document.querySelector("#historySave"),
@@ -114,6 +128,49 @@
   function showHistoryNoticeKey(key, tone = "info", duration = 2800) {
     showHistoryNotice(t(key), tone, { messageKey: key, duration });
   }
+  function setHistoryActivity(text, detail = "", progress = null, tone = "busy") {
+    const activity = document.querySelector("#historyActivity"),
+      title = document.querySelector("#historyActivityTitle"),
+      description = document.querySelector("#historyActivityDetail"),
+      bar = document.querySelector("#historyActivityProgress");
+    if (!activity || !title || !description || !bar) return;
+    clearTimeout(historyActivityTimer);
+    activity.hidden = false;
+    activity.dataset.tone = tone;
+    title.textContent = text;
+    description.textContent = detail;
+    if (Number.isFinite(progress)) bar.value = Math.max(0, Math.min(100, progress));
+    else bar.removeAttribute("value");
+  }
+  function snapshotByteLabel(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  function hideHistoryActivity(delay = 0) {
+    clearTimeout(historyActivityTimer);
+    const hide = () => {
+      const activity = document.querySelector("#historyActivity");
+      if (activity && !snapshotListInProgress && !snapshotLoadInProgress) activity.hidden = true;
+    };
+    if (delay > 0) historyActivityTimer = setTimeout(hide, delay);
+    else hide();
+  }
+  function historyBusy() { return snapshotSaveInProgress || snapshotListInProgress || snapshotLoadInProgress; }
+  function updateHistoryReadControls() {
+    const busy = historyBusy(), panel = document.querySelector("#historyPanel");
+    if (panel) panel.setAttribute("aria-busy", String(snapshotListInProgress || snapshotLoadInProgress));
+    document.querySelectorAll('input[name="historyStorageLocation"], #historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave, #historyNew').forEach((control) => (control.disabled = busy));
+    document.querySelectorAll(".history-load, .history-delete, .history-move").forEach((control) => (control.disabled = busy));
+    document.querySelectorAll(".history-card").forEach((card) => card.classList.toggle("loading", snapshotLoadInProgress && card.dataset.snapshotId === snapshotLoadingId));
+    document.querySelectorAll(".history-load").forEach((button) => {
+      const active = snapshotLoadInProgress && button.dataset.snapshotId === snapshotLoadingId;
+      button.textContent = t(active ? "snapshotLoadingShort" : "loadSnapshot");
+      if (active) button.setAttribute("aria-busy", "true");
+      else button.removeAttribute("aria-busy");
+    });
+  }
   function setHistorySaveBusy(busy) {
     const button = document.querySelector("#historySave"),
       currentButton = document.querySelector("#historySaveCurrent"),
@@ -136,9 +193,8 @@
       saveButton.classList.toggle("is-saving", busy);
       saveButton.setAttribute("aria-busy", String(busy));
     }
-    document.querySelectorAll('input[name="historyStorageLocation"]').forEach((input) => (input.disabled = busy));
-    document.querySelectorAll("#serverProjectManager button, #serverProjectManager select").forEach((control) => (control.disabled = busy));
     if (!busy) renderServerProjectUi();
+    updateHistoryReadControls();
   }
   async function saveSnapshotFromHistory() {
     if (snapshotSaveInProgress) return;
@@ -299,9 +355,23 @@
       canvas.width = canvas.height = 1;
     }
   }
-  async function snapshotApiResponse(response) {
+  async function snapshotJsonBody(response, onProgress) {
+    if (typeof onProgress !== "function" || !response.body?.getReader) return response.json();
+    const total = Number(response.headers.get("content-length")) || 0,
+      reader = response.body.getReader(), chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      onProgress(total > 0 ? Math.min(1, received / total) : null, received, total);
+    }
+    return JSON.parse(await new Blob(chunks, { type:"application/json" }).text());
+  }
+  async function snapshotApiResponse(response, onProgress = null) {
     let body = null;
-    try { body = await response.json(); } catch {}
+    try { body = await snapshotJsonBody(response, onProgress); } catch {}
     if (!response.ok) {
       const error = Error(body?.error || `PenEcho server returned HTTP ${response.status}`);
       error.status = response.status;
@@ -515,9 +585,10 @@
   function waitForSnapshotTileFrame() {
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
-  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent) {
+  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent, onProgress = null) {
     const decodedTiles = new Map();
     try {
+      if (!tileEntries.length) onProgress?.(1);
       for (let start = 0; start < tileEntries.length; start += SNAPSHOT_TILE_DECODE_BATCH_SIZE) {
         const end = Math.min(tileEntries.length, start + SNAPSHOT_TILE_DECODE_BATCH_SIZE),
           batch = await Promise.all(tileEntries.slice(start, end).map(async ({ k, blob }) => ({ k, image:await imageFromBlob(blob) })));
@@ -535,6 +606,7 @@
           if (previous) previous.width = previous.height = 1;
           decodedTiles.set(k, canvas);
         }
+        onProgress?.(end / tileEntries.length);
         // Drop this batch's decoded image references before yielding. The tile
         // canvases retain the pixels needed for the atomic swap below.
         batch.length = 0;
@@ -551,6 +623,25 @@
       releaseSnapshotTileCanvases(decodedTiles);
       throw error;
     }
+  }
+  async function decodeSnapshotImagesInBatches(items, isCurrent, onProgress = null) {
+    const source = Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : [], decoded = [];
+    if (!source.length) {
+      onProgress?.(1);
+      return decoded;
+    }
+    for (let start = 0; start < source.length; start += SNAPSHOT_IMAGE_DECODE_BATCH_SIZE) {
+      const end = Math.min(source.length, start + SNAPSHOT_IMAGE_DECODE_BATCH_SIZE),
+        batch = (await Promise.all(source.slice(start, end).map(decodeStoredImage))).filter(Boolean);
+      if (!isCurrent()) return null;
+      decoded.push(...batch);
+      onProgress?.(end / source.length);
+      if (end < source.length) {
+        await waitForSnapshotTileFrame();
+        if (!isCurrent()) return null;
+      }
+    }
+    return decoded;
   }
   async function finalizeCanvasForSnapshot() {
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
@@ -916,13 +1007,13 @@
       tileEntries:tileAssets.map((asset) => ({ k:asset.metadata?.tileKey, blob:snapshotBundleAssetBlob(asset) })),
     };
   }
-  async function readServerSnapshot(id) {
+  async function readServerSnapshot(id, onProgress = null) {
     const response = await fetch(`/api/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
       }),
-      body = await snapshotApiResponse(response),
+      body = await snapshotApiResponse(response, onProgress),
       stored = body?.canvas;
     if (!stored) throw Error("PenEcho server returned an invalid canvas");
     const storedVersion = stored.version ?? stored.bundleVersion ?? 1;
@@ -940,13 +1031,13 @@
       tileEntries:stored.tiles.map(({ k, data }) => ({ k, blob:dataUrlBlob(data) })),
     };
   }
-  async function readCloudSnapshot(id) {
+  async function readCloudSnapshot(id, onProgress = null) {
     const response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
       }),
-      body = await snapshotApiResponse(response);
+      body = await snapshotApiResponse(response, onProgress);
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
       metadata = snapshotItems.find((item) => item.id === id);
@@ -960,72 +1051,111 @@
     };
     return parsed;
   }
-  async function readSnapshot(location, id) {
-    return location === "server" ? readServerSnapshot(id) : location === "cloud" ? readCloudSnapshot(id) : readDeviceSnapshot(id);
+  async function readSnapshot(location, id, onProgress = null) {
+    if (location === "device") {
+      onProgress?.(0, 0, 0);
+      const stored = await readDeviceSnapshot(id);
+      onProgress?.(1, 0, 0);
+      return stored;
+    }
+    return location === "server" ? readServerSnapshot(id, onProgress) : readCloudSnapshot(id, onProgress);
   }
   async function loadSnapshot(id, location = state.snapshotLocation) {
-    const loadGeneration=++state.snapshotLoadGeneration;
-    if (state.selection) cancelSelection(true);
-    clearTextEditors();
-    state.userRevision++;
-    invalidateRecognition();
-    cancelPendingForRevision();
-    const expectedRevision=state.userRevision,
-      stored = await readSnapshot(location, id);
-    if (!stored) return;
-    const { item, tileEntries } = stored;
-    const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision;
-    if (!loadIsCurrent()) return;
-    await enableSnapshotWidgetPlugins(item.widgets);
-    if (!loadIsCurrent()) return;
-    const [decodedTiles, images] = await Promise.all([
-      decodeSnapshotTilesInBatches(tileEntries, loadIsCurrent),
-      decodeStoredImages(item.images),
-    ]);
-    if (!decodedTiles || !loadIsCurrent()) {
-      if (decodedTiles) releaseSnapshotTileCanvases(decodedTiles);
-      return;
+    if (snapshotLoadInProgress) return false;
+    const loadGeneration=++state.snapshotLoadGeneration,
+      expectedRevision=state.userRevision,
+      metadata=snapshotItems.find((item) => item.id === id),
+      displayName=metadata ? snapshotName(metadata) : id;
+    snapshotLoadInProgress = true;
+    snapshotLoadingId = id;
+    updateHistoryReadControls();
+    setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadRequesting"), 4);
+    const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision,
+      requireCurrent = () => { if (!loadIsCurrent()) throw Error(t("snapshotLoadChanged")); };
+    let decodedTiles = null;
+    try {
+      const stored = await readSnapshot(location, id, (fraction, received) => {
+        const progress = Number.isFinite(fraction) ? 5 + fraction * 30 : 12;
+        const bytes = received > 0 ? ` ${snapshotByteLabel(received)}` : "";
+        setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), `${t("snapshotLoadDownloading")}${bytes}`, progress);
+      });
+      if (!stored) throw Error("Canvas snapshot was not found.");
+      requireCurrent();
+      const { item, tileEntries } = stored;
+      setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadPreparing"), 38);
+      await enableSnapshotWidgetPlugins(item.widgets);
+      requireCurrent();
+      let tileProgress = tileEntries.length ? 0 : 1, imageProgress = item.images?.length ? 0 : 1;
+      const updateDecodeProgress = () => setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadDecoding"), 42 + (tileProgress * .7 + imageProgress * .3) * 48);
+      const tileTask = decodeSnapshotTilesInBatches(tileEntries, loadIsCurrent, (progress) => { tileProgress = progress; updateDecodeProgress(); })
+        .then((tilesResult) => (decodedTiles = tilesResult)),
+        imageTask = decodeSnapshotImagesInBatches(item.images, loadIsCurrent, (progress) => { imageProgress = progress; updateDecodeProgress(); });
+      const [tileResult, imageResult] = await Promise.allSettled([tileTask, imageTask]);
+      if (tileResult.status === "rejected") throw tileResult.reason;
+      if (imageResult.status === "rejected") throw imageResult.reason;
+      const images = imageResult.value;
+      if (!decodedTiles || !loadIsCurrent()) {
+        if (decodedTiles) releaseSnapshotTileCanvases(decodedTiles);
+        requireCurrent();
+      }
+      if (!images || !loadIsCurrent()) {
+        releaseSnapshotTileCanvases(decodedTiles);
+        requireCurrent();
+      }
+      setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 94);
+      if (state.selection) cancelSelection(true);
+      clearTextEditors();
+      state.userRevision++;
+      invalidateRecognition();
+      cancelPendingForRevision();
+      for (const canvas of tiles.values()) canvas.width = canvas.height = 1;
+      tiles.clear();
+      clearSharpOverlays();
+      state.inkBounds.clear();
+      state.history = [];
+      state.future = [];
+      state.animationHistoryBefore = null;
+      state.widgetHistoryBefore = null;
+      state.historyBefore.clear();
+      state.imageHistoryBefore = null;
+      state.textBoxHistoryBefore = null;
+      for (const [k, canvas] of decodedTiles) tiles.set(k, canvas);
+      decodedTiles.clear();
+      restoreAnimations(item.animations);
+      restoreWidgets(item.widgets);
+      applyTheme(item.theme);
+      restoreImages(images);
+      await restoreTextBoxes(item.textBoxes);
+      if (item.view) {
+        state.scale = Math.max(0.03, Math.min(2, item.view.scale));
+        state.panX = item.view.panX;
+        state.panY = item.view.panY;
+        updateCoordinates();
+      }
+      setCanvasNavigationLocked(item.view?.navigationLocked === true);
+      state.currentSnapshotId = item.id;
+      state.currentSnapshotName = snapshotName(item);
+      state.currentSnapshotLocation = location;
+      state.currentSnapshotProjectId = item.projectId || null;
+      state.currentSnapshotRevisionId = location === "cloud" ? item.currentRevisionId || null : null;
+      state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
+      state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
+      state.snapshotSavedRevision = state.userRevision;
+      setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
+      render();
+      closeHistoryPanel();
+      setStatusKey("snapshotLoaded");
+      return true;
+    } catch (error) {
+      if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
+      const message = t("snapshotLoadFailed").replace("{message}", String(error?.message || error));
+      setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), message, null, "error");
+      throw error;
+    } finally {
+      snapshotLoadInProgress = false;
+      snapshotLoadingId = null;
+      updateHistoryReadControls();
     }
-    state.userRevision++;
-    invalidateRecognition();
-    cancelPendingForRevision();
-    clearTextEditors();
-    for (const canvas of tiles.values()) canvas.width = canvas.height = 1;
-    tiles.clear();
-    clearSharpOverlays();
-    state.inkBounds.clear();
-    state.history = [];
-    state.future = [];
-    state.animationHistoryBefore = null;
-    state.widgetHistoryBefore = null;
-    state.historyBefore.clear();
-    state.imageHistoryBefore = null;
-    state.textBoxHistoryBefore = null;
-    for (const [k, canvas] of decodedTiles) tiles.set(k, canvas);
-    decodedTiles.clear();
-    restoreAnimations(item.animations);
-    restoreWidgets(item.widgets);
-    applyTheme(item.theme);
-    restoreImages(images);
-    await restoreTextBoxes(item.textBoxes);
-    if (item.view) {
-      state.scale = Math.max(0.03, Math.min(2, item.view.scale));
-      state.panX = item.view.panX;
-      state.panY = item.view.panY;
-      updateCoordinates();
-    }
-    setCanvasNavigationLocked(item.view?.navigationLocked === true);
-    state.currentSnapshotId = item.id;
-    state.currentSnapshotName = snapshotName(item);
-    state.currentSnapshotLocation = location;
-    state.currentSnapshotProjectId = item.projectId || null;
-    state.currentSnapshotRevisionId = location === "cloud" ? item.currentRevisionId || null : null;
-    state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
-    state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
-    state.snapshotSavedRevision = state.userRevision;
-    render();
-    closeHistoryPanel();
-    setStatusKey("snapshotLoaded");
   }
   async function deleteDeviceSnapshot(id) {
     const db = await snapshotDb(),
@@ -1198,14 +1328,14 @@
   }
   async function openCloudProjectHistory(projectId = null) {
     if (projectId && validCloudProjectSelection(projectId)) rememberSelectedCloudProject(projectId);
-    setSnapshotLocation("cloud");
+    setSnapshotLocation("cloud", { refresh:false });
     await refreshSnapshots();
     openHistoryPanel();
     return true;
   }
   async function openCloudCanvas(canvasId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(canvasId || ""))) throw Error("Invalid Cloud Canvas");
-    setSnapshotLocation("cloud");
+    setSnapshotLocation("cloud", { refresh:false });
     await refreshSnapshots();
     return requestLoadSnapshot(canvasId, "cloud");
   }
@@ -1219,6 +1349,22 @@
   }
   function snapshotName(item) {
     return item.name || new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(item.createdAt);
+  }
+  function renderSnapshotListLoading(location = state.snapshotLocation) {
+    const list = document.querySelector("#historyList");
+    if (!list) return;
+    const loading = document.createElement("div");
+    loading.className = "history-list-loading";
+    loading.textContent = t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location));
+    list.replaceChildren(loading);
+  }
+  function renderSnapshotListError(location = state.snapshotLocation) {
+    const list = document.querySelector("#historyList");
+    if (!list) return;
+    const error = document.createElement("div");
+    error.className = "history-list-loading error";
+    error.textContent = t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel(location));
+    list.replaceChildren(error);
   }
   function serverProjectName(project) {
     return project?.id === SERVER_DEFAULT_PROJECT_ID || project?.system || project?.systemKey === "uncategorized" ? t("canvasProjectUncategorized") : project?.name || t("canvasProjectUncategorized");
@@ -1347,6 +1493,10 @@
         : snapshotItems;
     if (!list) return;
     renderServerProjectUi();
+    if (snapshotListInProgress && snapshotItemsLocation !== location) {
+      renderSnapshotListLoading(location);
+      return;
+    }
     list.replaceChildren();
     if (!items.length) {
       const empty = document.createElement("div");
@@ -1367,6 +1517,7 @@
         remove = document.createElement("button"),
         url = item.preview instanceof Blob ? URL.createObjectURL(item.preview) : "";
       card.className = "history-card";
+      card.dataset.snapshotId = item.id;
       const isCurrent = item.id === state.currentSnapshotId && location === state.currentSnapshotLocation;
       card.classList.toggle("current", isCurrent);
       if (isCurrent) card.setAttribute("aria-current", "true");
@@ -1395,6 +1546,7 @@
       }
       actions.className = "history-actions";
       load.className = "history-load";
+      load.dataset.snapshotId = item.id;
       load.textContent = t("loadSnapshot");
       load.onclick = () => runSnapshotLoadAction(load, () => requestLoadSnapshot(item.id, location));
       remove.className = "history-delete";
@@ -1425,10 +1577,48 @@
   async function refreshSnapshots() {
     const generation = ++snapshotListGeneration,
       location = state.snapshotLocation,
-      items = await snapshotsAt(location);
-    if (generation !== snapshotListGeneration || location !== state.snapshotLocation) return;
-    snapshotItems = items;
-    renderSnapshotList();
+      replacingLocation = snapshotItemsLocation !== location;
+    snapshotListInProgress = true;
+    if (replacingLocation) {
+      snapshotItems = [];
+      snapshotItemsLocation = null;
+      renderSnapshotListLoading(location);
+    }
+    setHistoryActivity(
+      t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location)),
+      t("snapshotLibraryLoadingDetail"),
+      null,
+    );
+    updateHistoryReadControls();
+    try {
+      const items = await snapshotsAt(location);
+      if (generation !== snapshotListGeneration || location !== state.snapshotLocation) return false;
+      snapshotItems = items;
+      snapshotItemsLocation = location;
+      renderSnapshotList();
+      hideHistoryActivity(260);
+      return true;
+    } catch (error) {
+      if (generation === snapshotListGeneration && location === state.snapshotLocation) {
+        if (replacingLocation) {
+          snapshotItems = [];
+          snapshotItemsLocation = null;
+          renderSnapshotListError(location);
+        }
+        setHistoryActivity(
+          t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location)),
+          t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel(location)),
+          null,
+          "error",
+        );
+      }
+      throw error;
+    } finally {
+      if (generation === snapshotListGeneration) {
+        snapshotListInProgress = false;
+        updateHistoryReadControls();
+      }
+    }
   }
   async function runSnapshotAction(action) {
     try {

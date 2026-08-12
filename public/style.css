@@ -387,8 +387,26 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .history-notice[data-tone="error"] { color: var(--danger); }
 .history-notice.visible[data-tone="error"] { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .history-notice[data-tone="error"]::before { background: var(--danger); box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 60%, transparent); }
+.history-activity { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 10px var(--sheet-gutter) 0; padding: 10px 12px 12px; overflow: hidden; color: var(--ink); border: 1px solid color-mix(in srgb, var(--gold-bright) 28%, var(--sheet-hairline)); border-radius: 10px; background: var(--sheet-accent-soft); }
+.history-activity[hidden] { display: none; }
+.history-activity-icon { width: 17px; height: 17px; margin-top: 1px; border: 2px solid color-mix(in srgb, var(--gold-bright) 30%, transparent); border-right-color: var(--gold-bright); border-radius: 50%; animation: history-save-spin .8s linear infinite; }
+.history-activity-copy { display: grid; min-width: 0; gap: 2px; }
+.history-activity-copy strong { overflow: hidden; font: 700 .7rem/1.3 system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.history-activity-copy small { overflow-wrap: anywhere; color: var(--muted); font: .63rem/1.4 system-ui, sans-serif; }
+.history-activity progress { grid-column: 1 / -1; width: 100%; height: 4px; margin-top: 7px; overflow: hidden; border: 0; border-radius: 999px; appearance: none; background: color-mix(in srgb, var(--line) 55%, transparent); }
+.history-activity progress::-webkit-progress-bar { background: color-mix(in srgb, var(--line) 55%, transparent); }
+.history-activity progress::-webkit-progress-value { border-radius: inherit; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); transition: width .16s ease; }
+.history-activity progress::-moz-progress-bar { border-radius: inherit; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.history-activity[data-tone="error"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, var(--sheet-hairline)); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.history-activity[data-tone="error"] .history-activity-icon { border: 0; animation: none; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 8v5M12 17h.01'/%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 8v5M12 17h.01'/%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3C/svg%3E") center / contain no-repeat; }
+.history-list-loading { display: grid; min-height: 132px; place-items: center; color: var(--muted); border: 1.5px dashed var(--sheet-edge); border-radius: 12px; font: 650 .7rem/1.5 system-ui, sans-serif; text-align: center; }
+.history-list-loading.error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 42%, var(--sheet-edge)); background: color-mix(in srgb, var(--danger) 5%, transparent); }
+.history-card.loading { border-color: color-mix(in srgb, var(--gold-bright) 58%, var(--line)); background: color-mix(in srgb, var(--gold) 8%, var(--panel-raised) 72%); }
+.history-card.loading::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; content: ""; background: linear-gradient(90deg, transparent, var(--gold-bright), transparent); animation: history-load-scan 1.2s ease-in-out infinite; }
+.history-load[aria-busy="true"]::before { display: inline-block; width: .7em; height: .7em; margin-right: 5px; content: ""; vertical-align: -.05em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: history-save-spin .8s linear infinite; }
 @keyframes history-save-spin { to { transform: rotate(360deg); } }
 @keyframes history-save-pulse { 50% { opacity: .35; transform: scale(.7); } }
+@keyframes history-load-scan { 0%, 100% { transform: translateX(-70%); } 50% { transform: translateX(70%); } }
 .history-projects { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px; padding: 8px var(--sheet-gutter) 9px; align-items: end; }
 .history-projects[hidden] { display: none; }
 .history-projects label { display: grid; min-width: 0; gap: 5px; color: var(--muted); font: 700 .6rem/1.2 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
@@ -435,6 +453,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   .history-save-row input, #historySaveCurrent, #historySave, #historyNew, .history-projects select, .history-projects button { min-height: 42px; }
   .history-actions button { min-height: 36px; }
   #historyClose, .new-canvas-close { width: 38px; height: 38px; flex-basis: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .history-activity-icon, .history-card.loading::after, .history-load[aria-busy="true"]::before { animation-duration: 1.8s; }
+  .history-activity progress::-webkit-progress-value { transition: none; }
 }
 
 /* ---- Save / load confirmation dialog: same flat surface language as the sheet ---- */
