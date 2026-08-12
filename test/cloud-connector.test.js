@@ -25,6 +25,23 @@ test("cloud origin requires HTTPS except for loopback development", () => {
   assert.throws(() => normalizedOrigin("https://penecho.ai/path"), /without a path/);
 });
 
+test("temporary Cloud failures explain that the local Canvas remains safe", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-unavailable-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:"https://internaltest.penecho.ai" });
+    connector.writeConfiguration({ version:2, origin:"https://internaltest.penecho.ai", accountToken:"uat-account-token" });
+    global.fetch = async () => { throw Object.assign(new Error("connect timed out"), { code:"ETIMEDOUT" }); };
+    await assert.rejects(
+      () => connector.createCloudProject({ name:"Safe local Canvas" }),
+      (error) => error.status === 503 && error.code === "cloud_temporarily_unavailable" && /still safe on this device/.test(error.message),
+    );
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("cloud relay reconnect delays step from ten seconds to one minute and then five minutes", () => {
   for (const attempt of [0, 1, 2]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 10_000);
   for (const attempt of [3, 4, 5, 6, 7]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 60_000);

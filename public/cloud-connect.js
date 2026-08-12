@@ -173,7 +173,7 @@
     state.browserSignIn.tone = tone;
   }
 
-  function startBrowserSignInWatch({ started, popup, render }) {
+  function startBrowserSignInWatch({ started, popup, externalOpened = false, render }) {
     stopBrowserSignInWatch();
     const id = state.browserSignIn.id;
     const serverExpiry = Number(started?.expiresAt || 0);
@@ -184,10 +184,10 @@
     );
     state.browserSignIn.popup = popup || null;
     state.browserSignIn.authorizationUrl = String(started?.authorizationUrl || "");
-    state.browserSignIn.popupBlocked = !popup;
-    browserSignInMessage(popup
-      ? "Complete sign-in in the browser. PenEcho will connect here automatically."
-      : "Your browser blocked the sign-in window. Select Open sign-in page below; PenEcho will still connect automatically.", popup ? "" : "error");
+    state.browserSignIn.popupBlocked = !popup && !externalOpened;
+    browserSignInMessage(popup || externalOpened
+      ? `${window.PENECHO_CONFIG?.desktopApp ? "Your default browser is open. " : ""}Complete sign-in there; PenEcho will connect here automatically.`
+      : "Your browser blocked the sign-in window. Select Open sign-in page below; PenEcho will still connect automatically.", popup || externalOpened ? "" : "error");
 
     const renderIfOpen = () => {
       if (document.querySelector(".penecho-cloud-overlay")) render?.();
@@ -247,13 +247,15 @@
       role:browserSignIn.tone === "error" ? "alert" : "status",
       "aria-live":browserSignIn.tone === "error" ? "assertive" : "polite",
     });
-    const signIn = el("button", { class:"cloud-button primary", type:"button", text:browserSignIn.active ? "Waiting for browser…" : "Sign in with browser", ...(browserSignIn.active ? { disabled:"" } : {}), onclick:async () => {
-      const popup = window.open("about:blank", "penecho-cloud-sign-in", "popup,width=760,height=760");
+    const signIn = el("button", { class:"cloud-button primary", type:"button", text:browserSignIn.active ? "Waiting for browser…" : window.PENECHO_CONFIG?.desktopApp ? "Continue in browser" : "Sign in with browser", ...(browserSignIn.active ? { disabled:"" } : {}), onclick:async () => {
+      const desktopApp = window.PENECHO_CONFIG?.desktopApp === true;
+      const popup = desktopApp ? null : window.open("about:blank", "penecho-cloud-sign-in", "popup,width=760,height=760");
       await action(render, async () => {
         try {
           const started = await api("/api/cloud/sign-in/start", { method:"POST", body:JSON.stringify({ origin:cloudOrigin() }) });
-          if (popup) popup.location.replace(started.authorizationUrl);
-          startBrowserSignInWatch({ started, popup, render });
+          if (desktopApp) window.open(started.authorizationUrl, "_blank", "noopener");
+          else if (popup) popup.location.replace(started.authorizationUrl);
+          startBrowserSignInWatch({ started, popup, externalOpened:desktopApp, render });
         } catch (error) {
           try { popup?.close(); } catch {}
           throw error;

@@ -98,6 +98,7 @@ function loadConfiguration() {
   Object.assign(configuration.env, kimiPresetUpdates(configuration));
   configuration.env.PENECHO_STATE_DIR = paths.stateDir;
   configuration.env.PENECHO_PRIVATE_PLUGIN_DIR = paths.privatePlugins;
+  configuration.env.PENECHO_DESKTOP_APP = "true";
   if (!configuration.env.HOST) configuration.env.HOST = "0.0.0.0";
   if (!configuration.env.PORT) configuration.env.PORT = "3888";
   if (apiKey) configuration.env.AI_API_KEY = apiKey;

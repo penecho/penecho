@@ -47,11 +47,14 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /PenEcho will connect here automatically/);
   assert.match(cloud, /window\.open\("about:blank"/);
   assert.match(cloud, /popup\.location\.replace\(started\.authorizationUrl\)/);
+  assert.match(cloud, /window\.open\(started\.authorizationUrl, "_blank", "noopener"\)/);
+  assert.match(cloud, /externalOpened:desktopApp/);
   assert.match(cloud, /Open sign-in page/);
   assert.match(cloud, /document\.visibilityState === "visible"/);
   assert.match(cloud, /visibilitychange/);
   assert.match(cloud, /event\.origin !== location\.origin/);
   assert.match(main, /window\.location\.replace\("\/"\)/);
+  assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
   assert.match(css, /\.cloud-item-preview/);
   assert.match(css, /\.cloud-item-preview img:not\(\[src\]\)/);
   assert.match(css, /\.cloud-project-card/);

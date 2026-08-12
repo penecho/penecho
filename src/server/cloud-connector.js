@@ -12,6 +12,7 @@ const MAX_CLOUD_BUNDLE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_HEARTBEAT_SECONDS = 20;
 const ACCOUNT_REFRESH_INTERVAL_MS = 5 * 60_000;
 const ACCOUNT_SIGNOUT_TIMEOUT_MS = 5_000;
+const CLOUD_REQUEST_TIMEOUT_MS = 30_000;
 const BROWSER_AUTHORIZATION_MS = 10 * 60_000;
 const PUBLIC_MESSAGE_TIMEOUT_MS = 3_500;
 const BROWSER_CALLBACK_PATH = "/api/cloud/sign-in/callback";
@@ -35,6 +36,15 @@ function defaultPlatform() {
 function safeMessage(error) {
   const message = String(error?.message || "Local PenEcho could not complete the request.");
   return message.replace(/(?:sk-|key-|Bearer\s+)[A-Za-z0-9._-]{12,}/gi, "[credential redacted]").slice(0, 1000);
+}
+
+function temporaryCloudError(error, origin) {
+  const cause = error?.cause?.code || error?.code || error?.name || "cloud_network_error";
+  const label = String(origin || "").includes("internaltest.penecho.ai") ? "UAT Cloud" : "PenEcho Cloud";
+  const wrapped = new Error(`${label} is temporarily unavailable (${cause}). Your Canvas is still safe on this device. Try Save again in a moment.`);
+  wrapped.status = 503;
+  wrapped.code = "cloud_temporarily_unavailable";
+  return wrapped;
 }
 
 function reconnectDelayMs(attempt, random = Math.random) {
@@ -82,6 +92,8 @@ function publicAccount(value) {
   return {
     id: String(value.id),
     name: String(value.name || "PenEcho user"),
+    ...(value.bio ? { bio:String(value.bio) } : {}),
+    ...(value.avatarUrl ? { avatarUrl:String(value.avatarUrl) } : {}),
     credits: Number(value.credits || 0),
     workspace: value.workspace && typeof value.workspace === "object" ? value.workspace : undefined,
   };
@@ -269,21 +281,31 @@ class CloudConnector {
   async cloudRequest(pathname, { method = "GET", body } = {}) {
     const configuration = this.requireCloudAccount();
     if (!["/api/v1/device-sync/", "/api/v1/community/"].some((prefix) => String(pathname).startsWith(prefix))) throw new Error("Unsupported cloud account request.");
-    const response = await fetch(`${configuration.origin}${pathname}`, {
-      method,
-      redirect: "error",
-      headers: {
-        authorization: `Bearer ${configuration.accountToken}`,
-        accept: "application/json",
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response;
+    try {
+      response = await fetch(`${configuration.origin}${pathname}`, {
+        method,
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${configuration.accountToken}`,
+          accept: "application/json",
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal:AbortSignal.timeout(CLOUD_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw temporaryCloudError(error, configuration.origin);
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401 && this.configuration?.accountToken && !this.configuration?.legacyAccountAccess) this.clearAccountSession();
-      const error = new Error(payload.message || `Cloud account request failed (HTTP ${response.status}).`);
+      const temporary = [502, 503, 504].includes(response.status);
+      const error = new Error(temporary
+        ? `${configuration.origin.includes("internaltest.penecho.ai") ? "UAT Cloud" : "PenEcho Cloud"} is temporarily unavailable (HTTP ${response.status}). Your Canvas is still safe on this device. Try Save again in a moment.`
+        : payload.message || `Cloud account request failed (HTTP ${response.status}).`);
       error.status = response.status;
+      error.code = temporary ? "cloud_temporarily_unavailable" : payload.error || "cloud_request_failed";
       throw error;
     }
     return payload;
@@ -327,8 +349,18 @@ class CloudConnector {
       const normalized = key.toLowerCase();
       if (normalized === "content-type" || normalized.startsWith("x-amz-")) headers[normalized] = String(value);
     }
-    const response = await fetch(url, { method, redirect: "error", headers, body: bytes });
-    if (!response.ok) throw new Error(`Cloud storage transfer failed (HTTP ${response.status}).`);
+    let response;
+    try {
+      response = await fetch(url, { method, redirect: "error", headers, body: bytes, signal:AbortSignal.timeout(CLOUD_REQUEST_TIMEOUT_MS) });
+    } catch (error) {
+      throw temporaryCloudError(error, configuration.origin);
+    }
+    if (!response.ok) {
+      const error = new Error(`Cloud storage transfer failed (HTTP ${response.status}). Your Canvas is still safe on this device; try Save again.`);
+      error.status = [502, 503, 504].includes(response.status) ? 503 : response.status;
+      error.code = "cloud_storage_transfer_failed";
+      throw error;
+    }
     return response;
   }
 
