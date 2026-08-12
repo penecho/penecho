@@ -10,23 +10,12 @@
   const sessionToken = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || "");
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
-  const requestedCommunityItem = new URLSearchParams(location.search).get("community");
   const BROWSER_SIGN_IN_POLL_MS = 800;
   const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
   const state = {
     status:null,
-    section:requestedCommunityItem ? "community" : "projects",
-    scope:"community",
-    surface:"discover",
-    kind:"widget",
-    sort:"recommended",
-    focusItem:/^[0-9a-f-]{36}$/i.test(requestedCommunityItem || "") ? requestedCommunityItem : null,
-    focusQuery:"",
-    items:[],
     library:null,
     busy:false,
-    previewGeneration:0,
-    previewObjectUrls:new Set(),
     browserSignIn:{ id:0, timer:0, poll:null, polling:false, active:false, expiresAt:0, popup:null, authorizationUrl:"", popupBlocked:false, tone:"", message:"" },
   };
 
@@ -69,37 +58,6 @@
     return payload;
   }
 
-  async function apiImage(path) {
-    const response = await fetch(path, { headers:{ ...apiHeaders(false), accept:"image/webp" } });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || payload.message || `Cloud image request failed (HTTP ${response.status}).`);
-    }
-    const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
-    if (contentType !== "image/webp") throw new Error("Cloud preview is not a WebP image.");
-    const blob = await response.blob();
-    if (!blob.size || blob.size > 4 * 1024 * 1024) throw new Error("Cloud preview has an invalid size.");
-    return URL.createObjectURL(blob);
-  }
-
-  function releaseCommunityPreviews() {
-    state.previewGeneration++;
-    for (const url of state.previewObjectUrls) URL.revokeObjectURL(url);
-    state.previewObjectUrls.clear();
-    return state.previewGeneration;
-  }
-
-  async function loadCommunityThumbnail(image, itemId, generation) {
-    try {
-      const objectUrl = await apiImage(`/api/cloud/community/${encodeURIComponent(itemId)}/thumbnail`);
-      if (generation !== state.previewGeneration || !image.isConnected) return URL.revokeObjectURL(objectUrl);
-      state.previewObjectUrls.add(objectUrl);
-      image.src = objectUrl;
-    } catch {
-      image.removeAttribute("src");
-    }
-  }
-
   function el(tag, attributes = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attributes)) {
@@ -113,7 +71,6 @@
   }
 
   function closeOverlay(overlay) {
-    releaseCommunityPreviews();
     overlay?.remove();
     cloudButton.setAttribute("aria-expanded", "false");
   }
@@ -419,137 +376,27 @@
     return panel;
   }
 
-  function itemCard(item, renderItems, previewGeneration) {
-    const card = el("article", { class:"cloud-item" });
-    const previewImage = el("img", { alt:`Preview of ${item.name}`, loading:"lazy" });
-    card.append(el("button", { class:"cloud-item-preview", type:"button", "aria-label":`View the large screenshot for ${item.name}`, onclick:() => window.open(communityUrl(item), "_blank", "noopener") }, [
-      previewImage,
-      el("span", { text:item.kind === "widget" ? "Widget" : "Canvas" }),
-    ]));
-    void loadCommunityThumbnail(previewImage, item.id, previewGeneration);
-    const details = el("div", { class:"cloud-item-body" });
-    details.append(el("span", { class:"cloud-item-kind", text:`${item.category} · ${item.author?.name || "PenEcho creator"}` }));
-    details.append(el("h4", { text:item.name }));
-    details.append(el("p", { class:"cloud-item-description", text:item.description || "Shared for the PenEcho community." }));
-    const tags = el("div", { class:"cloud-item-tags" });
-    for (const tag of item.tags || []) tags.append(el("span", { text:tag }));
-    details.append(tags);
-    details.append(el("div", { class:"cloud-item-meta" }, [
-      el("span", { text:`${Number(item.forkCount || 0)} further` }),
-      el("span", { text:`${Number(item.favoriteCount || 0)} saved` }),
-      el("span", { text:item.generation ? `Step ${Number(item.generation) + 1}` : "First stroke" }),
-    ]));
-    const actions = el("div", { class:"cloud-item-actions" });
-    if (accountSignedIn()) actions.append(el("button", { class:"cloud-item-action", type:"button", text:item.isFavorite ? "Saved" : "Add to Favorites", onclick:async () => action(renderItems, async () => {
-        const result = await api(`/api/cloud/community/${item.id}/favorite`, { method:item.isFavorite ? "DELETE" : "POST", ...(item.isFavorite ? {} : { body:"{}" }) });
-        Object.assign(item, result.item || {});
-      }) }));
-    else actions.append(el("button", { class:"cloud-item-action", type:"button", text:"Sign in to save", onclick:() => document.querySelector(".penecho-cloud-panel .cloud-button.primary")?.focus() }));
-    actions.append(el("button", { class:"cloud-item-action", type:"button", text:"Share", onclick:async () => {
-      const url = communityUrl(item);
-      if (navigator.share) await navigator.share({ title:item.name, text:item.description || `Explore this ${item.kind} on PenEcho`, url }).catch((error) => { if (error?.name !== "AbortError") throw error; });
-      else { await copyText(url); window.alert("Public share link copied."); }
-    } }));
-    if (accountSignedIn() && item.takeFurtherUrl) actions.append(el("button", { class:"cloud-item-action primary", type:"button", text:"Take it further", onclick:async () => action(renderItems, () => takeFurther(item.id)) }));
-    details.append(actions);
-    card.append(details);
-    return card;
-  }
-
-  function communityPanel() {
-    const panel = el("section", { class:"penecho-cloud-panel" });
-    panel.append(el("h3", { text:"Explore Crafts" }));
-    if (!accountSignedIn()) panel.append(el("p", { class:"cloud-community-guest", text:"Browse public ideas and their lineage. Sign in to save one or take it further in PenEcho." }));
-    const tabs = el("div", { class:"cloud-tabs" });
-    const kindTabs = el("div", { class:"cloud-kind-tabs", role:"tablist", "aria-label":"Community content type" });
-    const content = el("div");
-    const category = el("select", {}, [el("option", { value:"", text:"All categories" }), ...CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) }))]);
-    const sort = el("select", {}, [
-      el("option", { value:"recommended", text:"Recommended" }),
-      el("option", { value:"newest", text:"Newest" }),
-      el("option", { value:"downloads", text:"Most downloaded" }),
-      el("option", { value:"favorites", text:"Most favorited" }),
-    ]);
-    sort.value = state.sort;
-    const search = el("input", { type:"search", placeholder:"Search community" });
-    search.value = state.focusQuery;
-
-    async function load() {
-      content.replaceChildren(el("div", { class:"cloud-message", text:"Loading community…" }));
-      try {
-        const query = new URLSearchParams({ scope:state.scope, surface:state.surface, kind:state.kind, sort:sort.value });
-        if (category.value) query.set("category", category.value);
-        if (search.value.trim()) query.set("q", search.value.trim());
-        const result = await api(`/api/cloud/community?${query}`);
-        state.items = result.items || [];
-        renderItems();
-      } catch (error) {
-        content.replaceChildren(el("div", { class:"cloud-message error", text:error.message }));
-      }
-    }
-    function renderItems() {
-      const previewGeneration = releaseCommunityPreviews();
-      if (!state.items.length) return content.replaceChildren(el("div", { class:"cloud-empty", text:"Nothing here yet. One useful stroke can begin the first Craft." }));
-      const grid = el("div", { class:"cloud-community-grid" });
-      for (const item of state.items) grid.append(itemCard(item, renderItems, previewGeneration));
-      content.replaceChildren(grid);
-    }
-    for (const [scope, surface, label] of accountSignedIn() ? [["community","discover","Discover"],["community","commons","Commons"],["community","archive","Archive"],["favorites","discover","Favorites"],["shared","discover","My shares"]] : [["community","discover","Discover"],["community","commons","Commons"],["community","archive","Archive"]]) {
-      tabs.append(el("button", { class:`cloud-tab${state.scope === scope && (scope!=="community"||state.surface===surface) ? " active" : ""}`, type:"button", text:label, onclick:(event) => {
-        state.scope = scope;
-        state.surface = surface;
-        for (const button of tabs.children) button.classList.toggle("active", button === event.currentTarget);
-        load();
-      } }));
-    }
-    for (const [kind, label, description] of [["widget", "Widgets", "Reusable building blocks to take further"], ["canvas", "Canvases", "Visual ideas with an open lineage"]]) {
-      kindTabs.append(el("button", { class:`cloud-kind-tab${state.kind === kind ? " active" : ""}`, type:"button", role:"tab", "aria-selected":String(state.kind === kind), onclick:(event) => {
-        state.kind = kind;
-        for (const button of kindTabs.children) {
-          button.classList.toggle("active", button === event.currentTarget);
-          button.setAttribute("aria-selected", String(button === event.currentTarget));
-        }
-        load();
-      } }, [el("strong", { text:label }), el("span", { text:description })]));
-    }
-    let searchTimer;
-    search.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 300); });
-    category.addEventListener("change", load);
-    sort.addEventListener("change", () => { state.sort = sort.value; load(); });
-    panel.append(tabs, kindTabs, el("div", { class:"cloud-community-tools" }, [field("Category", category), field("Sort by", sort), field("Search", search)]), content);
-    queueMicrotask(load);
-    return panel;
-  }
-
   async function openCloud() {
     cloudButton.setAttribute("aria-expanded", "true");
     await refreshStatus();
-    if (accountSignedIn() && state.focusItem) {
-      state.section = "community";
-      try {
-        const result = await api(`/api/cloud/community/${encodeURIComponent(state.focusItem)}`);
-        if (result.item) { state.kind = result.item.kind; state.focusQuery = result.item.name; }
-        state.focusItem = null;
-        const clean = new URL(location.href);
-        clean.searchParams.delete("community");
-        history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
-      } catch {}
-    }
     const shell = dialogShell({ title:"PenEcho Cloud", subtitle:"Private projects and shared building blocks." });
     const layout = el("div", { class:"penecho-cloud-layout" });
     shell.body.append(layout);
     function render() {
       const accountColumn = el("div", {}, [accountPanel(render), devicePanel(render)]);
-      accountColumn.append(el("a", { class:"cloud-public-link", href:new URL("/community", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener" }, [
-        el("strong", { text:"Explore public Crafts ↗" }),
-        el("span", { text:"See how ideas grow, then continue one in PenEcho." }),
-      ]));
       const workspace = el("div", { class:"cloud-workspace" });
-      const sections = el("div", { class:"cloud-section-tabs", role:"tablist", "aria-label":"PenEcho Cloud area" });
-      for (const [section, label, description] of [["projects", "Cloud Projects", "Private cross-device work"], ["community", "Explore", "Public Widgets and Canvas Crafts"]]) {
-        sections.append(el("button", { class:`cloud-section-tab${state.section === section ? " active" : ""}`, type:"button", role:"tab", "aria-selected":String(state.section === section), onclick:() => { state.section = section; render(); } }, [el("strong", { text:label }), el("span", { text:description })]));
-      }
-      workspace.append(sections, state.section === "projects" ? cloudProjectsPanel() : communityPanel());
+      const sections = el("nav", { class:"cloud-section-tabs", "aria-label":"PenEcho Cloud area" });
+      sections.append(
+        el("span", { class:"cloud-section-tab active", "aria-current":"page" }, [
+          el("strong", { text:"Cloud Projects" }),
+          el("span", { text:"Private cross-device work" }),
+        ]),
+        el("a", { class:"cloud-section-tab", href:new URL("/community.html", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener" }, [
+          el("strong", { text:"Explore ↗" }),
+          el("span", { text:"Browse public Crafts on PenEcho Cloud" }),
+        ]),
+      );
+      workspace.append(sections, cloudProjectsPanel());
       layout.replaceChildren(accountColumn, workspace);
     }
     render();
@@ -778,5 +625,5 @@
     state.browserSignIn.timer = 0;
     void state.browserSignIn.poll();
   });
-  refreshStatus().then(() => { if (state.focusItem) openCloud(); });
+  void refreshStatus();
 })();

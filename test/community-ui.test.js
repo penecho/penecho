@@ -8,25 +8,24 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center is separate from local Settings and exposes the complete community workflow", () => {
+test("Cloud Center keeps projects local to the app and sends Explore to PenEcho Cloud", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
   assert.match(html, /id="shareCanvasBtn"/);
-  assert.match(cloud, /\["widget", "Widgets"/);
-  assert.match(cloud, /\["canvas", "Canvases"/);
-  for (const sort of ["recommended", "newest", "downloads", "favorites"]) assert.match(cloud, new RegExp(`value:\"${sort}\"`));
+  assert.match(cloud, /new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)/);
+  assert.match(cloud, /target:"_blank", rel:"noopener"/);
+  assert.match(cloud, /Browse public Crafts on PenEcho Cloud/);
+  assert.doesNotMatch(cloud, /function communityPanel/);
+  assert.doesNotMatch(cloud, /function itemCard/);
+  assert.doesNotMatch(cloud, /cloud-community-grid/);
+  assert.doesNotMatch(cloud, /\/api\/cloud\/community\?\$\{query\}/);
   for (const removed of ["price_low", "price_high", "Free + paid", "Paid with credits", "Redeem ", "80% rewards"]) assert.doesNotMatch(cloud, new RegExp(removed));
-  assert.match(cloud, /\/api\/cloud\/community\/\$\{encodeURIComponent\(itemId\)\}\/thumbnail/);
-  assert.match(cloud, /async function apiImage/);
   assert.match(cloud, /x-penecho-session/);
-  assert.match(cloud, /URL\.createObjectURL\(blob\)/);
-  assert.doesNotMatch(cloud, /el\("img", \{ src:`\/api\/cloud\/community/);
   assert.doesNotMatch(cloud, /priceCredits|Credit price|field\("Pricing"/);
   assert.match(cloud, /Auto-fill with current AI/);
   assert.match(cloud, /no image upload/);
   assert.match(cloud, /Preserve this moment/);
-  assert.match(cloud, /Browse public ideas and their lineage/);
   assert.match(cloud, /Your Craft is now part of the public commons/);
   assert.match(cloud, /Take it further/);
   assert.match(cloud, /PUBLICATION_TERMS_VERSION = "2026-08-12"/);
@@ -55,10 +54,10 @@ test("Cloud Center is separate from local Settings and exposes the complete comm
   assert.match(cloud, /event\.origin !== location\.origin/);
   assert.match(main, /window\.location\.replace\("\/"\)/);
   assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
-  assert.match(css, /\.cloud-item-preview/);
-  assert.match(css, /\.cloud-item-preview img:not\(\[src\]\)/);
+  assert.match(css, /\.cloud-section-tab\[href\]/);
+  assert.doesNotMatch(css, /\.cloud-item-preview/);
+  assert.doesNotMatch(css, /\.cloud-community-grid/);
   assert.match(css, /\.cloud-project-card/);
-  assert.match(css, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(css, /overflow-wrap: anywhere/);
   assert.match(html, /Share to Community · Coming soon/);
   assert.doesNotMatch(html, /points-priced|Share for points|earn points/);
