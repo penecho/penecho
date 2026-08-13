@@ -86,6 +86,11 @@
       updateSnapshotLocationUi();
       return refresh ? refreshSnapshots() : Promise.resolve(false);
     }
+    if (snapshotLoadInProgress) {
+      state.snapshotLoadGeneration++;
+      snapshotLoadInProgress = false;
+      snapshotLoadingId = null;
+    }
     state.snapshotLocation = location;
     localStorage.setItem("penecho-snapshot-location", location);
     snapshotItems = [];
@@ -161,7 +166,8 @@
   function updateHistoryReadControls() {
     const busy = historyBusy(), panel = document.querySelector("#historyPanel");
     if (panel) panel.setAttribute("aria-busy", String(snapshotListInProgress || snapshotLoadInProgress));
-    document.querySelectorAll('input[name="historyStorageLocation"], #historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave, #historyNew').forEach((control) => (control.disabled = busy));
+    document.querySelectorAll('input[name="historyStorageLocation"]').forEach((control) => (control.disabled = snapshotSaveInProgress));
+    document.querySelectorAll('#historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave, #historyNew').forEach((control) => (control.disabled = busy));
     document.querySelectorAll(".history-load, .history-delete, .history-move").forEach((control) => (control.disabled = busy));
     document.querySelectorAll(".history-card").forEach((card) => card.classList.toggle("loading", snapshotLoadInProgress && card.dataset.snapshotId === snapshotLoadingId));
     document.querySelectorAll(".history-load").forEach((button) => {
@@ -1088,6 +1094,7 @@
     let decodedTiles = null;
     try {
       const stored = await readSnapshot(location, id, (fraction, received) => {
+        if (!loadIsCurrent()) return;
         const progress = Number.isFinite(fraction) ? 5 + fraction * 30 : 12;
         const bytes = received > 0 ? ` ${snapshotByteLabel(received)}` : "";
         setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), `${t("snapshotLoadDownloading")}${bytes}`, progress);
@@ -1162,13 +1169,16 @@
       return true;
     } catch (error) {
       if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
+      if (loadGeneration !== state.snapshotLoadGeneration) return false;
       const message = t("snapshotLoadFailed").replace("{message}", String(error?.message || error));
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), message, null, "error");
       throw error;
     } finally {
-      snapshotLoadInProgress = false;
-      snapshotLoadingId = null;
-      updateHistoryReadControls();
+      if (loadGeneration === state.snapshotLoadGeneration) {
+        snapshotLoadInProgress = false;
+        snapshotLoadingId = null;
+        updateHistoryReadControls();
+      }
     }
   }
   async function deleteDeviceSnapshot(id) {

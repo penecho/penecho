@@ -10,12 +10,14 @@
   const sessionToken = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || "");
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
   const configuredCloudEnvironment = String(window.PENECHO_CONFIG?.cloudEnvironment || "prod");
+  const localHostControlsAvailable = window.PENECHO_CONFIG?.runtime !== "cloud";
   const BROWSER_SIGN_IN_POLL_MS = 800;
   const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
   const CLOUD_STATUS_POLL_MS = 1500;
   const state = {
     status:null,
     library:null,
+    selectedProjectId:null,
     busy:false,
     browserSignIn:{ id:0, timer:0, poll:null, polling:false, active:false, expiresAt:0, popup:null, authorizationUrl:"", popupBlocked:false, tone:"", message:"" },
   };
@@ -256,10 +258,19 @@
         el("div", { class:"cloud-avatar", text:String(account.name || "P").slice(0, 1).toUpperCase() }),
         el("div", {}, [el("strong", { text:account.name || "PenEcho user" }), el("span", { text:`${Number(account.credits || 0)} credits` })]),
       ]));
-      const actions = el("div", { class:"cloud-button-row" });
-      actions.append(el("button", { class:"cloud-button", type:"button", text:"Refresh", onclick:async () => action(render, async () => refreshStatus(true)) }));
-      actions.append(el("button", { class:"cloud-button danger", type:"button", text:"Sign out", onclick:async () => action(render, async () => { await api("/api/cloud/sign-out", { method:"POST", body:"{}" }); await refreshStatus(); }) }));
-      panel.append(actions);
+      const settings = el("details", { class:"cloud-secondary-settings" });
+      settings.append(
+        el("summary", { text:"Account settings" }),
+        el("p", { text:"Signing out removes this account from this PenEcho host. It does not remove the existing device link." }),
+        el("div", { class:"cloud-button-row" }, [
+          el("button", { class:"cloud-button", type:"button", text:"Refresh account", onclick:async () => action(render, async () => refreshStatus(true)) }),
+          el("button", { class:"cloud-button danger", type:"button", text:"Sign out on this host", onclick:async () => {
+            if (!window.confirm("Sign out on this PenEcho host? The device link will remain available.")) return;
+            await action(render, async () => { await api("/api/cloud/sign-out", { method:"POST", body:"{}" }); await refreshStatus(); });
+          } }),
+        ]),
+      );
+      panel.append(settings);
       return panel;
     }
 
@@ -319,11 +330,17 @@
         await api(`/api/cloud/device/${device.enabled ? "disable" : "enable"}`, { method:"POST", body:"{}" });
         await refreshStatus();
       }) }));
-      actions.append(el("button", { class:"cloud-button danger", type:"button", text:"Revoke device", onclick:async () => {
-        if (!window.confirm("Revoke this device link? You can pair it again later.")) return;
-        await action(render, async () => { await api("/api/cloud/device/revoke", { method:"POST", body:"{}" }); await refreshStatus(); });
-      } }));
       panel.append(actions);
+      const settings = el("details", { class:"cloud-secondary-settings" });
+      settings.append(
+        el("summary", { text:"Link settings" }),
+        el("p", { text:"Removing the link stops remote access. You can connect this host again later with a new pairing key from Cloud → Devices." }),
+        el("button", { class:"cloud-button danger", type:"button", text:"Remove this link", onclick:async () => {
+          if (!window.confirm("Remove this device link? Remote access will stop, but you can pair this host again later.")) return;
+          await action(render, async () => { await api("/api/cloud/device/revoke", { method:"POST", body:"{}" }); await refreshStatus(); });
+        } }),
+      );
+      panel.append(settings);
       return panel;
     }
     panel.append(el("p", { text:"Generate a pairing key in PenEcho Cloud → Devices, then enter it below." }));
@@ -361,53 +378,88 @@
   function cloudProjectsPanel() {
     const panel = el("section", { class:"penecho-cloud-panel cloud-projects-panel" });
     panel.append(el("div", { class:"cloud-panel-heading" }, [
-      el("div", {}, [el("h3", { text:"Cloud Projects" }), el("p", { text:"Private, versioned Canvases available in every signed-in PenEcho app." })]),
-      el("button", { class:"cloud-button primary", type:"button", text:"Save current Canvas", onclick:async () => {
-        const bridge = window.PenEchoCloudProjects;
-        if (!bridge?.openHistory) return window.alert("Cloud project saving is not ready yet.");
-        const preferred = state.library?.projects?.find((project) => project.systemKey !== "uncategorized") || state.library?.projects?.[0];
-        closeOverlay(panel.closest(".penecho-cloud-overlay"));
-        await bridge.openHistory(preferred?.id || null);
-      } }),
+      el("div", {}, [el("h3", { text:"Cloud Projects" }), el("p", { text:"Choose a project, then open or save a versioned Canvas." })]),
     ]));
     if (!accountSignedIn()) {
       panel.append(el("div", { class:"cloud-empty", text:"Sign in to save private projects and continue your work across desktop, macOS and future iOS apps." }));
       return panel;
     }
     const content = el("div", { class:"cloud-project-content" });
-    const createName = el("input", { type:"text", maxlength:"160", placeholder:"New project name", "aria-label":"New Cloud project name" });
-    const createButton = el("button", { class:"cloud-button", type:"button", text:"New project", onclick:async () => action(load, async () => {
-      const name = createName.value.trim();
-      if (!name) throw Error("Enter a project name.");
-      await api("/api/cloud/projects", { method:"POST", body:JSON.stringify({ name }) });
-      createName.value = "";
-    }) });
-    panel.append(el("div", { class:"cloud-project-toolbar" }, [createName, createButton]), content);
+    panel.append(content);
+
+    function rememberProject(projectId) {
+      state.selectedProjectId = projectId || null;
+      try {
+        if (state.selectedProjectId) sessionStorage.setItem("penecho-cloud-center-project", state.selectedProjectId);
+        else sessionStorage.removeItem("penecho-cloud-center-project");
+      } catch {}
+    }
+
+    function selectedProject(projects) {
+      if (!state.selectedProjectId) {
+        try { state.selectedProjectId = sessionStorage.getItem("penecho-cloud-center-project"); } catch {}
+      }
+      const selected = projects.find((project) => project.id === state.selectedProjectId)
+        || projects.find((project) => project.systemKey !== "uncategorized")
+        || projects[0]
+        || null;
+      if (selected?.id !== state.selectedProjectId) rememberProject(selected?.id || null);
+      return selected;
+    }
+
+    async function openProjectHistory(projectId) {
+      const bridge = window.PenEchoCloudProjects;
+      if (!bridge?.openHistory) return window.alert("Cloud project saving is not ready yet.");
+      closeOverlay(panel.closest(".penecho-cloud-overlay"));
+      await bridge.openHistory(projectId || null);
+    }
 
     function renderLibrary() {
       const library = state.library || {}, workspace = library.workspace || {}, projects = Array.isArray(library.projects) ? library.projects : [], canvases = Array.isArray(library.canvases) ? library.canvases : [];
       const used = Number(workspace.storageUsedBytes || 0) + Number(workspace.storageReservedBytes || 0), limit = Number(workspace.storageLimitBytes || 0);
-      const storage = el("div", { class:"cloud-storage-summary" }, [
+      const storage = el("div", { class:"cloud-storage-summary compact" }, [
         el("div", {}, [el("strong", { text:`${formatBytes(used)} used` }), el("span", { text:limit ? ` of ${formatBytes(limit)}` : "" })]),
         el("progress", { class:"cloud-storage-track", max:String(Math.max(1, limit)), value:String(Math.min(used, Math.max(1, limit))), "aria-label":"Cloud storage used" }),
         el("small", { text:"Every successful save creates an immutable revision. Concurrent edits are never silently overwritten." }),
       ]);
-      const grid = el("div", { class:"cloud-project-grid" });
-      for (const project of projects) {
+      const project = selectedProject(projects);
+      const selector = el("select", { "aria-label":"Current Cloud project", onchange:(event) => {
+        rememberProject(event.currentTarget.value);
+        renderLibrary();
+      } }, projects.map((candidate) => el("option", {
+        value:candidate.id,
+        text:candidate.name || "Untitled project",
+        ...(candidate.id === project?.id ? { selected:"" } : {}),
+      })));
+      const picker = el("label", { class:"cloud-project-picker" }, [el("span", { text:"Project" }), selector]);
+      const createName = el("input", { type:"text", maxlength:"160", placeholder:"Project name", "aria-label":"New Cloud project name" });
+      const createDetails = el("details", { class:"cloud-project-create" });
+      const createButton = el("button", { class:"cloud-button primary", type:"button", text:"Create", onclick:async () => action(load, async () => {
+        const name = createName.value.trim();
+        if (!name) throw Error("Enter a project name.");
+        const created = await api("/api/cloud/projects", { method:"POST", body:JSON.stringify({ name }) });
+        rememberProject(created?.project?.id || null);
+        createName.value = "";
+        createDetails.open = false;
+      }) });
+      createDetails.append(
+        el("summary", { class:"cloud-button", text:"+ New project" }),
+        el("div", { class:"cloud-project-create-form" }, [createName, createButton]),
+      );
+      const commandBar = el("div", { class:"cloud-project-toolbar" }, [
+        picker,
+        project ? el("button", { class:"cloud-button primary", type:"button", text:"Save current Canvas here", onclick:() => openProjectHistory(project.id) }) : null,
+        createDetails,
+      ]);
+      const card = el("article", { class:"cloud-project-card" });
+      if (project) {
         const projectCanvases = canvases.filter((canvas) => canvas.projectId === project.id);
-        const card = el("article", { class:"cloud-project-card" });
         card.append(el("div", { class:"cloud-project-card-head" }, [
           el("div", {}, [el("h4", { text:project.name || "Untitled project" }), el("span", { text:`${projectCanvases.length} Canvas${projectCanvases.length === 1 ? "" : "es"}` })]),
-          el("button", { class:"cloud-button", type:"button", text:"Save here", onclick:async () => {
-            const bridge = window.PenEchoCloudProjects;
-            if (!bridge?.openHistory) return window.alert("Cloud project saving is not ready yet.");
-            closeOverlay(panel.closest(".penecho-cloud-overlay"));
-            await bridge.openHistory(project.id);
-          } }),
         ]));
         const list = el("div", { class:"cloud-canvas-list" });
         if (!projectCanvases.length) list.append(el("div", { class:"cloud-project-empty", text:"No Canvases yet. Save the current Canvas here to start." }));
-        for (const canvas of projectCanvases.slice(0, 8)) {
+        for (const canvas of projectCanvases.slice(0, 12)) {
           const row = el("button", { class:"cloud-canvas-row", type:"button", onclick:async () => {
             const bridge = window.PenEchoCloudProjects;
             if (!bridge?.openCanvas) return window.alert("Cloud Canvas loading is not ready yet.");
@@ -424,10 +476,9 @@
           list.append(row);
         }
         card.append(list);
-        grid.append(card);
       }
-      if (!projects.length) grid.append(el("div", { class:"cloud-empty", text:"No Cloud projects yet. Create one to keep this Canvas available across devices." }));
-      content.replaceChildren(storage, grid, el("a", { class:"cloud-project-web-link", href:new URL("/dashboard.html#projects", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:"Manage revisions, Trash and recovery on the web ↗" }));
+      const projectArea = project ? card : el("div", { class:"cloud-empty", text:"No Cloud projects yet. Create one to keep this Canvas available across devices." });
+      content.replaceChildren(storage, commandBar, projectArea, el("a", { class:"cloud-project-web-link", href:new URL("/dashboard.html#projects", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:"Manage revisions, Trash and recovery on the web ↗" }));
     }
     async function load() {
       content.replaceChildren(el("div", { class:"cloud-message", text:"Loading Cloud projects…" }));
@@ -451,7 +502,6 @@
     const layout = el("div", { class:"penecho-cloud-layout" });
     shell.body.append(layout);
     function render() {
-      const accountColumn = el("div", {}, [accountPanel(render), devicePanel(render)]);
       const workspace = el("div", { class:"cloud-workspace" });
       const sections = el("nav", { class:"cloud-section-tabs", "aria-label":"PenEcho Cloud area" });
       sections.append(
@@ -465,7 +515,13 @@
         ]),
       );
       workspace.append(sections, cloudProjectsPanel());
-      layout.replaceChildren(accountColumn, workspace);
+      layout.classList.toggle("remote-cloud-runtime", !localHostControlsAvailable);
+      if (localHostControlsAvailable) {
+        const accountColumn = el("aside", { class:"cloud-local-controls", "aria-label":"This PenEcho host" }, [accountPanel(render), devicePanel(render)]);
+        layout.replaceChildren(accountColumn, workspace);
+      } else {
+        layout.replaceChildren(workspace);
+      }
     }
     render();
     startCloudStatusWatch(shell.overlay, render);

@@ -41,6 +41,14 @@ test("Cloud Center keeps projects local to the app and sends Explore to PenEcho 
   assert.match(cloud, /\/api\/cloud\/library/);
   assert.match(cloud, /Save current Canvas/);
   assert.match(cloud, /window\.PenEchoCloudProjects/);
+  assert.match(cloud, /localHostControlsAvailable = window\.PENECHO_CONFIG\?\.runtime !== "cloud"/);
+  assert.match(cloud, /remote-cloud-runtime/);
+  assert.match(cloud, /Sign out on this host/);
+  assert.match(cloud, /Remove this link/);
+  assert.match(cloud, /penecho-cloud-center-project/);
+  assert.match(cloud, /class:"cloud-project-picker"/);
+  assert.match(cloud, /text:"\+ New project"/);
+  assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
   assert.match(cloud, /base-revision-required/);
   assert.match(cloud, /startBrowserSignInWatch/);
   assert.match(cloud, /PenEcho will connect here automatically/);
@@ -62,6 +70,8 @@ test("Cloud Center keeps projects local to the app and sends Explore to PenEcho 
   assert.doesNotMatch(css, /\.cloud-item-preview/);
   assert.doesNotMatch(css, /\.cloud-community-grid/);
   assert.match(css, /\.cloud-project-card/);
+  assert.match(css, /\.penecho-cloud-layout\.remote-cloud-runtime/);
+  assert.match(css, /\.cloud-project-create-form/);
   assert.match(css, /overflow-wrap: anywhere/);
   assert.match(html, /Share to Community · Coming soon/);
   assert.doesNotMatch(html, /points-priced|Share for points|earn points/);
