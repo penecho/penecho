@@ -29,7 +29,13 @@ test("toolbar ships a Saved Crafts picker wired to community favorites", () => {
   assert.match(script, /setCraftsOpen\(false\)/);
 
   assert.match(locale, /savedCrafts: "收藏"/);
-  assert.match(locale, /savedCraftsTitle: "收藏的 Craft"/);
+  assert.match(locale, /savedCraftsTitle: "收藏的组件"/);
+  assert.match(locale, /savedSourceSynced: "云端 \+ 本机"/);
+  assert.match(locale, /savedLoading: "正在加载收藏…"/);
   assert.match(css, /\.crafts-row/);
+  assert.doesNotMatch(page, /id="craftsButton"[^>]*>[\s\S]*?<span data-i18n="savedCrafts">/);
+  assert.match(script, /function savedT|const savedT/);
+  assert.match(script, /savedT\("savedAdd"/);
+  assert.match(script, /savedT\("savedSourceLocal"/);
   assert.match(css, /\.crafts-modal/);
 });

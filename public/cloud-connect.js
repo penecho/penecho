@@ -764,6 +764,9 @@
   const craftsPopover = document.getElementById("craftsPopover");
   const craftsClose = document.getElementById("craftsClose");
   const craftsList = document.getElementById("craftsList");
+  const savedT = (key, fallback) => document.documentElement.lang.startsWith("zh")
+    ? (window.PENECHO_LOCALES?.zh || {})[key] || fallback
+    : fallback;
 
   function setCraftsOpen(open) {
     if (!craftsPopover) return;
@@ -873,9 +876,9 @@
     const badge = document.createElement("span");
     badge.className = "crafts-source";
     const cloud = sources.includes("cloud") || sources.includes("community");
-    if (cloud && sources.includes("local")) { badge.textContent = "☁ + local"; badge.title = "Saved on PenEcho Cloud and this device"; }
-    else if (cloud) { badge.textContent = sources.includes("community") ? "☁ community" : "☁ cloud"; badge.title = "Saved on PenEcho Cloud"; }
-    else { badge.textContent = "local"; badge.title = "Saved on this device only — it uploads to PenEcho Cloud once you sign in"; }
+    if (cloud && sources.includes("local")) { badge.textContent = savedT("savedSourceSynced", "☁ + local"); badge.title = savedT("savedSourceCloudTitle", "Saved on PenEcho Cloud and this device"); }
+    else if (cloud) { badge.textContent = sources.includes("community") ? savedT("savedSourceCommunity", "☁ community") : savedT("savedSourceCloud", "☁ cloud"); badge.title = savedT("savedSourceCloudTitle", "Saved on PenEcho Cloud"); }
+    else { badge.textContent = savedT("savedSourceLocal", "local"); badge.title = savedT("savedSourceLocalTitle", "Saved on this device only — it uploads to PenEcho Cloud once you sign in"); }
     return badge;
   }
 
@@ -924,19 +927,19 @@
     const add = document.createElement("button");
     add.type = "button";
     add.className = "crafts-add";
-    add.textContent = "Add";
+    add.textContent = savedT("savedAdd", "Add");
     add.addEventListener("click", async () => {
       add.disabled = true;
-      add.textContent = "Adding…";
+      add.textContent = savedT("savedAdding", "Adding…");
       try { await addCraftToCanvas(merged); setCraftsOpen(false); }
-      catch (error) { add.textContent = "Add"; add.disabled = false; alert(error?.message || "Could not add this Widget."); }
+      catch (error) { add.textContent = savedT("savedAdd", "Add"); add.disabled = false; alert(error?.message || savedT("savedErrorAdd", "Could not add this Widget.")); }
     });
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "crafts-remove";
     remove.textContent = "×";
-    remove.title = "Remove from saved";
-    remove.setAttribute("aria-label", `Remove ${source.name || "this Widget"} from saved`);
+    remove.title = savedT("savedRemoveTitle", "Remove from saved");
+    remove.setAttribute("aria-label", `${savedT("savedRemoveTitle", "Remove from saved")}: ${source.name || ""}`);
     remove.addEventListener("click", async () => {
       remove.disabled = true;
       await removeCraft(merged);
@@ -950,7 +953,7 @@
   async function openCrafts() {
     if (!craftsPopover) return;
     setCraftsOpen(true);
-    craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Loading saved Widgets…" }));
+    craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading saved Widgets…") }));
     const refresh = async () => { await renderCraftsList(); };
     async function renderCraftsList() {
       const locals = await localFavorites();
@@ -977,8 +980,8 @@
       const merged = [...mergedMap.values()];
       if (!merged.length) {
         craftsList.replaceChildren(el("p", { class:"crafts-empty", text:accountSignedIn()
-          ? "No saved Widgets yet. Tap ★ on any Widget to keep it here."
-          : "No saved Widgets yet. Tap ★ on any Widget — favorites stay on this device until you sign in to PenEcho Cloud." }));
+          ? savedT("savedEmptyIn", "No saved Widgets yet. Tap ★ on any Widget to keep it here.")
+          : savedT("savedEmptyOut", "No saved Widgets yet. Tap ★ on any Widget — favorites stay on this device until you sign in to PenEcho Cloud.") }));
         return;
       }
       craftsList.replaceChildren(...merged.map((entry) => craftsRow(entry, refresh)));
@@ -987,7 +990,7 @@
       await refreshStatus();
       await renderCraftsList();
     } catch (error) {
-      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || "Saved Widgets are unavailable right now." }));
+      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || savedT("savedErrorAdd", "Saved Widgets are unavailable right now.") }));
     }
   }
 
@@ -1004,7 +1007,7 @@
     await refreshStatus();
     if (actionName === "share") { shareDialog({ kind:"widget", widgetId }); return; }
     try { await toggleWidgetFavorite(widgetId); }
-    catch (error) { alert(error?.message || "Could not save this Widget."); }
+    catch (error) { alert(error?.message || savedT("savedErrorToggle", "Could not save this Widget.")); }
   });
   window.addEventListener("message", async (event) => {
     if (event.origin !== location.origin || event.data?.type !== "penecho:cloud-sign-in-result") return;
