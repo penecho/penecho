@@ -49,6 +49,16 @@
   topbar.append(brand, actions);
   document.body.append(topbar);
 
+  const notice = document.createElement("div");
+  notice.className = "viewer-notice";
+  notice.textContent = t(
+    "Widgets that fetch live data stay static in this read-only view — create a free account and link a device to see full interactive Crafts.",
+    "需要实时数据的 Widget 在只读视图中保持静态——注册免费账号并连接设备后即可查看完整交互内容。",
+  );
+  notice.title = t("Dismiss", "关闭");
+  notice.addEventListener("click", () => { notice.hidden = true; });
+  document.body.append(notice);
+
   const status = document.createElement("div");
   status.className = "viewer-status";
   status.setAttribute("role", "status");

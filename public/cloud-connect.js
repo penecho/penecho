@@ -4,6 +4,9 @@
   const cloudButton = document.getElementById("cloudAccountBtn");
   const shareCanvasButton = document.getElementById("shareCanvasBtn");
   if (!cloudButton || !shareCanvasButton) return;
+  // The read-only viewer shell has its own minimal header; the Cloud Center and
+  // its local-server API calls must stay silent there.
+  if (window.PENECHO_CONFIG?.runtime === "viewer") return;
 
   const CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other", "guidance", "collaboration", "learning"];
   const CATEGORY_LABELS = { guidance:"Sharing & Guidance", collaboration:"Co-creation", learning:"Learning Notes" };
