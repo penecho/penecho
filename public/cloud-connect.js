@@ -756,6 +756,94 @@
 
   window.PenEchoCommunityUI = Object.freeze({ takeFurther });
 
+  /* Saved Crafts picker: the toolbar ➕ lists favorited community Widgets. */
+  const craftsButton = document.getElementById("craftsButton");
+  const craftsPopover = document.getElementById("craftsPopover");
+  const craftsClose = document.getElementById("craftsClose");
+  const craftsList = document.getElementById("craftsList");
+
+  function setCraftsOpen(open) {
+    if (!craftsPopover) return;
+    craftsPopover.hidden = !open;
+    craftsPopover.setAttribute("aria-hidden", String(!open));
+    craftsButton?.setAttribute("aria-expanded", String(open));
+    if (open) document.body.classList.add("plugin-open");
+    else document.body.classList.remove("plugin-open");
+  }
+
+  function craftsFallbackThumb(kind) {
+    const node = document.createElement("span");
+    node.className = "crafts-thumb-fallback";
+    node.textContent = kind === "canvas" ? "C" : "W";
+    return node;
+  }
+
+  function craftsRow(item) {
+    const row = document.createElement("div");
+    row.className = "crafts-row";
+    const thumb = document.createElement("img");
+    thumb.className = "crafts-thumb";
+    thumb.alt = "";
+    thumb.loading = "lazy";
+    thumb.src = `/api/cloud/community/${encodeURIComponent(item.id)}/thumbnail`;
+    thumb.addEventListener("error", () => thumb.replaceWith(craftsFallbackThumb(item.kind)));
+    const copy = document.createElement("div");
+    copy.className = "crafts-copy";
+    const title = document.createElement("b");
+    title.textContent = item.name || "Untitled Craft";
+    const byline = document.createElement("small");
+    byline.textContent = `${item.kind || "widget"} · by ${item.author?.name || "PenEcho Crafter"}`;
+    copy.append(title, byline);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "crafts-add";
+    add.textContent = "Add";
+    add.addEventListener("click", async () => {
+      add.disabled = true;
+      add.textContent = "Adding…";
+      try {
+        await takeFurther(item.id);
+        setCraftsOpen(false);
+      } catch (error) {
+        add.textContent = "Add";
+        add.disabled = false;
+        const note = document.createElement("p");
+        note.className = "crafts-empty";
+        note.textContent = error?.message || "Could not add this Craft.";
+        craftsList.prepend(note);
+      }
+    });
+    row.append(thumb, copy, add);
+    return row;
+  }
+
+  async function openCrafts() {
+    if (!craftsPopover) return;
+    setCraftsOpen(true);
+    craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Loading saved Crafts…" }));
+    try {
+      await refreshStatus();
+      if (!accountSignedIn()) {
+        craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Sign in to PenEcho Cloud to see the Crafts you saved." }));
+        return;
+      }
+      const result = await api("/api/cloud/community?scope=favorites&sort=newest&limit=60");
+      const items = (result?.items || []).filter((item) => item.kind === "widget");
+      if (!items.length) {
+        craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"No saved Widgets yet. Favorite a community Craft and it will appear here." }));
+        return;
+      }
+      craftsList.replaceChildren(...items.map(craftsRow));
+    } catch (error) {
+      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || "Saved Crafts are unavailable right now." }));
+    }
+  }
+
+  craftsButton?.addEventListener("click", openCrafts);
+  craftsClose?.addEventListener("click", () => setCraftsOpen(false));
+  craftsPopover?.addEventListener("mousedown", (event) => { if (event.target === craftsPopover) setCraftsOpen(false); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !craftsPopover?.hidden) setCraftsOpen(false); });
+
   cloudButton.addEventListener("click", openCloud);
   shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); shareDialog({ kind:"canvas" }); });
   window.addEventListener("penecho:community-widget-action", async (event) => {
