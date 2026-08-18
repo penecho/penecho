@@ -55,7 +55,10 @@ test("Remote Canvas community back copy points to Craft Commons in both language
   // Non-community back copy is untouched.
   assert.match(remoteCanvas, /back:"Back to Projects"/);
   assert.match(remoteCanvas, /back:"返回项目"/);
-  assert.match(remoteCanvas, /backLink\.href = isCommunityCraft \? "\/community\.html" : "\/dashboard\.html#projects"/);
+  // The back affordance is now the clickable brand instead of a toolbar link.
+  assert.match(remoteCanvas, /const brandTarget = isCommunityCraft \? "\/community\.html" : "\/dashboard\.html";/);
+  assert.match(remoteCanvas, /brand\.addEventListener\("click", \(\) => \{ location\.assign\(brandTarget\); \}\)/);
+  assert.doesNotMatch(remoteCanvas, /remote-canvas-back/);
 });
 
 test("server community metadata categories and AI prompt allow the three new categories", () => {

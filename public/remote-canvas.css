@@ -98,3 +98,7 @@
   .remote-canvas-gate { backdrop-filter: none; }
   .remote-canvas-gate .remote-canvas-dot { animation: none; }
 }
+
+/* The brand acts as the way back to the console. */
+.brand[data-home-link] { cursor: pointer; border-radius: 8px; }
+.brand[data-home-link]:hover { outline: 1px solid rgb(148 163 184 / .35); outline-offset: 4px; }

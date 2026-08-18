@@ -122,22 +122,25 @@ test("Remote Canvas gate only ever contains a single Link Device action", () => 
   assert.doesNotMatch(gateCss, /remote-canvas-flow|data-action="retry"|remote-canvas-actions button/);
 });
 
-test("Remote Canvas adds a context-aware back link to the top-left toolbar", () => {
+test("Remote Canvas brand doubles as the way back to the console", () => {
   const project = boot();
-  assert.equal(project.back.href, "/dashboard.html#projects");
-  assert.equal(project.back.textContent, "← Back to Projects");
-  assert.equal(project.back.getAttribute("aria-label"), "Back to Projects");
+  assert.ok(project.brand, "brand element exists in the top row");
+  assert.equal(project.brand.getAttribute("role"), "link");
+  assert.equal(project.brand.title, "Back to Projects");
+  assert.equal(project.brand.getAttribute("aria-label"), "Back to Projects");
+  const click = project.brand.listeners.get("click");
+  assert.ok(click, "brand is clickable");
+  click({ });
+  assert.equal(project.redirects[0], "/dashboard.html");
 
   const community = boot({ pathname:`/canvas/community/${COMMUNITY_ID}` });
-  assert.equal(community.back.href, "/community.html");
-  assert.equal(community.back.textContent, "← Back to Craft Commons");
-  assert.equal(community.back.getAttribute("aria-label"), "Back to Craft Commons");
+  assert.equal(community.brand.title, "Back to Craft Commons");
+  community.brand.listeners.get("click")({ });
+  assert.equal(community.redirects[0], "/community.html");
 
   const zhCommunity = boot({ pathname:`/canvas/community/${COMMUNITY_ID}`, language:"zh-CN" });
-  assert.equal(zhCommunity.back.href, "/community.html");
-  assert.equal(zhCommunity.back.textContent, "← 返回共创广场");
-  assert.equal(zhCommunity.back.getAttribute("aria-label"), "返回共创广场");
-  assert.match(gateCss, /\.remote-canvas-back\s*\{/);
+  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回共创广场");
+  assert.doesNotMatch(gateScript, /remote-canvas-back/);
 });
 
 test("Remote Canvas keeps the connected-device status beside the brand and out of the AI feedback area", async () => {

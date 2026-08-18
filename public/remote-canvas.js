@@ -31,6 +31,7 @@
   }
   const bridgedPaths = [
     /^\/api\/settings(?:\/|$)/,
+    /^\/api\/favorites(?:\/|$)/,
     /^\/api\/canvas-projects(?:\/|$)/,
     /^\/api\/canvases(?:\/|$)/,
     /^\/api\/cloud(?:\/|$)/,
@@ -90,13 +91,19 @@
     failed:"This Craft could not be continued right now", opening:"Host online. Importing this Craft…",
   });
 
-  const backLink = document.createElement("a");
-  backLink.className = "remote-canvas-back";
-  backLink.href = isCommunityCraft ? "/community.html" : "/dashboard.html#projects";
-  backLink.title = copy.back;
-  backLink.setAttribute("aria-label", copy.back);
-  backLink.textContent = `← ${copy.back}`;
-  document.querySelector(".top-row")?.prepend(backLink);
+  // The PenEcho brand in the top bar doubles as the way back: the toolbar stays
+  // uncluttered and the escape hatch lives where users expect a home control.
+  const brandTarget = isCommunityCraft ? "/community.html" : "/dashboard.html";
+  const brand = document.querySelector(".brand");
+  if (brand) {
+    brand.setAttribute("data-home-link", "true");
+    brand.setAttribute("role", "link");
+    brand.setAttribute("tabindex", "0");
+    brand.title = copy.back;
+    brand.setAttribute("aria-label", copy.back);
+    brand.addEventListener("click", () => { location.assign(brandTarget); });
+    brand.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); location.assign(brandTarget); } });
+  }
 
   // The gate is a compact status view, not a landing page. The only action it
   // ever offers is Link Device, revealed solely while no device is linked
