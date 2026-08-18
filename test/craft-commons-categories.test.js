@@ -37,8 +37,15 @@ test("Cloud Connect share categories keep every original and append the three Cr
     "Sharing & Guidance", "Co-creation", "Learning Notes",
   ]);
 
-  // Draft restore and AI auto-fill still guard on the same widened list.
-  assert.equal((cloudConnect.match(/CATEGORIES\.includes\(/g) || []).length, 2);
+  // Draft restore, publish availability, publish validation, and AI auto-fill
+  // all guard on the same widened list.
+  assert.ok((cloudConnect.match(/CATEGORIES\.includes\(/g) || []).length >= 4);
+
+  // Sharing requires an explicit choice: the select opens on a placeholder and
+  // publishing stays blocked until a real category is picked.
+  assert.match(cloudConnect, /el\("option", \{ value:"", text:"Select a category…" \}\)/);
+  assert.match(cloudConnect, /!CATEGORIES\.includes\(category\.value\)/);
+  assert.match(cloudConnect, /!CATEGORIES\.includes\(payload\.category\)\) throw new Error\("Choose a category before publishing\."\)/);
 });
 
 test("Cloud Connect cloud tab links to Craft Commons instead of Explore", () => {

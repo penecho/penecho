@@ -4311,6 +4311,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.widgetEdit) acceptWidgetEdit();
     const visible = viewportRect(), source = { ...artifact.widget };
     delete source.id;
+    // Fit the widget into the visible canvas: oversized widgets shrink
+    // uniformly (content scales through the shell transform) and land centered
+    // instead of spilling past the viewport edges.
+    const fitScale = Math.min(1, (visible.w * 0.9) / Number(source.w || 300) || 1, (visible.h * 0.9) / Number(source.h || 200) || 1);
+    if (fitScale > 0 && fitScale < 1) { source.w = Number(source.w || 300) * fitScale; source.h = Number(source.h || 200) * fitScale; }
     source.x = Math.max(0, Math.min(SIZE - Number(source.w || 300), visible.x + Math.max(0, (visible.w - Number(source.w || 300)) / 2)));
     source.y = Math.max(0, Math.min(SIZE - Number(source.h || 200), visible.y + Math.max(0, (visible.h - Number(source.h || 200)) / 2)));
     await enableSnapshotWidgetPlugins([source]);

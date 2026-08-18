@@ -574,8 +574,8 @@
     const shell = dialogShell({ title, subtitle:"It does not need to be finished. It only needs to be worth understanding or taking further.", share:true });
     const name = el("input", { type:"text", maxlength:"160", placeholder:kind === "widget" ? "Widget name" : "Canvas name" });
     const description = el("textarea", { rows:"3", maxlength:"1200", placeholder:"A short, useful introduction" });
-    const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:CATEGORY_LABELS[value] || value[0].toUpperCase() + value.slice(1) })));
-    category.value = "productivity";
+    const category = el("select", {}, [el("option", { value:"", text:"Select a category…" }), ...CATEGORIES.map(value => el("option", { value, text:CATEGORY_LABELS[value] || value[0].toUpperCase() + value.slice(1) }))]);
+    category.value = "";
     const tags = el("input", { type:"text", maxlength:"260", placeholder:"planning, dashboard, learning" }),tagCount=el("small", { class:"cloud-tag-count", text:"0 / 8 tags" });
     const status = el("span", { class:"cloud-share-status", text:"Generating preview…" }),previewImage=el("img", { alt:`Automatic ${kind} share preview` }),previewMeta=el("span", { text:"WebP · validating content" }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
     const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:"Auto-fill with current AI", disabled:"" });
@@ -598,14 +598,14 @@
     let artifact=null,lineage=null,draftKey=null,publish=null;
     function parsedTags(){const seen=new Set();return tags.value.split(",").map(value=>value.trim()).filter(value=>{const key=value.toLocaleLowerCase();if(!value||seen.has(key))return false;seen.add(key);return true;});}
     function tagIssue(){const values=parsedTags();if(values.length>8)return "Use no more than 8 tags.";if(values.some(value=>value.length>32))return "Each tag must be 32 characters or fewer.";if(values.some(value=>!/^\p{L}[\p{L}\p{N} ._+-]*$/u.test(value)&&!/^\p{N}[\p{L}\p{N} ._+-]*$/u.test(value)))return "Tags must start with a letter or number.";return "";}
-    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!permission.checked||!trainingPermission.checked||!continuation.value.trim()||Boolean(tagIssue());}
+    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!CATEGORIES.includes(category.value)||!permission.checked||!trainingPermission.checked||!continuation.value.trim()||Boolean(tagIssue());}
     function refreshTagCount(){const values=parsedTags(),issue=tagIssue();tagCount.textContent=issue||`${values.length} / 8 tags`;tagCount.classList.toggle("error",Boolean(issue));updatePublishAvailability();}
     function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value,continuation:continuation.value};}
     function saveDraft(){if(!draftKey)return;try{sessionStorage.setItem(draftKey,JSON.stringify(draftPayload()));}catch{}}
-    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"productivity";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value=String(saved.continuation||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
+    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value=String(saved.continuation||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
     function clearDraft(){if(!draftKey)return;try{sessionStorage.removeItem(draftKey);}catch{}}
     for(const input of [name,description,tags,contribution,continuation])input.addEventListener("input",()=>{saveDraft();updatePublishAvailability();});
-    category.addEventListener("change",saveDraft);
+    category.addEventListener("change",()=>{saveDraft();updatePublishAvailability();});
     tags.addEventListener("input",refreshTagCount);
     shell.body.append(el("div", { class:"cloud-share-note", text:`A rough sketch can be the first surviving record of a great idea. PenEcho captures this ${kind} automatically—no image upload—and preserves every attributed step. The validated WebP is at most 2048 × 2048 and 4 MB.` }),previewPanel);
     shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:"Uses the AI connection currently active on this device." })]),field("Name", name), field("Description", description), field("Category", category),field("Tags (up to 8, comma separated)", el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
@@ -632,6 +632,7 @@
           publicationTermsVersion:PUBLICATION_TERMS_VERSION,
         };
         if (!payload.name) throw new Error("Enter a name before publishing.");
+        if (!CATEGORIES.includes(payload.category)) throw new Error("Choose a category before publishing.");
         if (tagIssue()) throw new Error(tagIssue());
         if (lineage && !payload.contributionNote) throw new Error("Tell the next Crafter what you moved forward.");
         if (!payload.continuationPrompt) throw new Error("Tell the next Crafter what is worth taking further.");
