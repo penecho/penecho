@@ -16,7 +16,8 @@ html.viewer-mode #settingsLayer,
 html.viewer-mode .canvas-navigation-lock,
 html.viewer-mode .canvas-navigation-lock-hint,
 html.viewer-mode .canvas-hint,
-html.viewer-mode .image-action-hint { display: none !important; }
+html.viewer-mode .image-action-hint,
+html.viewer-mode #tip { display: none !important; }
 
 /* Widgets and placed content never capture the pointer: every gesture pans
    or zooms the canvas, which is exactly what a presentation viewer needs. */
