@@ -68,6 +68,11 @@
   status.innerHTML = `<div><div class="spinner"></div>${copy.loading}</div>`;
   document.body.append(status);
 
+  // Paid or license-restricted Crafts answer the artifact fetch with 403;
+  // continuing them needs a redemption the read-only viewer cannot perform,
+  // so the primary "Take it further" action must not render for them.
+  let previewOnly = false;
+
   function chip(label, hint, href) {
     const link = document.createElement("a");
     link.className = "viewer-chip";
@@ -91,7 +96,7 @@
         const response = await fetch("/api/v1/devices", { credentials: "same-origin", headers: { accept: "application/json" } });
         if (response.ok) devices = ((await response.json())?.devices || []).filter((device) => device.online !== false).length;
       } catch { /* read-only stays the honest default */ }
-      if (devices > 0 && config.takeFurtherUrl) {
+      if (devices > 0 && config.takeFurtherUrl && !previewOnly) {
         const open = document.createElement("a");
         open.className = "viewer-primary";
         open.href = config.takeFurtherUrl;
@@ -121,7 +126,12 @@
     void renderAccountArea();
     try {
       const response = await fetch(config.artifactUrl, { headers: { accept: "application/json" } });
-      if (response.status === 403) { showPreview(copy.previewOnly); return; }
+      if (response.status === 403) {
+        previewOnly = true;
+        actions.querySelector(".viewer-primary")?.remove();
+        showPreview(copy.previewOnly);
+        return;
+      }
       if (!response.ok) throw new Error(`artifact ${response.status}`);
       const payload = await response.json();
       const artifact = payload?.artifact && payload.artifact.format ? payload.artifact : payload;
