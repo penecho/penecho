@@ -786,6 +786,28 @@
     return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
   }
 
+  /* Deletion tombstones: a favorite removed while the cloud DELETE could not
+     land (offline, expired session) must stay deleted. The next sync re-issues
+     the DELETE for the surviving cloud copy instead of mirroring it back. */
+  const FAVORITE_TOMBSTONES_KEY = "penecho-favorite-tombstones";
+  function favoriteTombstones() {
+    try { return JSON.parse(localStorage.getItem(FAVORITE_TOMBSTONES_KEY)) || {}; } catch { return {}; }
+  }
+  function writeFavoriteTombstones(tombstones) {
+    try { localStorage.setItem(FAVORITE_TOMBSTONES_KEY, JSON.stringify(tombstones)); } catch {}
+  }
+  function rememberFavoriteTombstone(sha256) {
+    if (!sha256) return;
+    const entries = Object.entries({ ...favoriteTombstones(), [sha256]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 200);
+    writeFavoriteTombstones(Object.fromEntries(entries));
+  }
+  function clearFavoriteTombstone(sha256) {
+    const tombstones = favoriteTombstones();
+    if (!Object.hasOwn(tombstones, sha256)) return;
+    delete tombstones[sha256];
+    writeFavoriteTombstones(tombstones);
+  }
+
   async function localFavorites() {
     try { return (await api("/api/favorites")).favorites || []; }
     catch { return []; }
@@ -817,10 +839,12 @@
     const serialized = { name:String(artifact.widget?.title || "Untitled Widget").slice(0, 160), artifact, thumbnail:artifact.communityThumbnail?.dataBase64 || "", sourceItemId:artifact.widget?.communityOriginItemId || null };
     if (existing) {
       await removeLocalFavorite(sha256);
+      rememberFavoriteTombstone(sha256);
       if (accountSignedIn() && existing.cloudId) { try { await api(`/api/cloud/favorites/${encodeURIComponent(existing.cloudId)}`, { method:"DELETE" }); } catch {} }
       bridge.setWidgetFavorite(widgetId, false);
       return false;
     }
+    clearFavoriteTombstone(sha256);
     let saved = await saveLocalFavorite({ ...serialized, cloudId:null });
     if (accountSignedIn()) {
       try {
@@ -857,13 +881,26 @@
         } catch {}
       }
     }
+    const tombstones = favoriteTombstones();
     for (const cloudEntry of cloud) {
-      if (!locals.some((entry) => entry.artifactSha256 === cloudEntry.artifactSha256)) {
-        try {
-          await saveLocalFavorite({ name:cloudEntry.name, artifactSha256:cloudEntry.artifactSha256, artifact:cloudEntry.artifact, thumbnail:cloudEntry.thumbnail, sourceItemId:cloudEntry.sourceItemId, cloudId:cloudEntry.id, createdAt:cloudEntry.createdAt });
-          synced += 1;
-        } catch {}
+      if (locals.some((entry) => entry.artifactSha256 === cloudEntry.artifactSha256)) continue;
+      const tombstonedAt = Number(tombstones[cloudEntry.artifactSha256]) || 0;
+      if (tombstonedAt) {
+        // A cloud copy created after the tombstone is a fresh favorite made on
+        // another device — the delete intent does not cover it.
+        if (Number(cloudEntry.createdAt) > tombstonedAt) clearFavoriteTombstone(cloudEntry.artifactSha256);
+        else {
+          try {
+            await api(`/api/cloud/favorites/${encodeURIComponent(cloudEntry.id)}`, { method:"DELETE" });
+            clearFavoriteTombstone(cloudEntry.artifactSha256);
+          } catch { /* still offline: the tombstone retries next sync */ }
+        }
+        continue;
       }
+      try {
+        await saveLocalFavorite({ name:cloudEntry.name, artifactSha256:cloudEntry.artifactSha256, artifact:cloudEntry.artifact, thumbnail:cloudEntry.thumbnail, sourceItemId:cloudEntry.sourceItemId, cloudId:cloudEntry.id, createdAt:cloudEntry.createdAt });
+        synced += 1;
+      } catch {}
     }
     return { synced };
   }
@@ -900,8 +937,8 @@
 
   async function removeCraft(merged) {
     for (const source of merged.sources) {
-      if (source.type === "local") await removeLocalFavorite(source.entry.artifactSha256);
-      else if (source.type === "cloud") { try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.id)}`, { method:"DELETE" }); } catch {} }
+      if (source.type === "local") { await removeLocalFavorite(source.entry.artifactSha256); rememberFavoriteTombstone(source.entry.artifactSha256); }
+      else if (source.type === "cloud") { rememberFavoriteTombstone(source.entry.artifactSha256); try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.id)}`, { method:"DELETE" }); } catch {} }
       else if (source.type === "community") { try { await api(`/api/cloud/community/${encodeURIComponent(source.entry.id)}/favorite`, { method:"DELETE" }); } catch {} }
     }
   }

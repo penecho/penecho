@@ -40,3 +40,15 @@ test("toolbar ships a Saved Crafts picker wired to community favorites", () => {
   assert.match(script, /savedT\("savedSourceLocal"/);
   assert.match(css, /\.crafts-modal/);
 });
+
+test("favorite deletes leave a tombstone so offline removals never resurrect", () => {
+  // Deleting a favorite while the cloud DELETE cannot land must not be undone
+  // by the next sync mirroring the surviving cloud copy back down.
+  const script = read("public/cloud-connect.js");
+  assert.match(script, /rememberFavoriteTombstone\(sha256\);\s*\n\s*if \(accountSignedIn\(\) && existing\.cloudId\)/);
+  assert.match(script, /if \(source\.type === "local"\) \{ await removeLocalFavorite\(source\.entry\.artifactSha256\); rememberFavoriteTombstone/);
+  assert.match(script, /const tombstones = favoriteTombstones\(\);/);
+  assert.match(script, /tombstones\[cloudEntry\.artifactSha256\]/);
+  assert.match(script, /clearFavoriteTombstone\(cloudEntry\.artifactSha256\)/);
+  assert.match(script, /Number\(cloudEntry\.createdAt\) > tombstonedAt/, "a cloud copy newer than the tombstone is a fresh favorite, not a resurrection");
+});
