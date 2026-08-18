@@ -897,7 +897,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return { ...authenticatedApiHeaders(headers), "X-PenEcho-Connection":selectedAiConnectionId() };
   }
   function canvasAssetUrl(name) {
-    const base = window.PENECHO_CONFIG?.runtime === "cloud" ? new URL("/canvas/", location.origin) : location.href;
+    // Cloud-served shells (remote canvas + read-only viewer) live under nested
+    // routes (/canvas/community/:id, /canvas/view/:id), so assets must resolve
+    // against the canvas root rather than the page URL.
+    const runtime = window.PENECHO_CONFIG?.runtime;
+    const base = runtime === "cloud" || runtime === "viewer" ? new URL("/canvas/", location.origin) : location.href;
     return new URL(name, base).href;
   }
   const tiles = new Map(),
