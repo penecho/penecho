@@ -69,7 +69,8 @@
     const link = document.createElement("a");
     link.className = "viewer-chip";
     link.href = href;
-    link.innerHTML = `<b>${label}</b>${hint ? `<small>${hint}</small>` : ""}`;
+    link.textContent = label;
+    if (hint) link.title = hint;
     return link;
   }
 
