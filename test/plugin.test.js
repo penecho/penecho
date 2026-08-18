@@ -904,3 +904,20 @@ test("widget iframe preserves native navigation while forwarding only focus and 
   assert.equal(suspended.svg.paused, false);
   assert.equal(suspended.classes.has("penecho-widget-paused"), false);
 });
+
+test("plugin catalog paths accept PenEcho Cloud content-version suffixes", () => {
+  // PenEcho Cloud serves /api/plugins entries with ?v=<sha256-12> cache-busting
+  // suffixes. The catalog validator must accept them (and keep rejecting
+  // anything outside the plugins/ tree) or no manifest ever loads on
+  // cloud-served canvases and widgets silently never mount.
+  const app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8");
+  const validate = vm.runInNewContext(`(${functionSource(app, "validPluginCatalogPath")})`, {});
+  assert.equal(validate("plugins/general/plugin.md", "md"), "plugins/general/plugin.md");
+  assert.equal(validate("plugins/general/plugin.md?v=1734dd52572c", "md"), "plugins/general/plugin.md?v=1734dd52572c");
+  assert.equal(validate("plugins/flowchart/styles.css?v=c5173c2e432d", "css"), "plugins/flowchart/styles.css?v=c5173c2e432d");
+  assert.equal(validate("plugins/private/my-widget/plugin.md?v=abc123def456", "md"), "plugins/private/my-widget/plugin.md?v=abc123def456");
+  assert.equal(validate("plugins/general/plugin.md?v=not-hex!!", "md"), null);
+  assert.equal(validate("plugins/general/plugin.md?x=1734dd52572c", "md"), null);
+  assert.equal(validate("https://evil.example/plugins/general/plugin.md", "md"), null);
+  assert.equal(validate("plugins/../secret.md", "md"), null);
+});

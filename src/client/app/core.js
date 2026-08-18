@@ -2246,7 +2246,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (typeof value !== "string") return null;
     const suffix = extension === "css" ? "styles\\.css" : "plugin\\.md",
       legacy = extension === "md" ? "|[a-z0-9][a-z0-9-]{0,63}\\.md" : "";
-    return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})$`).test(value) ? value : null;
+    // PenEcho Cloud appends a content-version query (?v=<sha>) for cache
+    // busting; accept it alongside the plain paths the local server returns.
+    return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})(?:\\?v=[a-f0-9]{6,16})?$`).test(value) ? value : null;
   }
   async function loadPluginDocuments() {
     if (state.pluginCatalogLoading) return false;
