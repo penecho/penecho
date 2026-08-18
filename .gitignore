@@ -25,3 +25,13 @@ tools/mobile/ios/
 tools/mobile/web/penecho-mark.png
 .claude
 .penecho-local-test/
+
+# Agent / assistant working directories
+.playwright-cli/
+.zcode/
+.cursor/
+.codex/
+.gemini/
+.aider*
+.windsurf/
+.trash/

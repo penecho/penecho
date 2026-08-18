@@ -27,6 +27,7 @@ const ROUTES = [
   { pattern:new RegExp(`^/api/cloud/canvases/${UUID}$`, "i"), methods:new Set(["GET", "POST", "DELETE"]) },
   { pattern:new RegExp(`^/api/cloud/canvases/${UUID}/(?:save|thumbnail)$`, "i"), methods:new Set(["GET", "POST"]) },
   { pattern:/^\/api\/cloud\/community$/, methods:new Set(["GET"]), query:true },
+  { pattern:/^\/api\/cloud\/community\/share$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}$`, "i"), methods:new Set(["GET"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}/(?:thumbnail|preview|artifact)$`, "i"), methods:new Set(["GET"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}/favorite$`, "i"), methods:new Set(["POST", "DELETE"]) },

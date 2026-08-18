@@ -87,6 +87,15 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   }
 });
 
+test("closing Settings moves focus outside before hiding it from accessibility APIs", () => {
+  const closeSettings = functionSource(read("public/app.js"), "closeSettings");
+  const focusMove = closeSettings.indexOf("settingsLayer.contains(document.activeElement)");
+  const hideLayer = closeSettings.indexOf("settingsLayer.hidden = true");
+  const hideFromAccessibility = closeSettings.indexOf('settingsLayer.setAttribute("aria-hidden", "true")');
+  assert.ok(focusMove >= 0 && focusMove < hideLayer && hideLayer < hideFromAccessibility);
+  assert.match(closeSettings, /restoreTarget\?\.focus\(\{ preventScroll:true \}\)/);
+});
+
 test("canvas photos use one picker, editable image records, side action bar, and dirty Auto AI", () => {
   const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js"), css = read("public/style.css"),
     end = functionSource(app, "end"),

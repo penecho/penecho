@@ -787,6 +787,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDeleted: "Widget deleted",
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
+      favoriteWidget: "Favorite widget",
+      unfavoriteWidget: "Remove widget favorite",
+      widgetFavorited: "Widget added to Favorites",
+      widgetUnfavorited: "Widget removed from Favorites",
       widgetRefine: "AI Refine",
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
       widgetRefineNearbyHint: "New annotations were detected near this widget. Use AI Refine to update it from those instructions.",
@@ -2041,11 +2045,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function closeSettings(restore = true) {
     if (!settings.open) return false;
+    const restoreTarget = restore && settings.restoreFocus?.isConnected ? settings.restoreFocus : settingsButton;
+    if (settingsLayer.contains(document.activeElement)) restoreTarget?.focus({ preventScroll:true });
     settings.open = false;
     settingsLayer.hidden = true;
     settingsLayer.setAttribute("aria-hidden", "true");
     settingsButton.setAttribute("aria-expanded", "false");
-    if (restore) requestAnimationFrame(() => settings.restoreFocus?.focus({ preventScroll: true }));
+    if (restore && document.activeElement !== restoreTarget) requestAnimationFrame(() => restoreTarget?.focus({ preventScroll:true }));
     settings.restoreFocus = null;
     return true;
   }

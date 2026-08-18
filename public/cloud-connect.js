@@ -5,7 +5,8 @@
   const shareCanvasButton = document.getElementById("shareCanvasBtn");
   if (!cloudButton || !shareCanvasButton) return;
 
-  const CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other"];
+  const CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other", "guidance", "collaboration", "learning"];
+  const CATEGORY_LABELS = { guidance:"Sharing & Guidance", collaboration:"Co-creation", learning:"Learning Notes" };
   const PUBLICATION_TERMS_VERSION = "2026-08-12";
   const sessionToken = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || "");
   const configuredCloudOrigin = String(window.PENECHO_CONFIG?.cloudOrigin || "https://penecho.ai");
@@ -28,6 +29,14 @@
 
   function communityUrl(item) {
     return new URL(String(item?.shareUrl || `/community/${item?.id || ""}`), `${cloudOrigin()}/`).toString();
+  }
+
+  function cloudDevicesUrl() {
+    return new URL("/dashboard.html#devices", `${cloudOrigin()}/`).toString();
+  }
+
+  function cloudDevicesLink(text) {
+    return el("a", { href:cloudDevicesUrl(), target:"_blank", rel:"noopener", text });
   }
 
   async function copyText(value) {
@@ -125,12 +134,20 @@
     cloudButton.title = connected ? "PenEcho Cloud · Device linked" : accountSignedIn() ? `PenEcho Cloud · ${account?.credits || 0} credits` : "Connect PenEcho Cloud";
   }
 
+  let statusRequestSeq = 0;
+
   async function refreshStatus(force = false) {
+    const seq = ++statusRequestSeq;
     try {
-      state.status = await api(force ? "/api/cloud/account" : "/api/cloud/status");
+      const status = await api(force ? "/api/cloud/account" : "/api/cloud/status");
+      // A newer request already superseded this one; never let a stale,
+      // slower response overwrite fresher status.
+      if (seq !== statusRequestSeq) return state.status;
+      state.status = status;
       updateCloudButton();
       return state.status;
     } catch (error) {
+      if (seq !== statusRequestSeq) return state.status;
       if (force) throw error;
       cloudButton.dataset.state = "signed-out";
       return null;
@@ -139,6 +156,8 @@
 
   let cloudStatusTimer = 0;
   let cloudStatusPolling = false;
+  let cloudStatusWatchId = 0;
+  let cloudStatusPoll = null;
 
   function cloudStatusSignature() {
     const device = state.status?.device || {};
@@ -156,29 +175,37 @@
   }
 
   function stopCloudStatusWatch() {
+    cloudStatusWatchId++; // invalidate any in-flight poll from a previous watch
     clearTimeout(cloudStatusTimer);
     cloudStatusTimer = 0;
     cloudStatusPolling = false;
+    cloudStatusPoll = null;
   }
 
   function startCloudStatusWatch(overlay, render) {
     stopCloudStatusWatch();
+    const id = cloudStatusWatchId;
     let previous = cloudStatusSignature();
     const poll = async () => {
-      if (!overlay.isConnected || cloudStatusPolling) return;
+      // Never run two polls at once and never let a stale watch touch shared
+      // flags; an in-flight poll always reschedules in its finally block.
+      if (id !== cloudStatusWatchId || !overlay.isConnected || cloudStatusPolling) return;
       cloudStatusPolling = true;
       try {
         await refreshStatus();
+        if (id !== cloudStatusWatchId || !overlay.isConnected) return;
         const current = cloudStatusSignature();
         if (current !== previous) {
           previous = current;
           render();
         }
       } finally {
+        if (id !== cloudStatusWatchId) return; // a newer watch owns the timer and flags now
         cloudStatusPolling = false;
         if (overlay.isConnected) cloudStatusTimer = setTimeout(poll, document.visibilityState === "visible" ? CLOUD_STATUS_POLL_MS : 5000);
       }
     };
+    cloudStatusPoll = poll;
     cloudStatusTimer = setTimeout(poll, CLOUD_STATUS_POLL_MS);
   }
 
@@ -334,7 +361,11 @@
       const settings = el("details", { class:"cloud-secondary-settings" });
       settings.append(
         el("summary", { text:"Link settings" }),
-        el("p", { text:"Removing the link stops remote access. You can connect this host again later with a new pairing key from Cloud → Devices." }),
+        el("p", {}, [
+          document.createTextNode("Removing the link stops remote access. You can connect this host again later with a new pairing key from "),
+          cloudDevicesLink("Cloud → Devices"),
+          document.createTextNode("."),
+        ]),
         el("button", { class:"cloud-button danger", type:"button", text:"Remove this link", onclick:async () => {
           if (!window.confirm("Remove this device link? Remote access will stop, but you can pair this host again later.")) return;
           await action(render, async () => { await api("/api/cloud/device/revoke", { method:"POST", body:"{}" }); await refreshStatus(); });
@@ -343,7 +374,11 @@
       panel.append(settings);
       return panel;
     }
-    panel.append(el("p", { text:"Generate a pairing key in PenEcho Cloud → Devices, then enter it below." }));
+    panel.append(el("p", {}, [
+      document.createTextNode("Generate a pairing key in "),
+      cloudDevicesLink("PenEcho Cloud → Devices"),
+      document.createTextNode(", then enter it below."),
+    ]));
     const code = el("input", { type:"text", maxlength:"32", autocomplete:"one-time-code", placeholder:"Pairing key" });
     const name = el("input", { type:"text", maxlength:"80", value:"My PenEcho", placeholder:"Device name" });
     panel.append(field("Pairing key", code), field("Device name", name));
@@ -510,7 +545,7 @@
           el("span", { text:"Private cross-device work" }),
         ]),
         el("a", { class:"cloud-section-tab", href:new URL("/community.html", `${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener" }, [
-          el("strong", { text:"Explore ↗" }),
+          el("strong", { text:"Craft Commons ↗" }),
           el("span", { text:"Browse public Crafts on PenEcho Cloud" }),
         ]),
       );
@@ -536,7 +571,7 @@
     const shell = dialogShell({ title, subtitle:"It does not need to be finished. It only needs to be worth understanding or taking further.", share:true });
     const name = el("input", { type:"text", maxlength:"160", placeholder:kind === "widget" ? "Widget name" : "Canvas name" });
     const description = el("textarea", { rows:"3", maxlength:"1200", placeholder:"A short, useful introduction" });
-    const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:value[0].toUpperCase() + value.slice(1) })));
+    const category = el("select", {}, CATEGORIES.map(value => el("option", { value, text:CATEGORY_LABELS[value] || value[0].toUpperCase() + value.slice(1) })));
     category.value = "productivity";
     const tags = el("input", { type:"text", maxlength:"260", placeholder:"planning, dashboard, learning" }),tagCount=el("small", { class:"cloud-tag-count", text:"0 / 8 tags" });
     const status = el("span", { class:"cloud-share-status", text:"Generating preview…" }),previewImage=el("img", { alt:`Automatic ${kind} share preview` }),previewMeta=el("span", { text:"WebP · validating content" }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
@@ -745,10 +780,19 @@
     browserSignInMessage("Cloud sign-in could not be completed. Please try again.", "error");
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || !state.browserSignIn.active || !state.browserSignIn.poll) return;
-    clearTimeout(state.browserSignIn.timer);
-    state.browserSignIn.timer = 0;
-    void state.browserSignIn.poll();
+    if (document.visibilityState !== "visible") return;
+    if (state.browserSignIn.active && state.browserSignIn.poll) {
+      clearTimeout(state.browserSignIn.timer);
+      state.browserSignIn.timer = 0;
+      void state.browserSignIn.poll();
+    }
+    // Refresh the Cloud Center immediately when the page becomes visible again
+    // instead of waiting out the longer hidden-tab poll interval.
+    if (cloudStatusPoll) {
+      clearTimeout(cloudStatusTimer);
+      cloudStatusTimer = 0;
+      void cloudStatusPoll();
+    }
   });
   void refreshStatus();
 })();

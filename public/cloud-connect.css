@@ -70,6 +70,8 @@
 .penecho-cloud-panel { background: color-mix(in srgb, var(--panel, #fff) 94%, #92b8ee 6%); border: 1px solid var(--line, #d2d8e2); border-radius: .85rem; padding: .9rem; }
 .penecho-cloud-panel h3 { font-size: .92rem; margin: 0 0 .7rem; }
 .penecho-cloud-panel p { color: var(--muted, #667081); font-size: .8rem; line-height: 1.45; margin: .4rem 0; overflow-wrap: anywhere; }
+.penecho-cloud-panel p a { color: #285e9e; font-weight: 650; text-decoration: none; white-space: nowrap; }
+.penecho-cloud-panel p a:hover { text-decoration: underline; }
 .penecho-cloud-panel + .penecho-cloud-panel { margin-top: .8rem; }
 .cloud-account-summary { align-items: center; display: flex; gap: .65rem; margin-bottom: .75rem; }
 .cloud-avatar { align-items: center; background: #e4efff; border-radius: .75rem; color: #3265a8; display: flex; font-size: 1.1rem; font-weight: 800; height: 2.6rem; justify-content: center; width: 2.6rem; }

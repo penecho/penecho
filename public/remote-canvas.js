@@ -9,6 +9,26 @@
   const isCommunityCraft = Boolean(requestedCommunityItemId);
 
   const nativeFetch = window.fetch.bind(window);
+  const cloudRuntime = window.PENECHO_CONFIG?.runtime === "cloud";
+  let resolveBridgeGate = null;
+  let bridgeGateSettled = !cloudRuntime;
+  const bridgeGate = cloudRuntime
+    ? new Promise((resolve) => { resolveBridgeGate = resolve; })
+    : Promise.resolve({ online:true });
+  function settleBridgeGate(state) {
+    if (bridgeGateSettled) return;
+    bridgeGateSettled = true;
+    resolveBridgeGate?.(state);
+  }
+  function unavailableBridgeResponse(state) {
+    const payload = {
+      error:"device_offline",
+      code:"device_offline",
+      message:state?.message || "Your linked PenEcho host is offline.",
+    };
+    if (typeof Response === "function") return new Response(JSON.stringify(payload), { status:409, headers:{ "content-type":"application/json" } });
+    return { ok:false, status:409, headers:new Headers({ "content-type":"application/json" }), json:async () => payload };
+  }
   const bridgedPaths = [
     /^\/api\/settings(?:\/|$)/,
     /^\/api\/canvas-projects(?:\/|$)/,
@@ -45,50 +65,83 @@
     const target = shouldBridge
       ? `/api/v1/remote-canvas/http?path=${encodeURIComponent(`${sourceUrl.pathname === "/canvas/api/widget-fetch" ? "/api/widget-fetch" : sourceUrl.pathname}${sourceUrl.search}`)}`
       : `${sourceUrl.pathname}${sourceUrl.search}`;
-    return nativeFetch(target, { ...options, method, headers, credentials:"same-origin" });
+    const request = () => nativeFetch(target, { ...options, method, headers, credentials:"same-origin" });
+    if (!shouldBridge || !cloudRuntime) return request();
+    return bridgeGate.then((state) => state?.online ? request() : unavailableBridgeResponse(state));
   };
 
   const zh = /^zh\b/i.test(navigator.language || "");
   const copy = zh ? {
-    eyebrow:"私人云端画布", checking:"正在连接你的 PenEcho 主机…", noHost:"连接一台 PenEcho 主机后即可打开",
+    eyebrow:"私人云端画布", checking:"正在连接你的 PenEcho 主机…", noHost:"连接 PenEcho 主机后即可打开",
     offline:"已连接的 PenEcho 主机当前离线", failed:"这张画布暂时无法打开",
-    body:"项目与版本安全存储在云端；画布运行、模型请求和 API 密钥始终由你连接的电脑处理，云服务器不会运行画布。",
-    nodes:["已登录的浏览器", "PenEcho Cloud 桥接", "你的 PenEcho 主机"],
-    nodeDetails:["打开指定云端画布", "身份验证与白名单中继", "本地运行画布与模型"],
-    dashboard:"Link Device", projects:"返回 Cloud Projects", download:"下载 PenEcho", retry:"重新连接",
-    connected:"受保护的远程连接", unavailable:"尚未连接设备。请先安装 PenEcho，并在 Link Device 页面连接一台主电脑。", opening:"主机在线，正在打开云端画布…",
+    dashboard:"Link Device", back:"返回项目",
+    connected:"受保护的远程连接", unavailable:"请先在 Link Device 中连接一台 PenEcho 主机。", opening:"主机在线，正在打开云端画布…",
   } : {
     eyebrow:"Private Cloud Canvas", checking:"Connecting to your PenEcho host…", noHost:"Connect one PenEcho host to open this Canvas",
     offline:"Your linked PenEcho host is offline", failed:"This Canvas could not be opened",
-    body:"Your project and versions are stored safely in Cloud. Canvas runtime, model requests, and API keys stay on your linked computer; the Cloud server never runs the Canvas.",
-    nodes:["Signed-in browser", "PenEcho Cloud Bridge", "Your PenEcho host"],
-    nodeDetails:["Opens this Cloud Canvas", "Auth + allow-listed relay", "Runs Canvas + model locally"],
-    dashboard:"Link Device", projects:"Back to Cloud Projects", download:"Download PenEcho", retry:"Try again",
+    dashboard:"Link Device", back:"Back to Projects",
     connected:"Protected remote connection", unavailable:"No device is linked yet. Install PenEcho, then connect one main computer from Link Device.", opening:"Host online. Opening your Cloud Canvas…",
   };
   if (isCommunityCraft) Object.assign(copy, zh ? {
-    eyebrow:"公开 Craft", checking:"正在连接你的 PenEcho 主机…", noHost:"连接一台 PenEcho 主机后继续创作",
-    failed:"暂时无法继续这个 Craft",
-    body:"PenEcho Cloud 只提供公开预览、身份验证和安全桥接；画布素材会导入到你连接的电脑，并始终在那里运行。云服务器不会运行画布。",
-    nodes:["公开 Craft", "PenEcho Cloud 桥接", "你的 PenEcho 主机"],
-    nodeDetails:["选择一个想法", "验证身份并中继", "导入并继续创作"],
-    projects:"返回 Explore", opening:"主机在线，正在导入这个 Craft…",
+    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后继续创作", back:"返回共创广场",
+    failed:"暂时无法继续这个 Craft", opening:"主机在线，正在导入这个 Craft…",
   } : {
-    eyebrow:"Public Craft", checking:"Connecting to your PenEcho host…", noHost:"Connect one PenEcho host to take this further",
-    failed:"This Craft could not be continued right now",
-    body:"PenEcho Cloud provides the public preview, identity check, and protected bridge only. The artifact is imported into your linked computer and runs there; Cloud never runs the Canvas.",
-    nodes:["Public Craft", "PenEcho Cloud Bridge", "Your PenEcho host"],
-    nodeDetails:["Choose an idea", "Authenticates + relays", "Imports + continues locally"],
-    projects:"Back to Explore", opening:"Host online. Importing this Craft…",
+    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to take this further", back:"Back to Craft Commons",
+    failed:"This Craft could not be continued right now", opening:"Host online. Importing this Craft…",
   });
 
+  const backLink = document.createElement("a");
+  backLink.className = "remote-canvas-back";
+  backLink.href = isCommunityCraft ? "/community.html" : "/dashboard.html#projects";
+  backLink.title = copy.back;
+  backLink.setAttribute("aria-label", copy.back);
+  backLink.textContent = `← ${copy.back}`;
+  document.querySelector(".top-row")?.prepend(backLink);
+
+  // The gate is a compact status view, not a landing page. The only action it
+  // ever offers is Link Device, revealed solely while no device is linked
+  // (gate.dataset.state === "unlinked"); checking, offline, opening and error
+  // states render no actions at all.
   const gate = document.createElement("div");
   gate.className = "remote-canvas-gate";
   gate.setAttribute("role", "status");
   gate.setAttribute("aria-live", "polite");
-  gate.innerHTML = `<section class="remote-canvas-card" aria-labelledby="remoteCanvasTitle"><p class="eyebrow">${copy.eyebrow}</p><h2 id="remoteCanvasTitle">${copy.checking}</h2><p data-remote-body>${copy.body}</p><div class="remote-canvas-flow" role="img" aria-label="${copy.nodes.join(" to ")}"><div><span>01</span><b>${copy.nodes[0]}</b><small>${copy.nodeDetails[0]}</small></div><i aria-hidden="true">→</i><div><span>02</span><b>${copy.nodes[1]}</b><small>${copy.nodeDetails[1]}</small></div><i aria-hidden="true">→</i><div><span>03</span><b>${copy.nodes[2]}</b><small>${copy.nodeDetails[2]}</small></div></div><div class="remote-canvas-actions"><a class="primary" href="/dashboard.html#devices">${copy.dashboard}</a><a href="/downloads.html">${copy.download}</a><button type="button" data-remote-retry>${copy.retry}</button><a href="/dashboard.html#projects">${copy.projects}</a></div><div class="remote-canvas-detail" data-remote-detail>${location.origin}${location.pathname}</div></section>`;
+  gate.dataset.state = "checking";
+
+  const card = document.createElement("section");
+  card.className = "remote-canvas-card";
+  card.setAttribute("aria-labelledby", "remoteCanvasTitle");
+
+  const head = document.createElement("div");
+  head.className = "remote-canvas-head";
+  const dot = document.createElement("span");
+  dot.className = "remote-canvas-dot";
+  dot.setAttribute("aria-hidden", "true");
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = copy.eyebrow;
+  head.append(dot, eyebrow);
+
+  const title = document.createElement("h2");
+  title.id = "remoteCanvasTitle";
+  title.textContent = copy.checking;
+
+  const detail = document.createElement("p");
+  detail.className = "remote-canvas-detail";
+  detail.textContent = `${location.origin}${location.pathname}`;
+
+  const actions = document.createElement("div");
+  actions.className = "remote-canvas-actions";
+  const link = document.createElement("a");
+  link.className = "primary";
+  link.dataset.action = "link";
+  link.href = "/dashboard.html#devices";
+  link.textContent = copy.dashboard;
+  actions.append(link);
+
+  card.append(head, title, detail, actions);
+  gate.append(card);
   document.body.append(gate);
-  const title = gate.querySelector("h2"), detail = gate.querySelector("[data-remote-detail]");
 
   function statusBadge(device) {
     let badge = document.querySelector(".remote-canvas-status");
@@ -96,11 +149,15 @@
       badge = document.createElement("div");
       badge.className = "remote-canvas-status";
       badge.setAttribute("role", "status");
-      document.querySelector(".top-row")?.insertBefore(badge, document.querySelector(".language-toggle"));
+      const brand = document.querySelector(".brand");
+      if (brand) brand.append(badge);
+      else document.querySelector(".top-row")?.insertBefore(badge, document.querySelector(".language-toggle"));
     }
-    badge.title = `${copy.connected}: ${device.name}`;
+    const deviceName = String(device.name || "PenEcho");
+    badge.title = `${copy.connected}: ${deviceName}`;
+    badge.setAttribute("aria-label", badge.title);
     const label = document.createElement("span");
-    label.textContent = `${copy.connected} · ${String(device.name || "PenEcho")}`;
+    label.textContent = deviceName;
     badge.replaceChildren(label);
   }
 
@@ -115,21 +172,27 @@
   }
 
   async function connect() {
+    gate.dataset.state = "checking";
     title.textContent = copy.checking;
     detail.textContent = `${location.origin}${location.pathname}`;
     gate.hidden = false;
     try {
       const response = await nativeFetch("/api/v1/remote-canvas/status", { cache:"no-store", credentials:"same-origin", headers:csrfHeaders({ accept:"application/json" }) });
-      if (response.status === 401) return location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname)}`);
+      if (response.status === 401) {
+        settleBridgeGate({ online:false, message:copy.unavailable });
+        return location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname)}`);
+      }
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || `HTTP ${response.status}`);
       if (!result.device) {
+        settleBridgeGate({ online:false, message:copy.unavailable });
         gate.dataset.state = "unlinked";
         title.textContent = copy.noHost;
         detail.textContent = copy.unavailable;
         return;
       }
       if (!result.device.online) {
+        settleBridgeGate({ online:false, message:copy.offline });
         gate.dataset.state = "offline";
         title.textContent = copy.offline;
         detail.textContent = `${result.device.name} · ${result.device.platform} · Offline`;
@@ -139,18 +202,15 @@
       title.textContent = copy.opening;
       detail.textContent = `${result.device.name} · ${result.device.platform} · Online`;
       statusBadge(result.device);
+      settleBridgeGate({ online:true });
       await openRequestedCanvas();
       gate.hidden = true;
     } catch (error) {
+      settleBridgeGate({ online:false, message:String(error?.message || error || copy.unavailable).slice(0, 500) });
       gate.dataset.state = "error";
       title.textContent = copy.failed;
       detail.textContent = String(error?.message || error || copy.unavailable).slice(0, 500);
     }
   }
-  if (isCommunityCraft) {
-    const back = gate.querySelector('.remote-canvas-actions a[href="/dashboard.html#projects"]');
-    if (back) back.href = "/community";
-  }
-  gate.querySelector("[data-remote-retry]").addEventListener("click", connect);
   void connect();
 })();

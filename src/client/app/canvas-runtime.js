@@ -990,6 +990,7 @@
       contentH: widget.contentH,
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
+      ...(widget.favorite ? { favorite:true } : {}),
       ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(widget.diagramKind ? { diagramKind:widget.diagramKind } : {}),
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
@@ -1101,7 +1102,9 @@
     canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
     const communityImages = await communityImagesForCanvas(canvas, .82);
     canvas.width = canvas.height = 1;
-    return { format:"penecho-widget", formatVersion:1, widget:serialized, ...communityImages };
+    const publicWidget = { ...serialized };
+    delete publicWidget.favorite;
+    return { format:"penecho-widget", formatVersion:1, widget:publicWidget, ...communityImages };
   }
   async function importCommunityWidgetArtifact(artifact, origin = null) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
