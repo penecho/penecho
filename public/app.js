@@ -1135,10 +1135,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   };
   const setStatusKey = (key) => setStatus(t(key), key);
   const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
+  function fitCanvasHint() {
+    if (!canvasHint) return;
+    canvasHint.classList.remove("two-line");
+    if (canvasHint.scrollWidth > canvasHint.clientWidth) canvasHint.classList.add("two-line");
+  }
+
   function renderCanvasHint(restart = false) {
     if (!canvasHint || !state.canvasHintKey) return;
     canvasHint.textContent = `Hint: ${t(state.canvasHintKey)}`;
     canvasHint.hidden = false;
+    fitCanvasHint();
     if (!restart) return;
     canvasHint.classList.remove("is-new");
     void canvasHint.offsetWidth;
@@ -2634,6 +2641,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     sendPluginStylesPreview();
   }
   window.addEventListener("message", handlePluginStylesPreviewMessage);
+  let canvasHintResizeScheduled = false;
+  window.addEventListener("resize", () => {
+    if (canvasHintResizeScheduled) return;
+    canvasHintResizeScheduled = true;
+    requestAnimationFrame(() => { canvasHintResizeScheduled = false; fitCanvasHint(); });
+  });
   function updatePluginAuthoringUi() {
     const validation = pluginDraftValidation(),
       status = state.pluginAuthoringStatus || (validation.manifest

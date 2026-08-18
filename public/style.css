@@ -765,6 +765,17 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 #coords { flex: 0 0 auto; color: #b9a77f; font-variant-numeric: tabular-nums; }
 .canvas-hint { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; color: var(--muted); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-hint[hidden] { display: none; }
+/* A hint that would overflow one line wraps into two compact lines inside the
+   same footer height instead of being cut off; past two lines it clamps. */
+.canvas-hint.two-line {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: .68rem;
+  line-height: 13px;
+  padding-block: 1px;
+}
 .canvas-hint.is-new { animation: canvasHintSettle 10s ease-out forwards; }
 @keyframes canvasHintSettle {
   0%, 12% { color: #2f80ed; text-shadow: 0 0 8px rgba(47, 128, 237, .24); }
