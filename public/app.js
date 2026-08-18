@@ -4235,6 +4235,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       communityRootItemId,
       communityOriginName,
       communityOriginGeneration,
+      favorite: item.favorite === true,
     };
   }
   function restoreWidgets(items) {

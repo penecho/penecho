@@ -1065,6 +1065,7 @@
       communityRootItemId,
       communityOriginName,
       communityOriginGeneration,
+      favorite: item.favorite === true,
     };
   }
   function restoreWidgets(items) {
