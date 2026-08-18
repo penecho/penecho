@@ -36,21 +36,21 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 }
 .viewer-topbar > * { pointer-events: auto; }
 
-/* Standard buttons: no filled gray pills. The brand is plain logotype; the
-   actions follow the site's button language (outlined secondary, solid primary)
-   with a translucent rest state that becomes fully visible on hover. */
+/* Capsule buttons in the site's design language: a solid white capsule for
+   secondary actions and the accent blue capsule for the primary action. Solid
+   fills stay crisp over any canvas content; no translucent gray states. */
 .viewer-brand {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   padding: 4px 6px;
-  color: var(--ink, #e9ddbd);
+  color: #f5f2ea;
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
   text-decoration: none;
   cursor: pointer;
-  opacity: .78;
+  opacity: .85;
   transition: opacity .18s ease;
 }
 .viewer-brand img { width: 22px; height: 22px; filter: drop-shadow(0 0 6px rgb(0 0 0 / .5)); }
@@ -63,62 +63,53 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 36px;
-  padding: 7px 16px;
-  border-radius: 10px;
-  font-size: 13.5px;
+  min-height: 34px;
+  padding: 6px 17px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: .01em;
   text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
-  transition: background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
+  box-shadow: 0 1px 3px rgb(0 0 0 / .35);
+  transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
+.viewer-chip:active,
+.viewer-primary:active { transform: scale(.97); }
+.viewer-chip:focus-visible,
+.viewer-primary:focus-visible { outline: 2px solid #7aa5f8; outline-offset: 2px; }
 
 .viewer-chip {
-  border: 1px solid rgb(255 255 255 / .3);
-  background: rgb(255 255 255 / .04);
-  color: #f5f2ea;
-  opacity: .74;
+  background: #f5f5f7;
+  color: #1d1d1f;
 }
-.viewer-chip:hover {
-  opacity: 1;
-  border-color: rgb(255 255 255 / .55);
-  background: rgb(255 255 255 / .1);
-}
+.viewer-chip:hover { background: #ffffff; box-shadow: 0 2px 8px rgb(0 0 0 / .4); }
 
 .viewer-primary {
-  border: 1px solid transparent;
-  background: #f4f1ea;
-  color: #221c10;
-  opacity: .86;
+  background: #2563eb;
+  color: #ffffff;
 }
-.viewer-primary:hover {
-  opacity: 1;
-  background: #fff;
-}
+.viewer-primary:hover { background: #1d4ed8; box-shadow: 0 2px 8px rgb(0 0 0 / .4); }
 
+/* Docked at the very bottom of the page in normal flow (appended to <main>),
+   never floating over the canvas. The flex layout yields the strip's height
+   from #viewport automatically. */
 .viewer-notice {
-  position: fixed;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
+  flex: none;
   z-index: 400;
-  max-width: min(680px, calc(100vw - 32px));
-  padding: 9px 18px;
-  border: 1px solid rgb(255 255 255 / .22);
-  border-radius: 10px;
-  background: rgb(10 9 6 / .55);
-  color: rgb(245 242 234 / .92);
-  font: 500 12.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  margin: 6px calc(-1 * clamp(6px, 1.2vw, 16px)) -6px;
+  padding: 8px 20px 9px;
+  border-top: 1px solid rgb(255 255 255 / .14);
+  background: rgb(10 9 6 / .72);
+  color: rgb(245 242 234 / .68);
+  font: 500 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   text-align: center;
-  backdrop-filter: saturate(150%) blur(10px);
-  -webkit-backdrop-filter: saturate(150%) blur(10px);
-  opacity: .55;
   cursor: pointer;
-  transition: opacity .25s ease;
+  transition: color .2s ease, background .2s ease;
 }
-.viewer-notice:hover { opacity: 1; }
+.viewer-notice:hover { color: rgb(245 242 234 / .95); background: rgb(10 9 6 / .85); }
 .viewer-notice[hidden] { display: none; }
 
 .viewer-status {

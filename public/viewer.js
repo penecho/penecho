@@ -57,7 +57,10 @@
   );
   notice.title = t("Dismiss", "关闭");
   notice.addEventListener("click", () => { notice.hidden = true; });
-  document.body.append(notice);
+  // Dock the notice at the bottom of the page (inside the flex-column <main>)
+  // instead of floating it over the canvas; #viewport is flex:1, so it yields
+  // the space and the app's ResizeObserver re-fits the canvas automatically.
+  (document.querySelector("main") || document.body).append(notice);
 
   const status = document.createElement("div");
   status.className = "viewer-status";
