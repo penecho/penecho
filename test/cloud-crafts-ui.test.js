@@ -27,6 +27,7 @@ test("toolbar ships a Saved Crafts picker wired to community favorites", () => {
   assert.match(script, /No saved Widgets yet/);
   assert.match(script, /favorites stay on this device until you sign in/);
   assert.match(script, /setCraftsOpen\(false\)/);
+  assert.match(script, /craftsButton\?\.addEventListener\("click", openCrafts\)/);
 
   assert.match(locale, /savedCrafts: "收藏"/);
   assert.match(locale, /savedCraftsTitle: "收藏的组件"/);

@@ -994,6 +994,7 @@
     }
   }
 
+  craftsButton?.addEventListener("click", openCrafts);
   craftsClose?.addEventListener("click", () => setCraftsOpen(false));
   craftsPopover?.addEventListener("mousedown", (event) => { if (event.target === craftsPopover) setCraftsOpen(false); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !craftsPopover?.hidden) setCraftsOpen(false); });
