@@ -1,0 +1,108 @@
+/* Read-only Canvas viewer mode.
+   Activated only when html has .viewer-mode (set by viewer.js when
+   PENECHO_CONFIG.viewer is true). Everything interactive is hidden or made
+   pointer-transparent; only pan/zoom stays available. */
+
+html.viewer-mode .topbar,
+html.viewer-mode footer,
+html.viewer-mode #aiEmbodiment,
+html.viewer-mode #tourLayer,
+html.viewer-mode #textInputHint,
+html.viewer-mode #objectChromeLayer,
+html.viewer-mode #animationControls,
+html.viewer-mode .cloud-toolbar,
+html.viewer-mode #changelogLayer,
+html.viewer-mode #settingsLayer { display: none !important; }
+
+/* Widgets and placed content never capture the pointer: every gesture pans
+   or zooms the canvas, which is exactly what a presentation viewer needs. */
+html.viewer-mode #widgetLayer iframe,
+html.viewer-mode #placedContentLayer,
+html.viewer-mode #placedContentLayer * { pointer-events: none !important; }
+
+html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
+
+.viewer-topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.viewer-topbar > * { pointer-events: auto; }
+
+.viewer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(12, 16, 22, .66);
+  color: #f4f6f9;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+}
+.viewer-brand img { width: 20px; height: 20px; }
+.viewer-brand:hover { background: rgba(20, 26, 34, .82); }
+
+.viewer-actions { display: inline-flex; align-items: center; gap: 8px; }
+
+.viewer-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(12, 16, 22, .66);
+  color: #f4f6f9;
+  text-decoration: none;
+  text-align: right;
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+  cursor: pointer;
+  border: 0;
+}
+.viewer-chip b { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.viewer-chip small { font-size: 10.5px; color: #b7c0cc; line-height: 1.3; }
+.viewer-chip:hover { background: rgba(20, 26, 34, .82); }
+
+.viewer-primary {
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: #0071e3;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+}
+.viewer-primary:hover { background: #0077ed; }
+
+.viewer-status {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  background: #101418;
+  color: #d7dee7;
+  font: 500 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  text-align: center;
+  padding: 24px;
+}
+.viewer-status[hidden] { display: none; }
+.viewer-status img { max-width: min(920px, 92vw); max-height: 62vh; border-radius: 12px; box-shadow: 0 18px 60px rgba(0, 0, 0, .5); }
+.viewer-status .spinner { width: 22px; height: 22px; margin: 0 auto 12px; border: 2px solid #3a4656; border-top-color: #d7dee7; border-radius: 50%; animation: viewer-spin 1s linear infinite; }
+@keyframes viewer-spin { to { transform: rotate(360deg); } }
