@@ -12,7 +12,11 @@ html.viewer-mode #objectChromeLayer,
 html.viewer-mode #animationControls,
 html.viewer-mode .cloud-toolbar,
 html.viewer-mode #changelogLayer,
-html.viewer-mode #settingsLayer { display: none !important; }
+html.viewer-mode #settingsLayer,
+html.viewer-mode .canvas-navigation-lock,
+html.viewer-mode .canvas-navigation-lock-hint,
+html.viewer-mode .canvas-hint,
+html.viewer-mode .image-action-hint { display: none !important; }
 
 /* Widgets and placed content never capture the pointer: every gesture pans
    or zooms the canvas, which is exactly what a presentation viewer needs. */
@@ -42,19 +46,23 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 .viewer-brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 4px 6px;
-  color: #f5f2ea;
-  font-size: 15px;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 15px 5px 9px;
+  border: 1px solid rgb(0 0 0 / .08);
+  border-radius: 999px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-size: 13.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
   text-decoration: none;
   cursor: pointer;
-  opacity: .85;
-  transition: opacity .18s ease;
+  box-shadow: 0 1px 3px rgb(0 0 0 / .18);
+  transition: background .16s ease, box-shadow .16s ease;
 }
-.viewer-brand img { width: 22px; height: 22px; filter: drop-shadow(0 0 6px rgb(0 0 0 / .5)); }
-.viewer-brand:hover { opacity: 1; }
+.viewer-brand img { width: 20px; height: 20px; }
+.viewer-brand:hover { background: #ffffff; box-shadow: 0 2px 8px rgb(0 0 0 / .22); }
 
 .viewer-actions { display: flex; align-items: center; gap: 8px; }
 
@@ -82,6 +90,7 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 .viewer-primary:focus-visible { outline: 2px solid #7aa5f8; outline-offset: 2px; }
 
 .viewer-chip {
+  border-color: rgb(0 0 0 / .08);
   background: #f5f5f7;
   color: #1d1d1f;
 }
