@@ -4,6 +4,7 @@ const http = require("http");
 const https = require("https");
 const dns = require("dns").promises;
 const fs = require("fs");
+const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 const os = require("os");
@@ -57,6 +58,11 @@ const CONNECTIONS_FILE = STATE_DIRECTORY
   ? path.join(STATE_DIRECTORY, "connections.json")
   : CONFIG_FILE
     ? path.join(path.dirname(CONFIG_FILE), "connections.json")
+    : null;
+const FAVORITES_FILE = STATE_DIRECTORY
+  ? path.join(STATE_DIRECTORY, "favorites.json")
+  : CONFIG_FILE
+    ? path.join(path.dirname(CONFIG_FILE), "favorites.json")
     : null;
 const MAX_AI_CONNECTIONS = 10;
 const API_PRESETS = Object.freeze({
@@ -788,6 +794,35 @@ function aiProgressStream(req, res, requestId) {
 function sendAiResponse(progress, res, status, data) {
   if(!progress.finish(status,data))send(res,status,data);
 }
+async function readLocalFavorites() {
+  if (!FAVORITES_FILE) return [];
+  try {
+    const parsed = JSON.parse(await fsp.readFile(FAVORITES_FILE, "utf8"));
+    return Array.isArray(parsed?.favorites) ? parsed.favorites : [];
+  } catch { return []; }
+}
+
+async function writeLocalFavorites(list) {
+  if (!FAVORITES_FILE) throw new Error("Local favorites storage is unavailable in this mode.");
+  await fsp.mkdir(path.dirname(FAVORITES_FILE), { recursive: true });
+  const temporary = `${FAVORITES_FILE}.tmp`;
+  await fsp.writeFile(temporary, JSON.stringify({ favorites: list.slice(0, 500) }));
+  await fsp.rename(temporary, FAVORITES_FILE);
+}
+
+function localFavoriteRecord(entry) {
+  return {
+    id: String(entry.id),
+    name: String(entry.name || "Untitled Widget").slice(0, 160),
+    artifactSha256: String(entry.artifactSha256),
+    artifact: entry.artifact,
+    thumbnail: String(entry.thumbnail || "").slice(0, 131072),
+    sourceItemId: entry.sourceItemId || null,
+    cloudId: entry.cloudId || null,
+    createdAt: Number(entry.createdAt) || Date.now(),
+  };
+}
+
 function readJson(req, limit = MAX_BODY) { return new Promise((resolve, reject) => { let size = 0, chunks = []; req.on("data", c => { size += c.length; if (size > limit) { reject(new Error("Request too large")); req.destroy(); } else chunks.push(c); }); req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new Error("Invalid JSON")); } }); req.on("error", reject); }); }
 function log(entry) { try { fs.mkdirSync(LOG_DIR, { recursive:true }); if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= MAX_LOG) { try { fs.renameSync(LOG_FILE, `${LOG_FILE}.1`); } catch { fs.truncateSync(LOG_FILE, 0); } } fs.appendFileSync(LOG_FILE, JSON.stringify({ time:new Date().toISOString(), ...entry }) + "\n"); } catch (error) { console.error("PenEcho log error:", error.message); } }
 function short(value, length = 20000) { return typeof value === "string" ? value.slice(0, length) : value; }
@@ -2953,6 +2988,24 @@ const server = http.createServer(async (req, res) => {
         }
         if(req.method==="DELETE")return send(res,204,await cloudConnector.trashCloudCanvas(cloudCanvasMatch[1]));
       }
+      const favoriteCloudDelete=url.pathname.match(/^\/api\/cloud\/favorites\/([0-9a-f-]{36})$/i);
+      if(favoriteCloudDelete&&req.method==="DELETE"){
+        const favoriteCloudError=cloudBrowserRequestError(req);
+        if(favoriteCloudError)return send(res,403,{error:favoriteCloudError});
+        await cloudConnector.deleteWidgetFavorite(favoriteCloudDelete[1]);
+        return send(res,200,{removed:true});
+      }
+      if(url.pathname==="/api/cloud/favorites"){
+        const favoriteCloudError=cloudBrowserRequestError(req);
+        if(favoriteCloudError)return send(res,403,{error:favoriteCloudError});
+        if(req.method==="GET")return send(res,200,await cloudConnector.listWidgetFavorites());
+        if(req.method==="POST"){
+          if(!isJsonRequest(req))return send(res,415,{error:"Use application/json for this request."});
+          const body=await readJson(req,2*1024*1024);
+          return send(res,201,{favorite:await cloudConnector.saveWidgetFavorite(body)});
+        }
+        return send(res,405,{error:"Method Not Allowed"});
+      }
       if(req.method==="GET"&&url.pathname==="/api/cloud/community"){
         return send(res,200,await cloudConnector.communityItems(Object.fromEntries(url.searchParams)));
       }
@@ -2987,6 +3040,45 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort() });
+  if (url.pathname === "/api/favorites") {
+    const favoritesError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
+    if (favoritesError) return send(res, 403, { error:favoritesError });
+    if (req.method === "GET") return send(res, 200, { favorites:(await readLocalFavorites()).map(localFavoriteRecord) });
+    if (req.method === "PUT") {
+      if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
+      const body = await readJson(req, 2 * 1024 * 1024);
+      if (!body || typeof body !== "object" || !body.artifact || typeof body.artifact !== "object"
+        || typeof body.name !== "string" || !body.name.trim()) return send(res, 400, { error:"A name and widget artifact are required." });
+      const artifactText = JSON.stringify(body.artifact);
+      if (artifactText.length > 1048576) return send(res, 413, { error:"The widget snapshot exceeds the 1 MiB favorite limit." });
+      const sha256 = crypto.createHash("sha256").update(artifactText).digest("hex");
+      const list = await readLocalFavorites();
+      const existing = list.find((entry) => entry.artifactSha256 === sha256);
+      const record = localFavoriteRecord({
+        id: existing?.id || crypto.randomUUID(),
+        name: body.name.trim(),
+        artifactSha256: sha256,
+        artifact: body.artifact,
+        thumbnail: typeof body.thumbnail === "string" ? body.thumbnail : "",
+        sourceItemId: typeof body.sourceItemId === "string" ? body.sourceItemId : existing?.sourceItemId || null,
+        cloudId: typeof body.cloudId === "string" ? body.cloudId : existing?.cloudId || null,
+        createdAt: existing?.createdAt || Date.now(),
+      });
+      await writeLocalFavorites(existing ? list.map((entry) => entry.artifactSha256 === sha256 ? record : entry) : [...list, record]);
+      return send(res, existing ? 200 : 201, { favorite: record });
+    }
+    return send(res, 405, { error:"Method Not Allowed" });
+  }
+  const localFavoriteMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})$/);
+  if (localFavoriteMatch) {
+    const favoritesError = browserRequestError(req);
+    if (favoritesError) return send(res, 403, { error:favoritesError });
+    if (req.method !== "DELETE") return send(res, 405, { error:"Method Not Allowed" });
+    const list = await readLocalFavorites();
+    const remaining = list.filter((entry) => entry.artifactSha256 !== localFavoriteMatch[1]);
+    await writeLocalFavorites(remaining);
+    return send(res, 200, { removed: remaining.length !== list.length });
+  }
   if (url.pathname === "/api/settings") {
     const settingsError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
     if (settingsError) return send(res, 403, { error:settingsError });

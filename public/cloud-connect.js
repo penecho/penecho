@@ -754,7 +754,10 @@
     return item;
   }
 
-  window.PenEchoCommunityUI = Object.freeze({ takeFurther });
+  window.PenEchoCommunityUI = Object.freeze({
+    takeFurther,
+    label: (key) => (window.PENECHO_LOCALES?.zh || {})[key],
+  });
 
   /* Saved Crafts picker: the toolbar ➕ lists favorited community Widgets. */
   const craftsButton = document.getElementById("craftsButton");
@@ -771,29 +774,153 @@
     else document.body.classList.remove("plugin-open");
   }
 
-  function craftsFallbackThumb(kind) {
+  async function sha256Hex(text) {
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function localFavorites() {
+    try { return (await api("/api/favorites")).favorites || []; }
+    catch { return []; }
+  }
+
+  async function saveLocalFavorite(favorite) {
+    return (await api("/api/favorites", { method:"PUT", body:JSON.stringify(favorite) })).favorite;
+  }
+
+  async function removeLocalFavorite(sha256) {
+    try { await api(`/api/favorites/${encodeURIComponent(sha256)}`, { method:"DELETE" }); } catch {}
+  }
+
+  function thumbnailDataUrl(favorite) {
+    if (favorite.thumbnailUrl) return favorite.thumbnailUrl;
+    const base64 = favorite.thumbnail || favorite.artifact?.communityThumbnail?.dataBase64 || favorite.artifact?.communityPreview?.dataBase64;
+    const contentType = favorite.thumbnail ? "image/webp" : (favorite.artifact?.communityThumbnail || favorite.artifact?.communityPreview)?.contentType || "image/webp";
+    return base64 ? `data:${contentType};base64,${base64}` : null;
+  }
+
+  /* One-click favorite on a widget: local snapshot always, cloud copy when signed in. */
+  async function toggleWidgetFavorite(widgetId) {
+    const bridge = window.PenEchoCommunityCanvas;
+    if (!bridge?.widgetArtifact || !bridge.setWidgetFavorite) throw new Error("This PenEcho version does not support widget favorites.");
+    const artifact = await bridge.widgetArtifact(widgetId);
+    const sha256 = await sha256Hex(JSON.stringify(artifact));
+    const locals = await localFavorites();
+    const existing = locals.find((entry) => entry.artifactSha256 === sha256);
+    const serialized = { name:String(artifact.widget?.title || "Untitled Widget").slice(0, 160), artifact, thumbnail:artifact.communityThumbnail?.dataBase64 || "", sourceItemId:artifact.widget?.communityOriginItemId || null };
+    if (existing) {
+      await removeLocalFavorite(sha256);
+      if (accountSignedIn() && existing.cloudId) { try { await api(`/api/cloud/favorites/${encodeURIComponent(existing.cloudId)}`, { method:"DELETE" }); } catch {} }
+      bridge.setWidgetFavorite(widgetId, false);
+      return false;
+    }
+    let saved = await saveLocalFavorite({ ...serialized, cloudId:null });
+    if (accountSignedIn()) {
+      try {
+        const cloudFavorite = (await api("/api/cloud/favorites", { method:"POST", body:JSON.stringify(serialized) })).favorite;
+        saved = await saveLocalFavorite({ ...serialized, cloudId:cloudFavorite.id });
+      } catch {}
+    }
+    bridge.setWidgetFavorite(widgetId, true);
+    return true;
+  }
+
+  /* Two-way personal-favorites sync: upload offline saves, mirror cloud saves,
+     and drop local mirrors whose cloud copy was removed elsewhere. */
+  async function syncFavorites() {
+    if (!accountSignedIn()) return { synced: 0 };
+    const [locals, cloud] = await Promise.all([
+      localFavorites(),
+      api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
+    ]);
+    if (!Array.isArray(cloud)) return { synced: 0 };
+    const cloudBySha = new Map(cloud.map((entry) => [entry.artifactSha256, entry]));
+    let synced = 0;
+    for (const entry of locals) {
+      const cloudEntry = cloudBySha.get(entry.artifactSha256);
+      if (cloudEntry) {
+        if (entry.cloudId !== cloudEntry.id) await saveLocalFavorite({ ...entry, cloudId:cloudEntry.id });
+      } else if (entry.cloudId) {
+        await removeLocalFavorite(entry.artifactSha256); // removed on the cloud elsewhere
+      } else {
+        try {
+          const uploaded = (await api("/api/cloud/favorites", { method:"POST", body:JSON.stringify({ name:entry.name, artifact:entry.artifact, thumbnail:entry.thumbnail, sourceItemId:entry.sourceItemId }) })).favorite;
+          await saveLocalFavorite({ ...entry, cloudId:uploaded.id });
+          synced += 1;
+        } catch {}
+      }
+    }
+    for (const cloudEntry of cloud) {
+      if (!locals.some((entry) => entry.artifactSha256 === cloudEntry.artifactSha256)) {
+        try {
+          await saveLocalFavorite({ name:cloudEntry.name, artifactSha256:cloudEntry.artifactSha256, artifact:cloudEntry.artifact, thumbnail:cloudEntry.thumbnail, sourceItemId:cloudEntry.sourceItemId, cloudId:cloudEntry.id, createdAt:cloudEntry.createdAt });
+          synced += 1;
+        } catch {}
+      }
+    }
+    return { synced };
+  }
+
+  function craftsFallbackThumb() {
     const node = document.createElement("span");
     node.className = "crafts-thumb-fallback";
-    node.textContent = kind === "canvas" ? "C" : "W";
+    node.textContent = "W";
     return node;
   }
 
-  function craftsRow(item) {
+  function craftsSourceBadge(sources) {
+    const badge = document.createElement("span");
+    badge.className = "crafts-source";
+    const cloud = sources.includes("cloud") || sources.includes("community");
+    if (cloud && sources.includes("local")) { badge.textContent = "☁ + local"; badge.title = "Saved on PenEcho Cloud and this device"; }
+    else if (cloud) { badge.textContent = sources.includes("community") ? "☁ community" : "☁ cloud"; badge.title = "Saved on PenEcho Cloud"; }
+    else { badge.textContent = "local"; badge.title = "Saved on this device only — it uploads to PenEcho Cloud once you sign in"; }
+    return badge;
+  }
+
+  async function addCraftToCanvas(merged) {
+    const local = merged.sources.find((entry) => entry.type === "local");
+    if (local) {
+      if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error("This PenEcho version cannot import Widgets yet.");
+      await window.PenEchoCommunityCanvas.importWidget(local.entry.artifact, local.entry.sourceItemId ? { id:local.entry.sourceItemId, name:local.entry.name } : null);
+      return;
+    }
+    const cloudEntry = (merged.sources.find((entry) => entry.type === "cloud") || merged.sources.find((entry) => entry.type === "community"))?.entry;
+    if (merged.sources.some((entry) => entry.type === "community")) return takeFurther(cloudEntry.id);
+    if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error("This PenEcho version cannot import Widgets yet.");
+    await window.PenEchoCommunityCanvas.importWidget(cloudEntry.artifact, cloudEntry.sourceItemId ? { id:cloudEntry.sourceItemId, name:cloudEntry.name } : null);
+  }
+
+  async function removeCraft(merged) {
+    for (const source of merged.sources) {
+      if (source.type === "local") await removeLocalFavorite(source.entry.artifactSha256);
+      else if (source.type === "cloud") { try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.id)}`, { method:"DELETE" }); } catch {} }
+      else if (source.type === "community") { try { await api(`/api/cloud/community/${encodeURIComponent(source.entry.id)}/favorite`, { method:"DELETE" }); } catch {} }
+    }
+  }
+
+  function craftsRow(merged, refresh) {
     const row = document.createElement("div");
     row.className = "crafts-row";
+    const source = merged.sources[0].entry;
     const thumb = document.createElement("img");
     thumb.className = "crafts-thumb";
     thumb.alt = "";
     thumb.loading = "lazy";
-    thumb.src = `/api/cloud/community/${encodeURIComponent(item.id)}/thumbnail`;
-    thumb.addEventListener("error", () => thumb.replaceWith(craftsFallbackThumb(item.kind)));
+    const url = thumbnailDataUrl(source) || (merged.sources.some((entry) => entry.type === "community") ? `/api/cloud/community/${encodeURIComponent(source.id)}/thumbnail` : null);
+    if (url) { thumb.src = url; thumb.addEventListener("error", () => thumb.replaceWith(craftsFallbackThumb())); }
+    else thumb.replaceWith(craftsFallbackThumb());
     const copy = document.createElement("div");
     copy.className = "crafts-copy";
     const title = document.createElement("b");
-    title.textContent = item.name || "Untitled Craft";
+    title.textContent = source.name || "Untitled Widget";
     const byline = document.createElement("small");
-    byline.textContent = `${item.kind || "widget"} · by ${item.author?.name || "PenEcho Crafter"}`;
+    byline.textContent = source.artifact?.widget?.title || source.description || "Community Widget";
+    byline.append(document.createElement("br"), craftsSourceBadge(merged.sources.map((entry) => entry.type === "community" ? "community" : entry.type)));
     copy.append(title, byline);
+    const actions = document.createElement("div");
+    actions.className = "crafts-actions";
     const add = document.createElement("button");
     add.type = "button";
     add.className = "crafts-add";
@@ -801,45 +928,69 @@
     add.addEventListener("click", async () => {
       add.disabled = true;
       add.textContent = "Adding…";
-      try {
-        await takeFurther(item.id);
-        setCraftsOpen(false);
-      } catch (error) {
-        add.textContent = "Add";
-        add.disabled = false;
-        const note = document.createElement("p");
-        note.className = "crafts-empty";
-        note.textContent = error?.message || "Could not add this Craft.";
-        craftsList.prepend(note);
-      }
+      try { await addCraftToCanvas(merged); setCraftsOpen(false); }
+      catch (error) { add.textContent = "Add"; add.disabled = false; alert(error?.message || "Could not add this Widget."); }
     });
-    row.append(thumb, copy, add);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "crafts-remove";
+    remove.textContent = "×";
+    remove.title = "Remove from saved";
+    remove.setAttribute("aria-label", `Remove ${source.name || "this Widget"} from saved`);
+    remove.addEventListener("click", async () => {
+      remove.disabled = true;
+      await removeCraft(merged);
+      await refresh();
+    });
+    actions.append(add, remove);
+    row.append(thumb, copy, actions);
     return row;
   }
 
   async function openCrafts() {
     if (!craftsPopover) return;
     setCraftsOpen(true);
-    craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Loading saved Crafts…" }));
+    craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Loading saved Widgets…" }));
+    const refresh = async () => { await renderCraftsList(); };
+    async function renderCraftsList() {
+      const locals = await localFavorites();
+      let cloudPersonal = [], community = [];
+      if (accountSignedIn()) {
+        await syncFavorites();
+        const [personal, favorites] = await Promise.all([
+          api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => []),
+          api("/api/cloud/community?scope=favorites&sort=newest&limit=60").then((result) => result.items || []).catch(() => []),
+        ]);
+        cloudPersonal = personal;
+        community = favorites.filter((item) => item.kind === "widget");
+      }
+      const mergedMap = new Map();
+      const offer = (type, entry, sha) => {
+        const key = sha || entry.artifactSha256;
+        if (!key) return;
+        if (!mergedMap.has(key)) mergedMap.set(key, { key, sources: [] });
+        mergedMap.get(key).sources.push({ type, entry });
+      };
+      for (const entry of locals) offer("local", entry);
+      for (const entry of cloudPersonal) offer("cloud", entry);
+      for (const item of community) offer("community", item, item.artifactSha256 || item.artifact?.sha256);
+      const merged = [...mergedMap.values()];
+      if (!merged.length) {
+        craftsList.replaceChildren(el("p", { class:"crafts-empty", text:accountSignedIn()
+          ? "No saved Widgets yet. Tap ★ on any Widget to keep it here."
+          : "No saved Widgets yet. Tap ★ on any Widget — favorites stay on this device until you sign in to PenEcho Cloud." }));
+        return;
+      }
+      craftsList.replaceChildren(...merged.map((entry) => craftsRow(entry, refresh)));
+    }
     try {
       await refreshStatus();
-      if (!accountSignedIn()) {
-        craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"Sign in to PenEcho Cloud to see the Crafts you saved." }));
-        return;
-      }
-      const result = await api("/api/cloud/community?scope=favorites&sort=newest&limit=60");
-      const items = (result?.items || []).filter((item) => item.kind === "widget");
-      if (!items.length) {
-        craftsList.replaceChildren(el("p", { class:"crafts-empty", text:"No saved Widgets yet. Favorite a community Craft and it will appear here." }));
-        return;
-      }
-      craftsList.replaceChildren(...items.map(craftsRow));
+      await renderCraftsList();
     } catch (error) {
-      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || "Saved Crafts are unavailable right now." }));
+      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || "Saved Widgets are unavailable right now." }));
     }
   }
 
-  craftsButton?.addEventListener("click", openCrafts);
   craftsClose?.addEventListener("click", () => setCraftsOpen(false));
   craftsPopover?.addEventListener("mousedown", (event) => { if (event.target === craftsPopover) setCraftsOpen(false); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !craftsPopover?.hidden) setCraftsOpen(false); });
@@ -847,11 +998,13 @@
   cloudButton.addEventListener("click", openCloud);
   shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); shareDialog({ kind:"canvas" }); });
   window.addEventListener("penecho:community-widget-action", async (event) => {
-    await refreshStatus();
     const actionName = event.detail?.action;
     const widgetId = event.detail?.widgetId;
     if (!widgetId || !["favorite", "share"].includes(actionName)) return;
-    shareDialog({ kind:"widget", widgetId, favoriteAfterShare:actionName === "favorite" });
+    await refreshStatus();
+    if (actionName === "share") { shareDialog({ kind:"widget", widgetId }); return; }
+    try { await toggleWidgetFavorite(widgetId); }
+    catch (error) { alert(error?.message || "Could not save this Widget."); }
   });
   window.addEventListener("message", async (event) => {
     if (event.origin !== location.origin || event.data?.type !== "penecho:cloud-sign-in-result") return;

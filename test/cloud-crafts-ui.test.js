@@ -18,10 +18,14 @@ test("toolbar ships a Saved Crafts picker wired to community favorites", () => {
   assert.match(page, /id="craftsClose"/);
 
   assert.match(script, /scope=favorites&sort=newest&limit=60/);
-  assert.match(script, /\/api\/cloud\/community\/\$\{encodeURIComponent\(item\.id\)\}\/thumbnail/);
-  assert.match(script, /await takeFurther\(item\.id\)/);
-  assert.match(script, /Sign in to PenEcho Cloud to see the Crafts you saved/);
+  assert.match(script, /\/api\/cloud\/community\/\$\{encodeURIComponent\(source\.id\)\}\/thumbnail/);
+  assert.match(script, /return takeFurther\(cloudEntry\.id\)/);
+  assert.match(script, /function toggleWidgetFavorite/);
+  assert.match(script, /function syncFavorites/);
+  assert.match(script, /sourceItemId:entry\.sourceItemId/);
+  assert.match(script, /crafts-source/);
   assert.match(script, /No saved Widgets yet/);
+  assert.match(script, /favorites stay on this device until you sign in/);
   assert.match(script, /setCraftsOpen\(false\)/);
 
   assert.match(locale, /savedCrafts: "收藏"/);

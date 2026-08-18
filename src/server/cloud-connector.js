@@ -281,7 +281,7 @@ class CloudConnector {
 
   async cloudRequest(pathname, { method = "GET", body } = {}) {
     const configuration = this.requireCloudAccount();
-    if (!["/api/v1/device-sync/", "/api/v1/community/"].some((prefix) => String(pathname).startsWith(prefix))) throw new Error("Unsupported cloud account request.");
+    if (!["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix))) throw new Error("Unsupported cloud account request.");
     let response;
     try {
       response = await fetch(`${configuration.origin}${pathname}`, {
@@ -524,6 +524,17 @@ class CloudConnector {
     }
     if (payload?.account) payload.account = publicAccount(payload.account);
     return payload;
+  }
+
+  listWidgetFavorites() { return this.cloudRequest("/api/v1/favorites"); }
+
+  async saveWidgetFavorite(favorite) {
+    const result = await this.cloudRequest("/api/v1/favorites", { method:"POST", body:JSON.stringify({ name:favorite.name, artifact:favorite.artifact, thumbnail:favorite.thumbnail || "", sourceItemId:favorite.sourceItemId || null }) });
+    return result.favorite;
+  }
+
+  deleteWidgetFavorite(favoriteId) {
+    return this.cloudRequest(`/api/v1/favorites/${encodeURIComponent(favoriteId)}`, { method:"DELETE" });
   }
 
   communityItems(query = {}) {

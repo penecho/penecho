@@ -1240,6 +1240,7 @@
     canvasArtifact:communityCanvasArtifact,
     suggestMetadata:suggestCommunityMetadata,
     importWidget:importCommunityWidgetArtifact,
+    setWidgetFavorite:setCommunityWidgetFavorite,
     importCanvas:importCommunityCanvasArtifact,
     lineageForArtifact:communityLineageForArtifact,
     markPublishedOrigin:markPublishedCommunityOrigin,

@@ -4277,6 +4277,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     delete publicWidget.favorite;
     return { format:"penecho-widget", formatVersion:1, widget:publicWidget, ...communityImages };
   }
+  function setCommunityWidgetFavorite(widgetId, favorite) {
+    const widget = state.widgets.find((item) => item.id === widgetId);
+    if (!widget) return false;
+    widget.favorite = favorite === true;
+    const record = state.handToolbarTargets.get(handToolbarKey("widget", widgetId));
+    syncObjectChrome();
+    return widget.favorite;
+  }
+
   async function importCommunityWidgetArtifact(artifact, origin = null) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
@@ -14192,6 +14201,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasArtifact:communityCanvasArtifact,
     suggestMetadata:suggestCommunityMetadata,
     importWidget:importCommunityWidgetArtifact,
+    setWidgetFavorite:setCommunityWidgetFavorite,
     importCanvas:importCommunityCanvasArtifact,
     lineageForArtifact:communityLineageForArtifact,
     markPublishedOrigin:markPublishedCommunityOrigin,

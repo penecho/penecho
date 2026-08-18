@@ -1201,3 +1201,8 @@ body[data-theme="research"] .settings-save:hover:not(:disabled), body[data-theme
 .crafts-add { flex: 0 0 auto; padding: 7px 14px; border: 0; border-radius: 7px; color: #fff; background: var(--gold-bright, #d9a441); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .crafts-add:hover { filter: brightness(1.08); }
 .crafts-add[disabled] { opacity: .55; cursor: default; }
+
+.crafts-actions { display: flex; align-items: center; gap: 6px; }
+.crafts-remove { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; color: var(--ink-soft, #9aa3ad); background: transparent; font-size: 15px; line-height: 1; cursor: pointer; }
+.crafts-remove:hover { color: #e05252; background: rgba(224, 82, 82, .12); }
+.crafts-source { display: inline-block; margin-top: 3px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft, #9aa3ad); font-size: 10.5px; letter-spacing: .02em; white-space: nowrap; }
