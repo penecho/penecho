@@ -42,13 +42,14 @@ function flatten(root) {
   return out;
 }
 
-function boot({ pathname = `/canvas/${CANVAS_ID}`, language = "en-US", respond, openCanvas, takeFurther } = {}) {
+function boot({ pathname = `/canvas/${CANVAS_ID}`, baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther } = {}) {
   const topRow = new FakeElement("div");
   topRow.className = "top-row";
   const brand = new FakeElement("div");
   brand.className = "brand";
   topRow.append(brand);
   const document = {
+    baseURI,
     cookie:"",
     body:new FakeElement("body"),
     createElement:(tag) => new FakeElement(tag),
@@ -134,12 +135,12 @@ test("Remote Canvas brand doubles as the way back to the console", () => {
   assert.equal(project.redirects[0], "/dashboard.html");
 
   const community = boot({ pathname:`/canvas/community/${COMMUNITY_ID}` });
-  assert.equal(community.brand.title, "Back to Craft Commons");
+  assert.equal(community.brand.title, "Back to Echoes");
   community.brand.listeners.get("click")({ });
   assert.equal(community.redirects[0], "/community.html");
 
   const zhCommunity = boot({ pathname:`/canvas/community/${COMMUNITY_ID}`, language:"zh-CN" });
-  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回共创广场");
+  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回 Echoes");
   assert.doesNotMatch(gateScript, /remote-canvas-back/);
 });
 
@@ -191,7 +192,21 @@ test("Remote Canvas gate shows no actions while checking and none once a linked 
   assert.equal(online.gate.dataset.state, "opening");
   assert.deepEqual(actionRevealStates("link").filter((state) => state === "opening"), []);
   assert.deepEqual(online.opened, [CANVAS_ID]);
+  assert.deepEqual(online.redirects, [], "Cloud fallback must use the authenticated relay, not invent a LAN URL");
   assert.equal(online.gate.hidden, true);
+});
+
+test("Remote public Echo uses the linked-host bridge without redirecting to a guessed LAN origin", async () => {
+  const run = boot({
+    pathname:`/canvas/community/${COMMUNITY_ID}`,
+    respond:() => ({ device:{ id:"device-1", name:"My PenEcho", platform:"darwin", online:true } }),
+  });
+  await flush();
+  assert.deepEqual(run.taken, [COMMUNITY_ID]);
+  assert.deepEqual(run.opened, []);
+  assert.deepEqual(run.redirects, []);
+  assert.equal(run.gate.hidden, true);
+  assert.doesNotMatch(gateScript, /device\.(?:lan|local)(?:Url|Origin)|192\.168\.|location\.assign\([^)]*device/);
 });
 
 test("Remote Canvas gate error state shows the failure title and detail without any action", async () => {
@@ -211,8 +226,16 @@ test("Remote Canvas gate keeps the zh copy path", async () => {
   await flush();
   assert.equal(zh.gate.dataset.state, "unlinked");
   assert.equal(zh.title.textContent, "连接 PenEcho 主机后即可打开");
-  assert.equal(zh.detail.textContent, "请先在 Link Device 中连接一台 PenEcho 主机。");
-  assert.deepEqual(zh.actions.map((el) => el.textContent), ["Link Device"]);
+  assert.equal(zh.detail.textContent, "请先连接一台 PenEcho 主机。");
+  assert.deepEqual(zh.actions.map((el) => el.textContent), ["连接设备"]);
+
+  const offline = boot({ language:"zh-CN", respond:() => ({ device:{ name:"我的 PenEcho", platform:"macOS", online:false } }) });
+  await flush();
+  assert.equal(offline.detail.textContent, "我的 PenEcho · macOS · 离线");
+
+  const online = boot({ language:"zh-CN", respond:() => ({ device:{ name:"我的 PenEcho", platform:"macOS", online:true } }) });
+  await flush();
+  assert.equal(online.detail.textContent, "我的 PenEcho · macOS · 在线");
   assert.match(gateScript, /私人云端画布/);
   assert.match(gateScript, /Private Cloud Canvas/);
 });
@@ -263,6 +286,24 @@ test("Remote Canvas gate keeps the cloud fetch bridge and community take-further
   const direct = await run.window.fetch("/api/ai/command", { method:"POST" });
   assert.equal(direct.ok, true);
   assert.equal(run.fetchCalls.at(-1).url, "/api/ai/command");
+});
+
+test("Remote Canvas fetch wrapper preserves the Canvas base URL on nested community routes", async () => {
+  const run = boot({
+    pathname:`/canvas/community/${COMMUNITY_ID}`,
+    respond:() => ({ device:{ name:"Host", platform:"linux", online:true } }),
+  });
+  await flush();
+
+  await run.window.fetch("plugins/weather/plugin.md?v=abc123");
+  assert.equal(run.fetchCalls.at(-1).url, "/canvas/plugins/weather/plugin.md?v=abc123");
+  assert.doesNotMatch(run.fetchCalls.at(-1).url, /^\/canvas\/community\/plugins\//);
+
+  await run.window.fetch(new URL("plugins/stocks/plugin.md", "https://cloud.penecho.test/canvas/"));
+  assert.equal(run.fetchCalls.at(-1).url, "/canvas/plugins/stocks/plugin.md");
+
+  await run.window.fetch(new Request("https://cloud.penecho.test/canvas/plugins/flowchart/plugin.md"));
+  assert.equal(run.fetchCalls.at(-1).url, "/canvas/plugins/flowchart/plugin.md");
 });
 
 test("Remote Canvas gate stays compact, accessible and mobile-friendly", () => {

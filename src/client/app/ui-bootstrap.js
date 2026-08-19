@@ -1242,12 +1242,14 @@
     importWidget:importCommunityWidgetArtifact,
     setWidgetFavorite:setCommunityWidgetFavorite,
     importCanvas:importCommunityCanvasArtifact,
+    viewCanvas:viewCommunityCanvasArtifact,
     lineageForArtifact:communityLineageForArtifact,
     markPublishedOrigin:markPublishedCommunityOrigin,
   });
   window.PenEchoCloudProjects = Object.freeze({
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
+    confirmExternalOpen:confirmExternalCanvasOpen,
   });
   setPluginTemplate("simple");
   applyLanguage();
@@ -1255,7 +1257,9 @@
   applyTheme(state.theme);
   resetCanvasCursor();
   loadPluginDocuments().catch(() => {});
-  refreshSnapshots().catch(() => {});
+  // The public viewer has no history UI and must never probe private/local
+  // snapshot APIs on the Cloud origin.
+  if (window.PENECHO_CONFIG?.runtime !== "viewer") refreshSnapshots().catch(() => {});
   fit();
   setNavigating(true);
   scheduleAIOrbIdle();

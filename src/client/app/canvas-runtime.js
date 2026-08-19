@@ -12,6 +12,8 @@
   const widgetRefineTouchCandidates = new Map();
   let widgetRefineConfirmationElement = null;
   let canvasWidgetGestureResetTap = null;
+  let viewerAutoFitWidgetId = null;
+  let viewerAutoFitCanvas = false;
   let nextObjectChromeStyleId = 1;
   function normalizedWidgetSource(value) {
     return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
@@ -1116,7 +1118,7 @@
     return widget.favorite;
   }
 
-  async function importCommunityWidgetArtifact(artifact, origin = null) {
+  async function importCommunityWidgetArtifact(artifact, origin = null, options = null) {
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     if (state.widgetEdit) acceptWidgetEdit();
@@ -1125,8 +1127,9 @@
     // Fit the widget into the visible canvas: oversized widgets shrink
     // uniformly (content scales through the shell transform) and land centered
     // instead of spilling past the viewport edges.
-    const fitScale = Math.min(1, (visible.w * 0.9) / Number(source.w || 300) || 1, (visible.h * 0.9) / Number(source.h || 200) || 1);
-    if (fitScale > 0 && fitScale < 1) { source.w = Number(source.w || 300) * fitScale; source.h = Number(source.h || 200) * fitScale; }
+    const viewerFit = options?.fitViewport === true && window.PENECHO_CONFIG?.runtime === "viewer";
+    const fitScale = viewerFit ? 1 : Math.min(1, (visible.w * 0.9) / Number(source.w || 300) || 1, (visible.h * 0.9) / Number(source.h || 200) || 1);
+    if (!viewerFit && fitScale > 0 && fitScale < 1) { source.w = Number(source.w || 300) * fitScale; source.h = Number(source.h || 200) * fitScale; }
     source.x = Math.max(0, Math.min(SIZE - Number(source.w || 300), visible.x + Math.max(0, (visible.w - Number(source.w || 300)) / 2)));
     source.y = Math.max(0, Math.min(SIZE - Number(source.h || 200), visible.y + Math.max(0, (visible.h - Number(source.h || 200)) / 2)));
     await enableSnapshotWidgetPlugins([source]);
@@ -1141,6 +1144,11 @@
     recordWidgetsBefore();
     state.widgets.push(widget);
     if (pluginEnabled(widget.pluginId)) mountWidget(widget);
+    if (viewerFit) {
+      viewerAutoFitCanvas = false;
+      viewerAutoFitWidgetId = widget.id;
+      fit();
+    }
     state.userRevision++;
     state.autoEligible = false;
     save();
@@ -1148,16 +1156,22 @@
     return { id:widget.id, title:widget.title };
   }
   function widgetHostUrl(manifest) {
-    const url = new URL(canvasAssetUrl("widget-host.html"));
-    if (url.hostname === "localhost") {
-      url.hostname = "127.0.0.1";
-      url.searchParams.set("parent-origin", location.origin);
-    } else if (url.hostname === "127.0.0.1") {
-      url.hostname = "localhost";
-      url.searchParams.set("parent-origin", location.origin);
+    const url = new URL(canvasAssetUrl("widget-host.html")),
+      runtime = window.PENECHO_CONFIG?.runtime;
+    // The editable local app isolates Widget code on the other loopback host.
+    // Cloud shells serve a host with frame-ancestors 'self', so changing only
+    // the hostname there would make the iframe cross-origin and CSP-blocked.
+    if (runtime !== "cloud" && runtime !== "viewer") {
+      if (url.hostname === "localhost") {
+        url.hostname = "127.0.0.1";
+        url.searchParams.set("parent-origin", location.origin);
+      } else if (url.hostname === "127.0.0.1") {
+        url.hostname = "localhost";
+        url.searchParams.set("parent-origin", location.origin);
+      }
     }
     if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
-    if (window.PENECHO_CONFIG?.runtime === "cloud") url.searchParams.set("remote-canvas", "1");
+    if (runtime === "cloud") url.searchParams.set("remote-canvas", "1");
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -1185,6 +1199,9 @@
     frame.title = widget.title;
     frame.referrerPolicy = "no-referrer";
     frame.src = widgetHostUrl(manifest);
+    frame.addEventListener("load", () => {
+      if (widget.frame === frame) probeWidgetHost(widget);
+    });
     frame.addEventListener("pointerenter", (event) => {
       if (state.mode !== "hand" || event.pointerType === "touch") return;
       updateHandObjectHover(clientPoint(event));
@@ -1280,6 +1297,11 @@
     if (!widgetRuntimeEnabled()) return;
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) positionWidget(widget);
   }
+  function probeWidgetHost(widget) {
+    if (!widget.frame?.contentWindow) return false;
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-host-probe" }, widget.hostOrigin || location.origin);
+    return true;
+  }
   function sendWidgetInit(widget) {
     if (!widget.frame?.contentWindow || !widget.hostReady || widget.initialized || widget.renderActive === false) return;
     const manifest = pluginManifests.get(widget.pluginId);
@@ -1300,6 +1322,13 @@
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
     widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", selected, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
+  }
+  function markWidgetHostReady(widget) {
+    widget.hostReady = true;
+    widget.resolveHostReady?.();
+    widget.resolveHostReady = null;
+    sendWidgetInit(widget);
+    sendWidgetHostState(widget, undefined, undefined, true);
   }
   function syncWidgetHostStates() {
     for (const widget of [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : [])]) sendWidgetHostState(widget);
@@ -1367,11 +1396,7 @@
     if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
     const message = event.data;
     if (message.type === "penecho-widget-host-ready") {
-      widget.hostReady = true;
-      widget.resolveHostReady?.();
-      widget.resolveHostReady = null;
-      sendWidgetInit(widget);
-      sendWidgetHostState(widget, undefined, undefined, true);
+      markWidgetHostReady(widget);
       return;
     }
     if (message.type === "penecho-widget-capture-ready") {
@@ -2367,7 +2392,40 @@
     interactionLayer.width = screen.width;
     interactionLayer.height = screen.height;
     state.animationFullRedraw = true;
-    if (!state.viewInitialized && r.width > 0 && r.height > 0) {
+    const viewerWidget = viewerAutoFitWidgetId && state.widgets.find((widget) => widget.id === viewerAutoFitWidgetId),
+      viewerBounds = viewerWidget
+        ? widgetBox(viewerWidget)
+        : viewerAutoFitCanvas
+          ? unionLocalBounds(
+              unionLocalBounds(
+                unionLocalBounds(
+                  unionLocalBounds(visibleInkBounds({ x:0, y:0, w:SIZE, h:SIZE }), imageBounds()),
+                  textBoxBounds(),
+                ),
+                animationBounds(),
+              ),
+              widgetBounds(),
+            )
+          : null;
+    if (viewerBounds && r.width > 0 && r.height > 0) {
+      // A public Craft is the page's primary content, so frame either its one
+      // Widget or the complete Canvas bounds against the actual viewport
+      // instead of preserving the infinite Canvas' publishing-time zoom. The
+      // top inset keeps it clear of the read-only action bar; every
+      // ResizeObserver pass recomputes the frame for phones, tablets and
+      // resized desktop windows without changing the content's aspect ratio.
+      const viewerBar = document.querySelector(".viewer-topbar")?.getBoundingClientRect(),
+        sideInset = Math.max(12, Math.min(40, r.width * .035)),
+        topInset = Math.max(64, Math.min(r.height * .4, viewerBar ? viewerBar.bottom - r.top + 12 : r.height * .09)),
+        bottomInset = Math.max(12, Math.min(32, r.height * .035)),
+        availableWidth = Math.max(1, r.width - sideInset * 2),
+        availableHeight = Math.max(1, r.height - topInset - bottomInset),
+        nextScale = Math.max(.03, Math.min(2, availableWidth / Math.max(1, viewerBounds.w), availableHeight / Math.max(1, viewerBounds.h)));
+      state.scale = nextScale;
+      state.panX = sideInset + (availableWidth - viewerBounds.w * nextScale) / 2 - viewerBounds.x * nextScale;
+      state.panY = topInset + (availableHeight - viewerBounds.h * nextScale) / 2 - viewerBounds.y * nextScale;
+      state.viewInitialized = true;
+    } else if (!state.viewInitialized && r.width > 0 && r.height > 0) {
       state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000 * INITIAL_VIEW_ZOOM));
       state.panX = (r.width - SIZE * state.scale) / 2;
       state.panY = (r.height - SIZE * state.scale) / 2;
@@ -2375,6 +2433,13 @@
     }
     updateCoordinates();
     requestRender();
+  }
+  function fitViewerCanvas() {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer") return false;
+    viewerAutoFitWidgetId = null;
+    viewerAutoFitCanvas = true;
+    fit();
+    return true;
   }
   function renderPlacedContentLayer(region = null) {
     const d = devicePixelRatio || 1,

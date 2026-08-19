@@ -25,17 +25,17 @@ test("Cloud Connect share categories keep every original and append the three Cr
   const categories = [...evalLiteral(cloudConnect, /const CATEGORIES = (\[[^\]]*\]);/, "CATEGORIES")];
   assert.deepEqual(categories, ALL_CATEGORIES, "original categories must remain, in order, with guidance/collaboration/learning appended");
 
-  const labels = { ...evalLiteral(cloudConnect, /const CATEGORY_LABELS = (\{[^}]*\});/, "CATEGORY_LABELS") };
-  assert.deepEqual(labels, { guidance:"Sharing & Guidance", collaboration:"Co-creation", learning:"Learning Notes" });
+  const labelKeys = { ...evalLiteral(cloudConnect, /const CATEGORY_LABEL_KEYS = (\{[^}]*\});/, "CATEGORY_LABEL_KEYS") };
+  assert.deepEqual(labelKeys, {
+    education:"categoryEducation", productivity:"categoryProductivity", data:"categoryData",
+    design:"categoryDesign", developer:"categoryDeveloper", science:"categoryScience",
+    business:"categoryBusiness", lifestyle:"categoryLifestyle", other:"categoryOther",
+    guidance:"categoryGuidance", collaboration:"categoryCollaboration", learning:"categoryLearning",
+  });
 
-  // The select renders the English label for the new categories and keeps the
-  // capitalized fallback for every original category.
-  assert.match(cloudConnect, /CATEGORIES\.map\(value => el\("option", \{ value, text:CATEGORY_LABELS\[value\] \|\| value\[0\]\.toUpperCase\(\) \+ value\.slice\(1\) \}\)\)/);
-  const optionText = (value) => labels[value] || value[0].toUpperCase() + value.slice(1);
-  assert.deepEqual(categories.map(optionText), [
-    "Education", "Productivity", "Data", "Design", "Developer", "Science", "Business", "Lifestyle", "Other",
-    "Sharing & Guidance", "Co-creation", "Learning Notes",
-  ]);
+  // Every category is rendered through the bilingual Cloud copy table.
+  assert.match(cloudConnect, /CATEGORIES\.map\(value => el\("option", \{ value, text:cloudT\(CATEGORY_LABEL_KEYS\[value\]\) \}\)\)/);
+  assert.deepEqual(categories.map((value) => labelKeys[value]), Object.values(labelKeys));
 
   // Draft restore, publish availability, publish validation, and AI auto-fill
   // all guard on the same widened list.
@@ -43,22 +43,24 @@ test("Cloud Connect share categories keep every original and append the three Cr
 
   // Sharing requires an explicit choice: the select opens on a placeholder and
   // publishing stays blocked until a real category is picked.
-  assert.match(cloudConnect, /el\("option", \{ value:"", text:"Select a category…" \}\)/);
+  assert.match(cloudConnect, /el\("option", \{ value:"", text:cloudT\("selectCategory"\) \}\)/);
   assert.match(cloudConnect, /!CATEGORIES\.includes\(category\.value\)/);
-  assert.match(cloudConnect, /!CATEGORIES\.includes\(payload\.category\)\) throw new Error\("Choose a category before publishing\."\)/);
+  assert.match(cloudConnect, /!CATEGORIES\.includes\(payload\.category\)\) throw new Error\(cloudT\("publishCategoryRequired"\)\)/);
 });
 
-test("Cloud Connect cloud tab links to Craft Commons instead of Explore", () => {
-  assert.match(cloudConnect, /el\("strong", \{ text:"Craft Commons ↗" \}\)/);
-  assert.doesNotMatch(cloudConnect, /Explore ↗/);
-  // The tab still points at the community browse page on the configured cloud origin.
-  assert.match(cloudConnect, /href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\), target:"_blank", rel:"noopener"/);
+test("Cloud Connect keeps Echoes beside Projects and favorites", () => {
+  assert.match(cloudConnect, /\["projects", "cloudProjects"\]/);
+  assert.match(cloudConnect, /\["favorites", "favorites"\]/);
+  assert.match(cloudConnect, /class:"cloud-section-tab cloud-explore-link"/);
+  assert.match(cloudConnect, /href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\)/);
+  assert.match(cloudConnect, /text:`\$\{cloudT\("explore"\)\} ↗`/);
+  assert.doesNotMatch(cloudConnect, /text:cloudT\(hint\)/);
 });
 
-test("Remote Canvas community back copy points to Craft Commons in both languages", () => {
-  assert.match(remoteCanvas, /back:"Back to Craft Commons"/);
-  assert.match(remoteCanvas, /back:"返回共创广场"/);
-  assert.doesNotMatch(remoteCanvas, /Back to Explore|返回探索/);
+test("Remote Canvas community back copy points to Echoes in both languages", () => {
+  assert.match(remoteCanvas, /back:"Back to Echoes"/);
+  assert.match(remoteCanvas, /back:"返回 Echoes"/);
+  assert.doesNotMatch(remoteCanvas, /Back to Explore|返回探索|Craft Commons|共创广场/);
   // Non-community back copy is untouched.
   assert.match(remoteCanvas, /back:"Back to Projects"/);
   assert.match(remoteCanvas, /back:"返回项目"/);

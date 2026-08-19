@@ -47,6 +47,10 @@ function temporaryCloudError(error, origin) {
   return wrapped;
 }
 
+function cloudSignInRequiredError(message) {
+  return Object.assign(new Error(message), { status:401, code:"cloud_sign_in_required" });
+}
+
 function reconnectDelayMs(attempt, random = Math.random) {
   const retry = Math.max(0, Math.floor(Number(attempt) || 0));
   const base = retry < 3 ? 10_000 : retry < 8 ? 60_000 : 300_000;
@@ -129,7 +133,10 @@ function accountToken(configuration) {
 function accountSessionExpired(configuration, now = Date.now()) {
   if (!configuration?.accountToken || configuration.legacyAccountAccess || !configuration.accountExpiresAt) return false;
   const expiresAt = Date.parse(configuration.accountExpiresAt);
-  return !Number.isFinite(expiresAt) || expiresAt <= now;
+  // Malformed local metadata is not proof that the Cloud session expired.
+  // Preserve the credential and let the authoritative session endpoint
+  // validate it instead of destructively signing the user out.
+  return Number.isFinite(expiresAt) && expiresAt <= now;
 }
 
 class CloudConnector {
@@ -157,6 +164,8 @@ class CloudConnector {
     this.accountUpdatedAt = Number(this.configuration?.accountUpdatedAt || 0) || null;
     this.accountLastError = null;
     this.browserAuthorizations = new Map();
+    this.accountSignInSeq = 0;
+    this.deviceOperationSeq = 0;
     this.expireAccountSessionIfNeeded();
   }
 
@@ -272,10 +281,10 @@ class CloudConnector {
 
   requireCloudAccount() {
     if (this.expireAccountSessionIfNeeded()) {
-      throw Object.assign(new Error("The local PenEcho Cloud account session expired. Sign in on this computer again."), { status: 401 });
+      throw cloudSignInRequiredError("The local PenEcho Cloud account session expired. Sign in on this computer again.");
     }
     const token = accountToken(this.configuration);
-    if (!token || !this.configuration?.origin) throw new Error("Connect your PenEcho Cloud account on this computer first.");
+    if (!token || !this.configuration?.origin) throw cloudSignInRequiredError("Connect your PenEcho Cloud account on this computer first.");
     return { ...this.configuration, accountToken: token };
   }
 
@@ -300,7 +309,15 @@ class CloudConnector {
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      if (response.status === 401 && this.configuration?.accountToken && !this.configuration?.legacyAccountAccess) this.clearAccountSession();
+      if (response.status === 401) {
+        if (!configuration.legacyAccountAccess) {
+          await this.confirmAccountSessionAfterUnauthorized(configuration.accountToken, payload.message);
+        }
+        throw Object.assign(new Error(payload.message || "PenEcho Cloud rejected this account request."), {
+          status:403,
+          code:payload.error || "cloud_request_not_authorized",
+        });
+      }
       const temporary = [502, 503, 504].includes(response.status);
       const error = new Error(temporary
         ? `${configuration.origin.includes("internaltest.penecho.ai") ? "UAT Cloud" : "PenEcho Cloud"} is temporarily unavailable (HTTP ${response.status}). Your Canvas is still safe on this device. Try Save again in a moment.`
@@ -315,15 +332,16 @@ class CloudConnector {
   async communityRequest(pathname) {
     if(!String(pathname).startsWith("/api/v1/community/"))throw new Error("Unsupported public community request.");
     this.expireAccountSessionIfNeeded();
-    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),response=await fetch(`${origin}${pathname}`,{
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),legacyAccountAccess=Boolean(this.configuration?.legacyAccountAccess),response=await fetch(`${origin}${pathname}`,{
       method:"GET",
       redirect:"error",
       headers:{accept:"application/json",...(token?{authorization:`Bearer ${token}`}:{})},
     }),payload=await response.json().catch(()=>({}));
     if(!response.ok){
-      if(response.status===401&&token&&!this.configuration?.legacyAccountAccess)this.clearAccountSession();
+      if(response.status===401&&token&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,payload.message);
       const error=new Error(payload.message||`Community request failed (HTTP ${response.status}).`);
-      error.status=response.status;
+      error.status=response.status===401&&token?403:response.status;
+      error.code=response.status===401&&token?(payload.error||"cloud_request_not_authorized"):(payload.error||"community_request_failed");
       throw error;
     }
     return payload;
@@ -366,6 +384,7 @@ class CloudConnector {
   }
 
   async signIn({ origin, code, callback = null }) {
+    const signInSeq = ++this.accountSignInSeq;
     const cloudOrigin = normalizedOrigin(origin);
     if (this.configuration?.origin && this.configuration.origin !== cloudOrigin && deviceToken(this.configuration)) {
       throw new Error("Disconnect or revoke the device linked to the current Cloud address before signing in to another address.");
@@ -379,6 +398,9 @@ class CloudConnector {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.accessToken || !payload.account?.id) {
       throw new Error(payload.message || `Cloud sign-in failed (HTTP ${response.status}).`);
+    }
+    if (signInSeq !== this.accountSignInSeq) {
+      throw Object.assign(new Error("A newer PenEcho Cloud sign-in replaced this request."), { code:"cloud_sign_in_superseded" });
     }
     const account = publicAccount(payload.account);
     const accountUpdatedAt = Date.now();
@@ -451,12 +473,30 @@ class CloudConnector {
         method: "GET",
         redirect: "error",
         headers: { authorization: `Bearer ${current.accountToken}`, accept: "application/json" },
+        signal:AbortSignal.timeout(CLOUD_REQUEST_TIMEOUT_MS),
       });
       const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 && (accountToken(this.configuration) !== current.accountToken || this.configuration?.origin !== current.origin)) {
+        throw Object.assign(new Error("A newer PenEcho Cloud sign-in replaced this account check."), { status:409, code:"cloud_request_superseded" });
+      }
+      if (response.status === 401 && payload.error === "invalid_local_session") {
+        if (this.clearAccountSessionIfCurrent(current.accountToken)) {
+          throw cloudSignInRequiredError("The local PenEcho Cloud account session is no longer valid. Sign in on this computer again.");
+        }
+        throw Object.assign(new Error("A newer PenEcho Cloud sign-in replaced this account check."), { status:409, code:"cloud_request_superseded" });
+      }
+      if (response.status === 401) {
+        throw Object.assign(new Error(payload.message || "Cloud could not authoritatively validate the local account session."), {
+          status:503,
+          code:"cloud_session_validation_untrusted",
+        });
+      }
       if (!response.ok || !payload.account?.id) {
-        if (response.status === 401) this.clearAccountSession();
         throw new Error(payload.message || `Cloud account refresh failed (HTTP ${response.status}).`);
       }
+      // A previous account refresh may finish after a newer browser sign-in.
+      // Never let that older response overwrite the newly issued session.
+      if (accountToken(this.configuration) !== current.accountToken || this.configuration?.origin !== current.origin) return this.status();
       this.account = publicAccount(payload.account);
       this.accountUpdatedAt = Date.now();
       this.accountLastError = null;
@@ -466,6 +506,25 @@ class CloudConnector {
       this.accountLastError = safeMessage(error);
       throw error;
     }
+  }
+
+  async confirmAccountSessionAfterUnauthorized(expectedToken, message = "") {
+    if (!expectedToken || accountToken(this.configuration) !== expectedToken) {
+      throw Object.assign(new Error("A newer PenEcho Cloud sign-in replaced this request."), { status:409, code:"cloud_request_superseded" });
+    }
+    try {
+      await this.refreshAccount({ force:true });
+    } catch (error) {
+      if (error?.code === "cloud_sign_in_required" || error?.code === "cloud_request_superseded") throw error;
+      if (accountToken(this.configuration) !== expectedToken) {
+        throw Object.assign(new Error("A newer PenEcho Cloud sign-in replaced this request."), { status:409, code:"cloud_request_superseded" });
+      }
+      throw temporaryCloudError(error, this.configuration?.origin);
+    }
+    throw Object.assign(new Error(message || "PenEcho Cloud rejected this request while the account session remains valid."), {
+      status:403,
+      code:"cloud_request_not_authorized",
+    });
   }
 
   clearAccountSession() {
@@ -480,6 +539,12 @@ class CloudConnector {
     this.writeConfiguration(configuration);
   }
 
+  clearAccountSessionIfCurrent(expectedToken) {
+    if (!expectedToken || accountToken(this.configuration) !== expectedToken) return false;
+    this.clearAccountSession();
+    return true;
+  }
+
   expireAccountSessionIfNeeded() {
     if (!accountSessionExpired(this.configuration)) return false;
     this.clearAccountSession();
@@ -489,6 +554,7 @@ class CloudConnector {
   }
 
   async signOut() {
+    this.accountSignInSeq++;
     const configuration = this.configuration;
     const token = configuration?.accountToken;
     this.clearAccountSession();
@@ -515,8 +581,9 @@ class CloudConnector {
   }
 
   async library() {
+    const requestedWithToken = accountToken(this.configuration);
     const payload = await this.cloudRequest("/api/v1/device-sync/library");
-    if (payload?.account) {
+    if (payload?.account && requestedWithToken && accountToken(this.configuration) === requestedWithToken) {
       this.account = publicAccount(payload.account);
       this.accountUpdatedAt = Date.now();
       this.accountLastError = null;
@@ -549,9 +616,15 @@ class CloudConnector {
 
   async communityImage(itemId,variant="preview") {
     this.expireAccountSessionIfNeeded();
-    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),suffix=variant==="thumbnail"?"thumbnail":"preview";
+    const origin=this.configuration?.origin||this.defaultOrigin,token=accountToken(this.configuration),legacyAccountAccess=Boolean(this.configuration?.legacyAccountAccess),suffix=variant==="thumbnail"?"thumbnail":"preview";
     const response = await fetch(`${origin}/api/v1/community/items/${encodeURIComponent(itemId)}/${suffix}`, { method:"GET", redirect:"error", headers:{ accept:"image/webp",...(token?{authorization:`Bearer ${token}`}:{}) } });
-    if (!response.ok) throw Object.assign(new Error(`Community preview request failed (HTTP ${response.status}).`), { status:response.status });
+    if (!response.ok) {
+      if(response.status===401&&token&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this community image request.");
+      throw Object.assign(new Error(`Community preview request failed (HTTP ${response.status}).`), {
+        status:response.status===401&&token?403:response.status,
+        code:response.status===401&&token?"cloud_request_not_authorized":"community_image_failed",
+      });
+    }
     const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].toLowerCase(), bytes = Buffer.from(await response.arrayBuffer());
     if (contentType !== "image/webp" || !bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error("PenEcho Cloud returned an invalid community preview.");
     return { contentType, bytes };
@@ -647,8 +720,13 @@ class CloudConnector {
     });
     if (response.status === 404) return null;
     if (!response.ok) {
-      if (response.status === 401 && this.configuration?.accountToken && !this.configuration?.legacyAccountAccess) this.clearAccountSession();
-      throw Object.assign(new Error(`Cloud thumbnail request failed (HTTP ${response.status}).`), { status: response.status });
+      if (response.status === 401 && configuration.accountToken && !configuration.legacyAccountAccess) {
+        await this.confirmAccountSessionAfterUnauthorized(configuration.accountToken, "PenEcho Cloud rejected this Canvas thumbnail request.");
+      }
+      throw Object.assign(new Error(`Cloud thumbnail request failed (HTTP ${response.status}).`), {
+        status:response.status === 401 ? 403 : response.status,
+        code:response.status === 401 ? "cloud_request_not_authorized" : "cloud_thumbnail_failed",
+      });
     }
     const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
     const bytes = Buffer.from(await response.arrayBuffer());
@@ -728,6 +806,7 @@ class CloudConnector {
     return { revision: latest.revision, bundle };
   }
   async pair({ origin, code, name = defaultDeviceName(), platform = defaultPlatform(), publicKey = null }) {
+    const deviceOperationSeq = ++this.deviceOperationSeq;
     const cloudOrigin = normalizedOrigin(origin);
     const accountConfiguration = this.requireCloudAccount();
     if (accountConfiguration.origin !== cloudOrigin) {
@@ -741,6 +820,10 @@ class CloudConnector {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.token || !payload.device?.id) throw new Error(payload.message || `Cloud pairing failed (HTTP ${response.status}).`);
+    if (deviceOperationSeq !== this.deviceOperationSeq) throw Object.assign(new Error("A newer device-link action replaced this request."), { code:"cloud_device_action_superseded" });
+    if (accountToken(this.configuration) !== accountConfiguration.accountToken || this.configuration?.origin !== accountConfiguration.origin) {
+      throw cloudSignInRequiredError("The local PenEcho Cloud account changed while this device was linking. Start Link device again.");
+    }
     const existing = this.configuration;
     const configuration = {
       ...(existing || {}),
@@ -826,6 +909,7 @@ class CloudConnector {
   }
 
   async revokeDevice() {
+    const deviceOperationSeq = ++this.deviceOperationSeq;
     const configuration = this.configuration;
     const token = deviceToken(configuration);
     if (!token || !configuration?.origin) throw new Error("This PenEcho server has not been paired.");
@@ -838,6 +922,7 @@ class CloudConnector {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.message || `Device revocation failed (HTTP ${response.status}).`);
     }
+    if (deviceOperationSeq !== this.deviceOperationSeq || deviceToken(this.configuration) !== token) return this.status();
     this.disconnect({ forget: true });
     return this.status();
   }

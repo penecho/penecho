@@ -735,10 +735,10 @@ function send(res, code, data, type = "application/json; charset=utf-8", extraHe
 function sendCloudSignInResult(res, ok) {
   const nonce = crypto.randomBytes(18).toString("base64");
   const title = ok ? "PenEcho sign-in complete" : "PenEcho sign-in could not be completed";
-  const detail = ok ? "Returning you to your local Canvas…" : "Return to your local Canvas and start the sign-in again.";
+  const detail = ok ? "Sign-in complete. You can return to PenEcho and close this page." : "Return to your local Canvas and start the sign-in again.";
   const message = JSON.stringify({ type:"penecho:cloud-sign-in-result", ok });
   const finish = ok
-    ? `if(window.opener&&!window.opener.closed){window.opener.postMessage(${message},window.location.origin);setTimeout(()=>window.close(),700)}else{setTimeout(()=>window.location.replace("/"),700)}`
+    ? `if(window.opener&&!window.opener.closed)window.opener.postMessage(${message},window.location.origin);const closePage=()=>{try{window.close()}catch{}};closePage();setTimeout(closePage,120);setTimeout(closePage,700)`
     : `if(window.opener&&!window.opener.closed){window.opener.postMessage(${message},window.location.origin)}`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style nonce="${nonce}">:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f5f6f8;color:#1b1e25;font:15px/1.5 system-ui,sans-serif}.result{width:min(440px,100%);padding:28px;border:1px solid #dfe2e8;border-radius:8px;background:#fff;box-shadow:0 18px 50px #19202d1f}.mark{display:grid;place-items:center;width:36px;height:36px;margin-bottom:18px;border-radius:50%;color:#fff;background:${ok ? "#27875b" : "#b94a4a"};font-weight:800}h1{margin:0 0 8px;font-size:21px}p{margin:0;color:#606774}</style></head><body><main class="result"><span class="mark" aria-hidden="true">${ok ? "✓" : "!"}</span><h1>${title}</h1><p>${detail}</p></main><script nonce="${nonce}">${finish}</script></body></html>`;
   res.writeHead(200, { "Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });

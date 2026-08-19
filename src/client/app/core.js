@@ -246,6 +246,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       taglineResearch: "Mathematical physics, rigorous teaching, and verifiable code",
       taglineStudio: "A clean, focused studio for clear structure and practical answers",
       language: "Language",
+      hintPrefix: "Hint",
       theme: "Theme",
       themeArcane: "Arcane",
       themeScifi: "Sci-fi",
@@ -591,6 +592,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotLibraryLoading: "Loading {location} canvases…",
       snapshotLibraryLoadingDetail: "The previous location is being replaced with verified items.",
       snapshotLibraryLoadFailed: "Could not load {location}. Select the location to try again.",
+      snapshotCloudSignInRequired: "Sign in to PenEcho Cloud first",
+      snapshotCloudSignInHint: "Your Cloud projects and Canvases will appear here after you sign in.",
+      openPenEchoCloud: "Open PenEcho Cloud",
+      openPenEchoCloudExternal: "Open PenEcho Cloud in a new tab",
+      opensInNewTab: "Opens in a new tab",
+      openCloudCanvasUnsaved: "This Canvas has unsaved changes. Opening another Canvas in a new page will not save them. Continue?",
       snapshotLoading: "Loading “{name}”…",
       snapshotLoadingShort: "Loading…",
       snapshotLoadRequesting: "Requesting the saved Canvas…",
@@ -685,6 +692,37 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pendingConfirm: "Confirm or discard the current AI draft first",
       merged: "AI merged",
       plugins: "Plugins",
+      savedCrafts: "Favorites",
+      savedCraftsTitle: "Favorite Widgets",
+      savedCraftsHint: "Your favorite Widgets. Select Add to place one on this Canvas.",
+      savedLoading: "Loading favorites…",
+      savedEmptyIn: "No favorite Widgets yet. Select ★ on any Widget to keep it here.",
+      savedEmptyOut: "No favorite Widgets yet. Select ★ on any Widget—favorites stay on this device until you sign in to PenEcho Cloud.",
+      savedAdd: "Add",
+      savedAdding: "Adding…",
+      savedRemoveTitle: "Remove from favorites",
+      savedSourceLocal: "Local",
+      savedSourceCloud: "Cloud",
+      savedSourceCommunity: "Cloud community",
+      savedSourceSynced: "Cloud + local",
+      savedSourceLocalTitle: "On this device only; it uploads to PenEcho Cloud after you sign in",
+      savedSourceCloudTitle: "On PenEcho Cloud",
+      savedErrorAdd: "This Widget could not be added.",
+      savedErrorToggle: "The favorite could not be updated. Try again shortly.",
+      closeSavedCrafts: "Close Favorite Widgets",
+      shareCanvasCloud: "Share Canvas to PenEcho Cloud",
+      shareWidget: "Share widget",
+      openInNewPage: "Open in a new page",
+      openCanvas: "Open Canvas",
+      addToCanvas: "Add to Canvas",
+      favorites: "Favorites",
+      all: "All",
+      canvases: "Canvases",
+      widgets: "Widgets",
+      favoriteCanvases: "Favorite Canvases",
+      favoriteWidgets: "Favorite Widgets",
+      projects: "Projects",
+      explore: "Echoes",
       pluginManagerTitle: "Plugin manager",
       pluginManagerDescription: "Choose which capabilities the AI can use. Disabled plugins add no prompt or canvas widget runtime.",
       closePlugins: "Close plugins",
@@ -869,7 +907,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
     initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
-    initialSnapshotLocation = ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
+    // The public viewer shares the Cloud origin (and therefore localStorage)
+    // with editable Cloud Canvases. Never inherit their last-selected Cloud
+    // history location: the read-only shell has no /api/cloud/library route.
+    initialSnapshotLocation = window.PENECHO_CONFIG?.runtime === "viewer"
+      ? "device"
+      : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
     initialAiEffort = EFFORT_OPTIONS.includes(storedAiEffort) ? storedAiEffort : EFFORT_OPTIONS.includes(configuredAiEffort) ? configuredAiEffort : "config",
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function canvasClientId() {
@@ -1137,7 +1180,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     status.title=progress?text:"";
   };
   const setStatusKey = (key) => setStatus(t(key), key);
-  const t = (key) => I18N[state.language][key] || I18N.zh[key] || key;
+  const t = (key) => I18N[state.language]?.[key] || I18N.en[key] || key;
+  window.PenEchoI18n = Object.freeze({
+    t,
+    currentLanguage:() => state.language,
+  });
   function fitCanvasHint() {
     if (!canvasHint) return;
     canvasHint.classList.remove("two-line");
@@ -1146,7 +1193,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
 
   function renderCanvasHint(restart = false) {
     if (!canvasHint || !state.canvasHintKey) return;
-    canvasHint.textContent = `Hint: ${t(state.canvasHintKey)}`;
+    canvasHint.textContent = `${t("hintPrefix")}: ${t(state.canvasHintKey)}`;
     canvasHint.hidden = false;
     fitCanvasHint();
     if (!restart) return;
@@ -1341,13 +1388,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     featureTour.activeObserver?.disconnect();
     featureTour.activeObserver = null;
   }
+  function featureTourObserverTarget() {
+    if (window.PENECHO_CONFIG?.runtime === "viewer") return null;
+    const target = document.body;
+    return typeof Node === "function" && target instanceof Node ? target : null;
+  }
   function observeActiveFeatureTour() {
     stopActiveFeatureTourObserver();
-    if (typeof MutationObserver !== "function") return false;
+    const target = featureTourObserverTarget();
+    if (typeof MutationObserver !== "function" || !target) return false;
     featureTour.activeObserver = new MutationObserver((records) => {
       if (featureTour.active && records.some((record) => !tourLayer.contains(record.target))) scheduleFeatureTourPosition();
     });
-    featureTour.activeObserver.observe(document.body, {
+    featureTour.activeObserver.observe(target, {
       childList: true,
       subtree: true,
       attributes: true,
@@ -1547,11 +1600,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function watchForPendingFeatureTour() {
-    if (featureTour.pendingObserver || typeof MutationObserver !== "function") return false;
+    const target = featureTourObserverTarget();
+    if (featureTour.pendingObserver || typeof MutationObserver !== "function" || !target) return false;
     featureTour.pendingObserver = new MutationObserver((records) => {
       if (!featureTour.active && records.some((record) => !tourLayer.contains(record.target))) scheduleFeatureTourPendingRetry();
     });
-    featureTour.pendingObserver.observe(document.body, {
+    featureTour.pendingObserver.observe(target, {
       childList: true,
       subtree: true,
       attributes: true,
@@ -2081,6 +2135,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function maybeStartOnboarding() {
+    if (window.PENECHO_CONFIG?.runtime === "viewer") return false;
     if (!maybeStartFeatureTour()) maybeShowChangelog();
   }
   function autoDelayText() {
@@ -2271,8 +2326,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if (catalogError) return { documentPath, error:catalogError };
         try {
           const [documentResponse, styleResponse] = await Promise.all([
-            fetch(documentPath, { credentials:"same-origin", cache:"no-store" }),
-            stylePath ? fetch(stylePath, { credentials:"same-origin", cache:"no-store" }) : null,
+            fetch(canvasAssetUrl(documentPath), { credentials:"same-origin", cache:"no-store" }),
+            stylePath ? fetch(canvasAssetUrl(stylePath), { credentials:"same-origin", cache:"no-store" }) : null,
           ]);
           if (!documentResponse.ok) throw Error(`HTTP ${documentResponse.status}`);
           if (styleResponse && !styleResponse.ok) throw Error(`CSS HTTP ${styleResponse.status}`);
@@ -2323,10 +2378,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (pluginEnabled("flowchart")) await ensurePluginRuntime("flowchart");
       if (state.pendingWidget && !pluginManifests.has(state.pendingWidget.pluginId)) rejectPendingWidget();
       if (state.widgetEdit && !pluginManifests.has(selectedWidget()?.pluginId)) acceptWidgetEdit();
-      for (const widget of state.widgets) if (pluginEnabled(widget.pluginId)) mountWidget(widget);
-      if (state.pendingWidget && pluginEnabled(state.pendingWidget.pluginId)) mountWidget(state.pendingWidget);
+      // Hook the parent message channel before a newly mounted host can emit
+      // its first ready signal. The iframe load probe remains the recovery path
+      // for cached navigation and external callers that mount at the boundary.
       state.pluginCatalogLoaded = true;
       syncWidgetRuntime();
+      for (const widget of state.widgets) if (pluginEnabled(widget.pluginId)) mountWidget(widget);
+      if (state.pendingWidget && pluginEnabled(state.pendingWidget.pluginId)) mountWidget(state.pendingWidget);
       persistPluginSettings();
       requestRender();
       return true;
@@ -2612,7 +2670,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function updatePluginStylesPreview(validation) {
-    if (!pluginStylesPreview) return;
+    // The read-only viewer never exposes plugin authoring. Avoid creating its
+    // hidden preview iframe (and a third, unnecessary Widget host document).
+    if (!pluginStylesPreview || window.PENECHO_CONFIG?.runtime === "viewer") return;
     const css = validation?.manifest?.styles || "";
     pluginStylesPreviewPayload = {
       type:"penecho-widget-init",
@@ -2984,6 +3044,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     summonFX?.refreshText();
     positionAnimationControls();
     requestInteractionLayerRender();
+    window.dispatchEvent(new CustomEvent("penecho:languagechange", { detail:{ language:state.language } }));
   }
   function updateThemeCopy() {
     const key = { arcane: "taglineArcane", scifi: "taglineScifi", research: "taglineResearch", studio: "taglineStudio" }[state.theme];

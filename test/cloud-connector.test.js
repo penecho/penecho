@@ -165,13 +165,19 @@ test("expired local account sessions fail closed without revoking the paired dev
     assert.throws(() => connector.requireCloudAccount(), (error) => {
       assert.match(error.message, /session expired/);
       assert.equal(error.status, 401);
+      assert.equal(error.code, "cloud_sign_in_required");
       return true;
     });
     const status = connector.status();
     assert.equal(status.accountSession.signedIn, false);
     assert.equal(status.account, null);
     assert.equal(status.device.configured, true);
-    assert.throws(() => connector.requireCloudAccount(), /Connect your PenEcho Cloud account/);
+    assert.throws(() => connector.requireCloudAccount(), (error) => {
+      assert.match(error.message, /Connect your PenEcho Cloud account/);
+      assert.equal(error.status, 401);
+      assert.equal(error.code, "cloud_sign_in_required");
+      return true;
+    });
     const saved = JSON.parse(fs.readFileSync(file, "utf8"));
     assert.equal(saved.accountToken, undefined);
     assert.equal(saved.accountExpiresAt, undefined);
@@ -181,11 +187,362 @@ test("expired local account sessions fail closed without revoking the paired dev
   }
 });
 
+test("missing local account sessions require Cloud sign-in without revoking the paired device", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-missing-session-test-"));
+  const file = path.join(stateDir, "cloud-device.json");
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      deviceToken: "still-paired-device-token",
+      deviceId: "device-id",
+      enabled: false,
+    });
+
+    assert.throws(() => connector.requireCloudAccount(), (error) => {
+      assert.match(error.message, /Connect your PenEcho Cloud account/);
+      assert.equal(error.status, 401);
+      assert.equal(error.code, "cloud_sign_in_required");
+      return true;
+    });
+    assert.equal(connector.status().accountSession.signedIn, false);
+    assert.equal(connector.status().device.configured, true);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).deviceToken, "still-paired-device-token");
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an endpoint 401 clears the account only after the authoritative session check confirms revocation", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-upstream-unauthorized-test-"));
+  const file = path.join(stateDir, "cloud-device.json");
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "expired-upstream-account-token",
+      accountExpiresAt: "2099-01-01T00:00:00.000Z",
+      account: { id:"account-id", name:"Ada", credits:1000 },
+      deviceToken: "still-paired-device-token",
+      deviceId: "device-id",
+      enabled: false,
+    });
+    global.fetch = async () => new Response(JSON.stringify({
+      error:"invalid_local_session",
+      message:"The Cloud account session expired.",
+    }), { status:401, headers:{ "content-type":"application/json" } });
+
+    await assert.rejects(connector.library(), (error) => {
+      assert.match(error.message, /Sign in on this computer again/);
+      assert.equal(error.status, 401);
+      assert.equal(error.code, "cloud_sign_in_required");
+      return true;
+    });
+    const status = connector.status();
+    assert.equal(status.accountSession.signedIn, false);
+    assert.equal(status.account, null);
+    assert.equal(status.device.configured, true);
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(saved.accountToken, undefined);
+    assert.equal(saved.accountExpiresAt, undefined);
+    assert.equal(saved.deviceToken, "still-paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an untrusted 401 from the session-check path never clears account or device credentials", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-untrusted-session-401-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version:2,
+      origin:"https://penecho.ai",
+      accountToken:"durable-account-token",
+      accountExpiresAt:"2030-01-01T00:00:00.000Z",
+      account:{ id:"account-id", name:"Ada", credits:1000 },
+      deviceToken:"durable-device-token",
+      deviceId:"device-id",
+      enabled:false,
+    });
+    connector.account = { id:"account-id", name:"Ada", credits:1000 };
+
+    for (const response of [
+      new Response("Sign in", { status:401, headers:{ "content-type":"text/html" } }),
+      new Response(JSON.stringify({ error:"unauthorized", message:"An edge rejected the request." }), { status:401, headers:{ "content-type":"application/json" } }),
+    ]) {
+      global.fetch = async () => response.clone();
+      await assert.rejects(connector.refreshAccount({ force:true }), (error) => {
+        assert.equal(error.status, 503);
+        assert.equal(error.code, "cloud_session_validation_untrusted");
+        return true;
+      });
+      assert.equal(connector.status().accountSession.signedIn, true);
+      assert.equal(connector.status().device.configured, true);
+      const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+      assert.equal(saved.accountToken, "durable-account-token");
+      assert.equal(saved.deviceToken, "durable-device-token");
+    }
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("endpoint 401 responses never clear a valid current account or its linked device", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-unconfirmed-401-test-"));
+  const originalFetch = global.fetch;
+  let sessionChecks = 0;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "valid-current-account-token",
+      accountExpiresAt: "2030-01-01T00:00:00.000Z",
+      account: { id:"account-id", name:"Ada", credits:1000 },
+      deviceToken: "paired-device-token",
+      deviceId: "paired-device",
+      enabled: false,
+    });
+    global.fetch = async (url, options = {}) => {
+      if (url.endsWith("/api/v1/local-access/session") && options.method === "GET") {
+        sessionChecks++;
+        return new Response(JSON.stringify({
+          account:{ id:"account-id", name:"Ada", credits:1000 },
+          expiresAt:"2030-01-01T00:00:00.000Z",
+        }), { status:200, headers:{ "content-type":"application/json" } });
+      }
+      return new Response(JSON.stringify({ error:"request_unauthorized", message:"This individual request was rejected." }), {
+        status:401,
+        headers:{ "content-type":"application/json" },
+      });
+    };
+
+    const operations = [
+      () => connector.library(),
+      () => connector.communityRequest("/api/v1/community/items?scope=favorites&kind=widget"),
+      () => connector.communityPreview("community-item"),
+      () => connector.cloudCanvasThumbnail("canvas-id"),
+    ];
+    for (const operation of operations) {
+      await assert.rejects(operation(), (error) => {
+        assert.equal(error.status, 403);
+        assert.equal(error.code, "cloud_request_not_authorized");
+        return true;
+      });
+      assert.equal(connector.status().accountSession.signedIn, true);
+      assert.equal(connector.status().device.configured, true);
+    }
+
+    assert.equal(sessionChecks, operations.length);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "valid-current-account-token");
+    assert.equal(saved.deviceToken, "paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("background account refresh failures preserve the signed-in account and linked device", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-refresh-failure-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version:2,
+      origin:"https://penecho.ai",
+      accountToken:"durable-account-token",
+      accountExpiresAt:"2030-01-01T00:00:00.000Z",
+      account:{ id:"account-id", name:"Ada", credits:1000 },
+      deviceToken:"durable-device-token",
+      deviceId:"device-id",
+      enabled:false,
+    });
+    connector.account = { id:"account-id", name:"Ada", credits:1000 };
+    connector.accountUpdatedAt = Date.now();
+
+    global.fetch = async () => new Response(JSON.stringify({ message:"Temporary Cloud failure" }), {
+      status:503,
+      headers:{ "content-type":"application/json" },
+    });
+    await assert.rejects(connector.refreshAccount({ force:true }), /Temporary Cloud failure/);
+    assert.equal(connector.status().accountSession.signedIn, true);
+
+    global.fetch = async () => { throw Object.assign(new Error("temporary network failure"), { code:"ECONNRESET" }); };
+    await assert.rejects(connector.refreshAccount({ force:true }), /temporary network failure/);
+    const status = connector.status();
+    assert.equal(status.accountSession.signedIn, true);
+    assert.equal(status.account.name, "Ada");
+    assert.equal(status.device.configured, true);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "durable-account-token");
+    assert.equal(saved.deviceToken, "durable-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("an old Favorites 401 cannot clear a newer browser sign-in or its linked device", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-stale-favorites-401-test-"));
+  const originalFetch = global.fetch;
+  let resolveOldRequest;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "old-account-token",
+      accountExpiresAt: "2030-01-01T00:00:00.000Z",
+      account: { id:"old-account", name:"Old account", credits:1000 },
+      deviceToken: "paired-device-token",
+      deviceId: "paired-device",
+      enabled: false,
+    });
+    global.fetch = async () => new Promise((resolve) => { resolveOldRequest = resolve; });
+
+    const oldFavorites = connector.communityRequest("/api/v1/community/items?scope=favorites&kind=widget");
+    connector.writeConfiguration({
+      ...connector.configuration,
+      accountToken: "new-browser-account-token",
+      accountExpiresAt: "2030-02-01T00:00:00.000Z",
+      account: { id:"new-account", name:"New account", credits:900 },
+      accountUpdatedAt: Date.now(),
+    });
+    connector.account = { id:"new-account", name:"New account", credits:900 };
+    connector.accountUpdatedAt = Date.now();
+    resolveOldRequest(new Response(JSON.stringify({ message:"The old session expired." }), {
+      status:401,
+      headers:{ "content-type":"application/json" },
+    }));
+
+    await assert.rejects(oldFavorites, (error) => {
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "cloud_request_superseded");
+      return true;
+    });
+    const status = connector.status();
+    assert.equal(status.accountSession.signedIn, true);
+    assert.equal(status.account.name, "New account");
+    assert.equal(status.device.configured, true);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "new-browser-account-token");
+    assert.equal(saved.deviceToken, "paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an old background account refresh cannot clear or overwrite a newer sign-in", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-stale-account-refresh-test-"));
+  const originalFetch = global.fetch;
+  let resolveOldRequest;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "old-refresh-token",
+      accountExpiresAt: "2030-01-01T00:00:00.000Z",
+      account: { id:"old-account", name:"Old account", credits:1000 },
+      deviceToken: "paired-device-token",
+      deviceId: "paired-device",
+      enabled: false,
+    });
+    global.fetch = async () => new Promise((resolve) => { resolveOldRequest = resolve; });
+
+    const oldRefresh = connector.refreshAccount({ force:true });
+    connector.writeConfiguration({
+      ...connector.configuration,
+      accountToken: "new-refresh-token",
+      accountExpiresAt: "2030-02-01T00:00:00.000Z",
+      account: { id:"new-account", name:"New account", credits:900 },
+      accountUpdatedAt: Date.now(),
+    });
+    connector.account = { id:"new-account", name:"New account", credits:900 };
+    connector.accountUpdatedAt = Date.now();
+    resolveOldRequest(new Response(JSON.stringify({ message:"The old refresh token expired." }), {
+      status:401,
+      headers:{ "content-type":"application/json" },
+    }));
+
+    await assert.rejects(oldRefresh, (error) => {
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "cloud_request_superseded");
+      return true;
+    });
+    const status = connector.status();
+    assert.equal(status.accountSession.signedIn, true);
+    assert.equal(status.account.name, "New account");
+    assert.equal(status.device.configured, true);
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "new-refresh-token");
+    assert.equal(saved.deviceToken, "paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an old successful account refresh cannot overwrite a newer browser sign-in", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-stale-account-success-test-"));
+  const originalFetch = global.fetch;
+  let resolveOldRequest;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.writeConfiguration({
+      version:2,
+      origin:"https://penecho.ai",
+      accountToken:"old-refresh-token",
+      accountExpiresAt:"2030-01-01T00:00:00.000Z",
+      account:{ id:"old-account", name:"Old account", credits:1000 },
+      deviceToken:"paired-device-token",
+      deviceId:"paired-device",
+      enabled:false,
+    });
+    global.fetch = async () => new Promise((resolve) => { resolveOldRequest = resolve; });
+
+    const oldRefresh = connector.refreshAccount({ force:true });
+    connector.writeConfiguration({
+      ...connector.configuration,
+      accountToken:"new-browser-account-token",
+      accountExpiresAt:"2030-02-01T00:00:00.000Z",
+      account:{ id:"new-account", name:"New account", credits:900 },
+      accountUpdatedAt:Date.now(),
+    });
+    connector.account = { id:"new-account", name:"New account", credits:900 };
+    connector.accountUpdatedAt = Date.now();
+    resolveOldRequest(new Response(JSON.stringify({
+      account:{ id:"old-account", name:"Old account", credits:50 },
+      expiresAt:"2030-01-01T00:00:00.000Z",
+    }), { status:200, headers:{ "content-type":"application/json" } }));
+
+    const status = await oldRefresh;
+    assert.equal(status.accountSession.signedIn, true);
+    assert.equal(status.account.name, "New account");
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "new-browser-account-token");
+    assert.equal(saved.account.name, "New account");
+    assert.equal(saved.deviceToken, "paired-device-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("local account expiry validation rejects elapsed or malformed timestamps", () => {
   const future = { accountToken: "token", accountExpiresAt: "2030-01-01T00:00:00.000Z" };
   assert.equal(accountSessionExpired(future, Date.parse("2029-01-01T00:00:00.000Z")), false);
   assert.equal(accountSessionExpired(future, Date.parse("2030-01-01T00:00:00.000Z")), true);
-  assert.equal(accountSessionExpired({ accountToken: "token", accountExpiresAt: "not-a-date" }), true);
+  assert.equal(accountSessionExpired({ accountToken: "token", accountExpiresAt: "not-a-date" }), false);
   assert.equal(accountSessionExpired({ accountToken: "legacy-without-expiry" }), false);
   assert.equal(accountSessionExpired({ accountToken: "token", accountExpiresAt: "2020-01-01", legacyAccountAccess: true }), false);
 });
@@ -383,6 +740,55 @@ test("disconnect and device revocation preserve an independent local account ses
     const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
     assert.equal(saved.deviceToken, undefined);
     assert.equal(saved.accountToken, "account-session-token");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("an old device revocation cannot remove a newly replaced linked device", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-stale-device-revoke-test-"));
+  const originalFetch = global.fetch;
+  let resolveOldRevoke;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest: async () => ({}) });
+    connector.connect = () => {};
+    connector.writeConfiguration({
+      version: 2,
+      origin: "https://penecho.ai",
+      accountToken: "current-account-token",
+      accountExpiresAt: "2030-01-01T00:00:00.000Z",
+      account: { id:"account-id", name:"Ada", credits:1000 },
+      deviceToken: "old-device-token",
+      deviceId: "old-device",
+      enabled: true,
+    });
+    global.fetch = async (url, options = {}) => {
+      if (url.endsWith("/api/v1/device-sync/device") && options.method === "DELETE") {
+        return new Promise((resolve) => { resolveOldRevoke = resolve; });
+      }
+      if (url.endsWith("/api/v1/device/pair") && options.method === "POST") {
+        return new Response(JSON.stringify({
+          token:"new-device-token",
+          device:{ id:"new-device", name:"New device", platform:"test" },
+        }), { status:201, headers:{ "content-type":"application/json" } });
+      }
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    };
+
+    const oldRevoke = connector.revokeDevice();
+    const paired = await connector.pair({ origin:"https://penecho.ai", code:"new-pairing-key", name:"New device", platform:"test" });
+    assert.equal(paired.device.id, "new-device");
+    resolveOldRevoke(new Response(null, { status:204 }));
+    const afterOldRevoke = await oldRevoke;
+
+    assert.equal(afterOldRevoke.accountSession.signedIn, true);
+    assert.equal(afterOldRevoke.device.configured, true);
+    assert.equal(afterOldRevoke.device.id, "new-device");
+    const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
+    assert.equal(saved.accountToken, "current-account-token");
+    assert.equal(saved.deviceToken, "new-device-token");
+    assert.equal(saved.deviceId, "new-device");
   } finally {
     global.fetch = originalFetch;
     fs.rmSync(stateDir, { recursive: true, force: true });

@@ -31,7 +31,6 @@
     forwardedDragPointer = null,
     queuedDragMove = null,
     dragMoveFrame = 0,
-    innerDocumentUrl = null,
     runtimeVersion = 0,
     innerDocumentReady = false,
     widgetState = { selected:false, active:true, navigationLocked:false, scaleX:1, scaleY:1 };
@@ -41,12 +40,6 @@
   inner.setAttribute("title", "Dynamic canvas widget");
   inner.addEventListener("load", forwardWidgetState);
   document.body.append(inner);
-  function releaseInnerDocumentUrl() {
-    if (!innerDocumentUrl) return;
-    URL.revokeObjectURL(innerDocumentUrl);
-    innerDocumentUrl = null;
-  }
-  addEventListener("pagehide", releaseInnerDocumentUrl, { once:true });
   function runtime(runtimeVersion) {
     const UPDATED = "penecho-widget-updated",
       DRAG_START = "penecho-widget-drag-start",
@@ -1195,6 +1188,14 @@
   function forwardWidgetState() {
     inner.contentWindow?.postMessage({ type:"penecho-widget-state", ...widgetState }, "*");
   }
+  function announceWidgetHostReady() {
+    parent.postMessage({ type:"penecho-widget-host-ready" }, parentOrigin);
+  }
+  function respondToWidgetHostProbe(event) {
+    if (event.source !== parent || event.origin !== parentOrigin || event.data?.type !== "penecho-widget-host-probe") return false;
+    announceWidgetHostReady();
+    return true;
+  }
   function flushDragMove() {
     dragMoveFrame = 0;
     if (!queuedDragMove) return;
@@ -1223,6 +1224,7 @@
   }
 
   addEventListener("message", (event) => {
+    if (respondToWidgetHostProbe(event)) return;
     const message = event.data;
     if (event.source === parent && event.origin === parentOrigin) {
       if (message?.type === "penecho-widget-init") {
@@ -1234,9 +1236,9 @@
         innerDocumentReady = false;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
         parent.postMessage({ type:"penecho-widget-runtime-diagnostics", errors:[], truncated:false }, parentOrigin);
-        releaseInnerDocumentUrl();
-        innerDocumentUrl = URL.createObjectURL(new Blob([widgetDocument(message.html, message.pluginStyles || "", runtimeVersion)], { type:"text/html" }));
-        inner.src = innerDocumentUrl;
+        const documentSource = widgetDocument(message.html, message.pluginStyles || "", runtimeVersion);
+        inner.removeAttribute("src");
+        inner.srcdoc = documentSource;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
         widgetState = { selected:message.selected, active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
@@ -1300,5 +1302,5 @@
     else if (validTouchMessage(message)) parent.postMessage(message, parentOrigin);
   });
 
-  parent.postMessage({ type: "penecho-widget-host-ready" }, parentOrigin);
+  announceWidgetHostReady();
 })();

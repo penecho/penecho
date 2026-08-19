@@ -8,55 +8,64 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center keeps projects local to the app and sends Explore to PenEcho Cloud", () => {
+test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
   assert.match(html, /id="shareCanvasBtn"/);
-  assert.match(cloud, /new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)/);
-  assert.match(cloud, /target:"_blank", rel:"noopener"/);
-  assert.match(cloud, /Browse public Crafts on PenEcho Cloud/);
-  assert.doesNotMatch(cloud, /function communityPanel/);
-  assert.doesNotMatch(cloud, /function itemCard/);
-  assert.doesNotMatch(cloud, /cloud-community-grid/);
-  assert.doesNotMatch(cloud, /\/api\/cloud\/community\?\$\{query\}/);
-  for (const removed of ["price_low", "price_high", "Free + paid", "Paid with credits", "Redeem ", "80% rewards"]) assert.doesNotMatch(cloud, new RegExp(removed));
+
+  assert.match(cloud, /function cloudT\(key, replacements = \{\}\)/);
+  assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
+  assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(\)/);
+  assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
+  assert.match(cloud, /class:"cloud-section-tab cloud-explore-link",\s*href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\),\s*target:"_blank",\s*rel:"noopener"/);
+  assert.match(cloud, /text:`\$\{cloudT\("explore"\)\} ↗`/);
+  assert.match(cloud, /text:cloudT\(label\)/);
+  assert.doesNotMatch(cloud, /text:cloudT\(hint\)/);
+  assert.match(cloud, /text:cloudT\("favorites"\)/);
+  assert.match(cloud, /favoriteCanvasesHint:"收藏中的公开画布"/);
+  assert.doesNotMatch(cloud, /favoriteCanvasesHint:"Favorites 中/);
+  assert.match(css, /\.cloud-section-tabs \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.cloud-favorite-filters/);
+  assert.match(css, /\.cloud-workspace > \.penecho-cloud-panel \{[^}]*background: transparent[^}]*border: 0[^}]*padding: 0/);
+
+  assert.match(cloud, /localHostControlsAvailable = window\.PENECHO_CONFIG\?\.runtime !== "cloud"/);
+  assert.match(cloud, /layout\.classList\.toggle\("remote-cloud-runtime", !localHostControlsAvailable\)/);
+  assert.match(cloud, /cloud-local-controls/);
+  assert.match(css, /\.penecho-cloud-layout\.remote-cloud-runtime/);
   assert.match(cloud, /x-penecho-session/);
-  assert.doesNotMatch(cloud, /priceCredits|Credit price|field\("Pricing"/);
-  assert.match(cloud, /Auto-fill with current AI/);
-  assert.match(cloud, /no image upload/);
-  assert.match(cloud, /Preserve this moment/);
-  assert.match(cloud, /Your Craft is now part of the public commons/);
-  assert.match(cloud, /Take it further/);
+  assert.match(cloud, /\/api\/cloud\/library/);
+  assert.match(cloud, /\/api\/cloud\/community\?scope=favorites&kind=canvas&sort=newest&limit=60/);
+  assert.match(cloud, /\/api\/cloud\/favorites/);
+  assert.match(cloud, /openProjectCanvasHere\(canvas\.id, panel, row\)/);
+  assert.match(cloud, /await bridge\.openCanvas\(canvasId\)/);
+  assert.match(cloud, /text:cloudT\("openCanvasHere"\)/);
+  assert.match(cloud, /text:cloudT\("addToCanvas"\)/);
+  assert.doesNotMatch(cloud, /openCanvasInNewPage|\/canvas\/community\//);
+  assert.match(cloud, /window\.PenEchoCloudProjects/);
+  assert.match(cloud, /penecho-cloud-center-project/);
+  assert.match(cloud, /class:"cloud-project-picker"/);
+  assert.match(cloud, /text:cloudT\("newProject"\)/);
+  assert.match(cloud, /text:cloudT\("saveCurrentHere"\)/);
+  assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
+  assert.match(cloud, /base-revision-required/);
+
+  for (const key of ["cloudSubtitle", "cloudProjects", "signOutHost", "removeThisLink", "autoFillCurrentAi", "shareNote", "publicCommonsTitle"]) {
+    assert.match(cloud, new RegExp(`cloudT\\("${key}"`));
+  }
   assert.match(cloud, /PUBLICATION_TERMS_VERSION = "2026-08-12"/);
-  assert.match(cloud, /CC BY-SA 4\.0/);
-  assert.match(cloud, /embedded source under/);
-  assert.match(cloud, /Public Craft ML License/);
   assert.match(cloud, /continuationPrompt/);
   assert.match(cloud, /contributionNote/);
   assert.match(cloud, /parentItemId/);
   assert.match(cloud, /window\.PenEchoCommunityUI/);
-  assert.match(cloud, /Cloud Projects/);
-  assert.match(cloud, /Private cross-device work/);
-  assert.match(cloud, /\/api\/cloud\/library/);
-  assert.match(cloud, /Save current Canvas/);
-  assert.match(cloud, /window\.PenEchoCloudProjects/);
-  assert.match(cloud, /localHostControlsAvailable = window\.PENECHO_CONFIG\?\.runtime !== "cloud"/);
-  assert.match(cloud, /remote-cloud-runtime/);
-  assert.match(cloud, /Sign out on this host/);
-  assert.match(cloud, /Remove this link/);
-  assert.match(cloud, /penecho-cloud-center-project/);
-  assert.match(cloud, /class:"cloud-project-picker"/);
-  assert.match(cloud, /text:"\+ New project"/);
-  assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
-  assert.match(cloud, /base-revision-required/);
+  assert.doesNotMatch(cloud, /priceCredits|Credit price|field\("Pricing"|price_low|price_high|Free \+ paid|Paid with credits/);
+
   assert.match(cloud, /startBrowserSignInWatch/);
-  assert.match(cloud, /PenEcho will connect here automatically/);
   assert.match(cloud, /window\.open\("about:blank"/);
   assert.match(cloud, /popup\.location\.replace\(started\.authorizationUrl\)/);
   assert.match(cloud, /window\.open\(started\.authorizationUrl, "_blank", "noopener"\)/);
   assert.match(cloud, /externalOpened:desktopApp/);
-  assert.match(cloud, /Open sign-in page/);
+  assert.match(cloud, /cloudT\("openSignIn"\)/);
   assert.match(cloud, /document\.visibilityState === "visible"/);
   assert.match(cloud, /visibilitychange/);
   assert.match(cloud, /event\.origin !== location\.origin/);
@@ -64,17 +73,27 @@ test("Cloud Center keeps projects local to the app and sends Explore to PenEcho 
   assert.match(cloud, /CLOUD_STATUS_POLL_MS = 1500/);
   assert.match(cloud, /Boolean\(device\.connected\)/);
   assert.match(cloud, /if \(current !== previous\)/);
-  assert.match(main, /window\.location\.replace\("\/"\)/);
   assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
-  assert.match(css, /\.cloud-section-tab\[href\]/);
-  assert.doesNotMatch(css, /\.cloud-item-preview/);
-  assert.doesNotMatch(css, /\.cloud-community-grid/);
+  assert.match(css, /\.cloud-section-tab \{[^}]*min-height: 2\.75rem/);
   assert.match(css, /\.cloud-project-card/);
-  assert.match(css, /\.penecho-cloud-layout\.remote-cloud-runtime/);
   assert.match(css, /\.cloud-project-create-form/);
   assert.match(css, /overflow-wrap: anywhere/);
-  assert.match(html, /Share to Community · Coming soon/);
+  assert.match(html, /data-i18n="sharePluginComing"/);
   assert.doesNotMatch(html, /points-priced|Share for points|earn points/);
+});
+
+test("local sign-in callback always closes its script-opened page after notifying an available opener", () => {
+  const main = read("src/server/main.js");
+  assert.match(main, /Sign-in complete\. You can return to PenEcho and close this page\./);
+  assert.match(main, /if\(window\.opener&&!window\.opener\.closed\)window\.opener\.postMessage/);
+  assert.match(main, /const closePage=\(\)=>\{try\{window\.close\(\)\}catch\{\}\};closePage\(\);setTimeout\(closePage,120\);setTimeout\(closePage,700\)/);
+  assert.doesNotMatch(main, /window\.location\.replace\("\/"\)/);
+});
+
+test("Cloud sign-in selects Electron only from the renderer bridge", () => {
+  const cloud = read("public/cloud-connect.js");
+  assert.match(cloud, /Boolean\(window\.penechoDesktop\)/);
+  assert.doesNotMatch(cloud, /PENECHO_CONFIG\?\.desktopApp/);
 });
 
 test("community artifacts have bounded WebP previews and import both Widgets and Canvases locally", () => {

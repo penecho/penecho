@@ -372,7 +372,10 @@ test("contextual footer hints persist, settle from blue, and follow widget and t
     acceptWidget = functionSource(app, "acceptPendingWidget");
   assert.match(html, /id="canvasHint" class="canvas-hint" role="status" aria-live="polite" hidden/);
   assert.doesNotMatch(html, /data-i18n="footerTip"|AI drafts: move the whole group/);
-  assert.match(renderHint, /`Hint: \$\{t\(state\.canvasHintKey\)\}`[\s\S]*?canvasHint\.hidden = false/);
+  assert.match(renderHint, /`\$\{t\("hintPrefix"\)\}: \$\{t\(state\.canvasHintKey\)\}`[\s\S]*?canvasHint\.hidden = false/);
+  assert.match(app, /hintPrefix:\s*"Hint"/);
+  assert.match(zh, /hintPrefix:\s*"提示"/);
+  assert.match(zh, /pluginPreview:\s*"预览"/);
   assert.doesNotMatch(showHint, /setTimeout|hidden\s*=\s*true/);
   assert.match(showHint, /Array\.isArray\(keys\)[\s\S]*?candidates\.filter\(\(key\) => key !== state\.canvasHintKey\)[\s\S]*?Math\.random\(\)/);
   assert.match(css, /\.canvas-hint\s*\{[^}]*flex:\s*1 1 auto[^}]*min-width:\s*0[^}]*max-width:\s*none[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/);
@@ -790,6 +793,8 @@ test("new canvases open 1.5 times closer without overriding restored views", () 
     fit = vm.runInNewContext(`(${fitSource})`, {
       INITIAL_VIEW_ZOOM:1.5,
       SIZE:20000,
+      viewerAutoFitWidgetId:null,
+      viewerAutoFitCanvas:false,
       devicePixelRatio:1,
       view:{ getBoundingClientRect:() => ({ width:1200, height:800 }) },
       screen,
@@ -809,6 +814,98 @@ test("new canvases open 1.5 times closer without overriding restored views", () 
   assert.equal(state.panY + 10000 * state.scale, 400);
   assert.match(functionSource(persistence, "startBlankCanvas"), /state\.viewInitialized\s*=\s*false;[\s\S]*?fit\(\)/);
   assert.match(persistence, /state\.scale\s*=\s*Math\.max\(0\.03,\s*Math\.min\(2,\s*item\.view\.scale\)\)/);
+});
+
+test("the public Viewer camera fits a Widget in phone portrait and landscape", () => {
+  const fitSource = functionSource(read("src/client/app/canvas-runtime.js"), "fit"),
+    widget = { id:"viewer-widget", x:2400, y:3600, w:1200, h:800 },
+    state = { widgets:[widget], scale:.1, panX:0, panY:0, viewInitialized:true, animationFullRedraw:false },
+    screen = {}, animationLayer = {}, placedContentLayer = {}, inkLayer = {}, interactionLayer = {};
+  let rect = { left:0, top:0, width:375, height:667 };
+  const fit = vm.runInNewContext(`(${fitSource})`, {
+    INITIAL_VIEW_ZOOM:1.5,
+    SIZE:20000,
+    viewerAutoFitWidgetId:widget.id,
+    viewerAutoFitCanvas:false,
+    widgetBox:(item) => ({ x:item.x, y:item.y, w:item.w, h:item.h }),
+    devicePixelRatio:1,
+    view:{ getBoundingClientRect:() => rect },
+    document:{ querySelector:() => ({ getBoundingClientRect:() => ({ bottom:62 }) }) },
+    screen,
+    animationLayer,
+    placedContentLayer,
+    inkLayer,
+    interactionLayer,
+    state,
+    updateCoordinates:() => {},
+    requestRender:() => {},
+  });
+  const visibleBox = () => ({
+    left:state.panX + widget.x * state.scale,
+    top:state.panY + widget.y * state.scale,
+    right:state.panX + (widget.x + widget.w) * state.scale,
+    bottom:state.panY + (widget.y + widget.h) * state.scale,
+  });
+  for (const size of [{ width:375, height:667 }, { width:667, height:375 }]) {
+    rect = { ...rect, ...size };
+    fit();
+    const box = visibleBox();
+    assert.ok(box.left >= 11 && box.right <= size.width - 11);
+    assert.ok(box.top >= 63 && box.bottom <= size.height - 11);
+    assert.ok(Math.abs((box.right - box.left) / (box.bottom - box.top) - widget.w / widget.h) < 1e-9);
+  }
+});
+
+test("the public Viewer camera fits every object in a restored Canvas", () => {
+  const fitSource = functionSource(read("src/client/app/canvas-runtime.js"), "fit"),
+    widgets = [
+      { id:"clock", x:6895, y:8757, w:3206, h:1801 },
+      { id:"guide", x:9905, y:8922, w:3300, h:2150 },
+    ],
+    combined = { x:6895, y:8757, w:6310, h:2315 },
+    state = { widgets, scale:.1, panX:0, panY:0, viewInitialized:true, animationFullRedraw:false },
+    screen = {}, animationLayer = {}, placedContentLayer = {}, inkLayer = {}, interactionLayer = {},
+    rect = { left:0, top:0, width:1200, height:800 },
+    unionLocalBounds = (current, next) => {
+      if (!current) return next;
+      if (!next) return current;
+      const x = Math.min(current.x, next.x), y = Math.min(current.y, next.y),
+        right = Math.max(current.x + current.w, next.x + next.w),
+        bottom = Math.max(current.y + current.h, next.y + next.h);
+      return { x, y, w:right - x, h:bottom - y };
+    },
+    fit = vm.runInNewContext(`(${fitSource})`, {
+      INITIAL_VIEW_ZOOM:1.5,
+      SIZE:20000,
+      viewerAutoFitWidgetId:null,
+      viewerAutoFitCanvas:true,
+      visibleInkBounds:() => null,
+      imageBounds:() => null,
+      textBoxBounds:() => null,
+      animationBounds:() => null,
+      widgetBounds:() => combined,
+      unionLocalBounds,
+      devicePixelRatio:1,
+      view:{ getBoundingClientRect:() => rect },
+      document:{ querySelector:() => ({ getBoundingClientRect:() => ({ bottom:62 }) }) },
+      screen,
+      animationLayer,
+      placedContentLayer,
+      inkLayer,
+      interactionLayer,
+      state,
+      updateCoordinates:() => {},
+      requestRender:() => {},
+    });
+  fit();
+  for (const item of widgets) {
+    const left = state.panX + item.x * state.scale,
+      top = state.panY + item.y * state.scale,
+      right = state.panX + (item.x + item.w) * state.scale,
+      bottom = state.panY + (item.y + item.h) * state.scale;
+    assert.ok(left >= 39 && right <= rect.width - 39);
+    assert.ok(top >= 63 && bottom <= rect.height - 11);
+  }
 });
 
 test("animation defaults on without overriding an explicitly disabled plugin choice", () => {
@@ -1484,7 +1581,8 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(functionSource(app, "cloudSnapshotItems"), /\/api\/cloud\/library[\s\S]*?bundleVersion !== 2[\s\S]*?conflictPolicy !== "base-revision-required"/);
   assert.match(functionSource(app, "saveCloudSnapshot"), /baseRevisionId[\s\S]*?\/api\/cloud\/canvases\/[\s\S]*?status === 409[\s\S]*?cloudCanvasConflict[\s\S]*?\/api\/cloud\/projects\//);
   assert.match(functionSource(app, "readCloudSnapshot"), /\/api\/cloud\/canvases\/[\s\S]*?body\?\.revision\?\.id[\s\S]*?readSnapshotBundle/);
-  assert.match(functionSource(app, "openCloudProjectHistory"), /setSnapshotLocation\("cloud", \{ refresh:false \}\)[\s\S]*?refreshSnapshots\(\)[\s\S]*?openHistoryPanel\(\)/);
+  assert.match(functionSource(app, "openCloudProjectHistory"), /setSnapshotLocation\("cloud", \{ refresh:false \}\)[\s\S]*?refreshSnapshots\(\)[\s\S]*?openHistoryPanel\(false\)/);
+  assert.match(functionSource(app, "openHistoryPanel"), /if \(refresh\) refreshSnapshots\(\)/);
   for (const key of ["snapshotLibraryLoading", "snapshotLibraryLoadingDetail", "snapshotLoading", "snapshotLoadDownloading", "snapshotLoadDecoding", "snapshotLoadApplying"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
@@ -1521,6 +1619,44 @@ test("local snapshot database upgrades preserve existing canvas records", () => 
   assert.match(snapshotDb, /indexedDB\.open\(SNAPSHOT_DB, 2\)/);
   assert.match(snapshotDb, /createObjectStore\(SNAPSHOT_TILE_STORE/);
   assert.doesNotMatch(snapshotDb, /objectStore\(SNAPSHOT_STORE\)\.clear\(\)/);
+});
+
+test("Cloud History distinguishes sign-in from failures and protects external Canvas opens", () => {
+  const persistence = read("src/client/app/persistence.js"), bootstrap = read("src/client/app/ui-bootstrap.js"), css = read("public/style.css");
+  assert.match(functionSource(persistence, "cloudHistoryRequiresSignIn"), /cloud_sign_in_required/);
+  assert.doesNotMatch(functionSource(persistence, "cloudHistoryRequiresSignIn"), /status\) === 401|unauthorized/);
+  assert.match(functionSource(persistence, "renderCloudHistorySignIn"), /history-cloud-auth[\s\S]*?closeHistoryPanel\(\)[\s\S]*?cloudAccountBtn[\s\S]*?\.click\(\)/);
+  assert.match(functionSource(persistence, "renderSnapshotList"), /location === "cloud" && cloudHistorySignInRequired[\s\S]*?renderCloudHistorySignIn/);
+  assert.match(functionSource(persistence, "refreshSnapshots"), /authenticationRequired[\s\S]*?renderCloudHistorySignIn[\s\S]*?!authenticationRequired[\s\S]*?setHistoryActivity[\s\S]*?"error"/);
+  assert.match(functionSource(persistence, "updateHistoryReadControls"), /cloudBlocked[\s\S]*?historyProjectSelect[\s\S]*?historySaveCurrent[\s\S]*?saveCanvasBtn/);
+  assert.match(functionSource(persistence, "updateNewCanvasDialog"), /cloudBlocked[\s\S]*?saveCopy\.disabled = cloudBlocked/);
+  assert.match(functionSource(persistence, "confirmExternalCanvasOpen"), /!canvasHasUnsavedChanges\(\) \|\| window\.confirm\(cloudHistoryCopy\("confirmExternalOpen"\)\)/);
+  assert.match(functionSource(persistence, "cloudHistoryCopy"), /snapshotCloudSignInRequired[\s\S]*?snapshotCloudSignInHint[\s\S]*?openCloudCanvasUnsaved/);
+  assert.match(functionSource(persistence, "refreshSnapshots"), /if \(authenticationRequired\) return false;/);
+  assert.match(bootstrap, /confirmExternalOpen:confirmExternalCanvasOpen/);
+  assert.match(functionSource(persistence, "importCommunityCanvasArtifact"), /requestLoadSnapshot\(id, "device"\)/);
+  assert.doesNotMatch(functionSource(persistence, "importCommunityCanvasArtifact"), /loadSnapshot\(id, "device"\)/);
+  assert.doesNotMatch(functionSource(persistence, "importCommunityCanvasArtifact"), /refreshSnapshots\(\)/);
+  const openCloudCanvas = functionSource(persistence, "openCloudCanvas");
+  assert.match(openCloudCanvas, /setSnapshotLocation\("cloud", \{ refresh:false \}\)/);
+  assert.match(openCloudCanvas, /requestLoadSnapshot\(canvasId, "cloud"\)/);
+  assert.doesNotMatch(openCloudCanvas, /refreshSnapshots\(\)|window\.open|location\./);
+  assert.match(css, /\.history-cloud-auth\s*\{/);
+  assert.match(css, /\.history-cloud-auth button\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.history-cloud-auth button:hover:not\(:disabled\), \.history-cloud-auth button:focus-visible\s*\{[^}]*color:\s*var\(--accent-ink\)[^}]*background:\s*linear-gradient/);
+  assert.match(css, /#historyClose, \.new-canvas-close\s*\{[^}]*width:\s*44px[^}]*height:\s*44px[^}]*flex:\s*0 0 44px/);
+  for (const selector of [
+    "snapshot-location-options span",
+    "history-save-row input",
+    "history-projects select",
+    "history-projects button",
+    "history-actions button",
+    "history-move",
+    "new-canvas-project select, \\.new-snapshot-name input",
+    "new-canvas-actions button",
+  ]) assert.match(css, new RegExp(`\\.${selector}\\s*\\{[^}]*min-height:\\s*44px`));
+  assert.match(functionSource(persistence, "renderSnapshotListLoading"), /role", "status"/);
+  assert.match(functionSource(persistence, "renderSnapshotListError"), /role", "alert"/);
 });
 
 test("New, Export, Clear, and Debug are accessible theme-aware icon buttons", () => {

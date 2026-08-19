@@ -56,7 +56,7 @@
           <button id="saveCanvasBtn" class="icon-button utility-icon" type="button" data-i18n-aria="saveCanvas" aria-label="Save canvas" data-i18n-title="saveCanvas" title="Save canvas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
           </button>
-          <button id="shareCanvasBtn" class="icon-button utility-icon cloud-share-canvas" type="button" aria-label="Share canvas to PenEcho Cloud" title="Share canvas to PenEcho Cloud">
+          <button id="shareCanvasBtn" class="icon-button utility-icon cloud-share-canvas" type="button" data-i18n-aria="shareCanvasCloud" aria-label="Share Canvas to PenEcho Cloud" data-i18n-title="shareCanvasCloud" title="Share Canvas to PenEcho Cloud">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.3 10.8 7.4-4.5M8.3 13.2l7.4 4.5"/></svg>
           </button>
           <button id="exportPngBtn" class="icon-button utility-icon" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG">
@@ -111,7 +111,7 @@
             </button>
           </div>
           <div id="craftsControl" class="plugin-control">
-            <button id="craftsButton" class="plugin-trigger crafts-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="craftsPopover" data-i18n-aria="savedCrafts" aria-label="Saved Crafts" data-i18n-title="savedCrafts" title="Saved Crafts">
+            <button id="craftsButton" class="plugin-trigger crafts-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="craftsPopover" data-i18n-aria="savedCrafts" aria-label="Favorites" data-i18n-title="savedCrafts" title="Favorites">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
             </button>
           </div>
@@ -409,12 +409,12 @@
     <div class="plugin-modal crafts-modal" role="dialog" aria-modal="true" aria-labelledby="craftsTitle">
       <header class="crafts-head">
         <div>
-          <h2 id="craftsTitle" data-i18n="savedCraftsTitle">Saved Crafts</h2>
-          <p data-i18n="savedCraftsHint">Widgets you saved. Tap Add to place one on this canvas.</p>
+          <h2 id="craftsTitle" data-i18n="savedCraftsTitle">Favorite Widgets</h2>
+          <p data-i18n="savedCraftsHint">Favorite Widgets. Select Add to place one on this Canvas.</p>
         </div>
-        <button id="craftsClose" class="cloud-dialog-close" type="button" aria-label="Close">×</button>
+        <button id="craftsClose" class="cloud-dialog-close" type="button" data-i18n-aria="closeSavedCrafts" aria-label="Close Favorite Widgets" data-i18n-title="closeSavedCrafts" title="Close Favorite Widgets">×</button>
       </header>
-      <div id="craftsList" class="crafts-list" aria-live="polite"><p class="crafts-empty">Loading saved Crafts…</p></div>
+      <div id="craftsList" class="crafts-list" aria-live="polite"><p class="crafts-empty" data-i18n="savedLoading">Loading favorites…</p></div>
     </div>
   </div>
   <div id="pluginPopover" class="plugin-modal-layer" hidden aria-hidden="true">

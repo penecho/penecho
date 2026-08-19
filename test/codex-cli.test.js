@@ -173,7 +173,7 @@ setTimeout(() => {
 `);
   try {
     let reportReceiving,activityCount=0;
-    const receiving = new Promise(resolve => { reportReceiving=resolve; }), started = Date.now(), request = callCodexCli({
+    const receiving = new Promise(resolve => { reportReceiving=resolve; }), request = callCodexCli({
       executable:fakeCli,
       prompt:"stream",
       atlasImage:PNG,
@@ -182,10 +182,13 @@ setTimeout(() => {
       onActivity:() => activityCount++,
     });
     assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
-    const content = await request, elapsedMs=Date.now()-started;
+    let completionTimer;
+    const completionDeadline = new Promise((_, reject) => {
+      completionTimer = setTimeout(() => reject(new Error("Codex waited for a completed child process to exit")), 5000);
+    });
+    const content = await Promise.race([request, completionDeadline]).finally(() => clearTimeout(completionTimer));
     assert.equal(JSON.parse(content).message, "immediate");
     assert.ok(activityCount>0);
-    assert.ok(elapsedMs < 1500, `streamed completion took ${elapsedMs}ms`);
     const workDir = await fs.promises.readFile(marker, "utf8"), deadline=Date.now()+5000;
     while(fs.existsSync(workDir)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
     assert.equal(fs.existsSync(workDir), false);

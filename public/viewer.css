@@ -29,98 +29,175 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 
 .viewer-topbar {
   position: fixed;
-  inset: 0 0 auto 0;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  left: max(12px, env(safe-area-inset-left));
   z-index: 400;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
+  gap: 16px;
   pointer-events: none;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 .viewer-topbar > * { pointer-events: auto; }
 
-/* Capsule buttons in the site's design language: a solid white capsule for
-   secondary actions and the accent blue capsule for the primary action. Solid
-   fills stay crisp over any canvas content; no translucent gray states. */
+/* Swiss-minimal viewer controls: one quiet brand surface, one grouped action
+   surface, and a single blue primary action. The restrained border/shadow is
+   enough to keep controls legible over arbitrary Canvas content. */
 .viewer-brand {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 5px 15px 5px 9px;
-  border: 1px solid rgb(0 0 0 / .08);
-  border-radius: 999px;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-size: 13.5px;
+  justify-content: center;
+  gap: 9px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 7px 14px 7px 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 13px;
+  background: #ffffff;
+  color: #18181b;
+  font-size: 14px;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: -.015em;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgb(0 0 0 / .18);
-  transition: background .16s ease, box-shadow .16s ease;
+  box-shadow: 0 4px 14px rgb(24 24 27 / .1);
+  opacity: .5;
+  transition: opacity .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
-.viewer-brand img { width: 20px; height: 20px; }
-.viewer-brand:hover { background: #ffffff; box-shadow: 0 2px 8px rgb(0 0 0 / .22); }
+.viewer-brand img { width: 26px; height: 26px; object-fit: contain; }
+.viewer-brand:hover { opacity: 1; border-color: #d4d4d8; background: #fafafa; box-shadow: 0 6px 20px rgb(24 24 27 / .13); }
+.viewer-brand:focus-visible { outline: 3px solid rgb(37 99 235 / .32); outline-offset: 2px; }
+.viewer-brand:focus-visible { opacity: 1; }
 
-.viewer-actions { display: flex; align-items: center; gap: 8px; }
+.viewer-actions {
+  flex: 0 1 auto;
+  display: flex;
+  min-width: 0;
+  max-width: calc(100% - 124px);
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(24 24 27 / .1);
+  opacity: .5;
+  transition: opacity .18s ease;
+}
+.viewer-actions:empty { display: none; }
+.viewer-actions:hover,
+.viewer-actions:focus-within { opacity: 1; }
 
 .viewer-chip,
 .viewer-primary {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  min-height: 34px;
-  padding: 6px 17px;
+  min-height: 44px;
+  padding: 8px 15px;
   border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 13px;
+  border-radius: 10px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: .01em;
+  letter-spacing: -.005em;
+  line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgb(0 0 0 / .35);
-  transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
+  touch-action: manipulation;
+  transition: border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 .viewer-chip:active,
 .viewer-primary:active { transform: scale(.97); }
 .viewer-chip:focus-visible,
-.viewer-primary:focus-visible { outline: 2px solid #7aa5f8; outline-offset: 2px; }
+.viewer-primary:focus-visible { outline: 3px solid rgb(37 99 235 / .32); outline-offset: 2px; }
+
+.viewer-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .viewer-chip {
-  border-color: rgb(0 0 0 / .08);
-  background: #f5f5f7;
-  color: #1d1d1f;
+  background: transparent;
+  color: #52525b;
 }
-.viewer-chip:hover { background: #ffffff; box-shadow: 0 2px 8px rgb(0 0 0 / .4); }
+.viewer-chip:hover { background: #f4f4f5; color: #18181b; }
+.viewer-account-action { max-width: min(30vw, 240px); }
 
 .viewer-primary {
+  flex: none;
   background: #2563eb;
   color: #ffffff;
+  box-shadow: 0 1px 2px rgb(37 99 235 / .2);
 }
-.viewer-primary:hover { background: #1d4ed8; box-shadow: 0 2px 8px rgb(0 0 0 / .4); }
+.viewer-primary:hover { background: #1d4ed8; box-shadow: 0 4px 10px rgb(37 99 235 / .24); }
+.viewer-primary svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-/* Docked at the very bottom of the page in normal flow (appended to <main>),
-   never floating over the canvas. The flex layout yields the strip's height
-   from #viewport automatically. */
+/* A one-line, dismissible caption below the canvas. It stays in normal flow,
+   so it never covers the artwork and disappears completely when dismissed. */
 .viewer-notice {
+  appearance: none;
   flex: none;
-  z-index: 400;
-  margin: 6px calc(-1 * clamp(6px, 1.2vw, 16px)) -6px;
-  padding: 8px 20px 9px;
-  border-top: 1px solid rgb(255 255 255 / .14);
-  background: rgb(10 9 6 / .72);
-  color: rgb(245 242 234 / .68);
-  font: 500 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  align-self: center;
+  margin: 0 auto;
+  padding: 7px max(12px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  border: 0;
+  background: transparent;
+  color: var(--muted, #5f6674);
+  font: 500 clamp(12px, .7vw, 13px)/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: .005em;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
-  transition: color .2s ease, background .2s ease;
+  touch-action: manipulation;
+  transition: color .18s ease, opacity .18s ease;
 }
-.viewer-notice:hover { color: rgb(245 242 234 / .95); background: rgb(10 9 6 / .85); }
+.viewer-notice:hover { color: var(--ink, #18181b); }
+.viewer-notice:focus-visible { outline: 2px solid rgb(37 99 235 / .32); outline-offset: -2px; border-radius: 6px; }
+.viewer-notice:active { opacity: .64; }
 .viewer-notice[hidden] { display: none; }
+
+@media (max-width: 620px) {
+  .viewer-topbar {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+    gap: 8px;
+  }
+  .viewer-brand { width: 44px; padding: 7px; }
+  .viewer-brand span { display: none; }
+  .viewer-actions { max-width: calc(100% - 52px); padding: 3px; gap: 2px; border-radius: 13px; }
+  .viewer-chip,
+  .viewer-primary { min-height: 44px; padding-inline: 12px; }
+  .viewer-account-action { max-width: min(28vw, 136px); }
+  .viewer-notice {
+    max-width: calc(100% - 16px);
+    padding-block-start: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .viewer-chip,
+  .viewer-primary { padding-inline: 10px; font-size: 13px; }
+  .viewer-account-action { max-width: 82px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-brand,
+  .viewer-chip,
+  .viewer-primary { transition: none; }
+  .viewer-status .spinner { animation-duration: 1.8s; }
+}
 
 .viewer-status {
   position: fixed;

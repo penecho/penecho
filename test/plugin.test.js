@@ -652,7 +652,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /MAX_HTML_LENGTH = 200000/);
   assert.match(server, /MAX_WIDGET_HTML_LENGTH = 200000/);
   assert.doesNotMatch(host, /<foreignObject|penecho-widget-snapshot-markup/);
-  assert.match(host, /createObjectURL\(new Blob\(\[widgetDocument/);
+  assert.match(host, /inner\.srcdoc = documentSource/);
+  assert.doesNotMatch(host, /createObjectURL\(new Blob\(\[widgetDocument/);
   assert.match(host, /toDataURL\("image\/png"\)/);
   assert.match(host, /penecho-widget-snapshot-request/);
   for (const type of [
@@ -705,14 +706,15 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(html, /iframe \{[^}]*touch-action: none/);
 });
 
-test("widget host keeps the active Blob URL across stale iframe load events", () => {
+test("widget host loads generated HTML directly into the opaque sandbox", () => {
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
     innerLoadRegistration = host.slice(host.indexOf('inner.addEventListener("load"'), host.indexOf("document.body.append(inner)"));
   assert.match(host, /inner\.addEventListener\("load", forwardWidgetState\)/);
-  assert.doesNotMatch(innerLoadRegistration, /revokeObjectURL|releaseInnerDocumentUrl/);
-  assert.match(host, /function releaseInnerDocumentUrl\(\)[\s\S]*?URL\.revokeObjectURL\(innerDocumentUrl\)[\s\S]*?innerDocumentUrl = null/);
-  assert.match(host, /addEventListener\("pagehide", releaseInnerDocumentUrl, \{ once:true \}\)/);
-  assert.match(host, /releaseInnerDocumentUrl\(\);[\s\S]*?innerDocumentUrl = URL\.createObjectURL[\s\S]*?inner\.src = innerDocumentUrl/);
+  assert.doesNotMatch(innerLoadRegistration, /srcdoc|widgetDocument/);
+  assert.match(host, /const documentSource = widgetDocument\(message\.html, message\.pluginStyles \|\| "", runtimeVersion\);[\s\S]*?inner\.removeAttribute\("src"\);[\s\S]*?inner\.srcdoc = documentSource/);
+  assert.doesNotMatch(host, /innerDocumentUrl|releaseInnerDocumentUrl|URL\.revokeObjectURL\(innerDocumentUrl\)/);
+  assert.match(host, /inner\.setAttribute\("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox"\)/);
+  assert.doesNotMatch(host, /allow-same-origin/);
 });
 
 test("widget snapshots wait for one presented frame without pausing the live runtime", async () => {
@@ -920,4 +922,22 @@ test("plugin catalog paths accept PenEcho Cloud content-version suffixes", () =>
   assert.equal(validate("plugins/general/plugin.md?x=1734dd52572c", "md"), null);
   assert.equal(validate("https://evil.example/plugins/general/plugin.md", "md"), null);
   assert.equal(validate("plugins/../secret.md", "md"), null);
+});
+
+test("cloud community deep links load plugin assets from the Canvas root", () => {
+  const app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"),
+    deepLink = "https://cloud.penecho.test/canvas/community/123e4567-e89b-42d3-a456-426614174000",
+    assetUrl = vm.runInNewContext(`(${functionSource(app, "canvasAssetUrl")})`, {
+      window:{ PENECHO_CONFIG:{ runtime:"cloud" } },
+      location:{ origin:"https://cloud.penecho.test", href:deepLink },
+      URL,
+    }),
+    loadPluginDocuments = functionSource(app, "loadPluginDocuments");
+  const documentUrl = assetUrl("plugins/general/plugin.md?v=1734dd52572c"),
+    styleUrl = assetUrl("plugins/flowchart/styles.css?v=c5173c2e432d");
+  assert.equal(documentUrl, "https://cloud.penecho.test/canvas/plugins/general/plugin.md?v=1734dd52572c");
+  assert.equal(styleUrl, "https://cloud.penecho.test/canvas/plugins/flowchart/styles.css?v=c5173c2e432d");
+  assert.doesNotMatch(documentUrl, /\/canvas\/community\/plugins\//);
+  assert.match(loadPluginDocuments, /fetch\(canvasAssetUrl\(documentPath\)/);
+  assert.match(loadPluginDocuments, /stylePath \? fetch\(canvasAssetUrl\(stylePath\)/);
 });

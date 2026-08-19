@@ -24,6 +24,7 @@
     selectedServerProjectId = storedServerProjectId(),
     cloudCanvasProjects = [],
     selectedCloudProjectId = storedCloudProjectId(),
+    cloudHistorySignInRequired = false,
     pendingCanvasTransition = null;
   function validServerProjectSelection(projectId) {
     return projectId === SERVER_DEFAULT_PROJECT_ID || projectId === SERVER_ALL_PROJECTS_ID || /^project-[a-zA-Z0-9-]{8,64}$/.test(projectId || "");
@@ -69,6 +70,20 @@
   function snapshotLocationLabel(location = state.snapshotLocation) {
     return t(location === "server" ? "storagePenEchoServer" : location === "cloud" ? "storagePenEchoCloud" : "storageThisDevice");
   }
+  function cloudHistoryCopy(key) {
+    return t({
+      title:"snapshotCloudSignInRequired",
+      description:"snapshotCloudSignInHint",
+      action:"openPenEchoCloud",
+      confirmExternalOpen:"openCloudCanvasUnsaved",
+    }[key] || key);
+  }
+  function cloudHistoryRequiresSignIn(error) {
+    // Only the connector's explicit session-invalid contract may turn Cloud
+    // History into a signed-out state. A generic 401 can come from a proxy or
+    // an unrelated request and must remain an ordinary recoverable error.
+    return String(error?.code || "") === "cloud_sign_in_required";
+  }
   function updateSnapshotLocationUi() {
     const location = SNAPSHOT_LOCATIONS.has(state.snapshotLocation) ? state.snapshotLocation : "device",
       descriptionKey = location === "server" ? "storagePenEchoServerDescription" : location === "cloud" ? "storagePenEchoCloudDescription" : "storageThisDeviceDescription";
@@ -102,7 +117,9 @@
     renderSnapshotListLoading(location);
     if (!refresh) return Promise.resolve(true);
     const request = refreshSnapshots();
-    request.catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+    request.catch((error) => {
+      if (location !== "cloud" || !cloudHistoryRequiresSignIn(error)) setStatus(`${t("snapshotError")}${error.message}`);
+    });
     return request;
   }
   function updateHistorySaveFeedbackLanguage() {
@@ -164,10 +181,15 @@
   }
   function historyBusy() { return snapshotSaveInProgress || snapshotListInProgress || snapshotLoadInProgress; }
   function updateHistoryReadControls() {
-    const busy = historyBusy(), panel = document.querySelector("#historyPanel");
+    const busy = historyBusy(), cloudBlocked = state.snapshotLocation === "cloud" && cloudHistorySignInRequired,
+      panel = document.querySelector("#historyPanel");
     if (panel) panel.setAttribute("aria-busy", String(snapshotListInProgress || snapshotLoadInProgress));
     document.querySelectorAll('input[name="historyStorageLocation"]').forEach((control) => (control.disabled = snapshotSaveInProgress));
-    document.querySelectorAll('#historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave, #historyNew').forEach((control) => (control.disabled = busy));
+    document.querySelectorAll('#historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave').forEach((control) => (control.disabled = busy || cloudBlocked));
+    const newCanvas = document.querySelector("#historyNew");
+    if (newCanvas) newCanvas.disabled = busy;
+    const topSave = document.querySelector("#saveCanvasBtn");
+    if (topSave) topSave.disabled = snapshotSaveInProgress || cloudBlocked;
     document.querySelectorAll(".history-load, .history-delete, .history-move").forEach((control) => (control.disabled = busy));
     document.querySelectorAll(".history-card").forEach((card) => card.classList.toggle("loading", snapshotLoadInProgress && card.dataset.snapshotId === snapshotLoadingId));
     document.querySelectorAll(".history-load").forEach((button) => {
@@ -796,9 +818,89 @@
       };
     }
     await saveDeviceSnapshot(item, parsed.tileEntries, null);
-    await refreshSnapshots();
-    await loadSnapshot(id, "device");
+    // The imported public Canvas now has an explicit device identity. Load it
+    // through that read-only store path instead of refreshing the currently
+    // selected History location (which may be Cloud and unrelated to import).
+    await requestLoadSnapshot(id, "device");
     return { id, name:item.name };
+  }
+
+  // The public Viewer is presentation runtime, not an import workflow. Restore
+  // the published bundle directly into memory so opening a shared link never
+  // writes duplicate snapshots into IndexedDB, refreshes the private history
+  // library, or depends on editable-Canvas dialogs. Viewer CSS and the hand
+  // tool keep the restored objects read-only while fitViewerCanvas() frames
+  // the complete artifact instead of its publishing-time pan/zoom.
+  async function viewCommunityCanvasArtifact(artifact) {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer") throw Error("Read-only Canvas viewing is unavailable in this runtime.");
+    const parsed = await readSnapshotBundle(artifact),
+      { item, tileEntries } = parsed,
+      loadGeneration = ++state.snapshotLoadGeneration,
+      loadIsCurrent = () => loadGeneration === state.snapshotLoadGeneration;
+    if (item.widgets?.length) {
+      if (!state.pluginCatalogLoaded && !state.pluginCatalogLoading) await loadPluginDocuments();
+      const catalogDeadline = Date.now() + 15000;
+      while (state.pluginCatalogLoading && Date.now() < catalogDeadline) await new Promise((resolve) => setTimeout(resolve, 40));
+      const missingPlugin = item.widgets.find((widget) => !pluginManifests.has(widget?.pluginId));
+      if (missingPlugin) throw Error(`The read-only Canvas needs the unavailable ${missingPlugin.pluginId || "Widget"} plugin.`);
+    }
+    await enableSnapshotWidgetPlugins(item.widgets);
+    let decodedTiles = null;
+    try {
+      const [tileResult, imageResult] = await Promise.allSettled([
+        decodeSnapshotTilesInBatches(tileEntries, loadIsCurrent).then((value) => (decodedTiles = value)),
+        decodeSnapshotImagesInBatches(item.images, loadIsCurrent),
+      ]);
+      if (tileResult.status === "rejected") throw tileResult.reason;
+      if (imageResult.status === "rejected") throw imageResult.reason;
+      if (!decodedTiles || !imageResult.value || !loadIsCurrent()) throw Error("The read-only Canvas load was superseded.");
+
+      if (state.selection) cancelSelection(true);
+      clearTextEditors();
+      state.userRevision++;
+      invalidateRecognition();
+      cancelPendingForRevision();
+      for (const canvas of tiles.values()) canvas.width = canvas.height = 1;
+      tiles.clear();
+      clearSharpOverlays();
+      state.inkBounds.clear();
+      state.history = [];
+      state.future = [];
+      state.animationHistoryBefore = null;
+      state.widgetHistoryBefore = null;
+      state.historyBefore.clear();
+      state.imageHistoryBefore = null;
+      state.textBoxHistoryBefore = null;
+      for (const [key, canvas] of decodedTiles) tiles.set(key, canvas);
+      decodedTiles.clear();
+      restoreAnimations(item.animations);
+      restoreWidgets(item.widgets);
+      applyTheme(item.theme);
+      restoreImages(imageResult.value);
+      await restoreTextBoxes(item.textBoxes);
+      if (!loadIsCurrent()) throw Error("The read-only Canvas load was superseded.");
+
+      // A viewer URL does not own a local snapshot. Preserve artifact extension
+      // metadata for rendering, but keep the editable storage identity empty.
+      state.currentSnapshotId = null;
+      state.currentSnapshotName = String(item.name || "").slice(0, 160);
+      state.currentSnapshotLocation = null;
+      state.currentSnapshotProjectId = null;
+      state.currentSnapshotRevisionId = null;
+      state.currentSnapshotBundleExtensions = snapshotExtensionObject(item.bundleExtensions);
+      state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
+      state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
+      state.dirty = null;
+      state.snapshotSavedRevision = state.userRevision;
+      setCanvasNavigationLocked(false);
+      closeHistoryPanel();
+      fitViewerCanvas();
+      render();
+      return { id:String(item.id || ""), name:state.currentSnapshotName };
+    } catch (error) {
+      if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
+      throw error;
+    }
   }
 
   function communityLineageForArtifact(kind, artifact) {
@@ -1232,7 +1334,8 @@
       description = document.querySelector("#newCanvasDialog > form > p:not(.current-snapshot)"),
       discard = document.querySelector("#newDiscard"),
       saveCopy = document.querySelector("#newSaveCopy"),
-      loading = Boolean(pendingCanvasTransition);
+      loading = Boolean(pendingCanvasTransition),
+      cloudBlocked = state.snapshotLocation === "cloud" && cloudHistorySignInRequired;
     if (!label || !overwrite) return;
     if (title) title.textContent = t(loading ? "loadCanvasTitle" : "newCanvasTitle");
     if (description) description.textContent = t(loading ? "loadCanvasDescription" : "newCanvasDescription");
@@ -1247,7 +1350,10 @@
         .replace("{name}", state.currentSnapshotName || state.currentSnapshotId)
         .replace("{location}", snapshotLocationLabel(state.currentSnapshotLocation));
     }
-    overwrite.disabled = !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    overwrite.disabled = cloudBlocked || !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    if (saveCopy) saveCopy.disabled = cloudBlocked;
+    const project = document.querySelector("#newCanvasProjectSelect");
+    if (project) project.disabled = cloudBlocked;
     updateSnapshotLocationUi();
   }
   function setNewCanvasDialogBusy(busy) {
@@ -1342,6 +1448,9 @@
     const hasContent = tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length;
     return Boolean(hasContent && (state.dirty || state.userRevision !== state.snapshotSavedRevision));
   }
+  function confirmExternalCanvasOpen() {
+    return !canvasHasUnsavedChanges() || window.confirm(cloudHistoryCopy("confirmExternalOpen"));
+  }
   function requestLoadSnapshot(id, location = state.snapshotLocation) {
     if (!canvasHasUnsavedChanges()) return loadSnapshot(id, location);
     pendingCanvasTransition = { id, location };
@@ -1356,13 +1465,18 @@
     if (projectId && validCloudProjectSelection(projectId)) rememberSelectedCloudProject(projectId);
     setSnapshotLocation("cloud", { refresh:false });
     await refreshSnapshots();
-    openHistoryPanel();
+    // The explicit refresh above verifies the selected project before the
+    // panel becomes visible. Do not immediately issue the same Cloud library
+    // request again from openHistoryPanel(); duplicated requests can race and
+    // used to surface a misleading 502 after an otherwise successful load.
+    openHistoryPanel(false);
     return true;
   }
   async function openCloudCanvas(canvasId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(canvasId || ""))) throw Error("Invalid Cloud Canvas");
     setSnapshotLocation("cloud", { refresh:false });
-    await refreshSnapshots();
+    // Cloud Center already resolved this explicit Canvas id. Load that bundle
+    // through the local Cloud proxy without refreshing the unrelated library.
     return requestLoadSnapshot(canvasId, "cloud");
   }
   function discardCanvasTransition() {
@@ -1381,6 +1495,7 @@
     if (!list) return;
     const loading = document.createElement("div");
     loading.className = "history-list-loading";
+    loading.setAttribute("role", "status");
     loading.textContent = t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location));
     list.replaceChildren(loading);
   }
@@ -1389,8 +1504,26 @@
     if (!list) return;
     const error = document.createElement("div");
     error.className = "history-list-loading error";
+    error.setAttribute("role", "alert");
     error.textContent = t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel(location));
     list.replaceChildren(error);
+  }
+  function renderCloudHistorySignIn() {
+    const list = document.querySelector("#historyList");
+    if (!list) return;
+    const empty = document.createElement("div"), title = document.createElement("strong"),
+      description = document.createElement("p"), action = document.createElement("button");
+    empty.className = "history-cloud-auth";
+    title.textContent = cloudHistoryCopy("title");
+    description.textContent = cloudHistoryCopy("description");
+    action.type = "button";
+    action.textContent = cloudHistoryCopy("action");
+    action.onclick = () => {
+      closeHistoryPanel();
+      document.querySelector("#cloudAccountBtn")?.click();
+    };
+    empty.append(title, description, action);
+    list.replaceChildren(empty);
   }
   function serverProjectName(project) {
     return project?.id === SERVER_DEFAULT_PROJECT_ID || project?.system || project?.systemKey === "uncategorized" ? t("canvasProjectUncategorized") : project?.name || t("canvasProjectUncategorized");
@@ -1431,7 +1564,7 @@
     select.value = isCloud ? selectedCloudProjectId : selectedServerProjectId;
     if (!select.value) select.value = allProjectId;
     const selected = projects.find((project) => project.id === select.value);
-    remove.disabled = !selected || selected.id === SERVER_DEFAULT_PROJECT_ID || selected.system === true || selected.systemKey === "uncategorized";
+    remove.disabled = isCloud && cloudHistorySignInRequired || !selected || selected.id === SERVER_DEFAULT_PROJECT_ID || selected.system === true || selected.systemKey === "uncategorized";
     if (dialogSelect) {
       dialogSelect.replaceChildren();
       for (const project of projects) {
@@ -1519,6 +1652,11 @@
         : snapshotItems;
     if (!list) return;
     renderServerProjectUi();
+    if (location === "cloud" && cloudHistorySignInRequired) {
+      renderCloudHistorySignIn();
+      updateHistoryReadControls();
+      return;
+    }
     if (snapshotListInProgress && snapshotItemsLocation !== location) {
       renderSnapshotListLoading(location);
       return;
@@ -1616,9 +1754,11 @@
       null,
     );
     updateHistoryReadControls();
+    let authenticationRequired = false;
     try {
       const items = await snapshotsAt(location);
       if (generation !== snapshotListGeneration || location !== state.snapshotLocation) return false;
+      if (location === "cloud") cloudHistorySignInRequired = false;
       snapshotItems = items;
       snapshotItemsLocation = location;
       renderSnapshotList();
@@ -1626,22 +1766,33 @@
       return true;
     } catch (error) {
       if (generation === snapshotListGeneration && location === state.snapshotLocation) {
-        if (replacingLocation) {
+        authenticationRequired = location === "cloud" && cloudHistoryRequiresSignIn(error);
+        if (location === "cloud") cloudHistorySignInRequired = authenticationRequired;
+        if (authenticationRequired) {
+          snapshotItems = [];
+          snapshotItemsLocation = null;
+          cloudCanvasProjects = [];
+          renderCloudHistorySignIn();
+        } else if (replacingLocation) {
           snapshotItems = [];
           snapshotItemsLocation = null;
           renderSnapshotListError(location);
         }
-        setHistoryActivity(
-          t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location)),
-          t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel(location)),
-          null,
-          "error",
-        );
+        if (!authenticationRequired) {
+          setHistoryActivity(
+            t("snapshotLibraryLoading").replace("{location}", snapshotLocationLabel(location)),
+            t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel(location)),
+            null,
+            "error",
+          );
+        }
       }
+      if (authenticationRequired) return false;
       throw error;
     } finally {
       if (generation === snapshotListGeneration) {
         snapshotListInProgress = false;
+        if (authenticationRequired) hideHistoryActivity();
         updateHistoryReadControls();
       }
     }
@@ -1664,7 +1815,7 @@
       button.removeAttribute("aria-busy");
     }
   }
-  function openHistoryPanel() {
+  function openHistoryPanel(refresh = true) {
     const panel = document.querySelector("#historyPanel"),
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
@@ -1674,7 +1825,9 @@
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
     updateSnapshotLocationUi();
-    refreshSnapshots().catch((error) => setStatus(`${t("snapshotError")}${error.message}`));
+    if (refresh) refreshSnapshots().catch((error) => {
+      if (state.snapshotLocation !== "cloud" || !cloudHistoryRequiresSignIn(error)) setStatus(`${t("snapshotError")}${error.message}`);
+    });
   }
   function closeHistoryPanel() {
     const panel = document.querySelector("#historyPanel"),

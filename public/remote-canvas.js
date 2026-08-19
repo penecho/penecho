@@ -57,7 +57,7 @@
   }
 
   window.fetch = (input, options = {}) => {
-    const sourceUrl = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+    const sourceUrl = new URL(input instanceof Request ? input.url : input, document.baseURI || location.href);
     if (sourceUrl.origin !== location.origin) return nativeFetch(input, options);
     const method = String(options.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
     const inputHeaders = input instanceof Request ? input.headers : undefined;
@@ -75,19 +75,21 @@
   const copy = zh ? {
     eyebrow:"私人云端画布", checking:"正在连接你的 PenEcho 主机…", noHost:"连接 PenEcho 主机后即可打开",
     offline:"已连接的 PenEcho 主机当前离线", failed:"这张画布暂时无法打开",
-    dashboard:"Link Device", back:"返回项目",
-    connected:"受保护的远程连接", unavailable:"请先在 Link Device 中连接一台 PenEcho 主机。", opening:"主机在线，正在打开云端画布…",
+    dashboard:"连接设备", back:"返回项目",
+    connected:"受保护的远程连接", unavailable:"请先连接一台 PenEcho 主机。", opening:"主机在线，正在打开云端画布…",
+    offlineStatus:"离线", onlineStatus:"在线",
   } : {
     eyebrow:"Private Cloud Canvas", checking:"Connecting to your PenEcho host…", noHost:"Connect one PenEcho host to open this Canvas",
     offline:"Your linked PenEcho host is offline", failed:"This Canvas could not be opened",
     dashboard:"Link Device", back:"Back to Projects",
     connected:"Protected remote connection", unavailable:"No device is linked yet. Install PenEcho, then connect one main computer from Link Device.", opening:"Host online. Opening your Cloud Canvas…",
+    offlineStatus:"Offline", onlineStatus:"Online",
   };
   if (isCommunityCraft) Object.assign(copy, zh ? {
-    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后继续创作", back:"返回共创广场",
+    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后即可 Echo 此创作", back:"返回 Echoes",
     failed:"暂时无法继续这个 Craft", opening:"主机在线，正在导入这个 Craft…",
   } : {
-    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to take this further", back:"Back to Craft Commons",
+    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to Echo this Craft", back:"Back to Echoes",
     failed:"This Craft could not be continued right now", opening:"Host online. Importing this Craft…",
   });
 
@@ -202,12 +204,12 @@
         settleBridgeGate({ online:false, message:copy.offline });
         gate.dataset.state = "offline";
         title.textContent = copy.offline;
-        detail.textContent = `${result.device.name} · ${result.device.platform} · Offline`;
+        detail.textContent = `${result.device.name} · ${result.device.platform} · ${copy.offlineStatus}`;
         return;
       }
       gate.dataset.state = "opening";
       title.textContent = copy.opening;
-      detail.textContent = `${result.device.name} · ${result.device.platform} · Online`;
+      detail.textContent = `${result.device.name} · ${result.device.platform} · ${copy.onlineStatus}`;
       statusBadge(result.device);
       settleBridgeGate({ online:true });
       await openRequestedCanvas();
