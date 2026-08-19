@@ -1154,6 +1154,71 @@ test("community sharing rejects blank titles and descriptions before contacting 
   } finally { fs.rmSync(stateDir,{recursive:true,force:true}); }
 });
 
+test("community sharing derives lineage from the artifact and keeps contribution optional", async () => {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-community-lineage-")),originalFetch=global.fetch;
+  try {
+    const origin="http://127.0.0.1:8080",parentItemId="123e4567-e89b-42d3-a456-426614174080",itemId="123e4567-e89b-42d3-a456-426614174081",requests=[];
+    const connector=new CloudConnector({stateDir,executeRequest:async()=>({})});
+    connector.configuration={origin,accountToken:"account-token"};
+    global.fetch=async(url,options={})=>{
+      requests.push({url:String(url),options});
+      if(String(url)===`${origin}/api/v1/community/items`)return new Response(JSON.stringify({item:{id:itemId},upload:{url:`${origin}/storage/${itemId}`,headers:{"content-type":"application/json"}}}),{status:201,headers:{"content-type":"application/json"}});
+      if(String(url)===`${origin}/storage/${itemId}`)return new Response(null,{status:204});
+      if(String(url)===`${origin}/api/v1/community/items/${itemId}/complete`)return new Response(JSON.stringify({item:{id:itemId,parentItemId}}),{status:200,headers:{"content-type":"application/json"}});
+      throw new Error(`Unexpected request: ${url}`);
+    };
+    const artifact={formatVersion:1,widget:{communityOriginItemId:parentItemId},communityPreview:{dataBase64:"AA=="}};
+    await connector.shareCommunityItem({kind:"widget",name:"Continuation",description:"Keeps its source.",category:"productivity",artifact,contributionNote:"",publicationTermsAccepted:true,publicationRightsAccepted:true,modelTrainingAccepted:true,publicationTermsVersion:"2026-08-12"});
+    const reservation=JSON.parse(requests[0].options.body);
+    assert.equal(reservation.parentItemId,parentItemId);
+    assert.equal(reservation.contributionNote,"");
+    await assert.rejects(connector.shareCommunityItem({kind:"widget",name:"Wrong parent",description:"Must fail closed.",category:"productivity",artifact,parentItemId:"123e4567-e89b-42d3-a456-426614174082"}),(error)=>error.status===409&&error.code==="community_lineage_mismatch");
+  } finally {global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
+});
+
+test("community sharing lets Cloud atomically publish a missing parent as a new root", async () => {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-community-missing-parent-")),originalFetch=global.fetch;
+  try {
+    const origin="http://127.0.0.1:8080",parentItemId="123e4567-e89b-42d3-a456-426614174083",itemId="123e4567-e89b-42d3-a456-426614174084",reservations=[];
+    const connector=new CloudConnector({stateDir,executeRequest:async()=>({})});
+    connector.configuration={origin,accountToken:"account-token"};
+    let uploadedArtifact=null;
+    global.fetch=async(url,options={})=>{
+      if(String(url)===`${origin}/api/v1/community/items`){
+        const body=JSON.parse(options.body);reservations.push(body);
+        return new Response(JSON.stringify({item:{id:itemId,parentItemId:null,generation:0},upload:{url:`${origin}/storage/${itemId}`,headers:{"content-type":"application/json"}}}),{status:201,headers:{"content-type":"application/json"}});
+      }
+      if(String(url)===`${origin}/storage/${itemId}`){uploadedArtifact=JSON.parse(Buffer.from(options.body).toString("utf8"));return new Response(null,{status:204});}
+      if(String(url)===`${origin}/api/v1/community/items/${itemId}/complete`)return new Response(JSON.stringify({item:{id:itemId,parentItemId:null,generation:0}}),{status:200,headers:{"content-type":"application/json"}});
+      throw new Error(`Unexpected request: ${url}`);
+    };
+    const artifact={formatVersion:1,extensions:{penechoCommunity:{originItemId:parentItemId,rootItemId:parentItemId,originName:"Missing parent",originGeneration:0}},communityPreview:{dataBase64:"AA=="}};
+    const result=await connector.shareCommunityItem({kind:"canvas",name:"New root",description:"Cloud resolves the missing parent in the reservation transaction.",category:"productivity",artifact});
+    assert.equal(reservations.length,1);
+    assert.equal(reservations[0].parentItemId,parentItemId);
+    assert.equal(uploadedArtifact.extensions?.penechoCommunity?.originItemId,parentItemId,"the client must not rewrite lineage before Cloud decides");
+    assert.equal(result.item.parentItemId,null);
+    assert.equal(result.item.generation,0);
+  } finally {global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
+});
+
+test("community sharing never retries an HTTP error as a missing parent", async () => {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-community-no-fallback-")),originalFetch=global.fetch;
+  try {
+    const origin="http://127.0.0.1:8080",parentItemId="123e4567-e89b-42d3-a456-426614174085",connector=new CloudConnector({stateDir,executeRequest:async()=>({})}),artifact={formatVersion:1,widget:{communityOriginItemId:parentItemId},communityPreview:{dataBase64:"AA=="}};
+    connector.configuration={origin,accountToken:"account-token"};
+    for(const response of [
+      {status:404,body:{error:"not_found",message:"Resource not found."}},
+      {status:503,body:{error:"temporarily_unavailable",message:"Cloud unavailable."}},
+    ]){
+      let calls=0;
+      global.fetch=async()=>{calls++;return new Response(JSON.stringify(response.body),{status:response.status,headers:{"content-type":"application/json"}});};
+      await assert.rejects(connector.shareCommunityItem({kind:"widget",name:"No fallback",description:"Cloud request errors must remain errors.",category:"productivity",artifact}),(error)=>error.status===response.status);
+      assert.equal(calls,1);
+    }
+  } finally {global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
+});
+
 test("cloud Canvas save and load preserve animation manifests and widget assets", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-canvas-test-"));
   const originalFetch = global.fetch;

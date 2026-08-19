@@ -31,8 +31,11 @@ test("canvas file actions are in the top-right header and available in History",
   assert.match(html, /id="settingsBtn"[^>]*aria-controls="settingsPanel"[\s\S]*?<svg[^>]*viewBox="0 0 24 24"/);
   assert.match(css, /\.canvas-file-actions button,\s*#settingsBtn\s*\{[^}]*display:\s*grid;[^}]*width:\s*29px;[^}]*flex:\s*0 0 29px/);
   assert.match(css, /\.canvas-file-actions button svg,\s*#settingsBtn svg\s*\{[^}]*fill:\s*none;[^}]*stroke:\s*currentColor/);
-  for (const id of ["historyNew", "historySaveCurrent", "newCanvasDialog", "newDiscard", "newSaveCopy", "newOverwrite", "saveCanvasBtn"]) assert.match(html, new RegExp(`id="${id}"`));
-  assert.match(html, /class="new-canvas-actions"[\s\S]*?id="newDiscard"[\s\S]*?class="new-canvas-action-group"[\s\S]*?id="newCanvasCancel"[\s\S]*?id="newOverwrite"[\s\S]*?id="newSaveCopy"/);
+  for (const id of ["historySaveCurrent", "newCanvasDialog", "newDiscard", "newSaveCopy", "newOverwrite", "saveCanvasBtn"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /id="currentSnapshotLabel"[^>]*hidden/);
+  assert.match(css, /\.new-canvas-dialog \.current-snapshot\[hidden\]\s*\{\s*display:\s*none/);
+  for (const id of ["historyNew", "newCanvasCancel"]) assert.doesNotMatch(html, new RegExp(`id="${id}"`));
+  assert.match(html, /class="new-canvas-actions"[\s\S]*?id="newDiscard"[\s\S]*?class="new-canvas-action-group"[\s\S]*?id="newOverwrite"[\s\S]*?id="newSaveCopy"/);
   assert.match(css, /\.new-canvas-actions\s*\{[^}]*align-items:\s*center;[^}]*justify-content:\s*space-between/);
   assert.match(css, /\.new-canvas-action-group\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end/);
   assert.doesNotMatch(css, /\.new-canvas-actions\s*\{[^}]*grid-template-columns:\s*1fr 1fr/);
@@ -81,7 +84,12 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(css, /\.settings-connection-item\.editing\s*\{/);
   assert.doesNotMatch(css, /\.settings-connection-item\.active\s*\{/);
   assert.match(css, /\.settings-panel, \.configuration-panel\s*\{[^}]*color-scheme:\s*light[^}]*--panel-raised:\s*#ffffff/);
-  assert.match(css, /\.settings-save, \.connection-manager > header button\s*\{[^}]*color:\s*#fff;[^}]*background:\s*#4f46e5/);
+  assert.match(css, /\.settings-save\s*\{[^}]*color:\s*#fff;[^}]*background:\s*#4f46e5/);
+  assert.match(css, /\.connection-manager > header button\s*\{[^}]*height:\s*32px[^}]*color:\s*var\(--ink\)[^}]*background:\s*transparent/);
+  assert.match(html, /id="summonToggleLabel"[^>]*data-i18n="settingsSummonSection"/);
+  assert.doesNotMatch(html, /settingsSummonEnabled|settingsSummonDescription/);
+  assert.equal((html.match(/class="settings-links"/g) || []).length, 1, "web Settings keeps the download and GitHub links");
+  assert.match(app, /if \(window\.penechoDesktop\) document\.querySelector\("\.settings-links"\)\?\.remove\(\)/);
   assert.doesNotMatch(css, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.settings-panel/);
   for (const key of ["settingsApiRegion", "settingsApiService", "settingsApiServiceCoding"]) {
     assert.match(app, new RegExp(`${key}:`));
@@ -634,7 +642,8 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(css, /\.plugin-control\s*\{[^}]*height:\s*29px;\s*min-height:\s*29px/);
   assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.plugin-control\s*\{\s*height:\s*38px;\s*min-height:\s*38px;\s*\}[\s\S]*?\.toolbar \.plugin-trigger\s*\{\s*height:\s*36px;\s*min-height:\s*36px/);
   assert.match(css, /\.plugin-modal-layer\s*\{[^}]*position:\s*fixed[^}]*place-items:\s*center/);
-  assert.match(css, /\.plugin-modal\s*\{[^}]*width:\s*min\(920px, 100%\)[^}]*max-height/);
+  assert.match(css, /\.plugin-modal\s*\{[^}]*color-scheme:\s*light[^}]*--ink:\s*#1c1f27[^}]*--panel-raised:\s*#ffffff[^}]*--gold-bright:\s*#4f46e5[^}]*width:\s*min\(920px, 100%\)[^}]*max-height/);
+  assert.doesNotMatch(css, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.plugin-modal/);
   assert.match(html, /class="plugin-usage"[\s\S]*?data-i18n="pluginUsageDescription"/);
   assert.match(zh, /pluginUsageDescription:\s*"需要自定义界面时[\s\S]*?数据由你的浏览器直接获取/);
   assert.match(app, /generalPluginRecommendedHelp:\s*"Recommended\.[\s\S]*?interactive and dynamic content/);
@@ -1302,6 +1311,7 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
     context = functionSource(app, "widgetEditContext"),
     request = functionSource(app, "requestWidgetRefinement"),
     validate = functionSource(app, "validate"),
+    replacementInput = functionSource(app, "widgetReplacementRecordInput"),
     start = functionSource(app, "startPendingWidgetReplacement"),
     accept = functionSource(app, "acceptPendingWidget"),
     reject = functionSource(app, "rejectPendingWidget"),
@@ -1375,13 +1385,41 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(context, /widget\.widgetType === "html_widget" && widget\.runtimeDiagnostics\?\.errors\?\.length[\s\S]*?runtimeDiagnostics:widget\.runtimeDiagnostics/);
   assert.match(context, /refreshSeconds:widget\.refreshSeconds/);
   assert.doesNotMatch(context, /\bid\b|targetId/);
+  for (const field of ["communityOriginItemId", "communityRootItemId", "communityOriginName", "communityOriginGeneration"]) assert.doesNotMatch(context, new RegExp(field));
   assert.doesNotMatch(functionSource(app, "serializedWidgets"), /runtimeDiagnostics/);
   assert.match(functionSource(app, "widgetUsesHtmlCopySource"), /widget\.pluginId !== "image-search"[\s\S]*?!widget\.copyText \|\| widgetSourceMirrorsHtml/);
   assert.match(functionSource(app, "widgetCopySource"), /widgetUsesHtmlCopySource\(widget\) \? widget\.html : widget\.copyText/);
   assert.match(functionSource(app, "widgetCopySourceLabel"), /widgetUsesHtmlCopySource\(widget\)\) return "Copy HTML"/);
   assert.match(validate, /widgetEditTarget && c\.pluginId !== widgetEditTarget\.pluginId/);
   assert.match(validate, /sourceFormat \? `Copy \$\{sourceFormat\}` : "Copy source"/);
-  assert.match(start, /state\.widgets\.includes\(target\)[\s\S]*?id:target\.id[\s\S]*?x:target\.x[\s\S]*?target\.hiddenForReplacement = true/);
+  assert.match(start, /state\.widgets\.includes\(target\)[\s\S]*?widgetReplacementRecordInput\(command, target\)[\s\S]*?target\.hiddenForReplacement = true/);
+  const replacementRecord = vm.runInNewContext(`(${replacementInput})`),
+    protectedOrigin = {
+      communityOriginItemId:"123e4567-e89b-42d3-a456-426614174000",
+      communityRootItemId:"123e4567-e89b-42d3-a456-426614174001",
+      communityOriginName:"Original Echo",
+      communityOriginGeneration:7,
+    },
+    replacement = replacementRecord({
+      pluginId:"general",
+      html:"<main>AI update</main>",
+      favorite:true,
+      communityOriginItemId:"123e4567-e89b-42d3-a456-426614174099",
+      communityRootItemId:"123e4567-e89b-42d3-a456-426614174098",
+      communityOriginName:"Forged origin",
+      communityOriginGeneration:99,
+    }, {
+      id:"widget-7", x:10, y:20, w:300, h:200, contentW:600, contentH:400,
+      ...protectedOrigin,
+    });
+  assert.deepEqual({
+    communityOriginItemId:replacement.communityOriginItemId,
+    communityRootItemId:replacement.communityRootItemId,
+    communityOriginName:replacement.communityOriginName,
+    communityOriginGeneration:replacement.communityOriginGeneration,
+  }, protectedOrigin);
+  assert.equal(replacement.favorite, false);
+  assert.equal(replacement.html, "<main>AI update</main>");
   assert.match(start, /state\.pendingWidgetReplacement = \{ target[\s\S]*?acceptPendingWidget\(\{ restoreMode:false \}\)[\s\S]*?Promise\.resolve\(state\.widgets\.includes\(widget\)\)/);
   assert.doesNotMatch(start, /enterAIDraftHandMode|widgetReplacementReady/);
   assert.match(accept, /recordWidgetsBefore\(\)[\s\S]*?state\.widgets\.indexOf\(replacement\.target\)[\s\S]*?state\.widgets\.splice\(index, 1, widget\)[\s\S]*?const historyEntry = save\(\)/);
@@ -1570,6 +1608,10 @@ test("canvas history clearly separates device, server, and private cross-device 
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
   const closeHistory = functionSource(app, "closeHistoryPanel"), openHistory = functionSource(app, "openHistoryPanel");
   assert.match(html, /id="historyPanel"[^>]*aria-hidden="true"[^>]*\sinert/);
+  assert.doesNotMatch(html, /id="historyPanel"[\s\S]*?<span class="history-kicker">PenEcho<\/span>[\s\S]*?<div class="history-composer">/);
+  assert.doesNotMatch(html, /data-i18n="historyDescription"/);
+  assert.doesNotMatch(app, /historyDescription:/);
+  assert.doesNotMatch(zh, /historyDescription:/);
   assert.match(css, /\.history-panel, \.new-canvas-dialog\s*\{[^}]*color-scheme:\s*light[^}]*--ai-bg:\s*#ffffff/);
   assert.doesNotMatch(css, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.history-panel/);
   assert.match(openHistory, /panel\.inert = false/);
@@ -1618,7 +1660,8 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(functionSource(app, "refreshSnapshots"), /snapshotItemsLocation !== location[\s\S]*?renderSnapshotListLoading\(location\)[\s\S]*?snapshotItemsLocation = location/);
   assert.match(functionSource(app, "loadSnapshot"), /setHistoryActivity[\s\S]*?snapshotLoadRequesting[\s\S]*?snapshotLoadDownloading[\s\S]*?snapshotLoadDecoding[\s\S]*?snapshotLoadApplying/);
   assert.match(functionSource(app, "loadSnapshot"), /if \(!loadIsCurrent\(\)\) return;[\s\S]*?loadGeneration !== state\.snapshotLoadGeneration[\s\S]*?return false/);
-  for (const id of ["serverProjectManager", "historyProjectSelect", "historyProjectCreate", "historyProjectDelete", "projectDialog", "projectForm", "projectName", "projectDialogCancel", "projectDialogCreate", "newCanvasProjectField", "newCanvasProjectSelect"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["serverProjectManager", "historyProjectSelect", "historyProjectCreate", "historyProjectDelete", "projectDialog", "projectForm", "projectName", "projectDialogCreate", "newCanvasProjectField", "newCanvasProjectSelect"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.doesNotMatch(html, /id="projectDialogCancel"/);
   assert.match(functionSource(app, "openServerProjectDialog"), /projectDialog[\s\S]*?showModal\(\)[\s\S]*?input\.focus\(\)/);
   assert.match(functionSource(app, "createServerProject"), /projectName[\s\S]*?input\.value\.trim\(\)\.slice\(0, 48\)[\s\S]*?fetch\(isCloud \? "\/api\/cloud\/projects" : "\/api\/canvas-projects"[\s\S]*?dialog\.close\("created"\)/);
   assert.doesNotMatch(app, /\bprompt\s*\(/);
@@ -1637,6 +1680,11 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(css, /\.history-save-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
   assert.match(css, /\.history-meta\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/);
   assert.match(css, /\.snapshot-location-options\s*\{[^}]*grid-template-columns:\s*repeat\(3/);
+  assert.doesNotMatch(html, /class="history-kicker"/);
+  assert.match(css, /\.history-list-loading\s*\{[^}]*min-height:\s*44px[^}]*border:\s*0/);
+  assert.match(css, /\.history-empty\s*\{[^}]*padding:\s*12px[^}]*border:\s*0/);
+  assert.match(css, /\.history-projects \.history-project-delete\s*\{[^}]*color:\s*var\(--ai-faint\)[^}]*background:\s*transparent/);
+  assert.match(css, /\.new-canvas-fields\s*\{[^}]*display:\s*grid;[^}]*gap:\s*12px;[^}]*\}/);
 });
 
 test("local snapshot database upgrades preserve existing canvas records", () => {
@@ -1681,7 +1729,7 @@ test("Cloud History distinguishes sign-in from failures and protects external Ca
   ]) assert.match(css, new RegExp(`\\.${selector}\\s*\\{[^}]*min-height:\\s*36px`));
   assert.match(css, /\.snapshot-location-options\s*\{[^}]*height:\s*36px/);
   assert.match(css, /\.snapshot-location-options span\s*\{[^}]*height:\s*30px[^}]*min-height:\s*30px/);
-  assert.match(css, /#historySaveCurrent, #historySave, #historyNew\s*\{[^}]*height:\s*36px[^}]*min-height:\s*36px/);
+  assert.match(css, /#historySaveCurrent, #historySave\s*\{[^}]*height:\s*36px[^}]*min-height:\s*36px/);
   assert.match(css, /\.settings-editor-cancel\s*\{[^}]*height:\s*36px[^}]*min-height:\s*36px/);
   assert.match(css, /@media \(pointer: coarse\)/);
   assert.ok(css.includes("#historyClose, .new-canvas-close { width: 44px; height: 44px; flex-basis: 44px; }"));
@@ -1904,7 +1952,8 @@ test("text tool toggles a real MD+TeX preview and confirms the unchanged source"
   const textButton = html.match(/<button[^>]*data-mode="text"[\s\S]*?<\/button>/)?.[0] || "";
   assert.match(textButton, /class="[^\"]*icon-button[^\"]*"/);
   assert.match(textButton, /data-i18n-aria="text"/);
-  for (const id of ["textEditorLayer", "textInputHint", "textHelpDialog", "textHelpClose", "textHelpDone"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["textEditorLayer", "textInputHint", "textHelpDialog", "textHelpClose"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.doesNotMatch(html, /id="textHelpDone"|data-i18n="textHelpConfirm"/);
   for (const name of ["createTextEditor", "confirmTextEditor", "cancelTextEditor", "toggleTextEditorMixedMode", "updateTextEditorMixedMode", "renderTextEditorPreview", "scheduleTextEditorPreview", "cancelTextEditorPreview", "mixedTextImage", "positionTextEditors", "keepTextEditorVisible", "clearTextEditors", "setCanvasMode", "openTextHelp", "closeTextHelp", "restoreTextEditorAfterHelp"]) assert.match(app, new RegExp(`function ${name}\\(`));
   assert.ok(html.indexOf('src="mixed-text.js"') < html.indexOf('src="app.js"'));
   assert.match(app, /textEditorStyleSheet\(\)/);
@@ -1995,7 +2044,7 @@ test("text tool toggles a real MD+TeX preview and confirms the unchanged source"
   assert.match(css, /\.text-editor-handle\.width/);
   assert.match(css, /\.text-editor-handle\.height/);
   assert.match(css, /\.text-editor-handle\.corner/);
-  for (const key of ["text", "textMixedMode", "textMixedModeShort", "textEditMode", "textPreview", "textMixedModeError", "textConfirm", "textCancel", "textPlaceholder", "textConfirmHint", "textEmpty", "textHelp", "textHelpTitle", "textHelpClose", "textHelpIntro", "textHelpMarkdown", "textHelpMath", "textHelpConfirm", "textHelpExampleTitle", "textHelpExample", "textHelpDone"]) {
+  for (const key of ["text", "textMixedMode", "textMixedModeShort", "textEditMode", "textPreview", "textMixedModeError", "textConfirm", "textCancel", "textPlaceholder", "textConfirmHint", "textEmpty", "textHelp", "textHelpTitle", "textHelpClose", "textHelpIntro", "textHelpMarkdown", "textHelpMath", "textHelpExampleTitle", "textHelpExample"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }

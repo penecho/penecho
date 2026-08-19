@@ -874,7 +874,6 @@
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
-  document.querySelector("#historyNew").onclick = openNewCanvasDialog;
   document.querySelector("#historyProjectSelect").onchange = (event) => {
     if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
     else rememberSelectedServerProject(event.target.value);
@@ -893,7 +892,6 @@
       if (projectDialog.dataset.busy !== "true" && projectDialog.open) projectDialog.close("cancel");
     };
   document.querySelector("#projectDialogClose").onclick = closeProjectDialog;
-  document.querySelector("#projectDialogCancel").onclick = closeProjectDialog;
   document.querySelector("#projectName").addEventListener("input", (event) => event.currentTarget.setCustomValidity(""));
   projectDialog.addEventListener("cancel", (event) => {
     if (projectDialog.dataset.busy === "true") event.preventDefault();
@@ -920,12 +918,7 @@
     pendingCanvasTransition = null;
     document.querySelector("#newCanvasDialog").close("cancel");
   };
-  document.querySelector("#newCanvasCancel").onclick = () => {
-    pendingCanvasTransition = null;
-    document.querySelector("#newCanvasDialog").close("cancel");
-  };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
-  document.querySelector("#textHelpDone").onclick = closeTextHelp;
   document.querySelector("#textHelpDialog").addEventListener("close", restoreTextEditorAfterHelp);
   document.querySelector("#newDiscard").onclick = discardCanvasTransition;
   document.querySelector("#newSaveCopy").onclick = () => completeNewCanvas("new");
@@ -1096,7 +1089,6 @@
   tourNextButton.addEventListener("click", nextFeatureTourStep);
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
-  changelogDoneButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
     if (event.target === changelogLayer) closeChangelog();
   });
@@ -1120,6 +1112,7 @@
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
     updateSettingsProviderFields();
     selectDefaultConnectionEffort();

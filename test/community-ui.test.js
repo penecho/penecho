@@ -16,14 +16,15 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
 
   assert.match(cloud, /function cloudT\(key, replacements = \{\}\)/);
   assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
-  assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(reload\)/);
+  assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(setRefreshing\)/);
   assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
   assert.match(cloud, /class:"cloud-section-tab cloud-explore-link",\s*href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\),\s*target:"_blank",\s*rel:"noopener"/);
   assert.match(cloud, /text:`\$\{cloudT\("explore"\)\} ↗`/);
   assert.match(cloud, /text:cloudT\(label\)/);
   assert.doesNotMatch(cloud, /text:cloudT\(hint\)/);
   assert.doesNotMatch(cloud, /class:"cloud-panel-heading"[^\n]*cloudT\("cloudProjects"\)/);
-  assert.match(cloud, /text:cloudT\("favorites"\)/);
+  assert.match(cloud, /class:"cloud-favorites-hint", text:cloudT\("favoritesHint"\)/);
+  assert.doesNotMatch(cloud, /el\("h3", \{ text:cloudT\("favorites"\) \}\)/);
   assert.match(cloud, /favoriteCanvasesHint:"收藏中的公开画布"/);
   assert.doesNotMatch(cloud, /favoriteCanvasesHint:"Favorites 中/);
   assert.match(css, /\.cloud-section-tabs \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
@@ -71,7 +72,8 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /visibilitychange/);
   assert.match(cloud, /event\.origin !== location\.origin/);
   assert.doesNotMatch(cloud, /startCloudStatusWatch|CLOUD_STATUS_POLL_MS|cloudStatusPoll/);
-  assert.match(cloud, /"aria-label":cloudT\("refreshCurrentView"\)/);
+  assert.match(cloud, /cloud-section-refresh-indicator/);
+  assert.doesNotMatch(cloud, /refreshCurrentView/);
   assert.match(cloud, /Boolean\(state\.status\?\.device\?\.connected\)/);
   assert.match(cloud, /if \(previouslySignedIn !== accountSignedIn\(\)\)/);
   assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
@@ -106,6 +108,7 @@ test("community artifacts have bounded WebP previews and import both Widgets and
   assert.match(app, /snapshotPreview\(2048,1365\)/);
   assert.match(app, /communityImagesForCanvas\(canvas, \.82\)/);
   assert.match(app, /communityThumbnail/);
+  assert.match(app, /communitySocialCard:\{contentType:"image\/png",width:socialWidth,height:socialHeight/);
   assert.match(app, /suggestMetadata:suggestCommunityMetadata/);
   assert.match(app, /async function importCommunityCanvasArtifact/);
   assert.match(app, /importCanvas:importCommunityCanvasArtifact/);

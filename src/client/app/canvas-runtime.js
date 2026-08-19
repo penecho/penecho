@@ -1887,9 +1887,8 @@
     setStatusKey("aiDone");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
-  function startPendingWidgetReplacement(command, target, revision) {
-    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
-    const widget = widgetRecord({
+  function widgetReplacementRecordInput(command, target) {
+    return {
       ...command,
       id:target.id,
       x:target.x,
@@ -1898,7 +1897,16 @@
       h:target.h,
       contentW:target.contentW,
       contentH:target.contentH,
-    });
+      communityOriginItemId:target.communityOriginItemId,
+      communityRootItemId:target.communityRootItemId,
+      communityOriginName:target.communityOriginName,
+      communityOriginGeneration:target.communityOriginGeneration,
+      favorite:false,
+    };
+  }
+  function startPendingWidgetReplacement(command, target, revision) {
+    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
+    const widget = widgetRecord(widgetReplacementRecordInput(command, target));
     if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;

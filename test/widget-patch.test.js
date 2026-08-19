@@ -177,6 +177,29 @@ test("widget patch reports unsupported manifest fields precisely", () => {
   assert.equal(diagnostics.reason,"unsupported-manifest-field:background");
 });
 
+test("widget patch never exposes or accepts community lineage fields", () => {
+  const fields = ["communityOriginItemId", "communityRootItemId", "communityOriginName", "communityOriginGeneration"],
+    manifest = widgetPatchFiles(htmlEdit(Object.fromEntries(fields.map(field => [field, `private-${field}`]))))
+      .find(file => file.path === "widget.json").content;
+  for (const field of fields) assert.doesNotMatch(manifest, new RegExp(field));
+
+  const patch = [
+      "--- a/widget.json",
+      "+++ b/widget.json",
+      "@@ -5,6 +5,7 @@",
+      "   \"refreshSeconds\": 900,",
+      "   \"diagramKind\": null,",
+      "   \"sourceFormat\": \"mermaid\",",
+      "+  \"communityOriginItemId\": \"123e4567-e89b-42d3-a456-426614174099\",",
+      "   \"frameworkVersion\": null,",
+      "   \"htmlFile\": \"widget.html\",",
+      "   \"copyTextFile\": \"widget.source\",",
+      "",
+    ].join("\n"), diagnostics = {};
+  assert.equal(commandFromWidgetPatch(patchCommand(patch), htmlEdit(), diagnostics), null);
+  assert.equal(diagnostics.reason, "unsupported-manifest-field:communityOriginItemId");
+});
+
 test("widget patch accepts the standard dual-file prompt example", () => {
   const widgetEdit = htmlEdit({
       html:"<main>\n  <h1>Old</h1>\n</main>\n",

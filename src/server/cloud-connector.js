@@ -91,6 +91,11 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function communityArtifactLineage(kind, artifact) {
+  const itemId=kind==="widget"?artifact?.widget?.communityOriginItemId:artifact?.extensions?.penechoCommunity?.originItemId;
+  return /^[0-9a-f-]{36}$/i.test(String(itemId||""))?{itemId:String(itemId)}:null;
+}
+
 function publicAccount(value) {
   if (!value?.id) return null;
   return {
@@ -639,31 +644,19 @@ class CloudConnector {
     const normalizedName=String(name || "").trim(),normalizedDescription=String(description || "").trim();
     if(!normalizedName)throw Object.assign(new Error("A title is required."),{status:400,code:"community_title_required"});
     if(!normalizedDescription)throw Object.assign(new Error("A description is required."),{status:400,code:"community_description_required"});
-    const bytes = Buffer.from(JSON.stringify(artifact));
-    const maximum = kind === "widget" ? 10 * 1024 * 1024 : MAX_CLOUD_BUNDLE_BYTES;
-    if (!bytes.length || bytes.length > maximum) throw new Error(`The shared ${kind} is too large.`);
-    const reservation = await this.cloudRequest("/api/v1/community/items", {
-      method:"POST",
-      body:{
-        kind,
-        name:normalizedName,
-        description:normalizedDescription,
-        category,
-        tags,
-        priceCredits:0,
-        parentItemId:parentItemId || null,
-        contributionNote:String(contributionNote || "").trim(),
-        continuationPrompt:String(continuationPrompt || "").trim(),
-        publicationTermsAccepted:publicationTermsAccepted === true,
-        publicationRightsAccepted:publicationRightsAccepted === true,
-        modelTrainingAccepted:modelTrainingAccepted === true,
-        publicationTermsVersion:String(publicationTermsVersion || ""),
-        formatVersion:Number(artifact.formatVersion || 1),
-        artifact:{ sha256:sha256(bytes), sizeBytes:bytes.length, contentType:"application/json" },
-      },
-    });
-    await this.assetRequest(reservation.upload, { method:"PUT", bytes });
-    return this.cloudRequest(`/api/v1/community/items/${encodeURIComponent(reservation.item.id)}/complete`, { method:"POST", body:{} });
+    const artifactLineage=communityArtifactLineage(kind,artifact),submittedParent=String(parentItemId || "").trim() || null;
+    if(artifactLineage?.itemId&&submittedParent&&artifactLineage.itemId!==submittedParent)throw Object.assign(new Error("The submitted Craft parent does not match this artifact's saved lineage."),{status:409,code:"community_lineage_mismatch"});
+    const effectiveParentItemId=artifactLineage?.itemId||submittedParent,bytes=Buffer.from(JSON.stringify(artifact)),maximum=kind==="widget"?10*1024*1024:MAX_CLOUD_BUNDLE_BYTES;
+    if(!bytes.length||bytes.length>maximum)throw new Error(`The shared ${kind} is too large.`);
+    const reservation=await this.cloudRequest("/api/v1/community/items",{method:"POST",body:{
+      kind,name:normalizedName,description:normalizedDescription,category,tags,priceCredits:0,parentItemId:effectiveParentItemId,
+      contributionNote:String(contributionNote||"").trim(),continuationPrompt:String(continuationPrompt||"").trim(),
+      publicationTermsAccepted:publicationTermsAccepted===true,publicationRightsAccepted:publicationRightsAccepted===true,
+      modelTrainingAccepted:modelTrainingAccepted===true,publicationTermsVersion:String(publicationTermsVersion||""),
+      formatVersion:Number(artifact.formatVersion||1),artifact:{sha256:sha256(bytes),sizeBytes:bytes.length,contentType:"application/json"},
+    }});
+    await this.assetRequest(reservation.upload,{method:"PUT",bytes});
+    return this.cloudRequest(`/api/v1/community/items/${encodeURIComponent(reservation.item.id)}/complete`,{method:"POST",body:{}});
   }
 
   favoriteCommunityItem(itemId, favorite = true) {

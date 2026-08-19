@@ -90,8 +90,10 @@ test("1.0.0 changelog is a concise one-page dialog shown once after the feature 
     zh = read("public/locales/zh.js"),
     layer = html.match(/<div id="changelogLayer"[\s\S]*?<script src="\/api\/config\.js">/)?.[0] || "";
   assert.match(layer, /class="changelog-layer"[^>]*hidden[^>]*aria-hidden="true"/);
-  assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"[^>]*aria-describedby="changelogIntro"/);
-  for (const id of ["changelogClose", "changelogTitle", "changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.match(layer, new RegExp(`id="${id}"`));
+  assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"/);
+  assert.doesNotMatch(layer, /aria-describedby=/);
+  for (const id of ["changelogClose", "changelogTitle"]) assert.match(layer, new RegExp(`id="${id}"`));
+  for (const id of ["changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.doesNotMatch(layer, new RegExp(`id="${id}"`));
   assert.match(layer, />1\.0\.0</);
   assert.doesNotMatch(layer, /class="changelog-demo"|class="changelog-release changelog-earlier"/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
@@ -103,9 +105,13 @@ test("1.0.0 changelog is a concise one-page dialog shown once after the feature 
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogLocalCloud", "changelogEchoes", "changelogDone"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogLocalCloud", "changelogEchoes"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
+  }
+  for (const key of ["changelogIntro", "changelogDone"]) {
+    assert.doesNotMatch(app, new RegExp(`${key}:`));
+    assert.doesNotMatch(zh, new RegExp(`${key}:`));
   }
   assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 2);
   assert.match(app, /changelogLocalCloud:[^\n]*Open Cloud[^\n]*current Canvas/);

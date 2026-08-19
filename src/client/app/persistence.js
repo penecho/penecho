@@ -186,8 +186,6 @@
     if (panel) panel.setAttribute("aria-busy", String(snapshotListInProgress || snapshotLoadInProgress));
     document.querySelectorAll('input[name="historyStorageLocation"]').forEach((control) => (control.disabled = snapshotSaveInProgress));
     document.querySelectorAll('#historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave').forEach((control) => (control.disabled = busy || cloudBlocked));
-    const newCanvas = document.querySelector("#historyNew");
-    if (newCanvas) newCanvas.disabled = busy;
     const topSave = document.querySelector("#saveCanvasBtn");
     if (topSave) topSave.disabled = snapshotSaveInProgress || cloudBlocked;
     document.querySelectorAll(".history-load, .history-delete, .history-move").forEach((control) => (control.disabled = busy));
@@ -326,7 +324,28 @@
     thumbnailCanvas.getContext("2d").drawImage(canvas,0,0,thumbnailCanvas.width,thumbnailCanvas.height);
     const thumbnail=await communityImageForCanvas(thumbnailCanvas,{maximumBytes:768*1024,initialQuality:.78});
     thumbnailCanvas.width=thumbnailCanvas.height=1;
-    return { communityPreview:preview,communityThumbnail:thumbnail };
+    const socialCanvas=document.createElement("canvas"),socialWidth=1200,socialHeight=630,padding=24;
+    socialCanvas.width=socialWidth;
+    socialCanvas.height=socialHeight;
+    const socialContext=socialCanvas.getContext("2d"),socialScale=Math.min(
+      (socialWidth-padding*2)/canvas.width,
+      (socialHeight-padding*2)/canvas.height,
+    ),drawWidth=Math.max(1,Math.round(canvas.width*socialScale)),drawHeight=Math.max(1,Math.round(canvas.height*socialScale));
+    socialContext.fillStyle="#f8fafc";
+    socialContext.fillRect(0,0,socialWidth,socialHeight);
+    socialContext.drawImage(canvas,Math.round((socialWidth-drawWidth)/2),Math.round((socialHeight-drawHeight)/2),drawWidth,drawHeight);
+    const socialBlob=await canvasBlob(socialCanvas,"image/png"),socialImage=await imageFromBlob(socialBlob);
+    if(socialBlob.type!=="image/png"||socialBlob.size>5*1024*1024
+      ||(socialImage.naturalWidth||socialImage.width)!==socialWidth||(socialImage.naturalHeight||socialImage.height)!==socialHeight){
+      throw Error("The generated social card failed validation.");
+    }
+    const socialDataUrl=await blobDataUrl(socialBlob);
+    socialCanvas.width=socialCanvas.height=1;
+    return {
+      communityPreview:preview,
+      communityThumbnail:thumbnail,
+      communitySocialCard:{contentType:"image/png",width:socialWidth,height:socialHeight,dataBase64:socialDataUrl.split(",",2)[1]},
+    };
   }
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -1342,15 +1361,17 @@
     if (discard) discard.textContent = t(loading ? "loadWithoutSave" : "newWithoutSave");
     if (saveCopy) saveCopy.textContent = t(loading ? "saveAsNewAndLoad" : "saveAsNewAndCreate");
     overwrite.textContent = t(loading ? "overwriteAndLoad" : "overwriteAndCreate");
-    if (!state.currentSnapshotId) label.textContent = t("noCurrentSnapshot");
-    else {
+    const hasCurrentSnapshot = Boolean(state.currentSnapshotId);
+    label.hidden = !hasCurrentSnapshot;
+    overwrite.hidden = !hasCurrentSnapshot;
+    if (hasCurrentSnapshot) {
       const sameLocation = state.currentSnapshotLocation === state.snapshotLocation,
         key = sameLocation ? "currentSnapshot" : "currentSnapshotOtherLocation";
       label.textContent = t(key)
         .replace("{name}", state.currentSnapshotName || state.currentSnapshotId)
         .replace("{location}", snapshotLocationLabel(state.currentSnapshotLocation));
     }
-    overwrite.disabled = cloudBlocked || !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    overwrite.disabled = cloudBlocked || !hasCurrentSnapshot || state.currentSnapshotLocation !== state.snapshotLocation;
     if (saveCopy) saveCopy.disabled = cloudBlocked;
     const project = document.querySelector("#newCanvasProjectSelect");
     if (project) project.disabled = cloudBlocked;

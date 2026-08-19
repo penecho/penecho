@@ -1539,6 +1539,10 @@ test("professional diagrams accept local source renderers and keep unknown forma
         diagramKind:"process",
         sourceFormat:"mermaid",
         source:"flowchart LR\nA --> B",
+        communityOriginItemId:"123e4567-e89b-42d3-a456-426614174099",
+        communityRootItemId:"123e4567-e89b-42d3-a456-426614174098",
+        communityOriginName:"Forged origin",
+        communityOriginGeneration:99,
       },
     };
     const refined = await fetch(`${running.origin}/api/ai/command`, {
@@ -1572,6 +1576,10 @@ test("professional diagrams accept local source renderers and keep unknown forma
     assert.equal(modelInput.widgetEdit.widgetType, "diagram_source");
     assert.equal("source" in modelInput.widgetEdit, false);
     assert.equal("html" in modelInput.widgetEdit, false);
+    for (const field of ["communityOriginItemId", "communityRootItemId", "communityOriginName", "communityOriginGeneration"]) {
+      assert.equal(field in modelInput.widgetEdit, false);
+      assert.doesNotMatch(files.find(file => file.path === "widget.json").content, new RegExp(field));
+    }
     assert.deepEqual(modelInput.widgetEdit.patchFiles, [{ path:"widget.json" },{ path:"widget.source" }]);
     assert.equal(modelInput.actionMeaning, "refine the supplied target widget in place using the newest instructions; return only the required widget_patch command");
     assert.match(modelInput.widgetEditPolicy, /widget_patch[\s\S]*?standard unified diff/);

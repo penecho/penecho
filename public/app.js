@@ -97,7 +97,6 @@
     changelogLayer = document.querySelector("#changelogLayer"),
     changelogDialog = document.querySelector("#changelogDialog"),
     changelogCloseButton = document.querySelector("#changelogClose"),
-    changelogDoneButton = document.querySelector("#changelogDone"),
     settingsLayer = document.querySelector("#settingsLayer"),
     settingsBackdrop = document.querySelector("#settingsBackdrop"),
     settingsPanel = document.querySelector("#settingsPanel"),
@@ -308,10 +307,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       textHelpIntro: "Type normally; line breaks are preserved. Markdown and likely LaTeX are formatted automatically when confirmed; Preview shows the result.",
       textHelpMarkdown: "Use # for headings, - for lists, **text** for bold, and *text* for italic.",
       textHelpMath: "You may use $...$, but common bare TeX such as \\pi, \\frac{a}{b}, A_x, and \\sin(x) is recognized too.",
-      textHelpConfirm: "Press Ctrl/Cmd + Enter to confirm.",
       textHelpExampleTitle: "Example",
       textHelpExample: "# Kinematics\n**Speed:** $v=\\frac{d}{t}$\n- Area: $A=\\pi r^2$",
-      textHelpDone: "Got it",
       penSize: "Pen size",
       autoAI: "Auto AI",
       autoEnabled: "Auto ({delay}s)",
@@ -407,10 +404,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
       changelogTitle: "Local-first Cloud and Echoes",
-      changelogIntro: "Version 1.0.0 connects your local Canvas with Cloud Projects, Favorites, and Echoes.",
       changelogLocalCloud: "Open Cloud and favorite Canvases locally; add favorite Widgets to your current Canvas.",
       changelogEchoes: "Publish to Echoes, Echo shared work, and share Widgets or Canvases as images.",
-      changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsApiSection: "AI connection",
@@ -489,8 +484,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
-      settingsSummonEnabled: "Show while AI thinks",
-      settingsSummonDescription: "A changing mathematical form and quiet text appear while each request runs.",
       settingsChangelog: "What's new",
       settingsHelpSection: "Help & about",
       settingsDownloadMac: "Download for macOS",
@@ -536,7 +529,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       openLocalLog: "Open local server log",
       history: "Canvas history",
       historyTitle: "History",
-      historyDescription: "Confirmed canvases are saved here. AI drafts join only after you accept them.",
       saveLocation: "Location",
       storageThisDevice: "Device",
       storagePenEchoServer: "Server",
@@ -683,12 +675,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       merged: "AI merged",
       plugins: "Plugins",
       savedCrafts: "Favorites",
-      savedCraftsTitle: "Favorite Widgets",
+      savedCraftsTitle: "Favorites",
       savedLoading: "Loading favorites…",
-      savedEmptyIn: "No favorite Widgets yet. Select ★ on any Widget to keep it here.",
-      savedEmptyOut: "No favorite Widgets yet. Select ★ on any Widget—favorites stay on this device until you sign in to PenEcho Cloud.",
+      savedRefreshing: "Refreshing…",
+      savedEmptyIn: "No favorite Canvases or Widgets yet.",
+      savedEmptyOut: "No local favorite Widgets yet. Sign in to see Cloud favorites.",
       savedAdd: "Add",
       savedAdding: "Adding…",
+      savedOpen: "Open",
+      savedOpening: "Opening…",
+      savedCanvas: "Canvas",
+      savedWidget: "Widget",
       savedRemoveTitle: "Remove from favorites",
       savedSourceLocal: "Local",
       savedSourceCloud: "Cloud",
@@ -697,8 +694,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedSourceLocalTitle: "On this device only; it uploads to PenEcho Cloud after you sign in",
       savedSourceCloudTitle: "On PenEcho Cloud",
       savedErrorAdd: "This Widget could not be added.",
+      savedErrorOpen: "This Canvas could not be opened.",
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
-      closeSavedCrafts: "Close Favorite Widgets",
+      closeSavedCrafts: "Close Favorites",
       shareCanvasCloud: "Share Canvas to PenEcho Cloud",
       shareWidget: "Share widget",
       openInNewPage: "Open in a new page",
@@ -1698,7 +1696,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return true;
     }
     if (event.key !== "Tab") return false;
-    const focusable = [changelogCloseButton, changelogDoneButton].filter((button) => button && !button.disabled && !button.hidden),
+    const focusable = [changelogCloseButton].filter((button) => button && !button.disabled && !button.hidden),
       current = focusable.indexOf(document.activeElement),
       next = event.shiftKey ? (current <= 0 ? focusable.length - 1 : current - 1) : current < 0 || current === focusable.length - 1 ? 0 : current + 1;
     event.preventDefault();
@@ -5124,9 +5122,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey("aiDone");
     return new Promise((resolve) => (widget.resolve = resolve));
   }
-  function startPendingWidgetReplacement(command, target, revision) {
-    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
-    const widget = widgetRecord({
+  function widgetReplacementRecordInput(command, target) {
+    return {
       ...command,
       id:target.id,
       x:target.x,
@@ -5135,7 +5132,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       h:target.h,
       contentW:target.contentW,
       contentH:target.contentH,
-    });
+      communityOriginItemId:target.communityOriginItemId,
+      communityRootItemId:target.communityRootItemId,
+      communityOriginName:target.communityOriginName,
+      communityOriginGeneration:target.communityOriginGeneration,
+      favorite:false,
+    };
+  }
+  function startPendingWidgetReplacement(command, target, revision) {
+    if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
+    const widget = widgetRecord(widgetReplacementRecordInput(command, target));
     if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
@@ -8071,8 +8077,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (panel) panel.setAttribute("aria-busy", String(snapshotListInProgress || snapshotLoadInProgress));
     document.querySelectorAll('input[name="historyStorageLocation"]').forEach((control) => (control.disabled = snapshotSaveInProgress));
     document.querySelectorAll('#historyProjectSelect, #historyProjectCreate, #historyProjectDelete, #historyName, #historySaveCurrent, #historySave').forEach((control) => (control.disabled = busy || cloudBlocked));
-    const newCanvas = document.querySelector("#historyNew");
-    if (newCanvas) newCanvas.disabled = busy;
     const topSave = document.querySelector("#saveCanvasBtn");
     if (topSave) topSave.disabled = snapshotSaveInProgress || cloudBlocked;
     document.querySelectorAll(".history-load, .history-delete, .history-move").forEach((control) => (control.disabled = busy));
@@ -8211,7 +8215,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     thumbnailCanvas.getContext("2d").drawImage(canvas,0,0,thumbnailCanvas.width,thumbnailCanvas.height);
     const thumbnail=await communityImageForCanvas(thumbnailCanvas,{maximumBytes:768*1024,initialQuality:.78});
     thumbnailCanvas.width=thumbnailCanvas.height=1;
-    return { communityPreview:preview,communityThumbnail:thumbnail };
+    const socialCanvas=document.createElement("canvas"),socialWidth=1200,socialHeight=630,padding=24;
+    socialCanvas.width=socialWidth;
+    socialCanvas.height=socialHeight;
+    const socialContext=socialCanvas.getContext("2d"),socialScale=Math.min(
+      (socialWidth-padding*2)/canvas.width,
+      (socialHeight-padding*2)/canvas.height,
+    ),drawWidth=Math.max(1,Math.round(canvas.width*socialScale)),drawHeight=Math.max(1,Math.round(canvas.height*socialScale));
+    socialContext.fillStyle="#f8fafc";
+    socialContext.fillRect(0,0,socialWidth,socialHeight);
+    socialContext.drawImage(canvas,Math.round((socialWidth-drawWidth)/2),Math.round((socialHeight-drawHeight)/2),drawWidth,drawHeight);
+    const socialBlob=await canvasBlob(socialCanvas,"image/png"),socialImage=await imageFromBlob(socialBlob);
+    if(socialBlob.type!=="image/png"||socialBlob.size>5*1024*1024
+      ||(socialImage.naturalWidth||socialImage.width)!==socialWidth||(socialImage.naturalHeight||socialImage.height)!==socialHeight){
+      throw Error("The generated social card failed validation.");
+    }
+    const socialDataUrl=await blobDataUrl(socialBlob);
+    socialCanvas.width=socialCanvas.height=1;
+    return {
+      communityPreview:preview,
+      communityThumbnail:thumbnail,
+      communitySocialCard:{contentType:"image/png",width:socialWidth,height:socialHeight,dataBase64:socialDataUrl.split(",",2)[1]},
+    };
   }
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -9227,15 +9252,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (discard) discard.textContent = t(loading ? "loadWithoutSave" : "newWithoutSave");
     if (saveCopy) saveCopy.textContent = t(loading ? "saveAsNewAndLoad" : "saveAsNewAndCreate");
     overwrite.textContent = t(loading ? "overwriteAndLoad" : "overwriteAndCreate");
-    if (!state.currentSnapshotId) label.textContent = t("noCurrentSnapshot");
-    else {
+    const hasCurrentSnapshot = Boolean(state.currentSnapshotId);
+    label.hidden = !hasCurrentSnapshot;
+    overwrite.hidden = !hasCurrentSnapshot;
+    if (hasCurrentSnapshot) {
       const sameLocation = state.currentSnapshotLocation === state.snapshotLocation,
         key = sameLocation ? "currentSnapshot" : "currentSnapshotOtherLocation";
       label.textContent = t(key)
         .replace("{name}", state.currentSnapshotName || state.currentSnapshotId)
         .replace("{location}", snapshotLocationLabel(state.currentSnapshotLocation));
     }
-    overwrite.disabled = cloudBlocked || !state.currentSnapshotId || state.currentSnapshotLocation !== state.snapshotLocation;
+    overwrite.disabled = cloudBlocked || !hasCurrentSnapshot || state.currentSnapshotLocation !== state.snapshotLocation;
     if (saveCopy) saveCopy.disabled = cloudBlocked;
     const project = document.querySelector("#newCanvasProjectSelect");
     if (project) project.disabled = cloudBlocked;
@@ -14154,7 +14181,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = saveCurrentCanvas;
   document.querySelector("#historySave").onclick = saveSnapshotFromHistory;
-  document.querySelector("#historyNew").onclick = openNewCanvasDialog;
   document.querySelector("#historyProjectSelect").onchange = (event) => {
     if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
     else rememberSelectedServerProject(event.target.value);
@@ -14173,7 +14199,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (projectDialog.dataset.busy !== "true" && projectDialog.open) projectDialog.close("cancel");
     };
   document.querySelector("#projectDialogClose").onclick = closeProjectDialog;
-  document.querySelector("#projectDialogCancel").onclick = closeProjectDialog;
   document.querySelector("#projectName").addEventListener("input", (event) => event.currentTarget.setCustomValidity(""));
   projectDialog.addEventListener("cancel", (event) => {
     if (projectDialog.dataset.busy === "true") event.preventDefault();
@@ -14200,12 +14225,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     pendingCanvasTransition = null;
     document.querySelector("#newCanvasDialog").close("cancel");
   };
-  document.querySelector("#newCanvasCancel").onclick = () => {
-    pendingCanvasTransition = null;
-    document.querySelector("#newCanvasDialog").close("cancel");
-  };
   document.querySelector("#textHelpClose").onclick = closeTextHelp;
-  document.querySelector("#textHelpDone").onclick = closeTextHelp;
   document.querySelector("#textHelpDialog").addEventListener("close", restoreTextEditorAfterHelp);
   document.querySelector("#newDiscard").onclick = discardCanvasTransition;
   document.querySelector("#newSaveCopy").onclick = () => completeNewCanvas("new");
@@ -14376,7 +14396,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   tourNextButton.addEventListener("click", nextFeatureTourStep);
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
-  changelogDoneButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
     if (event.target === changelogLayer) closeChangelog();
   });
@@ -14400,6 +14419,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
     updateSettingsProviderFields();
     selectDefaultConnectionEffort();
