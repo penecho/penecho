@@ -52,8 +52,8 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
   justify-content: center;
   gap: 9px;
   min-width: 44px;
-  min-height: 44px;
-  padding: 7px 14px 7px 8px;
+  min-height: 36px;
+  padding: 5px 10px 5px 7px;
   border: 1px solid #e4e4e7;
   border-radius: 13px;
   background: #ffffff;
@@ -98,8 +98,8 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 44px;
-  padding: 8px 15px;
+  min-height: 36px;
+  padding: 5px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
   font-size: 14px;
@@ -190,6 +190,13 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
   .viewer-chip,
   .viewer-primary { padding-inline: 10px; font-size: 13px; }
   .viewer-account-action { max-width: 82px; }
+}
+
+@media (pointer: coarse) {
+  .viewer-brand,
+  .viewer-actions a,
+  .viewer-actions button,
+  .viewer-primary { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -63,7 +63,8 @@ test("the viewer localizes its actions and responsively frames Widgets and compl
   assert.match(canvas, /querySelector\("\.viewer-topbar"\)/);
   assert.match(persistence, /async function viewCommunityCanvasArtifact\(artifact\)/);
   assert.match(bootstrap, /viewCanvas:viewCommunityCanvasArtifact/);
-  assert.match(css, /min-height:\s*44px/);
+  assert.match(css, /\.viewer-chip,[\s\S]*?min-height:\s*36px/);
+  assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.viewer-primary \{ min-height:\s*44px/);
   assert.match(css, /@media \(max-width:\s*620px\)/);
 });
 

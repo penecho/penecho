@@ -1068,6 +1068,8 @@
       communityOriginName,
       communityOriginGeneration,
       favorite: item.favorite === true,
+      favoriteBusy: false,
+      favoritePendingVersion: null,
     };
   }
   function restoreWidgets(items) {
@@ -1109,11 +1111,18 @@
     delete publicWidget.favorite;
     return { format:"penecho-widget", formatVersion:1, widget:publicWidget, ...communityImages };
   }
-  function setCommunityWidgetFavorite(widgetId, favorite) {
+  function setCommunityWidgetFavorite(widgetId, favorite, busy = false) {
     const widget = state.widgets.find((item) => item.id === widgetId);
     if (!widget) return false;
-    widget.favorite = favorite === true;
-    const record = state.handToolbarTargets.get(handToolbarKey("widget", widgetId));
+    if (busy === true && !widget.favoriteBusy) widget.favoritePendingVersion = widget.contentVersion;
+    if (typeof favorite === "boolean") {
+      const changedWhileSaving = favorite === true
+        && Number.isInteger(widget.favoritePendingVersion)
+        && widget.favoritePendingVersion !== widget.contentVersion;
+      if (!changedWhileSaving) widget.favorite = favorite;
+    }
+    widget.favoriteBusy = busy === true;
+    if (!widget.favoriteBusy) widget.favoritePendingVersion = null;
     syncObjectChrome();
     return widget.favorite;
   }
@@ -1430,6 +1439,10 @@
     }
     if (message.type === "penecho-widget-updated") {
       widget.contentVersion++;
+      if (widget.favorite) {
+        widget.favorite = false;
+        syncObjectChrome();
+      }
       return;
     }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
@@ -3153,18 +3166,26 @@
       activate:(button) => void beginWidgetRefineConfirmation(options.refine, objectChromeAnchor(button)),
     });
     if (options.community && window.PenEchoCommunityUI) {
+      const favoriteLabelKey = widget.favoriteBusy ? "favoriteWidgetSaving" : widget.favorite ? "unfavoriteWidget" : "favoriteWidget";
       items.push({
         key:`widget:${widget.id}:tool-favorite`,
         kind:"favorite",
-        label:window.PenEchoCommunityUI.label?.("favoriteWidget") || "Favorite",
-        baseWidth:112,
-        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:widget.id } })),
+        label:window.PenEchoCommunityUI.label?.(favoriteLabelKey) || "Favorite",
+        baseWidth:36,
+        iconOnly:true,
+        pressed:widget.favorite === true,
+        busy:widget.favoriteBusy === true,
+        activate:() => {
+          if (widget.favoriteBusy) return;
+          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:widget.id } }));
+        },
       });
       items.push({
         key:`widget:${widget.id}:tool-share`,
         kind:"share",
         label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
-        baseWidth:104,
+        baseWidth:36,
+        iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
       });
     }
@@ -3436,7 +3457,7 @@
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (kind === "move") return;
+      if (kind === "move" || button.disabled) return;
       if (kind === "refine") triggerWidgetRefineClickPulse(button.penechoSpec?.refineCandidate?.widgetId);
       button.penechoSpec?.activate?.(button);
     });
@@ -3577,14 +3598,22 @@
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
+      button.classList.toggle("icon-only", Boolean(spec.iconOnly));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
+      button.classList.toggle("is-favorite", Boolean(spec.kind === "favorite" && spec.pressed));
+      button.classList.toggle("loading", Boolean(spec.busy));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
       else delete button.dataset.widgetToolGroup;
       button.setAttribute("aria-label", label);
+      button.disabled = Boolean(spec.busy);
+      if (spec.kind === "favorite") button.setAttribute("aria-pressed", String(Boolean(spec.pressed)));
+      else button.removeAttribute("aria-pressed");
+      if (spec.busy) button.setAttribute("aria-busy", "true");
+      else button.removeAttribute("aria-busy");
       if (spec.kind === "refine") button.removeAttribute("title");
       else button.title = label;
       if (["copy", "refine", "favorite", "share"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;

@@ -241,11 +241,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const I18N = {
     en: {
       title: "PenEcho | Handwritten AI Canvas",
-      tagline: "Write across twenty thousand squares and summon knowledge",
-      taglineArcane: "Interdisciplinary intuition, creative synthesis, and exploratory explanation",
-      taglineScifi: "Engineering, programming, system design, and future-technology analysis",
-      taglineResearch: "Mathematical physics, rigorous teaching, and verifiable code",
-      taglineStudio: "A clean, focused studio for clear structure and practical answers",
       language: "Language",
       hintPrefix: "Hint",
       theme: "Theme",
@@ -411,16 +406,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Refine, projects, and flexible AI connections",
-      changelogIntro: "Version 0.9.0 adds guided in-place editing, project-based shared canvases, and a more flexible and dependable AI workflow.",
-      changelogConnections: "Save up to ten API or CLI connections, start from Kimi and MiniMax presets, test them in Canvas, and switch the active connection for this device with one click.",
-      changelogProjects: "Organize shared server canvases into projects and browse larger previews by modification time. Versioned v2 bundles keep every canvas asset together while remaining compatible with existing saves.",
-      changelogRefine: "Write or place instructions anywhere in the current viewport, choose the widget to update, and apply a standard unified diff that reduces tokens while preserving confirmation, undo, and pending instructions after failure or cancellation.",
-      changelogStreaming: "API requests now use true SSE streaming, reducing long silent waits, improving responsiveness, and keeping lengthy model responses more stable through compatible gateways.",
-      changelogProgress: "The top status area now shows each request stage, live response receipt, retries, long-wait notices, and cancellation; the magic button can stop active requests immediately.",
-      changelogEarlierTitle: "Earlier highlights",
-      changelogImagesSummary: "0.8.1 added live public-data access for General HTML widgets and SVG-first animation and complex graphics.",
-      changelogPluginsSummary: "0.8.0 and earlier added editable professional diagrams, server-backed canvas storage, clipboard workflows, sourced web photos, and more reliable editing and export.",
+      changelogTitle: "Local-first Cloud and Echoes",
+      changelogIntro: "Version 1.0.0 connects your local Canvas with Cloud Projects, Favorites, and Echoes.",
+      changelogLocalCloud: "Open Cloud and favorite Canvases locally; add favorite Widgets to your current Canvas.",
+      changelogEchoes: "Publish to Echoes, Echo shared work, and share Widgets or Canvases as images.",
       changelogDone: "Got it",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
@@ -546,15 +535,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
       history: "Canvas history",
-      historyTitle: "Canvas history",
-      historyDescription: "Stores confirmed canvas content, including restorable animation scenes. Unconfirmed AI drafts are excluded.",
-      saveLocation: "Save location",
-      storageThisDevice: "This device",
-      storagePenEchoServer: "PenEcho server",
-      storagePenEchoCloud: "PenEcho Cloud",
-      storageThisDeviceDescription: "Saved only in this browser on this device. Other devices cannot see it.",
-      storagePenEchoServerDescription: "Saved on the computer running PenEcho. Anyone using this PenEcho service can see it after passing its access check.",
-      storagePenEchoCloudDescription: "Private, versioned Cloud storage for this account. Open the same project from desktop, macOS, and future iOS clients.",
+      historyTitle: "History",
+      historyDescription: "Confirmed canvases are saved here. AI drafts join only after you accept them.",
+      saveLocation: "Location",
+      storageThisDevice: "Device",
+      storagePenEchoServer: "Server",
+      storagePenEchoCloud: "Cloud",
+      storageThisDeviceDescription: "Saved only in this browser, on this device.",
+      storagePenEchoServerDescription: "Saved on this PenEcho host and shared with anyone who passes its access check.",
+      storagePenEchoCloudDescription: "Private, versioned storage in your account. Open the same project from any client.",
       canvasProject: "Project",
       canvasProjectAll: "All projects",
       canvasProjectUncategorized: "Uncategorized",
@@ -571,14 +560,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       saveCanvas: "Save canvas",
       saveCurrentSnapshot: "Save",
       exportPng: "Export PNG",
-      newCanvasTitle: "Start a new canvas?",
-      newCanvasDescription: "Save confirmed content and animation scenes before starting over. Unconfirmed AI drafts are not included.",
+      newCanvasTitle: "New canvas",
+      newCanvasDescription: "Save the confirmed canvas before starting over. Unaccepted AI drafts are not included.",
       loadCanvasTitle: "Load another canvas?",
       loadCanvasDescription: "This canvas has unsaved changes. Save them before loading another canvas.",
       currentSnapshot: "Current snapshot: {name} · {location}",
       noCurrentSnapshot: "There is no current snapshot to overwrite.",
       currentSnapshotOtherLocation: "Current snapshot {name} is in {location}. Select that location to overwrite it.",
-      newSnapshotName: "Name for new snapshot (optional)",
+      newSnapshotName: "New snapshot name",
       cancel: "Cancel",
       newWithoutSave: "Don't save",
       saveAsNewAndCreate: "Save as new",
@@ -586,15 +575,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       loadWithoutSave: "Load without saving",
       saveAsNewAndLoad: "Save as new and load",
       overwriteAndLoad: "Save and load",
-      snapshotName: "Snapshot name (optional)",
-      saveSnapshot: "Save New",
+      snapshotName: "Name (optional)",
+      saveSnapshot: "Save copy",
       snapshotSaving: "Saving canvas...",
       snapshotSavingShort: "Saving...",
       snapshotLibraryLoading: "Loading {location} canvases…",
       snapshotLibraryLoadingDetail: "The previous location is being replaced with verified items.",
       snapshotLibraryLoadFailed: "Could not load {location}. Select the location to try again.",
-      snapshotCloudSignInRequired: "Sign in to PenEcho Cloud first",
-      snapshotCloudSignInHint: "Your Cloud projects and Canvases will appear here after you sign in.",
+      snapshotCloudSignInRequired: "Sign in to view Cloud canvases",
+      snapshotCloudSignInHint: "Your Cloud projects and canvases appear here once you are signed in.",
       openPenEchoCloud: "Open PenEcho Cloud",
       openPenEchoCloudExternal: "Open PenEcho Cloud in a new tab",
       opensInNewTab: "Opens in a new tab",
@@ -610,10 +599,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       snapshotLoadFailed: "Loading stopped: {message} Select Load to try again.",
       loadSnapshot: "Load",
       deleteSnapshot: "Delete",
-      emptyDeviceHistory: "No canvases saved on this device yet",
-      emptyServerHistory: "No canvases saved on this PenEcho server yet",
-      emptyCloudHistory: "No canvases saved to PenEcho Cloud yet",
-      emptyProjectHistory: "No canvases saved in this project yet",
+      emptyDeviceHistory: "Nothing saved on this device yet",
+      emptyServerHistory: "Nothing saved on this server yet",
+      emptyCloudHistory: "Nothing saved to Cloud yet",
+      emptyProjectHistory: "Nothing saved in this project yet",
       emptyCanvas: "The canvas is empty",
       snapshotSaved: "Canvas snapshot saved",
       snapshotOverwritten: "Current snapshot overwritten",
@@ -695,7 +684,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       plugins: "Plugins",
       savedCrafts: "Favorites",
       savedCraftsTitle: "Favorite Widgets",
-      savedCraftsHint: "Your favorite Widgets. Select Add to place one on this Canvas.",
       savedLoading: "Loading favorites…",
       savedEmptyIn: "No favorite Widgets yet. Select ★ on any Widget to keep it here.",
       savedEmptyOut: "No favorite Widgets yet. Select ★ on any Widget—favorites stay on this device until you sign in to PenEcho Cloud.",
@@ -827,6 +815,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
       favoriteWidget: "Favorite widget",
+      favoriteWidgetSaving: "Saving favorite…",
       unfavoriteWidget: "Remove widget favorite",
       widgetFavorited: "Widget added to Favorites",
       widgetUnfavorited: "Widget removed from Favorites",
@@ -1110,7 +1099,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "0.9.0";
+  const CHANGELOG_VERSION = "1.0.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -3048,8 +3037,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     window.dispatchEvent(new CustomEvent("penecho:languagechange", { detail:{ language:state.language } }));
   }
   function updateThemeCopy() {
-    const key = { arcane: "taglineArcane", scifi: "taglineScifi", research: "taglineResearch", studio: "taglineStudio" }[state.theme];
-    document.querySelector("[data-i18n=tagline]").textContent = t(key);
     const focus = t({ arcane: "themeFocusArcane", scifi: "themeFocusScifi", research: "themeFocusResearch", studio: "themeFocusStudio" }[state.theme]);
     document.querySelector("#theme").setAttribute("title", focus);
     document.querySelector("#theme").setAttribute("aria-description", focus);
@@ -4318,6 +4305,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       communityOriginName,
       communityOriginGeneration,
       favorite: item.favorite === true,
+      favoriteBusy: false,
+      favoritePendingVersion: null,
     };
   }
   function restoreWidgets(items) {
@@ -4359,11 +4348,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     delete publicWidget.favorite;
     return { format:"penecho-widget", formatVersion:1, widget:publicWidget, ...communityImages };
   }
-  function setCommunityWidgetFavorite(widgetId, favorite) {
+  function setCommunityWidgetFavorite(widgetId, favorite, busy = false) {
     const widget = state.widgets.find((item) => item.id === widgetId);
     if (!widget) return false;
-    widget.favorite = favorite === true;
-    const record = state.handToolbarTargets.get(handToolbarKey("widget", widgetId));
+    if (busy === true && !widget.favoriteBusy) widget.favoritePendingVersion = widget.contentVersion;
+    if (typeof favorite === "boolean") {
+      const changedWhileSaving = favorite === true
+        && Number.isInteger(widget.favoritePendingVersion)
+        && widget.favoritePendingVersion !== widget.contentVersion;
+      if (!changedWhileSaving) widget.favorite = favorite;
+    }
+    widget.favoriteBusy = busy === true;
+    if (!widget.favoriteBusy) widget.favoritePendingVersion = null;
     syncObjectChrome();
     return widget.favorite;
   }
@@ -4680,6 +4676,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (message.type === "penecho-widget-updated") {
       widget.contentVersion++;
+      if (widget.favorite) {
+        widget.favorite = false;
+        syncObjectChrome();
+      }
       return;
     }
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
@@ -6403,18 +6403,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       activate:(button) => void beginWidgetRefineConfirmation(options.refine, objectChromeAnchor(button)),
     });
     if (options.community && window.PenEchoCommunityUI) {
+      const favoriteLabelKey = widget.favoriteBusy ? "favoriteWidgetSaving" : widget.favorite ? "unfavoriteWidget" : "favoriteWidget";
       items.push({
         key:`widget:${widget.id}:tool-favorite`,
         kind:"favorite",
-        label:window.PenEchoCommunityUI.label?.("favoriteWidget") || "Favorite",
-        baseWidth:112,
-        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:widget.id } })),
+        label:window.PenEchoCommunityUI.label?.(favoriteLabelKey) || "Favorite",
+        baseWidth:36,
+        iconOnly:true,
+        pressed:widget.favorite === true,
+        busy:widget.favoriteBusy === true,
+        activate:() => {
+          if (widget.favoriteBusy) return;
+          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:widget.id } }));
+        },
       });
       items.push({
         key:`widget:${widget.id}:tool-share`,
         kind:"share",
         label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
-        baseWidth:104,
+        baseWidth:36,
+        iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
       });
     }
@@ -6686,7 +6694,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (kind === "move") return;
+      if (kind === "move" || button.disabled) return;
       if (kind === "refine") triggerWidgetRefineClickPulse(button.penechoSpec?.refineCandidate?.widgetId);
       button.penechoSpec?.activate?.(button);
     });
@@ -6827,14 +6835,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];
       button.penechoSpec = spec;
       button.classList.toggle("widget-tool", Boolean(spec.widgetTool));
+      button.classList.toggle("icon-only", Boolean(spec.iconOnly));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
+      button.classList.toggle("is-favorite", Boolean(spec.kind === "favorite" && spec.pressed));
+      button.classList.toggle("loading", Boolean(spec.busy));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
       if (spec.widgetToolGroup) button.dataset.widgetToolGroup = spec.widgetToolGroup;
       else delete button.dataset.widgetToolGroup;
       button.setAttribute("aria-label", label);
+      button.disabled = Boolean(spec.busy);
+      if (spec.kind === "favorite") button.setAttribute("aria-pressed", String(Boolean(spec.pressed)));
+      else button.removeAttribute("aria-pressed");
+      if (spec.busy) button.setAttribute("aria-busy", "true");
+      else button.removeAttribute("aria-busy");
       if (spec.kind === "refine") button.removeAttribute("title");
       else button.title = label;
       if (["copy", "refine", "favorite", "share"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;

@@ -30,14 +30,13 @@
   const localHostControlsAvailable = window.PENECHO_CONFIG?.runtime !== "cloud";
   const BROWSER_SIGN_IN_POLL_MS = 800;
   const BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000;
-  const CLOUD_STATUS_POLL_MS = 1500;
   const CLOUD_COPY = Object.freeze({
     en:Object.freeze({
       close:"Close",
-      cloudSubtitle:"Private projects and favorite building blocks.",
+      cloudSubtitle:"Private canvases and favorites, synced to your account.",
       cloudArea:"PenEcho Cloud area",
       cloudProjects:"Projects",
-      cloudProjectsHint:"Private, versioned Canvases",
+      cloudProjectsHint:"Private, versioned canvases",
       favorites:"Favorites",
       favoritesHint:"Open a Canvas here or add a Widget to this Canvas.",
       all:"All",
@@ -55,6 +54,7 @@
       accountSettings:"Account settings",
       signOutHelp:"Signing out removes this account from this PenEcho host. It does not remove the existing device link.",
       refreshAccount:"Refresh account",
+      refreshCurrentView:"Refresh",
       signOutHost:"Sign out on this host",
       signOutConfirm:"Sign out on this PenEcho host? The device link will remain available.",
       localSignInHelp:"Sign in for private projects and favorites; API keys stay on this device.",
@@ -91,13 +91,12 @@
       myPenEcho:"My PenEcho",
       linkDevice:"Link device",
       requestFailed:"PenEcho Cloud request failed.",
-      chooseProject:"Choose a project, then open or save a versioned Canvas.",
-      signInProjects:"Sign in to view private projects and continue your work across devices.",
+      signInProjects:"Sign in to view private projects and pick up your work on any device.",
       cloudSavingNotReady:"Cloud project saving is not ready yet.",
       used:"{size} used",
       of:" of {size}",
       storageUsed:"Cloud storage used",
-      storageHelp:"Every successful save creates an immutable revision. Concurrent edits are never silently overwritten.",
+      storageHelp:"Saved versions are never overwritten.",
       currentProject:"Current Cloud project",
       untitledProject:"Untitled project",
       project:"Project",
@@ -108,17 +107,17 @@
       newProject:"+ New project",
       saveCurrentHere:"Save current Canvas here",
       canvasesCount:"{count} Canvas{suffix}",
-      noCanvases:"No Canvases yet. Save the current Canvas here to start.",
+      noCanvases:"Nothing here yet. Save the current canvas to this project.",
       untitledCanvas:"Untitled Canvas",
       updated:"Updated {date} · {size}",
       openNewPage:"Open in new page →",
       openCanvasHere:"Open Canvas",
       openingCanvas:"Opening…",
-      noProjects:"No Cloud projects yet. Create one to keep this Canvas available across devices.",
+      noProjects:"No projects yet. Create one to keep this canvas on every device.",
       manageWeb:"Manage revisions, Trash and recovery on the web ↗",
       loadingProjects:"Loading Cloud projects…",
       syncUnsupported:"This Cloud does not support the required project sync protocol.",
-      signInFavorites:"Sign in to view favorites saved to your PenEcho Cloud account.",
+      signInFavorites:"Sign in to view favorites saved to your account.",
       signInAction:"Sign in",
       loadingFavorites:"Loading favorites…",
       noFavorites:"No favorites yet. Favorite a Craft in Echoes to keep it here.",
@@ -161,35 +160,32 @@
       tagCount:"{count} / 8 tags",
       generatingPreview:"Generating preview…",
       automaticSharePreview:"Automatic {kind} share preview",
-      previewValidating:"WebP · validating content",
       autoFillCurrentAi:"Auto-fill with current AI",
       contributionPlaceholder:"What did you move forward?",
       continuationPlaceholder:"What question, detail, or direction should the next Crafter Echo?",
-      rightsBeforeCc:"I have the right to publish this work. Its visual and written content is shared under ",
-      rightsBetweenCcMit:", embedded source under ",
-      rightsAfterMit:", and listing metadata under CC0. Others may Echo with attribution and the same visual license; published versions and existing lineage cannot be withdrawn.",
-      trainingBeforeLicense:"I understand this is required to Publish. I allow PenEcho to use this public Craft to build, train, evaluate, improve, and commercialize PenEcho models and services under the ",
-      trainingAfterLicense:". Private projects, drafts, Link Device traffic, API keys, and private model requests are not included.",
+      publicationAgreementBeforeLink:"I have the right to publish this work and accept the ",
+      publicationAgreementLink:"Publication Agreement",
+      publicationAgreementAfterLink:".",
+      shareSignInRequired:"Please sign in to PenEcho Cloud before sharing.",
       tagLimit:"Use no more than 8 tags.",
       tagLength:"Each tag must be 32 characters or fewer.",
       tagStart:"Tags must start with a letter or number.",
       shareNote:"A rough sketch can be the first surviving record of a great idea. PenEcho captures this {kind} automatically—no image upload—and preserves every attributed step. The validated WebP is at most 2048 × 2048 and 4 MB.",
       usesCurrentAi:"Uses the AI connection currently active on this device.",
-      nameLabel:"Name",
+      nameLabel:"Title",
       descriptionLabel:"Description",
       categoryLabel:"Category",
       tagsLabel:"Tags (up to 8, comma separated)",
-      continuationLabel:"What should the next Crafter Echo?",
+      continuationLabel:"What should the next Crafter Echo? (optional)",
       publishAndSave:"Publish + Favorite",
       publishStroke:"Publish this stroke",
       validatingUploading:"Validating and uploading…",
       waitPreview:"Wait for the automatic preview to finish.",
-      publishNameRequired:"Enter a name before publishing.",
+      publishNameRequired:"Enter a title before publishing.",
+      publishDescriptionRequired:"Enter a description before publishing.",
       publishCategoryRequired:"Choose a category before publishing.",
       publishContributionRequired:"Tell the next Crafter what you moved forward.",
-      publishContinuationRequired:"Tell the next Crafter what to Echo.",
-      publishRightsRequired:"Confirm the publication rights and open licenses before publishing.",
-      publishTrainingRequired:"Confirm the required public model-training permission before publishing.",
+      publishAgreementRequired:"Accept the Publication Agreement before publishing.",
       addingLineage:"Adding your step to the Craft lineage…",
       publishingFirstStep:"Publishing the first step of this Craft…",
       publishedCraftMissing:"PenEcho Cloud did not return the published Craft.",
@@ -211,20 +207,17 @@
       done:"Done",
       publicCommonsTitle:"Your Craft is now part of Echoes",
       publicCommunityLink:"Public community link",
-      publishedImageShareTitle:"Share this published Craft",
-      publishedImageShareHelp:"Creates a share-ready image from the validated preview. Its visible link and share payload return to this public page.",
+      publishedDialogTitle:"Published to Echoes",
+      publishedDialogSubtitle:"Share this Craft or open its public page.",
+      shareAsLink:"Share as link",
       shareAsImage:"Share as image",
-      downloadImage:"Download image",
-      preparingShareImage:"Preparing share image…",
-      shareImageReady:"Share image ready.",
-      shareImageShared:"Image shared.",
-      shareImageDownloaded:"Image downloaded. Share it with the included public link.",
-      shareImageCancelled:"Image sharing was cancelled.",
-      shareImageFailed:"Could not prepare the share image.",
-      shareCardEyebrow:"ECHOES",
-      shareCardCallToAction:"Echo",
-      shareCardLicense:"CC BY-SA 4.0 · Source and attribution:",
-      nativeImageShareText:"View and Echo this {kind} on PenEcho.",
+      shareImageEmbedTitle:"Copy linked image embed code",
+      shareLinkShared:"Link shared.",
+      shareLinkCancelled:"Link sharing was cancelled.",
+      shareLinkFailed:"Could not share the public link.",
+      shareImageEmbedCopied:"Linked image embed code copied.",
+      shareImageEmbedFailed:"Could not copy the image embed code.",
+      nativeShareText:"View and Echo this {kind} on PenEcho.",
       shareFailed:"Could not share this item.",
       cancel:"Cancel",
       askingAi:"Asking your current AI to improve the listing…",
@@ -235,18 +228,16 @@
       publishedStep:"a published step",
       lineageNotice:"Building on {step}{name}. The original attribution and this new step will stay connected.",
       automaticPreviewMissing:"The automatic preview was not created.",
-      automaticPreviewMeta:"Automatic WebP · {width} × {height} · no image upload needed",
-      defaultWidgetDescription:"A reusable Widget for the PenEcho community.",
-      defaultCanvasDescription:"A reusable Canvas for the PenEcho community.",
       previewRestored:"Preview ready. Your unfinished listing was restored.",
       previewReady:"Preview ready.",
       previewFailed:"Could not generate the preview.",
       sharingUnavailable:"Sharing is unavailable until the preview is valid.",
       favoriteUnsupported:"This PenEcho version does not support widget favorites.",
+      favoriteLocalOnlyQuota:"Cloud storage is full. Saved locally only.",
     }),
     zh:Object.freeze({
       close:"关闭",
-      cloudSubtitle:"私有项目与收藏内容。",
+      cloudSubtitle:"私有画布与收藏，已同步到你的账号。",
       cloudArea:"PenEcho Cloud 区域",
       cloudProjects:"项目",
       cloudProjectsHint:"私有的版本化画布",
@@ -267,6 +258,7 @@
       accountSettings:"账户设置",
       signOutHelp:"退出只会从当前 PenEcho 主机移除此账户，不会移除已有的设备连接。",
       refreshAccount:"刷新账户",
+      refreshCurrentView:"刷新",
       signOutHost:"在此主机退出",
       signOutConfirm:"要在此 PenEcho 主机退出吗？设备连接会继续保留。",
       localSignInHelp:"登录后即可使用私有项目和收藏；API 密钥仍保存在此设备。",
@@ -303,13 +295,12 @@
       myPenEcho:"我的 PenEcho",
       linkDevice:"连接设备",
       requestFailed:"PenEcho Cloud 请求失败。",
-      chooseProject:"选择项目，然后打开或保存版本化画布。",
-      signInProjects:"登录后可查看私有项目，并在不同设备间继续工作。",
+      signInProjects:"登录后查看私有项目，在任意设备上继续创作。",
       cloudSavingNotReady:"Cloud 项目保存功能尚未就绪。",
       used:"已使用 {size}",
       of:"，共 {size}",
       storageUsed:"Cloud 存储用量",
-      storageHelp:"每次成功保存都会创建不可变版本，并发编辑不会被静默覆盖。",
+      storageHelp:"已保存版本不会被覆盖。",
       currentProject:"当前 Cloud 项目",
       untitledProject:"未命名项目",
       project:"项目",
@@ -320,17 +311,17 @@
       newProject:"+ 新建项目",
       saveCurrentHere:"将当前画布保存到这里",
       canvasesCount:"{count} 个画布",
-      noCanvases:"这里还没有画布。先把当前画布保存到此项目。",
+      noCanvases:"这里还没有画布，先把当前画布保存到此项目。",
       untitledCanvas:"未命名画布",
       updated:"更新于 {date} · {size}",
       openNewPage:"在新页面打开 →",
       openCanvasHere:"打开画布",
       openingCanvas:"正在打开…",
-      noProjects:"还没有 Cloud 项目。创建一个项目，即可在不同设备上使用当前画布。",
+      noProjects:"还没有项目。创建一个，让当前画布在每台设备上可用。",
       manageWeb:"在网页端管理版本、回收站与恢复 ↗",
       loadingProjects:"正在加载 Cloud 项目…",
       syncUnsupported:"此 Cloud 不支持当前所需的项目同步协议。",
-      signInFavorites:"登录后可查看保存在 PenEcho Cloud 账户中的收藏。",
+      signInFavorites:"登录后查看保存在账号中的收藏。",
       signInAction:"登录",
       loadingFavorites:"正在加载收藏…",
       noFavorites:"还没有收藏。可在 Echoes 中收藏后回到这里使用。",
@@ -373,35 +364,32 @@
       tagCount:"{count} / 8 个标签",
       generatingPreview:"正在生成预览…",
       automaticSharePreview:"自动生成的{kind}分享预览",
-      previewValidating:"WebP · 正在验证内容",
       autoFillCurrentAi:"使用当前 AI 自动填写",
       contributionPlaceholder:"你推进了哪些内容？",
       continuationPlaceholder:"下一位创作者应该 Echo 哪个问题、细节或方向？",
-      rightsBeforeCc:"我有权发布此作品。其视觉与文字内容采用 ",
-      rightsBetweenCcMit:"，嵌入的源代码采用 ",
-      rightsAfterMit:"，列表元数据采用 CC0。其他人可以在保留署名并沿用相同视觉许可的前提下 Echo；已发布版本和现有谱系无法撤回。",
-      trainingBeforeLicense:"我理解这是发布所必需的授权。我允许 PenEcho 根据 ",
-      trainingAfterLicense:" 使用此公开创作来构建、训练、评估、改进和商业化 PenEcho 模型与服务。私有项目、草稿、设备连接流量、API 密钥及私有模型请求不在此范围内。",
+      publicationAgreementBeforeLink:"我有权发布此作品，并接受",
+      publicationAgreementLink:"《发布协议》",
+      publicationAgreementAfterLink:"。",
+      shareSignInRequired:"请先登录 PenEcho Cloud，再进行分享。",
       tagLimit:"标签不能超过 8 个。",
       tagLength:"每个标签不能超过 32 个字符。",
       tagStart:"标签必须以字母或数字开头。",
       shareNote:"一张草图也可能成为伟大想法最早保留下来的记录。PenEcho 会自动捕获此{kind}，无需上传图片，并保留每一步的署名。经验证的 WebP 最大为 2048 × 2048、4 MB。",
       usesCurrentAi:"使用此设备上当前启用的 AI 连接。",
-      nameLabel:"名称",
+      nameLabel:"标题",
       descriptionLabel:"描述",
       categoryLabel:"分类",
       tagsLabel:"标签（最多 8 个，用逗号分隔）",
-      continuationLabel:"下一位创作者应该 Echo 什么？",
+      continuationLabel:"下一位创作者应该 Echo 什么？（可选）",
       publishAndSave:"发布并收藏",
       publishStroke:"发布此笔触",
       validatingUploading:"正在验证并上传…",
       waitPreview:"请等待自动预览生成完成。",
-      publishNameRequired:"请先输入名称再发布。",
+      publishNameRequired:"请先填写标题再发布。",
+      publishDescriptionRequired:"请先填写描述再发布。",
       publishCategoryRequired:"请先选择分类再发布。",
       publishContributionRequired:"请告诉下一位创作者你推进了哪些内容。",
-      publishContinuationRequired:"请告诉下一位创作者应该 Echo 什么。",
-      publishRightsRequired:"发布前请确认发布权利与开放许可。",
-      publishTrainingRequired:"发布前请确认必需的公开模型训练授权。",
+      publishAgreementRequired:"发布前请接受《发布协议》。",
       addingLineage:"正在将你的步骤加入创作谱系…",
       publishingFirstStep:"正在发布此创作的第一步…",
       publishedCraftMissing:"PenEcho Cloud 未返回已发布的创作。",
@@ -423,20 +411,17 @@
       done:"完成",
       publicCommonsTitle:"你的创作现已加入 Echoes",
       publicCommunityLink:"公开社区链接",
-      publishedImageShareTitle:"分享这份已发布的创作",
-      publishedImageShareHelp:"使用已验证的预览生成可分享图片。图中的可见链接与分享内容都会返回此公开页面。",
+      publishedDialogTitle:"已发布到 Echoes",
+      publishedDialogSubtitle:"分享此 Craft，或打开公开页面。",
+      shareAsLink:"分享链接",
       shareAsImage:"分享为图片",
-      downloadImage:"下载图片",
-      preparingShareImage:"正在准备分享图片…",
-      shareImageReady:"分享图片已就绪。",
-      shareImageShared:"图片已分享。",
-      shareImageDownloaded:"图片已下载。分享时请保留图中的公开链接。",
-      shareImageCancelled:"已取消图片分享。",
-      shareImageFailed:"无法准备分享图片。",
-      shareCardEyebrow:"ECHOES",
-      shareCardCallToAction:"Echo",
-      shareCardLicense:"CC BY-SA 4.0 · 来源与署名：",
-      nativeImageShareText:"在 PenEcho 查看并 Echo 此{kind}。",
+      shareImageEmbedTitle:"复制带链接的图片嵌入代码",
+      shareLinkShared:"链接已分享。",
+      shareLinkCancelled:"已取消分享链接。",
+      shareLinkFailed:"无法分享公开链接。",
+      shareImageEmbedCopied:"带链接的图片嵌入代码已复制。",
+      shareImageEmbedFailed:"无法复制图片嵌入代码。",
+      nativeShareText:"在 PenEcho 查看并 Echo 此{kind}。",
       shareFailed:"无法分享此内容。",
       cancel:"取消",
       askingAi:"正在请当前 AI 优化发布信息…",
@@ -447,23 +432,24 @@
       publishedStep:"一个已发布步骤",
       lineageNotice:"正在基于{step}{name}继续创作。原始署名与此新步骤会保持关联。",
       automaticPreviewMissing:"未能创建自动预览。",
-      automaticPreviewMeta:"自动 WebP · {width} × {height} · 无需上传图片",
-      defaultWidgetDescription:"一个可供 PenEcho 社区复用的组件。",
-      defaultCanvasDescription:"一个可供 PenEcho 社区复用的画布。",
       previewRestored:"预览已就绪，未完成的发布信息已恢复。",
       previewReady:"预览已就绪。",
       previewFailed:"无法生成预览。",
       sharingUnavailable:"预览验证通过后才能分享。",
       favoriteUnsupported:"此 PenEcho 版本不支持收藏组件。",
+      favoriteLocalOnlyQuota:"云端空间已满，已仅保存在本地。",
     }),
   });
   const state = {
     status:null,
     library:null,
+    favoriteCanvases:null,
+    favoriteWidgets:null,
     selectedProjectId:null,
     cloudSection:"projects",
     cloudFavoriteKind:"all",
     busy:false,
+    favoriteWidgetOperations:new Set(),
     browserSignIn:{ id:0, timer:0, poll:null, polling:false, active:false, expiresAt:0, popup:null, authorizationUrl:"", popupBlocked:false, tone:"", message:"" },
   };
 
@@ -482,6 +468,21 @@
 
   function communityUrl(item) {
     return new URL(String(item?.shareUrl || `/community/${item?.id || ""}`), `${cloudOrigin()}/`).toString();
+  }
+
+  function communityThumbnailUrl(item) {
+    return new URL(`/api/v1/community/items/${encodeURIComponent(String(item?.id || ""))}/thumbnail`, `${cloudOrigin()}/`).toString();
+  }
+
+  function htmlAttribute(value) {
+    return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function linkedImageEmbed(item, name) {
+    const href = htmlAttribute(communityUrl(item));
+    const src = htmlAttribute(communityThumbnailUrl(item));
+    const alt = htmlAttribute(`${String(name || item?.name || "PenEcho Craft")} — PenEcho Echoes`);
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer"><img src="${src}" alt="${alt}" width="1200" height="675" loading="lazy" decoding="async" style="max-width:100%;height:auto"></a>`;
   }
 
   function cloudDevicesUrl() {
@@ -548,7 +549,6 @@
   let activeCloudOverlay = null;
 
   function closeOverlay(overlay) {
-    stopCloudStatusWatch();
     const restoreFocus = overlay?._restoreFocus;
     overlay?.remove();
     if (overlay === activeCloudOverlay) activeCloudOverlay = null;
@@ -610,6 +610,11 @@
       // slower response overwrite fresher status.
       if (seq !== statusRequestSeq) return state.status;
       state.status = status;
+      if (previouslySignedIn !== accountSignedIn()) {
+        state.library = null;
+        state.favoriteCanvases = null;
+        state.favoriteWidgets = null;
+      }
       if (previouslySignedIn && !accountSignedIn()) browserSignInMessage("", "");
       updateCloudButton();
       return state.status;
@@ -623,68 +628,6 @@
       else cloudButton.dataset.state = "signed-out";
       return state.status;
     }
-  }
-
-  let cloudStatusTimer = 0;
-  let cloudStatusPolling = false;
-  let cloudStatusWatchId = 0;
-  let cloudStatusPoll = null;
-
-  function cloudStatusSignature() {
-    const device = state.status?.device || {};
-    const account = state.status?.account || {};
-    return JSON.stringify([
-      Boolean(state.status?.accountSession?.signedIn),
-      account.name || "",
-      Number(account.credits || 0),
-      Boolean(device.configured),
-      Boolean(device.enabled),
-      Boolean(device.connected),
-      device.state || "",
-      device.id || "",
-    ]);
-  }
-
-  function stopCloudStatusWatch() {
-    cloudStatusWatchId++; // invalidate any in-flight poll from a previous watch
-    clearTimeout(cloudStatusTimer);
-    cloudStatusTimer = 0;
-    cloudStatusPolling = false;
-    cloudStatusPoll = null;
-  }
-
-  function startCloudStatusWatch(overlay, render) {
-    stopCloudStatusWatch();
-    const id = cloudStatusWatchId;
-    let previous = cloudStatusSignature();
-    let previouslySignedIn = accountSignedIn();
-    const poll = async () => {
-      // Never run two polls at once and never let a stale watch touch shared
-      // flags; an in-flight poll always reschedules in its finally block.
-      if (id !== cloudStatusWatchId || !overlay.isConnected || cloudStatusPolling) return;
-      cloudStatusPolling = true;
-      try {
-        await refreshStatus();
-        if (id !== cloudStatusWatchId || !overlay.isConnected) return;
-        const currentlySignedIn = accountSignedIn();
-        if (!previouslySignedIn && currentlySignedIn) {
-          finishSuccessfulBrowserSignIn(overlay);
-          return;
-        }
-        previouslySignedIn = currentlySignedIn;
-        const current = cloudStatusSignature();
-        if (current !== previous) {
-          previous = current;
-          render();
-        }
-      } finally {
-        if (id !== cloudStatusWatchId) return; // a newer watch owns the timer and flags now
-        cloudStatusPolling = false;
-        if (overlay.isConnected) cloudStatusTimer = setTimeout(poll, document.visibilityState === "visible" ? CLOUD_STATUS_POLL_MS : 5000);
-      }
-    };
-    cloudStatusPoll = poll;
-    cloudStatusTimer = setTimeout(poll, CLOUD_STATUS_POLL_MS);
   }
 
   function stopBrowserSignInWatch() {
@@ -793,7 +736,7 @@
       role:browserSignIn.tone === "error" ? "alert" : "status",
       "aria-live":browserSignIn.tone === "error" ? "assertive" : "polite",
     });
-    const signIn = el("button", { class:"cloud-button primary", type:"button", text:browserSignIn.active ? cloudT("waitingBrowser") : window.penechoDesktop ? cloudT("continueBrowser") : cloudT("signInBrowser"), ...(browserSignIn.active ? { disabled:"" } : {}), onclick:async () => {
+    const signIn = el("button", { class:"cloud-button primary cloud-account-sign-in", type:"button", text:browserSignIn.active ? cloudT("waitingBrowser") : window.penechoDesktop ? cloudT("continueBrowser") : cloudT("signInBrowser"), ...(browserSignIn.active ? { disabled:"" } : {}), onclick:async () => {
       const desktopApp = Boolean(window.penechoDesktop);
       const popup = desktopApp ? null : window.open("about:blank", "penecho-cloud-sign-in", "popup,width=760,height=760");
       await action(render, async () => {
@@ -904,24 +847,22 @@
     }
   }
 
-  function focusCloudSignIn(owner) {
-    const signIn = owner?.closest?.(".penecho-cloud-overlay")?.querySelector?.(".cloud-local-controls .cloud-button.primary");
-    if (signIn) signIn.focus();
+  function startCloudSignIn(owner) {
+    const signIn = owner?.closest?.(".penecho-cloud-overlay")?.querySelector?.(".cloud-account-sign-in");
+    if (signIn && !signIn.disabled) signIn.click();
+    else if (signIn) signIn.focus();
     else cloudButton.focus();
   }
 
   function cloudSignInEmpty(owner, messageKey) {
     return el("div", { class:"cloud-empty cloud-auth-empty" }, [
       el("p", { text:cloudT(messageKey) }),
-      localHostControlsAvailable ? el("button", { class:"cloud-button primary", type:"button", text:cloudT("signInAction"), onclick:() => focusCloudSignIn(owner) }) : null,
+      localHostControlsAvailable ? el("button", { class:"cloud-button primary", type:"button", text:cloudT("signInAction"), onclick:() => startCloudSignIn(owner) }) : null,
     ]);
   }
 
-  function cloudProjectsPanel() {
+  function cloudProjectsPanel(reload = false) {
     const panel = el("section", { class:"penecho-cloud-panel cloud-projects-panel" });
-    panel.append(el("div", { class:"cloud-panel-heading" }, [
-      el("div", {}, [el("h3", { text:cloudT("cloudProjects") }), el("p", { text:cloudT("chooseProject") })]),
-    ]));
     if (!accountSignedIn()) {
       panel.append(cloudSignInEmpty(panel, "signInProjects"));
       return panel;
@@ -1031,7 +972,12 @@
         content.setAttribute("aria-busy", "false");
       }
     }
-    queueMicrotask(load);
+    if (state.library && !reload) {
+      renderLibrary();
+      content.setAttribute("aria-busy", "false");
+    } else {
+      queueMicrotask(load);
+    }
     return panel;
   }
 
@@ -1104,7 +1050,7 @@
     ]);
   }
 
-  function cloudFavoritesPanel() {
+  function cloudFavoritesPanel(reload = false) {
     const panel = el("section", { class:"penecho-cloud-panel cloud-favorites-panel" });
     panel.append(el("div", { class:"cloud-panel-heading" }, [el("div", {}, [
       el("h3", { text:cloudT("favorites") }),
@@ -1117,7 +1063,9 @@
     const filters = el("div", { class:"cloud-favorite-filters", role:"group", "aria-label":cloudT("favorites") });
     const content = el("div", { class:"cloud-library-list", "aria-live":"polite", "aria-busy":"true" });
     panel.append(filters, content);
-    let canvases = [], widgets = [], loaded = false;
+    let canvases = Array.isArray(state.favoriteCanvases) ? state.favoriteCanvases : [];
+    let widgets = Array.isArray(state.favoriteWidgets) ? state.favoriteWidgets : [];
+    let loaded = Array.isArray(state.favoriteCanvases) && Array.isArray(state.favoriteWidgets);
     function renderFavorites() {
       filters.replaceChildren(...[
         ["all", "all"],
@@ -1138,7 +1086,7 @@
       content.replaceChildren(...(rows.length ? rows : [el("div", { class:"cloud-empty", text:cloudT(emptyKey) })]));
     }
     renderFavorites();
-    queueMicrotask(async () => {
+    const load = async () => {
       content.setAttribute("aria-busy", "true");
       content.replaceChildren(el("div", { class:"cloud-message", role:"status", text:cloudT("loadingFavorites") }));
       try {
@@ -1148,6 +1096,8 @@
         ]);
         canvases = Array.isArray(canvasResult.items) ? canvasResult.items : [];
         widgets = widgetResult;
+        state.favoriteCanvases = canvases;
+        state.favoriteWidgets = widgets;
         loaded = true;
         renderFavorites();
       } catch (error) {
@@ -1155,13 +1105,19 @@
       } finally {
         content.setAttribute("aria-busy", "false");
       }
-    });
+    };
+    if (loaded && !reload) {
+      renderFavorites();
+      content.setAttribute("aria-busy", "false");
+    } else {
+      queueMicrotask(load);
+    }
     return panel;
   }
 
-  function cloudSectionPanel() {
-    if (state.cloudSection === "favorites") return cloudFavoritesPanel();
-    return cloudProjectsPanel();
+  function cloudSectionPanel(reload = false) {
+    if (state.cloudSection === "favorites") return cloudFavoritesPanel(reload);
+    return cloudProjectsPanel(reload);
   }
 
   async function openCloud() {
@@ -1177,7 +1133,7 @@
     activeCloudOverlay = shell.overlay;
     const layout = el("div", { class:"penecho-cloud-layout" });
     shell.body.append(layout);
-    function render() {
+    function render({ reload = false } = {}) {
       const workspace = el("div", { class:"cloud-workspace" });
       const sections = el("nav", { class:"cloud-section-tabs", role:"tablist", "aria-label":cloudT("cloudArea") });
       const definitions = [
@@ -1196,7 +1152,7 @@
           tabindex:active ? "0" : "-1",
           onclick:() => {
             state.cloudSection = value;
-            render();
+            render({ reload:true });
             queueMicrotask(() => document.querySelector(`#cloud-tab-${value}`)?.focus());
           },
         }, [el("strong", { text:cloudT(label) })]));
@@ -1216,11 +1172,32 @@
         tabs[next].focus();
         tabs[next].click();
       });
-      const sectionPanel = cloudSectionPanel();
+      const refreshView = el("button", {
+        class:"cloud-button cloud-section-refresh",
+        type:"button",
+        text:`↻ ${cloudT("refreshCurrentView")}`,
+        "aria-label":cloudT("refreshCurrentView"),
+        onclick:async () => {
+          if (state.busy) return;
+          state.busy = true;
+          refreshView.disabled = true;
+          refreshView.setAttribute("aria-busy", "true");
+          try {
+            await refreshStatus();
+            if (shell.overlay.isConnected) render({ reload:true });
+          } finally {
+            state.busy = false;
+            refreshView.disabled = false;
+            refreshView.setAttribute("aria-busy", "false");
+          }
+        },
+      });
+      const sectionToolbar = el("div", { class:"cloud-section-toolbar" }, [sections, refreshView]);
+      const sectionPanel = cloudSectionPanel(reload);
       sectionPanel.id = "cloud-section-panel";
       sectionPanel.setAttribute("role", "tabpanel");
       sectionPanel.setAttribute("aria-labelledby", `cloud-tab-${state.cloudSection}`);
-      workspace.append(sections, sectionPanel);
+      workspace.append(sectionToolbar, sectionPanel);
       layout.classList.toggle("remote-cloud-runtime", !localHostControlsAvailable);
       if (localHostControlsAvailable) {
         const accountColumn = el("aside", { class:"cloud-local-controls", "aria-label":cloudT("thisDevice") }, [accountPanel(render), devicePanel(render)]);
@@ -1230,240 +1207,155 @@
       }
     }
     shell.overlay._cloudRender = render;
-    render();
-    startCloudStatusWatch(shell.overlay, render);
+    render({ reload:true });
   }
 
-  function shareCardRoundedRect(context, x, y, width, height, radius) {
-    const corner = Math.min(radius, width / 2, height / 2);
-    context.beginPath();
-    context.moveTo(x + corner, y);
-    context.lineTo(x + width - corner, y);
-    context.quadraticCurveTo(x + width, y, x + width, y + corner);
-    context.lineTo(x + width, y + height - corner);
-    context.quadraticCurveTo(x + width, y + height, x + width - corner, y + height);
-    context.lineTo(x + corner, y + height);
-    context.quadraticCurveTo(x, y + height, x, y + height - corner);
-    context.lineTo(x, y + corner);
-    context.quadraticCurveTo(x, y, x + corner, y);
-    context.closePath();
-  }
-
-  function shareCardLines(context, value, maximumWidth) {
-    const characters = Array.from(String(value || "").trim().replace(/\s+/g, " "));
-    if (!characters.length) return [];
-    const lines = [];
-    let line = "";
-    for (const character of characters) {
-      const candidate = line + character;
-      if (!line || context.measureText(candidate).width <= maximumWidth) {
-        line = candidate;
-        continue;
+  function publishedCraftDialog({ item, kind, kindLabel, artifact, bridge, originError, favoriteError, favoriteAfterShare }) {
+    const url = communityUrl(item), publishedName = String(item.name || cloudT(kind === "widget" ? "widgetKind" : "canvasKind"));
+    const shell = dialogShell({ title:cloudT("publishedDialogTitle"), subtitle:cloudT("publishedDialogSubtitle") });
+    shell.dialog.classList.add("publish-success");
+    const status = el("p", { class:`cloud-published-status ${originError || favoriteError ? "error" : "success"}`, role:"status", "aria-live":"polite", text:originError
+      ? cloudT("publishedLocalLinkAttention")
+      : favoriteError
+        ? cloudT("publishedFavoriteRetry")
+        : cloudT(favoriteAfterShare ? "publishedAndSaved" : "publishedContinues") });
+    const localSourceMessage = el("p", { class:"cloud-published-source", text:originError
+      ? cloudT("originRetryMessage", { kind:kindLabel, step:Number(item.generation || 0) + 1 })
+      : cloudT("originLinkedMessage", { kind:kindLabel, step:item.generation ? cloudT("stepNumber", { number:Number(item.generation) + 1 }) : cloudT("firstStroke") }) });
+    const actions = el("div", { class:"cloud-published-actions" });
+    let busy = false;
+    const shareLink = el("button", { class:"cloud-button primary", type:"button", text:cloudT("shareAsLink"), onclick:async () => {
+      if (busy) return;
+      busy = true;
+      shareLink.disabled = shareImage.disabled = true;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title:publishedName, text:cloudT("nativeShareText", { kind:kindLabel }), url });
+          status.className = "cloud-published-status success";
+          status.textContent = cloudT("shareLinkShared");
+        } else {
+          await copyText(url);
+          status.className = "cloud-published-status success";
+          status.textContent = cloudT("publicLinkCopied");
+        }
+      } catch (error) {
+        status.className = `cloud-published-status${error?.name === "AbortError" ? "" : " error"}`;
+        status.textContent = cloudT(error?.name === "AbortError" ? "shareLinkCancelled" : "shareLinkFailed");
+      } finally {
+        busy = false;
+        shareLink.disabled = shareImage.disabled = false;
       }
-      lines.push(line.trimEnd());
-      line = character.trimStart();
-    }
-    if (line) lines.push(line.trimEnd());
-    return lines;
-  }
-
-  function shareCardLimitedLines(context, value, maximumWidth, maximumLines) {
-    const lines = shareCardLines(context, value, maximumWidth);
-    if (lines.length <= maximumLines) return lines;
-    const visible = lines.slice(0, maximumLines), suffix = "…";
-    let last = visible.at(-1);
-    while (last && context.measureText(`${last}${suffix}`).width > maximumWidth) last = last.slice(0, -1);
-    visible[visible.length - 1] = `${last.trimEnd()}${suffix}`;
-    return visible;
-  }
-
-  function shareCardImage(source, errorKey = "shareImageFailed") {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.decoding = "async";
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error(cloudT(errorKey)));
-      image.src = source;
-    });
-  }
-
-  function shareCardPreviewImage(preview) {
-    if (!preview?.dataBase64 || (preview.contentType && preview.contentType !== "image/webp")) return Promise.reject(new Error(cloudT("automaticPreviewMissing")));
-    return shareCardImage(`data:image/webp;base64,${preview.dataBase64}`);
-  }
-
-  function shareCardBlob(canvas) {
-    return new Promise((resolve, reject) => canvas.toBlob(
-      (blob) => blob ? resolve(blob) : reject(new Error(cloudT("shareImageFailed"))),
-      "image/png",
-    ));
-  }
-
-  async function publishedShareImage({ preview, name, kindLabel, url }) {
-    const [image, brandMark] = await Promise.all([
-      shareCardPreviewImage(preview),
-      shareCardImage("/penecho-mark.png").catch(() => null),
-    ]), canvas = document.createElement("canvas"), context = canvas.getContext("2d");
-    if (!context) throw new Error(cloudT("shareImageFailed"));
-    canvas.width = 1200;
-    canvas.height = 1200;
-
-    context.fillStyle = "#f3f6fa";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.save();
-    context.shadowColor = "rgba(15, 23, 42, .12)";
-    context.shadowBlur = 34;
-    context.shadowOffsetY = 12;
-    shareCardRoundedRect(context, 48, 48, 1104, 1104, 42);
-    context.fillStyle = "#ffffff";
-    context.fill();
-    context.restore();
-
-    if (brandMark) context.drawImage(brandMark, 80, 84, 56, 56);
-    context.fillStyle = "#182230";
-    context.font = "750 27px ui-sans-serif, system-ui, sans-serif";
-    context.textAlign = "left";
-    context.textBaseline = "middle";
-    context.fillText("PenEcho", 148, 112);
-    context.fillStyle = "#687385";
-    context.font = "700 18px ui-sans-serif, system-ui, sans-serif";
-    context.fillText(cloudT("shareCardEyebrow"), 281, 112);
-
-    context.font = "700 20px ui-sans-serif, system-ui, sans-serif";
-    const chipWidth = Math.min(230, Math.max(112, context.measureText(kindLabel).width + 48));
-    shareCardRoundedRect(context, 1096 - chipWidth, 86, chipWidth, 52, 26);
-    context.fillStyle = "#edf4ff";
-    context.fill();
-    context.fillStyle = "#285e9e";
-    context.textAlign = "center";
-    context.fillText(kindLabel, 1096 - chipWidth / 2, 112);
-    context.textAlign = "left";
-
-    let titleSize = 52, titleLines;
-    do {
-      context.font = `750 ${titleSize}px ui-sans-serif, system-ui, sans-serif`;
-      titleLines = shareCardLines(context, name, 992);
-      titleSize -= 4;
-    } while (titleLines.length > 2 && titleSize >= 36);
-    titleLines = shareCardLimitedLines(context, name, 992, 2);
-    context.fillStyle = "#182230";
-    context.textBaseline = "alphabetic";
-    titleLines.forEach((line, index) => context.fillText(line, 104, 188 + index * (titleSize + 12)));
-
-    const frame = { x:104, y:286, width:992, height:644 };
-    shareCardRoundedRect(context, frame.x, frame.y, frame.width, frame.height, 24);
-    context.fillStyle = "#eef2f7";
-    context.fill();
-    context.save();
-    shareCardRoundedRect(context, frame.x, frame.y, frame.width, frame.height, 24);
-    context.clip();
-    const sourceWidth = image.naturalWidth || image.width || preview.width || 1;
-    const sourceHeight = image.naturalHeight || image.height || preview.height || 1;
-    const scale = Math.min(frame.width / sourceWidth, frame.height / sourceHeight);
-    const imageWidth = Math.max(1, sourceWidth * scale), imageHeight = Math.max(1, sourceHeight * scale);
-    context.drawImage(image, frame.x + (frame.width - imageWidth) / 2, frame.y + (frame.height - imageHeight) / 2, imageWidth, imageHeight);
-    context.restore();
-
-    context.fillStyle = "#dbe1e9";
-    context.fillRect(104, 978, 992, 2);
-    context.fillStyle = "#182230";
-    context.font = "700 26px ui-sans-serif, system-ui, sans-serif";
-    context.fillText(cloudT("shareCardCallToAction"), 104, 1024);
-    context.fillStyle = "#687385";
-    context.font = "600 17px ui-sans-serif, system-ui, sans-serif";
-    context.fillText(cloudT("shareCardLicense"), 104, 1056);
-    context.fillStyle = "#356fc2";
-    context.font = "600 18px ui-monospace, SFMono-Regular, Menlo, monospace";
-    const urlLines = shareCardLimitedLines(context, url, 992, 3);
-    urlLines.forEach((line, index) => context.fillText(line, 104, 1085 + index * 23));
-
-    const blob = await shareCardBlob(canvas);
-    canvas.width = canvas.height = 1;
-    return blob;
-  }
-
-  function publishedShareFilename(kind, name, itemId) {
-    const label = String(name || itemId || "craft").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 64) || "craft";
-    return `penecho-${kind}-${label}.png`;
-  }
-
-  function downloadPublishedShareImage(blob, filename) {
-    const objectUrl = URL.createObjectURL(blob), link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }
-
-  async function sharePublishedImage(blob, { filename, title, text, url }) {
-    if (typeof File === "function" && navigator.share) {
-      const file = new File([blob], filename, { type:"image/png" });
-      let filesSupported = false;
-      try { filesSupported = typeof navigator.canShare === "function" && navigator.canShare({ files:[file] }); }
-      catch { filesSupported = false; }
-      if (filesSupported) {
-        await navigator.share({ files:[file], title, text, url });
-        return "shared";
+    } });
+    const shareImage = el("button", { class:"cloud-button", type:"button", text:cloudT("shareAsImage"), title:cloudT("shareImageEmbedTitle"), onclick:async () => {
+      if (busy) return;
+      busy = true;
+      shareLink.disabled = shareImage.disabled = true;
+      try {
+        await copyText(linkedImageEmbed(item, publishedName));
+        status.className = "cloud-published-status success";
+        status.textContent = cloudT("shareImageEmbedCopied");
+      } catch {
+        status.className = "cloud-published-status error";
+        status.textContent = cloudT("shareImageEmbedFailed");
+      } finally {
+        busy = false;
+        shareLink.disabled = shareImage.disabled = false;
       }
+    } });
+    actions.append(shareLink, shareImage);
+    if (originError) {
+      const retryOrigin = el("button", { class:"cloud-button", type:"button", text:cloudT("retryLocalLink"), onclick:async () => {
+        retryOrigin.disabled = true;
+        try {
+          await bridge.markPublishedOrigin?.(kind, artifact, item);
+          localSourceMessage.textContent = cloudT("localSourceLinked", { step:Number(item.generation || 0) + 1 });
+          status.className = "cloud-published-status success";
+          status.textContent = cloudT("publishedLinkRestored");
+          retryOrigin.remove();
+        } catch {
+          status.className = "cloud-published-status error";
+          status.textContent = cloudT("localLinkRestoreFailed");
+          retryOrigin.disabled = false;
+        }
+      } });
+      actions.append(retryOrigin);
     }
-    downloadPublishedShareImage(blob, filename);
-    return "downloaded";
+    actions.append(
+      el("a", { class:"cloud-button", href:url, target:"_blank", rel:"noopener", text:cloudT("viewPublicPage") }),
+      el("button", { class:"cloud-button", type:"button", text:cloudT("done"), onclick:() => closeOverlay(shell.overlay) }),
+    );
+    shell.body.append(
+      el("div", { class:"cloud-published-summary" }, [
+        el("span", { class:"cloud-published-mark", "aria-hidden":"true", text:"✓" }),
+        localSourceMessage,
+      ]),
+      el("input", { class:"cloud-published-url", value:url, readonly:"", "aria-label":cloudT("publicCommunityLink") }),
+      actions,
+      status,
+    );
+    queueMicrotask(() => shareLink.focus());
+    return shell;
   }
 
   function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {
     if (!accountSignedIn()) {
-      openCloud();
+      browserSignInMessage(cloudT("shareSignInRequired"));
+      void openCloud();
       return;
     }
     const title = cloudT("shareTitle"), bridge=window.PenEchoCommunityCanvas;
     const kindLabel = cloudT(kind === "widget" ? "widgetKind" : "canvasKind");
     const shell = dialogShell({ title, subtitle:cloudT("shareSubtitle"), share:true });
-    const name = el("input", { type:"text", maxlength:"160", placeholder:cloudT(kind === "widget" ? "widgetNamePlaceholder" : "canvasNamePlaceholder") });
-    const description = el("textarea", { rows:"3", maxlength:"1200", placeholder:cloudT("shareDescriptionPlaceholder") });
+    const name = el("input", { type:"text", maxlength:"160", required:"", "aria-required":"true", placeholder:cloudT(kind === "widget" ? "widgetNamePlaceholder" : "canvasNamePlaceholder") });
+    const description = el("textarea", { rows:"3", maxlength:"1200", required:"", "aria-required":"true", placeholder:cloudT("shareDescriptionPlaceholder") });
+    const nameError = el("small", { class:"cloud-field-error", role:"alert", text:cloudT("publishNameRequired") });
+    const descriptionError = el("small", { class:"cloud-field-error", role:"alert", text:cloudT("publishDescriptionRequired") });
+    nameError.hidden = descriptionError.hidden = true;
     const category = el("select", {}, [el("option", { value:"", text:cloudT("selectCategory") }), ...CATEGORIES.map(value => el("option", { value, text:cloudT(CATEGORY_LABEL_KEYS[value]) }))]);
     category.value = "";
     const tags = el("input", { type:"text", maxlength:"260", placeholder:cloudT("shareTagsPlaceholder") }),tagCount=el("small", { class:"cloud-tag-count", text:cloudT("tagCount", { count:0 }) });
-    const status = el("span", { class:"cloud-share-status", role:"status", "aria-live":"polite", text:cloudT("generatingPreview") }),previewImage=el("img", { alt:cloudT("automaticSharePreview", { kind:kindLabel }) }),previewMeta=el("span", { text:cloudT("previewValidating") }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage,previewMeta]);
+    const status = el("span", { class:"cloud-share-status", role:"status", "aria-live":"polite", text:cloudT("generatingPreview") }),previewImage=el("img", { alt:cloudT("automaticSharePreview", { kind:kindLabel }) }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage]);
     const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:cloudT("autoFillCurrentAi"), disabled:"" });
     const contribution = el("textarea", { rows:"3", maxlength:"500", placeholder:cloudT("contributionPlaceholder") });
     const continuation = el("textarea", { rows:"3", maxlength:"500", placeholder:cloudT("continuationPlaceholder") });
     const permission = el("input", { type:"checkbox" });
     const permissionLabel = el("label", { class:"cloud-publication-consent" }, [permission, el("span", {}, [
-      document.createTextNode(cloudT("rightsBeforeCc")),
-      el("a", { href:"https://creativecommons.org/licenses/by-sa/4.0/", target:"_blank", rel:"noopener", text:"CC BY-SA 4.0" }),
-      document.createTextNode(cloudT("rightsBetweenCcMit")),
-      el("a", { href:"https://opensource.org/license/mit", target:"_blank", rel:"noopener", text:"MIT" }),
-      document.createTextNode(cloudT("rightsAfterMit")),
+      document.createTextNode(cloudT("publicationAgreementBeforeLink")),
+      el("a", { href:new URL("/terms.html#public-crafts",`${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:cloudT("publicationAgreementLink") }),
+      document.createTextNode(cloudT("publicationAgreementAfterLink")),
     ])]);
-    const trainingPermission=el("input", { type:"checkbox" });
-    const trainingPermissionLabel=el("label", { class:"cloud-publication-consent" }, [trainingPermission,el("span", {}, [
-      document.createTextNode(cloudT("trainingBeforeLicense")),
-      el("a", { href:new URL("/terms.html#public-craft-training",`${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener", text:"Public Craft ML License" }),
-      document.createTextNode(cloudT("trainingAfterLicense")),
-    ])]);
-    let artifact=null,lineage=null,draftKey=null,publish=null;
+    let artifact=null,lineage=null,draftKey=null,publish=null,publishing=false,validationAttempted=false;
     function parsedTags(){const seen=new Set();return tags.value.split(",").map(value=>value.trim()).filter(value=>{const key=value.toLocaleLowerCase();if(!value||seen.has(key))return false;seen.add(key);return true;});}
     function tagIssue(){const values=parsedTags();if(values.length>8)return cloudT("tagLimit");if(values.some(value=>value.length>32))return cloudT("tagLength");if(values.some(value=>!/^\p{L}[\p{L}\p{N} ._+-]*$/u.test(value)&&!/^\p{N}[\p{L}\p{N} ._+-]*$/u.test(value)))return cloudT("tagStart");return "";}
-    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||!CATEGORIES.includes(category.value)||!permission.checked||!trainingPermission.checked||!continuation.value.trim()||Boolean(tagIssue());}
+    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||publishing;}
+    function setRequiredError(input, error, invalid){input.setAttribute("aria-invalid",String(invalid));error.hidden=!invalid;}
+    function validateRequiredFields({ focus = false } = {}) {
+      const missingName=!name.value.trim(),missingDescription=!description.value.trim();
+      setRequiredError(name,nameError,missingName);
+      setRequiredError(description,descriptionError,missingDescription);
+      if (focus && (missingName || missingDescription)) (missingName ? name : description).focus();
+      return !missingName && !missingDescription;
+    }
     function refreshTagCount(){const values=parsedTags(),issue=tagIssue();tagCount.textContent=issue||cloudT("tagCount", { count:values.length });tagCount.classList.toggle("error",Boolean(issue));updatePublishAvailability();}
-    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value,continuation:continuation.value};}
+    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value};}
     function saveDraft(){if(!draftKey)return;try{sessionStorage.setItem(draftKey,JSON.stringify(draftPayload()));}catch{}}
-    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value=String(saved.continuation||"").slice(0,500);refreshTagCount();return true;}catch{return false;}}
+    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value="";refreshTagCount();return true;}catch{return false;}}
     function clearDraft(){if(!draftKey)return;try{sessionStorage.removeItem(draftKey);}catch{}}
-    for(const input of [name,description,tags,contribution,continuation])input.addEventListener("input",()=>{saveDraft();updatePublishAvailability();});
+    for(const input of [name,description,tags,contribution,continuation])input.addEventListener("input",()=>{if(validationAttempted&&(input===name||input===description))validateRequiredFields();saveDraft();updatePublishAvailability();});
     category.addEventListener("change",()=>{saveDraft();updatePublishAvailability();});
     tags.addEventListener("input",refreshTagCount);
     shell.body.append(el("div", { class:"cloud-share-note", text:cloudT("shareNote", { kind:kindLabel }) }),previewPanel);
-    shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:cloudT("usesCurrentAi") })]),field(cloudT("nameLabel"), name), field(cloudT("descriptionLabel"), description), field(cloudT("categoryLabel"), category),field(cloudT("tagsLabel"), el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
+    shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:cloudT("usesCurrentAi") })]),field(cloudT("nameLabel"), el("div", { class:"cloud-required-field" }, [name,nameError])), field(cloudT("descriptionLabel"), el("div", { class:"cloud-required-field" }, [description,descriptionError])), field(cloudT("categoryLabel"), category),field(cloudT("tagsLabel"), el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
     shell.body.append(field(cloudT("continuationLabel"),continuation));
     publish = el("button", { class:"cloud-button primary", type:"button", text:cloudT(favoriteAfterShare ? "publishAndSave" : "publishStroke"), onclick:async () => {
-      publish.disabled = true;
+      publishing = true;
+      updatePublishAvailability();
       status.className = "cloud-share-status";
       status.textContent = cloudT("validatingUploading");
       try {
         if (!artifact) throw new Error(cloudT("waitPreview"));
+        validationAttempted=true;
+        if (!validateRequiredFields({ focus:true })) throw new Error(!name.value.trim()?cloudT("publishNameRequired"):cloudT("publishDescriptionRequired"));
         const payload = {
           kind,
           name:name.value.trim(),
@@ -1476,16 +1368,15 @@
           continuationPrompt:continuation.value.trim(),
           publicationTermsAccepted:permission.checked,
           publicationRightsAccepted:permission.checked,
-          modelTrainingAccepted:trainingPermission.checked,
+          modelTrainingAccepted:permission.checked,
           publicationTermsVersion:PUBLICATION_TERMS_VERSION,
         };
         if (!payload.name) throw new Error(cloudT("publishNameRequired"));
+        if (!payload.description) throw new Error(cloudT("publishDescriptionRequired"));
         if (!CATEGORIES.includes(payload.category)) throw new Error(cloudT("publishCategoryRequired"));
         if (tagIssue()) throw new Error(tagIssue());
         if (lineage && !payload.contributionNote) throw new Error(cloudT("publishContributionRequired"));
-        if (!payload.continuationPrompt) throw new Error(cloudT("publishContinuationRequired"));
-        if (!permission.checked) throw new Error(cloudT("publishRightsRequired"));
-        if (!trainingPermission.checked) throw new Error(cloudT("publishTrainingRequired"));
+        if (!permission.checked) throw new Error(cloudT("publishAgreementRequired"));
         status.textContent = cloudT(lineage ? "addingLineage" : "publishingFirstStep");
         const result = await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
         if (!result.item?.id) throw new Error(cloudT("publishedCraftMissing"));
@@ -1497,126 +1388,16 @@
           try { await api(`/api/cloud/community/${result.item.id}/favorite`, { method:"POST", body:"{}" }); }
           catch (error) { favoriteError=error; }
         }
-        status.className = `cloud-share-status ${originError||favoriteError?"error":"success"}`;
-        status.textContent = originError
-          ? cloudT("publishedLocalLinkAttention")
-          : favoriteError
-            ? cloudT("publishedFavoriteRetry")
-            : cloudT(favoriteAfterShare ? "publishedAndSaved" : "publishedContinues");
-        const url = communityUrl(result.item);
-        const publishedName = String(result.item.name || payload.name), imageFilename = publishedShareFilename(kind, publishedName, result.item.id);
-        const imageShareStatus = el("span", { class:"cloud-published-share-status", role:"status", "aria-live":"polite" });
-        const imageShareHelp = el("span", { class:"cloud-published-share-help", text:cloudT("publishedImageShareHelp") });
-        const imageShareButtons = el("div", { class:"cloud-published-share-buttons" });
-        const imageShareTools = el("section", { class:"cloud-published-share-tools", "aria-label":cloudT("publishedImageShareTitle"), "aria-busy":"false" }, [
-          el("strong", { text:cloudT("publishedImageShareTitle") }),
-          imageShareHelp,
-          imageShareButtons,
-          imageShareStatus,
-        ]);
-        let imageBlob = null, imageBlobPromise = null, imageBusy = false, shareImageButton, downloadImageButton;
-        function preparePublishedImage() {
-          if (imageBlob) return Promise.resolve(imageBlob);
-          imageBlobPromise ||= publishedShareImage({ preview:artifact.communityPreview, name:publishedName, kindLabel, url })
-            .then((blob) => { imageBlob = blob; return blob; })
-            .catch((error) => { imageBlobPromise = null; throw error; });
-          return imageBlobPromise;
-        }
-        async function warmPublishedImage() {
-          imageBusy = true;
-          shareImageButton.disabled = downloadImageButton.disabled = true;
-          imageShareTools.setAttribute("aria-busy", "true");
-          imageShareStatus.textContent = cloudT("preparingShareImage");
-          try {
-            await preparePublishedImage();
-            imageShareStatus.className = "cloud-published-share-status success";
-            imageShareStatus.textContent = cloudT("shareImageReady");
-          } catch {
-            imageShareStatus.className = "cloud-published-share-status error";
-            imageShareStatus.textContent = cloudT("shareImageFailed");
-          } finally {
-            imageBusy = false;
-            shareImageButton.disabled = downloadImageButton.disabled = false;
-            imageShareTools.setAttribute("aria-busy", "false");
-          }
-        }
-        async function runPublishedImageAction(action) {
-          if (imageBusy) return;
-          imageBusy = true;
-          shareImageButton.disabled = downloadImageButton.disabled = true;
-          imageShareTools.setAttribute("aria-busy", "true");
-          imageShareStatus.className = "cloud-published-share-status";
-          imageShareStatus.textContent = cloudT("preparingShareImage");
-          try {
-            const readyImageBlob = imageBlob || await preparePublishedImage();
-            if (action === "download") {
-              downloadPublishedShareImage(readyImageBlob, imageFilename);
-              imageShareStatus.textContent = cloudT("shareImageDownloaded");
-            } else {
-              const outcome = await sharePublishedImage(readyImageBlob, {
-                filename:imageFilename,
-                title:publishedName,
-                text:cloudT("nativeImageShareText", { kind:kindLabel }),
-                url,
-              });
-              imageShareStatus.textContent = cloudT(outcome === "shared" ? "shareImageShared" : "shareImageDownloaded");
-            }
-            imageShareStatus.className = "cloud-published-share-status success";
-          } catch (error) {
-            if (error?.name === "AbortError") {
-              imageShareStatus.textContent = cloudT("shareImageCancelled");
-            } else {
-              imageShareStatus.className = "cloud-published-share-status error";
-              imageShareStatus.textContent = cloudT("shareImageFailed");
-            }
-          } finally {
-            imageBusy = false;
-            shareImageButton.disabled = downloadImageButton.disabled = false;
-            imageShareTools.setAttribute("aria-busy", "false");
-          }
-        }
-        shareImageButton = el("button", { class:"cloud-button image-share", type:"button", text:cloudT("shareAsImage"), onclick:() => runPublishedImageAction("share") });
-        downloadImageButton = el("button", { class:"cloud-button", type:"button", text:cloudT("downloadImage"), onclick:() => runPublishedImageAction("download") });
-        imageShareButtons.append(shareImageButton, downloadImageButton);
-        const localSourceMessage=el("span", { text:originError
-          ? cloudT("originRetryMessage", { kind:kindLabel, step:Number(result.item.generation || 0)+1 })
-          : cloudT("originLinkedMessage", { kind:kindLabel, step:result.item.generation ? cloudT("stepNumber", { number:Number(result.item.generation) + 1 }) : cloudT("firstStroke") }) });
-        const resultActions=el("div", { class:"cloud-button-row" });
-        if(originError){
-          const retryOrigin=el("button", { class:"cloud-button", type:"button", text:cloudT("retryLocalLink"), onclick:async()=>{
-            retryOrigin.disabled=true;
-            try{
-              await bridge.markPublishedOrigin?.(kind,artifact,result.item);
-              localSourceMessage.textContent=cloudT("localSourceLinked", { step:Number(result.item.generation||0)+1 });
-              status.className="cloud-share-status success";
-              status.textContent=cloudT("publishedLinkRestored");
-              retryOrigin.remove();
-            }catch(error){status.className="cloud-share-status error";status.textContent=error.message||cloudT("localLinkRestoreFailed");retryOrigin.disabled=false;}
-          }});
-          resultActions.append(retryOrigin);
-        }
-        resultActions.append(
-          el("button", { class:"cloud-button", type:"button", text:cloudT("copyLink"), onclick:async () => { await copyText(url); status.textContent = cloudT("publicLinkCopied"); } }),
-          el("a", { class:"cloud-button", href:url, target:"_blank", rel:"noopener", text:cloudT("viewPublicPage") }),
-          el("button", { class:"cloud-button primary", type:"button", text:cloudT("done"), onclick:() => closeOverlay(shell.overlay) }),
-        );
-        const resultPanel = el("div", { class:"cloud-share-result" }, [
-          el("strong", { text:cloudT("publicCommonsTitle") }),
-          localSourceMessage,
-          el("input", { value:url, readonly:"", "aria-label":cloudT("publicCommunityLink") }),
-          imageShareTools,
-          resultActions,
-        ]);
-        shell.body.insertBefore(resultPanel, shell.body.lastElementChild);
-        void warmPublishedImage();
-        publish.remove();
+        closeOverlay(shell.overlay);
+        publishedCraftDialog({ item:{ ...result.item, name:result.item.name || payload.name }, kind, kindLabel, artifact, bridge, originError, favoriteError, favoriteAfterShare });
       } catch (error) {
         status.className = "cloud-share-status error";
         status.textContent = error.message || cloudT("shareFailed");
-        publish.disabled = false;
+        publishing = false;
+        updatePublishAvailability();
       }
     } });
-    shell.body.append(permissionLabel,trainingPermissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:cloudT("cancel"), onclick:() => closeOverlay(shell.overlay) }), publish]));
+    shell.body.append(permissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:cloudT("cancel"), onclick:() => closeOverlay(shell.overlay) }), publish]));
     publish.disabled=true;
     autoFill.addEventListener("click",async()=>{
       autoFill.disabled=true;
@@ -1630,6 +1411,7 @@
         tags.value=(metadata.tags||[]).slice(0,8).join(", ");
         continuation.value=String(metadata.continuationPrompt||continuation.value).slice(0,500);
         refreshTagCount();
+        if(validationAttempted)validateRequiredFields();
         saveDraft();
         status.className="cloud-share-status success";
         status.textContent=cloudT("listingOptimized");
@@ -1651,19 +1433,14 @@
         const preview=artifact.communityPreview,base64=preview?.dataBase64;
         if(!base64)throw new Error(cloudT("automaticPreviewMissing"));
         previewImage.src=`data:image/webp;base64,${base64}`;
-        previewMeta.textContent=cloudT("automaticPreviewMeta", { width:preview.width, height:preview.height });
         previewPanel.setAttribute("aria-busy","false");
-        const suggestedName=kind==="widget"?artifact.widget?.title:artifact.name;
-        if(!name.value.trim())name.value=String(suggestedName||cloudT(kind==="widget"?"untitledWidget":"untitledCanvas")).slice(0,160);
-        if(!description.value.trim())description.value=cloudT(kind==="widget"?"defaultWidgetDescription":"defaultCanvasDescription");
         const recovered=restoreDraft();
         updatePublishAvailability();
         autoFill.disabled=false;
         status.textContent=cloudT(recovered?"previewRestored":"previewReady");
-      }catch(error){previewPanel.classList.add("error");previewMeta.textContent=error.message||cloudT("previewFailed");status.className="cloud-share-status error";status.textContent=cloudT("sharingUnavailable");}
+      }catch(error){previewPanel.classList.add("error");previewPanel.setAttribute("aria-busy","false");status.className="cloud-share-status error";status.textContent=error.message||cloudT("sharingUnavailable");}
     });
     permission.addEventListener("change",updatePublishAvailability);
-    trainingPermission.addEventListener("change",updatePublishAvailability);
   }
 
   async function takeFurther(itemId) {
@@ -1721,12 +1498,6 @@
     else document.body.classList.remove("plugin-open");
   }
 
-  async function sha256Hex(text) {
-    const bytes = new TextEncoder().encode(text);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
-  }
-
   /* Deletion tombstones: a favorite removed while the cloud DELETE could not
      land (offline, expired session) must stay deleted. The next sync re-issues
      the DELETE for the surviving cloud copy instead of mirroring it back. */
@@ -1754,19 +1525,37 @@
     catch { return []; }
   }
 
-  async function saveLocalFavorite(favorite) {
-    return (await api("/api/favorites", { method:"PUT", body:JSON.stringify(favorite) })).favorite;
+  async function saveLocalFavorite(favorite, includeCreated = false) {
+    const response = await fetch("/api/favorites", {
+      method:"PUT",
+      headers:apiHeaders(true),
+      body:JSON.stringify(favorite),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error || payload.message || savedT("savedErrorToggle", "Could not update this favorite."));
+      error.status = response.status;
+      error.code = payload.code || null;
+      throw error;
+    }
+    return includeCreated ? { favorite:payload.favorite, created:response.status === 201 } : payload.favorite;
   }
 
   async function removeLocalFavorite(sha256) {
     try { await api(`/api/favorites/${encodeURIComponent(sha256)}`, { method:"DELETE" }); } catch {}
   }
 
-  function thumbnailDataUrl(favorite) {
-    if (favorite.thumbnailUrl) return favorite.thumbnailUrl;
+  function thumbnailDataUrl(favorite, communityId = null) {
     const base64 = favorite.thumbnail || favorite.artifact?.communityThumbnail?.dataBase64 || favorite.artifact?.communityPreview?.dataBase64;
     const contentType = favorite.thumbnail ? "image/webp" : (favorite.artifact?.communityThumbnail || favorite.artifact?.communityPreview)?.contentType || "image/webp";
-    return base64 ? `data:${contentType};base64,${base64}` : null;
+    if (base64) return `data:${contentType};base64,${base64}`;
+    const remoteThumbnail = String(favorite.thumbnailUrl || ""),
+      remoteItemId = remoteThumbnail.match(/^\/api\/v1\/community\/items\/([0-9a-f-]{36})\/thumbnail(?:[?#].*)?$/i)?.[1],
+      itemId = communityId || remoteItemId;
+    // Community API paths belong to PenEcho Cloud. A relative Cloud URL on a
+    // local Canvas resolves against 192.168/localhost and returns 404, so every
+    // community image must use the approved local/Remote Canvas proxy.
+    return itemId ? `/api/cloud/community/${encodeURIComponent(itemId)}/thumbnail` : null;
   }
 
   /* One-click favorite on a widget: local snapshot always, cloud copy when signed in. */
@@ -1774,24 +1563,24 @@
     const bridge = window.PenEchoCommunityCanvas;
     if (!bridge?.widgetArtifact || !bridge.setWidgetFavorite) throw new Error(cloudT("favoriteUnsupported"));
     const artifact = await bridge.widgetArtifact(widgetId);
-    const sha256 = await sha256Hex(JSON.stringify(artifact));
-    const locals = await localFavorites();
-    const existing = locals.find((entry) => entry.artifactSha256 === sha256);
     const serialized = { name:String(artifact.widget?.title || cloudT("untitledWidget")).slice(0, 160), artifact, thumbnail:artifact.communityThumbnail?.dataBase64 || "", sourceItemId:artifact.widget?.communityOriginItemId || null };
-    if (existing) {
-      await removeLocalFavorite(sha256);
-      rememberFavoriteTombstone(sha256);
-      if (accountSignedIn() && existing.cloudId) { try { await api(`/api/cloud/favorites/${encodeURIComponent(existing.cloudId)}`, { method:"DELETE" }); } catch {} }
+    const localWrite = await saveLocalFavorite({ ...serialized, cloudId:null }, true),
+      saved = localWrite.favorite;
+    if (!localWrite.created) {
+      await removeLocalFavorite(saved.artifactSha256);
+      rememberFavoriteTombstone(saved.artifactSha256);
+      if (accountSignedIn() && saved.cloudId) { try { await api(`/api/cloud/favorites/${encodeURIComponent(saved.cloudId)}`, { method:"DELETE" }); } catch {} }
       bridge.setWidgetFavorite(widgetId, false);
       return false;
     }
-    clearFavoriteTombstone(sha256);
-    let saved = await saveLocalFavorite({ ...serialized, cloudId:null });
+    clearFavoriteTombstone(saved.artifactSha256);
     if (accountSignedIn()) {
       try {
         const cloudFavorite = (await api("/api/cloud/favorites", { method:"POST", body:JSON.stringify(serialized) })).favorite;
-        saved = await saveLocalFavorite({ ...serialized, cloudId:cloudFavorite.id });
-      } catch {}
+        await saveLocalFavorite({ ...serialized, cloudId:cloudFavorite.id });
+      } catch (error) {
+        if (error?.code === "storage_quota_exceeded") window.alert(cloudT("favoriteLocalOnlyQuota"));
+      }
     }
     bridge.setWidgetFavorite(widgetId, true);
     return true;
@@ -1799,11 +1588,11 @@
 
   /* Two-way personal-favorites sync: upload offline saves, mirror cloud saves,
      and drop local mirrors whose cloud copy was removed elsewhere. */
-  async function syncFavorites() {
+  async function syncFavorites({ locals:providedLocals = null, cloud:providedCloud = null } = {}) {
     if (!accountSignedIn()) return { synced: 0 };
     const [locals, cloud] = await Promise.all([
-      localFavorites(),
-      api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
+      Array.isArray(providedLocals) ? providedLocals : localFavorites(),
+      Array.isArray(providedCloud) ? providedCloud : api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
     ]);
     if (!Array.isArray(cloud)) return { synced: 0 };
     const cloudBySha = new Map(cloud.map((entry) => [entry.artifactSha256, entry]));
@@ -1850,12 +1639,12 @@
     const locals = await localFavorites();
     let cloudPersonal = [], community = [];
     if (accountSignedIn()) {
-      await syncFavorites();
       const [personal, favorites] = await Promise.all([
-        api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => []),
+        api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
         api("/api/cloud/community?scope=favorites&kind=widget&sort=newest&limit=60").then((result) => result.items || []).catch(() => []),
       ]);
-      cloudPersonal = personal;
+      cloudPersonal = Array.isArray(personal) ? personal : [];
+      if (Array.isArray(personal)) await syncFavorites({ locals, cloud:personal });
       community = favorites.filter((item) => item.kind === "widget");
     }
     const mergedMap = new Map();
@@ -1917,7 +1706,8 @@
     thumb.className = "crafts-thumb";
     thumb.alt = "";
     thumb.loading = "lazy";
-    const url = thumbnailDataUrl(source) || (merged.sources.some((entry) => entry.type === "community") ? `/api/cloud/community/${encodeURIComponent(source.id)}/thumbnail` : null);
+    const community = merged.sources.find((entry) => entry.type === "community")?.entry || null,
+      url = thumbnailDataUrl(source, community?.id || null);
     if (url) { thumb.src = url; thumb.addEventListener("error", () => thumb.replaceWith(craftsFallbackThumb())); }
     else thumb.replaceWith(craftsFallbackThumb());
     const copy = document.createElement("div");
@@ -2001,10 +1791,26 @@
     const actionName = event.detail?.action;
     const widgetId = event.detail?.widgetId;
     if (!widgetId || !["favorite", "share"].includes(actionName)) return;
-    await refreshStatus();
-    if (actionName === "share") { shareDialog({ kind:"widget", widgetId }); return; }
-    try { await toggleWidgetFavorite(widgetId); }
-    catch (error) { alert(error?.message || savedT("savedErrorToggle", "Could not update this favorite.")); }
+    if (actionName === "share") {
+      await refreshStatus();
+      shareDialog({ kind:"widget", widgetId });
+      return;
+    }
+    if (state.favoriteWidgetOperations.has(widgetId)) return;
+    state.favoriteWidgetOperations.add(widgetId);
+    const bridge = window.PenEchoCommunityCanvas;
+    bridge?.setWidgetFavorite?.(widgetId, undefined, true);
+    let completed = false;
+    try {
+      await refreshStatus();
+      await toggleWidgetFavorite(widgetId);
+      completed = true;
+    } catch (error) {
+      window.alert(error?.message || savedT("savedErrorToggle", "Could not update this favorite."));
+    } finally {
+      if (!completed) bridge?.setWidgetFavorite?.(widgetId, undefined, false);
+      state.favoriteWidgetOperations.delete(widgetId);
+    }
   });
   window.addEventListener("message", async (event) => {
     if (event.origin !== location.origin || event.data?.type !== "penecho:cloud-sign-in-result") return;
@@ -2024,13 +1830,6 @@
       clearTimeout(state.browserSignIn.timer);
       state.browserSignIn.timer = 0;
       void state.browserSignIn.poll();
-    }
-    // Refresh the Cloud Center immediately when the page becomes visible again
-    // instead of waiting out the longer hidden-tab poll interval.
-    if (cloudStatusPoll) {
-      clearTimeout(cloudStatusTimer);
-      cloudStatusTimer = 0;
-      void cloudStatusPoll();
     }
   });
   // Remote Canvas has its own Cloud account/device gate. Avoid relaying a

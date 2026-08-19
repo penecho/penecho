@@ -78,8 +78,8 @@
   display: none;
   font: 650 13.5px/1 ui-sans-serif, system-ui, sans-serif;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 11px;
   text-decoration: none;
 }
 .remote-canvas-gate[data-state="unlinked"] .remote-canvas-actions [data-action="link"] { display: inline-flex; }
@@ -93,6 +93,10 @@
   .remote-canvas-status { max-width: 29px; min-height: 29px; padding: 6px 10px; }
   .remote-canvas-status span { position: absolute; clip: rect(0 0 0 0); }
   .remote-canvas-back { min-height: 36px; padding: 0 9px; }
+}
+
+@media (pointer: coarse) {
+  .remote-canvas-actions a { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .remote-canvas-gate { backdrop-filter: none; }

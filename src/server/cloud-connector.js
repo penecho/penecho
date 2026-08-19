@@ -596,7 +596,7 @@ class CloudConnector {
   listWidgetFavorites() { return this.cloudRequest("/api/v1/favorites"); }
 
   async saveWidgetFavorite(favorite) {
-    const result = await this.cloudRequest("/api/v1/favorites", { method:"POST", body:JSON.stringify({ name:favorite.name, artifact:favorite.artifact, thumbnail:favorite.thumbnail || "", sourceItemId:favorite.sourceItemId || null }) });
+    const result = await this.cloudRequest("/api/v1/favorites", { method:"POST", body:{ name:favorite.name, artifact:favorite.artifact, thumbnail:favorite.thumbnail || "", sourceItemId:favorite.sourceItemId || null } });
     return result.favorite;
   }
 
@@ -636,6 +636,9 @@ class CloudConnector {
 
   async shareCommunityItem({ kind, name, description = "", category, tags = [], artifact, parentItemId = null, contributionNote = "", continuationPrompt = "", publicationTermsAccepted = false, publicationRightsAccepted = false, modelTrainingAccepted = false, publicationTermsVersion = "" }) {
     if (!["widget", "canvas"].includes(kind) || !artifact || typeof artifact !== "object") throw new Error("The community share is invalid.");
+    const normalizedName=String(name || "").trim(),normalizedDescription=String(description || "").trim();
+    if(!normalizedName)throw Object.assign(new Error("A title is required."),{status:400,code:"community_title_required"});
+    if(!normalizedDescription)throw Object.assign(new Error("A description is required."),{status:400,code:"community_description_required"});
     const bytes = Buffer.from(JSON.stringify(artifact));
     const maximum = kind === "widget" ? 10 * 1024 * 1024 : MAX_CLOUD_BUNDLE_BYTES;
     if (!bytes.length || bytes.length > maximum) throw new Error(`The shared ${kind} is too large.`);
@@ -643,8 +646,8 @@ class CloudConnector {
       method:"POST",
       body:{
         kind,
-        name:String(name || "").trim(),
-        description:String(description || "").trim(),
+        name:normalizedName,
+        description:normalizedDescription,
         category,
         tags,
         priceCredits:0,

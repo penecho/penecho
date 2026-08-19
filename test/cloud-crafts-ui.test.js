@@ -15,12 +15,15 @@ test("toolbar ships a Favorite Crafts picker wired to community favorites", () =
   assert.match(page, /id="craftsButton"[^>]*data-i18n-aria="savedCrafts"/);
   assert.match(page, /id="craftsPopover"[^>]*hidden/);
   assert.match(page, /id="craftsList"/);
+  assert.doesNotMatch(page, /savedCraftsHint|Your favorite Widgets|Select Add to place one on this Canvas/);
   assert.match(page, /id="craftsClose"[^>]*data-i18n-aria="closeSavedCrafts"[^>]*data-i18n-title="closeSavedCrafts"/);
   assert.match(page, /class="crafts-empty"[^>]*data-i18n="savedLoading"/);
   assert.match(page, /id="shareCanvasBtn"[^>]*data-i18n-aria="shareCanvasCloud"[^>]*data-i18n-title="shareCanvasCloud"/);
 
   assert.match(script, /scope=favorites&kind=widget&sort=newest&limit=60/);
-  assert.match(script, /\/api\/cloud\/community\/\$\{encodeURIComponent\(source\.id\)\}\/thumbnail/);
+  assert.match(script, /\/api\/cloud\/community\/\$\{encodeURIComponent\(itemId\)\}\/thumbnail/);
+  assert.match(script, /remoteThumbnail\.match\(\/\^\\\/api\\\/v1\\\/community\\\/items/);
+  assert.match(script, /thumbnailDataUrl\(source, community\?\.id \|\| null\)/);
   assert.match(script, /return takeFurther\(cloudEntry\.id\)/);
   assert.match(script, /function toggleWidgetFavorite/);
   assert.match(script, /function syncFavorites/);
@@ -36,7 +39,7 @@ test("toolbar ships a Favorite Crafts picker wired to community favorites", () =
   assert.match(locale, /savedSourceSynced: "云端 \+ 本机"/);
   assert.match(locale, /savedLoading: "正在加载收藏…"/);
   assert.match(locale, /shareWidget: "分享组件"/);
-  assert.match(locale, /snapshotCloudSignInRequired: "请先登录 PenEcho Cloud"/);
+  assert.match(locale, /snapshotCloudSignInRequired: "登录后查看云端画布"/);
   assert.match(css, /\.crafts-row/);
   assert.doesNotMatch(page, /id="craftsButton"[^>]*>[\s\S]*?<span data-i18n="savedCrafts">/);
   assert.match(script, /function savedT|const savedT/);
@@ -45,7 +48,7 @@ test("toolbar ships a Favorite Crafts picker wired to community favorites", () =
   assert.match(css, /\.crafts-modal/);
 
   const bilingualKeys = [
-    "savedCrafts", "savedCraftsTitle", "savedCraftsHint", "savedLoading", "savedEmptyIn", "savedEmptyOut",
+    "savedCrafts", "savedCraftsTitle", "savedLoading", "savedEmptyIn", "savedEmptyOut",
     "savedAdd", "savedAdding", "savedRemoveTitle", "savedSourceLocal", "savedSourceCloud", "savedSourceCommunity",
     "savedSourceSynced", "savedSourceLocalTitle", "savedSourceCloudTitle", "savedErrorAdd", "savedErrorToggle",
     "closeSavedCrafts", "shareCanvasCloud", "shareWidget", "snapshotCloudSignInRequired", "snapshotCloudSignInHint",
@@ -65,7 +68,7 @@ test("favorite deletes leave a tombstone so offline removals never resurrect", (
   // Deleting a favorite while the cloud DELETE cannot land must not be undone
   // by the next sync mirroring the surviving cloud copy back down.
   const script = read("public/cloud-connect.js");
-  assert.match(script, /rememberFavoriteTombstone\(sha256\);\s*\n\s*if \(accountSignedIn\(\) && existing\.cloudId\)/);
+  assert.match(script, /rememberFavoriteTombstone\(saved\.artifactSha256\);\s*\n\s*if \(accountSignedIn\(\) && saved\.cloudId\)/);
   assert.match(script, /if \(source\.type === "local"\) \{ await removeLocalFavorite\(source\.entry\.artifactSha256\); rememberFavoriteTombstone/);
   assert.match(script, /const tombstones = favoriteTombstones\(\);/);
   assert.match(script, /tombstones\[cloudEntry\.artifactSha256\]/);

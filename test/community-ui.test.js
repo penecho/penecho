@@ -16,12 +16,13 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
 
   assert.match(cloud, /function cloudT\(key, replacements = \{\}\)/);
   assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
-  assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(\)/);
+  assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(reload\)/);
   assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
   assert.match(cloud, /class:"cloud-section-tab cloud-explore-link",\s*href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\),\s*target:"_blank",\s*rel:"noopener"/);
   assert.match(cloud, /text:`\$\{cloudT\("explore"\)\} ↗`/);
   assert.match(cloud, /text:cloudT\(label\)/);
   assert.doesNotMatch(cloud, /text:cloudT\(hint\)/);
+  assert.doesNotMatch(cloud, /class:"cloud-panel-heading"[^\n]*cloudT\("cloudProjects"\)/);
   assert.match(cloud, /text:cloudT\("favorites"\)/);
   assert.match(cloud, /favoriteCanvasesHint:"收藏中的公开画布"/);
   assert.doesNotMatch(cloud, /favoriteCanvasesHint:"Favorites 中/);
@@ -50,7 +51,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
   assert.match(cloud, /base-revision-required/);
 
-  for (const key of ["cloudSubtitle", "cloudProjects", "signOutHost", "removeThisLink", "autoFillCurrentAi", "shareNote", "publicCommonsTitle"]) {
+  for (const key of ["cloudSubtitle", "signOutHost", "removeThisLink", "autoFillCurrentAi", "shareNote", "publishedDialogTitle", "shareAsLink", "shareAsImage"]) {
     assert.match(cloud, new RegExp(`cloudT\\("${key}"`));
   }
   assert.match(cloud, /PUBLICATION_TERMS_VERSION = "2026-08-12"/);
@@ -69,12 +70,14 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /document\.visibilityState === "visible"/);
   assert.match(cloud, /visibilitychange/);
   assert.match(cloud, /event\.origin !== location\.origin/);
-  assert.match(cloud, /startCloudStatusWatch\(shell\.overlay, render\)/);
-  assert.match(cloud, /CLOUD_STATUS_POLL_MS = 1500/);
-  assert.match(cloud, /Boolean\(device\.connected\)/);
-  assert.match(cloud, /if \(current !== previous\)/);
+  assert.doesNotMatch(cloud, /startCloudStatusWatch|CLOUD_STATUS_POLL_MS|cloudStatusPoll/);
+  assert.match(cloud, /"aria-label":cloudT\("refreshCurrentView"\)/);
+  assert.match(cloud, /Boolean\(state\.status\?\.device\?\.connected\)/);
+  assert.match(cloud, /if \(previouslySignedIn !== accountSignedIn\(\)\)/);
   assert.match(main, /desktopApp:process\.env\.PENECHO_DESKTOP_APP==="true"/);
-  assert.match(css, /\.cloud-section-tab \{[^}]*min-height: 2\.75rem/);
+  assert.match(css, /\.cloud-section-tabs \{[^}]*height: 2\.25rem/);
+  assert.match(css, /\.cloud-section-tab \{[^}]*height: 1\.875rem[^}]*min-height: 1\.875rem/);
+  assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.cloud-section-tab[\s\S]*?min-height: 2\.75rem/);
   assert.match(css, /\.cloud-project-card/);
   assert.match(css, /\.cloud-project-create-form/);
   assert.match(css, /overflow-wrap: anywhere/);

@@ -42,6 +42,34 @@ test("temporary Cloud failures explain that the local Canvas remains safe", asyn
   }
 });
 
+test("personal Widget favorites send one JSON object through the local Cloud account session", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-favorite-body-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:"https://internaltest.penecho.ai" });
+    connector.writeConfiguration({ version:2, origin:"https://internaltest.penecho.ai", accountToken:"local-account-session" });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://internaltest.penecho.ai/api/v1/favorites");
+      assert.equal(options.headers.authorization, "Bearer local-account-session");
+      assert.deepEqual(JSON.parse(options.body), {
+        name:"Timer",
+        artifact:{ format:"penecho-widget", formatVersion:1, widget:{ title:"Timer" } },
+        thumbnail:"AA==",
+        sourceItemId:null,
+      });
+      return new Response(JSON.stringify({ favorite:{ id:"favorite-1", name:"Timer" } }), { status:201, headers:{ "content-type":"application/json" } });
+    };
+    assert.equal((await connector.saveWidgetFavorite({
+      name:"Timer",
+      artifact:{ format:"penecho-widget", formatVersion:1, widget:{ title:"Timer" } },
+      thumbnail:"AA==",
+    })).id, "favorite-1");
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("cloud relay reconnect delays step from ten seconds to one minute and then five minutes", () => {
   for (const attempt of [0, 1, 2]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 10_000);
   for (const attempt of [3, 4, 5, 6, 7]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 60_000);
@@ -1108,6 +1136,22 @@ test("Remote Canvas relay operations use the isolated HTTP callback", async () =
   } finally {
     fs.rmSync(stateDir, { recursive:true, force:true });
   }
+});
+
+test("community sharing rejects blank titles and descriptions before contacting Cloud", async () => {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(), "penecho-community-required-fields-"));
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}) });
+    const artifact={ formatVersion:1, communityPreview:{ dataBase64:"AA==" } };
+    await assert.rejects(
+      connector.shareCommunityItem({ kind:"widget", name:" ", description:"Useful", category:"productivity", artifact }),
+      (error) => error.status===400&&error.code==="community_title_required",
+    );
+    await assert.rejects(
+      connector.shareCommunityItem({ kind:"widget", name:"Timer", description:" ", category:"productivity", artifact }),
+      (error) => error.status===400&&error.code==="community_description_required",
+    );
+  } finally { fs.rmSync(stateDir,{recursive:true,force:true}); }
 });
 
 test("cloud Canvas save and load preserve animation manifests and widget assets", async () => {

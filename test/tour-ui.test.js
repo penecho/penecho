@@ -83,7 +83,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("0.9.0 changelog is a one-page dialog shown once after the feature tour", () => {
+test("1.0.0 changelog is a concise one-page dialog shown once after the feature tour", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -91,12 +91,11 @@ test("0.9.0 changelog is a one-page dialog shown once after the feature tour", (
     layer = html.match(/<div id="changelogLayer"[\s\S]*?<script src="\/api\/config\.js">/)?.[0] || "";
   assert.match(layer, /class="changelog-layer"[^>]*hidden[^>]*aria-hidden="true"/);
   assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"[^>]*aria-describedby="changelogIntro"/);
-  for (const id of ["changelogClose", "changelogTitle", "changelogIntro", "changelogCurrentVersion", "changelogEarlierTitle", "changelogDone"]) assert.match(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />0\.9\.0</);
-  assert.match(layer, /class="changelog-demo"[\s\S]*?penecho_plugins\.webp[\s\S]*?loading="eager"/);
-  assert.doesNotMatch(layer, /class="changelog-plugin-note"/);
+  for (const id of ["changelogClose", "changelogTitle", "changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.match(layer, new RegExp(`id="${id}"`));
+  assert.match(layer, />1\.0\.0</);
+  assert.doesNotMatch(layer, /class="changelog-demo"|class="changelog-release changelog-earlier"/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "0\.9\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "1\.0\.0"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer"\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
@@ -104,19 +103,15 @@ test("0.9.0 changelog is a one-page dialog shown once after the feature tour", (
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
-  assert.match(css, /\.changelog-demo\s*\{[^}]*margin-bottom:\s*14px/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogConnections", "changelogProjects", "changelogRefine", "changelogStreaming", "changelogProgress", "changelogEarlierTitle", "changelogImagesSummary", "changelogPluginsSummary", "changelogDone"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogIntro", "changelogLocalCloud", "changelogEchoes", "changelogDone"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
-  assert.match(layer, /class="changelog-demo"[\s\S]*data-i18n="changelogConnections"[\s\S]*data-i18n="changelogProgress"/);
-  assert.match(app, /changelogConnections:[^\n]*ten API or CLI connections[^\n]*one click/);
-  assert.match(app, /changelogProjects:[^\n]*server canvases[^\n]*v2 bundles/);
-  assert.match(app, /changelogRefine:[^\n]*standard unified diff[^\n]*reduces tokens/);
-  assert.match(app, /changelogStreaming:[^\n]*SSE streaming[^\n]*stable/);
-  assert.match(zh, /changelogConnections:[^\n]*十套 API 或 CLI 连接[^\n]*一键切换/);
-  assert.match(zh, /changelogProjects:[^\n]*项目[^\n]*v2 Bundle/);
-  assert.match(zh, /changelogRefine:[^\n]*unified diff[^\n]*减少 token/);
+  assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 2);
+  assert.match(app, /changelogLocalCloud:[^\n]*Open Cloud[^\n]*current Canvas/);
+  assert.match(app, /changelogEchoes:[^\n]*Publish to Echoes[^\n]*as images/);
+  assert.match(zh, /changelogLocalCloud:[^\n]*本地打开[^\n]*当前画布/);
+  assert.match(zh, /changelogEchoes:[^\n]*发布到 Echoes[^\n]*分享为图片/);
 });
 
 test("feature tour copy is complete in English and Chinese", () => {

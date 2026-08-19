@@ -9,6 +9,13 @@ const { test } = require("node:test");
 const ROOT = path.resolve(__dirname, "..");
 const cloudScript = fs.readFileSync(path.join(ROOT, "public", "cloud-connect.js"), "utf8");
 const cloudCss = fs.readFileSync(path.join(ROOT, "public", "cloud-connect.css"), "utf8");
+const serverSource = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8");
+
+test("Cloud storage help stays concise in both languages", () => {
+  assert.match(cloudScript, /storageHelp:"Saved versions are never overwritten\."/);
+  assert.match(cloudScript, /storageHelp:"已保存版本不会被覆盖。"/);
+  assert.doesNotMatch(cloudScript, /Every successful save creates an immutable revision|每次成功保存都会创建不可变版本/);
+});
 
 class FakeElement {
   constructor(tag, ownerDocument) {
@@ -158,7 +165,7 @@ const signedOutStatus = (device = {}) => ({
   browserSignIn:{ pending:false },
 });
 
-function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, navigatorOverrides = {} } = {}) {
+function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], cloudFavoriteSaveError = null, serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, widgetArtifactPromise = null, widgetArtifactError = null, navigatorOverrides = {}, withCrafts = false, sessionStorageEntries = {} } = {}) {
   const timers = makeTimers();
   const documentListeners = new Map();
   const document = {
@@ -189,7 +196,16 @@ function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime
   const cloudButton = new FakeElement("button", document);
   cloudButton.append(label);
   const shareButton = new FakeElement("button", document);
-  document.getElementById = (id) => ({ cloudAccountBtn:cloudButton, shareCanvasBtn:shareButton })[id] || null;
+  const craftsButton = withCrafts ? new FakeElement("button", document) : null,
+    craftsPopover = withCrafts ? new FakeElement("section", document) : null,
+    craftsClose = withCrafts ? new FakeElement("button", document) : null,
+    craftsList = withCrafts ? new FakeElement("div", document) : null;
+  if (withCrafts) {
+    craftsPopover.hidden = true;
+    craftsPopover.append(craftsClose, craftsList);
+    document.body.append(craftsButton, craftsPopover);
+  }
+  document.getElementById = (id) => ({ cloudAccountBtn:cloudButton, shareCanvasBtn:shareButton, craftsButton, craftsPopover, craftsClose, craftsList })[id] || null;
 
   let statusPayload = status;
   let statusError = null;
@@ -199,15 +215,19 @@ function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime
   let deferredAccountError = null;
   let releaseAccountError = null;
   const alerts = [];
+  const clipboardWrites = [];
   const fetchCalls = [];
   const windowListeners = new Map();
-  const jsonResponse = (body) => ({ ok:true, status:200, json:async () => body });
+  const jsonResponse = (body, status = 200) => ({ ok:true, status, json:async () => body });
   const fetch = (url, options = {}) => {
     const target = String(url);
     fetchCalls.push({ url:target, options });
     if (target === "/api/cloud/status") {
       if (statusError) return Promise.reject(statusError);
-      if (deferStatus) return new Promise((resolve) => { releaseStale = () => resolve(jsonResponse(stalePayload)); });
+      if (deferStatus) {
+        deferStatus = false;
+        return new Promise((resolve) => { releaseStale = () => resolve(jsonResponse(stalePayload)); });
+      }
       return Promise.resolve(jsonResponse(statusPayload));
     }
     if (target === "/api/cloud/account" && deferredAccountError) {
@@ -216,7 +236,17 @@ function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime
     if (target === "/api/cloud/account") return Promise.resolve(jsonResponse(statusPayload));
     if (target === "/api/cloud/sign-in/start") return Promise.resolve(jsonResponse({ authorizationUrl:`${cloudOrigin}/auth/local`, expiresAt:Date.now() + 60_000 }));
     if (target === "/api/cloud/library") return Promise.resolve(jsonResponse(library || { workspace:{}, projects:[], canvases:[], sync:{ bundleVersion:2, conflictPolicy:"base-revision-required" } }));
+    if (target === "/api/favorites" && options.method === "PUT") {
+      const existing = localFavoriteItems[0] || null,
+        favorite = { ...existing, ...JSON.parse(options.body), id:existing?.id || "local-favorite-1", artifactSha256:existing?.artifactSha256 || "b".repeat(64), cloudId:existing?.cloudId || null, createdAt:existing?.createdAt || Date.now() };
+      return Promise.resolve(jsonResponse({ favorite }, existing ? 200 : 201));
+    }
     if (target === "/api/favorites") return Promise.resolve(jsonResponse({ favorites:localFavoriteItems }));
+    if (target.startsWith("/api/favorites/") && options.method === "DELETE") return Promise.resolve(jsonResponse({ removed:true }));
+    if (target === "/api/cloud/favorites" && options.method === "POST") {
+      if (cloudFavoriteSaveError) return Promise.resolve({ ok:false, status:cloudFavoriteSaveError.status || 413, json:async () => ({ error:cloudFavoriteSaveError.message || "Not enough Cloud storage for this favorite.", code:cloudFavoriteSaveError.code || "storage_quota_exceeded" }) });
+      return Promise.resolve(jsonResponse({ favorite:{ id:"cloud-favorite-1", ...JSON.parse(options.body) } }, 201));
+    }
     if (target === "/api/cloud/favorites") return Promise.resolve(jsonResponse({ favorites:widgetFavorites }));
     if (target.startsWith("/api/cloud/community?scope=favorites")) return Promise.resolve(jsonResponse({ items:communityFavorites }));
     if (target === "/api/cloud/community/share" && publishItem) return Promise.resolve(jsonResponse({ item:publishItem }));
@@ -229,13 +259,19 @@ function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime
   const imported = [];
   const opened = [];
   const openedLocal = [];
+  const favoriteStates = [];
   const windowObject = {
     PENECHO_CONFIG:{ accessSessionToken:"test-session", cloudOrigin, cloudEnvironment:cloudOrigin.includes("internaltest") ? "uat" : "prod", desktopApp:serverDesktopApp, ...(runtime ? { runtime } : {}) },
     ...(rendererDesktopBridge ? { penechoDesktop:{} } : {}),
     PenEchoCommunityCanvas:{
       importWidget:async (artifact, item) => { imported.push({ kind:"widget", artifact, item }); },
       importCanvas:async (artifact, item) => { imported.push({ kind:"canvas", artifact, item }); },
-      widgetArtifact:async () => widgetShareArtifact || ({ widget:{ id:"widget-1", title:"Widget" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } }),
+      widgetArtifact:async () => {
+        if (widgetArtifactError) throw widgetArtifactError;
+        if (widgetArtifactPromise) return widgetArtifactPromise;
+        return widgetShareArtifact || ({ widget:{ id:"widget-1", title:"Widget" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } });
+      },
+      setWidgetFavorite:(widgetId, favorite, busy = false) => favoriteStates.push({ widgetId, favorite, busy }),
       canvasArtifact:async () => canvasShareArtifact || ({ name:"", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } }),
       lineageForArtifact:() => null,
     },
@@ -252,15 +288,19 @@ function boot({ status, cloudOrigin = "https://internaltest.penecho.ai", runtime
     alert(message) { alerts.push(String(message)); },
   };
   const context = {
-    window:windowObject, document, navigator:{ ...navigatorOverrides }, location:{ origin:"http://127.0.0.1:3888" },
-    sessionStorage:{ getItem:() => null, setItem() {}, removeItem() {} },
+    window:windowObject, document, navigator:{ clipboard:{ writeText:async (value) => clipboardWrites.push(String(value)) }, ...navigatorOverrides }, location:{ origin:"http://127.0.0.1:3888" },
+    sessionStorage:{
+      getItem:(key) => Object.hasOwn(sessionStorageEntries, key) ? sessionStorageEntries[key] : null,
+      setItem:(key, value) => { sessionStorageEntries[key] = String(value); },
+      removeItem:(key) => { delete sessionStorageEntries[key]; },
+    }, crypto:{},
     fetch, setTimeout:timers.setTimeout, clearTimeout:timers.clearTimeout, queueMicrotask,
     URL, Date, console, Blob, File:FakeFile, Image:FakeImage,
   };
   vm.runInNewContext(cloudScript, context, { filename:"public/cloud-connect.js" });
   const statusCalls = () => fetchCalls.filter((call) => call.url === "/api/cloud/status").length;
   return {
-    document, cloudButton, shareButton, timers, fetchCalls, statusCalls, alerts, imported, opened, openedLocal, window:windowObject,
+    document, cloudButton, shareButton, craftsButton, craftsPopover, craftsList, timers, fetchCalls, statusCalls, alerts, clipboardWrites, imported, opened, openedLocal, favoriteStates, window:windowObject,
     overlay:() => document.querySelector(".penecho-cloud-overlay"),
     setStatus(next) { statusPayload = next; },
     setStatusError(error) { statusError = error; },
@@ -294,18 +334,25 @@ async function openCloudCenter(run) {
   return overlay;
 }
 
-async function publishCraftFromShareDialog(run, kind) {
+async function publishCraftFromShareDialog(run, kind, { continuationText="Continue with the next useful detail.", beforePublish = null } = {}) {
   if (kind === "canvas") run.shareButton.click();
   else await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"share", widgetId:"widget-1" } });
   await run.flush();
   const overlay = run.overlay();
   assert.ok(overlay?.isConnected, `expected the ${kind} share dialog to open`);
+  beforePublish?.(overlay);
   const controls = flatten(overlay);
+  const title = controls.find((node) => node.tagName === "INPUT" && ["Widget name", "Canvas name"].includes(node.getAttribute("placeholder")));
+  const description = controls.find((node) => node.tagName === "TEXTAREA" && node.getAttribute("placeholder") === "A short, useful introduction");
+  title.value = `${kind === "widget" ? "Widget" : "Canvas"} title`;
+  title.dispatch("input");
+  description.value = "A concise description of this published Craft.";
+  description.dispatch("input");
   const category = controls.find((node) => node.tagName === "SELECT");
   category.value = "productivity";
   category.dispatch("change");
   const continuation = controls.find((node) => node.getAttribute("placeholder")?.includes("next Crafter"));
-  continuation.value = "Continue with the next useful detail.";
+  continuation.value = continuationText;
   continuation.dispatch("input");
   for (const checkbox of controls.filter((node) => node.getAttribute("type") === "checkbox")) {
     checkbox.checked = true;
@@ -315,8 +362,99 @@ async function publishCraftFromShareDialog(run, kind) {
   assert.equal(publish?.disabled, false, "completed publication fields enable the publish action");
   publish.click();
   await run.flush();
-  return overlay;
+  const resultOverlay = run.overlay();
+  assert.equal(overlay.isConnected, false, "the publication form closes after a successful publish");
+  assert.ok(resultOverlay?.isConnected, "a separate publication result dialog opens");
+  assert.notEqual(resultOverlay, overlay);
+  return resultOverlay;
 }
+
+test("the next-Crafter Echo prompt is optional in English and Chinese", async () => {
+  const run = boot({
+    status:deviceStatus(),
+    publishItem:{ id:"123e4567-e89b-42d3-a456-426614174099", kind:"canvas", name:"Optional prompt" },
+    canvasShareArtifact:{ name:"Optional prompt", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
+  });
+  await run.flush();
+  let publicationForm;
+  await publishCraftFromShareDialog(run, "canvas", { continuationText:"", beforePublish:(overlay) => { publicationForm = overlay; } });
+  const publicationRequest = run.fetchCalls.find((call) => call.url === "/api/cloud/community/share" && call.options.method === "POST");
+  assert.equal(JSON.parse(publicationRequest.options.body).continuationPrompt, "");
+  assert.ok(publicationForm.textContent.includes("What should the next Crafter Echo? (optional)"));
+  assert.doesNotMatch(publicationForm.textContent, /Tell the next Crafter what to Echo/);
+
+  const zh = boot({ status:deviceStatus(), language:"zh-CN" });
+  await zh.flush();
+  zh.shareButton.click();
+  await zh.flush();
+  assert.ok(zh.overlay().textContent.includes("下一位创作者应该 Echo 什么？（可选）"));
+});
+
+test("the optional next-Crafter Echo prompt always opens empty", async () => {
+  const draftKey = "penecho.community.publish.canvas.Draft identity";
+  const sessionStorageEntries = {
+    [draftKey]:JSON.stringify({
+      name:"Recovered title",
+      description:"Recovered description",
+      category:"productivity",
+      tags:"planning",
+      continuation:"Old suggestion must not return",
+    }),
+  };
+  const run = boot({
+    status:deviceStatus(),
+    canvasShareArtifact:{ name:"Draft identity", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
+    sessionStorageEntries,
+  });
+  await run.flush();
+  run.shareButton.click();
+  await run.flush();
+
+  const controls = flatten(run.overlay());
+  const title = controls.find((node) => node.tagName === "INPUT" && node.getAttribute("placeholder") === "Canvas name");
+  const continuation = controls.find((node) => node.getAttribute("placeholder")?.includes("next Crafter"));
+  assert.equal(title.value, "Recovered title", "ordinary publication draft fields still recover");
+  assert.equal(continuation.value, "", "legacy or previous optional suggestions never prefill a new publication form");
+
+  continuation.value = "A suggestion entered during this opening";
+  continuation.dispatch("input");
+  assert.equal(Object.hasOwn(JSON.parse(sessionStorageEntries[draftKey]), "continuation"), false, "the optional suggestion is not persisted as draft state");
+});
+
+test("new publication forms keep title and description empty and block incomplete publishing", async () => {
+  const run = boot({
+    status:deviceStatus(),
+    publishItem:{ id:"123e4567-e89b-42d3-a456-426614174098", kind:"canvas", name:"Should not publish" },
+    canvasShareArtifact:{ name:"Artifact title must not prefill", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
+  });
+  await run.flush();
+  run.shareButton.click();
+  await run.flush();
+
+  const overlay=run.overlay(),controls=flatten(overlay);
+  const title=controls.find((node)=>node.tagName==="INPUT"&&node.getAttribute("placeholder")==="Canvas name");
+  const description=controls.find((node)=>node.tagName==="TEXTAREA"&&node.getAttribute("placeholder")==="A short, useful introduction");
+  const publish=controls.find((node)=>node.tagName==="BUTTON"&&node.textContent==="Publish this stroke");
+  assert.equal(title.value, "");
+  assert.equal(description.value, "");
+  assert.equal(title.getAttribute("required"), "");
+  assert.equal(description.getAttribute("required"), "");
+  assert.equal(publish.disabled, false, "the publish action remains available so it can explain missing fields");
+
+  publish.click();
+  await run.flush();
+  assert.ok(overlay.textContent.includes("Enter a title before publishing."));
+  assert.equal(title.getAttribute("aria-invalid"), "true");
+  assert.equal(run.fetchCalls.some((call)=>call.url==="/api/cloud/community/share"), false);
+
+  title.value="A clear title";
+  title.dispatch("input");
+  publish.click();
+  await run.flush();
+  assert.ok(overlay.textContent.includes("Enter a description before publishing."));
+  assert.equal(description.getAttribute("aria-invalid"), "true");
+  assert.equal(run.fetchCalls.some((call)=>call.url==="/api/cloud/community/share"), false);
+});
 
 test("Cloud Center pairing instructions link PenEcho Cloud → Devices to the configured cloud origin", async () => {
   const uat = boot({ status:deviceStatus({ configured:false, enabled:false, state:"disconnected", id:null, name:null }) });
@@ -351,6 +489,45 @@ test("Cloud Center Link settings reuse the same Devices link once a device is co
   assert.ok(overlay.textContent.includes("new pairing key from Cloud → Devices."));
 });
 
+test("sharing while signed out explains the requirement and opens Cloud sign-in", async () => {
+  const run = boot({ status:signedOutStatus() });
+  await run.flush();
+
+  run.shareButton.click();
+  await run.flush();
+
+  const overlay = run.overlay();
+  assert.ok(overlay?.isConnected, "the Cloud Center opens instead of an unusable publication form");
+  assert.ok(overlay.textContent.includes("Please sign in to PenEcho Cloud before sharing."));
+  assert.ok(flatten(overlay).some((node) => node.tagName === "BUTTON" && node.textContent === "Sign in with browser"));
+  assert.ok(!overlay.textContent.includes("Preserve this moment"));
+});
+
+test("publication uses one consolidated PenEcho agreement link in browsers and desktop apps", async () => {
+  for (const options of [
+    { cloudOrigin:"https://internaltest.penecho.ai" },
+    { cloudOrigin:"https://penecho.ai", rendererDesktopBridge:true },
+  ]) {
+    const run = boot({ status:deviceStatus(), ...options });
+    await run.flush();
+    run.shareButton.click();
+    await run.flush();
+
+    const overlay = run.overlay();
+    const checkboxes = flatten(overlay).filter((node) => node.getAttribute("type") === "checkbox");
+    const agreement = flatten(overlay).find((node) => node.tagName === "A" && node.textContent === "Publication Agreement");
+    assert.equal(checkboxes.length, 1, "one agreement replaces the two overlapping confirmations");
+    assert.ok(agreement);
+    assert.equal(agreement.getAttribute("href"), `${options.cloudOrigin}/terms.html#public-crafts`);
+    assert.equal(agreement.getAttribute("target"), "_blank");
+    assert.equal(agreement.getAttribute("rel"), "noopener");
+    assert.doesNotMatch(overlay.textContent, /Public Craft ML License|CC BY-SA 4\.0|embedded source under MIT|including its open-license and model-training terms/);
+    const preview = flatten(overlay).find((node) => node.className === "cloud-share-preview");
+    assert.ok(preview);
+    assert.equal(preview.children.length, 1, "the preview contains only the image, without a dark metadata strip");
+  }
+});
+
 test("a linked device remains visible and controllable when the Cloud account is signed out", async () => {
   const run = boot({ status:signedOutStatus({ configured:true, enabled:true, connected:true, state:"connected", id:"dev-1", name:"My PenEcho" }) });
   await run.flush();
@@ -362,33 +539,38 @@ test("a linked device remains visible and controllable when the Cloud account is
   assert.ok(!overlay.textContent.includes("enter a one-time pairing key"));
 });
 
-test("Cloud Center re-renders from Connecting to Connected through the status watcher without reopening", async () => {
+test("Cloud Center re-renders from Connecting to Connected through manual Refresh without reopening", async () => {
   const run = boot({ status:deviceStatus() });
   await run.flush();
   const overlay = await openCloudCenter(run);
   assert.ok(overlay.textContent.includes("My PenEcho · Connecting"));
 
   run.setStatus(deviceStatus({ connected:true, state:"connected" }));
-  await run.timers.advance(1500); // one watcher interval, no reload, no reopen
+  const refresh = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  refresh.click();
+  await run.flush();
   assert.equal(run.overlay(), overlay, "overlay must stay the same instance");
   assert.ok(overlay.textContent.includes("My PenEcho · Connected"));
   assert.ok(!overlay.textContent.includes("· Connecting"));
   assert.equal(run.cloudButton.dataset.state, "connected");
 });
 
-test("Cloud Center closes only when the status watcher observes a signed-out to signed-in transition", async () => {
+test("manual Refresh never treats device state changes as a completed browser sign-in", async () => {
   const run = boot({ status:signedOutStatus() });
   await run.flush();
   const overlay = await openCloudCenter(run);
 
   run.setStatus(signedOutStatus({ configured:true, enabled:true, connected:true, state:"connected", id:"dev-1", name:"My PenEcho" }));
-  await run.timers.advance(1500);
+  let refresh = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  refresh.click();
+  await run.flush();
   assert.equal(run.overlay(), overlay, "linking a device without an account session must not close Cloud Center");
 
   run.setStatus(deviceStatus({ connected:true, state:"connected" }));
-  await run.timers.advance(1500);
-  assert.equal(run.overlay(), null, "the first confirmed signed-in status closes Cloud Center");
-  assert.equal(run.cloudButton.getAttribute("aria-expanded"), "false");
+  refresh = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  refresh.click();
+  await run.flush();
+  assert.equal(run.overlay(), overlay, "only an active browser sign-in transaction may auto-close Cloud Center");
 });
 
 test("Cloud Center stays open when it was manually opened for an account that was already signed in", async () => {
@@ -396,8 +578,9 @@ test("Cloud Center stays open when it was manually opened for an account that wa
   await run.flush();
   const overlay = await openCloudCenter(run);
 
-  await run.timers.advance(1500);
+  await run.timers.advance(30_000);
   assert.equal(run.overlay(), overlay, "an existing signed-in session is not a new login completion");
+  assert.equal(run.timers.count(), 0, "ordinary Cloud Center use has no status watcher");
 });
 
 test("browser sign-in polling closes Cloud Center after the account session becomes signed in", async () => {
@@ -416,6 +599,21 @@ test("browser sign-in polling closes Cloud Center after the account session beco
   assert.equal(run.overlay(), null);
   assert.equal(run.cloudButton.getAttribute("aria-expanded"), "false");
   assert.equal(run.timers.count(), 0, "successful login stops both login and dialog status polling");
+});
+
+test("Projects sign-in action starts browser sign-in instead of only moving focus", async () => {
+  const run = boot({ status:signedOutStatus() });
+  await run.flush();
+  const overlay = await openCloudCenter(run);
+  assert.ok(!overlay.textContent.includes("Choose a project, then open or save a versioned Canvas."), "the active tab label replaces the duplicate Projects heading and hint");
+
+  const signIn = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Sign in");
+  assert.ok(signIn, "expected the Projects sign-in action");
+  signIn.click();
+  await run.flush();
+
+  assert.ok(run.fetchCalls.some((call) => call.url === "/api/cloud/sign-in/start"), "the Projects action must start the browser authorization request");
+  assert.deepEqual(run.opened, [["about:blank", "penecho-cloud-sign-in", "popup,width=760,height=760"]]);
 });
 
 test("browser sign-in detects Electron from the renderer bridge instead of the host server flag", async () => {
@@ -459,73 +657,64 @@ test("browser sign-in callback closes on confirmed login but not on a failed or 
   assert.equal(existing.overlay(), existingOverlay, "a stale callback cannot close a dialog opened by an existing session");
 });
 
-test("Cloud Center refreshes immediately when the page becomes visible again", async () => {
-  const run = boot({ status:deviceStatus() });
+test("Cloud Center refreshes data only on open, tab switch, or explicit Refresh", async () => {
+  const widget = { id:"123e4567-e89b-42d3-a456-426614174003", name:"Timer", artifactSha256:"a".repeat(64), artifact:{ widget:{ title:"Timer" } } };
+  const run = boot({ status:deviceStatus(), widgetFavorites:[widget] });
   await run.flush();
   const overlay = await openCloudCenter(run);
-  const callsAfterOpen = run.statusCalls();
+  const count = (url) => run.fetchCalls.filter((call) => call.url === url).length;
+  const initialStatusCalls = run.statusCalls();
 
-  run.document.visibilityState = "hidden";
-  run.setStatus({ ...deviceStatus({ connected:true, state:"connected" }), account:{ name:"Test User", credits:42 } });
-  run.document.dispatch("visibilitychange"); // ignored while hidden
-  await run.timers.advance(200); // not enough for the hidden-tab interval
-  assert.equal(run.statusCalls(), callsAfterOpen);
-  assert.ok(!overlay.textContent.includes("42 credits"));
+  assert.equal(count("/api/cloud/library"), 1, "opening loads Projects once");
+  assert.equal(run.timers.count(), 0, "an open Cloud Center has no background data timer");
 
-  run.document.visibilityState = "visible";
-  run.document.dispatch("visibilitychange");
-  assert.equal(run.statusCalls(), callsAfterOpen + 1, "returning to visible must poll immediately");
-  await run.flush();
-  assert.ok(overlay.textContent.includes("42 credits"));
-  assert.ok(overlay.textContent.includes("My PenEcho · Connected"));
-  assert.equal(run.timers.count(), 1, "the watcher keeps a single pending timer");
-});
-
-test("Cloud Center stops the status watcher when the overlay closes", async () => {
-  const run = boot({ status:deviceStatus() });
-  await run.flush();
-  await openCloudCenter(run);
-  assert.equal(run.timers.count(), 1, "expected one pending watcher timer while open");
-
-  const close = flatten(run.overlay()).find((node) => node.getAttribute("aria-label") === "Close");
-  close.click();
-  assert.equal(run.overlay(), null);
-  assert.equal(run.timers.count(), 0, "closing must clear the watcher timer");
-
-  const callsAtClose = run.statusCalls();
   await run.timers.advance(30_000);
+  run.document.visibilityState = "hidden";
+  run.document.dispatch("visibilitychange");
   run.document.visibilityState = "visible";
   run.document.dispatch("visibilitychange");
   await run.flush();
-  assert.equal(run.statusCalls(), callsAtClose, "no polling happens after the overlay closes");
+  assert.equal(run.statusCalls(), initialStatusCalls, "time and visibility changes do not refresh status");
+  assert.equal(count("/api/cloud/library"), 1, "time and visibility changes do not reload Projects");
+
+  const favorites = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites");
+  favorites.click();
+  await run.flush();
+  assert.equal(count("/api/cloud/favorites"), 1, "one Favorites load makes one personal-favorites request");
+  assert.equal(count("/api/cloud/community?scope=favorites&kind=canvas&sort=newest&limit=60"), 1);
+  assert.equal(count("/api/cloud/community?scope=favorites&kind=widget&sort=newest&limit=60"), 1);
+
+  const projects = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Projects");
+  projects.click();
+  await run.flush();
+  assert.equal(count("/api/cloud/library"), 2, "switching back intentionally reloads Projects once");
+
+  const refresh = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  assert.ok(refresh, "the active view exposes a manual Refresh control");
+  refresh.click();
+  await run.flush();
+  assert.equal(run.statusCalls(), initialStatusCalls + 1);
+  assert.equal(count("/api/cloud/library"), 3, "manual Refresh reloads only the active view once");
 });
 
-test("Cloud Center never runs concurrent polls and a stale response cannot overwrite newer status", async () => {
+test("a stale manual status response cannot overwrite a newer account refresh", async () => {
   const run = boot({ status:deviceStatus() });
   await run.flush();
   const overlay = await openCloudCenter(run);
-  const callsAfterOpen = run.statusCalls();
 
-  run.freezeStale(deviceStatus()); // the next /api/cloud/status response stays pending until released
-  run.timers.fire(1500); // start a watcher poll that hangs on the deferred response
-  assert.equal(run.statusCalls(), callsAfterOpen + 1);
-
-  run.document.dispatch("visibilitychange"); // must not start a second concurrent poll
-  assert.equal(run.statusCalls(), callsAfterOpen + 1, "the in-flight poll blocks a concurrent one");
+  run.freezeStale(deviceStatus());
+  const refreshView = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  refreshView.click();
+  await run.flush();
 
   run.setStatus(deviceStatus({ connected:true, state:"connected" }));
-  const refresh = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Refresh account");
-  refresh.click(); // a newer, faster request completes while the poll is still pending
-  await run.flush();
-  assert.ok(overlay.textContent.includes("My PenEcho · Connected"));
+  await run.window.dispatch("message", { origin:"http://127.0.0.1:3888", data:{ type:"penecho:cloud-sign-in-result", ok:true } });
   assert.equal(run.cloudButton.dataset.state, "connected");
 
-  run.releaseStale(); // the stale "connecting" response arrives last and must be dropped
+  run.releaseStale();
   await run.flush();
   assert.equal(run.cloudButton.dataset.state, "connected");
   assert.equal(run.cloudButton.title, "PenEcho Cloud · Device linked");
-  assert.ok(overlay.textContent.includes("My PenEcho · Connected"));
-  assert.ok(!overlay.textContent.includes("· Connecting"));
 });
 
 test("Cloud Center ignores a stale forced-refresh error after a newer status succeeds", async () => {
@@ -539,8 +728,7 @@ test("Cloud Center ignores a stale forced-refresh error after a newer status suc
   await run.flush();
 
   run.setStatus(deviceStatus({ connected:true, state:"connected" }));
-  await run.timers.advance(1500);
-  assert.ok(overlay.textContent.includes("My PenEcho · Connected"));
+  await run.window.dispatch("message", { origin:"http://127.0.0.1:3888", data:{ type:"penecho:cloud-sign-in-result", ok:true } });
   assert.equal(run.cloudButton.dataset.state, "connected");
 
   run.releaseAccountError();
@@ -557,8 +745,10 @@ test("Cloud Center preserves a confirmed signed-in account across transient stat
   const overlay = await openCloudCenter(run);
 
   run.setStatusError(new Error("temporary status outage"));
-  await run.timers.advance(1500);
-  assert.equal(run.cloudButton.dataset.state, "signed-in", "a failed poll cannot imply sign-out");
+  const refresh = flatten(overlay).find((node) => node.getAttribute("aria-label") === "Refresh");
+  refresh.click();
+  await run.flush();
+  assert.equal(run.cloudButton.dataset.state, "signed-in", "a failed manual refresh cannot imply sign-out");
 
   const favorites = flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites");
   favorites.click();
@@ -636,6 +826,36 @@ test("Cloud Center opens favorite Canvases in the current local Canvas", async (
   assert.deepEqual(run.opened, []);
 });
 
+test("Cloud Center proxies community favorite thumbnails through the local Canvas", async () => {
+  const id = "123e4567-e89b-42d3-a456-426614174024",
+    canvas = { id, kind:"canvas", name:"Plan", author:{ name:"Ada" }, thumbnailUrl:`/api/v1/community/items/${id}/thumbnail` },
+    run = boot({ status:deviceStatus(), communityFavorites:[canvas] });
+  await run.flush();
+  const overlay = await openCloudCenter(run);
+  flatten(overlay).find((node) => node.getAttribute("role") === "tab" && node.textContent === "Favorites").click();
+  await run.flush();
+
+  const thumbnail = flatten(overlay).find((node) => node.className === "cloud-library-thumb");
+  assert.ok(thumbnail);
+  assert.equal(thumbnail.getAttribute("src"), `/api/cloud/community/${id}/thumbnail`);
+  assert.notEqual(thumbnail.getAttribute("src"), canvas.thumbnailUrl, "a Cloud API path must never resolve against the local 192.168/localhost origin");
+});
+
+test("the toolbar Favorites picker proxies community Widget thumbnails with the community item id", async () => {
+  const id = "123e4567-e89b-42d3-a456-426614174025",
+    widget = { id, kind:"widget", name:"Timer", artifactSha256:"c".repeat(64), thumbnailUrl:`/api/v1/community/items/${id}/thumbnail` },
+    run = boot({ status:deviceStatus(), communityFavorites:[widget], withCrafts:true });
+  await run.flush();
+
+  run.craftsButton.click();
+  await run.flush();
+
+  const thumbnail = flatten(run.craftsList).find((node) => node.className === "crafts-thumb");
+  assert.ok(thumbnail);
+  assert.equal(thumbnail.src, `/api/cloud/community/${id}/thumbnail`);
+  assert.notEqual(thumbnail.src, widget.thumbnailUrl);
+});
+
 test("Cloud Center adds favorite Widgets to the current Canvas", async () => {
   const widget = { id:"123e4567-e89b-42d3-a456-426614174003", name:"Timer", artifactSha256:"a".repeat(64), artifact:{ widget:{ title:"Timer" } } };
   const run = boot({ status:deviceStatus(), widgetFavorites:[widget] });
@@ -651,6 +871,101 @@ test("Cloud Center adds favorite Widgets to the current Canvas", async () => {
   assert.deepEqual(run.imported, [{ kind:"widget", artifact:widget.artifact, item:null }]);
 });
 
+test("favoriting a Widget works on LAN HTTP without Web Crypto", async () => {
+  const run = boot({
+    status:signedOutStatus(),
+    widgetShareArtifact:{ widget:{ id:"widget-1", title:"LAN Widget" } },
+  });
+  await run.flush();
+
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+
+  assert.deepEqual(run.alerts, []);
+  assert.deepEqual(run.favoriteStates, [
+    { widgetId:"widget-1", favorite:undefined, busy:true },
+    { widgetId:"widget-1", favorite:true, busy:false },
+  ]);
+  const request = run.fetchCalls.find((call) => call.url === "/api/favorites" && call.options.method === "PUT");
+  assert.ok(request, "the local PenEcho service hashes and stores the favorite");
+  assert.equal(JSON.parse(request.options.body).artifact.widget.title, "LAN Widget");
+  assert.doesNotMatch(cloudScript, /crypto\.subtle\.digest/);
+});
+
+test("Cloud quota failure leaves the newly saved local favorite intact and explains local-only storage", async () => {
+  const run = boot({
+    status:deviceStatus(),
+    widgetShareArtifact:{ widget:{ id:"widget-1", title:"Keep local" }, communityThumbnail:{ contentType:"image/webp", dataBase64:"A".repeat(200_000) } },
+    cloudFavoriteSaveError:{ code:"storage_quota_exceeded" },
+  });
+  await run.flush();
+
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+
+  assert.deepEqual(run.alerts, ["Cloud storage is full. Saved locally only."], "the user sees one concise local-only result");
+  assert.deepEqual(run.favoriteStates, [
+    { widgetId:"widget-1", favorite:undefined, busy:true },
+    { widgetId:"widget-1", favorite:true, busy:false },
+  ]);
+  assert.equal(run.fetchCalls.filter((call) => call.url === "/api/favorites" && call.options.method === "PUT").length, 1);
+  assert.ok(run.fetchCalls.some((call) => call.url === "/api/cloud/favorites" && call.options.method === "POST"));
+  assert.ok(!run.fetchCalls.some((call) => call.url.startsWith("/api/favorites/") && call.options.method === "DELETE"));
+});
+
+test("clicking an already-favorite Widget removes the server-identified favorite", async () => {
+  const artifact = { widget:{ id:"widget-1", title:"LAN Widget" } },
+    existing = { id:"local-favorite-1", name:"LAN Widget", artifact, artifactSha256:"a".repeat(64), cloudId:null, createdAt:1 },
+    run = boot({ status:signedOutStatus(), widgetShareArtifact:artifact, localFavoriteItems:[existing] });
+  await run.flush();
+
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+
+  assert.deepEqual(run.alerts, []);
+  assert.deepEqual(run.favoriteStates, [
+    { widgetId:"widget-1", favorite:undefined, busy:true },
+    { widgetId:"widget-1", favorite:false, busy:false },
+  ]);
+  assert.ok(run.fetchCalls.some((call) => call.url === `/api/favorites/${"a".repeat(64)}` && call.options.method === "DELETE"));
+});
+
+test("Widget favorite busy state clears after a failed snapshot", async () => {
+  const run = boot({ status:signedOutStatus(), widgetArtifactError:new Error("snapshot failed") });
+  await run.flush();
+
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+
+  assert.deepEqual(run.alerts, ["snapshot failed"]);
+  assert.deepEqual(run.favoriteStates, [
+    { widgetId:"widget-1", favorite:undefined, busy:true },
+    { widgetId:"widget-1", favorite:undefined, busy:false },
+  ]);
+});
+
+test("Widget favorite ignores repeat activation while its snapshot is still saving", async () => {
+  let releaseArtifact;
+  const widgetArtifactPromise = new Promise((resolve) => { releaseArtifact = resolve; });
+  const run = boot({ status:signedOutStatus(), widgetArtifactPromise });
+  await run.flush();
+
+  const first = run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+  const second = run.window.dispatch("penecho:community-widget-action", { detail:{ action:"favorite", widgetId:"widget-1" } });
+  await run.flush();
+
+  assert.deepEqual(run.favoriteStates, [{ widgetId:"widget-1", favorite:undefined, busy:true }]);
+  releaseArtifact({ widget:{ id:"widget-1", title:"One snapshot" } });
+  await Promise.all([first, second]);
+  await run.flush();
+  assert.deepEqual(run.favoriteStates, [
+    { widgetId:"widget-1", favorite:undefined, busy:true },
+    { widgetId:"widget-1", favorite:true, busy:false },
+  ]);
+  assert.equal(run.fetchCalls.filter((call) => call.url === "/api/favorites" && call.options.method === "PUT").length, 1);
+});
+
 test("share dialog and all category labels use the Chinese Cloud copy", async () => {
   const run = boot({ status:deviceStatus(), language:"zh-CN" });
   await run.flush();
@@ -662,6 +977,8 @@ test("share dialog and all category labels use the Chinese Cloud copy", async ()
   assert.ok(overlay.textContent.includes("保存这一刻"));
   assert.ok(overlay.textContent.includes("使用当前 AI 自动填写"));
   assert.ok(overlay.textContent.includes("我有权发布此作品"));
+  assert.ok(overlay.textContent.includes("《发布协议》"));
+  assert.ok(!overlay.textContent.includes("包括开放许可与模型训练条款"));
   assert.ok(overlay.textContent.includes("发布此笔触"));
   assert.ok(overlay.textContent.includes("预览已就绪"));
 
@@ -675,145 +992,138 @@ test("share dialog and all category labels use the Chinese Cloud copy", async ()
   assert.doesNotMatch(overlay.textContent, /Preserve this moment|Select a category|Auto-fill with current AI|I have the right to publish/);
 });
 
-test("published Canvas shares a generated image and exact public Craft URL through the browser share sheet", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174021", kind:"canvas", name:"Roadmap", shareUrl:"/community/123e4567-e89b-42d3-a456-426614174021" };
+test("published Canvas closes the publication form and opens a link-first result dialog", async () => {
+  const item = { id:"123e4567-e89b-42d3-a456-426614174021", kind:"canvas", name:"Roadmap", description:"Plan the next release.", shareUrl:"/community/123e4567-e89b-42d3-a456-426614174021" };
   const shareCalls = [];
   const run = boot({
     status:deviceStatus(),
     publishItem:item,
     canvasShareArtifact:{ name:"Roadmap", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-    navigatorOverrides:{ canShare:({ files }) => files?.[0]?.type === "image/png", share:async (payload) => { shareCalls.push(payload); } },
+    navigatorOverrides:{ share:async (payload) => { shareCalls.push(payload); } },
   });
   await run.flush();
   const overlay = await publishCraftFromShareDialog(run, "canvas");
-  const imageShare = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as image");
-  assert.ok(imageShare, "image sharing is an explicit post-publish action");
+  const publicationRequest = run.fetchCalls.find((call) => call.url === "/api/cloud/community/share" && call.options.method === "POST");
+  const publication = JSON.parse(publicationRequest.options.body);
+  assert.equal(publication.publicationTermsAccepted, true);
+  assert.equal(publication.publicationRightsAccepted, true);
+  assert.equal(publication.modelTrainingAccepted, true, "the consolidated agreement satisfies the existing server contract");
+  assert.ok(overlay.textContent.includes("Published to Echoes"));
+  assert.doesNotMatch(overlay.textContent, /Publish this stroke|Auto-fill with current AI/);
+  const actions = flatten(overlay).filter((node) => node.tagName === "BUTTON" || node.tagName === "A");
+  const linkIndex = actions.findIndex((node) => node.textContent === "Share as link");
+  const imageIndex = actions.findIndex((node) => node.textContent === "Share as image");
+  assert.ok(linkIndex >= 0 && imageIndex > linkIndex, "link sharing is the first share action");
 
-  imageShare.click();
+  actions[linkIndex].click();
   await run.flush();
-
-  const publicUrl = "https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174021";
   assert.equal(shareCalls.length, 1);
-  assert.equal(shareCalls[0].url, publicUrl);
-  assert.equal(shareCalls[0].files[0].type, "image/png");
-  assert.equal(shareCalls[0].files[0].name, "penecho-canvas-Roadmap.png");
-  const card = run.document.createdElements.find((node) => node instanceof FakeCanvasElement);
-  assert.ok(card.drawnImages.length, "the validated WebP preview is drawn into the share card");
-  assert.ok(card.drawnImages.some(([image]) => image.src === "/penecho-mark.png"), "the official PenEcho mark is drawn into the Canvas card");
-  for (const label of ["PenEcho", "ECHOES", "Echo", "CC BY-SA 4.0 · Source and attribution:"]) {
-    assert.ok(card.drawnText.some(({ value }) => value === label), `the Canvas card includes ${label}`);
-  }
-  assert.ok(card.drawnText.some(({ value }) => value === publicUrl), "the image itself includes the exact resolvable public link");
-  assert.ok(overlay.textContent.includes("Image shared."));
+  assert.equal(shareCalls[0].title, "Roadmap");
+  assert.equal(shareCalls[0].text, "View and Echo this Canvas on PenEcho.");
+  assert.equal(shareCalls[0].url, "https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174021");
+  assert.ok(overlay.textContent.includes("Link shared."));
 });
 
-test("published image sharing exposes busy state, prevents duplicate actions, and recovers from share-sheet errors", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174023", kind:"canvas", name:"Launch plan" };
-  let rejectShare;
+test("published image sharing copies a responsive linked image embed and prevents duplicate actions", async () => {
+  const item = { id:"123e4567-e89b-42d3-a456-426614174023", kind:"canvas", name:'Launch "plan" <safe>' };
+  let releaseCopy;
+  const clipboardWrites = [];
   const run = boot({
     status:deviceStatus(),
     publishItem:item,
-    navigatorOverrides:{
-      canShare:() => true,
-      share:() => new Promise((resolve, reject) => { rejectShare = reject; }),
-    },
+    navigatorOverrides:{ clipboard:{ writeText:(value) => new Promise((resolve) => { clipboardWrites.push(String(value)); releaseCopy=resolve; }) } },
   });
   await run.flush();
   const overlay = await publishCraftFromShareDialog(run, "canvas");
-  const imageShare = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as image");
-  const download = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Download image");
-  const tools = flatten(overlay).find((node) => node.className === "cloud-published-share-tools");
-
-  imageShare.click();
-  assert.equal(tools.getAttribute("aria-busy"), "true");
-  assert.equal(imageShare.disabled, true);
-  assert.equal(download.disabled, true);
-  assert.ok(overlay.textContent.includes("Preparing share image…"));
+  const shareLink = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as link");
+  const shareImage = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as image");
+  shareImage.click();
+  assert.equal(shareLink.disabled, true);
+  assert.equal(shareImage.disabled, true);
+  assert.equal(clipboardWrites.length, 1);
+  assert.equal(clipboardWrites[0], '<a href="https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174023" target="_blank" rel="noopener noreferrer"><img src="https://internaltest.penecho.ai/api/v1/community/items/123e4567-e89b-42d3-a456-426614174023/thumbnail" alt="Launch &quot;plan&quot; &lt;safe&gt; — PenEcho Echoes" width="1200" height="675" loading="lazy" decoding="async" style="max-width:100%;height:auto"></a>');
+  releaseCopy();
   await run.flush();
-  rejectShare(new Error("platform-specific, unlocalized failure"));
-  await run.flush();
-
-  assert.equal(tools.getAttribute("aria-busy"), "false");
-  assert.equal(imageShare.disabled, false);
-  assert.equal(download.disabled, false);
-  assert.ok(overlay.textContent.includes("Could not prepare the share image."));
-  assert.doesNotMatch(overlay.textContent, /platform-specific, unlocalized failure/);
+  assert.equal(shareLink.disabled, false);
+  assert.equal(shareImage.disabled, false);
+  assert.ok(overlay.textContent.includes("Linked image embed code copied."));
 });
 
-test("published Widget offers bilingual image sharing and downloads when native file sharing is unavailable", async () => {
+test("published Widget exposes the same bilingual link and image actions", async () => {
   const item = { id:"123e4567-e89b-42d3-a456-426614174022", kind:"widget", name:"计时器" };
-  const run = boot({
-    status:deviceStatus(),
-    language:"zh-CN",
-    publishItem:item,
-    widgetShareArtifact:{ widget:{ id:"widget-1", title:"计时器" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-  });
+  const run = boot({ status:deviceStatus(), language:"zh-CN", publishItem:item, widgetShareArtifact:{ widget:{ id:"widget-1", title:"计时器" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } } });
   await run.flush();
   await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"share", widgetId:"widget-1" } });
   await run.flush();
-  const overlay = run.overlay(), controls = flatten(overlay);
+  const form = run.overlay(), controls = flatten(form);
+  const title = controls.find((node) => node.tagName === "INPUT" && node.getAttribute("placeholder") === "组件名称");
+  const description = controls.find((node) => node.tagName === "TEXTAREA" && node.getAttribute("placeholder") === "写一段简短、实用的介绍");
+  title.value = "计时器"; title.dispatch("input");
+  description.value = "一个清晰、可复用的计时组件。"; description.dispatch("input");
   const category = controls.find((node) => node.tagName === "SELECT");
-  category.value = "productivity";
-  category.dispatch("change");
-  const continuation = controls.find((node) => node.getAttribute("placeholder")?.includes("下一位创作者"));
-  continuation.value = "继续完善提醒。";
-  continuation.dispatch("input");
-  for (const checkbox of controls.filter((node) => node.getAttribute("type") === "checkbox")) {
-    checkbox.checked = true;
-    checkbox.dispatch("change");
-  }
-  flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "发布此笔触").click();
+  category.value = "productivity"; category.dispatch("change");
+  for (const checkbox of controls.filter((node) => node.getAttribute("type") === "checkbox")) { checkbox.checked = true; checkbox.dispatch("change"); }
+  controls.find((node) => node.tagName === "BUTTON" && node.textContent === "发布此笔触").click();
   await run.flush();
 
-  const imageShare = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "分享为图片");
-  assert.ok(imageShare);
-  assert.ok(overlay.textContent.includes("下载图片"), "the explicit download fallback stays available");
-  imageShare.click();
+  const result = run.overlay();
+  assert.equal(form.isConnected, false);
+  assert.ok(result.textContent.includes("已发布到 Echoes"));
+  const shareLink = flatten(result).find((node) => node.tagName === "BUTTON" && node.textContent === "分享链接");
+  const shareImage = flatten(result).find((node) => node.tagName === "BUTTON" && node.textContent === "分享为图片");
+  assert.ok(shareLink && shareImage);
+  shareImage.click();
   await run.flush();
-
-  const download = run.document.createdElements.find((node) => node.tagName === "A" && node.download === "penecho-widget-计时器.png");
-  assert.ok(download, "unsupported native file sharing falls back to a PNG download");
-  assert.match(download.href, /^blob:/);
-  assert.ok(overlay.textContent.includes("图片已下载"));
-  const card = run.document.createdElements.find((node) => node instanceof FakeCanvasElement);
-  assert.ok(card.drawnImages.some(([image]) => image.src === "/penecho-mark.png"), "the official PenEcho mark is drawn into the Widget card");
-  for (const label of ["PenEcho", "ECHOES", "Echo", "CC BY-SA 4.0 · 来源与署名："]) {
-    assert.ok(card.drawnText.some(({ value }) => value === label), `the Widget card includes ${label}`);
-  }
-  assert.ok(card.drawnText.some(({ value }) => value === "组件"), "the Widget card uses the localized kind label");
-  assert.ok(card.drawnText.some(({ value }) => value === "https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174022"));
+  assert.match(run.clipboardWrites.at(-1), /<a href="https:\/\/internaltest\.penecho\.ai\/community\/123e4567-e89b-42d3-a456-426614174022"/);
+  assert.match(run.clipboardWrites.at(-1), /<img src="https:\/\/internaltest\.penecho\.ai\/api\/v1\/community\/items\/123e4567-e89b-42d3-a456-426614174022\/thumbnail"/);
+  assert.ok(result.textContent.includes("带链接的图片嵌入代码已复制。"));
 });
 
 test("share and widget-favorite flows do not embed user-facing English outside Cloud copy", () => {
   const shareSource = cloudScript.slice(cloudScript.indexOf("function shareDialog"), cloudScript.indexOf("async function takeFurther"));
   const favoriteSource = cloudScript.slice(cloudScript.indexOf("async function toggleWidgetFavorite"), cloudScript.indexOf("async function syncFavorites"));
   assert.doesNotMatch(shareSource, /Preserve this moment|Generating preview|Use no more than 8 tags|Enter a name before publishing|Craft published safely|Copy link|Preview ready\.|Could not generate the preview/);
+  assert.doesNotMatch(shareSource, /creativecommons\.org|opensource\.org|public-craft-training|Public Craft ML License/);
+  assert.match(shareSource, /new URL\("\/terms\.html#public-crafts",`\$\{cloudOrigin\(\)\}\/`\)/);
   assert.doesNotMatch(favoriteSource, /This PenEcho version does not support widget favorites|"Untitled Widget"/);
   assert.match(shareSource, /CATEGORIES\.map\(value => el\("option", \{ value, text:cloudT\(CATEGORY_LABEL_KEYS\[value\]\) \}\)\)/);
   assert.match(favoriteSource, /throw new Error\(cloudT\("favoriteUnsupported"\)\)/);
 });
 
-test("Cloud Connect source keeps the reviewed status watch contract", () => {
+test("the local favorite API has no 1 MiB artifact or 128 KiB thumbnail cap", () => {
+  assert.doesNotMatch(serverSource, /1 MiB favorite limit|artifactText\.length\s*>\s*1048576|thumbnail:[^\n]*slice\(0,\s*131072\)/);
+  assert.match(serverSource, /url\.pathname==="\/api\/cloud\/favorites"[\s\S]*?readJson\(req,MAX_SHARED_CANVAS_BYTES\)/);
+  assert.match(serverSource, /url\.pathname === "\/api\/favorites"[\s\S]*?readJson\(req, MAX_SHARED_CANVAS_BYTES\)/);
+});
+
+test("Cloud Connect refreshes views by interaction and keeps only the bounded sign-in watcher", () => {
   assert.match(cloudScript, /function cloudDevicesUrl\(\) \{\s*return new URL\("\/dashboard\.html#devices", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\);/);
   assert.match(cloudScript, /cloudDevicesLink\(cloudT\("penechoDevices"\)\)/);
   assert.doesNotMatch(cloudScript, /Use a one-time code instead|Paste local sign-in code|Authorization code/);
-  assert.match(cloudScript, /startCloudStatusWatch\(shell\.overlay, render\)/);
-  assert.match(cloudScript, /CLOUD_STATUS_POLL_MS = 1500/);
-  assert.match(cloudScript, /if \(current !== previous\)/);
+  assert.doesNotMatch(cloudScript, /startCloudStatusWatch|CLOUD_STATUS_POLL_MS|cloudStatusPoll/);
+  assert.match(cloudScript, /function render\(\{ reload = false \} = \{\}\)/);
+  assert.match(cloudScript, /render\(\{ reload:true \}\)/);
+  assert.match(cloudScript, /"aria-label":cloudT\("refreshCurrentView"\)/);
+  assert.match(cloudScript, /startBrowserSignInWatch/);
   assert.match(cloudScript, /visibilitychange/);
   assert.match(cloudScript, /if \(seq !== statusRequestSeq\) return state\.status;/);
 });
 
-test("Cloud Center keeps navigation, forms, filters, and inline links at least 44px", () => {
-  assert.match(cloudCss, /\.penecho-cloud-dialog \.cloud-dialog-close\s*\{[^}]*flex:\s*0 0 2\.75rem[^}]*min-width:\s*2\.75rem/);
-  assert.match(cloudCss, /\.penecho-cloud-panel p a\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-project-web-link\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-account-button\s*\{[^}]*min-height:\s*2\.75rem[^}]*min-width:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-favorite-filter\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-secondary-settings summary\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-project-picker select, \.cloud-project-create-form input\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-project-create > summary\s*\{[^}]*min-height:\s*2\.75rem/);
-  assert.match(cloudCss, /\.cloud-field input, \.cloud-field select\s*\{\s*min-height:\s*2\.75rem/);
+test("Cloud Center uses compact desktop controls and restores 44px coarse-pointer targets", () => {
+  assert.match(cloudCss, /\.penecho-cloud-dialog \.cloud-dialog-close\s*\{[^}]*flex:\s*0 0 2\.25rem[^}]*min-width:\s*2\.25rem/);
+  assert.match(cloudCss, /\.penecho-cloud-panel p a\s*\{[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-project-web-link\s*\{[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-account-button\s*\{[^}]*min-height:\s*2\.25rem[^}]*min-width:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-section-tabs\s*\{[^}]*height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-section-tab\s*\{[^}]*height:\s*1\.875rem[^}]*min-height:\s*1\.875rem/);
+  assert.match(cloudCss, /\.cloud-favorite-filters\s*\{[^}]*height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-favorite-filter\s*\{[^}]*height:\s*1\.875rem[^}]*min-height:\s*1\.875rem/);
+  assert.match(cloudCss, /\.cloud-secondary-settings summary\s*\{[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-project-picker select, \.cloud-project-create-form input\s*\{[^}]*height:\s*2\.25rem[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-project-create > summary\s*\{[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /\.cloud-field input, \.cloud-field select\s*\{[^}]*height:\s*2\.25rem[^}]*min-height:\s*2\.25rem/);
+  assert.match(cloudCss, /@media \(pointer: coarse\)[\s\S]*?\.cloud-account-button,[\s\S]*?\.penecho-cloud-panel p a \{ min-height: 2\.75rem; \}/);
+  assert.match(cloudCss, /@media \(pointer: coarse\)[\s\S]*?\.cloud-field input,[\s\S]*?\.cloud-project-create-form input \{ height: 2\.75rem; min-height: 2\.75rem; \}/);
 });
 
 test("Cloud Center exposes accessible loading, error, and focus-preservation contracts", () => {
@@ -821,7 +1131,7 @@ test("Cloud Center exposes accessible loading, error, and focus-preservation con
   assert.match(cloudScript, /class:"cloud-library-list", "aria-live":"polite", "aria-busy":"true"/);
   assert.equal((cloudScript.match(/class:"cloud-message", role:"status"/g) || []).length, 2);
   assert.equal((cloudScript.match(/class:"cloud-message error", role:"alert"/g) || []).length, 2);
-  assert.equal((cloudScript.match(/content\.setAttribute\("aria-busy", "false"\)/g) || []).length, 2);
+  assert.equal((cloudScript.match(/content\.setAttribute\("aria-busy", "false"\)/g) || []).length, 4);
   assert.match(cloudScript, /queueMicrotask\(\(\) => document\.querySelector\(`#cloud-tab-\$\{value\}`\)\?\.focus\(\)\)/);
   assert.match(cloudScript, /cloudButton\.setAttribute\("aria-busy", "true"\)[\s\S]*?cloudButton\.disabled = true[\s\S]*?cloudButton\.setAttribute\("aria-busy", "false"\)/);
 });
@@ -831,12 +1141,14 @@ test("Cloud Center keeps narrow layouts and theme contrast token-driven", () => 
   assert.match(cloudCss, /@media \(max-width:\s*760px\)[\s\S]*?\.penecho-cloud-layout\s*\{\s*grid-template-columns:\s*1fr/);
   assert.match(cloudCss, /@media \(max-width:\s*760px\)[\s\S]*?\.cloud-project-toolbar\s*\{[^}]*grid-template-columns:\s*1fr/);
   assert.match(cloudCss, /\.cloud-field input, \.cloud-field select, \.cloud-field textarea\s*\{\s*max-width:\s*100%;\s*min-width:\s*0/);
-  assert.match(cloudCss, /--cloud-link:\s*color-mix\(in srgb, var\(--ink/);
+  assert.match(cloudCss, /--cloud-link:\s*var\(--ai-accent\)/);
   assert.match(cloudCss, /\.cloud-canvas-open\s*\{\s*color:\s*var\(--cloud-link\)/);
   assert.match(cloudCss, /\.cloud-project-web-link\s*\{[^}]*color:\s*var\(--cloud-link\)/);
-  assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*color:\s*#fff/);
+  assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*color:\s*var\(--ai-primary-ink\)/);
+  assert.match(cloudCss, /\.penecho-cloud-dialog\s*\{[^}]*color-scheme:\s*light[^}]*--ai-bg:\s*#ffffff/);
+  assert.doesNotMatch(cloudCss, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.penecho-cloud-dialog/);
 });
 
 test("Cloud sign-in CTAs keep explicit foreground and background colors for hover and focus", () => {
-  assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*background:\s*#285a9d[^}]*color:\s*#fff/);
+  assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*background:\s*var\(--ai-primary-hover\)[^}]*color:\s*var\(--ai-primary-ink\)/);
 });
