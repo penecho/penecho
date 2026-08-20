@@ -113,7 +113,7 @@ test("the viewer controls stay quiet until hovered or focused", () => {
   assert.match(css, /\.viewer-actions:hover,[\s\S]*?\.viewer-actions:focus-within\s*\{\s*opacity:\s*1/);
 });
 
-test("Widget hosts stay same-origin in Viewer and Cloud while the local app keeps loopback isolation", () => {
+test("Widget hosts stay same-origin in Viewer and Cloud while the local app keeps loopback isolation", (t) => {
   const canvas = read("src/client/app/canvas-runtime.js"),
     source = functionSource(canvas, "widgetHostUrl"),
     resolveHost = (runtime, pageUrl, connect = []) => {
@@ -153,8 +153,14 @@ test("Widget hosts stay same-origin in Viewer and Cloud while the local app keep
   assert.equal(localName.searchParams.get("parent-origin"), "http://localhost:18081");
 
   const cloudRoot = path.resolve(root, "..", "penecho_cloud"),
-    cloudWidgetRoute = fs.readFileSync(path.join(cloudRoot, "src", "routes", "plugins.mjs"), "utf8"),
-    cloudApp = fs.readFileSync(path.join(cloudRoot, "src", "app.mjs"), "utf8");
+    cloudWidgetRoutePath = path.join(cloudRoot, "src", "routes", "plugins.mjs"),
+    cloudAppPath = path.join(cloudRoot, "src", "app.mjs");
+  if (!fs.existsSync(cloudWidgetRoutePath) || !fs.existsSync(cloudAppPath)) {
+    t.diagnostic("Sibling PenEcho Cloud checkout is unavailable; local Viewer origin assertions still passed.");
+    return;
+  }
+  const cloudWidgetRoute = fs.readFileSync(cloudWidgetRoutePath, "utf8"),
+    cloudApp = fs.readFileSync(cloudAppPath, "utf8");
   assert.match(cloudWidgetRoute, /frame-ancestors 'self'/);
   assert.match(cloudApp, /frame-src 'self' blob:/);
 });
@@ -339,9 +345,14 @@ test("Viewer skips onboarding observers and hidden plugin preview hosts, with a 
   assert.match(previewSource, /window\.PENECHO_CONFIG\?\.runtime === "viewer"\) return;/);
 });
 
-test("the cloud sync allow-list carries the viewer assets", () => {
+test("the cloud sync allow-list carries the viewer assets", (t) => {
   const cloudRoot = path.resolve(root, "..", "penecho_cloud");
-  const sync = fs.readFileSync(path.join(cloudRoot, "tools", "sync-public-canvas.mjs"), "utf8");
+  const syncPath = path.join(cloudRoot, "tools", "sync-public-canvas.mjs");
+  if (!fs.existsSync(syncPath)) {
+    t.skip("Sibling PenEcho Cloud checkout is unavailable in this CI job.");
+    return;
+  }
+  const sync = fs.readFileSync(syncPath, "utf8");
   assert.match(sync, /"viewer\.js"/);
   assert.match(sync, /"viewer\.css"/);
   assert.ok(fs.existsSync(path.join(cloudRoot, "public", "canvas", "viewer.js")));
