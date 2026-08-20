@@ -19,11 +19,15 @@ const ROUTES = [
   { pattern:new RegExp(`^/api/canvases/${CANVAS_ID}$`), methods:new Set(["GET", "PUT", "DELETE"]) },
   { pattern:/^\/api\/plugins$/, methods:new Set(["GET", "POST"]) },
   { pattern:/^\/api\/plugins\/[a-z0-9]+(?:-[a-z0-9]+)*$/, methods:new Set(["DELETE"]) },
+  { pattern:/^\/plugins\/private\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:plugin\.md|styles\.css)|\.md)$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/community\/metadata$/, methods:new Set(["POST"]) },
-  { pattern:/^\/api\/favorites$/, methods:new Set(["GET", "PUT"]) },
-  { pattern:/^\/api\/favorites\/[0-9a-f]{64}$/, methods:new Set(["DELETE"]) },
-  { pattern:/^\/api\/cloud\/favorites$/, methods:new Set(["GET", "POST"]) },
-  { pattern:new RegExp(`^/api/cloud/favorites/${UUID}$`, "i"), methods:new Set(["DELETE"]) },
+  { pattern:/^\/api\/favorites$/, methods:new Set(["GET", "PUT"]), query:true },
+  { pattern:/^\/api\/favorites\/[0-9a-f]{64}$/, methods:new Set(["GET", "DELETE"]) },
+  { pattern:/^\/api\/favorites\/[0-9a-f]{64}\/thumbnail$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/favorites\/[0-9a-f]{64}\/cloud$/, methods:new Set(["PATCH"]) },
+  { pattern:/^\/api\/cloud\/favorites$/, methods:new Set(["GET", "POST"]), query:true },
+  { pattern:/^\/api\/cloud\/favorites\/feed$/, methods:new Set(["GET"]), query:true },
+  { pattern:new RegExp(`^/api/cloud/favorites/${UUID}$`, "i"), methods:new Set(["GET", "DELETE"]) },
   { pattern:/^\/api\/cloud\/(?:status|account|library)$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/cloud\/projects$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/projects/${UUID}$`, "i"), methods:new Set(["POST", "DELETE"]) },
@@ -40,7 +44,7 @@ const ROUTES = [
 
 function remoteCanvasTarget(method, value) {
   const requestMethod = String(method || "").toUpperCase();
-  if (!new Set(["GET", "POST", "PUT", "DELETE"]).has(requestMethod)) throw Object.assign(new Error("Remote Canvas method is not allowed."), { code:"remote_canvas_method", status:405 });
+  if (!new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]).has(requestMethod)) throw Object.assign(new Error("Remote Canvas method is not allowed."), { code:"remote_canvas_method", status:405 });
   const source = String(value || "");
   if (!source || Buffer.byteLength(source, "utf8") > MAX_REMOTE_CANVAS_PATH_BYTES || !source.startsWith("/")) throw Object.assign(new Error("Remote Canvas path is invalid."), { code:"remote_canvas_path", status:400 });
   const url = new URL(source, "http://penecho.local");

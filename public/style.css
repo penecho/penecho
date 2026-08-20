@@ -1259,6 +1259,7 @@ body[data-theme="studio"] footer, body[data-theme="studio"] #coords { color: #66
 .crafts-refresh-spinner { width: 11px; height: 11px; flex: 0 0 11px; border: 1.5px solid color-mix(in srgb, currentColor 30%, transparent); border-right-color: currentColor; border-radius: 50%; animation: crafts-refresh-spin .75s linear infinite; }
 @keyframes crafts-refresh-spin { to { transform: rotate(360deg); } }
 .crafts-list { overflow-y: auto; padding: 12px 14px 16px; display: grid; gap: 8px; }
+.crafts-load-more { justify-self: center; margin: 4px 0; min-width: 112px; }
 .crafts-empty { margin: 24px 0; text-align: center; color: var(--ink-soft, #9aa3ad); font-size: 13px; }
 .crafts-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel-raised) 70%, transparent); }
 .crafts-row:hover { border-color: var(--gold-bright); }

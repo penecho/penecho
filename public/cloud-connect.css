@@ -19,8 +19,7 @@
 .cloud-account-button[aria-busy="true"] { cursor: wait; opacity: .68; }
 .cloud-account-button svg { fill: none; height: 1.15rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.15rem; }
 .cloud-account-dot { background: #9ca5b2; border: 2px solid var(--panel, #fff); border-radius: 50%; height: .55rem; width: .55rem; }
-.cloud-account-button[data-state="signed-in"] .cloud-account-dot { background: #32a56d; }
-.cloud-account-button[data-state="connected"] .cloud-account-dot { background: #2f86e8; box-shadow: 0 0 0 3px rgb(47 134 232 / 15%); }
+.cloud-account-button[data-state="connected"] .cloud-account-dot { background: #10b981; box-shadow: 0 0 0 3px rgb(16 185 129 / 15%); }
 .cloud-share-canvas { color: #3f70bc; }
 
 .object-chrome-button.favorite { color: #b26a23; }
@@ -259,6 +258,7 @@
 .cloud-project-web-link { align-items: center; color: var(--cloud-link); display: inline-flex; font-size: .7rem; font-weight: 600; justify-self: end; min-height: 2.25rem; text-decoration: none; }
 .cloud-project-web-link:hover { text-decoration: underline; }
 .cloud-library-list { display: grid; gap: .6rem; }
+.cloud-favorites-load-more { justify-self: center; margin: .2rem 0; min-width: 8rem; }
 .cloud-library-row { align-items: center; background: transparent; border: 1px solid var(--ai-line); border-radius: .75rem; display: grid; gap: .7rem; grid-template-columns: 88px minmax(0, 1fr) auto; min-width: 0; padding: .6rem; transition: border-color .15s ease, background .15s ease; }
 .cloud-library-row:hover { background: var(--ai-hover); border-color: var(--ai-line-strong); }
 .cloud-library-thumb, .cloud-library-thumb-fallback { aspect-ratio: 16 / 10; background: var(--ai-thumb); border-radius: .5rem; display: block; height: 55px; object-fit: cover; width: 88px; }

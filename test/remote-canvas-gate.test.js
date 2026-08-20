@@ -144,15 +144,13 @@ test("Remote Canvas brand doubles as the way back to the console", () => {
   assert.doesNotMatch(gateScript, /remote-canvas-back/);
 });
 
-test("Remote Canvas keeps the connected-device status beside the brand and out of the AI feedback area", async () => {
-  const run = boot({ respond:() => ({ device:{ name:"My PenEcho", platform:"darwin", online:true } }) });
+test("Remote Canvas publishes the account and device status without adding a duplicate brand badge", async () => {
+  const run = boot({ respond:() => ({ account:{ name:"Remote User" }, device:{ name:"My PenEcho", platform:"darwin", online:true } }) });
   await flush();
-  const badge = run.brand.children.find((child) => child.className === "remote-canvas-status");
-  assert.ok(badge);
-  assert.equal(badge.children[0].textContent, "My PenEcho");
-  assert.equal(badge.title, "Protected remote connection: My PenEcho");
-  assert.equal(badge.getAttribute("aria-label"), badge.title);
-  assert.match(gateCss, /\.remote-canvas-status\s*\{[^}]*max-width:\s*min\(132px, 18vw\)/);
+  assert.equal(run.brand.children.some((child) => child.className === "remote-canvas-status"), false);
+  assert.equal(run.window.PENECHO_REMOTE_CLOUD_STATUS.accountName, "Remote User");
+  assert.equal(run.window.PENECHO_REMOTE_CLOUD_STATUS.deviceOnline, true);
+  assert.doesNotMatch(gateCss, /\.remote-canvas-status/);
 });
 
 test("Remote Canvas gate reveals Link Device only in the unlinked state and reveals nothing in any other state", () => {
@@ -304,6 +302,12 @@ test("Remote Canvas fetch wrapper preserves the Canvas base URL on nested commun
 
   await run.window.fetch(new Request("https://cloud.penecho.test/canvas/plugins/flowchart/plugin.md"));
   assert.equal(run.fetchCalls.at(-1).url, "/canvas/plugins/flowchart/plugin.md");
+
+  await run.window.fetch("plugins/private/air-quality/plugin.md");
+  assert.equal(run.fetchCalls.at(-1).url, "/api/v1/remote-canvas/http?path=%2Fplugins%2Fprivate%2Fair-quality%2Fplugin.md");
+
+  await run.window.fetch("plugins/private/air-quality/styles.css");
+  assert.equal(run.fetchCalls.at(-1).url, "/api/v1/remote-canvas/http?path=%2Fplugins%2Fprivate%2Fair-quality%2Fstyles.css");
 });
 
 test("Remote Canvas gate stays compact, accessible and mobile-friendly", () => {

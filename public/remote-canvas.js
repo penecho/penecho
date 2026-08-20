@@ -38,6 +38,7 @@
     /^\/api\/community\/metadata$/,
     /^\/api\/plugins(?:\/|$)/,
     /^\/canvas\/api\/widget-fetch$/,
+    /^\/canvas\/plugins\/private\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:plugin\.md|styles\.css)|\.md)$/,
   ];
   const nativeCloudPaths = new Set(["/api/ai/command", "/api/plugins/improve"]);
 
@@ -63,8 +64,13 @@
     const inputHeaders = input instanceof Request ? input.headers : undefined;
     const headers = csrfHeaders(options.headers || inputHeaders);
     const shouldBridge = !nativeCloudPaths.has(sourceUrl.pathname) && bridgedPaths.some((pattern) => pattern.test(sourceUrl.pathname));
+    const bridgePath = sourceUrl.pathname === "/canvas/api/widget-fetch"
+      ? "/api/widget-fetch"
+      : sourceUrl.pathname.startsWith("/canvas/plugins/private/")
+        ? sourceUrl.pathname.slice("/canvas".length)
+        : sourceUrl.pathname;
     const target = shouldBridge
-      ? `/api/v1/remote-canvas/http?path=${encodeURIComponent(`${sourceUrl.pathname === "/canvas/api/widget-fetch" ? "/api/widget-fetch" : sourceUrl.pathname}${sourceUrl.search}`)}`
+      ? `/api/v1/remote-canvas/http?path=${encodeURIComponent(`${bridgePath}${sourceUrl.search}`)}`
       : `${sourceUrl.pathname}${sourceUrl.search}`;
     const request = () => nativeFetch(target, { ...options, method, headers, credentials:"same-origin" });
     if (!shouldBridge || !cloudRuntime) return request();
@@ -152,22 +158,15 @@
   gate.append(card);
   document.body.append(gate);
 
-  function statusBadge(device) {
-    let badge = document.querySelector(".remote-canvas-status");
-    if (!badge) {
-      badge = document.createElement("div");
-      badge.className = "remote-canvas-status";
-      badge.setAttribute("role", "status");
-      const brand = document.querySelector(".brand");
-      if (brand) brand.append(badge);
-      else document.querySelector(".top-row")?.insertBefore(badge, document.querySelector(".language-toggle"));
+  function publishCloudHeaderStatus(result) {
+    const detail = Object.freeze({
+      accountName:String(result.account?.name || "").slice(0, 100),
+      deviceOnline:Boolean(result.device?.online),
+    });
+    window.PENECHO_REMOTE_CLOUD_STATUS = detail;
+    if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") {
+      window.dispatchEvent(new CustomEvent("penecho:remote-cloud-status", { detail }));
     }
-    const deviceName = String(device.name || "PenEcho");
-    badge.title = `${copy.connected}: ${deviceName}`;
-    badge.setAttribute("aria-label", badge.title);
-    const label = document.createElement("span");
-    label.textContent = deviceName;
-    badge.replaceChildren(label);
   }
 
   async function openRequestedCanvas() {
@@ -193,6 +192,7 @@
       }
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || `HTTP ${response.status}`);
+      publishCloudHeaderStatus(result);
       if (!result.device) {
         settleBridgeGate({ online:false, message:copy.unavailable });
         gate.dataset.state = "unlinked";
@@ -210,7 +210,6 @@
       gate.dataset.state = "opening";
       title.textContent = copy.opening;
       detail.textContent = `${result.device.name} · ${result.device.platform} · ${copy.onlineStatus}`;
-      statusBadge(result.device);
       settleBridgeGate({ online:true });
       await openRequestedCanvas();
       gate.hidden = true;
