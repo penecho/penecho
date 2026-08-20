@@ -23,8 +23,14 @@ jobs:
 
   mac:
     needs: test
+    environment: macos-signing
     env:
       MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+      MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+      MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+      APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,29 +51,72 @@ jobs:
             tools/electron/package-lock.json
       - run: npm ci
       - run: npm ci --prefix tools/electron
+      - name: Validate Apple signing credentials
+        shell: bash
+        run: |
+          required=(
+            MAC_CERTIFICATE_P12_BASE64
+            MAC_CERTIFICATE_PASSWORD
+            MAC_CODESIGN_IDENTITY
+            APPLE_API_KEY_P8_BASE64
+            APPLE_API_KEY_ID
+            APPLE_API_ISSUER
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required macos-signing environment secret: $name"
+              exit 1
+            fi
+          done
       - name: Import Apple signing certificate
-        if: env.MAC_CERTIFICATE_P12_BASE64 != ''
-        env:
-          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        shell: bash
         run: |
           CERTIFICATE_PATH="$RUNNER_TEMP/penecho.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/penecho-signing.keychain-db"
-          echo "$MAC_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
-          security create-keychain -p actions "$KEYCHAIN_PATH"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          printf '%s' "$MAC_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p actions "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERTIFICATE_PATH" -P "$MAC_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
-          security set-key-partition-list -S apple-tool:,apple: -s -k actions "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -F "$MAC_CODESIGN_IDENTITY"
+      - name: Restore App Store Connect API key
+        shell: bash
+        run: |
+          APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$APPLE_API_KEY_PATH"
+          chmod 600 "$APPLE_API_KEY_PATH"
+          echo "APPLE_API_KEY_PATH=$APPLE_API_KEY_PATH" >> "$GITHUB_ENV"
       - name: Build macOS installer
-        env:
-          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run desktop:make:mac -- --arch=${{ matrix.arch }}
-      - name: Verify macOS app signature
-        run: codesign --verify --deep --strict --verbose=2 "out/PenEcho-darwin-${{ matrix.arch }}/PenEcho.app"
+      - name: Verify signed and notarized macOS app
+        shell: bash
+        run: |
+          APP_PATH="out/PenEcho-darwin-${{ matrix.arch }}/PenEcho.app"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "Authority=Developer ID Application:"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+      - name: Notarize and staple macOS disk image
+        shell: bash
+        run: |
+          DMG_FOUND=false
+          while IFS= read -r -d '' dmg; do
+            DMG_FOUND=true
+            xcrun notarytool submit "$dmg" \
+              --key "$APPLE_API_KEY_PATH" \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" \
+              --wait
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+          done < <(find out/make -type f -name '*.dmg' -print0)
+          if [[ "$DMG_FOUND" != true ]]; then
+            echo "::error::The macOS build did not produce a DMG"
+            exit 1
+          fi
       - run: npm run desktop:collect
       - uses: actions/upload-artifact@v4
         with:
@@ -76,9 +125,20 @@ jobs:
 
   windows:
     needs: test
+    environment: windows-signing
     runs-on: windows-2025
+    permissions:
+      contents: read
+      id-token: write
     env:
       WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+      AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
+      AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -90,18 +150,150 @@ jobs:
             tools/electron/package-lock.json
       - run: npm ci
       - run: npm ci --prefix tools/electron
+      - name: Select Windows signing mode
+        shell: pwsh
+        run: |
+          $pfxNames = @("WINDOWS_CERTIFICATE_PFX_BASE64", "WINDOWS_CERTIFICATE_PASSWORD")
+          $azureNames = @(
+            "AZURE_ARTIFACT_SIGNING_ENDPOINT",
+            "AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME",
+            "AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME",
+            "AZURE_CLIENT_ID",
+            "AZURE_TENANT_ID",
+            "AZURE_SUBSCRIPTION_ID"
+          )
+          $pfxValues = $pfxNames | ForEach-Object { [Environment]::GetEnvironmentVariable($_) }
+          $azureValues = $azureNames | ForEach-Object { [Environment]::GetEnvironmentVariable($_) }
+          $pfxRequested = @($pfxValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
+          $azureRequested = @($azureValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
+          $pfxReady = @($pfxValues | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -eq 0
+          $azureReady = @($azureValues | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -eq 0
+          if ($pfxRequested -and -not $pfxReady) {
+            Write-Error "PFX signing was partially configured. Set both PFX secrets or remove both."
+            exit 1
+          }
+          if ($azureRequested -and -not $azureReady) {
+            Write-Error "Azure Artifact Signing was partially configured. Set all six windows-signing environment variables or remove all six."
+            exit 1
+          }
+          if ($pfxReady -and $azureReady) {
+            Write-Error "Configure either Azure Artifact Signing or PFX signing, not both."
+            exit 1
+          }
+          if ($azureReady) {
+            "WINDOWS_SIGNING_MODE=azure" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } elseif ($pfxReady) {
+            "WINDOWS_SIGNING_MODE=pfx" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            Write-Warning "Windows signing is not configured; producing an unsigned installer."
+            "WINDOWS_SIGNING_MODE=unsigned" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
       - name: Restore Windows signing certificate
-        if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
+        if: env.WINDOWS_SIGNING_MODE == 'pfx'
         shell: pwsh
         run: |
           $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64)
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\penecho.pfx", $bytes)
-      - name: Build Windows installer
+          $certificatePath = "$env:RUNNER_TEMP\penecho.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, $bytes)
+          "WINDOWS_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Authenticate to Azure with OIDC
+        if: env.WINDOWS_SIGNING_MODE == 'azure'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Package Windows application for Azure signing
+        if: env.WINDOWS_SIGNING_MODE == 'azure'
         shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE_FILE: ${{ runner.temp }}\penecho.pfx
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run desktop:package -- --platform=win32 --arch=x64
+      - name: Sign packaged Windows application with Azure Artifact Signing
+        if: env.WINDOWS_SIGNING_MODE == 'azure'
+        uses: Azure/artifact-signing-action@v0
+        with:
+          endpoint: ${{ env.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ env.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}\out\PenEcho-win32-x64
+          files-folder-filter: exe,dll,node
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com/
+          timestamp-digest: SHA256
+          description: PenEcho
+          description-url: https://github.com/penecho/penecho
+      - name: Build Windows installer from Azure-signed application
+        if: env.WINDOWS_SIGNING_MODE == 'azure'
+        shell: pwsh
+        run: npm run desktop:make:windows -- --arch=x64 --skip-package
+      - name: Sign Windows installer with Azure Artifact Signing
+        if: env.WINDOWS_SIGNING_MODE == 'azure'
+        uses: Azure/artifact-signing-action@v0
+        with:
+          endpoint: ${{ env.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ env.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}\out\make\squirrel.windows\x64
+          files-folder-filter: PenEcho-Setup-*.exe
+          files-folder-recurse: false
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com/
+          timestamp-digest: SHA256
+          description: PenEcho
+          description-url: https://github.com/penecho/penecho
+      - name: Build Windows installer without Azure Artifact Signing
+        if: env.WINDOWS_SIGNING_MODE != 'azure'
+        shell: pwsh
         run: npm run desktop:make:windows -- --arch=x64
+      - name: Verify Windows Authenticode signatures
+        if: env.WINDOWS_SIGNING_MODE != 'unsigned'
+        shell: pwsh
+        run: |
+          $certificate = $null
+          if ($env:WINDOWS_SIGNING_MODE -eq "pfx") {
+            $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              $env:WINDOWS_CERTIFICATE_FILE,
+              $env:WINDOWS_CERTIFICATE_PASSWORD,
+              $flags
+            )
+          }
+          $targets = @("out\PenEcho-win32-x64\PenEcho.exe")
+          $setup = Get-ChildItem "out\make\squirrel.windows\x64" -Filter "PenEcho-Setup-*-win-x64.exe" -File
+          if ($setup.Count -ne 1) {
+            Write-Error "Expected exactly one Windows Setup executable, found $($setup.Count)"
+            exit 1
+          }
+          $targets += $setup.FullName
+          foreach ($target in $targets) {
+            if (-not (Test-Path $target -PathType Leaf)) {
+              Write-Error "Missing signed Windows artifact: $target"
+              exit 1
+            }
+            $signature = Get-AuthenticodeSignature $target
+            if ($signature.Status -ne "Valid") {
+              Write-Error "Invalid Authenticode signature on ${target}: $($signature.Status) $($signature.StatusMessage)"
+              exit 1
+            }
+            if ($certificate -and $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+              Write-Error "Unexpected signer on $target"
+              exit 1
+            }
+            if (-not $signature.TimeStamperCertificate) {
+              Write-Error "Missing trusted timestamp on $target"
+              exit 1
+            }
+          }
+      - name: Confirm unsigned Windows installer
+        if: env.WINDOWS_SIGNING_MODE == 'unsigned'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "out\make\squirrel.windows\x64" -Filter "PenEcho-Setup-*-win-x64.exe" -File
+          if ($setup.Count -ne 1) {
+            Write-Error "Expected exactly one unsigned Windows Setup executable, found $($setup.Count)"
+            exit 1
+          }
+          Write-Warning "Publishing unsigned Windows artifact: $($setup.FullName)"
       - run: npm run desktop:collect
       - uses: actions/upload-artifact@v4
         with:

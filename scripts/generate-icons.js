@@ -19,6 +19,18 @@ async function png(size, output) {
     .toFile(output);
 }
 
+async function installerGif(icon, output) {
+  const artwork = Buffer.from(`<svg width="268" height="167" xmlns="http://www.w3.org/2000/svg">
+    <rect width="268" height="167" fill="#f4f7fb"/>
+    <text x="134" y="122" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" fill="#172033">PenEcho</text>
+    <text x="134" y="145" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#667085">Installing…</text>
+  </svg>`);
+  await sharp(artwork)
+    .composite([{ input:await sharp(icon).resize(68, 68).png().toBuffer(), top:24, left:100 }])
+    .gif()
+    .toFile(output);
+}
+
 async function main() {
   fs.mkdirSync(generated, { recursive:true });
   const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024], files = new Map();
@@ -29,6 +41,7 @@ async function main() {
   }
   fs.copyFileSync(files.get(512), path.join(iconRoot, "penecho.png"));
   fs.copyFileSync(files.get(1024), path.join(iconRoot, "penecho-1024.png"));
+  await installerGif(files.get(128), path.join(iconRoot, "penecho-install.gif"));
   const sourcePng = fs.readFileSync(files.get(1024)),
     icns = png2icons.createICNS(sourcePng, png2icons.BICUBIC2, 0),
     ico = png2icons.createICO(sourcePng, png2icons.BICUBIC2, 0, false, true);
