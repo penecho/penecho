@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho は、手書き、数式、図、空間的な文脈を対話の一部として扱える共有キャンバスです。</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">公式サイト · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">アイデアを公開 · 共同制作 · 作品をシェア</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-コミュニティに参加-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="PenEcho Discord に参加"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="GitHub で PenEcho にスターを付ける"></a>
@@ -44,7 +50,7 @@ PenEcho は、[Moonshot AI](https://www.kimi.com/) が優れたオープンソ�
 
 [GitHub Releases からダウンロード](https://github.com/penecho/penecho/releases/latest)。
 
-npm でインストールする場合は、[Node.js 20.3 以降](https://nodejs.org/)と、API キー、認証済みの [Codex CLI](https://developers.openai.com/codex/cli)、または認証済みの [Claude Code CLI](https://code.claude.com/docs/en/overview) のいずれかが必要です。
+npm でインストールする場合は、[Node.js 20.3 以降](https://nodejs.org/)と、API キー、認証済みの [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、[Codex CLI](https://developers.openai.com/codex/cli)、または [Claude Code CLI](https://code.claude.com/docs/en/overview) のいずれかが必要です。
 
 ```bash
 npm install -g penecho
@@ -71,20 +77,27 @@ npm start
 - 回答、ヒント、説明、数式、プロット、図をキャンバス上に直接生成します。
 - AI の下書きは移動、サイズ変更、承認、破棄ができ、確定するまで元の内容とは分離されます。
 - 投げ縄で選択した手書きを移動、変形、色変更、削除、または Typeset で清書できます。
-- スナップショットをこの端末または PenEcho サーバーに保存し、確定済みの内容を PNG として書き出せます。
+- 対話型ウィジェット、専門図表、アニメーション、ライブデータプラグインを差分更新でその場で修正できます。
+- API または CLI 接続を最大 10 件保存し、ワンクリックで切り替えられます。
+- キャンバスをプロジェクトに整理し、PenEcho Cloud で別の端末から非公開プロジェクトを続け、確定済みの内容を PNG として書き出せます。
 - Arcane、Sci-fi、Research、Studio のテーマを選べます。
 
-## 0.9.0 の新機能
+## PenEcho Cloud
 
-- **複数の AI 接続をワンクリックで切り替え。** API または CLI 接続を最大 10 件保存し、編集可能な Kimi・MiniMax プリセットから設定してキャンバス内でテストできます。同じ PenEcho ホストに接続する各クライアントが別々の接続を選べ、変更はすぐに反映されます。
-- **プロジェクト単位の共有キャンバス。** サーバー上のキャンバスをプロジェクトに整理して移動でき、より大きなプレビューを最終更新順で確認できます。バージョン管理された v2 Bundle はタイル、ウィジェット、配置画像、リソース、プレビュー情報を一つにまとめます。既存の v1 キャンバスも読み込め、次回保存時に更新されます。
-- **対象が明確な、その場での Refine。** 表示中の領域のどこにでも新しい指示を書いたり配置したりし、その指示で更新するウィジェットを選べます。PenEcho は指示領域と対象を視覚的に結び、送信前に確認します。キャンセルや失敗では指示を保持し、成功した編集も確認または取り消せます。
-- **標準 unified diff による小さな差分更新。** Refine は編集可能なウィジェットファイル全体を送りますが、モデルはウィジェット全体を再生成せず変更した hunk だけを返します。出力トークンと待ち時間を大幅に減らしつつ、HTML、ソース、メタデータの変更を一括で適用します。
-- **真の API ストリーミング。** OpenAI・Anthropic 互換 API はエンドツーエンドの SSE を使用し、受信開始をすぐに表示して、互換ゲートウェイ経由の長いリクエストを安定させます。
-- **明確な進行状況と停止。** 上部に準備、接続、待機、受信、検証、再試行、タイムアウトを表示します。リクエスト中は魔法ボタンで実行中の処理を即座に停止できます。
+バージョン 1.0.0 で導入された [PenEcho Cloud](https://penecho.ai) は完全に任意です。自分の API または CLI を使えば、PenEcho は引き続きローカルだけで動作します。サインインすると、非公開でバージョン管理されたキャンバスをプロジェクトに保存し、お気に入りを同期し、リンク済み端末を介してこのホストへリモートアクセスできます。API 認証情報が端末外へ送られることはありません。
+
+**Echoes** では 12 カテゴリの公開キャンバスとウィジェットを閲覧、お気に入り登録、再利用できます。自分の Craft を公開し、読み取り専用の Web ビューアーで共有し、バージョン間の系譜を保つこともできます。
+
+## 1.0.0 の新機能
+
+- **PenEcho Cloud。** 端末をまたぐ非公開プロジェクト、お気に入り同期、アカウント・ストレージ・クレジット管理を追加しました。
+- **リンク済み端末。** ワンタイムキーでこのホストをペアリングし、サインイン済みのブラウザーやアプリからアクセスできます。リンクは一時停止、再開、削除できます。
+- **Echoes と公開 Craft。** カテゴリ、お気に入り、読み取り専用 Web ビューアーを使って公開キャンバスやウィジェットを探索、共有、再利用できます。
+- **安全な端末間保存。** 保存のたびに変更不能なリビジョンを作成し、別端末の変更を黙って上書きしません。
 
 ## 以前の主な更新
 
+- **0.9.0。** 複数の AI 接続、プロジェクト単位の共有キャンバス、その場での Refine、unified diff による差分更新、SSE ストリーミング、進行状況表示とキャンセルを追加しました。
 - **0.8.1。** General HTML のリアルタイム公開データと、アニメーション・複雑なグラフィック向けの SVG 優先表示を追加しました。
 - **0.8.0 と 0.7.2。** 編集可能な専門図表、サーバー保存、クリップボード操作、出典付き Web 写真、より信頼性の高い編集と書き出しを追加しました。
 
@@ -102,7 +115,7 @@ npm start
 
 ## 安全な運用
 
-- **Codex CLI / Claude CLI:** ローカルマシンまたは信頼できる LAN だけで使用してください。有効なリクエストはローカル CLI プロセスを起動するため、公開インターネットへ直接公開しないでください。
+- **Kimi Code CLI / Codex CLI / Claude CLI:** ローカルマシンまたは信頼できる LAN だけで使用してください。有効なリクエストはローカル CLI プロセスを起動するため、公開インターネットへ直接公開しないでください。
 - **API モード:** 公開する場合は HTTPS、認証、レート制限、リクエストサイズ制限を備えたリバースプロキシの背後に配置してください。
 - 設定ファイル、API キー、リクエスト記録、ログ、非公開のキャンバス画像を公開しないでください。
 

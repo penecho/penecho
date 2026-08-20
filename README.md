@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho is a shared canvas where handwriting, equations, diagrams, and spatial context become part of the conversation.</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">Official Website · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">Publish ideas · Collaborate through shared canvases · Share your work</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX">
     <img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Join the PenEcho Discord">
@@ -32,8 +38,8 @@
 
 <p align="center">
   <a href="https://penecho.ai">Website</a> &bull;
-  <a href="#-quick-start">Quick Start</a> &bull;
   <a href="#-features">Features</a> &bull;
+  <a href="#-quick-start">Quick Start</a> &bull;
   <a href="#penecho-cloud">Cloud</a> &bull;
   <a href="#recommended-model-configurations">Models</a> &bull;
   <a href="#-faq">FAQ</a> &bull;
@@ -51,7 +57,7 @@
   <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
 </p>
 
-## A Kimi Open Source Friend
+## Kimi Open Source Friends
 
 <p align="center">
   <a href="https://www.kimi.com/code?aff=penecho">
@@ -85,11 +91,11 @@ Using these links directly supports the project:
 
 **Desktop app** — [download from GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-**npm** — needs [Node.js 20.3+](https://nodejs.org/) and one of: an API key, an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
+**npm** — needs [Node.js 20.3+](https://nodejs.org/) and one of: an API key, an authenticated [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho
-penecho configure   # pick your LLM source: API, Codex CLI, or Claude CLI
+penecho configure   # pick your LLM source: API, Kimi, Codex, or Claude CLI
 penecho             # then open http://localhost:3888
 ```
 
@@ -102,7 +108,7 @@ npm install
 npm start
 ```
 
-On the first start, the first browser must set a shared six-digit security code or explicitly keep the process open to the local network. Configuration is saved to `~/.penecho/config.env`; API keys never reach browser code. CLI modes require an authenticated CLI on your `PATH` — see the [configuration reference](docs/configuration.md) for CLI setup, effort mapping, and every setting.
+On first start, the initial browser session must set a shared six-digit security code or explicitly acknowledge leaving the process open to the local network. Configuration is saved to `~/.penecho/config.env`; API keys never reach browser code. CLI modes require an authenticated CLI on your `PATH` — see the [configuration reference](docs/configuration.md) for CLI setup, effort mapping, and every setting.
 
 <a id="penecho-cloud"></a>
 ## ☁️ PenEcho Cloud
@@ -159,7 +165,7 @@ These recommendations balance answer quality against the latency of PenEcho's re
 | `gpt-5.6-sol` | `high` | Good enough for most requests and more responsive than `xhigh` | Recommended Sol default when responsiveness matters |
 | `gpt-5.6-sol` | `xhigh` | Very good results, but slower and more variable | Quality-first Sol configuration for difficult canvas tasks |
 
-Typical output usage per request, including hidden reasoning tokens, is roughly `1,000` tokens at `low`, `3,000` at `medium`, and `5,000–8,000` at `xhigh`/`max`. At a typical low-effort volume (`10,000` input / `1,000` output tokens), standard API rates work out to about $0.016–$0.08 per request depending on the model; higher effort levels cost more because reasoning tokens are billed as output. Check current [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) before budgeting. Codex and Claude CLI modes use the plan you are already signed in with rather than API billing. Google models are untested — if you try Gemini, please share the configuration and results in an issue.
+Typical output usage per request, including hidden reasoning tokens, is roughly `1,000` tokens at `low`, `3,000` at `medium`, and `5,000–8,000` at `xhigh`/`max`. At a typical low-effort volume (`10,000` input / `1,000` output tokens), current standard GPT-5.6 API rates work out to about $0.003–$0.08 per request across Luna, Terra, and Sol; higher effort levels cost more because reasoning tokens are billed as output. Check current [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) before budgeting. CLI modes use the plan you are already signed in with rather than API billing. Google models are untested — if you try Gemini, please share the configuration and results in an issue.
 
 ## ⚙️ Configuration
 
@@ -167,7 +173,7 @@ Typical output usage per request, including hidden reasoning tokens, is roughly 
 
 | Setting | Purpose |
 | --- | --- |
-| `AI_PROVIDER` | Executor: `api`, `codex-cli`, or `claude-cli` |
+| `AI_PROVIDER` | Executor: `api`, `kimi-cli`, `codex-cli`, or `claude-cli` |
 | `AI_API_URL` / `AI_API_KEY` / `AI_API_MODEL` | API endpoint, credential, and model (API mode only) |
 | `AI_EFFORT` | Saved reasoning level; the canvas toolbar `Reasoning` menu can override it per request without rewriting the connection |
 | `HOST` / `PORT` | Listening interface and port, default `0.0.0.0:3888` |
@@ -194,7 +200,7 @@ Use a different config file for one launch with `--config ./team.env`, or overri
 ## ❓ FAQ
 
 **Do I need an API key?**
-No. An authenticated [Codex CLI](https://developers.openai.com/codex/cli) or [Claude Code CLI](https://code.claude.com/docs/en/overview) works too — PenEcho uses the selected CLI locally and never needs a key for that source.
+No. An authenticated [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli), or [Claude Code CLI](https://code.claude.com/docs/en/overview) works too — PenEcho uses the selected CLI locally and never needs an API key for that source.
 
 **Which model should I start with?**
 [Kimi K3](https://platform.kimi.ai?aff=penecho), Claude Opus 4.8 / 5.0, and the `gpt-5.6` family are all good first choices — see [recommended models](#recommended-model-configurations).

@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho est un canevas partagé où l'écriture manuscrite, les équations, les schémas et le contexte spatial font partie de la conversation.</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">Site officiel · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">Publiez vos idées · Collaborez · Partagez vos créations</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-Rejoindre%20la%20communauté-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Rejoindre le Discord de PenEcho"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="Ajouter une étoile à PenEcho sur GitHub"></a>
@@ -44,7 +50,7 @@ PenEcho est membre officiel de **Kimi Open Source Friends**, le programme de [Mo
 
 [Télécharger depuis GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-Pour une installation avec npm, vous avez besoin de [Node.js 20.3 ou version ultérieure](https://nodejs.org/) et de l'une des options suivantes : une clé d'API, un [Codex CLI](https://developers.openai.com/codex/cli) authentifié ou un [Claude Code CLI](https://code.claude.com/docs/en/overview) authentifié.
+Pour une installation avec npm, vous avez besoin de [Node.js 20.3 ou version ultérieure](https://nodejs.org/) et de l'une des options suivantes : une clé d'API, ou [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) ou [Claude Code CLI](https://code.claude.com/docs/en/overview) avec une session authentifiée.
 
 ```bash
 npm install -g penecho
@@ -71,20 +77,27 @@ npm start
 - Obtenez des réponses, indices, explications, formules, graphiques et schémas directement sur le canevas.
 - Déplacez et redimensionnez les brouillons de l'IA, puis acceptez-les ou rejetez-les avant de les intégrer à votre travail.
 - Sélectionnez des traits au lasso pour les déplacer, redimensionner, recolorer, supprimer ou les mettre au propre avec Typeset.
-- Enregistrez les instantanés sur cet appareil ou sur le serveur PenEcho et exportez le contenu confirmé au format PNG.
+- Affinez des widgets interactifs, diagrammes professionnels, animations et plugins de données en direct par modifications incrémentales.
+- Enregistrez jusqu'à dix connexions API ou CLI et passez de l'une à l'autre en un clic.
+- Organisez les canevas en projets, poursuivez vos projets privés sur d'autres appareils avec PenEcho Cloud et exportez le contenu confirmé au format PNG.
 - Choisissez parmi les thèmes Arcane, Sci-fi, Research et Studio.
 
-## Nouveautés de la version 0.9.0
+## PenEcho Cloud
 
-- **Plusieurs connexions IA, sélectionnables en un clic.** Enregistrez jusqu'à dix connexions API ou CLI, utilisez les préréglages Kimi et MiniMax modifiables, testez-les dans le canevas et choisissez une connexion active propre à chaque client d'un même hôte PenEcho. Les changements s'appliquent immédiatement.
-- **Canevas partagés organisés par projets.** Classez les canevas du serveur dans des projets, déplacez le travail entre eux et parcourez de plus grands aperçus triés par dernière modification. Le bundle v2 versionné regroupe tuiles, widgets, images placées, ressources et métadonnées d'aperçu ; les canevas v1 restent lisibles et sont mis à niveau lors de leur prochain enregistrement.
-- **Refine guidé et appliqué sur place.** Écrivez ou placez de nouvelles consignes n'importe où dans la zone visible, puis choisissez le widget à mettre à jour. PenEcho relie clairement la zone d'instructions à sa cible et demande confirmation ; une annulation ou un échec conserve les consignes, et une modification réussie reste confirmable et annulable.
-- **Modifications incrémentales plus petites avec un unified diff standard.** Refine envoie les fichiers modifiables complets du widget, mais le modèle ne renvoie que les blocs modifiés au lieu de régénérer tout le widget. Cela réduit fortement les tokens de sortie et le délai, tout en appliquant atomiquement HTML, source et métadonnées du widget.
-- **Vrai streaming API.** Les API compatibles OpenAI et Anthropic utilisent maintenant SSE de bout en bout afin de signaler immédiatement les données reçues et de stabiliser les requêtes longues via les passerelles compatibles.
-- **Progression et annulation claires.** L'état supérieur indique préparation, connexion, attente, réception, validation, nouvelles tentatives et délais. Pendant une requête, le bouton magique arrête immédiatement le travail actif.
+[PenEcho Cloud](https://penecho.ai), lancé avec la version 1.0.0, reste entièrement facultatif : PenEcho continue de fonctionner en local avec votre propre API ou CLI. Une fois connecté, vous pouvez enregistrer des canevas privés et versionnés dans des projets, synchroniser vos favoris et accéder à distance à cet hôte via un appareil lié, sans que les identifiants d'API quittent l'appareil.
+
+**Echoes** permet d'explorer, de mettre en favoris et de réutiliser des canevas et widgets publics dans douze catégories. Vous pouvez publier vos propres Crafts, les ouvrir dans un visualiseur Web en lecture seule et conserver leur filiation entre les versions.
+
+## Nouveautés de la version 1.0.0
+
+- **PenEcho Cloud.** Projets privés multi-appareils, favoris synchronisés et gestion du compte, du stockage et des crédits.
+- **Appareil lié.** Associez cet hôte avec une clé à usage unique et accédez-y depuis vos navigateurs et applications connectés ; la liaison peut être suspendue, reprise ou supprimée.
+- **Echoes et Crafts publics.** Explorez, partagez et réutilisez des canevas et widgets publics avec catégories, favoris et visualiseur Web en lecture seule.
+- **Enregistrement sécurisé entre appareils.** Chaque enregistrement crée une révision immuable ; les changements d'un autre appareil ne sont jamais écrasés silencieusement.
 
 ## Points forts précédents
 
+- **0.9.0.** Ajout de plusieurs connexions IA, des canevas partagés par projet, de Refine guidé sur place, des modifications incrémentales par unified diff, du streaming SSE et d'une progression annulable.
 - **0.8.1.** Ajout des données publiques en direct pour General HTML et de SVG par défaut pour les animations et graphismes complexes.
 - **0.8.0 et 0.7.2.** Ajout des diagrammes professionnels modifiables, du stockage serveur, des flux de presse-papiers, des photos Web sourcées et d'une édition et d'un export plus fiables.
 
@@ -102,7 +115,7 @@ Le navigateur n'envoie que la zone pertinente du canevas et sa géométrie. Le s
 
 ## Déploiement sécurisé
 
-- **Codex CLI et Claude CLI :** utilisez-les uniquement sur la machine locale ou un réseau de confiance. Chaque requête valide lance un processus CLI local ; n'exposez donc pas directement ces modes à Internet.
+- **Kimi Code CLI, Codex CLI et Claude CLI :** utilisez-les uniquement sur la machine locale ou un réseau de confiance. Chaque requête valide lance un processus CLI local ; n'exposez donc pas directement ces modes à Internet.
 - **Mode API :** en cas d'accès public, placez PenEcho derrière un proxy HTTPS avec authentification et limites de fréquence et de taille des requêtes.
 - Ne publiez pas les fichiers de configuration, clés d'API, traces de requêtes, journaux ou images privées du canevas.
 

@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho é uma tela compartilhada onde escrita à mão, equações, diagramas e contexto espacial fazem parte da conversa.</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">Site oficial · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">Publique ideias · Colabore · Compartilhe seu trabalho</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-Participe%20da%20comunidade-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Participe do Discord do PenEcho"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="Dê uma estrela ao PenEcho no GitHub"></a>
@@ -44,7 +50,7 @@ O PenEcho é membro oficial do **Kimi Open Source Friends**, programa da [Moonsh
 
 [Baixar no GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-Para instalar pelo npm, você precisa do [Node.js 20.3 ou mais recente](https://nodejs.org/) e de uma destas opções: uma chave de API, um [Codex CLI](https://developers.openai.com/codex/cli) autenticado ou um [Claude Code CLI](https://code.claude.com/docs/en/overview) autenticado.
+Para instalar pelo npm, você precisa do [Node.js 20.3 ou mais recente](https://nodejs.org/) e de uma destas opções: uma chave de API, ou [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) ou [Claude Code CLI](https://code.claude.com/docs/en/overview) autenticado.
 
 ```bash
 npm install -g penecho
@@ -71,20 +77,27 @@ Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar 
 - Receba respostas, dicas, explicações, fórmulas, gráficos e diagramas diretamente na tela.
 - Mova e redimensione rascunhos da IA; aceite ou descarte cada um antes de incorporá-lo ao trabalho.
 - Selecione traços com o laço para mover, redimensionar, recolorir, excluir ou converter com Typeset.
-- Salve instantâneos neste dispositivo ou no servidor PenEcho e exporte o conteúdo confirmado como PNG.
+- Refine widgets interativos, diagramas profissionais, animações e plugins de dados ao vivo por meio de alterações incrementais.
+- Salve até dez conexões de API ou CLI e alterne entre elas com um clique.
+- Organize telas em projetos, continue projetos privados em outros dispositivos com o PenEcho Cloud e exporte o conteúdo confirmado como PNG.
 - Escolha entre os temas Arcane, Sci-fi, Research e Studio.
 
-## Novidades da versão 0.9.0
+## PenEcho Cloud
 
-- **Várias conexões de IA com troca em um clique.** Salve até dez conexões API ou CLI, use predefinições editáveis de Kimi e MiniMax, teste-as na tela e escolha uma conexão ativa diferente em cada cliente do mesmo host PenEcho. As alterações são aplicadas imediatamente.
-- **Telas compartilhadas organizadas por projetos.** Organize as telas do servidor em projetos, mova o trabalho entre eles e navegue por prévias maiores ordenadas pela última modificação. O bundle v2 versionado mantém blocos, widgets, imagens posicionadas, recursos e metadados de prévia juntos; telas v1 continuam compatíveis e são atualizadas quando salvas novamente.
-- **Refine guiado e aplicado no próprio widget.** Escreva ou posicione novas instruções em qualquer lugar da área visível e escolha o widget que elas devem atualizar. O PenEcho conecta visualmente a área das instruções ao destino e pede confirmação; cancelamentos ou falhas preservam as instruções, e uma edição concluída ainda pode ser confirmada ou desfeita.
-- **Alterações incrementais menores com unified diff padrão.** O Refine envia os arquivos editáveis completos do widget, mas o modelo devolve apenas os hunks alterados, sem regenerar o widget inteiro. Isso reduz bastante os tokens de saída e a espera, mantendo atômicas as alterações de HTML, fonte e metadados do widget.
-- **Streaming real da API.** APIs compatíveis com OpenAI e Anthropic agora usam SSE de ponta a ponta para mostrar o recebimento imediatamente e tornar solicitações longas mais estáveis em gateways compatíveis.
-- **Progresso e cancelamento claros.** O status superior mostra preparação, conexão, espera, recebimento, validação, novas tentativas e tempo limite. Durante uma solicitação, o botão mágico interrompe o trabalho ativo imediatamente.
+O [PenEcho Cloud](https://penecho.ai), lançado na versão 1.0.0, é totalmente opcional: o PenEcho continua funcionando por completo localmente com sua própria API ou CLI. Ao entrar, você pode salvar telas privadas e versionadas em projetos, sincronizar favoritos e acessar este host remotamente por meio de um dispositivo vinculado, sem que as credenciais de API saiam do aparelho.
+
+O **Echoes** permite explorar, favoritar e reutilizar telas e widgets públicos em doze categorias. Você pode publicar seus próprios Crafts, abri-los em um visualizador Web somente leitura e preservar a linhagem entre versões.
+
+## Novidades da versão 1.0.0
+
+- **PenEcho Cloud.** Projetos privados entre dispositivos, favoritos sincronizados e gerenciamento de conta, armazenamento e créditos.
+- **Dispositivo vinculado.** Emparelhe este host com uma chave de uso único e acesse-o em navegadores e aplicativos autenticados; o vínculo pode ser pausado, retomado ou removido.
+- **Echoes e Crafts públicos.** Explore, compartilhe e reutilize telas e widgets públicos com categorias, favoritos e visualizador Web somente leitura.
+- **Salvamento seguro entre dispositivos.** Cada salvamento cria uma revisão imutável; alterações de outro dispositivo nunca são sobrescritas silenciosamente.
 
 ## Destaques anteriores
 
+- **0.9.0.** Adicionou várias conexões de IA, telas compartilhadas por projeto, Refine guiado no próprio widget, alterações incrementais com unified diff, streaming SSE e progresso com cancelamento.
 - **0.8.1.** Adicionou dados públicos ao vivo ao General HTML e SVG como padrão para animações e gráficos complexos.
 - **0.8.0 e 0.7.2.** Adicionaram diagramas profissionais editáveis, armazenamento no servidor, fluxos da área de transferência, fotos Web com fonte e edição e exportação mais confiáveis.
 
@@ -102,7 +115,7 @@ O navegador envia apenas o recorte relevante da tela e sua geometria. O servidor
 
 ## Implantação segura
 
-- **Codex CLI e Claude CLI:** use apenas na máquina local ou em uma rede confiável. Cada solicitação válida inicia um processo CLI local, portanto esses modos não devem ficar expostos diretamente à internet.
+- **Kimi Code CLI, Codex CLI e Claude CLI:** use apenas na máquina local ou em uma rede confiável. Cada solicitação válida inicia um processo CLI local, portanto esses modos não devem ficar expostos diretamente à internet.
 - **Modo API:** se houver acesso público, coloque o PenEcho atrás de um proxy HTTPS com autenticação e limites de frequência e tamanho de solicitação.
 - Não publique arquivos de configuração, chaves de API, rastros de solicitações, logs ou imagens privadas da tela.
 

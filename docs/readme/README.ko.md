@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho는 손글씨, 수식, 다이어그램, 공간적 맥락을 대화의 일부로 만드는 공유 캔버스입니다.</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">공식 웹사이트 · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">아이디어 게시 · 공동 작업 · 결과 공유</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-커뮤니티%20참여-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="PenEcho Discord 참여"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="GitHub에서 PenEcho에 스타 주기"></a>
@@ -44,7 +50,7 @@ PenEcho는 [Moonshot AI](https://www.kimi.com/)가 뛰어난 오픈 소스 프�
 
 [GitHub Releases에서 다운로드](https://github.com/penecho/penecho/releases/latest).
 
-npm으로 설치하려면 [Node.js 20.3 이상](https://nodejs.org/)과 API 키, 인증된 [Codex CLI](https://developers.openai.com/codex/cli), 또는 인증된 [Claude Code CLI](https://code.claude.com/docs/en/overview) 중 하나가 필요합니다.
+npm으로 설치하려면 [Node.js 20.3 이상](https://nodejs.org/)과 API 키, 로그인된 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli), 또는 [Claude Code CLI](https://code.claude.com/docs/en/overview) 중 하나가 필요합니다.
 
 ```bash
 npm install -g penecho
@@ -71,20 +77,27 @@ npm start
 - 답변, 힌트, 설명, 수식, 그래프, 다이어그램을 캔버스에서 바로 받습니다.
 - AI 초안을 이동하거나 크기를 조정한 뒤 작업에 포함하기 전에 개별적으로 승인하거나 폐기합니다.
 - 올가미로 필기를 선택해 이동, 크기 조정, 색상 변경, 삭제 또는 Typeset 정리를 수행합니다.
-- 스냅샷을 이 기기 또는 PenEcho 서버에 저장하고 확정된 콘텐츠를 PNG로 내보냅니다.
+- 대화형 위젯, 전문 다이어그램, 애니메이션과 실시간 데이터 플러그인을 증분 수정으로 제자리에서 다듬습니다.
+- API 또는 CLI 연결을 최대 10개 저장하고 한 번의 클릭으로 전환합니다.
+- 캔버스를 프로젝트로 정리하고 PenEcho Cloud를 통해 다른 기기에서 비공개 프로젝트를 이어가며 확정된 콘텐츠를 PNG로 내보냅니다.
 - Arcane, Sci-fi, Research, Studio 테마를 선택할 수 있습니다.
 
-## 0.9.0의 새로운 기능
+## PenEcho Cloud
 
-- **여러 AI 연결을 한 번에 전환.** API 또는 CLI 연결을 최대 10개 저장하고 편집 가능한 Kimi 및 MiniMax 프리셋으로 설정해 캔버스에서 테스트할 수 있습니다. 같은 PenEcho 호스트의 각 클라이언트가 별도의 활성 연결을 선택하며 변경은 즉시 적용됩니다.
-- **프로젝트 기반 공유 캔버스.** 서버 캔버스를 프로젝트로 정리하고 서로 이동하며, 더 큰 미리보기를 최근 수정 순으로 확인할 수 있습니다. 버전이 지정된 v2 Bundle은 타일, 위젯, 배치 이미지, 리소스와 미리보기 메타데이터를 하나로 보관합니다. 기존 v1 캔버스도 계속 열 수 있으며 다시 저장할 때 업그레이드됩니다.
-- **대상이 명확한 제자리 Refine.** 현재 화면 어디에나 새 지시를 쓰거나 배치한 다음 업데이트할 위젯을 선택할 수 있습니다. PenEcho는 지시 영역과 대상을 시각적으로 연결하고 전송 전에 확인합니다. 취소나 실패 시 지시는 유지되며, 성공한 편집도 확인하거나 실행 취소할 수 있습니다.
-- **표준 unified diff를 사용하는 작은 증분 수정.** Refine은 편집 가능한 위젯 파일 전체를 보내지만 모델은 위젯 전체를 다시 생성하지 않고 변경된 hunk만 반환합니다. 출력 토큰과 대기 시간을 크게 줄이면서 HTML, 소스와 위젯 메타데이터 변경을 원자적으로 적용합니다.
-- **실제 API 스트리밍.** OpenAI 및 Anthropic 호환 API가 종단 간 SSE를 사용하여 수신 시작을 즉시 표시하고 호환 게이트웨이를 통한 긴 요청의 안정성을 높입니다.
-- **명확한 진행 상태와 취소.** 상단 상태에 준비, 연결, 대기, 수신, 검증, 재시도와 시간 초과를 표시합니다. 요청 중에는 마법 버튼으로 활성 작업을 즉시 중지할 수 있습니다.
+1.0.0에서 도입된 [PenEcho Cloud](https://penecho.ai)는 완전히 선택 사항입니다. 자체 API 또는 CLI를 사용하면 PenEcho는 계속 로컬에서 온전히 작동합니다. 로그인하면 비공개 버전 캔버스를 프로젝트에 저장하고 즐겨찾기를 동기화하며, 연결된 기기를 통해 이 호스트에 원격으로 접근할 수 있습니다. API 자격 증명은 기기 밖으로 나가지 않습니다.
+
+**Echoes**에서는 12개 카테고리의 공개 캔버스와 위젯을 탐색하고 즐겨찾기에 추가하거나 재사용할 수 있습니다. 자신의 Craft를 게시하고 읽기 전용 웹 뷰어로 공유하며 버전 간 계보를 유지할 수도 있습니다.
+
+## 1.0.0의 새로운 기능
+
+- **PenEcho Cloud.** 기기 간 비공개 프로젝트, 동기화된 즐겨찾기와 계정·저장 공간·크레딧 관리를 추가했습니다.
+- **연결된 기기.** 일회용 키로 이 호스트를 페어링하고 로그인된 브라우저와 앱에서 접근합니다. 연결은 일시 중지, 재개 또는 제거할 수 있습니다.
+- **Echoes와 공개 Craft.** 카테고리, 즐겨찾기와 읽기 전용 웹 뷰어를 통해 공개 캔버스와 위젯을 탐색하고 공유하며 재사용합니다.
+- **안전한 기기 간 저장.** 저장할 때마다 변경 불가능한 리비전을 만들고 다른 기기의 변경 사항을 조용히 덮어쓰지 않습니다.
 
 ## 이전 주요 업데이트
 
+- **0.9.0.** 여러 AI 연결, 프로젝트 기반 공유 캔버스, 제자리 Refine, unified diff 증분 수정, SSE 스트리밍과 진행 상태 및 취소를 추가했습니다.
 - **0.8.1.** General HTML의 실시간 공개 데이터와 애니메이션 및 복잡한 그래픽용 SVG 우선 표시를 추가했습니다.
 - **0.8.0 및 0.7.2.** 편집 가능한 전문 다이어그램, 서버 저장, 클립보드 워크플로, 출처가 있는 웹 사진과 더 안정적인 편집 및 내보내기를 추가했습니다.
 
@@ -102,7 +115,7 @@ npm start
 
 ## 안전한 배포
 
-- **Codex CLI 및 Claude CLI:** 로컬 컴퓨터나 신뢰할 수 있는 LAN에서만 사용하세요. 유효한 요청은 로컬 CLI 프로세스를 시작하므로 이 모드를 인터넷에 직접 공개하지 마세요.
+- **Kimi Code CLI, Codex CLI 및 Claude CLI:** 로컬 컴퓨터나 신뢰할 수 있는 LAN에서만 사용하세요. 유효한 요청은 로컬 CLI 프로세스를 시작하므로 이 모드를 인터넷에 직접 공개하지 마세요.
 - **API 모드:** 공개할 경우 HTTPS, 인증, 요청 빈도와 크기 제한을 적용한 리버스 프록시 뒤에 배치하세요.
 - 설정 파일, API 키, 요청 추적, 로그 또는 비공개 캔버스 이미지를 공개하지 마세요.
 
