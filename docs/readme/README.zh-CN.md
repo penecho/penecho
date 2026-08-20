@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho 是一块共享画布，让手写内容、公式、图表和空间关系都成为对话的一部分。</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">官方网站 · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">发布想法 · 协作共创 · 分享作品</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-加入社区-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="加入 PenEcho Discord"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="在 GitHub 上为 PenEcho 点亮 Star"></a>
@@ -28,9 +34,9 @@
 
 <p align="center">
   <a href="https://penecho.ai">官网</a> &bull;
-  <a href="#penecho-cloud">云端</a> &bull;
-  <a href="#-快速开始">快速开始</a> &bull;
   <a href="#-功能特性">功能特性</a> &bull;
+  <a href="#-快速开始">快速开始</a> &bull;
+  <a href="#penecho-cloud">云端</a> &bull;
   <a href="#-常见问题">常见问题</a> &bull;
   <a href="https://discord.gg/3jrPJ3mXdX">Discord</a>
 </p>
@@ -71,11 +77,11 @@ PenEcho 是 **Kimi Open Source Friends** 的正式成员。该计划由 [Moonsho
 
 **桌面应用** — [前往 GitHub Releases 下载](https://github.com/penecho/penecho/releases/latest)。
 
-**npm 安装** — 需要 [Node.js 20.3 或更高版本](https://nodejs.org/)，并准备以下任意一种：API Key、已登录的 [Codex CLI](https://developers.openai.com/codex/cli)，或已登录的 [Claude Code CLI](https://code.claude.com/docs/en/overview)。
+**npm 安装** — 需要 [Node.js 20.3 或更高版本](https://nodejs.org/)，并准备以下任意一种：API Key、已登录的 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、已登录的 [Codex CLI](https://developers.openai.com/codex/cli)，或已登录的 [Claude Code CLI](https://code.claude.com/docs/en/overview)。
 
 ```bash
 npm install -g penecho
-penecho configure   # 选择 LLM 来源：API、Codex CLI 或 Claude CLI
+penecho configure   # 选择 LLM 来源：API、Kimi、Codex 或 Claude CLI
 penecho             # 然后打开 http://localhost:3888
 ```
 
@@ -88,7 +94,7 @@ npm install
 npm start
 ```
 
-首次启动时，第一个浏览器必须设置一个共用的 6 位安全码，或明确确认风险后保持局域网开放。配置保存在 `~/.penecho/config.env`，API 凭据不会发送到浏览器。CLI 模式要求对应的 CLI 已安装并登录，详见[配置参考](../configuration.md)。
+首次启动时，最先打开的浏览器会话必须设置一个共用的 6 位安全码，或明确确认将进程保持为局域网开放状态。配置保存在 `~/.penecho/config.env`，API 凭据不会发送到浏览器。CLI 模式要求对应的 CLI 已安装、登录并位于 `PATH` 中，详见[配置参考](../configuration.md)。
 
 <a id="penecho-cloud"></a>
 ## ☁️ PenEcho 云端
@@ -131,7 +137,7 @@ npm start
 
 | 设置 | 用途 |
 | --- | --- |
-| `AI_PROVIDER` | 执行器：`api`、`codex-cli` 或 `claude-cli` |
+| `AI_PROVIDER` | 执行器：`api`、`kimi-cli`、`codex-cli` 或 `claude-cli` |
 | `AI_API_URL` / `AI_API_KEY` / `AI_API_MODEL` | API 端点、凭据和模型（仅 API 模式） |
 | `AI_EFFORT` | 保存的推理等级；画布工具栏的 `Reasoning` 菜单可按请求覆盖，不会改写连接配置 |
 | `HOST` / `PORT` | 监听地址和端口，默认 `0.0.0.0:3888` |
@@ -158,7 +164,7 @@ npm start
 ## ❓ 常见问题
 
 **必须有 API Key 吗？**
-不是。已登录的 [Codex CLI](https://developers.openai.com/codex/cli) 或 [Claude Code CLI](https://code.claude.com/docs/en/overview) 也可以 — PenEcho 在本地调用所选 CLI，该来源不需要 API Key。
+不是。已登录的 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、[Codex CLI](https://developers.openai.com/codex/cli) 或 [Claude Code CLI](https://code.claude.com/docs/en/overview) 都可以 — PenEcho 在本地调用所选 CLI，该来源不需要 API Key。
 
 **应该从哪个模型开始？**
 [Kimi K3](https://platform.kimi.ai?aff=penecho)、Claude Opus 4.8 / 5.0 和 `gpt-5.6` 系列都是不错的起点，详见[英文 README 的模型推荐](../../README.md#recommended-model-configurations)。

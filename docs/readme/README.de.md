@@ -18,6 +18,12 @@
 
 <p align="center">PenEcho ist eine gemeinsame Leinwand, auf der Handschrift, Gleichungen, Diagramme und räumlicher Kontext Teil des Gesprächs werden.</p>
 
+<h2 align="center">
+  <a href="https://penecho.ai">Offizielle Website · penecho.ai</a>
+</h2>
+
+<h3 align="center"><a href="https://penecho.ai">Ideen veröffentlichen · Zusammenarbeiten · Ergebnisse teilen</a></h3>
+
 <p align="center">
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/Discord-Community%20beitreten-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="PenEcho auf Discord beitreten"></a>
   <a href="https://github.com/penecho/penecho/stargazers"><img src="https://img.shields.io/github/stars/penecho/penecho?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;color=f5b301" alt="PenEcho auf GitHub einen Stern geben"></a>
@@ -44,7 +50,7 @@ PenEcho ist offizielles Mitglied der **Kimi Open Source Friends**, einem Program
 
 [Von GitHub Releases herunterladen](https://github.com/penecho/penecho/releases/latest).
 
-Für die Installation über npm benötigst du [Node.js 20.3 oder neuer](https://nodejs.org/) und eine der folgenden Optionen: einen API-Schlüssel, eine authentifizierte [Codex CLI](https://developers.openai.com/codex/cli) oder eine authentifizierte [Claude Code CLI](https://code.claude.com/docs/en/overview).
+Für die Installation über npm benötigst du [Node.js 20.3 oder neuer](https://nodejs.org/) und eine der folgenden Optionen: einen API-Schlüssel oder eine angemeldete [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) oder [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho
@@ -71,20 +77,27 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 - Erhalte Antworten, Hinweise, Erklärungen, Formeln, Funktionsgraphen und Diagramme direkt auf der Leinwand.
 - Verschiebe oder skaliere KI-Entwürfe und bestätige oder verwirf sie einzeln, bevor sie Teil deiner Arbeit werden.
 - Wähle Handschrift mit dem Lasso aus, um sie zu verschieben, zu skalieren, umzufärben, zu löschen oder mit Typeset sauber zu setzen.
-- Speichere Schnappschüsse auf diesem Gerät oder dem PenEcho-Server und exportiere bestätigte Inhalte als PNG.
+- Verfeinere interaktive Widgets, professionelle Diagramme, Animationen und Live-Daten-Plugins durch inkrementelle Änderungen.
+- Speichere bis zu zehn API- oder CLI-Verbindungen und wechsle mit einem Klick zwischen ihnen.
+- Organisiere Leinwände in Projekten, setze private Projekte über PenEcho Cloud auf anderen Geräten fort und exportiere bestätigte Inhalte als PNG.
 - Wähle zwischen den Designs Arcane, Sci-fi, Research und Studio.
 
-## Neu in Version 0.9.0
+## PenEcho Cloud
 
-- **Mehrere KI-Verbindungen mit Ein-Klick-Wechsel.** Speichere bis zu zehn API- oder CLI-Verbindungen, nutze bearbeitbare Kimi- und MiniMax-Voreinstellungen, teste Verbindungen im Canvas und wähle auf jedem Client desselben PenEcho-Hosts eine eigene aktive Verbindung. Änderungen gelten sofort.
-- **Gemeinsame Leinwände nach Projekten.** Organisiere Server-Leinwände in Projekten, verschiebe Arbeiten zwischen ihnen und finde die neuesten Speicherstände über größere Vorschauen und Änderungszeiten. Das versionierte v2-Bundle hält Kacheln, Widgets, platzierte Bilder, Ressourcen und Vorschau-Metadaten zusammen; v1-Leinwände bleiben lesbar und werden beim nächsten Speichern aktualisiert.
-- **Geführtes Refine direkt am Widget.** Schreibe oder platziere neue Anweisungen an einer beliebigen Stelle des sichtbaren Bereichs und wähle anschließend das zu aktualisierende Widget. PenEcho verbindet Anweisungsbereich und Ziel sichtbar, fragt vor dem Senden nach und bewahrt Anweisungen bei Abbruch oder Fehler; erfolgreiche Änderungen lassen sich weiterhin bestätigen oder rückgängig machen.
-- **Kleinere inkrementelle Änderungen mit standardisiertem Unified Diff.** Refine sendet die vollständigen editierbaren Widget-Dateien, das Modell gibt jedoch nur geänderte Hunks statt des ganzen Widgets zurück. Das reduziert Ausgabe-Token und Wartezeit deutlich, während Änderungen an HTML, Quelle und Widget-Metadaten atomar bleiben.
-- **Echte API-Streams.** OpenAI- und Anthropic-kompatible APIs verwenden jetzt durchgehend SSE, sodass eingehende Antworten sofort sichtbar werden und lange Anfragen über kompatible Gateways stabiler laufen.
-- **Klarer Fortschritt und Abbruch.** Der obere Status zeigt Vorbereitung, Verbindung, Warten, Empfang, Prüfung, Wiederholungen und Zeitüberschreitungen. Während einer Anfrage stoppt die magische Schaltfläche die aktive Arbeit sofort.
+[PenEcho Cloud](https://penecho.ai), eingeführt mit Version 1.0.0, ist vollständig optional: PenEcho funktioniert mit deiner eigenen API oder CLI weiterhin komplett lokal. Nach der Anmeldung kannst du private, versionierte Leinwände projektweise speichern, Favoriten synchronisieren und über ein verknüpftes Gerät aus der Ferne auf diesen Host zugreifen. API-Zugangsdaten verlassen dabei nie das Gerät.
+
+In **Echoes** kannst du öffentliche Leinwände und Widgets in zwölf Kategorien entdecken, favorisieren und wiederverwenden. Eigene Crafts lassen sich veröffentlichen, in einem schreibgeschützten Web-Viewer öffnen und mit ihrer Versionsabstammung weiterentwickeln.
+
+## Neu in Version 1.0.0
+
+- **PenEcho Cloud.** Private geräteübergreifende Projekte, synchronisierte Favoriten sowie Verwaltung von Konto, Speicher und Guthaben.
+- **Verknüpftes Gerät.** Kopple diesen Host mit einem einmaligen Schlüssel und greife über angemeldete Browser und Apps darauf zu; die Verbindung kann pausiert, fortgesetzt oder entfernt werden.
+- **Echoes und öffentliche Crafts.** Entdecke, teile und verwende öffentliche Leinwände und Widgets mit Kategorien, Favoriten und schreibgeschütztem Web-Viewer.
+- **Sicheres Speichern über Geräte hinweg.** Jede Speicherung erzeugt eine unveränderliche Revision; Änderungen von anderen Geräten werden nie still überschrieben.
 
 ## Frühere Höhepunkte
 
+- **0.9.0.** Ergänzte mehrere KI-Verbindungen, projektbasierte gemeinsame Leinwände, geführtes Refine direkt am Widget, inkrementelle Unified-Diff-Änderungen, SSE-Streaming sowie Fortschritt mit Abbruch.
 - **0.8.1.** Ergänzte öffentliche Live-Daten für General HTML sowie SVG als Standard für Animationen und komplexe Grafiken.
 - **0.8.0 und 0.7.2.** Ergänzten editierbare professionelle Diagramme, Server-Speicherung, Zwischenablage-Workflows, Webfotos mit Quellen sowie zuverlässigere Bearbeitung und Exporte.
 
@@ -102,7 +115,7 @@ Der Browser sendet nur den relevanten Ausschnitt der Leinwand und dessen Geometr
 
 ## Sichere Bereitstellung
 
-- **Codex CLI und Claude CLI:** Nur auf dem lokalen Rechner oder in einem vertrauenswürdigen LAN verwenden. Jede gültige Anfrage startet einen lokalen CLI-Prozess; diese Modi dürfen daher nicht direkt im Internet bereitgestellt werden.
+- **Kimi Code CLI, Codex CLI und Claude CLI:** Nur auf dem lokalen Rechner oder in einem vertrauenswürdigen LAN verwenden. Jede gültige Anfrage startet einen lokalen CLI-Prozess; diese Modi dürfen daher nicht direkt im Internet bereitgestellt werden.
 - **API-Modus:** Bei öffentlichem Zugriff sollte PenEcho hinter einem HTTPS-Proxy mit Authentifizierung sowie Begrenzungen für Anfragerate und -größe betrieben werden.
 - Veröffentliche keine Konfigurationsdateien, API-Schlüssel, Anfrageprotokolle, Logs oder privaten Leinwandbilder.
 

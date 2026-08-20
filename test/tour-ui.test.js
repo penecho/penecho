@@ -25,19 +25,21 @@ test("feature tour follows the requested concise order with stable targets", () 
     ordered = [
       "core-effort-v1",
       "plugins-v3",
+      "favorites-add-v1",
       "hand-v1",
       "studio-theme-v1",
       "core-lasso-v1",
       "core-text-v1",
       "core-image-v1",
       "core-fullscreen-v1",
-      "core-files-v1",
+      "cloud-share-canvas-v1",
+      "cloud-workspace-v1",
       "core-manual-ai-v1",
       "core-status-v1",
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#pluginButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#canvasFileActions", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#pluginButton", "#craftsButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
@@ -149,8 +151,12 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourImageBody",
       "tourFullscreenTitle",
       "tourFullscreenBody",
-      "tourFilesTitle",
-      "tourFilesBody",
+      "tourFavoritesTitle",
+      "tourFavoritesBody",
+      "tourShareCanvasTitle",
+      "tourShareCanvasBody",
+      "tourCloudTitle",
+      "tourCloudBody",
       "tourManualAITitle",
       "tourManualAIBody",
       "tourStatusTitle",
@@ -173,7 +179,12 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.doesNotMatch(zh, /控制动态图讲解/);
   assert.match(zh, /Studio 主题/);
   assert.match(zh, /不会参考画布其他部分/);
-  assert.match(zh, /PNG/);
+  assert.match(app, /tourFavoritesBody:[^\n]*Echoes favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
+  assert.match(zh, /tourFavoritesBody:[^\n]*Echoes[^\n]*收藏组件[^\n]*收藏画布/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*public in Echoes[^\n]*Use Cloud instead for private saves/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*公开发布到 Echoes[^\n]*私密保存请使用 Cloud/);
+  assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or Widgets/);
+  assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);
   assert.match(zh, /双指.*缩放/);
 });

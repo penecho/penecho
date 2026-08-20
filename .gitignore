@@ -1,9 +1,13 @@
 .env
 *.env
 .env.cli
+.env.*
+!.env.example
+!.env.*.example
 .env.*.local
 node_modules/
 npm-debug.log*
+*.log
 logs/
 debug_logs/
 .opencode/
@@ -17,6 +21,10 @@ release/
 build/icons/generated/
 .DS_Store
 Thumbs.db
+*.pem
+*.key
+*.p12
+*.pfx
 local/*
 public/plugins/private/
 docs/assets/penecho-demo.gif
@@ -34,4 +42,8 @@ tools/mobile/web/penecho-mark.png
 .gemini/
 .aider*
 .windsurf/
+.idea/
+.vscode/
+*.swp
+*.swo
 .trash/
