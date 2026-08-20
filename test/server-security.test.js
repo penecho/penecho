@@ -535,7 +535,7 @@ test("two clients independently route requests through the shared connection lis
     const clientA = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) }),
       clientB = fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/x-ndjson", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
     const deadline = Date.now() + 3000;
-    while ((!openai.requests.length || !anthropic.requests.length) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    while ((!openai.requests.length || anthropic.requests.length < 2) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(openai.requests.length, 1);
     assert.equal(anthropic.requests.length, 2);
     assert.equal(JSON.parse(anthropic.requests[0]).model, "model-b");
