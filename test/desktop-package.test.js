@@ -307,7 +307,10 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /xcrun notarytool submit/);
   assert.match(desktopReleaseWorkflow, /environment: windows-signing/);
   assert.match(desktopReleaseWorkflow, /WINDOWS_SIGNING_MODE=unsigned/);
-  assert.match(desktopReleaseWorkflow, /Azure\/artifact-signing-action@v0/);
+  assert.match(desktopReleaseWorkflow, /ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(desktopReleaseWorkflow, /Install-Module -Name ArtifactSigning -RequiredVersion 0\.1\.8/);
+  assert.match(desktopReleaseWorkflow, /Invoke-ArtifactSigning/);
+  assert.match(desktopReleaseWorkflow, /ExcludeWorkloadIdentityCredential \$false/);
   assert.match(desktopReleaseWorkflow, /AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME/);
   assert.match(desktopReleaseWorkflow, /npm run desktop:make:windows -- --arch=x64 --skip-package/);
   assert.match(desktopReleaseWorkflow, /Publishing unsigned Windows artifact/);

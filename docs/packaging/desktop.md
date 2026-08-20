@@ -97,7 +97,7 @@ Preferred Azure Artifact Signing environment variables (no certificate private k
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-Configure these as GitHub Environment variables after the public identity validation and certificate profile are complete. The Entra application or managed identity must trust the `windows-signing` GitHub Environment through OIDC and have the `Artifact Signing Certificate Profile Signer` role on the certificate profile. The workflow signs the packaged application before Squirrel creates its package, then signs the final Setup executable and verifies both signatures. Enabling Azure signing later requires environment and Azure identity configuration only; it does not require another source change.
+Configure these as GitHub Environment variables after the public identity validation and certificate profile are complete. The Entra application or managed identity must trust the `windows-signing` GitHub Environment through OIDC and have the `Artifact Signing Certificate Profile Signer` role on the certificate profile. The workflow requests a short-lived GitHub OIDC token and uses Microsoft's `ArtifactSigning` PowerShell module; no Azure client secret or third-party GitHub Action is required. It signs the packaged application before Squirrel creates its package, then signs the final Setup executable and verifies both signatures. Enabling Azure signing later requires environment and Azure identity configuration only; it does not require another source change.
 
 PFX-based Authenticode remains an optional fallback using `windows-signing` environment secrets:
 

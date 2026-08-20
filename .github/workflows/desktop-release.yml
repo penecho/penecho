@@ -196,51 +196,65 @@ jobs:
           $certificatePath = "$env:RUNNER_TEMP\penecho.pfx"
           [IO.File]::WriteAllBytes($certificatePath, $bytes)
           "WINDOWS_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Authenticate to Azure with OIDC
+      - name: Prepare Azure Artifact Signing with OIDC
         if: env.WINDOWS_SIGNING_MODE == 'azure'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+        shell: pwsh
+        run: |
+          $tokenUrl = "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=api%3A%2F%2FAzureADTokenExchange"
+          $headers = @{ Authorization = "Bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }
+          $token = (Invoke-RestMethod -Uri $tokenUrl -Headers $headers).value
+          if ([string]::IsNullOrWhiteSpace($token)) {
+            Write-Error "GitHub did not return an OIDC token for Azure Artifact Signing."
+            exit 1
+          }
+          $tokenPath = "$env:RUNNER_TEMP\penecho-azure-federated-token"
+          [IO.File]::WriteAllText($tokenPath, $token)
+          "AZURE_FEDERATED_TOKEN_FILE=$tokenPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Install-Module -Name ArtifactSigning -RequiredVersion 0.1.8 -Force -Repository PSGallery -Scope CurrentUser
       - name: Package Windows application for Azure signing
         if: env.WINDOWS_SIGNING_MODE == 'azure'
         shell: pwsh
         run: npm run desktop:package -- --platform=win32 --arch=x64
       - name: Sign packaged Windows application with Azure Artifact Signing
         if: env.WINDOWS_SIGNING_MODE == 'azure'
-        uses: Azure/artifact-signing-action@v0
-        with:
-          endpoint: ${{ env.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ env.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ env.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}\out\PenEcho-win32-x64
-          files-folder-filter: exe,dll,node
-          files-folder-recurse: true
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com/
-          timestamp-digest: SHA256
-          description: PenEcho
-          description-url: https://github.com/penecho/penecho
+        shell: pwsh
+        run: |
+          Invoke-ArtifactSigning `
+            -Endpoint $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
+            -CodeSigningAccountName $env:AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME `
+            -CertificateProfileName $env:AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME `
+            -FilesFolder "$env:GITHUB_WORKSPACE\out\PenEcho-win32-x64" `
+            -FilesFolderFilter "exe,dll,node" `
+            -FilesFolderRecurse $true `
+            -FileDigest SHA256 `
+            -TimestampRfc3161 http://timestamp.acs.microsoft.com/ `
+            -TimestampDigest SHA256 `
+            -Description PenEcho `
+            -DescriptionUrl https://github.com/penecho/penecho `
+            -ExcludeEnvironmentCredential $true `
+            -ExcludeWorkloadIdentityCredential $false
       - name: Build Windows installer from Azure-signed application
         if: env.WINDOWS_SIGNING_MODE == 'azure'
         shell: pwsh
         run: npm run desktop:make:windows -- --arch=x64 --skip-package
       - name: Sign Windows installer with Azure Artifact Signing
         if: env.WINDOWS_SIGNING_MODE == 'azure'
-        uses: Azure/artifact-signing-action@v0
-        with:
-          endpoint: ${{ env.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ env.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ env.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}\out\make\squirrel.windows\x64
-          files-folder-filter: PenEcho-Setup-*.exe
-          files-folder-recurse: false
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com/
-          timestamp-digest: SHA256
-          description: PenEcho
-          description-url: https://github.com/penecho/penecho
+        shell: pwsh
+        run: |
+          Invoke-ArtifactSigning `
+            -Endpoint $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
+            -CodeSigningAccountName $env:AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME `
+            -CertificateProfileName $env:AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME `
+            -FilesFolder "$env:GITHUB_WORKSPACE\out\make\squirrel.windows\x64" `
+            -FilesFolderFilter "PenEcho-Setup-*.exe" `
+            -FilesFolderRecurse $false `
+            -FileDigest SHA256 `
+            -TimestampRfc3161 http://timestamp.acs.microsoft.com/ `
+            -TimestampDigest SHA256 `
+            -Description PenEcho `
+            -DescriptionUrl https://github.com/penecho/penecho `
+            -ExcludeEnvironmentCredential $true `
+            -ExcludeWorkloadIdentityCredential $false
       - name: Build Windows installer without Azure Artifact Signing
         if: env.WINDOWS_SIGNING_MODE != 'azure'
         shell: pwsh
