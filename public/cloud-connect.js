@@ -114,6 +114,8 @@
       syncUnsupported:"This Cloud does not support the required project sync protocol.",
       signInFavorites:"Sign in to view favorites saved to your account.",
       loadingFavorites:"Loading favorites…",
+      loadMoreFavorites:"Load more",
+      retryFavorites:"Retry",
       noFavorites:"No favorites yet. Favorite a Craft in Echoes to keep it here.",
       noFavoriteCanvases:"No favorite Canvases yet. Favorite one in Echoes to keep it here.",
       noFavoriteWidgets:"No favorite Widgets yet. Favorite one in Echoes or from a Canvas.",
@@ -309,6 +311,8 @@
       syncUnsupported:"此 Cloud 不支持当前所需的项目同步协议。",
       signInFavorites:"登录后查看保存在账号中的收藏。",
       loadingFavorites:"正在加载收藏…",
+      loadMoreFavorites:"加载更多",
+      retryFavorites:"重试",
       noFavorites:"还没有收藏。可在 Echoes 中收藏后回到这里使用。",
       noFavoriteCanvases:"还没有收藏的画布。可在 Echoes 中收藏后回到这里打开。",
       noFavoriteWidgets:"还没有收藏的组件。可在 Echoes 或画布中收藏。",
@@ -427,8 +431,6 @@
   const state = {
     status:null,
     library:null,
-    favoriteCanvases:null,
-    favoriteWidgets:null,
     selectedProjectId:null,
     cloudSection:"projects",
     cloudFavoriteKind:"all",
@@ -451,6 +453,23 @@
 
   function cloudOrigin() {
     return configuredCloudOrigin.replace(/\/$/, "");
+  }
+
+  function isCloudRuntime() {
+    return window.PENECHO_CONFIG?.runtime === "cloud";
+  }
+
+  function runtimeApiPath(path, method = "GET") {
+    if (!isCloudRuntime()) return path;
+    const source = new URL(path, `${location.origin}/`), requestMethod = String(method || "GET").toUpperCase();
+    if (requestMethod === "GET" && source.pathname === "/api/cloud/library") return `/api/v1/library${source.search ? `${source.search}&` : "?"}previews=0`;
+    if (requestMethod === "POST" && source.pathname === "/api/cloud/projects") return "/api/v1/projects";
+    if (/^\/api\/cloud\/favorites(?:\/feed|\/[0-9a-f-]{36}(?:\/thumbnail)?)?$/i.test(source.pathname)) return `${source.pathname.replace("/api/cloud/favorites", "/api/v1/favorites")}${source.search}`;
+    if (source.pathname === "/api/cloud/community" && requestMethod === "GET") return `/api/v1/community/items${source.search}`;
+    if (/^\/api\/cloud\/community\/[0-9a-f-]{36}(?:\/(?:favorite|redeem))?$/i.test(source.pathname)) {
+      return `${source.pathname.replace("/api/cloud/community/", "/api/v1/community/items/")}${source.search}`;
+    }
+    return path;
   }
 
   function communityUrl(item) {
@@ -502,7 +521,8 @@
   }
 
   async function api(path, options = {}) {
-    const response = await fetch(path, {
+    const requestPath = runtimeApiPath(path, options.method || "GET");
+    const response = await fetch(requestPath, {
       ...options,
       headers:{ ...apiHeaders(options.body !== undefined), ...(options.headers || {}) },
     });
@@ -512,6 +532,9 @@
       error.status = response.status;
       error.code = payload.code || null;
       throw error;
+    }
+    if (isCloudRuntime() && path === "/api/cloud/library" && !payload.sync) {
+      payload.sync = { bundleVersion:2, conflictPolicy:"base-revision-required" };
     }
     return payload;
   }
@@ -575,16 +598,23 @@
     return { overlay, dialog, body };
   }
 
-  function accountSignedIn() { return Boolean(state.status?.accountSession?.signedIn); }
+  function accountSignedIn() {
+    return isCloudRuntime()
+      ? Boolean(window.PENECHO_REMOTE_CLOUD_STATUS?.accountName)
+      : Boolean(state.status?.accountSession?.signedIn);
+  }
 
   function updateCloudButton() {
     const account = state.status?.account;
-    const connected = Boolean(state.status?.device?.connected);
-    cloudButton.dataset.state = connected ? "connected" : accountSignedIn() ? "signed-in" : "signed-out";
-    cloudButton.querySelector(".cloud-account-label").textContent = account?.name ? account.name.split(/\s+/)[0] : "Cloud";
+    const remote = window.PENECHO_CONFIG?.runtime === "cloud" ? window.PENECHO_REMOTE_CLOUD_STATUS : null;
+    const connected = remote ? Boolean(remote.deviceOnline) : Boolean(state.status?.device?.connected);
+    const signedIn = remote ? Boolean(remote.accountName) : accountSignedIn();
+    const accountName = String(remote?.accountName || account?.name || "");
+    cloudButton.dataset.state = connected ? "connected" : signedIn ? "signed-in" : "signed-out";
+    cloudButton.querySelector(".cloud-account-label").textContent = accountName ? accountName.split(/\s+/)[0] : "Cloud";
     cloudButton.title = connected
       ? `PenEcho Cloud · ${cloudT("deviceLinked")}`
-      : accountSignedIn()
+      : signedIn
         ? `PenEcho Cloud · ${cloudT("credits", { count:account?.credits || 0 })}`
         : cloudT("openPenEchoCloud", { fallback:"Connect PenEcho Cloud" });
   }
@@ -592,6 +622,17 @@
   let statusRequestSeq = 0;
 
   async function refreshStatus(force = false) {
+    if (isCloudRuntime()) {
+      const remote = window.PENECHO_REMOTE_CLOUD_STATUS || {};
+      state.status = {
+        ...(state.status || {}),
+        account:remote.accountName ? { ...(state.status?.account || {}), name:remote.accountName } : null,
+        accountSession:{ ...(state.status?.accountSession || {}), signedIn:Boolean(remote.accountName) },
+        device:{ ...(state.status?.device || {}), connected:Boolean(remote.deviceOnline) },
+      };
+      updateCloudButton();
+      return state.status;
+    }
     const seq = ++statusRequestSeq;
     const previouslySignedIn = accountSignedIn();
     try {
@@ -946,8 +987,9 @@
         const list = el("div", { class:"cloud-canvas-list" });
         if (!projectCanvases.length) list.append(el("div", { class:"cloud-project-empty", text:cloudT("noCanvases") }));
         for (const canvas of projectCanvases.slice(0, 12)) {
+          const thumbnailUrl = canvas.previewDataUrl || (isCloudRuntime() ? `/api/v1/canvases/${encodeURIComponent(canvas.id)}/thumbnail` : "");
           const row = el("button", { class:"cloud-canvas-row", type:"button", onclick:() => openProjectCanvasHere(canvas.id, panel, row) }, [
-            canvas.previewDataUrl ? el("img", { src:canvas.previewDataUrl, alt:"", loading:"lazy" }) : el("span", { class:"cloud-canvas-placeholder", text:"P" }),
+            thumbnailUrl ? el("img", { src:thumbnailUrl, alt:"", loading:"lazy" }) : el("span", { class:"cloud-canvas-placeholder", text:"P" }),
             el("span", { class:"cloud-canvas-copy" }, [
               el("strong", { text:canvas.name || cloudT("untitledCanvas") }),
               el("small", { text:cloudT("updated", { date:new Intl.DateTimeFormat(document.documentElement.lang.startsWith("zh") ? "zh-CN" : "en", { dateStyle:"medium", timeStyle:"short" }).format(canvas.updatedAt || canvas.createdAt || Date.now()), size:formatBytes(canvas.sizeBytes) }) }),
@@ -990,7 +1032,7 @@
   }
 
   function favoriteThumbnail(source, fallback, communityId = null) {
-    const url = thumbnailDataUrl(source) || (communityId ? `/api/cloud/community/${encodeURIComponent(communityId)}/thumbnail` : "");
+    const url = thumbnailDataUrl(source) || (communityId ? communityThumbnailUrl(communityId) : "");
     if (!url) return el("span", { class:"cloud-library-thumb-fallback", text:fallback });
     const image = el("img", { class:"cloud-library-thumb", src:url, alt:"", loading:"lazy" });
     image.addEventListener("error", () => image.replaceWith(el("span", { class:"cloud-library-thumb-fallback", text:fallback })));
@@ -1068,9 +1110,8 @@
     const filters = el("div", { class:"cloud-favorite-filters", role:"group", "aria-label":cloudT("favorites") });
     const content = el("div", { class:"cloud-library-list", "aria-live":"polite", "aria-busy":"true" });
     panel.append(filters, content);
-    let canvases = Array.isArray(state.favoriteCanvases) ? state.favoriteCanvases : [];
-    let widgets = Array.isArray(state.favoriteWidgets) ? state.favoriteWidgets : [];
-    let loaded = Array.isArray(state.favoriteCanvases) && Array.isArray(state.favoriteWidgets);
+    let pager = favoritePagerForKind(state.cloudFavoriteKind);
+    let observer = null;
     function renderFavorites() {
       filters.replaceChildren(...[
         ["all", "all"],
@@ -1081,36 +1122,54 @@
         type:"button",
         "aria-pressed":String(state.cloudFavoriteKind === value),
         text:cloudT(label),
-        onclick:() => { state.cloudFavoriteKind = value; renderFavorites(); },
+        onclick:() => {
+          if (state.cloudFavoriteKind === value) return;
+          state.cloudFavoriteKind = value;
+          pager = favoritePagerForKind(value);
+          renderFavorites();
+          void load(true);
+        },
       })));
-      if (!loaded) return;
-      const rows = [];
-      if (state.cloudFavoriteKind !== "widget") rows.push(...canvases.map((item) => favoriteCanvasRow(item, panel)));
-      if (state.cloudFavoriteKind !== "canvas") rows.push(...widgets.map((entry) => favoriteWidgetRow(entry, panel)));
+      observer?.disconnect();
+      observer = null;
+      const entries = favoritePagerEntries(pager), rows = entries.map((entry) => entry.kind === "canvas"
+        ? favoriteCanvasRow(entry.sources.find((source) => source.type === "community")?.entry || entry.sources[0]?.entry || {}, panel)
+        : favoriteWidgetRow(entry, panel));
       const emptyKey = state.cloudFavoriteKind === "canvas" ? "noFavoriteCanvases" : state.cloudFavoriteKind === "widget" ? "noFavoriteWidgets" : "noFavorites";
-      content.replaceChildren(...(rows.length ? rows : [el("div", { class:"cloud-empty", text:cloudT(emptyKey) })]));
+      if (!rows.length && pager.loading) rows.push(el("div", { class:"cloud-message", role:"status", text:cloudT("loadingFavorites") }));
+      else if (!rows.length && pager.error) rows.push(el("div", { class:"cloud-message error", role:"alert", text:pager.error?.message || cloudT("favoriteLoadFailed") }));
+      else if (!rows.length) rows.push(el("div", { class:"cloud-empty", text:cloudT(emptyKey) }));
+      if (favoritePagerHasMore(pager)) {
+        const more = el("button", {
+          class:"cloud-button cloud-favorites-load-more",
+          type:"button",
+          disabled:Boolean(pager.loading),
+          text:pager.loading ? cloudT("loadingFavorites") : pager.error ? cloudT("retryFavorites") : cloudT("loadMoreFavorites"),
+          onclick:() => void load(false),
+        });
+        rows.push(more);
+        observer = observeFavoritePagerSentinel(more, null, () => load(false));
+      }
+      content.replaceChildren(...rows);
     }
-    renderFavorites();
-    const load = async () => {
+    const load = async (reset = false) => {
       const requestId = ++state.favoriteRequestId;
       content.setAttribute("aria-busy", "true");
       setRefreshing(true);
-      if (!loaded) content.replaceChildren(el("div", { class:"cloud-message", role:"status", text:cloudT("loadingFavorites") }));
+      if (reset) {
+        pager.kind = state.cloudFavoriteKind;
+        if (!favoritePagerEntries(pager).length) content.replaceChildren(el("div", { class:"cloud-message", role:"status", text:cloudT("loadingFavorites") }));
+      }
       try {
-        const [canvasResult, widgetResult] = await Promise.all([
-          api("/api/cloud/community?scope=favorites&kind=canvas&sort=newest&limit=60"),
-          mergedFavoriteWidgets(),
-        ]);
+        await loadFavoritePager(pager, { reset, onUpdate:() => {
+          if (requestId === state.favoriteRequestId && panel.isConnected) renderFavorites();
+        } });
         if (requestId !== state.favoriteRequestId) return;
-        canvases = Array.isArray(canvasResult.items) ? canvasResult.items : [];
-        widgets = widgetResult;
-        state.favoriteCanvases = canvases;
-        state.favoriteWidgets = widgets;
-        loaded = true;
         if (panel.isConnected) renderFavorites();
       } catch (error) {
         if (requestId !== state.favoriteRequestId) return;
-        if (!loaded) content.replaceChildren(el("div", { class:"cloud-message error", role:"alert", text:error?.message || cloudT("favoriteLoadFailed") }));
+        pager.error = error;
+        if (panel.isConnected) renderFavorites();
       } finally {
         if (requestId === state.favoriteRequestId) {
           content.setAttribute("aria-busy", "false");
@@ -1118,7 +1177,8 @@
         }
       }
     };
-    queueMicrotask(load);
+    renderFavorites();
+    queueMicrotask(() => load(true));
     return panel;
   }
 
@@ -1129,13 +1189,6 @@
 
   async function openCloud() {
     cloudButton.setAttribute("aria-expanded", "true");
-    cloudButton.setAttribute("aria-busy", "true");
-    cloudButton.disabled = true;
-    try { await refreshStatus(); }
-    finally {
-      cloudButton.disabled = false;
-      cloudButton.setAttribute("aria-busy", "false");
-    }
     const shell = dialogShell({ title:"PenEcho Cloud", subtitle:cloudT("cloudSubtitle") });
     activeCloudOverlay = shell.overlay;
     const layout = el("div", { class:"penecho-cloud-layout" });
@@ -1203,6 +1256,15 @@
     }
     shell.overlay._cloudRender = render;
     render();
+    if (isCloudRuntime()) {
+      void refreshStatus();
+      return;
+    }
+    const hadStatus = Boolean(state.status), wasSignedIn = accountSignedIn();
+    cloudButton.setAttribute("aria-busy", "true");
+    void refreshStatus().then(() => {
+      if (shell.overlay.isConnected && (!hadStatus || wasSignedIn !== accountSignedIn())) render();
+    }).finally(() => cloudButton.setAttribute("aria-busy", "false"));
   }
 
   function publishedCraftDialog({ item, kind, kindLabel, artifact, bridge, originError, favoriteError, favoriteAfterShare }) {
@@ -1484,7 +1546,8 @@
     { kind:"widget", button:document.getElementById("craftsFilterWidgets"), label:"widgets", fallback:"Widgets" },
     { kind:"canvas", button:document.getElementById("craftsFilterCanvases"), label:"canvases", fallback:"Canvases" },
   ].filter((option) => option.button);
-  let cachedFavoriteCrafts = null;
+  let craftsPager = null;
+  let craftsObserver = null;
   let craftsRefreshGeneration = 0;
   let selectedCraftKind = "all";
   const savedT = (key, fallback) => {
@@ -1511,7 +1574,9 @@
     if (!craftFilterOptions.some((option) => option.kind === kind)) return;
     selectedCraftKind = kind;
     updateCraftFilterTabs();
-    if (Array.isArray(cachedFavoriteCrafts)) renderCraftsList(cachedFavoriteCrafts);
+    craftsPager = favoritePagerForKind(kind);
+    renderCraftsList(favoritePagerEntries(craftsPager));
+    if (!craftsPopover?.hidden) void refreshCraftsList({ reset:true });
     if (focus) craftFilterOptions.find((option) => option.kind === kind)?.button.focus();
   }
 
@@ -1532,7 +1597,11 @@
     craftsPopover.setAttribute("aria-hidden", String(!open));
     craftsButton?.setAttribute("aria-expanded", String(open));
     if (open) document.body.classList.add("plugin-open");
-    else document.body.classList.remove("plugin-open");
+    else {
+      document.body.classList.remove("plugin-open");
+      craftsObserver?.disconnect();
+      craftsObserver = null;
+    }
   }
 
   function setCraftsRefreshing(refreshing) {
@@ -1542,31 +1611,21 @@
     if (copy) copy.textContent = savedT("savedRefreshing", "Refreshing…");
   }
 
-  /* Deletion tombstones: a favorite removed while the cloud DELETE could not
-     land (offline, expired session) must stay deleted. The next sync re-issues
-     the DELETE for the surviving cloud copy instead of mirroring it back. */
-  const FAVORITE_TOMBSTONES_KEY = "penecho-favorite-tombstones";
-  function favoriteTombstones() {
-    try { return JSON.parse(localStorage.getItem(FAVORITE_TOMBSTONES_KEY)) || {}; } catch { return {}; }
-  }
-  function writeFavoriteTombstones(tombstones) {
-    try { localStorage.setItem(FAVORITE_TOMBSTONES_KEY, JSON.stringify(tombstones)); } catch {}
-  }
-  function rememberFavoriteTombstone(sha256) {
-    if (!sha256) return;
-    const entries = Object.entries({ ...favoriteTombstones(), [sha256]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 200);
-    writeFavoriteTombstones(Object.fromEntries(entries));
-  }
-  function clearFavoriteTombstone(sha256) {
-    const tombstones = favoriteTombstones();
-    if (!Object.hasOwn(tombstones, sha256)) return;
-    delete tombstones[sha256];
-    writeFavoriteTombstones(tombstones);
+  async function localFavorites() {
+    try { return (await api("/api/favorites?view=summary")).favorites || []; }
+    catch { return []; }
   }
 
-  async function localFavorites() {
-    try { return (await api("/api/favorites")).favorites || []; }
-    catch { return []; }
+  async function fullLocalFavorite(entry) {
+    if (entry?.artifact) return entry;
+    if (!entry?.artifactSha256) throw new Error(cloudT("favoriteLoadFailed"));
+    return (await api(`/api/favorites/${encodeURIComponent(entry.artifactSha256)}`)).favorite;
+  }
+
+  async function fullCloudFavorite(entry) {
+    if (entry?.artifact) return entry;
+    if (!entry?.id) throw new Error(cloudT("favoriteLoadFailed"));
+    return (await api(`/api/cloud/favorites/${encodeURIComponent(entry.id)}`)).favorite;
   }
 
   async function saveLocalFavorite(favorite, includeCreated = false) {
@@ -1589,17 +1648,30 @@
     try { await api(`/api/favorites/${encodeURIComponent(sha256)}`, { method:"DELETE" }); } catch {}
   }
 
+  async function linkLocalFavoriteToCloud(sha256, cloudId) {
+    return (await api(`/api/favorites/${encodeURIComponent(sha256)}/cloud`, { method:"PATCH", body:JSON.stringify({ cloudId }) })).favorite;
+  }
+
   function thumbnailDataUrl(favorite, communityId = null) {
     const base64 = favorite.thumbnail || favorite.artifact?.communityThumbnail?.dataBase64 || favorite.artifact?.communityPreview?.dataBase64;
     const contentType = favorite.thumbnail ? "image/webp" : (favorite.artifact?.communityThumbnail || favorite.artifact?.communityPreview)?.contentType || "image/webp";
     if (base64) return `data:${contentType};base64,${base64}`;
     const remoteThumbnail = String(favorite.thumbnailUrl || ""),
+      cloudFavoriteId = remoteThumbnail.match(/^\/api\/v1\/favorites\/([0-9a-f-]{36})\/thumbnail(?:[?#].*)?$/i)?.[1],
       remoteItemId = remoteThumbnail.match(/^\/api\/v1\/community\/items\/([0-9a-f-]{36})\/thumbnail(?:[?#].*)?$/i)?.[1],
       itemId = communityId || remoteItemId;
+    if (cloudFavoriteId) return isCloudRuntime() ? remoteThumbnail : `/api/cloud/favorites/${encodeURIComponent(cloudFavoriteId)}/thumbnail`;
+    if (/^\/api\/favorites\/[0-9a-f]{64}\/thumbnail(?:[?#].*)?$/i.test(remoteThumbnail)) return remoteThumbnail;
     // Community API paths belong to PenEcho Cloud. A relative Cloud URL on a
     // local Canvas resolves against 192.168/localhost and returns 404, so every
     // community image must use the approved local/Remote Canvas proxy.
-    return itemId ? `/api/cloud/community/${encodeURIComponent(itemId)}/thumbnail` : null;
+    return itemId ? communityThumbnailUrl(itemId) : null;
+  }
+
+  function communityThumbnailUrl(itemId) {
+    return isCloudRuntime()
+      ? `/api/v1/community/items/${encodeURIComponent(itemId)}/thumbnail`
+      : `/api/cloud/community/${encodeURIComponent(itemId)}/thumbnail`;
   }
 
   /* One-click favorite on a widget: local snapshot always, cloud copy when signed in. */
@@ -1612,118 +1684,196 @@
       saved = localWrite.favorite;
     if (!localWrite.created) {
       await removeLocalFavorite(saved.artifactSha256);
-      rememberFavoriteTombstone(saved.artifactSha256);
       if (accountSignedIn() && saved.cloudId) { try { await api(`/api/cloud/favorites/${encodeURIComponent(saved.cloudId)}`, { method:"DELETE" }); } catch {} }
       bridge.setWidgetFavorite(widgetId, false);
       return false;
     }
-    clearFavoriteTombstone(saved.artifactSha256);
     if (accountSignedIn()) {
+      let removedDuringUpload = false;
       try {
         const cloudFavorite = (await api("/api/cloud/favorites", { method:"POST", body:JSON.stringify(serialized) })).favorite;
-        await saveLocalFavorite({ ...serialized, cloudId:cloudFavorite.id });
+        try { await linkLocalFavoriteToCloud(saved.artifactSha256, cloudFavorite.id); }
+        catch (error) {
+          if (error?.status !== 404) throw error;
+          removedDuringUpload = true;
+          try { await api(`/api/cloud/favorites/${encodeURIComponent(cloudFavorite.id)}`, { method:"DELETE" }); } catch {}
+        }
       } catch (error) {
         if (error?.code === "storage_quota_exceeded") window.alert(cloudT("favoriteLocalOnlyQuota"));
+      }
+      if (removedDuringUpload) {
+        bridge.setWidgetFavorite(widgetId, false);
+        return false;
       }
     }
     bridge.setWidgetFavorite(widgetId, true);
     return true;
   }
 
-  /* Two-way personal-favorites sync: upload offline saves, mirror cloud saves,
-     and drop local mirrors whose cloud copy was removed elsewhere. */
-  async function syncFavorites({ locals:providedLocals = null, cloud:providedCloud = null } = {}) {
+  /* Personal favorites have one synchronization direction: local snapshots
+     upload to Cloud. Cloud-only favorites stay remote and are downloaded only
+     after the user chooses Add/Open. */
+  async function syncLocalFavorites({ locals:providedLocals = null } = {}) {
     if (!accountSignedIn()) return { synced: 0 };
-    const [locals, cloud] = await Promise.all([
-      Array.isArray(providedLocals) ? providedLocals : localFavorites(),
-      Array.isArray(providedCloud) ? providedCloud : api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
-    ]);
-    if (!Array.isArray(cloud)) return { synced: 0 };
-    const cloudBySha = new Map(cloud.map((entry) => [entry.artifactSha256, entry]));
+    const locals = Array.isArray(providedLocals) ? providedLocals : await localFavorites();
     let synced = 0;
-    for (const entry of locals) {
-      const cloudEntry = cloudBySha.get(entry.artifactSha256);
-      if (cloudEntry) {
-        if (entry.cloudId !== cloudEntry.id) await saveLocalFavorite({ ...entry, cloudId:cloudEntry.id });
-      } else if (entry.cloudId) {
-        await removeLocalFavorite(entry.artifactSha256); // removed on the cloud elsewhere
-      } else {
-        try {
-          const uploaded = (await api("/api/cloud/favorites", { method:"POST", body:JSON.stringify({ name:entry.name, artifact:entry.artifact, thumbnail:entry.thumbnail, sourceItemId:entry.sourceItemId }) })).favorite;
-          await saveLocalFavorite({ ...entry, cloudId:uploaded.id });
-          synced += 1;
-        } catch {}
-      }
-    }
-    const tombstones = favoriteTombstones();
-    for (const cloudEntry of cloud) {
-      if (locals.some((entry) => entry.artifactSha256 === cloudEntry.artifactSha256)) continue;
-      const tombstonedAt = Number(tombstones[cloudEntry.artifactSha256]) || 0;
-      if (tombstonedAt) {
-        // A cloud copy created after the tombstone is a fresh favorite made on
-        // another device — the delete intent does not cover it.
-        if (Number(cloudEntry.createdAt) > tombstonedAt) clearFavoriteTombstone(cloudEntry.artifactSha256);
-        else {
-          try {
-            await api(`/api/cloud/favorites/${encodeURIComponent(cloudEntry.id)}`, { method:"DELETE" });
-            clearFavoriteTombstone(cloudEntry.artifactSha256);
-          } catch { /* still offline: the tombstone retries next sync */ }
-        }
-        continue;
-      }
+    for (const entry of locals.filter((favorite) => !favorite.cloudId)) {
       try {
-        await saveLocalFavorite({ name:cloudEntry.name, artifactSha256:cloudEntry.artifactSha256, artifact:cloudEntry.artifact, thumbnail:cloudEntry.thumbnail, sourceItemId:cloudEntry.sourceItemId, cloudId:cloudEntry.id, createdAt:cloudEntry.createdAt });
+        const localEntry = await fullLocalFavorite(entry), uploaded = (await api("/api/cloud/favorites", {
+          method:"POST",
+          body:JSON.stringify({ name:localEntry.name, artifact:localEntry.artifact, thumbnail:localEntry.thumbnail, sourceItemId:localEntry.sourceItemId }),
+        })).favorite;
+        try { await linkLocalFavoriteToCloud(entry.artifactSha256, uploaded.id); }
+        catch (error) {
+          if (error?.status !== 404) throw error;
+          try { await api(`/api/cloud/favorites/${encodeURIComponent(uploaded.id)}`, { method:"DELETE" }); } catch {}
+          continue;
+        }
         synced += 1;
       } catch {}
     }
     return { synced };
   }
 
-  async function mergedFavoriteWidgets() {
-    const locals = await localFavorites();
-    let cloudPersonal = [], community = [];
-    if (accountSignedIn()) {
-      const [personal, favorites] = await Promise.all([
-        api("/api/cloud/favorites").then((result) => result.favorites || []).catch(() => null),
-        api("/api/cloud/community?scope=favorites&kind=widget&sort=newest&limit=60").then((result) => result.items || []).catch(() => []),
-      ]);
-      cloudPersonal = Array.isArray(personal) ? personal : [];
-      if (Array.isArray(personal)) await syncFavorites({ locals, cloud:personal });
-      community = favorites.filter((item) => item.kind === "widget");
-    }
-    const mergedMap = new Map();
-    const offer = (type, entry, sha) => {
-      const key = sha || entry.artifactSha256;
-      if (!key) return;
-      if (!mergedMap.has(key)) mergedMap.set(key, { key, sources:[] });
-      mergedMap.get(key).sources.push({ type, entry });
-    };
-    for (const entry of locals) offer("local", entry);
-    for (const entry of cloudPersonal) offer("cloud", entry);
-    for (const item of community) offer("community", item, item.artifactSha256 || item.artifact?.sha256);
-    return [...mergedMap.values()];
+  let favoriteSyncPromise = null;
+
+  function scheduleLocalFavoriteSync(locals) {
+    if (!accountSignedIn() || !Array.isArray(locals) || favoriteSyncPromise) return;
+    favoriteSyncPromise = syncLocalFavorites({ locals }).catch(() => ({ synced:0 })).finally(() => { favoriteSyncPromise = null; });
   }
 
-  async function mergedFavoriteCrafts() {
-    const [widgets, canvases] = await Promise.all([
-      mergedFavoriteWidgets(),
-      accountSignedIn()
-        ? api("/api/cloud/community?scope=favorites&kind=canvas&sort=newest&limit=60").then((result) => result.items || []).catch(() => [])
-        : Promise.resolve([]),
-    ]);
-    return [
-      ...canvases.filter((item) => item?.kind === "canvas").map((item) => ({ key:`canvas:${item.id}`, kind:"canvas", sources:[{ type:"community", entry:item }] })),
-      ...widgets.map((entry) => ({ ...entry, kind:"widget" })),
-    ].sort((a, b) => favoriteCraftTime(b) - favoriteCraftTime(a) || String(a.key).localeCompare(String(b.key)));
+  const FAVORITE_PAGE_SIZE = 20;
+
+  function favoriteCraftsFromLocal(locals) {
+    return locals.map((entry) => ({ key:`widget:${entry.artifactSha256}`, kind:"widget", sources:[{ type:"local", entry }] }));
+  }
+
+  function favoriteCraftsFromFeed(items) {
+    return (items || []).map((item) => {
+      if (item.source === "community") {
+        const entry = { ...(item.item || {}), favoritedAt:item.favoritedAt };
+        return item.kind === "canvas"
+          ? { key:`canvas:${entry.id}`, kind:"canvas", sources:[{ type:"community", entry }] }
+          : { key:`widget:${entry.artifactSha256 || entry.artifact?.sha256 || entry.id}`, kind:"widget", sources:[{ type:"community", entry }] };
+      }
+      const entry = { ...(item.favorite || {}), favoritedAt:item.favoritedAt };
+      return { key:`widget:${entry.artifactSha256 || entry.id}`, kind:"widget", sources:[{ type:"cloud", entry }] };
+    }).filter((entry) => !entry.key.endsWith(":undefined"));
+  }
+
+  function mergeFavoriteCrafts(...collections) {
+    const mergedMap = new Map();
+    for (const craft of collections.flat()) {
+      const existing = mergedMap.get(craft.key);
+      if (!existing) mergedMap.set(craft.key, { ...craft, sources:[...craft.sources] });
+      else for (const source of craft.sources) {
+        const sourceId = source.entry?.id || source.entry?.artifactSha256 || source.entry?.artifact?.sha256;
+        if (!existing.sources.some((candidate) => candidate.type === source.type && (candidate.entry?.id || candidate.entry?.artifactSha256 || candidate.entry?.artifact?.sha256) === sourceId)) existing.sources.push(source);
+      }
+    }
+    return [...mergedMap.values()].sort((a, b) => favoriteCraftTime(b) - favoriteCraftTime(a) || String(a.key).localeCompare(String(b.key)));
+  }
+
+  async function cloudFavoritePage(kind, cursor = null) {
+    if (!accountSignedIn()) return { items:[], pagination:{ hasMore:false, nextCursor:null, limit:FAVORITE_PAGE_SIZE } };
+    const search = new URLSearchParams({ kind, limit:String(FAVORITE_PAGE_SIZE) });
+    if (cursor) search.set("cursor", cursor);
+    return api(`/api/cloud/favorites/feed?${search}`);
+  }
+
+  function createFavoritePager(kind = "all") {
+    return { kind, generation:0, locals:[], remote:[], visibleLimit:0, nextCursor:null, remoteHasMore:accountSignedIn(), loading:null, error:null };
+  }
+
+  const favoritePagers = new Map();
+  function favoritePagerForKind(kind = "all") {
+    if (!favoritePagers.has(kind)) {
+      const pager = createFavoritePager(kind), all = favoritePagers.get("all");
+      if (kind !== "all" && all) {
+        pager.locals = kind === "canvas" ? [] : [...all.locals];
+        pager.remote = all.remote.filter((entry) => entry.kind === kind);
+        pager.visibleLimit = FAVORITE_PAGE_SIZE;
+      }
+      favoritePagers.set(kind, pager);
+    }
+    return favoritePagers.get(kind);
+  }
+
+  function favoritePagerAllEntries(pager) {
+    return mergeFavoriteCrafts(favoriteCraftsFromLocal(pager.locals), pager.remote);
+  }
+
+  function favoritePagerEntries(pager) {
+    return favoritePagerAllEntries(pager).slice(0, pager.visibleLimit);
+  }
+
+  function favoritePagerHasMore(pager) {
+    return pager.remoteHasMore || favoritePagerAllEntries(pager).length > pager.visibleLimit;
+  }
+
+  async function loadFavoritePager(pager, { reset = false, onUpdate = () => {} } = {}) {
+    if (!reset && pager.loading) return pager.loading.promise;
+    const generation = reset ? ++pager.generation : pager.generation, request = {};
+    if (reset) pager.error = null;
+    const promise = (async () => {
+      if (reset) {
+        if (!pager.visibleLimit) pager.visibleLimit = FAVORITE_PAGE_SIZE;
+        const localTask = (isCloudRuntime() ? Promise.resolve([]) : localFavorites()).then((locals) => {
+          if (generation !== pager.generation) return;
+          pager.locals = locals.filter((entry) => pager.kind !== "canvas");
+          scheduleLocalFavoriteSync(pager.locals);
+          onUpdate(pager);
+        }), cloudTask = cloudFavoritePage(pager.kind).then((page) => {
+          if (generation !== pager.generation) return;
+          pager.remote = favoriteCraftsFromFeed(page.items);
+          pager.nextCursor = page.pagination?.nextCursor || null;
+          pager.remoteHasMore = Boolean(page.pagination?.hasMore && pager.nextCursor);
+          pager.error = null;
+          onUpdate(pager);
+        }, (error) => {
+          if (generation !== pager.generation) return;
+          pager.error = error;
+          if (!pager.remote.length) pager.remoteHasMore = accountSignedIn();
+          onUpdate(pager);
+        });
+        await Promise.all([localTask, cloudTask]);
+        if (generation === pager.generation) pager.visibleLimit = FAVORITE_PAGE_SIZE;
+        return pager;
+      }
+      if (pager.remoteHasMore) {
+        const previousCursor = pager.nextCursor, page = await cloudFavoritePage(pager.kind, previousCursor);
+        if (generation !== pager.generation) return pager;
+        pager.remote.push(...favoriteCraftsFromFeed(page.items));
+        pager.nextCursor = page.pagination?.nextCursor || null;
+        pager.remoteHasMore = Boolean(page.pagination?.hasMore && pager.nextCursor && pager.nextCursor !== previousCursor);
+      }
+      pager.visibleLimit += FAVORITE_PAGE_SIZE;
+      pager.error = null;
+      return pager;
+    })();
+    request.promise = promise;
+    pager.loading = request;
+    try { return await promise; }
+    catch (error) { if (generation === pager.generation) pager.error = error; throw error; }
+    finally { if (pager.loading === request) pager.loading = null; }
+  }
+
+  function observeFavoritePagerSentinel(node, root, loadMore) {
+    if (typeof IntersectionObserver !== "function") return null;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { root, rootMargin:"160px 0px" });
+    observer.observe(node);
+    return observer;
   }
 
   function favoriteCraftTime(craft) {
     let newest = 0;
     for (const source of craft.sources || []) {
       const entry = source.entry || {};
-      const value = source.type === "community"
-        ? entry.favoritedAt ?? entry.favoriteCreatedAt ?? entry.publishedAt ?? entry.createdAt ?? entry.updatedAt
-        : entry.createdAt ?? entry.updatedAt ?? entry.publishedAt;
+      const value = entry.favoritedAt ?? (source.type === "community"
+        ? entry.favoriteCreatedAt ?? entry.publishedAt ?? entry.createdAt ?? entry.updatedAt
+        : entry.createdAt ?? entry.updatedAt ?? entry.publishedAt);
       const numeric = Number(value);
       const timestamp = Number.isFinite(numeric) && numeric > 0 ? numeric : Date.parse(String(value || ""));
       if (Number.isFinite(timestamp)) newest = Math.max(newest, timestamp);
@@ -1752,13 +1902,15 @@
     const local = merged.sources.find((entry) => entry.type === "local");
     if (local) {
       if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error(cloudT("widgetImportUnavailable"));
-      await window.PenEchoCommunityCanvas.importWidget(local.entry.artifact, local.entry.sourceItemId ? { id:local.entry.sourceItemId, name:local.entry.name } : null);
+      const favorite = await fullLocalFavorite(local.entry);
+      await window.PenEchoCommunityCanvas.importWidget(favorite.artifact, favorite.sourceItemId ? { id:favorite.sourceItemId, name:favorite.name } : null);
       return;
     }
     const cloudEntry = (merged.sources.find((entry) => entry.type === "cloud") || merged.sources.find((entry) => entry.type === "community"))?.entry;
     if (merged.sources.some((entry) => entry.type === "community")) return takeFurther(cloudEntry.id);
     if (!window.PenEchoCommunityCanvas?.importWidget) throw new Error(cloudT("widgetImportUnavailable"));
-    await window.PenEchoCommunityCanvas.importWidget(cloudEntry.artifact, cloudEntry.sourceItemId ? { id:cloudEntry.sourceItemId, name:cloudEntry.name } : null);
+    const favorite = await fullCloudFavorite(cloudEntry);
+    await window.PenEchoCommunityCanvas.importWidget(favorite.artifact, favorite.sourceItemId ? { id:favorite.sourceItemId, name:favorite.name } : null);
   }
 
   async function activateFavoriteCraft(merged) {
@@ -1769,9 +1921,16 @@
   }
 
   async function removeCraft(merged) {
+    const deletedCloudIds = new Set();
     for (const source of merged.sources) {
-      if (source.type === "local") { await removeLocalFavorite(source.entry.artifactSha256); rememberFavoriteTombstone(source.entry.artifactSha256); }
-      else if (source.type === "cloud") { rememberFavoriteTombstone(source.entry.artifactSha256); try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.id)}`, { method:"DELETE" }); } catch {} }
+      if (source.type === "local") {
+        await removeLocalFavorite(source.entry.artifactSha256);
+        if (source.entry.cloudId) {
+          deletedCloudIds.add(source.entry.cloudId);
+          try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.cloudId)}`, { method:"DELETE" }); } catch {}
+        }
+      }
+      else if (source.type === "cloud" && !deletedCloudIds.has(source.entry.id)) { try { await api(`/api/cloud/favorites/${encodeURIComponent(source.entry.id)}`, { method:"DELETE" }); } catch {} }
       else if (source.type === "community") { try { await api(`/api/cloud/community/${encodeURIComponent(source.entry.id)}/favorite`, { method:"DELETE" }); } catch {} }
     }
   }
@@ -1830,8 +1989,13 @@
   }
 
   function renderCraftsList(entries) {
+    craftsObserver?.disconnect();
+    craftsObserver = null;
     const visibleEntries = filteredFavoriteCrafts(entries);
-    if (!visibleEntries.length) {
+    const rows = [];
+    if (!visibleEntries.length && craftsPager?.loading) {
+      rows.push(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
+    } else if (!visibleEntries.length) {
       const emptyText = selectedCraftKind === "canvas"
         ? savedT("noFavoriteCanvases", cloudT("noFavoriteCanvases"))
         : selectedCraftKind === "widget"
@@ -1839,29 +2003,49 @@
           : accountSignedIn()
             ? savedT("savedEmptyIn", "No favorite Canvases or Widgets yet.")
             : savedT("savedEmptyOut", "No local favorite Widgets yet. Sign in to see Cloud favorites.");
-      craftsList.replaceChildren(el("p", { class:"crafts-empty", text:emptyText }));
-      return;
+      rows.push(el("p", { class:"crafts-empty", text:craftsPager?.error?.message || emptyText }));
     }
     const removeFromCache = (key) => {
-      if (Array.isArray(cachedFavoriteCrafts)) cachedFavoriteCrafts = cachedFavoriteCrafts.filter((entry) => entry.key !== key);
-      renderCraftsList(cachedFavoriteCrafts || []);
-      void refreshCraftsList();
+      if (craftsPager) {
+        craftsPager.locals = craftsPager.locals.filter((entry) => `widget:${entry.artifactSha256}` !== key);
+        craftsPager.remote = craftsPager.remote.filter((entry) => entry.key !== key);
+        renderCraftsList(favoritePagerEntries(craftsPager));
+      }
+      void refreshCraftsList({ reset:true });
     };
-    craftsList.replaceChildren(...visibleEntries.map((entry) => craftsRow(entry, removeFromCache)));
+    rows.push(...visibleEntries.map((entry) => craftsRow(entry, removeFromCache)));
+    if (craftsPager && favoritePagerHasMore(craftsPager)) {
+      const more = el("button", {
+        class:"cloud-button crafts-load-more",
+        type:"button",
+        disabled:Boolean(craftsPager.loading),
+        text:craftsPager.loading ? cloudT("loadingFavorites") : craftsPager.error ? cloudT("retryFavorites") : cloudT("loadMoreFavorites"),
+        onclick:() => void refreshCraftsList(),
+      });
+      rows.push(more);
+      craftsObserver = observeFavoritePagerSentinel(more, craftsList, () => refreshCraftsList());
+    }
+    craftsList.replaceChildren(...rows);
   }
 
-  async function refreshCraftsList() {
+  async function refreshCraftsList({ reset = false } = {}) {
     const generation = ++craftsRefreshGeneration;
     setCraftsRefreshing(true);
     try {
-      await refreshStatus();
-      const refreshed = await mergedFavoriteCrafts();
+      if (!isCloudRuntime() && !state.status) await refreshStatus();
+      else void refreshStatus();
+      if (!craftsPager || craftsPager.kind !== selectedCraftKind) craftsPager = favoritePagerForKind(selectedCraftKind);
+      await loadFavoritePager(craftsPager, { reset, onUpdate:() => {
+        if (generation === craftsRefreshGeneration && !craftsPopover?.hidden) renderCraftsList(favoritePagerEntries(craftsPager));
+      } });
       if (generation !== craftsRefreshGeneration) return;
-      cachedFavoriteCrafts = refreshed;
-      renderCraftsList(refreshed);
+      renderCraftsList(favoritePagerEntries(craftsPager));
     } catch (error) {
       if (generation !== craftsRefreshGeneration) return;
-      if (!Array.isArray(cachedFavoriteCrafts)) craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || savedT("savedErrorAdd", "Favorites are unavailable right now.") }));
+      if (craftsPager) {
+        craftsPager.error = error;
+        renderCraftsList(favoritePagerEntries(craftsPager));
+      } else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:error?.message || savedT("savedErrorAdd", "Favorites are unavailable right now.") }));
     } finally {
       if (generation === craftsRefreshGeneration) setCraftsRefreshing(false);
     }
@@ -1870,11 +2054,12 @@
   function openCrafts() {
     if (!craftsPopover) return;
     if (craftsPopover.hidden) selectedCraftKind = "all";
+    craftsPager = favoritePagerForKind(selectedCraftKind);
     setCraftsOpen(true);
     updateCraftFilterTabs();
-    if (Array.isArray(cachedFavoriteCrafts)) renderCraftsList(cachedFavoriteCrafts);
+    if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
     else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
-    void refreshCraftsList();
+    void refreshCraftsList({ reset:true });
   }
 
   craftsButton?.addEventListener("click", openCrafts);
@@ -1892,6 +2077,7 @@
     }
     if (craftsPopover && !craftsPopover.hidden) void openCrafts();
   });
+  window.addEventListener("penecho:remote-cloud-status", updateCloudButton);
 
   cloudButton.addEventListener("click", openCloud);
   shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); shareDialog({ kind:"canvas" }); });
@@ -1942,5 +2128,6 @@
   });
   // Remote Canvas has its own Cloud account/device gate. Avoid relaying a
   // redundant local /api/cloud/status request while that gate is opening.
-  if (window.PENECHO_CONFIG?.runtime !== "cloud") void refreshStatus();
+  if (window.PENECHO_CONFIG?.runtime === "cloud") updateCloudButton();
+  else void refreshStatus();
 })();

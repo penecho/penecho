@@ -70,6 +70,25 @@ test("personal Widget favorites send one JSON object through the local Cloud acc
   }
 });
 
+test("favorite feed forwards kind, page size, and opaque cursor through the local account session", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-favorite-feed-test-"));
+  const originalFetch = global.fetch;
+  try {
+    const connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), defaultOrigin:"https://internaltest.penecho.ai" });
+    connector.writeConfiguration({ version:2, origin:"https://internaltest.penecho.ai", accountToken:"local-account-session" });
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://internaltest.penecho.ai/api/v1/favorites/feed?kind=canvas&limit=20&cursor=opaque-next");
+      assert.equal(options.headers.authorization, "Bearer local-account-session");
+      return new Response(JSON.stringify({ items:[], pagination:{ limit:20, hasMore:false, nextCursor:null } }), { status:200, headers:{ "content-type":"application/json" } });
+    };
+    const feed = await connector.favoriteFeed({ kind:"canvas", limit:20, cursor:"opaque-next" });
+    assert.deepEqual(feed.pagination, { limit:20, hasMore:false, nextCursor:null });
+  } finally {
+    global.fetch = originalFetch;
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
 test("cloud relay reconnect delays step from ten seconds to one minute and then five minutes", () => {
   for (const attempt of [0, 1, 2]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 10_000);
   for (const attempt of [3, 4, 5, 6, 7]) assert.equal(reconnectDelayMs(attempt, () => 0.5), 60_000);
@@ -1031,6 +1050,82 @@ test("relay reports connected only after the Cloud authentication hello", async 
     connector.close();
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("a legacy Cloud hello without acknowledgement support keeps the relay connected", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-legacy-heartbeat-test-"));
+  const server = new WebSocketServer({ host:"127.0.0.1", port:0 });
+  await new Promise((resolve) => server.once("listening", resolve));
+  let connector;
+  try {
+    const accepted = new Promise((resolve) => server.once("connection", resolve));
+    connector = new CloudConnector({ stateDir, executeRequest:async () => ({}), heartbeatTimeoutMs:50 });
+    connector.writeConfiguration({
+      version:2,
+      origin:`http://127.0.0.1:${server.address().port}`,
+      deviceToken:"legacy-heartbeat-device-token",
+      deviceId:"legacy-heartbeat-device",
+      deviceName:"Legacy heartbeat device",
+      enabled:true,
+    });
+    connector.start();
+    const remoteSocket = await accepted;
+    remoteSocket.send(JSON.stringify({ type:"hello", protocol:1, deviceId:"legacy-heartbeat-device", heartbeatSeconds:60 }));
+    await eventually(() => connector.status().connected, "legacy relay did not become connected after hello");
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(connector.status().connected, true);
+    assert.equal(connector.heartbeatDeadlineTimer, null);
+  } finally {
+    connector?.close();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("relay heartbeat acknowledgements refresh the silence watchdog and missing acknowledgements reconnect", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-heartbeat-test-"));
+  const server = new WebSocketServer({ host:"127.0.0.1", port:0 });
+  await new Promise((resolve) => server.once("listening", resolve));
+  const events = [];
+  let connector;
+  try {
+    const accepted = new Promise((resolve) => server.once("connection", resolve));
+    connector = new CloudConnector({
+      stateDir,
+      executeRequest:async () => ({}),
+      logger:(entry) => events.push(entry),
+      heartbeatTimeoutMs:80,
+    });
+    connector.writeConfiguration({
+      version:2,
+      origin:`http://127.0.0.1:${server.address().port}`,
+      deviceToken:"heartbeat-device-token",
+      deviceId:"heartbeat-device",
+      deviceName:"Heartbeat device",
+      enabled:true,
+    });
+    connector.start();
+    const remoteSocket = await accepted;
+    remoteSocket.send(JSON.stringify({
+      type:"hello",
+      protocol:1,
+      deviceId:"heartbeat-device",
+      heartbeatSeconds:60,
+      heartbeatTimeoutSeconds:150,
+    }));
+    await eventually(() => connector.status().connected, "relay did not become connected after hello");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    remoteSocket.send(JSON.stringify({ type:"heartbeat_ack" }));
+    await new Promise((resolve) => setTimeout(resolve, 55));
+    assert.equal(connector.status().connected, true, "the acknowledgement should refresh the watchdog");
+    await eventually(() => connector.status().state === "waiting", "a silent relay did not enter reconnect backoff", 500);
+    assert.match(connector.status().lastError, /heartbeat acknowledgement timed out/i);
+    assert.ok(events.some((entry) => entry.event === "heartbeat-timeout" && entry.timeoutMs === 80));
+  } finally {
+    connector?.close();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(stateDir, { recursive:true, force:true });
   }
 });
 

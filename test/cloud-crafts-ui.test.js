@@ -25,15 +25,16 @@ test("toolbar ships a mixed Canvas and Widget Favorites picker", () => {
   assert.match(page, /class="crafts-empty"[^>]*data-i18n="savedLoading"/);
   assert.match(page, /id="shareCanvasBtn"[^>]*data-i18n-aria="shareCanvasCloud"[^>]*data-i18n-title="shareCanvasCloud"/);
 
-  assert.match(script, /scope=favorites&kind=widget&sort=newest&limit=60/);
-  assert.match(script, /scope=favorites&kind=canvas&sort=newest&limit=60/);
+  assert.match(script, /const FAVORITE_PAGE_SIZE = 20/);
+  assert.match(script, /\/api\/cloud\/favorites\/feed\?/);
+  assert.match(script, /cursor/);
   assert.match(script, /\/api\/cloud\/community\/\$\{encodeURIComponent\(itemId\)\}\/thumbnail/);
   assert.match(script, /remoteThumbnail\.match\(\/\^\\\/api\\\/v1\\\/community\\\/items/);
   assert.match(script, /thumbnailDataUrl\(source, community\?\.id \|\| null\)/);
   assert.match(script, /return takeFurther\(cloudEntry\.id\)/);
   assert.match(script, /function toggleWidgetFavorite/);
-  assert.match(script, /function syncFavorites/);
-  assert.match(script, /sourceItemId:entry\.sourceItemId/);
+  assert.match(script, /function syncLocalFavorites/);
+  assert.match(script, /scheduleLocalFavoriteSync/);
   assert.match(script, /crafts-source/);
   assert.match(script, /No favorite Canvases or Widgets yet/);
   assert.match(script, /Sign in to see Cloud favorites/);
@@ -42,10 +43,9 @@ test("toolbar ships a mixed Canvas and Widget Favorites picker", () => {
   assert.match(script, /return takeFurther\(community\.id\)/);
   assert.match(script, /setCraftsOpen\(false\)/);
   assert.match(script, /craftsButton\?\.addEventListener\("click", openCrafts\)/);
-  assert.match(script, /let cachedFavoriteCrafts = null/);
+  assert.match(script, /let craftsPager = null/);
   assert.match(script, /let craftsRefreshGeneration = 0/);
-  assert.match(script, /if \(Array\.isArray\(cachedFavoriteCrafts\)\) renderCraftsList\(cachedFavoriteCrafts\)/);
-  assert.match(script, /const refreshed = await mergedFavoriteCrafts\(\)/);
+  assert.match(script, /loadFavoritePager\(craftsPager/);
   assert.match(script, /generation !== craftsRefreshGeneration/);
   assert.match(script, /let selectedCraftKind = "all"/);
   assert.match(script, /function filteredFavoriteCrafts/);
@@ -90,14 +90,12 @@ test("toolbar ships a mixed Canvas and Widget Favorites picker", () => {
   assert.match(app, /new CustomEvent\("penecho:languagechange", \{ detail:\{ language:state\.language \} \}\)/);
 });
 
-test("favorite deletes leave a tombstone so offline removals never resurrect", () => {
-  // Deleting a favorite while the cloud DELETE cannot land must not be undone
-  // by the next sync mirroring the surviving cloud copy back down.
+test("personal favorite synchronization is local-to-Cloud only", () => {
   const script = read("public/cloud-connect.js");
-  assert.match(script, /rememberFavoriteTombstone\(saved\.artifactSha256\);\s*\n\s*if \(accountSignedIn\(\) && saved\.cloudId\)/);
-  assert.match(script, /if \(source\.type === "local"\) \{ await removeLocalFavorite\(source\.entry\.artifactSha256\); rememberFavoriteTombstone/);
-  assert.match(script, /const tombstones = favoriteTombstones\(\);/);
-  assert.match(script, /tombstones\[cloudEntry\.artifactSha256\]/);
-  assert.match(script, /clearFavoriteTombstone\(cloudEntry\.artifactSha256\)/);
-  assert.match(script, /Number\(cloudEntry\.createdAt\) > tombstonedAt/, "a cloud copy newer than the tombstone is a fresh favorite, not a resurrection");
+  const synchronization = script.slice(script.indexOf("async function syncLocalFavorites"), script.indexOf("const FAVORITE_PAGE_SIZE"));
+  assert.match(synchronization, /localFavorites\(\)/);
+  assert.match(synchronization, /method:"POST"/);
+  assert.doesNotMatch(synchronization, /fullCloudFavorite|saveLocalFavorite\(\{ name:fullEntry|removeLocalFavorite/);
+  assert.doesNotMatch(script, /favoriteTombstones|rememberFavoriteTombstone/);
+  assert.match(script, /if \(source\.entry\.cloudId\)[\s\S]*?method:"DELETE"/, "removing a local favorite also removes its associated private Cloud copy");
 });

@@ -37,8 +37,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(css, /\.penecho-cloud-layout\.remote-cloud-runtime/);
   assert.match(cloud, /x-penecho-session/);
   assert.match(cloud, /\/api\/cloud\/library/);
-  assert.match(cloud, /\/api\/cloud\/community\?scope=favorites&kind=canvas&sort=newest&limit=60/);
-  assert.match(cloud, /\/api\/cloud\/favorites/);
+  assert.match(cloud, /\/api\/cloud\/favorites\/feed\?/);
   assert.match(cloud, /openProjectCanvasHere\(canvas\.id, panel, row\)/);
   assert.match(cloud, /await bridge\.openCanvas\(canvasId\)/);
   assert.match(cloud, /text:cloudT\("openCanvasHere"\)/);

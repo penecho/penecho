@@ -9,7 +9,7 @@ const { WebSocket } = require("ws");
 
 const MAX_RELAY_MESSAGE_BYTES = 140 * 1024 * 1024;
 const MAX_CLOUD_BUNDLE_BYTES = 32 * 1024 * 1024;
-const DEFAULT_HEARTBEAT_SECONDS = 20;
+const DEFAULT_HEARTBEAT_SECONDS = 60;
 const ACCOUNT_REFRESH_INTERVAL_MS = 5 * 60_000;
 const ACCOUNT_SIGNOUT_TIMEOUT_MS = 5_000;
 const CLOUD_REQUEST_TIMEOUT_MS = 30_000;
@@ -145,7 +145,7 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, executeHttpRequest = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null }) {
+  constructor({ stateDir, executeRequest, executeHttpRequest = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null, heartbeatTimeoutMs = null }) {
     this.stateDir = stateDir;
     this.file = path.join(stateDir, "cloud-device.json");
     this.executeRequest = executeRequest;
@@ -156,6 +156,9 @@ class CloudConnector {
     this.configuration = this.readConfiguration();
     this.socket = null;
     this.heartbeatTimer = null;
+    this.heartbeatDeadlineTimer = null;
+    this.heartbeatTimeoutOverrideMs = Number.isFinite(heartbeatTimeoutMs) && heartbeatTimeoutMs > 0 ? heartbeatTimeoutMs : null;
+    this.heartbeatTimedOutSocket = null;
     this.helloTimer = null;
     this.reconnectTimer = null;
     this.accountRefreshTimer = null;
@@ -598,7 +601,37 @@ class CloudConnector {
     return payload;
   }
 
-  listWidgetFavorites() { return this.cloudRequest("/api/v1/favorites"); }
+  listWidgetFavorites({ summary = false, limit = null, cursor = null } = {}) {
+    const search = new URLSearchParams();
+    if (summary) search.set("view", "summary");
+    if (limit !== null && limit !== undefined && limit !== "") search.set("limit", String(limit));
+    if (cursor) search.set("cursor", String(cursor));
+    return this.cloudRequest(`/api/v1/favorites${search.size ? `?${search}` : ""}`);
+  }
+
+  favoriteFeed(query = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+    return this.cloudRequest(`/api/v1/favorites/feed${search.size ? `?${search}` : ""}`);
+  }
+
+  getWidgetFavorite(favoriteId) {
+    return this.cloudRequest(`/api/v1/favorites/${encodeURIComponent(favoriteId)}`);
+  }
+
+  async widgetFavoriteThumbnail(favoriteId) {
+    this.expireAccountSessionIfNeeded();
+    const configuration=this.configuration,token=accountToken(configuration),legacyAccountAccess=Boolean(configuration?.legacyAccountAccess);
+    if(!configuration?.origin||!token)throw Object.assign(new Error("Sign in to PenEcho Cloud on this computer first."),{status:401,code:"cloud_account_required"});
+    const response=await fetch(`${configuration.origin}/api/v1/favorites/${encodeURIComponent(favoriteId)}/thumbnail`,{method:"GET",redirect:"error",headers:{accept:"image/webp",authorization:`Bearer ${token}`}});
+    if(!response.ok){
+      if(response.status===401&&!legacyAccountAccess)await this.confirmAccountSessionAfterUnauthorized(token,"PenEcho Cloud rejected this favorite thumbnail request.");
+      throw Object.assign(new Error(`Favorite thumbnail request failed (HTTP ${response.status}).`),{status:response.status===401?403:response.status,code:response.status===401?"cloud_request_not_authorized":"favorite_thumbnail_failed"});
+    }
+    const contentType=String(response.headers.get("content-type")||"").split(";",1)[0].toLowerCase(),bytes=Buffer.from(await response.arrayBuffer());
+    if(contentType!=="image/webp"||!bytes.length||bytes.length>96*1024*1024)throw new Error("PenEcho Cloud returned an invalid favorite thumbnail.");
+    return {contentType,bytes};
+  }
 
   async saveWidgetFavorite(favorite) {
     const result = await this.cloudRequest("/api/v1/favorites", { method:"POST", body:{ name:favorite.name, artifact:favorite.artifact, thumbnail:favorite.thumbnail || "", sourceItemId:favorite.sourceItemId || null } });
@@ -925,9 +958,11 @@ class CloudConnector {
 
   clearTimers() {
     clearInterval(this.heartbeatTimer);
+    clearTimeout(this.heartbeatDeadlineTimer);
     clearTimeout(this.helloTimer);
     clearTimeout(this.reconnectTimer);
     this.heartbeatTimer = null;
+    this.heartbeatDeadlineTimer = null;
     this.helloTimer = null;
     this.reconnectTimer = null;
   }
@@ -965,7 +1000,6 @@ class CloudConnector {
 
     socket.on("message", (data) => {
       if (data.length > MAX_RELAY_MESSAGE_BYTES) return socket.close(4009, "message too large");
-      this.lastSeenAt = Date.now();
       let message;
       try { message = JSON.parse(data.toString("utf8")); } catch { return socket.close(4002, "invalid message"); }
       if (message.type === "hello") {
@@ -979,11 +1013,17 @@ class CloudConnector {
         this.lastError = null;
         this.reconnectAttempt = 0;
         socket.send(JSON.stringify({ type:"capabilities", capabilities:this.capabilities }));
-        this.startHeartbeat(Number(message.heartbeatSeconds) || DEFAULT_HEARTBEAT_SECONDS);
+        this.startHeartbeat(
+          Number(message.heartbeatSeconds) || DEFAULT_HEARTBEAT_SECONDS,
+          Number(message.heartbeatTimeoutSeconds) || null,
+          socket,
+        );
         if (accountToken(this.configuration)) this.refreshAccount({ force: true }).catch((error) => this.log("account-refresh-failed", { error: safeMessage(error) }));
         this.log("connected", { deviceId: this.configuration.deviceId });
         return;
       }
+      if (this.socket === socket && this.connectionState === "connected") this.noteRelayActivity(socket);
+      if (message.type === "heartbeat_ack") return;
       if (message.type === "request" && this.connectionState !== "connected") return socket.close(4002, "request before relay authentication");
       if (message.type === "request" && typeof message.requestId === "string") this.handleRequest(socket, message);
     });
@@ -993,8 +1033,11 @@ class CloudConnector {
       this.socket = null;
       this.clearTimers();
       const credentialInvalid = code === 4003;
+      const heartbeatTimedOut = this.heartbeatTimedOutSocket === socket;
+      if (heartbeatTimedOut) this.heartbeatTimedOutSocket = null;
       this.connectionState = credentialInvalid ? "invalid" : "disconnected";
-      this.lastError = code === 1000 ? null : `Connection closed (${code}): ${String(reason || "")}`.trim();
+      this.lastError = heartbeatTimedOut ? "Relay heartbeat acknowledgement timed out."
+        : code === 1000 ? null : `Connection closed (${code}): ${String(reason || "")}`.trim();
       this.log("closed", { code });
       if (!credentialInvalid) this.scheduleReconnect();
     });
@@ -1005,14 +1048,35 @@ class CloudConnector {
     });
   }
 
-  startHeartbeat(seconds) {
+  noteRelayActivity(socket) {
+    if (this.socket !== socket || this.connectionState !== "connected") return;
+    this.lastSeenAt = Date.now();
+    clearTimeout(this.heartbeatDeadlineTimer);
+    const timeoutMs = this.activeHeartbeatTimeoutMs;
+    if (!timeoutMs) return;
+    this.heartbeatDeadlineTimer = setTimeout(() => {
+      if (this.socket !== socket || this.connectionState !== "connected") return;
+      this.heartbeatTimedOutSocket = socket;
+      this.lastError = "Relay heartbeat acknowledgement timed out.";
+      this.log("heartbeat-timeout", { timeoutMs });
+      if (typeof socket.terminate === "function") socket.terminate();
+      else socket.close(4008, "relay heartbeat timed out");
+    }, timeoutMs);
+    this.heartbeatDeadlineTimer.unref?.();
+  }
+
+  startHeartbeat(seconds, timeoutSeconds = null, socket = this.socket) {
     clearInterval(this.heartbeatTimer);
     const interval = Math.max(5, Math.min(120, seconds)) * 1000;
+    const configuredTimeout = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
+      ? Math.max(15, Math.min(600, timeoutSeconds)) * 1000
+      : null;
+    // Old Cloud versions do not advertise or acknowledge a heartbeat timeout.
+    // Keep those rolling-upgrade connections compatible until Cloud opts in.
+    this.activeHeartbeatTimeoutMs = configuredTimeout ? this.heartbeatTimeoutOverrideMs || Math.max(interval + 5_000, configuredTimeout) : null;
+    this.noteRelayActivity(socket);
     this.heartbeatTimer = setInterval(() => {
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ type: "heartbeat", sentAt: Date.now() }));
-        this.lastSeenAt = Date.now();
-      }
+      if (this.socket === socket && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "heartbeat", sentAt: Date.now() }));
     }, interval);
     this.heartbeatTimer.unref?.();
   }

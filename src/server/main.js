@@ -806,8 +806,19 @@ async function writeLocalFavorites(list) {
   if (!FAVORITES_FILE) throw new Error("Local favorites storage is unavailable in this mode.");
   await fsp.mkdir(path.dirname(FAVORITES_FILE), { recursive: true });
   const temporary = `${FAVORITES_FILE}.tmp`;
-  await fsp.writeFile(temporary, JSON.stringify({ favorites: list.slice(0, 500) }));
+  await fsp.writeFile(temporary, JSON.stringify({ favorites: list }));
   await fsp.rename(temporary, FAVORITES_FILE);
+}
+
+let localFavoritesMutation = Promise.resolve();
+function mutateLocalFavorites(mutator) {
+  const operation = localFavoritesMutation.then(async () => {
+    const result = await mutator(await readLocalFavorites());
+    if (Array.isArray(result?.favorites)) await writeLocalFavorites(result.favorites);
+    return result?.value;
+  });
+  localFavoritesMutation = operation.catch(() => {});
+  return operation;
 }
 
 function localFavoriteRecord(entry) {
@@ -2988,17 +2999,29 @@ const server = http.createServer(async (req, res) => {
         }
         if(req.method==="DELETE")return send(res,204,await cloudConnector.trashCloudCanvas(cloudCanvasMatch[1]));
       }
-      const favoriteCloudDelete=url.pathname.match(/^\/api\/cloud\/favorites\/([0-9a-f-]{36})$/i);
-      if(favoriteCloudDelete&&req.method==="DELETE"){
+      const favoriteCloudThumbnail=url.pathname.match(/^\/api\/cloud\/favorites\/([0-9a-f-]{36})\/thumbnail$/i);
+      if(favoriteCloudThumbnail&&req.method==="GET"){
+        const result=await cloudConnector.widgetFavoriteThumbnail(favoriteCloudThumbnail[1]);
+        res.writeHead(200,{"Content-Type":result.contentType,"Content-Length":result.bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
+        return res.end(result.bytes);
+      }
+      if(req.method==="GET"&&url.pathname==="/api/cloud/favorites/feed"){
         const favoriteCloudError=cloudBrowserRequestError(req);
         if(favoriteCloudError)return send(res,403,{error:favoriteCloudError});
-        await cloudConnector.deleteWidgetFavorite(favoriteCloudDelete[1]);
+        return send(res,200,await cloudConnector.favoriteFeed(Object.fromEntries(url.searchParams)));
+      }
+      const favoriteCloudItem=url.pathname.match(/^\/api\/cloud\/favorites\/([0-9a-f-]{36})$/i);
+      if(favoriteCloudItem&&["GET","DELETE"].includes(req.method)){
+        const favoriteCloudError=cloudBrowserRequestError(req);
+        if(favoriteCloudError)return send(res,403,{error:favoriteCloudError});
+        if(req.method==="GET")return send(res,200,await cloudConnector.getWidgetFavorite(favoriteCloudItem[1]));
+        await cloudConnector.deleteWidgetFavorite(favoriteCloudItem[1]);
         return send(res,200,{removed:true});
       }
       if(url.pathname==="/api/cloud/favorites"){
         const favoriteCloudError=cloudBrowserRequestError(req);
         if(favoriteCloudError)return send(res,403,{error:favoriteCloudError});
-        if(req.method==="GET")return send(res,200,await cloudConnector.listWidgetFavorites());
+        if(req.method==="GET")return send(res,200,await cloudConnector.listWidgetFavorites({summary:url.searchParams.get("view")==="summary",limit:url.searchParams.get("limit"),cursor:url.searchParams.get("cursor")}));
         if(req.method==="POST"){
           if(!isJsonRequest(req))return send(res,415,{error:"Use application/json for this request."});
           const body=await readJson(req,MAX_SHARED_CANVAS_BYTES);
@@ -3043,7 +3066,14 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/api/favorites") {
     const favoritesError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
     if (favoritesError) return send(res, 403, { error:favoritesError });
-    if (req.method === "GET") return send(res, 200, { favorites:(await readLocalFavorites()).map(localFavoriteRecord) });
+    if (req.method === "GET") {
+      const summary=url.searchParams.get("view")==="summary";
+      const favorites=(await readLocalFavorites()).map(localFavoriteRecord).map((entry)=>summary?{
+        ...Object.fromEntries(Object.entries(entry).filter(([key])=>!["artifact","thumbnail"].includes(key))),
+        ...(entry.thumbnail?{thumbnailUrl:`/api/favorites/${entry.artifactSha256}/thumbnail`}:{}),
+      }:entry);
+      return send(res, 200, { favorites });
+    }
     if (req.method === "PUT") {
       if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
       const body = await readJson(req, MAX_SHARED_CANVAS_BYTES);
@@ -3051,32 +3081,63 @@ const server = http.createServer(async (req, res) => {
         || typeof body.name !== "string" || !body.name.trim()) return send(res, 400, { error:"A name and widget artifact are required." });
       const artifactText = JSON.stringify(body.artifact);
       const sha256 = crypto.createHash("sha256").update(artifactText).digest("hex");
-      const list = await readLocalFavorites();
-      const existing = list.find((entry) => entry.artifactSha256 === sha256);
-      const record = localFavoriteRecord({
-        id: existing?.id || crypto.randomUUID(),
-        name: body.name.trim(),
-        artifactSha256: sha256,
-        artifact: body.artifact,
-        thumbnail: typeof body.thumbnail === "string" ? body.thumbnail : "",
-        sourceItemId: typeof body.sourceItemId === "string" ? body.sourceItemId : existing?.sourceItemId || null,
-        cloudId: typeof body.cloudId === "string" ? body.cloudId : existing?.cloudId || null,
-        createdAt: existing?.createdAt || Date.now(),
+      const result = await mutateLocalFavorites((list) => {
+        const existing = list.find((entry) => entry.artifactSha256 === sha256), record = localFavoriteRecord({
+          id: existing?.id || crypto.randomUUID(),
+          name: body.name.trim(),
+          artifactSha256: sha256,
+          artifact: body.artifact,
+          thumbnail: typeof body.thumbnail === "string" ? body.thumbnail : "",
+          sourceItemId: typeof body.sourceItemId === "string" ? body.sourceItemId : existing?.sourceItemId || null,
+          cloudId: typeof body.cloudId === "string" ? body.cloudId : existing?.cloudId || null,
+          createdAt: existing?.createdAt || Date.now(),
+        });
+        return { favorites:existing ? list.map((entry) => entry.artifactSha256 === sha256 ? record : entry) : [...list, record], value:{ record, created:!existing } };
       });
-      await writeLocalFavorites(existing ? list.map((entry) => entry.artifactSha256 === sha256 ? record : entry) : [...list, record]);
-      return send(res, existing ? 200 : 201, { favorite: record });
+      return send(res, result.created ? 201 : 200, { favorite:result.record });
     }
     return send(res, 405, { error:"Method Not Allowed" });
   }
-  const localFavoriteMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})$/);
-  if (localFavoriteMatch) {
+  const localFavoriteThumbnailMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})\/thumbnail$/);
+  if (localFavoriteThumbnailMatch && req.method === "GET") {
+    const favoritesError = publicFetchRequestError(req);
+    if (favoritesError) return send(res, 403, { error:favoritesError });
+    const favorite=(await readLocalFavorites()).find((entry)=>entry.artifactSha256===localFavoriteThumbnailMatch[1]);
+    const bytes=favorite?.thumbnail?Buffer.from(String(favorite.thumbnail),"base64"):Buffer.alloc(0);
+    if(!bytes.length)return send(res,404,{error:"Favorite thumbnail not found."});
+    res.writeHead(200,{"Content-Type":"image/webp","Content-Length":bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
+    return res.end(bytes);
+  }
+  const localFavoriteCloudMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})\/cloud$/);
+  if (localFavoriteCloudMatch && req.method === "PATCH") {
     const favoritesError = browserRequestError(req);
     if (favoritesError) return send(res, 403, { error:favoritesError });
+    if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
+    const body=await readJson(req,4096),cloudId=typeof body?.cloudId==="string"&&/^[0-9a-f-]{36}$/i.test(body.cloudId)?body.cloudId:null;
+    if(!cloudId)return send(res,400,{error:"A valid Cloud favorite id is required."});
+    const favorite=await mutateLocalFavorites((list)=>{
+      const existing=list.find((entry)=>entry.artifactSha256===localFavoriteCloudMatch[1]);
+      if(!existing)return {value:null};
+      const linked=localFavoriteRecord({...existing,cloudId:existing.cloudId||cloudId});
+      return {favorites:list.map((entry)=>entry.artifactSha256===localFavoriteCloudMatch[1]?linked:entry),value:linked};
+    });
+    return favorite?send(res,200,{favorite}):send(res,404,{error:"Favorite not found."});
+  }
+  const localFavoriteMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})$/);
+  if (localFavoriteMatch) {
+    const favoritesError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
+    if (favoritesError) return send(res, 403, { error:favoritesError });
+    if (req.method === "GET") {
+      const list = await readLocalFavorites();
+      const favorite=list.find((entry)=>entry.artifactSha256===localFavoriteMatch[1]);
+      return favorite?send(res,200,{favorite:localFavoriteRecord(favorite)}):send(res,404,{error:"Favorite not found."});
+    }
     if (req.method !== "DELETE") return send(res, 405, { error:"Method Not Allowed" });
-    const list = await readLocalFavorites();
-    const remaining = list.filter((entry) => entry.artifactSha256 !== localFavoriteMatch[1]);
-    await writeLocalFavorites(remaining);
-    return send(res, 200, { removed: remaining.length !== list.length });
+    const removed=await mutateLocalFavorites((list)=>{
+      const remaining=list.filter((entry)=>entry.artifactSha256!==localFavoriteMatch[1]);
+      return {favorites:remaining,value:remaining.length!==list.length};
+    });
+    return send(res, 200, { removed });
   }
   if (url.pathname === "/api/settings") {
     const settingsError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
