@@ -135,6 +135,7 @@ function configureIosNetwork() {
     NSAllowsLocalNetworking:true,
   };
   info.NSLocalNetworkUsageDescription = "Connect to a PenEcho server on your local network.";
+  info.ITSAppUsesNonExemptEncryption = false;
   fs.writeFileSync(plistPath, plist.build(info));
 }
 

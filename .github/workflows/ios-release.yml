@@ -74,8 +74,8 @@ jobs:
           PROFILE_PLIST="$RUNNER_TEMP/penecho-ios-profile.plist"
           KEYCHAIN_PATH="$RUNNER_TEMP/penecho-ios-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
-          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | /usr/bin/base64 -D > "$PROFILE_PATH"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -119,7 +119,7 @@ jobs:
         run: |
           API_KEY_DIRECTORY="$HOME/.appstoreconnect/private_keys"
           mkdir -p "$API_KEY_DIRECTORY"
-          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$API_KEY_DIRECTORY/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$API_KEY_DIRECTORY/AuthKey_${APPLE_API_KEY_ID}.p8"
           chmod 600 "$API_KEY_DIRECTORY/AuthKey_${APPLE_API_KEY_ID}.p8"
       - name: Upload to TestFlight
         if: env.UPLOAD_TESTFLIGHT == 'true'

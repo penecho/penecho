@@ -65,6 +65,7 @@ test("iOS builder exports a signed IPA with an independent CI build number", () 
   assert.match(builder, /IOS_PROVISIONING_PROFILE_SPECIFIER/);
   assert.match(builder, /PROVISIONING_PROFILE_SPECIFIER/);
   assert.match(builder, /-exportArchive/);
+  assert.match(builder, /ITSAppUsesNonExemptEncryption = false/);
   assert.match(builder, /PenEcho-\$\{APP_PACKAGE\.version\}-\$\{suffix\}/);
   assert.doesNotMatch(builder, /penecho_cloud|public\/canvas/);
 });
@@ -75,6 +76,8 @@ test("iOS release workflow signs tag artifacts and keeps TestFlight upload expli
   assert.match(workflow, /environment: ios-signing/);
   assert.match(workflow, /IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64/);
   assert.match(workflow, /IOS_PROVISIONING_PROFILE_BASE64/);
+  assert.match(workflow, /\/usr\/bin\/base64 -D/);
+  assert.doesNotMatch(workflow, /base64 --decode/);
   assert.match(workflow, /npm run mobile:ipa/);
   assert.match(workflow, /release\/mobile\/PenEcho-\*-ios\.ipa/);
   assert.match(workflow, /UPLOAD_TESTFLIGHT: \$\{\{ inputs\.upload_testflight == true \}\}/);
