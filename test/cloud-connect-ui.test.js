@@ -1034,6 +1034,24 @@ test("Cloud Center opens project Canvases in the current local Canvas", async ()
   assert.deepEqual(run.opened, [], "opening a Canvas must not navigate to PenEcho Cloud");
 });
 
+test("Cloud-hosted Canvas thumbnails use the immutable revision as their cache key", async () => {
+  const projectId = "123e4567-e89b-42d3-a456-426614174011", canvasId = "123e4567-e89b-42d3-a456-426614174012", revisionId = "123e4567-e89b-42d3-a456-426614174013";
+  const library = { workspace:{}, projects:[{ id:projectId, name:"Research" }], canvases:[{ id:canvasId, projectId, currentRevisionId:revisionId, name:"Notes", updatedAt:Date.now(), sizeBytes:42 }], sync:{ bundleVersion:2, conflictPolicy:"base-revision-required" } };
+  const run = boot({ runtime:"cloud", status:deviceStatus(), remoteCloudStatus:{ accountName:"Remote User", deviceOnline:true }, library });
+  await run.flush();
+  const overlay = await openCloudCenter(run);
+  await run.flush();
+  const thumbnail = run.document.createdElements.find((node) => node.tagName === "IMG" && String(node.getAttribute("src") || "").includes(canvasId));
+  assert.equal(thumbnail?.getAttribute("src"), `/api/v1/canvases/${canvasId}/thumbnail?revision=${revisionId}`);
+});
+
+test("local mutable image proxies revalidate instead of caching stale Canvas and Favorite previews", () => {
+  assert.match(serverSource, /function sendPrivateMutableImage\(req, res, bytes/);
+  assert.match(serverSource, /private, no-cache, must-revalidate/);
+  assert.match(serverSource, /sendPrivateMutableImage\(req,res,result\.bytes,result\.contentType\)/);
+  assert.match(serverSource, /sendPrivateMutableImage\(req,res,bytes\)/);
+});
+
 test("Cloud Center opens favorite Canvases in the current local Canvas", async () => {
   const canvas = { id:"123e4567-e89b-42d3-a456-426614174004", kind:"canvas", name:"Plan", author:{ name:"Ada" } };
   const canvasArtifact = { version:2, bundleVersion:2, mode:"snapshot", manifest:{ format:"penecho-raster-tiles" } };
