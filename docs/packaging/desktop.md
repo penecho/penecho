@@ -1,6 +1,6 @@
 # PenEcho desktop packaging
 
-This directory is a self-contained desktop-packaging snapshot of PenEcho 0.9.0. It keeps the existing browser canvas and CLI while adding an Electron shell for macOS and Windows.
+This directory contains PenEcho's Electron packaging for macOS and Windows. It keeps the existing browser canvas and CLI while adding a native desktop shell.
 
 End users do **not** need Node.js or Python. Electron bundles its own Chromium and Node.js runtime. API mode is the recommended beginner path. Codex CLI and Claude Code can also be installed from the setup page without opening a terminal.
 
@@ -67,27 +67,48 @@ Generated production assets:
 - `build/icons/penecho.icns`
 - `build/icons/penecho.ico`
 
-The website brand icon is applied to the app bundle, Dock/taskbar executable, DMG and Windows setup executable.
+The website brand icon is applied to the app bundle, Dock/taskbar executable, DMG and Windows setup executable. Squirrel's generic green install animation is replaced with the generated PenEcho-branded `penecho-install.gif`, so first install and update never show an unfamiliar third-party splash.
 
 ## Signing and notarization
 
 Unsigned builds are suitable only for local testing. Beginner-facing releases should always be signed.
 
-macOS workflow secrets:
+The macOS jobs use the protected GitHub Environment named `macos-signing`. That environment requires approval from the repository owner and is restricted to `v*` tags. Its secret values are never stored in source or exposed to repository visitors.
+
+Required `macos-signing` environment secrets:
 
 - `MAC_CERTIFICATE_P12_BASE64`
 - `MAC_CERTIFICATE_PASSWORD`
 - `MAC_CODESIGN_IDENTITY`
-- `APPLE_ID`
-- `APPLE_APP_SPECIFIC_PASSWORD`
-- `APPLE_TEAM_ID`
+- `APPLE_API_KEY_P8_BASE64`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_ISSUER`
 
-Windows workflow secrets for a PFX-based signing service:
+The workflow restores both credentials only inside the temporary GitHub-hosted runner. It signs the complete app with Developer ID, submits the app and DMG to Apple's notary service, staples the tickets, and verifies the result with `codesign`, Gatekeeper (`spctl`), and `stapler` before uploading artifacts. A missing credential fails the macOS jobs instead of silently producing an ad-hoc-signed release.
+
+The Windows job uses the GitHub Environment named `windows-signing`. Until a signing identity is configured it deliberately produces an unsigned installer and writes a warning to the build log. Adding a complete signing configuration switches the same workflow to signed output; a partial configuration fails instead of silently falling back to unsigned output.
+
+Preferred Azure Artifact Signing environment variables (no certificate private key is stored in GitHub):
+
+- `AZURE_ARTIFACT_SIGNING_ENDPOINT`
+- `AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME`
+- `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME`
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+Configure these as GitHub Environment variables after the public identity validation and certificate profile are complete. The Entra application or managed identity must trust the `windows-signing` GitHub Environment through OIDC and have the `Artifact Signing Certificate Profile Signer` role on the certificate profile. The workflow signs the packaged application before Squirrel creates its package, then signs the final Setup executable and verifies both signatures. Enabling Azure signing later requires environment and Azure identity configuration only; it does not require another source change.
+
+PFX-based Authenticode remains an optional fallback using `windows-signing` environment secrets:
 
 - `WINDOWS_CERTIFICATE_PFX_BASE64`
 - `WINDOWS_CERTIFICATE_PASSWORD`
 
-Azure Artifact Signing can replace the PFX path later if the publisher account is eligible. Never commit certificates or credentials.
+The certificate must be a Windows-trusted code-signing certificate with its private key, not the Apple Developer ID certificate. Configure either Azure or PFX, never both. Signed modes use SHA-256 and a trusted timestamp, and the workflow verifies that both `PenEcho.exe` and `PenEcho-Setup-*.exe` have valid timestamped Authenticode signatures before artifacts are uploaded.
+
+The update download progress is shown only inside the PenEcho window. It is intentionally never mirrored onto the Windows taskbar icon.
+
+Never commit certificates or credentials.
 
 ## GitHub Releases
 
@@ -99,7 +120,7 @@ Packaged apps check for updates shortly after launch and every six hours. `Help 
 
 Only published GitHub Releases are offered. Drafts and prereleases are not installed as normal updates. The updater accepts only the exact asset name for the current platform and architecture, only downloads it from the `penecho/penecho` GitHub Release path over HTTPS, and checks GitHub's SHA-256 digest when it is available.
 
-Unsigned builds can update during the pre-signing release phase:
+Local unsigned builds can still exercise the update flow during development:
 
 - macOS downloads the matching ZIP, validates its PenEcho bundle ID and version, then replaces the installed `.app` after the running process exits. PenEcho must be installed in a user-writable location.
 - Windows downloads the matching Squirrel Setup executable and starts its silent installed-app upgrade path. Squirrel install/update events update the shortcut and exit without opening the canvas.

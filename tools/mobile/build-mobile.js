@@ -154,6 +154,22 @@ function copyArtifact(source, extension, suffix) {
   console.log(target);
 }
 
+function iosBuildNumber() {
+  const explicit = Number.parseInt(process.env.IOS_BUILD_NUMBER || process.env.GITHUB_RUN_NUMBER || "", 10);
+  return Number.isSafeInteger(explicit) && explicit > 0 ? explicit : buildNumber(APP_PACKAGE.version);
+}
+
+function iosSigning() {
+  const teamId = String(process.env.APPLE_TEAM_ID || "").trim();
+  const profile = String(process.env.IOS_PROVISIONING_PROFILE_SPECIFIER || "").trim();
+  const identity = String(process.env.IOS_SIGNING_IDENTITY || "Apple Distribution").trim();
+  const requested = Boolean(teamId || profile || process.env.IOS_SIGNING_IDENTITY);
+  if (requested && (!teamId || !profile || !identity)) {
+    throw new Error("Signed iOS builds require APPLE_TEAM_ID, IOS_PROVISIONING_PROFILE_SPECIFIER, and IOS_SIGNING_IDENTITY.");
+  }
+  return requested ? { teamId, profile, identity } : null;
+}
+
 async function buildAndroid() {
   const androidRoot = ensurePlatform("android");
   await generateAndroidIcons();
@@ -189,21 +205,60 @@ async function buildIos() {
   await generateIosIcons();
   configureIosNetwork();
   cap("sync", "ios");
+  const signing = iosSigning();
+  const projectVersion = String(iosBuildNumber());
   const archiveRoot = path.join(RELEASE_DIR, "ios", "PenEcho.xcarchive");
   fs.rmSync(archiveRoot, { recursive:true, force:true });
-  run("xcodebuild", [
+  const archiveArgs = [
     "archive",
     "-workspace", path.join(iosRoot, "App", "App.xcworkspace"),
     "-scheme", "App",
     "-configuration", "Release",
     "-sdk", "iphoneos",
     "-archivePath", archiveRoot,
-    "CODE_SIGNING_ALLOWED=NO",
-    "CODE_SIGNING_REQUIRED=NO",
-    "CODE_SIGN_IDENTITY=",
     `MARKETING_VERSION=${APP_PACKAGE.version}`,
-    `CURRENT_PROJECT_VERSION=${buildNumber(APP_PACKAGE.version)}`,
-  ], MOBILE_ROOT);
+    `CURRENT_PROJECT_VERSION=${projectVersion}`,
+  ];
+  if (signing) {
+    archiveArgs.push(
+      `DEVELOPMENT_TEAM=${signing.teamId}`,
+      "CODE_SIGN_STYLE=Manual",
+      `CODE_SIGN_IDENTITY=${signing.identity}`,
+      `PROVISIONING_PROFILE_SPECIFIER=${signing.profile}`,
+    );
+  } else {
+    archiveArgs.push("CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGN_IDENTITY=");
+  }
+  run("xcodebuild", archiveArgs, MOBILE_ROOT);
+
+  if (signing) {
+    const exportRoot = path.join(RELEASE_DIR, "ios", "export");
+    const exportOptionsPath = path.join(RELEASE_DIR, "ios", "ExportOptions.plist");
+    fs.rmSync(exportRoot, { recursive:true, force:true });
+    ensureDir(exportRoot);
+    fs.writeFileSync(exportOptionsPath, require("plist").build({
+      method:"app-store-connect",
+      destination:"export",
+      signingStyle:"manual",
+      signingCertificate:signing.identity,
+      teamID:signing.teamId,
+      provisioningProfiles:{ "ai.penecho.mobile":signing.profile },
+      manageAppVersionAndBuildNumber:false,
+      stripSwiftSymbols:true,
+      uploadSymbols:true,
+    }));
+    run("xcodebuild", [
+      "-exportArchive",
+      "-archivePath", archiveRoot,
+      "-exportPath", exportRoot,
+      "-exportOptionsPlist", exportOptionsPath,
+    ], MOBILE_ROOT);
+    const exported = filesBelow(exportRoot).find(file => path.extname(file).toLowerCase() === ".ipa");
+    if (!exported) throw new Error("Xcode export succeeded without producing an IPA.");
+    copyArtifact(exported, "ipa", "ios");
+    return;
+  }
+
   const appPath = path.join(archiveRoot, "Products", "Applications", "App.app");
   const payloadRoot = path.join(RELEASE_DIR, "ios", "Payload");
   fs.rmSync(payloadRoot, { recursive:true, force:true });

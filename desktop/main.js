@@ -331,12 +331,6 @@ function sendUpdateState(window) {
 }
 
 function updateDesktopUpdateUi(state) {
-  const progress = state.status === "downloading"
-    ? state.progress === null ? 2 : Math.max(0, Math.min(1, state.progress / 100))
-    : -1;
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.setProgressBar(progress, { mode:state.progress === null ? "indeterminate" : "normal" });
-  }
   sendUpdateState(mainWindow);
   installMenu();
 }
