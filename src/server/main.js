@@ -28,7 +28,7 @@ const { DEFAULT_REASONING_EFFORT, apiReasoningParameters, normalizeReasoningEffo
 const { testConfiguredProvider } = require("../cli/main.js");
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const { resolveWidgetEditPatchCommands, widgetSourceMirrorsHtml, widgetPatchContract, widgetPatchFiles } = require("./widget-patch.js");
-const { CloudConnector } = require("./cloud-connector.js");
+const { CloudConnector, cloudAiConnectionHeaders } = require("./cloud-connector.js");
 const { createRemoteCanvasHttpExecutor } = require("./remote-canvas-http.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
@@ -732,6 +732,16 @@ function normalizeCanvasTheme(theme) {
 }
 
 function send(res, code, data, type = "application/json; charset=utf-8", extraHeaders = {}) { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", ...extraHeaders }); res.end(typeof data === "string" ? data : JSON.stringify(data)); }
+function sendPrivateMutableImage(req, res, bytes, contentType = "image/webp") {
+  const etag = `"${crypto.createHash("sha256").update(bytes).digest("hex")}"`;
+  const headers = { "Cache-Control":"private, no-cache, must-revalidate", ETag:etag, "X-Content-Type-Options":"nosniff" };
+  if (req.headers["if-none-match"] === etag) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+  res.writeHead(200, { ...headers, "Content-Type":contentType, "Content-Length":bytes.length });
+  return res.end(bytes);
+}
 function sendCloudSignInResult(res, ok) {
   const nonce = crypto.randomBytes(18).toString("base64");
   const title = ok ? "PenEcho sign-in complete" : "PenEcho sign-in could not be completed";
@@ -2981,8 +2991,7 @@ const server = http.createServer(async (req, res) => {
       if(cloudCanvasThumbnailMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasThumbnailMatch[1])&&req.method==="GET"){
         const result=await cloudConnector.cloudCanvasThumbnail(cloudCanvasThumbnailMatch[1]);
         if(!result)return send(res,404,{error:"Cloud Canvas preview was not found."});
-        res.writeHead(200,{"Content-Type":result.contentType,"Content-Length":result.bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
-        return res.end(result.bytes);
+        return sendPrivateMutableImage(req,res,result.bytes,result.contentType);
       }
       if(cloudCanvasSaveMatch&&CLOUD_RESOURCE_ID_PATTERN.test(cloudCanvasSaveMatch[1])&&req.method==="POST"){
         const body=await readJson(req,35*1024*1024);
@@ -3002,8 +3011,7 @@ const server = http.createServer(async (req, res) => {
       const favoriteCloudThumbnail=url.pathname.match(/^\/api\/cloud\/favorites\/([0-9a-f-]{36})\/thumbnail$/i);
       if(favoriteCloudThumbnail&&req.method==="GET"){
         const result=await cloudConnector.widgetFavoriteThumbnail(favoriteCloudThumbnail[1]);
-        res.writeHead(200,{"Content-Type":result.contentType,"Content-Length":result.bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
-        return res.end(result.bytes);
+        return sendPrivateMutableImage(req,res,result.bytes,result.contentType);
       }
       if(req.method==="GET"&&url.pathname==="/api/cloud/favorites/feed"){
         const favoriteCloudError=cloudBrowserRequestError(req);
@@ -3105,8 +3113,7 @@ const server = http.createServer(async (req, res) => {
     const favorite=(await readLocalFavorites()).find((entry)=>entry.artifactSha256===localFavoriteThumbnailMatch[1]);
     const bytes=favorite?.thumbnail?Buffer.from(String(favorite.thumbnail),"base64"):Buffer.alloc(0);
     if(!bytes.length)return send(res,404,{error:"Favorite thumbnail not found."});
-    res.writeHead(200,{"Content-Type":"image/webp","Content-Length":bytes.length,"Cache-Control":"private, max-age=300","X-Content-Type-Options":"nosniff"});
-    return res.end(bytes);
+    return sendPrivateMutableImage(req,res,bytes);
   }
   const localFavoriteCloudMatch = url.pathname.match(/^\/api\/favorites\/([0-9a-f]{64})\/cloud$/);
   if (localFavoriteCloudMatch && req.method === "PATCH") {
@@ -3620,14 +3627,14 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
   if (req.method === "HEAD") return res.end();
   fs.createReadStream(file).pipe(res);
 });
-async function executeCloudCommand(payload, timeoutMs) {
+async function executeCloudCommand(payload, timeoutMs, context = null) {
   const address=server.address();
   if(!address||typeof address!=="object")throw new Error("Local PenEcho server is not listening.");
   const port=address.port,origin=`http://127.0.0.1:${port}`,host=`127.0.0.1:${port}`,
     cookieName=`${AI_SESSION_COOKIE_PREFIX}_${crypto.createHash("sha256").update(host).digest("hex").slice(0,12)}`,
     controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),Math.max(10000,Math.min(Number(timeoutMs)||AI_REQUEST_TIMEOUT_MS,AI_REQUEST_TIMEOUT_MS)));
   try {
-    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",signal:controller.signal,headers:{"content-type":"application/json",accept:"application/json",origin,cookie:`${cookieName}=${AI_SESSION_TOKEN}`},body:JSON.stringify(payload)});
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",signal:controller.signal,headers:{"content-type":"application/json",accept:"application/json",origin,cookie:`${cookieName}=${AI_SESSION_TOKEN}`,...cloudAiConnectionHeaders(context)},body:JSON.stringify(payload)});
     const body=await response.json().catch(()=>({}));
     if(!response.ok){const error=new Error(body.error||`Local AI request failed (HTTP ${response.status}).`);error.code=body.errorCode||"local_ai_error";error.status=response.status;throw error}
     return body;

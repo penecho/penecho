@@ -987,7 +987,10 @@
         const list = el("div", { class:"cloud-canvas-list" });
         if (!projectCanvases.length) list.append(el("div", { class:"cloud-project-empty", text:cloudT("noCanvases") }));
         for (const canvas of projectCanvases.slice(0, 12)) {
-          const thumbnailUrl = canvas.previewDataUrl || (isCloudRuntime() ? `/api/v1/canvases/${encodeURIComponent(canvas.id)}/thumbnail` : "");
+          const revision = String(canvas.currentRevisionId || "").trim();
+          const thumbnailUrl = canvas.previewDataUrl || (isCloudRuntime() && revision
+            ? `/api/v1/canvases/${encodeURIComponent(canvas.id)}/thumbnail?revision=${encodeURIComponent(revision)}`
+            : "");
           const row = el("button", { class:"cloud-canvas-row", type:"button", onclick:() => openProjectCanvasHere(canvas.id, panel, row) }, [
             thumbnailUrl ? el("img", { src:thumbnailUrl, alt:"", loading:"lazy" }) : el("span", { class:"cloud-canvas-placeholder", text:"P" }),
             el("span", { class:"cloud-canvas-copy" }, [

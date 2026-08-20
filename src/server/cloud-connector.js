@@ -16,6 +16,30 @@ const CLOUD_REQUEST_TIMEOUT_MS = 30_000;
 const BROWSER_AUTHORIZATION_MS = 10 * 60_000;
 const PUBLIC_MESSAGE_TIMEOUT_MS = 3_500;
 const BROWSER_CALLBACK_PATH = "/api/cloud/sign-in/callback";
+const CLOUD_AI_CONTEXT_KEY = "__penechoCloudAi";
+const LOCAL_CONNECTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizedCloudAiConnectionId(value) {
+  const connectionId = typeof value === "string" ? value.trim() : "";
+  return LOCAL_CONNECTION_ID_PATTERN.test(connectionId) ? connectionId : null;
+}
+
+function cloudAiRelayRequest(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Object.hasOwn(payload, CLOUD_AI_CONTEXT_KEY)) {
+    return { payload, connectionId:null };
+  }
+  const context = payload[CLOUD_AI_CONTEXT_KEY], cleanPayload = { ...payload };
+  delete cleanPayload[CLOUD_AI_CONTEXT_KEY];
+  const connectionId = context && typeof context === "object" && !Array.isArray(context) && context.version === 1
+    ? normalizedCloudAiConnectionId(context.connectionId)
+    : null;
+  return { payload:cleanPayload, connectionId };
+}
+
+function cloudAiConnectionHeaders(context) {
+  const connectionId = normalizedCloudAiConnectionId(context?.connectionId);
+  return connectionId ? { "x-penecho-connection":connectionId } : {};
+}
 
 function normalizedOrigin(value) {
   const url = new URL(String(value || "").trim());
@@ -1091,9 +1115,16 @@ class CloudConnector {
 
   async handleRequest(socket, message) {
     try {
-      const executor = message.payload?.operation === "canvas.http" ? this.executeHttpRequest : this.executeRequest;
+      const operation = message.payload?.operation,
+        remoteCanvas = operation === "canvas.http",
+        canvasAi = operation === undefined,
+        executor = remoteCanvas ? this.executeHttpRequest : this.executeRequest,
+        timeoutMs = Number(message.timeoutMs) || 210_000;
       if (typeof executor !== "function") throw Object.assign(new Error("This PenEcho version does not support Remote Canvas."), { code:"remote_canvas_unsupported" });
-      const payload = await executor(message.payload, Number(message.timeoutMs) || 210_000);
+      const relayRequest = canvasAi ? cloudAiRelayRequest(message.payload) : null,
+        payload = relayRequest?.connectionId
+          ? await executor(relayRequest.payload, timeoutMs, { connectionId:relayRequest.connectionId })
+          : await executor(relayRequest ? relayRequest.payload : message.payload, timeoutMs);
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response", requestId: message.requestId, ok: true, payload }));
     } catch (error) {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({
@@ -1107,4 +1138,4 @@ class CloudConnector {
   }
 }
 
-module.exports = { CloudConnector, accountSessionExpired, normalizedOrigin, publicCanvasMessage, reconnectDelayMs };
+module.exports = { CloudConnector, accountSessionExpired, cloudAiConnectionHeaders, cloudAiRelayRequest, normalizedOrigin, publicCanvasMessage, reconnectDelayMs };

@@ -7,7 +7,7 @@ const path = require("node:path");
 const { createHash } = require("node:crypto");
 const { test } = require("node:test");
 const { WebSocket, WebSocketServer } = require("ws");
-const { CloudConnector, accountSessionExpired, normalizedOrigin, publicCanvasMessage, reconnectDelayMs } = require("../src/server/cloud-connector.js");
+const { CloudConnector, accountSessionExpired, cloudAiConnectionHeaders, cloudAiRelayRequest, normalizedOrigin, publicCanvasMessage, reconnectDelayMs } = require("../src/server/cloud-connector.js");
 
 async function eventually(predicate, message, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
@@ -1210,6 +1210,65 @@ test("cloud relay requests execute through the local model callback without expo
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
+});
+
+test("cloud Canvas model selection reaches the local callback without leaking relay metadata", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-model-selection-test-"));
+  try {
+    const connectionId = "123e4567-e89b-42d3-a456-426614174080";
+    let receivedArguments = null;
+    const connector = new CloudConnector({
+      stateDir,
+      executeRequest: async (...args) => {
+        receivedArguments = args;
+        return { result:{ intent:"answer", commands:[] }, provider:"api" };
+      },
+    });
+    let sent = null;
+    const socket = { readyState:WebSocket.OPEN, send:value => { sent = JSON.parse(value); } };
+    await connector.handleRequest(socket, {
+      type:"request",
+      requestId:"selected-model",
+      timeoutMs:12_345,
+      payload:{ userAction:"answer", __penechoCloudAi:{ version:1, connectionId } },
+    });
+    assert.deepEqual(receivedArguments, [{ userAction:"answer" }, 12_345, { connectionId }]);
+    assert.equal(JSON.stringify(receivedArguments).includes("__penechoCloudAi"), false);
+    assert.equal(sent.ok, true);
+  } finally {
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("invalid Cloud model context is removed and falls back to the default local connection", async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-model-fallback-test-"));
+  try {
+    let receivedArguments = null;
+    const connector = new CloudConnector({ stateDir, executeRequest:async (...args) => { receivedArguments = args; return {}; } });
+    const socket = { readyState:WebSocket.OPEN, send:() => {} };
+    await connector.handleRequest(socket, {
+      type:"request",
+      requestId:"invalid-model",
+      timeoutMs:12_345,
+      payload:{ userAction:"answer", __penechoCloudAi:{ version:2, connectionId:"not-a-uuid" } },
+    });
+    assert.deepEqual(receivedArguments, [{ userAction:"answer" }, 12_345]);
+    assert.deepEqual(cloudAiConnectionHeaders(), {});
+    assert.deepEqual(cloudAiConnectionHeaders({ connectionId:"not-a-uuid" }), {});
+    assert.deepEqual(cloudAiConnectionHeaders({ connectionId:"123e4567-e89b-42d3-a456-426614174080" }), {
+      "x-penecho-connection":"123e4567-e89b-42d3-a456-426614174080",
+    });
+    assert.deepEqual(cloudAiRelayRequest({ userAction:"answer" }), { payload:{ userAction:"answer" }, connectionId:null });
+  } finally {
+    fs.rmSync(stateDir, { recursive:true, force:true });
+  }
+});
+
+test("Cloud model context is applied only at the local AI loopback boundary", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "server", "main.js"), "utf8");
+  assert.match(source, /async function executeCloudCommand\(payload, timeoutMs, context = null\)/);
+  assert.match(source, /headers:\{[^\n]+\.\.\.cloudAiConnectionHeaders\(context\)[^\n]+body:JSON\.stringify\(payload\)/);
+  assert.match(source, /findConnection\(store, requestedId\) \|\| store\.defaultConnection/);
 });
 
 test("Remote Canvas relay operations use the isolated HTTP callback", async () => {
