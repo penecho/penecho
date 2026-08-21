@@ -333,7 +333,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(otherGroup, /value="codex-cli"/);
   assert.match(otherGroup, /value="claude-cli"/);
   assert.ok(html.indexOf("kimi-provider-group") < html.indexOf("otherProviderGroupTitle"));
-  assert.equal(rootPackage.version, "1.0.0");
+  assert.equal(rootPackage.version, "1.0.1");
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
