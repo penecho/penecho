@@ -2,6 +2,17 @@ name: Desktop installers
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Build target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - windows
+          - mac
+          - android
   push:
     tags:
       - "v*"
@@ -22,6 +33,7 @@ jobs:
       - run: npm run check
 
   mac:
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'mac'
     needs: test
     environment: macos-signing
     env:
@@ -124,6 +136,7 @@ jobs:
           path: release/*
 
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'windows'
     needs: test
     environment: windows-signing
     runs-on: windows-2025
@@ -315,6 +328,7 @@ jobs:
           path: release/*
 
   android:
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android'
     needs: test
     runs-on: ubuntu-latest
     env:
