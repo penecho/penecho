@@ -6,13 +6,33 @@ const SAFE_RESPONSE_HEADERS = new Set(["x-penecho-final-url", "x-penecho-upstrea
 
 const CANVAS_ID = "\\d{10,16}-[a-zA-Z0-9-]{8,64}";
 const PROJECT_ID = "project-[a-zA-Z0-9-]{8,64}";
+const CANVAS_AGENT_PROJECT_ID = "(?:local|file)-[0-9a-f]{24}";
+const CANVAS_AGENT_ROOT_ID = "root-[0-9a-f]{24}";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+
+function validCanvasAgentEntriesQuery(searchParams) {
+  const entries = [...searchParams.entries()];
+  if (entries.length !== 1 || entries[0][0] !== "path") return false;
+  const value = entries[0][1];
+  if (Buffer.byteLength(value, "utf8") > 4096 || value.includes("\0") || value.includes("\\") || value.startsWith("/")) return false;
+  return !value.split("/").some(part => part === "." || part === "..");
+}
 
 const ROUTES = [
   { pattern:/^\/api\/settings$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/widget-fetch$/, methods:new Set(["GET", "POST"]), query:true },
   { pattern:/^\/api\/canvas-projects$/, methods:new Set(["GET", "POST"]) },
+  // Cloud may select a registered resource, upload one file, or choose a
+  // folder under a configured opaque root. It must never register a raw host
+  // path through POST /api/canvas-agent/projects.
+  { pattern:/^\/api\/canvas-agent\/projects$/, methods:new Set(["GET"]) },
+  { pattern:new RegExp(`^/api/canvas-agent/projects/${CANVAS_AGENT_PROJECT_ID}$`), methods:new Set(["DELETE"]) },
+  { pattern:new RegExp(`^/api/canvas-agent/projects/${CANVAS_AGENT_PROJECT_ID}/history$`), methods:new Set(["GET", "PUT"]) },
+  { pattern:/^\/api\/canvas-agent\/roots$/, methods:new Set(["GET"]) },
+  { pattern:new RegExp(`^/api/canvas-agent/roots/${CANVAS_AGENT_ROOT_ID}/entries$`), methods:new Set(["GET"]), query:validCanvasAgentEntriesQuery },
+  { pattern:/^\/api\/canvas-agent\/projects\/from-root$/, methods:new Set(["POST"]) },
+  { pattern:/^\/api\/canvas-agent\/files$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/canvas-projects/${PROJECT_ID}$`), methods:new Set(["DELETE"]) },
   { pattern:new RegExp(`^/api/canvases/${CANVAS_ID}/project$`), methods:new Set(["PUT"]) },
   { pattern:/^\/api\/canvases$/, methods:new Set(["GET", "POST"]) },
@@ -50,7 +70,7 @@ function remoteCanvasTarget(method, value) {
   const url = new URL(source, "http://penecho.local");
   if (url.origin !== "http://penecho.local" || url.hash || url.username || url.password) throw Object.assign(new Error("Remote Canvas path is invalid."), { code:"remote_canvas_path", status:400 });
   const route = ROUTES.find((candidate) => candidate.pattern.test(url.pathname));
-  if (!route || !route.methods.has(requestMethod) || url.search && !route.query) throw Object.assign(new Error("Remote Canvas route is not available."), { code:"remote_canvas_route", status:404 });
+  if (!route || !route.methods.has(requestMethod) || url.search && (!route.query || typeof route.query === "function" && !route.query(url.searchParams))) throw Object.assign(new Error("Remote Canvas route is not available."), { code:"remote_canvas_route", status:404 });
   return `${url.pathname}${url.search}`;
 }
 

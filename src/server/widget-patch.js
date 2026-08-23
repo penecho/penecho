@@ -147,6 +147,14 @@ function coalescedPatchFileSections(patchText, widgetEdit) {
   return `${output.join("\n")}${finalNewline ? "\n" : ""}`;
 }
 
+function diagnosticSequenceStarts(lines, expected, minimumStart, matchesLine = (actual, submitted) => actual === submitted) {
+  const matches = [];
+  for (let candidate = minimumStart; candidate + expected.length <= lines.length; candidate++) {
+    if (expected.every((line, index) => matchesLine(lines[candidate + index], line))) matches.push(candidate);
+  }
+  return matches;
+}
+
 function uniqueSequenceStart(lines, expected, minimumStart, matchesLine = (actual, submitted) => actual === submitted, preferredStart = null) {
   const matches = [];
   for (let candidate = minimumStart; candidate + expected.length <= lines.length; candidate++) {
@@ -192,8 +200,44 @@ function repairedNumberingTabBody(body, sourceLines, minimumStart, declaredStart
   return body.map(line => line === "\\ No newline at end of file" ? line : `${line[0]}${line.slice(2)}`);
 }
 
-function setPatchDiagnostic(diagnostics, reason) {
-  if (diagnostics && typeof diagnostics === "object" && !diagnostics.reason) diagnostics.reason = reason;
+function patchDiagnosticLine(value, limit = 240) {
+  const line = String(value ?? "");
+  return line.length > limit ? `${line.slice(0,limit)}…` : line;
+}
+
+function setPatchDiagnostic(diagnostics, reason, details = null) {
+  if (!diagnostics || typeof diagnostics !== "object" || diagnostics.reason) return;
+  diagnostics.reason = reason;
+  if (details && typeof details === "object" && !Array.isArray(details)) Object.assign(diagnostics,details);
+}
+
+function setPatchLocationDiagnostic(diagnostics, { path, hunk, oldStart, sourceLines, entries, minimumStart }) {
+  const expected = entries.map(entry => entry.content), declaredStart = Number.isSafeInteger(oldStart) && oldStart > 0 ? oldStart - 1 : null,
+    exactMatches = diagnosticSequenceStarts(sourceLines,expected,minimumStart), omittedIndentMatches = exactMatches.length ? [] : diagnosticSequenceStarts(
+      sourceLines,
+      expected,
+      minimumStart,
+      (actual, submitted) => actual === submitted || actual === ` ${submitted}`,
+    );
+  if (exactMatches.length > 1 || omittedIndentMatches.length > 1) {
+    setPatchDiagnostic(diagnostics,"ambiguous-context",{path,hunk,oldStart,matchCount:Math.max(exactMatches.length,omittedIndentMatches.length)});
+    return;
+  }
+  if (declaredStart !== null && declaredStart < minimumStart) {
+    setPatchDiagnostic(diagnostics,"out-of-order-hunk",{path,hunk,oldStart,minimumOldStart:minimumStart+1});
+    return;
+  }
+  const comparisonStart = declaredStart !== null && declaredStart >= minimumStart ? declaredStart : minimumStart;
+  let mismatchIndex = 0;
+  while (mismatchIndex < expected.length && sourceLines[comparisonStart+mismatchIndex] === expected[mismatchIndex]) mismatchIndex++;
+  setPatchDiagnostic(diagnostics,"context-mismatch",{
+    path,
+    hunk,
+    oldStart,
+    sourceLine:comparisonStart+mismatchIndex+1,
+    submittedLine:patchDiagnosticLine(expected[mismatchIndex]),
+    currentLine:patchDiagnosticLine(sourceLines[comparisonStart+mismatchIndex]),
+  });
 }
 
 function patchBodyCounts(body) {
@@ -297,7 +341,10 @@ function canonicalPatchCounts(patchText, widgetEdit, diagnostics = null) {
           newStart = locatedStart + lineOffset + (newLines === 0 ? 0 : 1);
         } else {
           const located = uniquelyLocatedPatchSequence(sourceLines, currentExpectedEntries, previousEnd, declaredStart);
-          if (!located) return "";
+          if (!located) {
+            if (diagnostics?.includeLocationDetails === true) setPatchLocationDiagnostic(diagnostics,{path,hunk:hunkCount+1,oldStart,sourceLines,entries:currentExpectedEntries,minimumStart:previousEnd});
+            return "";
+          }
           locatedStart = located.start;
           if (located.repaired) {
             currentExpectedEntries.forEach((entry, index) => {

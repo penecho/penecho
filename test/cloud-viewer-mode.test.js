@@ -90,8 +90,8 @@ test("Canvas viewer restores the published bundle in memory without importing it
 
 test("the viewer presents its Widget limitation as a localized, transparent caption", () => {
   const js = read("public/viewer.js"), css = read("public/viewer.css");
-  assert.match(js, /Live-data Widgets are static here; sign in and link a device to interact\./);
-  assert.match(js, /实时 Widget 在此为静态预览；登录并连接设备即可交互。/);
+  assert.match(js, /Dynamically loaded content is available after you sign in and complete Link Device\./);
+  assert.match(js, /动态加载的内容需登录并完成设备连接后才能查看。/);
   assert.match(js, /createElement\("button"\)/);
   assert.match(js, /notice\.hidden = true/);
   assert.match(js, /dismissNotice:"Hide this message"/);

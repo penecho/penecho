@@ -538,8 +538,8 @@ test("canvas view mode exposes only quiet share and exit controls while preservi
     modeTools = html.match(/<div class="mode-tools">[\s\S]*?<\/div>/)?.[0] || "",
     viewTools = html.match(/<span class="view-tools">[\s\S]*?<\/span>/)?.[0] || "";
 
-  assert.doesNotMatch(modeTools, /id="canvasViewBtn"/);
-  assert.ok(viewTools.indexOf('id="canvasViewBtn"') < viewTools.indexOf('id="fullscreenBtn"'));
+  assert.ok(modeTools.indexOf('id="canvasViewBtn"') < modeTools.indexOf('id="handToolBtn"'));
+  assert.doesNotMatch(viewTools, /id="canvasViewBtn"/);
   assert.ok(viewTools.indexOf('id="fullscreenBtn"') < viewTools.indexOf('id="gridToggle"'));
   assert.match(html, /id="canvasViewBtn"[^>]*aria-pressed="false"[^>]*data-i18n-aria="enterCanvasViewMode"[\s\S]*?<circle cx="12" cy="12" r="2\.8"/);
   assert.match(html, /id="canvasViewActions"[^>]*role="toolbar"[^>]*hidden[\s\S]*?id="canvasViewShareBtn"[\s\S]*?id="canvasViewCloseBtn"/);

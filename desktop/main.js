@@ -16,6 +16,7 @@ const { installCli, managedCliPath } = require("./cli-installer.js");
 const { createUpdateManager } = require("./update-manager.js");
 const { lanHosts, lanUrls } = require("./network-access.js");
 const { desktopConfigurationEnvironment } = require("./config-environment.js");
+const { issueNativePickerGrant } = require("../src/server/canvas-agent/native-picker-grants.js");
 const pkg = require("../package.json");
 
 app.setName("PenEcho");
@@ -157,13 +158,16 @@ function restrictNavigation(window, allowed) {
 }
 
 function showSettings() {
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   if (settingsWindow && !settingsWindow.isDestroyed()) {
+    if (parent && settingsWindow.getParentWindow() !== parent) settingsWindow.setParentWindow(parent);
     settingsWindow.show();
     settingsWindow.focus();
     return settingsWindow;
   }
   settingsReadyToLaunch = false;
   settingsWindow = new BrowserWindow(secureWindowOptions({
+    ...(parent ? { parent } : {}),
     width:1120,
     height:780,
     minWidth:920,
@@ -377,6 +381,44 @@ function installMenu() {
 
 function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+  ipcMain.handle("penecho:pick-project-file", async event => {
+    if (!fromCanvas(event)) return { canceled:true };
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title:"Choose a local file",
+      buttonLabel:"Choose File",
+      properties:["openFile"],
+      filters:[
+        {
+          name:"Readable files",
+          extensions:[
+            "pdf", "docx", "xlsx", "csv", "db", "sqlite", "sqlite3",
+            "png", "jpg", "jpeg", "webp", "gif",
+            "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "log",
+            "json", "jsonc", "jsonl", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "config", "properties", "env", "xml", "xsd", "svg",
+            "html", "htm", "css", "scss", "sass", "less", "js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts",
+            "py", "pyi", "rb", "php", "java", "kt", "kts", "go", "rs", "c", "h", "cc", "cpp", "cxx", "hpp", "cs", "scala", "swift",
+            "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "sql", "graphql", "gql", "proto", "vue", "svelte", "astro", "tex", "lock", "diff", "patch",
+          ],
+        },
+        { name:"Documents", extensions:["pdf", "docx", "xlsx", "csv"] },
+        { name:"SQLite databases", extensions:["db", "sqlite", "sqlite3"] },
+        { name:"Images", extensions:["png", "jpg", "jpeg", "webp", "gif"] },
+        {
+          name:"Text, source, and configuration",
+          extensions:[
+            "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "log",
+            "json", "jsonc", "jsonl", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "config", "properties", "env", "xml", "xsd", "svg",
+            "html", "htm", "css", "scss", "sass", "less", "js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts",
+            "py", "pyi", "rb", "php", "java", "kt", "kts", "go", "rs", "c", "h", "cc", "cpp", "cxx", "hpp", "cs", "scala", "swift",
+            "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "sql", "graphql", "gql", "proto", "vue", "svelte", "astro", "tex", "lock", "diff", "patch",
+          ],
+        },
+      ],
+    });
+    const selectedPath = result.filePaths[0] || "";
+    if (result.canceled || !selectedPath) return { canceled:true };
+    return { canceled:false, path:selectedPath, pickerToken:issueNativePickerGrant({ selectedPath, kind:"file" }) };
+  });
   ipcMain.handle("penecho:get-update-state", event => fromCanvas(event) ? updateManager?.getState() : null);
   ipcMain.handle("penecho:update-check", event => fromCanvas(event) ? updateManager?.check(true) : false);
   ipcMain.handle("penecho:update-download", event => fromCanvas(event) ? updateManager?.download() : false);

@@ -91,16 +91,28 @@ function imageRefs(blocks, refs) {
 
 async function activeImageDataUrls(messages, attachments, signal) {
   if (!attachments) return []
-  let active = []
+  let userRefs = [], userMessageIndex = -1
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index], refs = []
     imageRefs(Array.isArray(message?.content) ? message.content : [], refs)
-    if (!refs.length) continue
-    active = message.role === 'user' && message.source?.kind === 'user'
-      ? refs.slice(0, CLI_MAX_IMAGES)
-      : refs.slice(-1)
+    if (!refs.length || message.role !== 'user' || message.source?.kind !== 'user') continue
+    userRefs = refs.slice(0, CLI_MAX_IMAGES)
+    userMessageIndex = index
     break
   }
+  let latestGeneratedRef = null
+  for (let index = messages.length - 1; index > userMessageIndex; index--) {
+    const message = messages[index], refs = []
+    if (message.role === 'user' && message.source?.kind === 'user') continue
+    imageRefs(Array.isArray(message?.content) ? message.content : [], refs)
+    if (refs.length) {
+      latestGeneratedRef = refs.at(-1)
+      break
+    }
+  }
+  const active = latestGeneratedRef
+    ? [...userRefs.slice(0,CLI_MAX_IMAGES-1),latestGeneratedRef]
+    : userRefs.slice(0,CLI_MAX_IMAGES)
   return Promise.all(active.map(async ref => {
     const image = await attachments.readImageRequest(ref, { maxPixels:CLI_REQUEST_IMAGE_MAX_PIXELS, maxBytes:CLI_REQUEST_IMAGE_MAX_BYTES }, signal)
     return `data:${image.mediaType};base64,${Buffer.from(image.data).toString('base64')}`
@@ -185,11 +197,12 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
 }
 
 export class PenEchoCliAdapter extends LlmAdapter {
-  constructor({ callCli = callPenEchoCli, attachments = () => undefined, timeoutMs = () => DEFAULT_CLI_TIMEOUT_MS } = {}) {
+  constructor({ callCli = callPenEchoCli, attachments = () => undefined, timeoutMs = () => DEFAULT_CLI_TIMEOUT_MS, onDiagnostic = () => {} } = {}) {
     super()
     this.callCli = callCli
     this.attachments = attachments
     this.timeoutMs = timeoutMs
+    this.onDiagnostic = typeof onDiagnostic === 'function' ? onDiagnostic : () => {}
     this.routes = new Map()
   }
 
@@ -264,6 +277,17 @@ export class PenEchoCliAdapter extends LlmAdapter {
       signal.throwIfAborted()
       return parseCliDecision(output, (options.tools || []).map(tool => tool.name))
     } catch (error) {
+      if (error?.traceDiagnostic) {
+        try {
+          this.onDiagnostic({
+            sessionId:String(options.sessionId || ''),
+            provider:connection.provider,
+            model:connection.cliModel || options.model || null,
+            error:{ name:String(error.name || 'Error'), message:String(error.message || error), code:error.code || null },
+            traceDiagnostic:String(error.traceDiagnostic),
+          })
+        } catch {}
+      }
       if (controller.signal.aborted && !options.signal?.aborted) throw timeoutError
       throw error
     } finally {

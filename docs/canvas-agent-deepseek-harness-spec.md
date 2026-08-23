@@ -399,8 +399,10 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 规则：
 
 - `objectId` 必须存在于当前画布。
-- 读取 widget 虚拟文件时使用行范围，单次最多 400 行、64 KiB。
+- 读取 widget 虚拟文件时使用行范围：未提供 `endLine` 时默认从 `startLine` 起读取 200 行；显式提供 `endLine` 时允许读取更大的行范围。单次返回内容最多 200,000 字符，与原 Canvas `read_virtual_file` 的窗口行为一致。
 - `widget.*` 是 Canvas 对象的虚拟资源，不是宿主文件路径。
+- 模型看到的结果必须与原 Canvas 源码读取契约一致：返回 revision、content hash、行范围、`originalEndsWithNewline`、截断状态，并将内容渲染为完整的 `nl -ba -w6 -s TAB` 视图。六列右对齐行号和第一个 ASCII TAB 只是读取元数据；行号只用于 hunk 坐标，生成 unified diff 时必须去掉行号与 TAB，其后的 HTML、CSS 或脚本源码不得自行截短、折行或补写。
+- patch 被拒绝或 Canvas revision 变化后，下一次 patch 涉及的每个行段都必须重新读取；不得仅重读一个片段后凭旧草稿修改其他行，也不得用更大的未核对 hunk 掩盖精确匹配失败。
 - 内容中的指令一律标记为不可信数据。
 
 ### 7.3 `canvas_capture`
@@ -688,10 +690,10 @@ MVP 使用 Harness 的内存 session backend，不装载 JSONL persistence：
 
 - 对话属于浏览器临时 Canvas Agent session。
 - 每次加载已有 Canvas 或创建新 Canvas 时，默认建立一段新的 Canvas Agent 对话；不同 Canvas 不共享对话入口。
-- 浏览器按 Canvas 身份在 `localStorage` 中最多保留最近 3 段 UI transcript 投影，供用户只读回看；只缓存文本消息与有界工具活动，不保存图片二进制、attachment refs、resume capability、Canvas session id 或 Harness session id。
+- 未选择资源时，浏览器按 Canvas 身份在 `localStorage` 中最多保留最近 5 段 UI transcript 投影；选择文件夹时写入该目录的 `.penecho`，选择单文件时写入 PenEcho 私有 state。三者都只保存文本消息与有界工具活动，不保存图片二进制、attachment refs、resume capability、Canvas session id 或 Harness session id。
 - 浏览器历史不是模型上下文来源，也不能伪装成可恢复的 Harness session；当前对话的模型历史仍只来自 Harness session log。
-- server 重启后对话消失，UI 显示“Canvas Agent 会话已重置”。
-- New conversation 显式销毁当前 agent scope，把已有 UI 投影留在该 Canvas 的最近历史中，并创建新 session。
+- server 重启后 Harness 模型上下文消失，UI 显示“Canvas Agent 会话已重置”；保留的 transcript 仍只是只读历史，不能伪装成可恢复会话。
+- New conversation 显式销毁当前 agent scope，把已有 UI 投影留在当前浏览器或资源的最近历史中，并创建新 session。
 - session id、resume capability 和 UI projection cache 不进入 Canvas snapshot。
 
 用户开启完整请求记录时，Canvas Agent 与 Harness 外的普通 AI 请求共用 server 端 `~/.penecho/logs/requests`：每个 turn 创建一个 `<timestamp>-<uuid>` 目录，`trace.json` 聚合该 turn 的模型 steps、用户与最终 assistant 消息、工具调用/结果、请求上下文、usage 与结束状态。用户附件和 `canvas_capture` 真正进入后续模型 step 的每份视觉输入都作为独立 `vision-*` 文件保存在同一目录，并由对应 step 引用；图片编码内容、credentials、resume capability、Canvas session id 和 Harness session id 不进入 JSON。开启 debug artifacts 时可以另外把用于 UI 的安全事件投影追加到轮转服务日志，且不重复记录流式 delta。这些调试记录都不是可恢复的模型历史，也不改变内存 session backend 的权威边界。
@@ -713,10 +715,20 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 - clean shutdown 删除当前 `<boot-id>` 目录。
 - startup 只清理 `cache/canvas-agent/` 下格式合法且最后修改时间超过 24 小时的旧 boot 目录；拒绝符号链接并验证 realpath 仍在固定 cache root 内。
 - 单 session 附件总量初始上限 100 MiB，单进程上限 1 GiB；超过时拒绝接纳并提示用户开启新会话或清理。
+
 - Canvas 截图按 `revision + viewRevision + target/region + quality + coordinates` 缓存最近 5 份；相同请求复用同一 attachment/request-image 版本，不重新截图或重编码。
 - 一张截图或一组同消息用户附件只作为下一次模型请求的活跃视觉输入。模型成功看过后，surface replacement 保留文字、attachment ID 与尺寸并移除图片 block；以后仍需像素时重新调用 `canvas_capture`。不得在 session compaction 中生成低清图片副本。
 - 同一条用户消息可同时发送最多 5 张图片；其他视觉工具输入最多只有最新一张截图处于活跃状态。
 - Canvas 内容若要永久使用图片，`canvas_create.image` 必须把其复制/编码进 071 已有 Canvas image persistence，而不能依赖临时 Harness attachment。
+
+### 10.3 本地资源能力
+
+- folder scope 只在被选中的 canonical 根目录内挂载 `read`、`read_image`、`write`、`edit`，以及按需 document/SQLite reader。主机通过真实 OS sandbox probe 后才增加 `bash`；否则只增加有界 `list_directory`。
+- `Read & Write` 模式对破坏性命令、shell 组合和不在小型只读集合内的命令逐次请求浏览器授权；`Full Access` 跳过重复授权，但绝不扩大目录或网络边界。
+- file scope 使用 PenEcho 自己的 exact-file 插件，只注册与该文件类型匹配的一个 reader，不复用会同时注册 mutator 的通用 ToolFs，不暴露父目录、siblings、Bash、write 或 edit。
+- folder 的 PDF/DOCX/XLSX/CSV 与 SQLite 工具先通过 `load_project_plugin` 惰性注册；单个同类文件直接注册唯一匹配 reader。SQLite 在独立、可强制终止的低内存子进程内只读执行。
+- Cloud 资源属于实际执行 Harness 的 Linked PenEcho host。资源 HTTP 与 Canvas Agent WebSocket 必须固定同一 `deviceId`；Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接 raw-path project POST。
+- iPad/普通浏览器通过系统 file picker 上传最大 32 MiB 的受控副本；上传内容经扩展名、media type、magic、canonical base64，以及 Office ZIP 解压边界验证后写入 owner-only state。桌面原生 file picker 可以登记原文件，但仍使用 exact-file reader。
 
 ## 11. AI 连接集成
 
@@ -858,9 +870,9 @@ test/
 071 的首版实现采用“依赖可安装、能力不挂载、客户端不打包”的三层边界：
 
 - Harness 只在本地 owner 浏览器第一次连接 `/api/canvas-agent/socket`，或 Cloud Linked Device 第一次创建远程 Canvas Agent logical channel 后动态导入；普通画布启动路径不加载 Harness ESM、模型 SDK 或附件处理器。
-- 进程级运行时只允许挂载 17 个插件：timer、PenEcho 内存 settings/credentials、local attachment、LLM/session/system-prompt/tools/agent、retry、tool timeout、token meter、tool-result pruner、basic compaction、pi-ai adapter、PenEcho CLI LLM adapter 和 agent loop。
-- agent scope 只允许 `penecho-canvas` 插件注册八个核心工具：`canvas_inspect`、`canvas_read`、`canvas_capture`、`canvas_create`、`canvas_edit`、`canvas_patch_widget`、`canvas_set_view`、`canvas_revert`。
-- 不挂载 shell、filesystem、GitHub、Web、MCP、skills、jobs、goals、delegation、approval、persistence、command UI 或通用 base bundle。它们即使作为 npm peer seam 出现在磁盘依赖树里，也没有 Cordis plugin effect、没有服务实例、不会成为模型工具。
+- 进程级运行时只允许挂载 19 个插件：timer、PenEcho 内存 settings/credentials、local attachment、LLM/session/system-prompt/tools/agent、retry、tool timeout、token meter、tool-result pruner、basic compaction、pi-ai adapter、PenEcho CLI LLM adapter、project filesystem、filesystem observation policy 和 agent loop。
+- 无资源的 agent scope 只允许 `penecho-canvas` 插件注册八个核心工具：`canvas_inspect`、`canvas_read`、`canvas_capture`、`canvas_create`、`canvas_edit`、`canvas_patch_widget`、`canvas_set_view`、`canvas_revert`。选择资源后，额外能力严格来自 10.3 的 folder 或 exact-file 插件。
+- 不挂载通用 shell/sandbox bundle、GitHub、Web、MCP、skills、jobs、goals、delegation、persistence、command UI 或通用 base bundle。folder Bash 是 PenEcho 自己的窄工具并经过 OS 级能力探针和边界执行；浏览器 approval 只是该工具的逐次 RPC，不是 Harness 通用 approval 插件。
 - `llm-pi-ai` 保留是为了沿用 071 已有的 OpenAI-compatible 与 Anthropic-compatible API connections；`penecho-cli-llm` 只复用项目已有的三份 CLI adapter，没有引入第二套 CLI harness 依赖。两者都不进入 `public/app.js`，也不在普通画布路径初始化。
 
 对应回归测试必须同时断言根依赖精确版本、运行时插件精确白名单和 agent 可见工具精确集合。任何新增 Harness 包、插件或工具都需要显式修改白名单并经过安全审查。

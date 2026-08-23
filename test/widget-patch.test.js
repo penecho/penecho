@@ -611,6 +611,67 @@ test("widget patch rejects location drift even when jsdiff could find matching t
   assert.equal(commandFromWidgetPatch(patchCommand(patch), widgetEdit), null);
 });
 
+test("widget patch diagnoses shortened long-line context and incomplete HTML tags", () => {
+  const widgetEdit = htmlEdit({
+      html:[
+        "<section>",
+        "  <canvas id=\"c\" width=\"1100\" height=\"560\"></canvas>",
+        "  <div class=\"legend\"><span>Re(ψ)</span><span>|ψ|²</span></div>",
+        "  </ol>",
+        "  <canvas id=\"w\" width=\"1100\" height=\"430\"></canvas>",
+        "  <div class=\"chips\">",
+        "</section>",
+        "",
+      ].join("\n"),
+      source:"",
+      sourceFormat:"",
+    }),
+    shortenedLongLine = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -1,3 +1,3 @@",
+      " <section>",
+      "-  <canvas id=\"c\" width=\"1100\" height=\"560\"></canvas>",
+      "+  <canvas id=\"c\" width=\"1100\" height=\"480\"></canvas>",
+      "   <div class=\"legend\">",
+      "",
+    ].join("\n"),
+    unchangedMainCanvasDiagnostics = {},
+    shortenedDiagnostics = {includeLocationDetails:true};
+  assert.equal(commandFromWidgetPatch(patchCommand(shortenedLongLine),widgetEdit,unchangedMainCanvasDiagnostics),null);
+  assert.deepEqual(unchangedMainCanvasDiagnostics,{});
+  assert.equal(commandFromWidgetPatch(patchCommand(shortenedLongLine),widgetEdit,shortenedDiagnostics),null);
+  assert.deepEqual(shortenedDiagnostics,{
+    includeLocationDetails:true,
+    reason:"context-mismatch",
+    path:"widget.html",
+    hunk:1,
+    oldStart:1,
+    sourceLine:3,
+    submittedLine:'  <div class="legend">',
+    currentLine:'  <div class="legend"><span>Re(ψ)</span><span>|ψ|²</span></div>',
+  });
+
+  const incompleteTag = [
+      "--- a/widget.html",
+      "+++ b/widget.html",
+      "@@ -4,3 +4,3 @@",
+      "   </ol>",
+      "-  <canvas id=\"w\" width=\"1100\" height=\"430\">",
+      "+  <canvas id=\"w\" width=\"1100\" height=\"360\">",
+      "   <div class=\"chips\">",
+      "",
+    ].join("\n"),
+    tagDiagnostics = {includeLocationDetails:true};
+  assert.equal(commandFromWidgetPatch(patchCommand(incompleteTag),widgetEdit,tagDiagnostics),null);
+  assert.equal(tagDiagnostics.reason,"context-mismatch");
+  assert.equal(tagDiagnostics.path,"widget.html");
+  assert.equal(tagDiagnostics.hunk,1);
+  assert.equal(tagDiagnostics.sourceLine,5);
+  assert.equal(tagDiagnostics.submittedLine,'  <canvas id="w" width="1100" height="430">');
+  assert.equal(tagDiagnostics.currentLine,'  <canvas id="w" width="1100" height="430"></canvas>');
+});
+
 test("widget patch strips non-diff boundary lines but rejects unsafe envelopes and full replacements", () => {
   const validHunk = "@@ -3,3 +3,3 @@\n <body>\n-<h1>Old</h1>\n+<h1>New</h1>\n <p>Keep</p>\n",
     rejected = [

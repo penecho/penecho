@@ -9,7 +9,10 @@
   const isCommunityCraft = Boolean(requestedCommunityItemId);
 
   const nativeFetch = window.fetch.bind(window);
+  const nativeWebSocket = window.WebSocket;
   const cloudRuntime = window.PENECHO_CONFIG?.runtime === "cloud";
+  const deviceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  let bridgeDeviceId = "";
   let resolveBridgeGate = null;
   let bridgeGateSettled = !cloudRuntime;
   const bridgeGate = cloudRuntime
@@ -32,6 +35,7 @@
   const bridgedPaths = [
     /^\/api\/settings(?:\/|$)/,
     /^\/api\/favorites(?:\/|$)/,
+    /^\/api\/canvas-agent\/(?:projects|roots|files)(?:\/|$)/,
     /^\/api\/canvas-projects(?:\/|$)/,
     /^\/api\/canvases(?:\/|$)/,
     /^\/api\/cloud(?:\/|$)/,
@@ -41,6 +45,27 @@
     /^\/canvas\/plugins\/private\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:plugin\.md|styles\.css)|\.md)$/,
   ];
   const nativeCloudPaths = new Set(["/api/ai/command", "/api/plugins/improve"]);
+
+  function canvasAgentWebSocketTarget(value) {
+    if (!bridgeDeviceId) return value;
+    try {
+      const target = new URL(String(value), location.href), page = new URL(location.href);
+      const expectedProtocol = page.protocol === "https:" ? "wss:" : "ws:";
+      if (target.protocol !== expectedProtocol || target.host !== page.host || target.pathname !== "/api/v1/remote-canvas/canvas-agent") return value;
+      target.searchParams.set("deviceId", bridgeDeviceId);
+      return target.toString();
+    } catch { return value; }
+  }
+
+  if (typeof nativeWebSocket === "function") {
+    window.WebSocket = class PenEchoRemoteCanvasWebSocket extends nativeWebSocket {
+      constructor(url, protocols) {
+        const target = canvasAgentWebSocketTarget(url);
+        if (arguments.length > 1) super(target, protocols);
+        else super(target);
+      }
+    };
+  }
 
   function cookie(name) {
     const prefix = `${encodeURIComponent(name)}=`;
@@ -69,10 +94,12 @@
       : sourceUrl.pathname.startsWith("/canvas/plugins/private/")
         ? sourceUrl.pathname.slice("/canvas".length)
         : sourceUrl.pathname;
-    const target = shouldBridge
-      ? `/api/v1/remote-canvas/http?path=${encodeURIComponent(`${bridgePath}${sourceUrl.search}`)}`
-      : `${sourceUrl.pathname}${sourceUrl.search}`;
-    const request = () => nativeFetch(target, { ...options, method, headers, credentials:"same-origin" });
+    const request = () => {
+      const target = shouldBridge
+        ? `/api/v1/remote-canvas/http?path=${encodeURIComponent(`${bridgePath}${sourceUrl.search}`)}${bridgeDeviceId ? `&deviceId=${encodeURIComponent(bridgeDeviceId)}` : ""}`
+        : `${sourceUrl.pathname}${sourceUrl.search}`;
+      return nativeFetch(target, { ...options, method, headers, credentials:"same-origin" });
+    };
     if (!shouldBridge || !cloudRuntime) return request();
     return bridgeGate.then((state) => state?.online ? request() : unavailableBridgeResponse(state));
   };
@@ -162,6 +189,7 @@
     const detail = Object.freeze({
       accountName:String(result.account?.name || "").slice(0, 100),
       deviceOnline:Boolean(result.device?.online),
+      deviceId:bridgeDeviceId,
     });
     window.PENECHO_REMOTE_CLOUD_STATUS = detail;
     if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") {
@@ -192,6 +220,7 @@
       }
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || `HTTP ${response.status}`);
+      bridgeDeviceId = deviceIdPattern.test(String(result.device?.id || "")) ? String(result.device.id) : "";
       publishCloudHeaderStatus(result);
       if (!result.device) {
         settleBridgeGate({ online:false, message:copy.unavailable });

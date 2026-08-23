@@ -116,6 +116,9 @@
           </div>
           </div>
           <div class="mode-tools">
+            <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
+            </button>
             <button id="handToolBtn" data-mode="hand" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="hand" aria-label="Hand tool: move canvas and objects" data-i18n-title="hand" title="Hand tool: move canvas and objects">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v8"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M6 13.5 5.9 12a2 2 0 0 0-4 0c0 .7.1 1.5.2 2l.8 5a6 6 0 0 0 6 5h2a8 8 0 0 0 8-8v-5a2 2 0 1 0-4 0v1"/></svg>
             </button>
@@ -176,9 +179,6 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"/><path d="M20 12h-9a6 6 0 0 0-6 6"/></svg>
           </button>
           <span class="view-tools">
-            <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
-            </button>
             <button id="fullscreenBtn" class="icon-button" type="button" data-i18n-aria="fullscreen" aria-label="Fullscreen" data-i18n-title="fullscreen" title="Fullscreen" aria-pressed="false">
               <svg class="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
               <svg class="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8H3V3M16 8h5V3M8 16H3v5M16 16h5v5"/></svg>
@@ -400,11 +400,29 @@
           <header id="canvasAgentHead" class="canvas-agent-head" data-i18n-title="canvasAgentMove" title="Drag to move Canvas Agent">
             <span class="canvas-agent-mark" aria-hidden="true"></span>
             <div><strong data-i18n="canvasAgent">Canvas Agent</strong><small id="canvasAgentStatus" data-i18n="canvasAgentReadyConnect">Ready to connect</small></div>
+            <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Choose project or file" data-i18n-aria="canvasAgentProject" aria-label="Choose project or file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg><span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">Browser</span></button>
             <button id="canvasAgentHistory" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="canvasAgentHistoryPopover" data-i18n-title="canvasAgentHistory" title="Canvas Agent history" data-i18n-aria="canvasAgentHistory" aria-label="Canvas Agent history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5M4 4v4.5h4.5"/><path d="M12 8v4l2.5 1.5"/></svg></button>
             <button id="canvasAgentSize" class="canvas-agent-size" type="button" data-i18n-title="canvasAgentResize" title="Change Canvas Agent height" data-i18n-aria="canvasAgentResize" aria-label="Change Canvas Agent height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4M12 5v14M8 15l4 4 4-4"/></svg></button>
             <button id="canvasAgentNew" type="button" data-i18n-title="newCanvasAgentConversation" title="New Canvas Agent conversation" data-i18n-aria="newCanvasAgentConversation" aria-label="New Canvas Agent conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
             <button id="canvasAgentClose" type="button" data-i18n-title="closeCanvasAgent" title="Close Canvas Agent" data-i18n-aria="closeCanvasAgent" aria-label="Close Canvas Agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </header>
+          <section id="canvasAgentProjectPopover" class="canvas-agent-project-popover" role="dialog" data-i18n-aria="canvasAgentProject" aria-label="Choose project or file" hidden>
+            <header><div><strong data-i18n="canvasAgentProject">Choose project or file</strong><small data-i18n="canvasAgentProjectBoundary">Folders and single files are read-only.</small></div><button id="canvasAgentProjectClose" type="button" data-i18n-aria="canvasAgentProjectClose" aria-label="Close project chooser">×</button></header>
+            <div id="canvasAgentProjectList" class="canvas-agent-project-list"></div>
+            <div class="canvas-agent-project-actions">
+              <button id="canvasAgentProjectAddFile" class="canvas-agent-project-add" type="button" data-i18n="canvasAgentAddProjectFile">Add local file</button>
+              <button id="canvasAgentProjectUpload" class="canvas-agent-project-add" type="button" data-i18n="canvasAgentUploadFile">Upload file</button>
+              <input id="canvasAgentProjectUploadInput" type="file" accept=".pdf,.docx,.xlsx,.csv,.db,.sqlite,.sqlite3,.png,.jpg,.jpeg,.webp,.gif,.txt,.text,.md,.markdown,.mdx,.rst,.adoc,.log,.json,.jsonc,.jsonl,.ndjson,.yaml,.yml,.toml,.ini,.cfg,.conf,.config,.properties,.env,.xml,.xsd,.svg,.html,.htm,.css,.scss,.sass,.less,.js,.jsx,.mjs,.cjs,.ts,.tsx,.mts,.cts,.py,.pyi,.rb,.php,.java,.kt,.kts,.go,.rs,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.scala,.swift,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.sql,.graphql,.gql,.proto,.vue,.svelte,.astro,.tex,.lock,.diff,.patch" hidden>
+            </div>
+            <section id="canvasAgentProjectRoots" class="canvas-agent-project-roots" hidden>
+              <header><button id="canvasAgentProjectRootBack" type="button" data-i18n-aria="canvasAgentRootBack" aria-label="Back" hidden>←</button><strong id="canvasAgentProjectRootPath" data-i18n="canvasAgentServerFolders">Server folders</strong></header>
+              <small data-i18n="canvasAgentServerFoldersDetail">Folders shared by this PenEcho host</small>
+              <div id="canvasAgentProjectRootList" class="canvas-agent-project-root-list"></div>
+              <button id="canvasAgentProjectRootSelect" class="canvas-agent-project-root-select" type="button" data-i18n="canvasAgentRootSelect" hidden>Use this folder</button>
+              <small id="canvasAgentProjectRootTruncated" class="canvas-agent-project-root-truncated" data-i18n="canvasAgentRootTruncated" hidden>Some folders are not shown.</small>
+            </section>
+            <p id="canvasAgentProjectError" class="canvas-agent-project-error" role="alert" hidden></p>
+          </section>
           <div id="canvasAgentHistoryPopover" class="canvas-agent-history-popover" role="menu" data-i18n-aria="canvasAgentHistory" aria-label="Canvas Agent history" hidden>
             <div id="canvasAgentHistoryList" class="canvas-agent-history-list"></div>
           </div>
@@ -417,6 +435,12 @@
           </div>
           <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
           <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Image attachments" hidden></div>
+          <section id="canvasAgentApproval" class="canvas-agent-approval" role="alertdialog" aria-modal="false" data-i18n-aria="canvasAgentApproval" aria-label="Authorize project command" hidden>
+            <strong data-i18n="canvasAgentApprovalTitle">Authorize critical command?</strong>
+            <span id="canvasAgentApprovalReason"></span>
+            <pre id="canvasAgentApprovalCommand"></pre>
+            <div><button id="canvasAgentApprovalReject" type="button" data-i18n="canvasAgentApprovalReject">Reject</button><button id="canvasAgentApprovalAllow" type="button" data-i18n="canvasAgentApprovalAllow">Allow once</button></div>
+          </section>
           <form id="canvasAgentForm" class="canvas-agent-composer">
             <p id="canvasAgentInputHint" class="canvas-agent-input-hint" data-i18n="canvasAgentInputHint">Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.</p>
             <textarea id="canvasAgentInput" rows="2" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask Canvas Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message Canvas Agent" aria-describedby="canvasAgentInputHint"></textarea>

@@ -256,6 +256,10 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(preload, /copyText/);
   assert.match(canvasPreload, /penechoDesktopUpdate/);
   assert.match(canvasPreload, /installCli:provider => ipcRenderer\.invoke\("penecho:install-cli", provider\)/);
+  assert.match(canvasPreload, /pickProjectDirectory:\(\) => ipcRenderer\.invoke\("penecho:pick-project-directory"\)/);
+  assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
+  assert.match(main, /showOpenDialog\(mainWindow,[\s\S]*?properties:\["openDirectory", "createDirectory"\]/);
+  assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);
   assert.doesNotMatch(canvasPreload, /openSettings/);
   assert.match(canvasPreload, /process\.platform !== "win32"/);
   assert.match(canvasPreload, /What's new/);
@@ -265,6 +269,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /\["api", "kimi"\]\.includes\(normalized\.provider\)/);
   assert.match(main, /if \(!configurationIsReady\(loaded\)\) \{\s*showSettings\(\);\s*return;/);
   assert.match(main, /label:"Settings…"[\s\S]*?click:showSettings/);
+  assert.match(main, /function showSettings\(\) \{\s*const parent = mainWindow && !mainWindow\.isDestroyed\(\) \? mainWindow : null;[\s\S]*?getParentWindow\(\) !== parent[\s\S]*?setParentWindow\(parent\)[\s\S]*?new BrowserWindow\(secureWindowOptions\(\{\s*\.\.\.\(parent \? \{ parent \} : \{\}\),/);
   assert.match(main, /if \(!fromCanvas\(event\) && !fromSetup\) return \{ ok:false/);
   assert.match(main, /window\.loadFile\(SETTINGS_FILE\)\.then\(reveal\)/);
   assert.match(main, /settingsReadyToLaunch = true;[\s\S]*?ok:false,[\s\S]*?saved:true/);
@@ -349,6 +354,31 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(html, /platform\.kimi\.com\?aff=penecho/);
   assert.match(html, /platform\.kimi\.ai\?aff=penecho/);
   assert.match(html, /Content-Security-Policy/);
+});
+
+test("desktop Canvas file picker is sender-guarded, single-file, and type-limited", () => {
+  const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8"),
+    canvasPreload = fs.readFileSync(path.join(ROOT, "desktop", "canvas-preload.js"), "utf8"),
+    handler = main.match(/ipcMain\.handle\("penecho:pick-project-file", async event => \{([\s\S]*?)\n  \}\);/)?.[1] || "",
+    folderHandler = main.match(/ipcMain\.handle\("penecho:pick-project-directory", async event => \{([\s\S]*?)\n  \}\);/)?.[1] || "";
+
+  assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
+  assert.match(handler, /if \(!fromCanvas\(event\)\) return \{ canceled:true \}/);
+  assert.match(handler, /dialog\.showOpenDialog\(mainWindow, \{/);
+  assert.match(handler, /properties:\["openFile"\]/);
+  assert.doesNotMatch(handler, /multiSelections/);
+  assert.match(handler, /name:"Documents", extensions:\["pdf", "docx", "xlsx", "csv"\]/);
+  assert.match(handler, /name:"SQLite databases", extensions:\["db", "sqlite", "sqlite3"\]/);
+  assert.match(handler, /name:"Images", extensions:\["png", "jpg", "jpeg", "webp", "gif"\]/);
+  assert.match(handler, /name:"Text, source, and configuration"/);
+  for (const extension of ["txt", "md", "mdx", "jsonc", "jsonl", "yaml", "svg", "ts", "mts", "py", "pyi", "scala", "bat", "sql", "proto", "astro", "toml", "conf", "diff"]) {
+    assert.match(handler, new RegExp(`"${extension}"`));
+  }
+  assert.doesNotMatch(handler, /name:"All files"|extensions:\["\*"\]/);
+  assert.match(handler, /if \(result\.canceled \|\| !selectedPath\) return \{ canceled:true \}/);
+  assert.match(handler, /pickerToken:issueNativePickerGrant\(\{ selectedPath, kind:"file" \}\)/);
+  assert.match(folderHandler, /if \(!fromCanvas\(event\)\) return \{ canceled:true \}/);
+  assert.match(folderHandler, /pickerToken:issueNativePickerGrant\(\{ selectedPath, kind:"folder" \}\)/);
 });
 
 test("desktop build dependencies are isolated from normal root installs", () => {

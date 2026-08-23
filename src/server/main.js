@@ -32,6 +32,8 @@ const { CloudConnector, cloudAiConnectionHeaders } = require("./cloud-connector.
 const { createRemoteCanvasHttpExecutor } = require("./remote-canvas-http.js");
 const { attachCanvasAgent } = require("./canvas-agent/http.js");
 const { createCanvasAgentRequestTracer } = require("./canvas-agent/request-trace.js");
+const { CanvasAgentProjectStore } = require("./canvas-agent/project-store.js");
+const { consumeNativePickerGrant } = require("./canvas-agent/native-picker-grants.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
 let sharp = null;
@@ -44,6 +46,52 @@ const STATE_DIRECTORY = process.env.PENECHO_STATE_DIR ? path.resolve(process.env
 const CLOUD_STATE_DIRECTORY = process.env.PENECHO_CLOUD_STATE_DIR
   ? path.resolve(process.env.PENECHO_CLOUD_STATE_DIR)
   : STATE_DIRECTORY || path.join(os.homedir(), ".penecho");
+function canvasAgentAllowedRoots(value) {
+  const source = String(value || "").trim();
+  if (!source) return [];
+  let parsed;
+  try { parsed = JSON.parse(source); }
+  catch { throw new Error("PENECHO_CANVAS_AGENT_ALLOWED_ROOTS must be a JSON array."); }
+  if (!Array.isArray(parsed) || parsed.length > 32) throw new Error("PENECHO_CANVAS_AGENT_ALLOWED_ROOTS must contain at most 32 entries.");
+  return parsed.map((entry) => {
+    const selectedPath = typeof entry === "string" ? entry : entry?.path, name = typeof entry === "object" ? entry?.name : "";
+    if (typeof selectedPath !== "string" || !selectedPath || selectedPath.length > 4096 || selectedPath.includes("\0") || !path.isAbsolute(selectedPath)) {
+      throw new Error("Every Canvas Agent allowed root must use an absolute local path.");
+    }
+    if (name !== undefined && (typeof name !== "string" || name.length > 120 || /[\0\r\n/\\]/.test(name))) {
+      throw new Error("Canvas Agent allowed root names must be short plain labels.");
+    }
+    return typeof entry === "string" ? selectedPath : { path:selectedPath, ...(name ? { name } : {}) };
+  });
+}
+const CANVAS_AGENT_PUBLIC_PROJECT_ERROR_CODES = new Set([
+  "project_changed", "project_file_content_invalid", "project_file_name_invalid", "project_file_too_large",
+  "project_file_type_invalid", "project_file_unreadable", "project_invalid", "project_limit", "project_metadata_invalid",
+  "project_not_found", "project_root_escape", "project_root_invalid", "project_root_kind_invalid", "project_root_not_found",
+  "project_root_path_invalid", "project_root_unreadable", "project_unavailable", "project_upload_failed",
+  "project_upload_identity_invalid", "project_upload_invalid", "project_upload_too_large",
+]);
+function canvasAgentResourceErrorExposesAbsolutePath(value) {
+  return /(?:^|[\s("'`=])(?:\/[^\s"'`]+|[A-Za-z]:[\\/][^\s"'`]+|\\\\[^\\\s"'`]+\\[^\s"'`]*)/.test(String(value || ""));
+}
+function publicCanvasAgentResourceError(error) {
+  if (error?.message === "Request too large") return { status:413, body:{ error:"The resource request is too large.", code:"project_request_too_large" } };
+  if (error instanceof SyntaxError) return { status:400, body:{ error:"The resource request is invalid.", code:"project_invalid" } };
+  const code = CANVAS_AGENT_PUBLIC_PROJECT_ERROR_CODES.has(error?.code) ? error.code : "project_error",
+    known = code !== "project_error",
+    status = known && Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : 500,
+    safeMessage = known && typeof error?.message === "string" && !canvasAgentResourceErrorExposesAbsolutePath(error.message)
+      ? error.message
+      : "Unable to access the Canvas Agent resource.";
+  return { status, body:{ error:safeMessage, code } };
+}
+const CANVAS_AGENT_ALLOWED_ROOTS = canvasAgentAllowedRoots(process.env.PENECHO_CANVAS_AGENT_ALLOWED_ROOTS);
+const CANVAS_AGENT_HOST_ROOTS = [{ name:"Home", path:os.homedir() }, ...CANVAS_AGENT_ALLOWED_ROOTS];
+const CANVAS_AGENT_PROJECT_STORE = new CanvasAgentProjectStore({
+  stateDirectory:STATE_DIRECTORY || CLOUD_STATE_DIRECTORY,
+  allowedRoots:CANVAS_AGENT_ALLOWED_ROOTS,
+  hostRoots:CANVAS_AGENT_HOST_ROOTS,
+});
 const PENECHO_CLOUD_ENV = String(process.env.PENECHO_CLOUD_ENV || "prod").trim().toLowerCase() === "uat" ? "uat" : "prod";
 const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "https://internaltest.penecho.ai" : "https://penecho.ai")).replace(/\/$/, "");
 const PRIVATE_PLUGIN_DIRECTORY = process.env.PENECHO_PRIVATE_PLUGIN_DIR
@@ -3092,6 +3140,92 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort(), canvasAgentSearchConfigured:Boolean(TAVILY_API_KEY) });
+  const canvasAgentProjectMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})$/.exec(url.pathname),
+    canvasAgentProjectHistoryMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})\/history$/.exec(url.pathname),
+    canvasAgentRootEntriesMatch = /^\/api\/canvas-agent\/roots\/(root-[0-9a-f]{24})\/entries$/.exec(url.pathname),
+    canvasAgentHostRootEntriesMatch = /^\/api\/canvas-agent\/host-roots\/(root-[0-9a-f]{24})\/entries$/.exec(url.pathname),
+    canvasAgentResourceRoute = url.pathname === "/api/canvas-agent/projects"
+      || url.pathname === "/api/canvas-agent/projects/from-root"
+      || url.pathname === "/api/canvas-agent/projects/from-host-root"
+      || url.pathname === "/api/canvas-agent/files"
+      || url.pathname === "/api/canvas-agent/roots"
+      || url.pathname === "/api/canvas-agent/host-roots"
+      || canvasAgentProjectMatch || canvasAgentProjectHistoryMatch || canvasAgentRootEntriesMatch || canvasAgentHostRootEntriesMatch;
+  if (canvasAgentResourceRoute) {
+    try {
+      const authorizationError = req.method === "GET" ? sharedCanvasReadError(req) : browserRequestError(req);
+      if (authorizationError) return send(res, 403, { error:authorizationError });
+      if (req.method === "GET" && url.pathname === "/api/canvas-agent/projects") {
+        if (url.search) return send(res, 400, { error:"Project listing does not accept query parameters." });
+        return send(res, 200, { projects:await CANVAS_AGENT_PROJECT_STORE.list() });
+      }
+      if (req.method === "POST" && url.pathname === "/api/canvas-agent/projects") {
+        if (!isJsonRequest(req)) return send(res, 415, { error:"Project selection requires application/json." });
+        const body = await readJson(req, 16 * 1024);
+        if (body?.kind !== "file") return send(res, 403, { error:"Choose folders in the PenEcho project browser.", code:"project_picker_grant_invalid" });
+        if (!consumeNativePickerGrant({ token:body?.pickerToken, selectedPath:body?.path, kind:body?.kind })) {
+          return send(res, 403, { error:"Choose the local file again in the PenEcho desktop app.", code:"project_picker_grant_invalid" });
+        }
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.add(body?.path, { kind:body?.kind, origin:"native" }) });
+      }
+      if (req.method === "POST" && url.pathname === "/api/canvas-agent/projects/from-root") {
+        if (!isJsonRequest(req)) return send(res, 415, { error:"Server project selection requires application/json." });
+        const body = await readJson(req, 16 * 1024);
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromRoot(body?.rootId, body?.path || "") });
+      }
+      if (req.method === "POST" && url.pathname === "/api/canvas-agent/projects/from-host-root") {
+        if (!isJsonRequest(req)) return send(res, 415, { error:"Host project selection requires application/json." });
+        const body = await readJson(req, 16 * 1024);
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromHostRoot(body?.rootId, body?.path || "") });
+      }
+      if (req.method === "POST" && url.pathname === "/api/canvas-agent/files") {
+        if (!isJsonRequest(req)) return send(res, 415, { error:"File upload requires application/json." });
+        const body = await readJson(req, 46 * 1024 * 1024);
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.upload(body) });
+      }
+      if (req.method === "GET" && url.pathname === "/api/canvas-agent/roots") {
+        if (url.search) return send(res, 400, { error:"Server root listing does not accept query parameters." });
+        return send(res, 200, { roots:await CANVAS_AGENT_PROJECT_STORE.listRoots() });
+      }
+      if (req.method === "GET" && url.pathname === "/api/canvas-agent/host-roots") {
+        if (url.search) return send(res, 400, { error:"Host root listing does not accept query parameters." });
+        return send(res, 200, { roots:await CANVAS_AGENT_PROJECT_STORE.listHostRoots() });
+      }
+      if (req.method === "GET" && canvasAgentRootEntriesMatch) {
+        const keys = [...url.searchParams.keys()];
+        if (keys.some(key => key !== "path") || url.searchParams.getAll("path").length > 1) {
+          return send(res, 400, { error:"Server folder browsing accepts one relative path parameter." });
+        }
+        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseRoot(canvasAgentRootEntriesMatch[1], url.searchParams.get("path") || ""));
+      }
+      if (req.method === "GET" && canvasAgentHostRootEntriesMatch) {
+        const keys = [...url.searchParams.keys()];
+        if (keys.some(key => key !== "path") || url.searchParams.getAll("path").length > 1) {
+          return send(res, 400, { error:"Host folder browsing accepts one relative path parameter." });
+        }
+        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseHostRoot(canvasAgentHostRootEntriesMatch[1], url.searchParams.get("path") || ""));
+      }
+      if (req.method === "DELETE" && canvasAgentProjectMatch) {
+        if (url.search) return send(res, 400, { error:"Project removal does not accept query parameters." });
+        await CANVAS_AGENT_PROJECT_STORE.remove(canvasAgentProjectMatch[1]);
+        return send(res, 200, { removed:true });
+      }
+      if (req.method === "GET" && canvasAgentProjectHistoryMatch) {
+        if (url.search) return send(res, 400, { error:"Project history does not accept query parameters." });
+        return send(res, 200, { conversations:await CANVAS_AGENT_PROJECT_STORE.readHistory(canvasAgentProjectHistoryMatch[1]) });
+      }
+      if (req.method === "PUT" && canvasAgentProjectHistoryMatch) {
+        if (url.search) return send(res, 400, { error:"Project history does not accept query parameters." });
+        if (!isJsonRequest(req)) return send(res, 415, { error:"Project history storage requires application/json." });
+        const body = await readJson(req, 16 * 1024 * 1024);
+        return send(res, 200, { conversations:await CANVAS_AGENT_PROJECT_STORE.writeHistory(canvasAgentProjectHistoryMatch[1], body) });
+      }
+      return send(res, 405, { error:"Method Not Allowed" });
+    } catch (error) {
+      const publicError = publicCanvasAgentResourceError(error);
+      return send(res, publicError.status, publicError.body);
+    }
+  }
   if (url.pathname === "/api/favorites") {
     const favoritesError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
     if (favoritesError) return send(res, 403, { error:favoritesError });
@@ -3698,6 +3832,7 @@ const canvasAgent = attachCanvasAgent({
   resolveConnection:id=>findConnection(connectionStore(),String(id||"default")),
   listConnections:()=>{const store=connectionStore();return[store.defaultConnection,...store.connections]},
   resolveWebSearch:()=>({ provider:"tavily", apiKey:TAVILY_API_KEY || "" }),
+  resolveProject:id=>CANVAS_AGENT_PROJECT_STORE.resolve(id, { touch:true }),
   stateDirectory:STATE_DIRECTORY||CLOUD_STATE_DIRECTORY,
   rootDirectory:ROOT,
   modelTimeoutMs:()=>MODEL_TIMEOUT_MS,

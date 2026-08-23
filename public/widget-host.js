@@ -22,7 +22,7 @@
     })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
     visualExplainerVendorUrl = new URL("visual-explainer-vendor.js?v=0.2.20", location.href).href,
-    visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=2", location.href).href,
+    visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     cloudCsrf = remoteCanvas ? document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || "" : "",
     publicFetchUrl = remoteCanvas ? new URL("/api/v1/remote-canvas/http?path=%2Fapi%2Fwidget-fetch", location.href).href : new URL("api/widget-fetch", location.href).href,
@@ -966,8 +966,19 @@
     }
   }
 
-  function csp() {
-    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+  function csp(allowNestedFrames = false) {
+    const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+  }
+
+  function visualExplainerAllowsNestedFrames(planElement) {
+    if (!planElement) return false;
+    try {
+      const plan = JSON.parse(planElement.textContent || "");
+      return Array.isArray(plan?.regions) && plan.regions.some(region => region?.renderer === "embedded-html");
+    } catch {
+      return false;
+    }
   }
 
   function safeHttpsResource(element, attribute) {
@@ -1122,9 +1133,10 @@
       if (!safeHttpsResource(element, "src")) element.removeAttribute("src");
     });
     parsed.querySelectorAll("a[href]").forEach(safeOutboundLink);
+    const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp();
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan));
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1140,7 +1152,6 @@
     const bridgeStyle = parsed.createElement("style");
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     parsed.head.append(bridgeStyle);
-    const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
     if (visualPlan) {
       const visualReady = parsed.createElement("script");
       visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{if(sent||!visual||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;

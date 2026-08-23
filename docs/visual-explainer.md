@@ -16,25 +16,41 @@ For a mixed request, the dominant deliverable wins. Teaching copy around BPMN re
 
 ## Contract
 
-The model supplies a versioned `VisualExplainerPlan`, not renderer source. A plan contains:
+The model supplies the single current `VisualExplainerPlan` as a JSON object, not a JSON-encoded string and not renderer source. A plan contains:
 
 - `intent`: `explain`, `organize`, or `plan`;
 - a title, optional subtitle, takeaways, and annotations;
-- one to eight semantic sections;
-- section kinds such as `flow`, `timeline`, `hierarchy`, `relationship`, `comparison`, `cards`, `metrics`, `schedule`, `table`, `map`, `notes`, or `matrix`;
-- items, optional parent references, and optional links.
+- one to eight regions placed on a responsive 12-column layout;
+- semantic renderers such as `flow`, `timeline`, `hierarchy`, `relationship`, `comparison`, `cards`, `metrics`, `schedule`, `table`, `map`, `notes`, or `matrix`;
+- semantic items, optional parent references, and optional local links;
+- optional named ports and cross-region relations;
+- optional isolated `embedded-html` artifacts when semantic renderers are insufficient;
+- explicit typography and theme settings.
 
-The plan cannot contain coordinates, CSS, SVG, AntV syntax, or template names. PenEcho validates string lengths, collection limits, unique identifiers, parent references, links, and a maximum of 64 total items at both the Canvas Agent boundary and the browser boundary.
+Semantic regions cannot contain CSS, SVG, JavaScript, AntV syntax, or template names. Custom source is permitted only inside an `embedded-html` artifact. PenEcho validates string lengths, collection limits, unique identifiers, layout bounds, parent references, ports, relations, artifacts, and a maximum of 64 total semantic items at both the Canvas Agent boundary and the browser boundary.
+
+## Spatial planning and evidence
+
+Spatial Widget work uses separate evidence for composition and readability:
+
+- On a nonempty Canvas, Canvas Agent inspects exact object bounds and captures the complete content bounds before it creates, moves, resizes, deletes, or arranges a Widget.
+- `canvas_inspect.plannedWidget` accepts the intended width, height, source typography, and placement preference. It returns a collision-aware box, a pinned `createPlacement`, whether the box lies outside the current viewport, the unobscured screen stage beside the Agent panel, the focused scale, predicted screen typography, nearby objects, and a suggested region capture.
+- Auto placement searches the current viewport first. If no clear slot fits, it uses the nearest clear location elsewhere inside the 20000×20000 logical Canvas; the created Widget is then automatically framed for the user.
+- A complete-Canvas layout capture uses automatic bounded compression: a 1024px long edge, at most 520,000 pixels, initial WebP quality 0.72, and at most 700 KiB. Detail evidence is limited to a 1440px long edge, 1,800,000 pixels, and 1200 KiB. Encoding keeps reducing the raster until the byte cap is met or rejects the capture; the server independently verifies encoded bytes and decoded dimensions before exposing it to the model.
+- Logical coordinates and output raster size are independent. Capturing a region at a large `x` or `y` changes only its exact logical/pixel transform; only the region width and height participate in sampling, so even far-away or whole-content captures cannot exceed the policy.
+- After Widget creation or a geometry change, another complete-Canvas capture is mandatory before object detail or a further mutation. A viewport capture verifies final user-visible framing; tight object or region evidence verifies local detail.
+
+Meaningful body copy targets about 15 screen pixels in a focused view. Body copy below about 11 screen pixels needs visual evidence, and compact labels may reach 8 screen pixels only when contrast and rendered pixels remain clear. These are role-aware review targets, not instructions to enlarge every label or squeeze a long document into one screen.
 
 ## Rendering pipeline
 
 1. Canvas Agent selects Visual Explainer when a rich visual composition materially improves comprehension.
 2. `canvas_create_visual_explainer` validates the semantic plan.
 3. PenEcho creates one General HTML Widget and stores the normalized plan as copyable JSON.
-4. The local renderer resolves exact presentation forms. AntV Infographic 0.2.20 renders sequence and hierarchy panels plus directional relationship cards; deterministic native components render schedules, tables, routes, matrices, notes, metrics, and fallback cards.
-5. The responsive layout packs sections into one, two, or three columns according to the current Widget width, aspect ratio, importance, and section count. Primary sections stay full-width; supporting sections fill complete rows without dead grid columns. A debounced `ResizeObserver` recomputes the layout and rerenders AntV in horizontal or vertical form when either Widget axis changes.
-6. Typography uses a Canvas-readable fluid scale with stable lower bounds. `compact` and `dense` modes first reduce spacing and secondary detail instead of shrinking body text into illegibility. Native cards and matrices center their useful content rather than stretching sparse boxes across an entire panel.
-7. The renderer tries `comfortable`, `compact`, then `dense` layout at most once each. It checks Widget overflow, panel bounds, panel size, clipped content, AntV warnings, and AntV errors.
+4. The local renderer resolves exact presentation forms. AntV Infographic 0.2.20 renders sequence, hierarchy, and directional relationship regions; deterministic native components render schedules, tables, routes, matrices, notes, metrics, and fallback cards. Embedded HTML artifacts run in isolated nested frames.
+5. The responsive layout preserves the authored 12-column region composition at wide sizes, condenses it to six columns at medium sizes, and stacks it at narrow sizes. A debounced `ResizeObserver` recomputes the composition and rerenders when the Widget size changes.
+6. Explicit typography uses Canvas-readable bounds, while native cards and matrices center their useful content instead of stretching sparse boxes across an entire region.
+7. The renderer performs one deterministic composition and checks Widget overflow, region bounds, region size, clipped content, AntV warnings, and AntV errors.
 8. Structured diagnostics return a status, score, issue signature, selected density, deterministic attempt count, and whether a semantic replan is justified.
 9. Existing `canvas_capture` can provide a detail screenshot for the Widget when diagnostics alone are insufficient.
 
@@ -45,12 +61,12 @@ The AntV browser bundle is generated from the pinned npm dependency into `public
 The stop policy is enforced by server state per actual user message; model tool calls cannot reset it.
 
 - One Visual Explainer may be created per user message.
-- Deterministic layout performs at most three local attempts and consumes no model tokens.
+- Deterministic layout performs one local composition and consumes no model tokens.
 - At most two detail captures are allowed for the affected Widget.
 - At most one model-authored plan update is allowed.
 - Repeating an identical plan is rejected.
 - A passing result, a repeated issue signature, improvement below three score points, or the one-update limit ends automatic refinement.
-- Generic Widget patching is rejected for Visual Explainer Widgets; semantic changes must use `canvas_update_visual_explainer`.
+- Explicit user refinements use a minimal `canvas_patch_widget` diff against `widget.source`; one bounded `canvas_update_visual_explainer` remains available only for a diagnostics-driven semantic replan.
 - A later explicit user message opens a fresh bounded budget.
 
 Playwright is not part of runtime generation or review. Browser automation may be added later as optional CI coverage, while production review uses structured DOM/SVG diagnostics and PenEcho's existing Widget capture path.

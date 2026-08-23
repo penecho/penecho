@@ -55,6 +55,28 @@ Canvas requests through Codex use `codex exec --json`. PenEcho returns as soon a
 
 Claude CLI requests use one isolated `claude -p` turn with tools, agents, MCP, prompt suggestions, session persistence, and other nonessential background traffic disabled. Selecting effort `none` sets `MAX_THINKING_TOKENS=0`, causing Claude Code to send `thinking.type=disabled`; because `none` is not a valid Claude CLI effort value, PenEcho also passes an internal `low` effort and per-process `--settings` override to neutralize any user-level `CLAUDE_CODE_EFFORT_LEVEL=max`. Selecting `low`, `medium`, `high`, or `max` leaves thinking enabled and applies the chosen value through both Claude's `--effort` flag and the same settings override. PenEcho incrementally validates the stream and returns as soon as Claude emits its successful final `result`; any attempted tool use aborts the request, while a CLI process that remains alive after the result is terminated and cleaned up in the background.
 
+## Canvas Agent local resources
+
+Canvas Agent can run without a resource, against one selected folder, or against one selected file. The selection belongs to the PenEcho host that executes the Agent, not necessarily the browser displaying the Canvas:
+
+- The macOS and Windows desktop applications use native, single-selection pickers for a local folder or file.
+- A Cloud Canvas can select an already registered resource or browse only the allowed roots configured on its currently pinned PenEcho host. Cloud receives opaque root IDs, safe labels, and relative folder names; it cannot submit a raw absolute host path.
+- An iPad or other browser cannot expose its local filesystem path or run Bash locally. It can upload one supported file, up to 32 MiB, as a private PenEcho-managed copy. Removing that resource deletes only the managed copy.
+
+Configure the folders that Cloud clients may browse with a JSON array in `~/.penecho/config.env`:
+
+```dotenv
+PENECHO_CANVAS_AGENT_ALLOWED_ROOTS='[{"name":"Projects","path":"/srv/projects"},{"name":"Research","path":"/data/research"}]'
+```
+
+Windows paths inside the JSON value need JSON escaping, for example `C:\\Users\\me\\Projects`. PenEcho resolves every configured root and every selected child again on the host, rejects symlink/junction escapes and `.penecho`, and never returns the canonical absolute path to Cloud. An empty or omitted array disables server-folder browsing without affecting native desktop selection.
+
+Folder resources have two modes. `Read & Write` exposes bounded `read`, `read_image`, `write`, and `edit`; when a fully read/write-confined Bash runner is available, commands outside a small read-only set require per-command approval. `Full Access` removes those repeated command approvals but keeps the same folder and network boundary. PenEcho registers Bash only after an actual OS-sandbox probe succeeds (macOS Seatbelt or Linux bubblewrap); otherwise it exposes bounded directory listing instead. The Windows build currently keeps file tools available but does not advertise Bash because there is no equivalent fully confined runner yet.
+
+A single-file resource is always read-only and exact-file scoped. It exposes only the matching text, image, document, or SQLite reader: no parent directory, sibling files, Bash, write, or edit capability. PDF/DOCX/XLSX/CSV and SQLite readers are loaded on demand for folder projects; selecting one such file directly mounts only its matching reader. PDF text can be extracted or one bounded page can be rendered for visual inspection, DOCX returns bounded text, XLSX/CSV returns bounded table rows, and SQLite accepts one bounded read-only `SELECT`, `WITH`, or `EXPLAIN` query.
+
+The five most recent UI conversation projections are stored in `<folder>/.penecho` for folder resources, in private PenEcho state for single-file resources, and in browser storage when no resource is selected. These projections are for history display only and do not restore Harness model context after a server restart.
+
 ## Transient launch overrides
 
 ```bash
@@ -88,6 +110,7 @@ Interactive starts print the current version immediately. After the server is li
 | `AUTO_AI_DELAY_SECONDS` | Initial delay before automatic recognition; the browser control can override it from 0 to 10 seconds |
 | `PENECHO_REQUEST_TRACE` | Save local per-request image, outbound request, response, and outcome traces; disabled by default |
 | `PENECHO_REQUEST_TRACE_LIMIT` | Number of local request traces retained, default 100 and maximum 1000 |
+| `PENECHO_CANVAS_AGENT_ALLOWED_ROOTS` | JSON array of absolute PenEcho-host folders that Cloud may browse through opaque IDs and relative paths; omitted by default |
 | `PENECHO_CLOUD_ENV` | Internal Cloud target switch: `uat` uses the dedicated HTTPS UAT service; every other value uses production |
 | `PENECHO_CLOUD_ORIGIN` | Optional explicit Cloud origin override; takes precedence over `PENECHO_CLOUD_ENV` |
 | `HOST` / `PORT` | Listening interface and port, default `0.0.0.0:3888` |

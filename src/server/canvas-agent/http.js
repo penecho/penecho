@@ -8,7 +8,7 @@ const MAX_REMOTE_AGENT_CHANNELS = 8;
 const REMOTE_AGENT_CHANNEL_TTL_MS = 5 * 60_000;
 const REMOTE_AGENT_POLL_MS = 15_000;
 
-function attachCanvasAgent({ server, authorize, resolveConnection, listConnections, resolveWebSearch = () => null, stateDirectory, rootDirectory, modelTimeoutMs, logger = () => {}, conversationLogger = null, conversationTrace = null }) {
+function attachCanvasAgent({ server, authorize, resolveConnection, listConnections, resolveWebSearch = () => null, resolveProject = async () => null, stateDirectory, rootDirectory, modelTimeoutMs, logger = () => {}, conversationLogger = null, conversationTrace = null }) {
   const wss = new WebSocketServer({ noServer:true, maxPayload:8 * 1024 * 1024, perMessageDeflate:false });
   let hostPromise = null;
   const host = () => {
@@ -16,7 +16,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
       import("./runtime.mjs"),
       import("./protocol.mjs"),
     ]).then(async ([runtime]) => {
-      const instance = new runtime.CanvasHarnessHost({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch, modelTimeoutMs, logger, conversationLogger, conversationTrace });
+      const instance = new runtime.CanvasHarnessHost({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch, resolveProject, modelTimeoutMs, logger, conversationLogger, conversationTrace });
       await instance.initialize();
       return instance;
     });
@@ -59,6 +59,8 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
             clientId:String(envelope.clientId || envelope.payload?.clientId || ""),
             connectionId:String(envelope.payload?.connectionId || "default"),
             webSearchEnabled:envelope.payload?.webSearchEnabled === true,
+            projectId:String(envelope.payload?.projectId || ""),
+            accessMode:String(envelope.payload?.accessMode || "controlled"),
             binding,
             send,
           });
@@ -77,7 +79,15 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
           const previous = state.session, connectionId = String(envelope.payload?.connectionId || previous.connectionId);
           if (!resolveConnection(connectionId)) throw new Error("The selected AI connection was not found.");
           await runtime.disposeSession(previous);
-          state.session = await runtime.connect({ clientId:previous.clientId, connectionId, webSearchEnabled:envelope.payload?.webSearchEnabled === true, binding, send });
+          state.session = await runtime.connect({
+            clientId:previous.clientId,
+            connectionId,
+            webSearchEnabled:envelope.payload?.webSearchEnabled === true,
+            projectId:String(envelope.payload?.projectId || ""),
+            accessMode:String(envelope.payload?.accessMode || "controlled"),
+            binding,
+            send,
+          });
         } else if (envelope.type === "ping") send("pong", { time:Date.now() });
       } catch (error) {
         fail(error, !state.session);

@@ -4,7 +4,6 @@
     ROOT_ID = "penecho-visual-explainer",
     STYLE_ID = "penecho-visual-explainer-style",
     ANT_KINDS = new Set(["flow","timeline","hierarchy","relationship"]),
-    DENSITIES = ["comfortable","compact","dense"],
     DEFAULT_PALETTE = ["#2563eb","#0891b2","#16a34a","#ea580c","#7c3aed","#dc2626"];
 
   const text = value => String(value ?? ""),
@@ -66,12 +65,6 @@
       .vex-takeaways{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
       .vex-takeaway{display:flex;gap:10px;align-items:flex-start;min-width:0;padding:10px 13px;border-radius:11px;background:color-mix(in srgb,var(--vex-accent) 7%,white);font-size:clamp(18px,.9cqw,23px);line-height:1.45}
       .vex-takeaway::before{content:"◆";flex:none;margin-top:.45em;color:var(--vex-accent);font-size:.55em}
-      .vex-grid{min-height:0;display:grid;grid-template-columns:repeat(var(--vex-columns,1),minmax(0,1fr));grid-template-rows:repeat(var(--vex-rows,1),minmax(0,1fr));grid-auto-flow:row dense;gap:14px;overflow:hidden}
-      .vex-panel{min-width:0;min-height:0;grid-column:span var(--vex-span,1);display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;border:1px solid var(--vex-line);border-top:3px solid var(--vex-accent);border-radius:15px;background:var(--vex-panel);box-shadow:0 6px 18px rgba(15,23,42,.055)}
-      .vex-panel-head{padding:13px 15px 9px}
-      .vex-panel-title{margin:0;font-size:clamp(21px,1.08cqw,29px);line-height:1.2}
-      .vex-panel-summary{margin:5px 0 0;color:var(--vex-muted);font-size:clamp(18px,.9cqw,23px);line-height:1.45}
-      .vex-panel-body{min-height:0;overflow:hidden;padding:5px 13px 13px}
       .vex-antv{width:100%;height:100%;min-height:0;overflow:hidden}
       .vex-antv svg{display:block;width:100%!important;height:100%!important;max-width:100%;max-height:100%;overflow:visible}
       .vex-fallback{height:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-content:center;overflow:hidden}
@@ -117,26 +110,39 @@
       .vex-matrix-item:first-of-type{border-top:0}
       .vex-annotations{display:flex;gap:10px;overflow:hidden}
       .vex-note{min-width:0;flex:1;padding:10px 12px;border-left:3px solid var(--vex-accent);border-radius:5px;background:rgba(241,245,249,.86);color:#475569;font-size:clamp(18px,.85cqw,22px);line-height:1.45}
-      #${ROOT_ID}[data-columns="1"] .vex-head{gap:14px}
-      #${ROOT_ID}[data-columns="1"] .vex-count{display:none}
-      #${ROOT_ID}[data-columns="1"] .vex-takeaways{grid-template-columns:1fr}
-      #${ROOT_ID}[data-columns="1"] .vex-matrix{grid-template-columns:1fr}
-      #${ROOT_ID}[data-density="compact"]{gap:12px;padding:18px}
-      #${ROOT_ID}[data-density="compact"] .vex-grid{gap:10px}
-      #${ROOT_ID}[data-density="compact"] .vex-panel-head{padding:10px 12px 7px}
-      #${ROOT_ID}[data-density="compact"] .vex-panel-body{padding:3px 10px 10px}
-      #${ROOT_ID}[data-density="compact"] .vex-subtitle{margin-top:6px}
-      #${ROOT_ID}[data-density="compact"] .vex-card{padding:8px 9px}
-      #${ROOT_ID}[data-density="compact"] .vex-details{display:none}
-      #${ROOT_ID}[data-density="dense"]{gap:8px;padding:13px;border-radius:16px}
-      #${ROOT_ID}[data-density="dense"] .vex-grid{gap:7px}
-      #${ROOT_ID}[data-density="dense"] .vex-subtitle,#${ROOT_ID}[data-density="dense"] .vex-takeaways{display:none}
-      #${ROOT_ID}[data-density="dense"] .vex-count{padding:6px 9px}
-      #${ROOT_ID}[data-density="dense"] .vex-panel-head{padding:8px 10px 5px}
-      #${ROOT_ID}[data-density="dense"] .vex-panel-summary{display:none}
-      #${ROOT_ID}[data-density="dense"] .vex-panel-body{padding:2px 8px 8px}
-      #${ROOT_ID}[data-density="dense"] .vex-card{padding:6px 7px}
-      #${ROOT_ID}[data-density="dense"] .vex-card-desc,#${ROOT_ID}[data-density="dense"] .vex-details{display:none}
+      #${ROOT_ID}[data-mode="current"]{
+        --vex-title-px:52px;
+        --vex-subtitle-px:22px;
+        --vex-region-title-px:25px;
+        --vex-body-px:18px;
+        --vex-caption-px:15px;
+        position:relative;
+        grid-template-rows:auto auto minmax(0,1fr) auto;
+        gap:12px;
+        padding:18px;
+        border-radius:18px;
+      }
+      #${ROOT_ID}[data-mode="current"] .vex-title{font-size:var(--vex-title-px)}
+      #${ROOT_ID}[data-mode="current"] .vex-subtitle{font-size:var(--vex-subtitle-px)}
+      .vex-region-grid{position:relative;z-index:1;min-height:0;display:grid;grid-template-columns:repeat(var(--vex-region-columns,12),minmax(0,1fr));grid-template-rows:repeat(var(--vex-region-rows,1),minmax(0,1fr));gap:12px;overflow:hidden}
+      .vex-region{position:relative;min-width:0;min-height:0;grid-column:var(--vex-column-start)/span var(--vex-column-span);grid-row:var(--vex-row-start)/span var(--vex-row-span);display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;border:1.5px solid color-mix(in srgb,var(--vex-accent) 48%,var(--vex-line));border-radius:13px;background:rgba(255,255,255,.95);box-shadow:0 4px 14px rgba(15,23,42,.045)}
+      .vex-region[data-importance="primary"]{border-width:2px;box-shadow:0 7px 20px color-mix(in srgb,var(--vex-accent) 11%,transparent)}
+      .vex-region[data-show-header="false"]{grid-template-rows:minmax(0,1fr)}
+      .vex-region[data-show-header="false"]>.vex-region-head{display:none}
+      .vex-region-head{position:relative;z-index:3;padding:9px 11px 7px;background:linear-gradient(180deg,color-mix(in srgb,var(--vex-accent) 7%,white),rgba(255,255,255,.85))}
+      .vex-region-title{margin:0;font-size:var(--vex-region-title-px);line-height:1.18}
+      .vex-region-summary{margin:3px 0 0;color:var(--vex-muted);font-size:var(--vex-caption-px);line-height:1.35}
+      .vex-region-body{position:relative;z-index:1;min-height:0;overflow:hidden;padding:7px 9px 9px;font-size:var(--vex-body-px)}
+      .vex-region-body>.vex-fallback,.vex-region-body>.vex-timeline,.vex-region-body>.vex-route,.vex-region-body>.vex-table-wrap,.vex-region-body>.vex-matrix{font-size:inherit}
+      .vex-embedded{padding:0;background:color-mix(in srgb,var(--vex-accent) 2%,white)}
+      .vex-embedded-frame{position:relative;z-index:1;display:block;width:100%;height:100%;border:0;background:transparent}
+      .vex-embedded-snapshot{position:absolute;z-index:0;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none}
+      .vex-port{position:absolute;z-index:4;width:10px;height:10px;border:2px solid white;border-radius:50%;background:var(--vex-accent);box-shadow:0 0 0 1px var(--vex-accent);transform:translate(-50%,-50%)}
+      .vex-relations{position:absolute;z-index:2;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+      .vex-relation{fill:none;stroke:var(--vex-accent);stroke-width:2.2;stroke-linecap:round;opacity:.88;vector-effect:non-scaling-stroke}
+      .vex-relation[data-kind="reference"]{stroke-dasharray:6 5;opacity:.65}
+      .vex-relation-label{fill:var(--vex-ink);font-size:var(--vex-caption-px);font-weight:700;paint-order:stroke;stroke:white;stroke-width:5px;stroke-linejoin:round;text-anchor:middle}
+      #${ROOT_ID}[data-region-columns="1"] .vex-count{display:none}
     `;
     return style;
   }
@@ -174,18 +180,6 @@
     if(section.kind==="table")return renderTable(section);
     if(section.kind==="matrix"||section.kind==="comparison")return renderMatrix(section);
     return renderCards(section);
-  }
-  function responsiveLayout(width,height,sections) {
-    const safeWidth=Math.max(1,Number(width)||1),safeHeight=Math.max(1,Number(height)||1),count=Math.max(1,sections.length),aspect=safeWidth/safeHeight,
-      secondary=sections.map((section,index)=>section.importance==="primary"?-1:index).filter(index=>index>=0),
-      supportsThreeColumns=safeWidth>=1800&&aspect>=1.15&&secondary.length>=3&&secondary.length%3===0,
-      supportsTwoColumns=safeWidth>=1280&&aspect>=.68||safeWidth>=900&&aspect>=.9,
-      columns=supportsThreeColumns?3:supportsTwoColumns?2:1,
-      spans=Array.from({length:count},(_,index)=>sections[index]?.importance==="primary"?columns:1),
-      remainder=secondary.length%columns;
-    if(columns>1&&remainder)spans[secondary[0]]+=columns-remainder;
-    const rows=Math.max(1,Math.ceil(spans.reduce((sum,span)=>sum+span,0)/columns));
-    return {columns,rows,spans,aspect};
   }
   function hierarchyRoot(section) {
     const byId=new Map(section.items.map(item=>[item.id,{label:item.label,desc:item.description||"",children:[]}])) , roots=[];
@@ -229,32 +223,72 @@
       }catch(error){issues.push({code:"ANTV_RENDER_ERROR",severity:"warning",sectionId:section.id,message:text(error?.message||error).slice(0,240)});finish(false);}
     });
   }
-  function panelFor(section,span=1) {
-    const panel=element("section","vex-panel");panel.dataset.sectionId=section.id;panel.dataset.importance=section.importance||"standard";panel.dataset.kind=section.kind;
-    panel.style.setProperty("--vex-span",String(span));
-    const head=element("header","vex-panel-head");addText(head,"h2","vex-panel-title",section.title);addText(head,"p","vex-panel-summary",section.summary);const body=element("div","vex-panel-body");panel.append(head,body);return {panel,body};
+  function responsiveRegionLayout(width,regions) {
+    const safeWidth=Math.max(1,Number(width)||1),columns=safeWidth<900?1:safeWidth<1450?6:12,placements=[];
+    if(columns===1){regions.forEach((region,index)=>placements.push({columnStart:1,columnSpan:1,rowStart:index+1,rowSpan:1}));return {columns,rows:regions.length,placements};}
+    for(const region of regions){
+      const scale=12/columns,columnStart=Math.max(1,Math.min(columns,Math.ceil(region.layout.columnStart/scale))),columnSpan=Math.max(1,Math.min(columns-columnStart+1,Math.ceil(region.layout.columnSpan/scale)));
+      placements.push({columnStart,columnSpan,rowStart:region.layout.rowStart,rowSpan:region.layout.rowSpan});
+    }
+    return {columns,rows:Math.max(1,...placements.map(item=>item.rowStart+item.rowSpan-1)),placements};
   }
-  function buildFrame(root,plan,layout) {
-    root.className="";root.replaceChildren();root.dataset.intent=plan.intent;
-    root.dataset.columns=String(layout.columns);
-    const head=element("header","vex-head"),titles=element("div"),total=plan.sections.reduce((sum,section)=>sum+section.items.length,0);
-    addText(titles,"div","vex-eyebrow",plan.intent==="plan"?"Visual plan":plan.intent==="organize"?"Visual notes":"Visual explainer");addText(titles,"h1","vex-title",plan.title);addText(titles,"p","vex-subtitle",plan.subtitle);head.append(titles,element("div","vex-count",`${plan.sections.length} sections · ${total} items`));root.append(head);
+  function portPositionStyle(port) {
+    const offset=`${Math.round(port.offset*10000)/100}%`;
+    if(port.side==="top")return {left:offset,top:"0%"};
+    if(port.side==="bottom")return {left:offset,top:"100%"};
+    if(port.side==="left")return {left:"0%",top:offset};
+    return {left:"100%",top:offset};
+  }
+  function embeddedDocument(artifact) {
+    const parsed=new DOMParser().parseFromString(text(artifact.html),"text/html");
+    parsed.querySelectorAll("base,iframe,object,embed,form,meta[http-equiv]").forEach(node=>node.remove());
+    parsed.querySelectorAll("a[href]").forEach(link=>{link.target="_blank";link.rel="noopener noreferrer";});
+    const meta=parsed.createElement("meta");meta.httpEquiv="Content-Security-Policy";meta.content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https:; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'";parsed.head.prepend(meta);
+    const bridge=parsed.createElement("script"),artifactId=JSON.stringify(artifact.id);
+    bridge.textContent=`(()=>{const artifactId=${artifactId};let timer,snapshotTimer,snapshotRunning=false;const snapshot=()=>{clearTimeout(snapshotTimer);snapshotTimer=setTimeout(async()=>{if(snapshotRunning)return;snapshotRunning=true;let url,canvas;try{const width=Math.max(1,document.documentElement.clientWidth),height=Math.max(1,document.documentElement.clientHeight),clone=document.body.cloneNode(true);clone.querySelectorAll('script').forEach(node=>node.remove());clone.setAttribute('xmlns','http://www.w3.org/1999/xhtml');for(const style of [...document.querySelectorAll('style')].reverse())clone.prepend(style.cloneNode(true));clone.style.cssText+=';width:'+width+'px;height:'+height+'px;overflow:hidden;margin:0';const content=new XMLSerializer().serializeToString(clone),svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'"><foreignObject width="100%" height="100%">'+content+'</foreignObject></svg>';url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const image=await new Promise((resolve,reject)=>{const value=new Image();value.onload=()=>resolve(value);value.onerror=reject;value.src=url});canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(image,0,0,width,height);const dataUrl=canvas.toDataURL('image/png');if(dataUrl.length<8*1024*1024)parent.postMessage({type:'penecho-visual-artifact-snapshot',artifactId,dataUrl},'*')}catch{}finally{if(url)URL.revokeObjectURL(url);if(canvas)canvas.width=canvas.height=1;snapshotRunning=false}},90)};const send=()=>{clearTimeout(timer);timer=setTimeout(()=>{const page=document.documentElement.getBoundingClientRect(),ports=[...document.querySelectorAll('[data-penecho-port]')].slice(0,32).map(node=>{const rect=node.getBoundingClientRect();return{id:String(node.dataset.penechoPort||''),x:(rect.left+rect.width/2-page.left)/Math.max(1,page.width),y:(rect.top+rect.height/2-page.top)/Math.max(1,page.height)}}).filter(port=>port.id);parent.postMessage({type:'penecho-visual-artifact-ports',artifactId,ports},'*');snapshot()},32)};addEventListener('DOMContentLoaded',send);addEventListener('resize',send);new MutationObserver(send).observe(document.documentElement,{subtree:true,childList:true,attributes:true});addEventListener('message',event=>{if(event.data?.type==='penecho-visual-request-ports')send()});send()})()`;
+    parsed.body.append(bridge);return `<!doctype html>\n${parsed.documentElement.outerHTML}`;
+  }
+  function relationAnchor(root,plan,endpoint,artifactAnchors) {
+    const region=plan.regions.find(item=>item.id===endpoint.regionId),panel=root.querySelector(`[data-region-id="${CSS.escape(endpoint.regionId)}"]`),rootRect=root.getBoundingClientRect();if(!region||!panel)return null;
+    const iframe=region.renderer==="embedded-html"?panel.querySelector(".vex-embedded-frame"):null,artifactPoint=iframe?artifactAnchors.get(`${region.artifactId}:${endpoint.port}`):null;
+    if(artifactPoint){const rect=iframe.getBoundingClientRect();return {x:rect.left-rootRect.left+artifactPoint.x*rect.width,y:rect.top-rootRect.top+artifactPoint.y*rect.height};}
+    const marker=panel.querySelector(`[data-port-id="${CSS.escape(endpoint.port)}"]`);if(!marker)return null;const rect=marker.getBoundingClientRect();return {x:rect.left+rect.width/2-rootRect.left,y:rect.top+rect.height/2-rootRect.top};
+  }
+  function drawRelations(root,plan,artifactAnchors) {
+    root.querySelector(".vex-relations")?.remove();if(!plan.relations?.length)return;
+    const namespace="http://www.w3.org/2000/svg",svg=document.createElementNS(namespace,"svg");svg.classList.add("vex-relations");svg.setAttribute("aria-hidden","true");
+    const defs=document.createElementNS(namespace,"defs"),marker=document.createElementNS(namespace,"marker"),tip=document.createElementNS(namespace,"path");marker.id="vex-arrow";marker.setAttribute("viewBox","0 0 10 10");marker.setAttribute("refX","9");marker.setAttribute("refY","5");marker.setAttribute("markerWidth","7");marker.setAttribute("markerHeight","7");marker.setAttribute("orient","auto-start-reverse");tip.setAttribute("d","M 0 0 L 10 5 L 0 10 z");tip.setAttribute("fill","var(--vex-accent)");marker.append(tip);defs.append(marker);svg.append(defs);
+    for(const relation of plan.relations){const from=relationAnchor(root,plan,relation.from,artifactAnchors),to=relationAnchor(root,plan,relation.to,artifactAnchors);if(!from||!to)continue;const path=document.createElementNS(namespace,"path"),dx=Math.max(36,Math.abs(to.x-from.x)*.42),vertical=Math.abs(to.y-from.y)>Math.abs(to.x-from.x)*1.2,d=vertical?`M ${from.x} ${from.y} C ${from.x} ${from.y+(to.y-from.y)*.46}, ${to.x} ${from.y+(to.y-from.y)*.54}, ${to.x} ${to.y}`:`M ${from.x} ${from.y} C ${from.x+(to.x>=from.x?dx:-dx)} ${from.y}, ${to.x-(to.x>=from.x?dx:-dx)} ${to.y}, ${to.x} ${to.y}`;path.setAttribute("d",d);path.classList.add("vex-relation");path.dataset.kind=relation.kind;path.setAttribute("marker-end","url(#vex-arrow)");svg.append(path);if(relation.label){const label=document.createElementNS(namespace,"text");label.classList.add("vex-relation-label");label.setAttribute("x",String((from.x+to.x)/2));label.setAttribute("y",String((from.y+to.y)/2-7));label.textContent=relation.label;svg.append(label);}}
+    root.append(svg);
+  }
+  async function renderCurrentPlan(root,plan) {
+    const accent=plan.theme?.accent||DEFAULT_PALETTE[0],palette=[accent,...DEFAULT_PALETTE.filter(color=>color.toLowerCase()!==accent.toLowerCase())],issues=[],artifactAnchors=new Map();
+    if(!document.getElementById(STYLE_ID))document.head.append(styleSheet(accent));destroyInfographics(root);root._vexMessageCleanup?.();for(const url of root._vexArtifactUrls||[])URL.revokeObjectURL(url);root._vexArtifactUrls=[];root.className="";root.replaceChildren();root.dataset.intent=plan.intent;root.dataset.mode="current";root.dataset.density="comfortable";root.style.setProperty("--vex-accent",accent);
+    for(const [key,value] of Object.entries({"--vex-title-px":plan.typography.titlePx,"--vex-subtitle-px":plan.typography.subtitlePx,"--vex-region-title-px":plan.typography.regionTitlePx,"--vex-body-px":plan.typography.bodyPx,"--vex-caption-px":plan.typography.captionPx}))root.style.setProperty(key,`${value}px`);
+    const head=element("header","vex-head"),titles=element("div");addText(titles,"div","vex-eyebrow","Visual explainer");addText(titles,"h1","vex-title",plan.title);addText(titles,"p","vex-subtitle",plan.subtitle);head.append(titles,element("div","vex-count",`${plan.regions.length} regions · ${(plan.artifacts||[]).length} live artifacts`));root.append(head);
     if(plan.takeaways?.length){const takeaways=element("section","vex-takeaways");plan.takeaways.forEach(value=>takeaways.append(element("div","vex-takeaway",value)));root.append(takeaways);}else root.append(element("div"));
-    const grid=element("section","vex-grid");grid.style.setProperty("--vex-columns",String(layout.columns));grid.style.setProperty("--vex-rows",String(layout.rows));root.append(grid);
+    const layout=responsiveRegionLayout(root.getBoundingClientRect().width,plan.regions),grid=element("section","vex-region-grid"),pending=[],frames=new Map();root.dataset.regionColumns=String(layout.columns);grid.style.setProperty("--vex-region-columns",String(layout.columns));grid.style.setProperty("--vex-region-rows",String(layout.rows));root.append(grid);
+    plan.regions.forEach((region,index)=>{const placement=layout.placements[index],panel=element("section","vex-region"),header=element("header","vex-region-head"),body=element("div","vex-region-body");panel.dataset.regionId=region.id;panel.dataset.importance=region.importance;panel.dataset.renderer=region.renderer;panel.dataset.showHeader=String(region.showHeader!==false);panel.style.setProperty("--vex-column-start",placement.columnStart);panel.style.setProperty("--vex-column-span",placement.columnSpan);panel.style.setProperty("--vex-row-start",placement.rowStart);panel.style.setProperty("--vex-row-span",placement.rowSpan);addText(header,"h2","vex-region-title",region.title);addText(header,"p","vex-region-summary",region.summary);panel.append(header,body);for(const port of region.ports||[]){const marker=element("span","vex-port"),position=portPositionStyle(port);marker.dataset.portId=port.id;marker.style.left=position.left;marker.style.top=position.top;panel.append(marker);}grid.append(panel);
+      if(region.renderer==="embedded-html"){body.classList.add("vex-embedded");const artifact=plan.artifacts?.find(item=>item.id===region.artifactId);if(!artifact){issues.push({code:"EMBEDDED_ARTIFACT_MISSING",severity:"error",sectionId:region.id,message:`Artifact ${region.artifactId} is unavailable.`});body.append(element("div","vex-card-desc","Embedded artifact unavailable"));return;}const frame=element("iframe","vex-embedded-frame"),url=URL.createObjectURL(new Blob([embeddedDocument(artifact)],{type:"text/html"}));frame.title=artifact.title;frame.sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox";frame.referrerPolicy="no-referrer";frame.src=url;root._vexArtifactUrls.push(url);body.append(frame);if(!frames.has(artifact.id))frames.set(artifact.id,[]);frames.get(artifact.id).push(frame);}
+      else if(ANT_KINDS.has(region.renderer)){const antv=element("div","vex-antv");body.append(antv);pending.push(renderAntv({...region,kind:region.renderer},antv,palette,issues).then(ok=>{if(!ok){antv.remove();body.append(renderNative({...region,kind:region.renderer}));}}));}
+      else body.append(renderNative({...region,kind:region.renderer}));
+    });
     if(plan.annotations?.length){const notes=element("footer","vex-annotations");plan.annotations.forEach(value=>notes.append(element("div","vex-note",value)));root.append(notes);}else root.append(element("div"));
-    return grid;
+    const onMessage=event=>{const data=event.data,frame=(frames.get(String(data?.artifactId||""))||[]).find(value=>value.contentWindow===event.source),allFrames=[...frames.values()].flat();if(data?.type==="penecho-visual-artifact-ports"&&frame){for(const port of Array.isArray(data.ports)?data.ports:[]){if(typeof port?.id!=="string"||!Number.isFinite(port.x)||!Number.isFinite(port.y)||port.x<0||port.x>1||port.y<0||port.y>1)continue;artifactAnchors.set(`${data.artifactId}:${port.id}`,{x:port.x,y:port.y});}drawRelations(root,plan,artifactAnchors);}if(data?.type==="penecho-visual-artifact-snapshot"&&frame&&typeof data.dataUrl==="string"&&data.dataUrl.startsWith("data:image/png;base64,")&&data.dataUrl.length<8*1024*1024){let preview=frame.parentElement.querySelector(".vex-embedded-snapshot");if(!preview){preview=element("img","vex-embedded-snapshot");preview.alt="";frame.before(preview);}preview.src=data.dataUrl;}if(data?.type==="penecho-widget-updated"&&allFrames.some(value=>value.contentWindow===event.source)){event.source.postMessage({type:"penecho-visual-request-ports"},"*");parent.postMessage({type:"penecho-widget-updated"},"*");}};addEventListener("message",onMessage);root._vexMessageCleanup=()=>removeEventListener("message",onMessage);
+    await Promise.all(pending);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));drawRelations(root,plan,artifactAnchors);const geometry=geometryIssues(root),finalIssues=uniqueIssues([...issues,...geometry]),score=scoreFor(finalIssues,plan.regions),status=finalIssues.some(issue=>issue.severity==="error")?"fail":finalIssues.length?"warn":"pass",signature=finalIssues.map(issue=>`${issue.code}:${issue.sectionId||"all"}`).sort().join("|")||"none";
+    return {version:1,status,score,density:"comfortable",deterministicAttempts:1,issues:finalIssues,issueSignature:signature,semanticReplanRecommended:status==="fail"||finalIssues.some(issue=>issue.code==="TEXT_OVERFLOW")};
   }
   function geometryIssues(root) {
     const issues=[],rootRect=root.getBoundingClientRect();
     if(root.scrollWidth>root.clientWidth+2||root.scrollHeight>root.clientHeight+2)issues.push({code:"LAYOUT_OVERFLOW",severity:"error",message:"The composed explanation exceeds the Widget bounds."});
-    const panels=[...root.querySelectorAll(".vex-panel")];
-    for(const panel of panels){const rect=panel.getBoundingClientRect();if(rect.width<180||rect.height<105)issues.push({code:"PANEL_TOO_SMALL",severity:"warning",sectionId:panel.dataset.sectionId,message:"A panel has insufficient room for its content."});if(rect.left<rootRect.left-1||rect.top<rootRect.top-1||rect.right>rootRect.right+1||rect.bottom>rootRect.bottom+1)issues.push({code:"PANEL_OUT_OF_BOUNDS",severity:"error",sectionId:panel.dataset.sectionId,message:"A panel leaves the Widget bounds."});}
-    const overflow=[...root.querySelectorAll(".vex-panel-body,.vex-fallback,.vex-timeline,.vex-route,.vex-table-wrap,.vex-matrix,.vex-card-title,.vex-card-desc,.vex-event-title,.vex-event-desc,.vex-matrix-item")].filter(node=>node.scrollWidth>node.clientWidth+2||node.scrollHeight>node.clientHeight+2);
+    const panels=[...root.querySelectorAll(".vex-region")];
+    for(const panel of panels){const rect=panel.getBoundingClientRect(),sectionId=panel.dataset.sectionId||panel.dataset.regionId;if(rect.width<180||rect.height<105)issues.push({code:"PANEL_TOO_SMALL",severity:"warning",sectionId,message:"A panel has insufficient room for its content."});if(rect.left<rootRect.left-1||rect.top<rootRect.top-1||rect.right>rootRect.right+1||rect.bottom>rootRect.bottom+1)issues.push({code:"PANEL_OUT_OF_BOUNDS",severity:"error",sectionId,message:"A panel leaves the Widget bounds."});}
+    const overflow=[...root.querySelectorAll(".vex-region-body:not(.vex-embedded),.vex-fallback,.vex-timeline,.vex-route,.vex-table-wrap,.vex-matrix,.vex-card-title,.vex-card-desc,.vex-event-title,.vex-event-desc,.vex-matrix-item")].filter(node=>node.scrollWidth>node.clientWidth+2||node.scrollHeight>node.clientHeight+2);
     if(overflow.length)issues.push({code:"TEXT_OVERFLOW",severity:"warning",message:`${overflow.length} text block(s) need more semantic compression.`});
     return issues;
   }
-  function scoreFor(issues,plan) {
-    let score=100;for(const issue of issues)score-=issue.severity==="error"?28:issue.code==="PLAN_DENSITY_HIGH"?12:7;if(plan.sections.length>6)score-=5;return Math.max(0,Math.min(100,score));
+  function scoreFor(issues,regions) {
+    let score=100;for(const issue of issues)score-=issue.severity==="error"?28:7;if(regions.length>6)score-=5;return Math.max(0,Math.min(100,score));
   }
   function uniqueIssues(issues) {
     const seen=new Set();return issues.filter(issue=>{const key=[issue.code,issue.sectionId||""].join(":");if(seen.has(key))return false;seen.add(key);return true;}).slice(0,12);
@@ -263,32 +297,8 @@
     root.querySelectorAll(".vex-antv").forEach(node=>{try{node._penechoInfographic?.destroy?.();}catch{}});
   }
   async function renderPlan(root,plan) {
-    const baseIssues=[],totalItems=plan.sections.reduce((sum,section)=>sum+section.items.length,0),textVolume=JSON.stringify(plan).length;
-    if(totalItems>44||textVolume>12000)baseIssues.push({code:"PLAN_DENSITY_HIGH",severity:"warning",message:"The semantic plan is dense; consider splitting or shortening supporting details."});
-    const accent=plan.theme?.accent||DEFAULT_PALETTE[0],palette=[accent,...DEFAULT_PALETTE.filter(color=>color.toLowerCase()!==accent.toLowerCase())];
-    if(!document.getElementById(STYLE_ID))document.head.append(styleSheet(accent));
-    let finalIssues=[],attempt=0;
-    for(const density of DENSITIES){
-      attempt++;
-      root.dataset.density=density;
-      const rect=root.getBoundingClientRect(),layout=responsiveLayout(rect.width,rect.height,plan.sections),renderIssues=[];
-      destroyInfographics(root);
-      const grid=buildFrame(root,plan,layout),pending=[];
-      for(let index=0;index<plan.sections.length;index++){
-        const section=plan.sections[index],{panel,body}=panelFor(section,layout.spans[index]);
-        grid.append(panel);
-        if(ANT_KINDS.has(section.kind)){
-          const antv=element("div","vex-antv");
-          body.append(antv);
-          pending.push(renderAntv(section,antv,palette,renderIssues).then(ok=>{if(!ok){antv.remove();body.append(renderNative(section));}}));
-        }else body.append(renderNative(section));
-      }
-      await Promise.all(pending);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));finalIssues=uniqueIssues([...baseIssues,...renderIssues,...geometryIssues(root)]);
-      if(!finalIssues.some(issue=>["LAYOUT_OVERFLOW","PANEL_OUT_OF_BOUNDS","PANEL_TOO_SMALL","TEXT_OVERFLOW"].includes(issue.code)))break;
-      destroyInfographics(root);
-    }
-    const score=scoreFor(finalIssues,plan),status=finalIssues.some(issue=>issue.severity==="error")?"fail":finalIssues.length?"warn":"pass",signature=finalIssues.map(issue=>`${issue.code}:${issue.sectionId||"all"}`).sort().join("|")||"none";
-    return {version:1,status,score,density:root.dataset.density,deterministicAttempts:attempt,issues:finalIssues,issueSignature:signature,semanticReplanRecommended:status==="fail"||finalIssues.some(issue=>["PLAN_DENSITY_HIGH","TEXT_OVERFLOW"].includes(issue.code))};
+    if(!Array.isArray(plan?.regions)||!plan.regions.length)throw Error("Unsupported VisualExplainerPlan contract.");
+    return renderCurrentPlan(root,plan);
   }
   let readySent=false;
   function finish(diagnostics) {
@@ -316,7 +326,7 @@
       timer=setTimeout(render,140);
     });
     observer.observe(root);
-    addEventListener("pagehide",()=>{clearTimeout(timer);observer.disconnect();destroyInfographics(root);},{once:true});
+    addEventListener("pagehide",()=>{clearTimeout(timer);observer.disconnect();destroyInfographics(root);root._vexMessageCleanup?.();for(const url of root._vexArtifactUrls||[])URL.revokeObjectURL(url);root._vexArtifactUrls=[];},{once:true});
     return observer;
   }
   async function main() {

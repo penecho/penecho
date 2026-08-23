@@ -25,6 +25,7 @@ const updateApi = Object.freeze({
 contextBridge.exposeInMainWorld("penechoDesktopUpdate", updateApi);
 contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
   installCli:provider => ipcRenderer.invoke("penecho:install-cli", provider),
+  pickProjectFile:() => ipcRenderer.invoke("penecho:pick-project-file"),
 }));
 
 function element(tag, className, value) {

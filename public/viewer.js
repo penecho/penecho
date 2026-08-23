@@ -32,7 +32,7 @@
       previewOnly:"This Craft's full view needs a redemption. Showing the preview.",
       failed:"This Craft could not be opened.",
       backTitle:"Back to Echoes",
-      staticWidgetNotice:"Live-data Widgets are static here; sign in and link a device to interact.",
+      staticWidgetNotice:"Dynamically loaded content is available after you sign in and complete Link Device.",
       dismissNotice:"Hide this message",
     },
     zh: {
@@ -45,7 +45,7 @@
       previewOnly:"查看完整内容需要先赎回，正在展示预览图。",
       failed:"这个 Craft 暂时无法打开。",
       backTitle:"返回 Echoes",
-      staticWidgetNotice:"实时 Widget 在此为静态预览；登录并连接设备即可交互。",
+      staticWidgetNotice:"动态加载的内容需登录并完成设备连接后才能查看。",
       dismissNotice:"隐藏此提示",
     },
   };

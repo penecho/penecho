@@ -5,7 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const MAX_TRACE_STRING_CHARS = 500_000;
+const MAX_TRACE_DIAGNOSTIC_CHARS = 64_000;
+const MAX_TRACE_DIAGNOSTICS = 32;
 const TRACE_SECRET_KEY = /(?:^|[-_])(?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret)(?:$|[-_])/i;
+const TRACE_SECRET_TEXT = /((?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret|claude_code_oauth_token)\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi;
 
 function bounded(value, limit = MAX_TRACE_STRING_CHARS) {
   const text = String(value ?? "");
@@ -26,6 +29,34 @@ function safeValue(value) {
     return { serializationError:String(error?.message||error||"Could not serialize trace value.").slice(0,1000) };
   }
   return serialized === undefined ? null : JSON.parse(serialized);
+}
+
+function redactDiagnosticText(value) {
+  return bounded(value,MAX_TRACE_DIAGNOSTIC_CHARS)
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi,"$1<redacted>")
+    .replace(TRACE_SECRET_TEXT,"$1<redacted>")
+    .replace(/([?&](?:api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token)=)[^&#\s]+/gi,"$1<redacted>")
+    .replace(/\b(?:sk|xox[baprs]|gh[pousr])[-_][A-Za-z0-9_-]{12,}\b/g,"<redacted-token>");
+}
+
+function safeDiagnosticValue(value) {
+  let serialized;
+  try {
+    serialized = JSON.stringify(value,(key,item)=>{
+      if (TRACE_SECRET_KEY.test(key)) return "<redacted>";
+      if (typeof item === "string") return redactDiagnosticText(item);
+      return item;
+    });
+  } catch (error) {
+    return { serializationError:String(error?.message||error||"Could not serialize provider diagnostic.").slice(0,1000) };
+  }
+  return serialized === undefined ? null : JSON.parse(serialized);
+}
+
+function safeProviderDiagnostic(value) {
+  const raw = bounded(value,MAX_TRACE_DIAGNOSTIC_CHARS);
+  try { return { format:"json", value:safeDiagnosticValue(JSON.parse(raw)) }; }
+  catch { return { format:"text", value:redactDiagnosticText(raw) }; }
 }
 
 function tracedEffort(state) {
@@ -190,6 +221,23 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     if (entry.phase === "asset") {
       if (state.active) { persistAsset(state,state.active,entry.asset); write(state.active); }
       else state.pendingAssets.push(entry.asset);
+      return;
+    }
+    if (entry.phase === "diagnostic") {
+      if (!state.active || !entry.diagnostic?.traceDiagnostic) return;
+      const pendingStep = state.active.data.steps.findLast(item=>item.status==="in-flight"), diagnostic = entry.diagnostic;
+      state.active.data.diagnostics.push({
+        kind:"cli-provider",
+        recordedAt:isoTime(now()),
+        turn:pendingStep?.turn ?? null,
+        step:pendingStep?.step ?? null,
+        provider:bounded(diagnostic.provider,128),
+        model:bounded(diagnostic.model,256) || null,
+        error:safeValue(diagnostic.error || null),
+        trace:safeProviderDiagnostic(diagnostic.traceDiagnostic),
+      });
+      if (state.active.data.diagnostics.length > MAX_TRACE_DIAGNOSTICS) state.active.data.diagnostics.splice(0,state.active.data.diagnostics.length-MAX_TRACE_DIAGNOSTICS);
+      write(state.active);
       return;
     }
     if (entry.phase === "end") {
