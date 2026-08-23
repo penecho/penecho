@@ -4,7 +4,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
-const { mapCodexReasoningEffort } = require("./reasoning-effort.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MAX_AUTH_BYTES = 1024 * 1024;
@@ -101,7 +100,7 @@ function buildCodexArgs({ workDir, imageFile, imageFiles, outputFile, model, eff
   for (const attachedImage of attachedImages) args.push("-i", attachedImage);
   args.push("-o", outputFile);
   if (model) args.push("--model", model);
-  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(mapCodexReasoningEffort(String(effort).trim().toLowerCase(), model))}`);
+  if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(String(effort).trim())}`);
   args.push("-");
   return args;
 }

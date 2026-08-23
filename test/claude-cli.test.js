@@ -45,20 +45,22 @@ test("leaves Claude effort unset when the global value is empty", () => {
   assert.equal(args.includes("--settings"), false);
 });
 
-test("Claude none disables thinking while using low to override a global CLI effort", () => {
+test("Claude none disables thinking without inventing a replacement effort", () => {
   const args = buildClaudeArgs({ systemPrompt:"system instructions", model:"opus", effort:"none" });
-  assert.equal(args[args.indexOf("--effort") + 1], "low");
-  assert.deepEqual(JSON.parse(args[args.indexOf("--settings") + 1]), { env:{ CLAUDE_CODE_EFFORT_LEVEL:"low" } });
+  assert.equal(args.includes("--effort"), false);
+  assert.equal(args.includes("--settings"), false);
   assert.equal(args.includes("none"), false);
 });
 
-test("Claude CLI maps xhigh away from older models that expose only four enabled levels", () => {
+test("Claude CLI passes the configured effort through without model-family mapping", () => {
   const older = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-6", effort:"xhigh" });
-  assert.equal(older[older.indexOf("--effort") + 1], "max");
+  assert.equal(older[older.indexOf("--effort") + 1], "xhigh");
   const oldest = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-5", effort:"xhigh" });
-  assert.equal(oldest[oldest.indexOf("--effort") + 1], "high");
+  assert.equal(oldest[oldest.indexOf("--effort") + 1], "xhigh");
   const current = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-8", effort:"xhigh" });
   assert.equal(current[current.indexOf("--effort") + 1], "xhigh");
+  const custom = buildClaudeArgs({ systemPrompt:"system", model:"claude-opus-4-8", effort:"Provider_Native" });
+  assert.equal(custom[custom.indexOf("--effort") + 1], "Provider_Native");
 });
 
 test("Claude CLI input carries text and the canvas image in one streaming user message", () => {
@@ -139,8 +141,8 @@ test("Claude CLI none keeps the current thinking-disabled runtime", async () => 
   await callClaudeCli({ executable:fakeCli, model:"opus", effort:"none", systemPrompt:"system", prompt:"request", atlasImage:PNG });
   const saved = JSON.parse(fs.readFileSync(record, "utf8"));
   assert.equal(saved.maxThinkingTokens, "0");
-  assert.equal(saved.args[saved.args.indexOf("--effort") + 1], "low");
-  assert.deepEqual(JSON.parse(saved.args[saved.args.indexOf("--settings") + 1]), { env:{ CLAUDE_CODE_EFFORT_LEVEL:"low" } });
+  assert.equal(saved.args.includes("--effort"), false);
+  assert.equal(saved.args.includes("--settings"), false);
   assert.equal(saved.args.includes("none"), false);
 });
 

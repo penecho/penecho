@@ -1392,6 +1392,8 @@
       canvas_read:["objectId","resource","startLine","endLine"],
       canvas_capture:["target","objectId","region","quality","coordinates"],
       canvas_create:["baseRevision","items","summary","_changeId"],canvas_edit:["baseRevision","operations","summary","_changeId"],
+      canvas_visual_explainer_create:["baseRevision","plan","title","width","height","placement","summary","_changeId"],
+      canvas_visual_explainer_update:["objectId","baseRevision","plan","title","summary","_changeId"],
       canvas_set_view:["target","objectId","region","padding"],canvas_revert:["changeId"],
       canvas_internal_widget:["objectId"],canvas_internal_replace_widget:["objectId","baseRevision","expectedHash","changeId","command"],
     }[name];
@@ -1633,6 +1635,25 @@
     }
     state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);requestRender();canvasAgentSyncState();return{ok:true,previousRevision:args.baseRevision,revision:state.userRevision,changeId,receipts,summary:String(args.summary||"")};
   }
+  async function canvasAgentVisualExplainerCreate(args) {
+    const item=visualExplainerWidgetItem(args.plan,{title:args.title,width:args.width,height:args.height,placement:args.placement}),
+      result=await canvasAgentCreate({baseRevision:args.baseRevision,items:[item],summary:args.summary,_changeId:args._changeId}),
+      objectId=result.receipts?.[0]?.objectId,object=objectId?canvasAgentObject(objectId):null,
+      diagnostics=object?.kind === "widget"?await visualExplainerWaitForDiagnostics(object.item):null;
+    return {...result,visualExplainer:{objectId,planVersion:VISUAL_EXPLAINER_VERSION,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,diagnostics}};
+  }
+  async function canvasAgentVisualExplainerUpdate(args) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();
+    const object=canvasAgentObject(String(args.objectId||""));
+    if(!object||object.kind!=="widget")throw canvasAgentToolError("OBJECT_NOT_FOUND","Visual Explainer Widget was not found.",{objectId:args.objectId});
+    if(object.item.widgetType!=="html_widget"||object.item.pluginId!=="general"||object.item.sourceFormat!==VISUAL_EXPLAINER_SOURCE_FORMAT)throw canvasAgentToolError("KIND_MISMATCH","The target is not a PenEcho Visual Explainer Widget.",{objectId:args.objectId});
+    const previousDiagnostics=object.item.visualDiagnostics?structuredClone(object.item.visualDiagnostics):await visualExplainerWaitForDiagnostics(object.item,1200),
+      generated=visualExplainerWidgetItem(args.plan,{title:args.title||object.item.title}),currentEdit=widgetEditContext(object.item,"agent"),expectedHash=await canvasAgentHash(currentEdit),
+      command={tool:"html_widget",widgetType:"html_widget",pluginId:"general",title:generated.title,refreshSeconds:0,html:generated.html,sourceFormat:generated.sourceFormat,frameworkVersion:generated.frameworkVersion,copyText:generated.copyText,copyLabel:generated.copyLabel,x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h};
+    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash,changeId:args._changeId,command}),updated=canvasAgentObject(object.item.id),
+      diagnostics=updated?.kind === "widget"?await visualExplainerWaitForDiagnostics(updated.item):null;
+    return {...result,summary:String(args.summary||""),visualExplainer:{objectId:object.item.id,planVersion:VISUAL_EXPLAINER_VERSION,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,previousDiagnostics,diagnostics}};
+  }
   async function canvasAgentPrepareEditOperations(operations) {
     if(!Array.isArray(operations)||!operations.length||operations.length>40)throw canvasAgentToolError("INVALID_BATCH","Provide between 1 and 40 edit operations.");
     const prepared=[],touched=new Set();
@@ -1755,6 +1776,8 @@
       else if (name === "canvas_read") result = await canvasAgentRead(args);
       else if (name === "canvas_capture") result = await canvasAgentCapture(args);
       else if (name === "canvas_create") result = await canvasAgentCreate({...args,_changeId:payload.callId});
+      else if (name === "canvas_visual_explainer_create") result = await canvasAgentVisualExplainerCreate({...args,_changeId:payload.callId});
+      else if (name === "canvas_visual_explainer_update") result = await canvasAgentVisualExplainerUpdate({...args,_changeId:payload.callId});
       else if (name === "canvas_edit") result = await canvasAgentEdit({...args,_changeId:payload.callId});
       else if (name === "canvas_set_view") result = canvasAgentSetView(args);
       else if (name === "canvas_revert") result = canvasAgentRevert(args);

@@ -21,6 +21,8 @@
       }
     })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
+    visualExplainerVendorUrl = new URL("visual-explainer-vendor.js?v=0.2.20", location.href).href,
+    visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=2", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     cloudCsrf = remoteCanvas ? document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || "" : "",
     publicFetchUrl = remoteCanvas ? new URL("/api/v1/remote-canvas/http?path=%2Fapi%2Fwidget-fetch", location.href).href : new URL("api/widget-fetch", location.href).href,
@@ -965,7 +967,7 @@
   }
 
   function csp() {
-    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function safeHttpsResource(element, attribute) {
@@ -1138,12 +1140,30 @@
     const bridgeStyle = parsed.createElement("style");
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     parsed.head.append(bridgeStyle);
+    const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
+    if (visualPlan) {
+      const visualReady = parsed.createElement("script");
+      visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{if(sent||!visual||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
+      parsed.body.append(visualReady);
+      const vendor = parsed.createElement("script");
+      vendor.src = visualExplainerVendorUrl;
+      parsed.body.append(vendor);
+      const visualRuntime = parsed.createElement("script");
+      visualRuntime.src = visualExplainerRuntimeUrl;
+      parsed.body.append(visualRuntime);
+    }
     const renderer = parsed.createElement("script");
     renderer.src = rendererUrl;
     parsed.body.append(renderer);
-    const ready = parsed.createElement("script");
-    ready.textContent = `parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")`;
-    parsed.body.append(ready);
+    if (visualPlan) {
+      const rendererReady = parsed.createElement("script");
+      rendererReady.textContent = `globalThis.__penechoVisualRendererReady?.();delete globalThis.__penechoVisualRendererReady`;
+      parsed.body.append(rendererReady);
+    } else {
+      const ready = parsed.createElement("script");
+      ready.textContent = `parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")`;
+      parsed.body.append(ready);
+    }
     const bridge = parsed.createElement("script");
     bridge.textContent = `(${runtime.toString()})(${JSON.stringify(documentVersion)})`;
     // Establish the bridge early. The end marker runs after widget-authored scripts and
@@ -1184,6 +1204,22 @@
         && Number.isInteger(error.repeatedCount) && error.repeatedCount >= 1 && error.repeatedCount <= 1000000
         && Array.isArray(error.stack) && error.stack.length <= 3
         && error.stack.every(frame => typeof frame === "string" && frame.length > 0 && frame.length <= 300));
+  }
+  function validVisualExplainerDiagnostics(message) {
+    const diagnostics=message?.diagnostics;
+    return message?.type === "penecho-visual-explainer-diagnostics" && diagnostics && typeof diagnostics === "object"
+      && diagnostics.version === 1 && ["pass","warn","fail"].includes(diagnostics.status)
+      && Number.isInteger(diagnostics.score) && diagnostics.score >= 0 && diagnostics.score <= 100
+      && ["comfortable","compact","dense"].includes(diagnostics.density)
+      && Number.isInteger(diagnostics.deterministicAttempts) && diagnostics.deterministicAttempts >= 1 && diagnostics.deterministicAttempts <= 3
+      && typeof diagnostics.issueSignature === "string" && diagnostics.issueSignature.length <= 1200
+      && typeof diagnostics.semanticReplanRecommended === "boolean"
+      && Array.isArray(diagnostics.issues) && diagnostics.issues.length <= 12
+      && diagnostics.issues.every(issue => issue && typeof issue === "object"
+        && typeof issue.code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(issue.code)
+        && ["warning","error"].includes(issue.severity)
+        && typeof issue.message === "string" && issue.message.length > 0 && issue.message.length <= 300
+        && (issue.sectionId === undefined || typeof issue.sectionId === "string" && issue.sectionId.length > 0 && issue.sectionId.length <= 64));
   }
   function forwardWidgetState() {
     inner.contentWindow?.postMessage({ type:"penecho-widget-state", ...widgetState }, "*");
@@ -1271,6 +1307,8 @@
       for (const [requestId, request] of pendingSnapshots) forwardSnapshotRequest(requestId, request);
     } else if (validRuntimeDiagnostics(message)) {
       parent.postMessage({ type:message.type, errors:message.errors, truncated:message.truncated }, parentOrigin);
+    } else if (validVisualExplainerDiagnostics(message)) {
+      parent.postMessage({ type:message.type, diagnostics:message.diagnostics }, parentOrigin);
     } else if (message.type === "penecho-widget-updated") {
       forwardWidgetState();
       const now = Date.now();

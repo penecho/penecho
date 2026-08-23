@@ -24,7 +24,6 @@ test("feature tour follows the requested concise order with stable targets", () 
   const app = read("public/app.js"),
     ordered = [
       "core-effort-v1",
-      "plugins-v3",
       "favorites-add-v1",
       "hand-v1",
       "studio-theme-v1",
@@ -39,7 +38,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#pluginButton", "#craftsButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#craftsButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
@@ -137,8 +136,6 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourDone",
       "tourEffortTitle",
       "tourEffortBody",
-      "tourPluginsTitle",
-      "tourPluginsBody",
       "tourHandTitle",
       "tourHandBody",
       "tourStudioThemeTitle",
@@ -169,9 +166,8 @@ test("feature tour copy is complete in English and Chinese", () => {
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
   assert.match(zh, /闭合套索/);
-  assert.match(app, /tourPluginsBody:[\s\S]*Real Photos[\s\S]*Professional Diagrams[\s\S]*copyable source/);
-  assert.match(zh, /显示网络真实照片.*一张/);
-  assert.match(zh, /tourPluginsBody:[^\n]*专业图示[^\n]*源码/);
+  assert.doesNotMatch(app, /tourPlugins(?:Title|Body):|plugins-v3/);
+  assert.doesNotMatch(zh, /tourPlugins(?:Title|Body):/);
   assert.match(app, /tourHandBody:[^\n]*tap an image[^\n]*AI widget[^\n]*HTML widgets remain interactive/);
   assert.match(zh, /点击图片、动画、文本框或 AI 控件.*显示操作按钮/);
   assert.match(zh, /HTML 控件仍可直接交互/);

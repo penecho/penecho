@@ -109,12 +109,6 @@
               <span data-i18n="canvasAgent">Canvas Agent</span>
             </button>
           </div>
-          <div id="pluginControl" class="plugin-control">
-            <button id="pluginButton" class="plugin-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pluginPopover" data-i18n-aria="plugins" aria-label="Plugins" data-i18n-title="plugins" title="Plugins">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h3a2 2 0 1 1 4 0h3a2 2 0 0 1 2 2v3a2 2 0 1 0 0 4v3a2 2 0 0 1-2 2h-3a2 2 0 1 1-4 0H8a2 2 0 0 1-2-2v-3a2 2 0 1 0 0-4V6a2 2 0 0 1 2-2Z"/></svg>
-              <span data-i18n="plugins">Plugins</span>
-            </button>
-          </div>
           <div id="craftsControl" class="plugin-control">
             <button id="craftsButton" class="plugin-trigger crafts-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="craftsPopover" data-i18n-aria="savedCrafts" aria-label="Favorites" data-i18n-title="savedCrafts" title="Favorites">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -127,9 +121,6 @@
             </button>
             <button data-mode="pen" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="pen" aria-label="Pen" data-i18n-title="pen" title="Pen">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
-            </button>
-            <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
             </button>
             <button data-mode="eraser" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
@@ -185,6 +176,9 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"/><path d="M20 12h-9a6 6 0 0 0-6 6"/></svg>
           </button>
           <span class="view-tools">
+            <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
+            </button>
             <button id="fullscreenBtn" class="icon-button" type="button" data-i18n-aria="fullscreen" aria-label="Fullscreen" data-i18n-title="fullscreen" title="Fullscreen" aria-pressed="false">
               <svg class="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
               <svg class="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8H3V3M16 8h5V3M8 16H3v5M16 16h5v5"/></svg>
@@ -594,6 +588,9 @@
           <div class="settings-quick-heading"><h3 id="settingsConfigurationHeading" data-i18n="settingsConnections">AI connections</h3><button id="settingsOpenApi" type="button" data-i18n="settingsManage">Manage</button></div>
           <div id="settingsConnectionQuickList" class="settings-connection-quick-list"></div>
           <div class="settings-entry-actions">
+            <button id="pluginButton" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pluginPopover" data-i18n-aria="plugins" aria-label="Plugins">
+              <strong data-i18n="plugins">Plugins</strong><small data-i18n="settingsPluginsEntryHelp">Manage AI capabilities</small>
+            </button>
             <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">Add a Tavily API key</small></button>
             <button id="settingsOpenSystem" type="button"><strong data-i18n="settingsSystemEntry">System settings</strong><small data-i18n="settingsSystemEntryHelp">Restart required after saving</small></button>
           </div>
@@ -625,7 +622,7 @@
               </div>
               <p class="settings-note" data-i18n="settingsCliHelp">Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.</p>
             </div>
-            <label class="settings-field"><span data-i18n="settingsEffort">Reasoning</span><select id="settingsEffort" name="effort" required><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Maximum</option></select><small data-i18n="settingsEffortToolbarHelp">You can quickly change reasoning for any request from the Canvas toolbar.</small></label>
+            <div class="settings-field"><label for="settingsEffort"><span data-i18n="settingsEffort">Reasoning</span></label><div id="settingsEffortCombobox" class="settings-combobox"><input id="settingsEffort" name="effort" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="settingsEffortOptions" aria-expanded="false" autocomplete="off" spellcheck="false" maxlength="128" required><button id="settingsEffortToggle" class="settings-combobox-toggle" type="button" aria-haspopup="listbox" aria-controls="settingsEffortOptions" aria-expanded="false" data-i18n-aria="settingsShowEffortSuggestions" aria-label="Show reasoning suggestions" data-i18n-title="settingsShowEffortSuggestions" title="Show reasoning suggestions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><div id="settingsEffortOptions" class="settings-combobox-options" role="listbox" data-i18n-aria="settingsEffortSuggestions" aria-label="Reasoning suggestions" hidden><button type="button" role="option" data-effort-value="none" aria-selected="false">none</button><button type="button" role="option" data-effort-value="low" aria-selected="false">low</button><button type="button" role="option" data-effort-value="medium" aria-selected="false">medium</button><button type="button" role="option" data-effort-value="high" aria-selected="false">high</button><button type="button" role="option" data-effort-value="xhigh" aria-selected="false">xhigh</button><button type="button" role="option" data-effort-value="max" aria-selected="false">max</button></div></div><small data-i18n="settingsEffortToolbarHelp">You can quickly change reasoning for any request from the Canvas toolbar.</small></div>
           </section>
           <section class="settings-group settings-system-group" aria-labelledby="settingsSystemHeading">
             <div class="settings-section-heading"><div><h3 id="settingsSystemHeading" data-i18n="settingsSystemSection">System</h3><p data-i18n="settingsSystemDescription">Simple defaults for requests and canvas behavior.</p></div></div>

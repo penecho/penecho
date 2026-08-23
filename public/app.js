@@ -141,6 +141,9 @@
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
     settingsTavilySaved = document.querySelector("#settingsTavilySaved"),
     settingsEffort = document.querySelector("#settingsEffort"),
+    settingsEffortCombobox = document.querySelector("#settingsEffortCombobox"),
+    settingsEffortToggle = document.querySelector("#settingsEffortToggle"),
+    settingsEffortOptions = document.querySelector("#settingsEffortOptions"),
     settingsMaxTokens = document.querySelector("#settingsMaxTokens"),
     settingsTimeout = document.querySelector("#settingsTimeout"),
     settingsAutoDelay = document.querySelector("#settingsAutoDelay"),
@@ -389,8 +392,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourDone: "Finish",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourPluginsTitle: "Real photos and professional diagrams",
-      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is also on by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
       tourHandBody: "Choose Hand, then tap an image, animation, text box, or AI widget to reveal its controls. HTML widgets remain interactive; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
@@ -436,6 +437,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiEntryHelp: "Changes apply immediately",
       settingsSystemEntry: "System settings",
       settingsSystemEntryHelp: "Restart required after saving",
+      settingsPluginsEntryHelp: "Manage AI capabilities",
       settingsSearchEntry: "Internet search",
       settingsSearchReady: "Tavily key saved",
       settingsSearchNotConfigured: "Add a Tavily API key",
@@ -445,6 +447,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSearchDialogSubtitle: "Configure Tavily once, then enable search per device from the Canvas Agent composer.",
       settingsConnectionEditor: "Connection details",
       settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
+      settingsEffortSuggestions: "Reasoning suggestions",
+      settingsShowEffortSuggestions: "Show reasoning suggestions",
       settingsSavedConnections: "Saved connections",
       settingsConnectionCount: "{count} of {limit} connections",
       settingsAddConnection: "Add connection",
@@ -1216,7 +1220,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
-    { id: "plugins-v3", targets: ["#pluginButton"], titleKey: "tourPluginsTitle", bodyKey: "tourPluginsBody", placement: "bottom", radius: 8 },
     { id: "favorites-add-v1", targets: ["#craftsButton"], titleKey: "tourFavoritesTitle", bodyKey: "tourFavoritesBody", placement: "bottom", radius: 8 },
     { id: "hand-v1", targets: ["#handToolBtn"], titleKey: "tourHandTitle", bodyKey: "tourHandBody", placement: "bottom", radius: 7 },
     { id: "studio-theme-v1", targets: ["#theme"], titleKey: "tourStudioThemeTitle", bodyKey: "tourStudioThemeBody", placement: "bottom", radius: 8 },
@@ -1863,6 +1866,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const restoreFocus = settings.configurationRestoreFocus;
     settings.configurationMode = "";
     settings.configurationRestoreFocus = null;
+    hideSettingsEffortOptions();
     configurationLayer.hidden = true;
     configurationLayer.setAttribute("aria-hidden", "true");
     canvasSettingsForm.hidden = true;
@@ -1889,8 +1893,60 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function defaultConnectionEffort(provider = settingsProvider?.value || "api") {
     return "medium";
   }
+  function updateSettingsEffortOptions() {
+    const selected = settingsEffort.value.trim();
+    settingsEffortOptions?.querySelectorAll("[data-effort-value]").forEach((option) => option.setAttribute("aria-selected", String(option.dataset.effortValue === selected)));
+  }
+  function hideSettingsEffortOptions() {
+    if (!settingsEffortOptions) return;
+    settingsEffortOptions.hidden = true;
+    settingsEffort.setAttribute("aria-expanded", "false");
+    settingsEffortToggle?.setAttribute("aria-expanded", "false");
+  }
+  function showSettingsEffortOptions() {
+    if (!settingsEffortOptions || settingsEffort.disabled || settingsEffortToggle?.disabled) return;
+    updateSettingsEffortOptions();
+    settingsEffortOptions.hidden = false;
+    settingsEffort.setAttribute("aria-expanded", "true");
+    settingsEffortToggle?.setAttribute("aria-expanded", "true");
+  }
+  function chooseSettingsEffort(value) {
+    settingsEffort.value = String(value || "");
+    updateSettingsEffortOptions();
+    hideSettingsEffortOptions();
+    settingsEffort.focus({ preventScroll:true });
+  }
+  function handleSettingsEffortKeydown(event) {
+    if (event.key === "Escape") {
+      if (settingsEffortOptions?.hidden) return;
+      event.preventDefault();
+      hideSettingsEffortOptions();
+      return;
+    }
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    showSettingsEffortOptions();
+    const options = [...settingsEffortOptions.querySelectorAll("[data-effort-value]")], selected = options.find(option => option.getAttribute("aria-selected") === "true");
+    (selected || options[0])?.focus({ preventScroll:true });
+  }
+  function handleSettingsEffortOptionKeydown(event) {
+    const option = event.target.closest("[data-effort-value]");
+    if (!option) return;
+    const options = [...settingsEffortOptions.querySelectorAll("[data-effort-value]")], index = options.indexOf(option);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideSettingsEffortOptions();
+      settingsEffort.focus({ preventScroll:true });
+      return;
+    }
+    const next = event.key === "ArrowDown" ? options[(index + 1) % options.length] : event.key === "ArrowUp" ? options[(index - 1 + options.length) % options.length] : event.key === "Home" ? options[0] : event.key === "End" ? options.at(-1) : null;
+    if (!next) return;
+    event.preventDefault();
+    next.focus({ preventScroll:true });
+  }
   function selectDefaultConnectionEffort() {
     settingsEffort.value = defaultConnectionEffort();
+    updateSettingsEffortOptions();
   }
   function apiPresetForConnection(connection = {}) {
     if (connection.apiPreset && API_PRESETS[connection.apiPreset]) return [connection.apiPreset, API_PRESETS[connection.apiPreset]];
@@ -2012,6 +2068,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsApiSaved.dataset.saved = String(connection?.hasApiKey === true);
     settings.cli[provider] = { model:connection?.cliModel || "", path:connection?.cliPath || provider.replace("-cli", "") };
     settingsEffort.value = connection?.effort || defaultConnectionEffort(provider);
+    updateSettingsEffortOptions();
     canvasSettingsForm.dataset.editorHidden = "false";
     updateSettingsProviderFields();
     renderConnectionLists();
@@ -2022,6 +2079,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settings.editingConnectionId = null;
     canvasSettingsForm.dataset.editorHidden = "true";
     settingsApiKey.value = "";
+    hideSettingsEffortOptions();
     renderConnectionLists();
     setSettingsStatus();
   }
@@ -2125,6 +2183,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         "claude-cli":{ model:body.claudeModel, path:body.claudePath },
       };
       settingsEffort.value = body.effort || defaultConnectionEffort(body.provider);
+      updateSettingsEffortOptions();
       settingsMaxTokens.value = String(body.maxTokens);
       settingsTimeout.value = String(body.timeoutSeconds);
       settingsAutoDelay.value = String(body.autoDelaySeconds);
@@ -4442,6 +4501,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hostOrigin: null,
       pending: false,
       runtimeDiagnostics: null,
+      visualDiagnostics: null,
+      visualDiagnosticWaiters: new Set(),
       communityOriginItemId,
       communityRootItemId,
       communityOriginName,
@@ -4603,6 +4664,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widget.frame = frame;
     widget.hostOrigin = new URL(frame.src).origin;
     widget.runtimeDiagnostics = null;
+    widget.visualDiagnostics = null;
+    if (!(widget.visualDiagnosticWaiters instanceof Set)) widget.visualDiagnosticWaiters = new Set();
     widget.initialized = false;
     widget.hostReady = false;
     widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
@@ -4814,6 +4877,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         errors:message.errors.map(error => ({ ...error, stack:[...error.stack] })),
         truncated:message.truncated,
       };
+      return;
+    }
+    if (validVisualExplainerDiagnostics(message)) {
+      widget.visualDiagnostics = structuredClone(message.diagnostics);
+      for (const resolve of widget.visualDiagnosticWaiters || []) resolve(widget.visualDiagnostics);
+      widget.visualDiagnosticWaiters?.clear();
       return;
     }
     if (message.type === "penecho-widget-updated") {
@@ -5033,6 +5102,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         && Number.isInteger(error.repeatedCount) && error.repeatedCount >= 1 && error.repeatedCount <= 1000000
         && Array.isArray(error.stack) && error.stack.length <= 3
         && error.stack.every(frame => typeof frame === "string" && frame.length > 0 && frame.length <= 300));
+  }
+  function validVisualExplainerDiagnostics(message) {
+    const diagnostics=message?.diagnostics;
+    return message?.type === "penecho-visual-explainer-diagnostics" && diagnostics && typeof diagnostics === "object"
+      && diagnostics.version === 1 && ["pass","warn","fail"].includes(diagnostics.status)
+      && Number.isInteger(diagnostics.score) && diagnostics.score >= 0 && diagnostics.score <= 100
+      && ["comfortable","compact","dense"].includes(diagnostics.density)
+      && Number.isInteger(diagnostics.deterministicAttempts) && diagnostics.deterministicAttempts >= 1 && diagnostics.deterministicAttempts <= 3
+      && typeof diagnostics.issueSignature === "string" && diagnostics.issueSignature.length <= 1200
+      && typeof diagnostics.semanticReplanRecommended === "boolean"
+      && Array.isArray(diagnostics.issues) && diagnostics.issues.length <= 12
+      && diagnostics.issues.every(issue=>issue&&typeof issue === "object"&&typeof issue.code === "string"&&/^[A-Z][A-Z0-9_]{1,63}$/.test(issue.code)
+        && ["warning","error"].includes(issue.severity)&&typeof issue.message === "string"&&issue.message.length>0&&issue.message.length<=300
+        && (issue.sectionId===undefined||typeof issue.sectionId === "string"&&issue.sectionId.length>0&&issue.sectionId.length<=64));
   }
   function widgetHostPointerId(widget, pointerId) {
     return `widget-host:${widget.id}:${pointerId}`;
@@ -6493,6 +6576,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(sourceMirrorsHtml ? { sourceMirrorsHtml:true } : widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
       ...(widget.widgetType === "html_widget" && widget.runtimeDiagnostics?.errors?.length ? { runtimeDiagnostics:widget.runtimeDiagnostics } : {}),
+      ...(widget.widgetType === "html_widget" && widget.sourceFormat === VISUAL_EXPLAINER_SOURCE_FORMAT && widget.visualDiagnostics ? { visualDiagnostics:structuredClone(widget.visualDiagnostics) } : {}),
     };
   }
   function requestWidgetRefinement(widget, instructionMode) {
@@ -8043,6 +8127,166 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     copy.width = copy.height = TILE;
     copy.getContext("2d").drawImage(source, 0, 0);
     return copy;
+  }
+// Deterministic Visual Explainer plan validation and single-Widget compilation.
+  const VISUAL_EXPLAINER_VERSION = 1,
+    VISUAL_EXPLAINER_SOURCE_FORMAT = "penecho-visual-explainer-plan+json",
+    VISUAL_EXPLAINER_FRAMEWORK_VERSION = "penecho-visual-explainer/2 antv-infographic/0.2.20",
+    VISUAL_EXPLAINER_SECTION_KINDS = new Set(["flow","timeline","hierarchy","relationship","comparison","cards","metrics","schedule","table","map","notes","matrix"]),
+    VISUAL_EXPLAINER_INTENTS = new Set(["explain","organize","plan"]),
+    VISUAL_EXPLAINER_IMPORTANCE = new Set(["primary","standard","supporting"]),
+    VISUAL_EXPLAINER_STATUSES = new Set(["planned","active","done","blocked","warning","info"]),
+    VISUAL_EXPLAINER_MAX_SECTIONS = 8,
+    VISUAL_EXPLAINER_MAX_ITEMS = 64;
+
+  function visualExplainerError(code,message,details) {
+    const error = Error(message);
+    error.code = code;
+    if (details !== undefined) error.details = details;
+    return error;
+  }
+  function visualExplainerText(value,name,maxLength,{required=false}={}) {
+    if (value === undefined || value === null) {
+      if (required) throw visualExplainerError("INVALID_VISUAL_PLAN",`${name} is required.`);
+      return "";
+    }
+    if (typeof value !== "string") throw visualExplainerError("INVALID_VISUAL_PLAN",`${name} must be text.`);
+    const text=value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,"").replace(/\r\n/g,"\n").trim();
+    if (required&&!text)throw visualExplainerError("INVALID_VISUAL_PLAN",`${name} cannot be empty.`);
+    if(text.length>maxLength)throw visualExplainerError("INVALID_VISUAL_PLAN",`${name} exceeds ${maxLength} characters.`);
+    return text;
+  }
+  function visualExplainerStringList(value,name,maxItems,maxLength) {
+    if(value===undefined)return [];
+    if(!Array.isArray(value)||value.length>maxItems)throw visualExplainerError("INVALID_VISUAL_PLAN",`${name} must contain at most ${maxItems} text values.`);
+    return value.map((item,index)=>visualExplainerText(item,`${name}[${index}]`,maxLength,{required:true}));
+  }
+  function visualExplainerNormalizeItem(value,sectionIndex,itemIndex) {
+    if(!value||typeof value!=="object"||Array.isArray(value))throw visualExplainerError("INVALID_VISUAL_PLAN",`sections[${sectionIndex}].items[${itemIndex}] must be an object.`);
+    const allowed=new Set(["id","label","description","value","time","location","status","group","parentId","details"]),extra=Object.keys(value).find(key=>!allowed.has(key));
+    if(extra)throw visualExplainerError("INVALID_VISUAL_PLAN",`Unexpected item field: ${extra}.`);
+    const status=value.status===undefined?"":String(value.status);
+    if(status&&!VISUAL_EXPLAINER_STATUSES.has(status))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported item status: ${status}.`);
+    const numericValue=typeof value.value === "number" ? value.value : null;
+    if(numericValue!==null&&!Number.isFinite(numericValue))throw visualExplainerError("INVALID_VISUAL_PLAN","Item value must be finite.");
+    return {
+      id:visualExplainerText(value.id,`sections[${sectionIndex}].items[${itemIndex}].id`,64,{required:true}),
+      label:visualExplainerText(value.label,`sections[${sectionIndex}].items[${itemIndex}].label`,160,{required:true}),
+      ...(value.description!==undefined?{description:visualExplainerText(value.description,"item.description",600)}:{}),
+      ...(value.value!==undefined?{value:numericValue===null?visualExplainerText(value.value,"item.value",80):numericValue}:{}),
+      ...(value.time!==undefined?{time:visualExplainerText(value.time,"item.time",120)}:{}),
+      ...(value.location!==undefined?{location:visualExplainerText(value.location,"item.location",160)}:{}),
+      ...(status?{status}:{}),
+      ...(value.group!==undefined?{group:visualExplainerText(value.group,"item.group",120)}:{}),
+      ...(value.parentId!==undefined?{parentId:visualExplainerText(value.parentId,"item.parentId",64)}:{}),
+      ...(value.details!==undefined?{details:visualExplainerStringList(value.details,"item.details",8,240)}:{}),
+    };
+  }
+  function visualExplainerNormalizeLink(value,sectionIndex,linkIndex) {
+    if(!value||typeof value!=="object"||Array.isArray(value))throw visualExplainerError("INVALID_VISUAL_PLAN",`sections[${sectionIndex}].links[${linkIndex}] must be an object.`);
+    const allowed=new Set(["from","to","label","direction"]),extra=Object.keys(value).find(key=>!allowed.has(key));
+    if(extra)throw visualExplainerError("INVALID_VISUAL_PLAN",`Unexpected link field: ${extra}.`);
+    const direction=value.direction===undefined?"forward":String(value.direction);
+    if(!["forward","both","none"].includes(direction))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported link direction: ${direction}.`);
+    return {
+      from:visualExplainerText(value.from,"link.from",64,{required:true}),
+      to:visualExplainerText(value.to,"link.to",64,{required:true}),
+      ...(value.label!==undefined?{label:visualExplainerText(value.label,"link.label",120)}:{}),
+      direction,
+    };
+  }
+  function visualExplainerNormalizeSection(value,index) {
+    if(!value||typeof value!=="object"||Array.isArray(value))throw visualExplainerError("INVALID_VISUAL_PLAN",`sections[${index}] must be an object.`);
+    const allowed=new Set(["id","title","kind","summary","importance","items","links"]),extra=Object.keys(value).find(key=>!allowed.has(key));
+    if(extra)throw visualExplainerError("INVALID_VISUAL_PLAN",`Unexpected section field: ${extra}.`);
+    const kind=String(value.kind||""),importance=value.importance===undefined?"standard":String(value.importance);
+    if(!VISUAL_EXPLAINER_SECTION_KINDS.has(kind))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported section kind: ${kind||"(missing)"}.`);
+    if(!VISUAL_EXPLAINER_IMPORTANCE.has(importance))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported section importance: ${importance}.`);
+    if(!Array.isArray(value.items)||!value.items.length||value.items.length>16)throw visualExplainerError("INVALID_VISUAL_PLAN",`sections[${index}].items must contain 1 to 16 items.`);
+    const items=value.items.map((item,itemIndex)=>visualExplainerNormalizeItem(item,index,itemIndex)),ids=new Set();
+    for(const item of items){if(ids.has(item.id))throw visualExplainerError("INVALID_VISUAL_PLAN",`Duplicate item id in section ${value.id||index}: ${item.id}.`);ids.add(item.id);}
+    const links=value.links===undefined?[]:Array.isArray(value.links)&&value.links.length<=24?value.links.map((link,linkIndex)=>visualExplainerNormalizeLink(link,index,linkIndex)):(()=>{throw visualExplainerError("INVALID_VISUAL_PLAN",`sections[${index}].links must contain at most 24 links.`);})();
+    for(const link of links)if(!ids.has(link.from)||!ids.has(link.to))throw visualExplainerError("INVALID_VISUAL_PLAN",`Link ${link.from} → ${link.to} references an unknown item.`);
+    for(const item of items)if(item.parentId&&!ids.has(item.parentId))throw visualExplainerError("INVALID_VISUAL_PLAN",`Item ${item.id} has an unknown parentId.`);
+    return {
+      id:visualExplainerText(value.id,`sections[${index}].id`,64,{required:true}),
+      title:visualExplainerText(value.title,`sections[${index}].title`,160,{required:true}),
+      kind,
+      ...(value.summary!==undefined?{summary:visualExplainerText(value.summary,"section.summary",600)}:{}),
+      importance,
+      items,
+      ...(links.length?{links}:{}),
+    };
+  }
+  function visualExplainerNormalizePlan(value) {
+    if(!value||typeof value!=="object"||Array.isArray(value))throw visualExplainerError("INVALID_VISUAL_PLAN","VisualExplainerPlan must be an object.");
+    const allowed=new Set(["version","intent","title","subtitle","takeaways","sections","annotations","theme"]),extra=Object.keys(value).find(key=>!allowed.has(key));
+    if(extra)throw visualExplainerError("INVALID_VISUAL_PLAN",`Unexpected plan field: ${extra}.`);
+    if(value.version!==VISUAL_EXPLAINER_VERSION)throw visualExplainerError("INVALID_VISUAL_PLAN",`VisualExplainerPlan version must be ${VISUAL_EXPLAINER_VERSION}.`);
+    const intent=String(value.intent||"");
+    if(!VISUAL_EXPLAINER_INTENTS.has(intent))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported visual intent: ${intent||"(missing)"}.`);
+    if(!Array.isArray(value.sections)||!value.sections.length||value.sections.length>VISUAL_EXPLAINER_MAX_SECTIONS)throw visualExplainerError("INVALID_VISUAL_PLAN",`sections must contain 1 to ${VISUAL_EXPLAINER_MAX_SECTIONS} entries.`);
+    const sections=value.sections.map(visualExplainerNormalizeSection),sectionIds=new Set(),totalItems=sections.reduce((sum,section)=>sum+section.items.length,0);
+    if(totalItems>VISUAL_EXPLAINER_MAX_ITEMS)throw visualExplainerError("INVALID_VISUAL_PLAN",`The plan exceeds ${VISUAL_EXPLAINER_MAX_ITEMS} total items.`);
+    for(const section of sections){if(sectionIds.has(section.id))throw visualExplainerError("INVALID_VISUAL_PLAN",`Duplicate section id: ${section.id}.`);sectionIds.add(section.id);}
+    const theme=value.theme===undefined?{}:value.theme;
+    if(!theme||typeof theme!=="object"||Array.isArray(theme))throw visualExplainerError("INVALID_VISUAL_PLAN","theme must be an object.");
+    const themeExtra=Object.keys(theme).find(key=>!["tone","accent"].includes(key));
+    if(themeExtra)throw visualExplainerError("INVALID_VISUAL_PLAN",`Unexpected theme field: ${themeExtra}.`);
+    const tone=theme.tone===undefined?"clear":String(theme.tone);
+    if(!["clear","warm","technical","playful"].includes(tone))throw visualExplainerError("INVALID_VISUAL_PLAN",`Unsupported theme tone: ${tone}.`);
+    const accent=theme.accent===undefined?"":String(theme.accent).trim();
+    if(accent&&!/^#[0-9a-f]{6}$/i.test(accent))throw visualExplainerError("INVALID_VISUAL_PLAN","theme.accent must be a six-digit hex color.");
+    return {
+      version:VISUAL_EXPLAINER_VERSION,
+      intent,
+      title:visualExplainerText(value.title,"title",180,{required:true}),
+      ...(value.subtitle!==undefined?{subtitle:visualExplainerText(value.subtitle,"subtitle",500)}:{}),
+      ...(value.takeaways!==undefined?{takeaways:visualExplainerStringList(value.takeaways,"takeaways",6,240)}:{}),
+      sections,
+      ...(value.annotations!==undefined?{annotations:visualExplainerStringList(value.annotations,"annotations",8,280)}:{}),
+      theme:{ tone, ...(accent?{accent}: {}) },
+    };
+  }
+  function visualExplainerEscapeHtml(value) {
+    return String(value).replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+  }
+  function visualExplainerDocument(plan) {
+    const normalized=visualExplainerNormalizePlan(plan),json=JSON.stringify(normalized).replace(/</g,"\\u003c").replace(/>/g,"\\u003e").replace(/&/g,"\\u0026");
+    return `<!doctype html>
+<html lang="${/[\u3400-\u9fff]/.test(normalized.title)?"zh-CN":"en"}">
+<head>
+  <meta charset="utf-8">
+  <title>${visualExplainerEscapeHtml(normalized.title)}</title>
+  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Inter,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}.penecho-visual-loading{box-sizing:border-box;width:100%;height:100%;display:grid;place-content:center;padding:48px;color:#334155;text-align:center}.penecho-visual-loading h1{margin:0 0 12px;font-size:clamp(30px,4vw,56px)}.penecho-visual-loading p{margin:0;color:#64748b}</style>
+</head>
+<body>
+  <main id="penecho-visual-explainer" class="penecho-visual-loading" aria-live="polite">
+    <h1>${visualExplainerEscapeHtml(normalized.title)}</h1>
+    <p>${visualExplainerEscapeHtml(normalized.subtitle||"Preparing visual explanation…")}</p>
+  </main>
+  <script type="application/json" data-penecho-visual-explainer>${json}</script>
+</body>
+</html>`;
+  }
+  function visualExplainerWidgetItem(plan,{title,width,height,placement}={}) {
+    const normalized=visualExplainerNormalizePlan(plan),source=JSON.stringify(normalized,null,2);
+    return {
+      type:"widget",widgetType:"html_widget",pluginId:"general",title:String(title||normalized.title).trim().slice(0,120),
+      html:visualExplainerDocument(normalized),sourceFormat:VISUAL_EXPLAINER_SOURCE_FORMAT,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,
+      copyText:source,copyLabel:"Copy visual plan",width,height,placement,
+    };
+  }
+  function visualExplainerWaitForDiagnostics(widget,timeoutMs=3800) {
+    if(widget?.visualDiagnostics)return Promise.resolve(structuredClone(widget.visualDiagnostics));
+    if(!widget)return Promise.resolve(null);
+    if(!(widget.visualDiagnosticWaiters instanceof Set))widget.visualDiagnosticWaiters=new Set();
+    return new Promise(resolve=>{
+      let settled=false;
+      const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);widget.visualDiagnosticWaiters?.delete(finish);resolve(value?structuredClone(value):null);},
+        timer=setTimeout(()=>finish(null),Math.max(500,Math.min(5000,Number(timeoutMs)||3800)));
+      widget.visualDiagnosticWaiters.add(finish);
+    });
   }
 // Canvas snapshots, export, drawing history, strokes, and lasso selection.
   const SNAPSHOT_DB = "penecho-canvas-history",
@@ -14863,6 +15107,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvas_read:["objectId","resource","startLine","endLine"],
       canvas_capture:["target","objectId","region","quality","coordinates"],
       canvas_create:["baseRevision","items","summary","_changeId"],canvas_edit:["baseRevision","operations","summary","_changeId"],
+      canvas_visual_explainer_create:["baseRevision","plan","title","width","height","placement","summary","_changeId"],
+      canvas_visual_explainer_update:["objectId","baseRevision","plan","title","summary","_changeId"],
       canvas_set_view:["target","objectId","region","padding"],canvas_revert:["changeId"],
       canvas_internal_widget:["objectId"],canvas_internal_replace_widget:["objectId","baseRevision","expectedHash","changeId","command"],
     }[name];
@@ -15104,6 +15350,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);requestRender();canvasAgentSyncState();return{ok:true,previousRevision:args.baseRevision,revision:state.userRevision,changeId,receipts,summary:String(args.summary||"")};
   }
+  async function canvasAgentVisualExplainerCreate(args) {
+    const item=visualExplainerWidgetItem(args.plan,{title:args.title,width:args.width,height:args.height,placement:args.placement}),
+      result=await canvasAgentCreate({baseRevision:args.baseRevision,items:[item],summary:args.summary,_changeId:args._changeId}),
+      objectId=result.receipts?.[0]?.objectId,object=objectId?canvasAgentObject(objectId):null,
+      diagnostics=object?.kind === "widget"?await visualExplainerWaitForDiagnostics(object.item):null;
+    return {...result,visualExplainer:{objectId,planVersion:VISUAL_EXPLAINER_VERSION,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,diagnostics}};
+  }
+  async function canvasAgentVisualExplainerUpdate(args) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();
+    const object=canvasAgentObject(String(args.objectId||""));
+    if(!object||object.kind!=="widget")throw canvasAgentToolError("OBJECT_NOT_FOUND","Visual Explainer Widget was not found.",{objectId:args.objectId});
+    if(object.item.widgetType!=="html_widget"||object.item.pluginId!=="general"||object.item.sourceFormat!==VISUAL_EXPLAINER_SOURCE_FORMAT)throw canvasAgentToolError("KIND_MISMATCH","The target is not a PenEcho Visual Explainer Widget.",{objectId:args.objectId});
+    const previousDiagnostics=object.item.visualDiagnostics?structuredClone(object.item.visualDiagnostics):await visualExplainerWaitForDiagnostics(object.item,1200),
+      generated=visualExplainerWidgetItem(args.plan,{title:args.title||object.item.title}),currentEdit=widgetEditContext(object.item,"agent"),expectedHash=await canvasAgentHash(currentEdit),
+      command={tool:"html_widget",widgetType:"html_widget",pluginId:"general",title:generated.title,refreshSeconds:0,html:generated.html,sourceFormat:generated.sourceFormat,frameworkVersion:generated.frameworkVersion,copyText:generated.copyText,copyLabel:generated.copyLabel,x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h};
+    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash,changeId:args._changeId,command}),updated=canvasAgentObject(object.item.id),
+      diagnostics=updated?.kind === "widget"?await visualExplainerWaitForDiagnostics(updated.item):null;
+    return {...result,summary:String(args.summary||""),visualExplainer:{objectId:object.item.id,planVersion:VISUAL_EXPLAINER_VERSION,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,previousDiagnostics,diagnostics}};
+  }
   async function canvasAgentPrepareEditOperations(operations) {
     if(!Array.isArray(operations)||!operations.length||operations.length>40)throw canvasAgentToolError("INVALID_BATCH","Provide between 1 and 40 edit operations.");
     const prepared=[],touched=new Set();
@@ -15226,6 +15491,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       else if (name === "canvas_read") result = await canvasAgentRead(args);
       else if (name === "canvas_capture") result = await canvasAgentCapture(args);
       else if (name === "canvas_create") result = await canvasAgentCreate({...args,_changeId:payload.callId});
+      else if (name === "canvas_visual_explainer_create") result = await canvasAgentVisualExplainerCreate({...args,_changeId:payload.callId});
+      else if (name === "canvas_visual_explainer_update") result = await canvasAgentVisualExplainerUpdate({...args,_changeId:payload.callId});
       else if (name === "canvas_edit") result = await canvasAgentEdit({...args,_changeId:payload.callId});
       else if (name === "canvas_set_view") result = canvasAgentSetView(args);
       else if (name === "canvas_revert") result = canvasAgentRevert(args);
@@ -16319,7 +16586,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else hideEffortControl();
   };
   pluginButton.onclick = () => {
-    if (pluginPopover.hidden) showPluginControl();
+    if (pluginPopover.hidden) {
+      closeSettings(false);
+      showPluginControl();
+    }
     else hidePluginControl();
   };
   pluginClose.onclick = hidePluginControl;
@@ -16688,6 +16958,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  settingsEffortToggle?.addEventListener("click", () => settingsEffortOptions.hidden ? showSettingsEffortOptions() : hideSettingsEffortOptions());
+  settingsEffort?.addEventListener("pointerdown", showSettingsEffortOptions);
+  settingsEffort?.addEventListener("input", () => {
+    updateSettingsEffortOptions();
+    showSettingsEffortOptions();
+  });
+  settingsEffort?.addEventListener("keydown", handleSettingsEffortKeydown);
+  settingsEffortOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-effort-value]");
+    if (option) chooseSettingsEffort(option.dataset.effortValue);
+  });
+  settingsEffortOptions?.addEventListener("keydown", handleSettingsEffortOptionKeydown);
+  document.addEventListener("pointerdown", (event) => {
+    if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
+  });
   if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
     updateSettingsProviderFields();

@@ -309,9 +309,9 @@ test("API validation and connection requests use the selected wire format", asyn
   await testApiConnection({ AI_API_FORMAT:"openai", AI_API_URL:"https://api.minimax.io/v1", AI_API_MODEL:"MiniMax-M3", AI_API_KEY:"key", AI_EFFORT:"medium", PENECHO_API_PRESET:"minimax-global-api" }, { fetchImpl:minimaxFetch, timeoutMs:1000 });
   const minimaxBody = JSON.parse(minimaxCalls[0].options.body);
   assert.equal(minimaxBody.stream,true);
-  assert.deepEqual(minimaxBody.thinking, { type:"adaptive" });
+  assert.equal(minimaxBody.reasoning_effort,"medium");
   assert.equal(Object.hasOwn(minimaxBody,"max_tokens"),false);
-  assert.equal(Object.hasOwn(minimaxBody, "reasoning_effort"), false);
+  assert.equal(Object.hasOwn(minimaxBody,"thinking"),false);
 });
 
 test("API failure diagnostics redact the key", async () => {

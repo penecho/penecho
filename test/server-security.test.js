@@ -465,6 +465,15 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
     const removeDefaulted = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:emptyEffortBody.savedId }) });
     assert.equal(removeDefaulted.status, 200);
 
+    const customEffort = "Provider_Native";
+    const customResponse = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://custom.example.test/v1", apiModel:"custom", apiKey:"custom", effort:customEffort } }) }), customBody = await customResponse.json();
+    assert.equal(customResponse.status, 200, JSON.stringify(customBody));
+    assert.equal(customBody.connections.find(connection => connection.id === customBody.savedId)?.effort, customEffort);
+    const customStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
+    assert.equal(customStore.connections.find(connection => connection.id === customBody.savedId)?.effort, customEffort);
+    const removeCustom = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:customBody.savedId }) });
+    assert.equal(removeCustom.status, 200);
+
     const missingCliTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"codex-cli", cliPath:path.join(stateDir, "missing-codex"), effort:"xhigh" } }) }), missingCliBody = await missingCliTest.json();
     assert.equal(missingCliTest.status, 400);
     assert.equal(missingCliBody.installable, true);
@@ -791,7 +800,7 @@ test("Codex CLI mode writes the configured WebP image with a .webp extension", {
     assert.equal(saved.extension,".webp");
     assert.equal(saved.signature,"RIFF");
     assert.equal(saved.json,true);
-    assert.ok(saved.args.includes('model_reasoning_effort="xhigh"'));
+    assert.ok(saved.args.includes('model_reasoning_effort="max"'));
     const configuredPayload=validPayload(),configuredResponse=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(configuredPayload)});
     assert.equal(configuredResponse.status,200);
     const configured=JSON.parse(await fs.promises.readFile(record,"utf8"));
@@ -830,7 +839,7 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     const maxResponse=await fetch(`${openaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(maxPayload)});
     assert.equal(maxResponse.status,200);
     const maxRequest=JSON.parse(openai.requests[1]);
-    assert.equal(maxRequest.reasoning_effort,"xhigh");
+    assert.equal(maxRequest.reasoning_effort,"max");
     assert.equal(Object.hasOwn(maxRequest,"temperature"),false);
   } finally { await stopServer(openaiServer.child); await new Promise(resolve=>openai.server.close(resolve)); }
 
@@ -841,12 +850,12 @@ test("page reasoning effort maps to OpenAI and Anthropic request fields", { time
     assert.equal(Object.hasOwn(JSON.parse(kimi.requests[0]),"temperature"),false);
   } finally { await stopServer(kimiServer.child); await new Promise(resolve=>kimi.server.close(resolve)); }
 
-  const configuredOpenai=await startApiServer(),configuredOpenaiServer=await startServer(apiServerEnv(configuredOpenai.origin,{AI_EFFORT:"future-tier"}));
+  const configuredOpenai=await startApiServer(),customEffort="Provider_Native",configuredOpenaiServer=await startServer(apiServerEnv(configuredOpenai.origin,{AI_EFFORT:customEffort}));
   try {
     const response=await fetch(`${configuredOpenaiServer.origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(validPayload())});
     assert.equal(response.status,200);
     const configuredRequest=JSON.parse(configuredOpenai.requests[0]);
-    assert.equal(configuredRequest.reasoning_effort,"future-tier");
+    assert.equal(configuredRequest.reasoning_effort,customEffort);
     assert.equal(Object.hasOwn(configuredRequest,"temperature"),false);
   } finally { await stopServer(configuredOpenaiServer.child); await new Promise(resolve=>configuredOpenai.server.close(resolve)); }
 
@@ -1975,6 +1984,14 @@ test("widget host CSP permits on-demand HTTPS resources inside the isolated widg
     assert.equal(renderer.headers.get("cross-origin-resource-policy"), "cross-origin");
     assert.equal(renderer.headers.get("access-control-allow-origin"), "*");
     assert.match(await renderer.text(), /html2canvas/);
+    const visualVendor=await fetch(`${origin}/visual-explainer-vendor.js`),visualRuntime=await fetch(`${origin}/visual-explainer-runtime.js`);
+    assert.equal(visualVendor.status,200);
+    assert.match(visualVendor.headers.get("content-type"),/^application\/javascript/);
+    assert.equal(visualVendor.headers.get("cross-origin-resource-policy"),"cross-origin");
+    assert.match(await visualVendor.text(),/AntVInfographic/);
+    assert.equal(visualRuntime.status,200);
+    assert.equal(visualRuntime.headers.get("cross-origin-resource-policy"),"cross-origin");
+    assert.match(await visualRuntime.text(),/penecho-visual-explainer-diagnostics/);
 
     const privateData = await fetch(`${origin}/api/widget-fetch?url=${encodeURIComponent("https://127.0.0.1/")}`, { headers:{ Origin:origin } });
     assert.equal(privateData.status, 403);
@@ -2032,8 +2049,9 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
   assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
-  assert.match(source, /Use native draw only[\s\S]*?10 or fewer basic primitives or line segments[\s\S]*?larger static visuals[\s\S]*?General HTML/);
-  assert.match(source, /Prefer General HTML for explanatory, educational, conceptual, and overview visuals[\s\S]*?professional notation[\s\S]*?diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
+  assert.match(source, /Choose exactly one command path by the defining deliverable[\s\S]*never return speculative alternatives/);
+  assert.match(source, /does not expose the Canvas Agent Visual Explainer tool[\s\S]*General HTML as its explicit compatibility fallback/);
+  assert.match(source, /custom behavior is primary[\s\S]*faithful quantitative chart with axes and scales[\s\S]*diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
   assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);

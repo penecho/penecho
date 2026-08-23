@@ -9,6 +9,7 @@ const TARGET = path.join(ROOT, "public", "app.js");
 const SOURCES = [
   "src/client/app/core.js",
   "src/client/app/canvas-runtime.js",
+  "src/client/app/visual-explainer.js",
   "src/client/app/persistence.js",
   "src/client/app/ai-runtime.js",
   "src/client/app/canvas-agent-runtime.js",

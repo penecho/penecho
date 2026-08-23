@@ -1063,6 +1063,8 @@
       hostOrigin: null,
       pending: false,
       runtimeDiagnostics: null,
+      visualDiagnostics: null,
+      visualDiagnosticWaiters: new Set(),
       communityOriginItemId,
       communityRootItemId,
       communityOriginName,
@@ -1224,6 +1226,8 @@
     widget.frame = frame;
     widget.hostOrigin = new URL(frame.src).origin;
     widget.runtimeDiagnostics = null;
+    widget.visualDiagnostics = null;
+    if (!(widget.visualDiagnosticWaiters instanceof Set)) widget.visualDiagnosticWaiters = new Set();
     widget.initialized = false;
     widget.hostReady = false;
     widget.hostReadyPromise = new Promise((resolve) => (widget.resolveHostReady = resolve));
@@ -1435,6 +1439,12 @@
         errors:message.errors.map(error => ({ ...error, stack:[...error.stack] })),
         truncated:message.truncated,
       };
+      return;
+    }
+    if (validVisualExplainerDiagnostics(message)) {
+      widget.visualDiagnostics = structuredClone(message.diagnostics);
+      for (const resolve of widget.visualDiagnosticWaiters || []) resolve(widget.visualDiagnostics);
+      widget.visualDiagnosticWaiters?.clear();
       return;
     }
     if (message.type === "penecho-widget-updated") {
@@ -1654,6 +1664,20 @@
         && Number.isInteger(error.repeatedCount) && error.repeatedCount >= 1 && error.repeatedCount <= 1000000
         && Array.isArray(error.stack) && error.stack.length <= 3
         && error.stack.every(frame => typeof frame === "string" && frame.length > 0 && frame.length <= 300));
+  }
+  function validVisualExplainerDiagnostics(message) {
+    const diagnostics=message?.diagnostics;
+    return message?.type === "penecho-visual-explainer-diagnostics" && diagnostics && typeof diagnostics === "object"
+      && diagnostics.version === 1 && ["pass","warn","fail"].includes(diagnostics.status)
+      && Number.isInteger(diagnostics.score) && diagnostics.score >= 0 && diagnostics.score <= 100
+      && ["comfortable","compact","dense"].includes(diagnostics.density)
+      && Number.isInteger(diagnostics.deterministicAttempts) && diagnostics.deterministicAttempts >= 1 && diagnostics.deterministicAttempts <= 3
+      && typeof diagnostics.issueSignature === "string" && diagnostics.issueSignature.length <= 1200
+      && typeof diagnostics.semanticReplanRecommended === "boolean"
+      && Array.isArray(diagnostics.issues) && diagnostics.issues.length <= 12
+      && diagnostics.issues.every(issue=>issue&&typeof issue === "object"&&typeof issue.code === "string"&&/^[A-Z][A-Z0-9_]{1,63}$/.test(issue.code)
+        && ["warning","error"].includes(issue.severity)&&typeof issue.message === "string"&&issue.message.length>0&&issue.message.length<=300
+        && (issue.sectionId===undefined||typeof issue.sectionId === "string"&&issue.sectionId.length>0&&issue.sectionId.length<=64));
   }
   function widgetHostPointerId(widget, pointerId) {
     return `widget-host:${widget.id}:${pointerId}`;
@@ -3114,6 +3138,7 @@
       ...(widget.widgetType === "diagram_source" ? { source:widget.source } : { html:widget.html }),
       ...(sourceMirrorsHtml ? { sourceMirrorsHtml:true } : widget.widgetType !== "diagram_source" && widget.copyText ? { source:widget.copyText, copyLabel:widget.copyLabel } : {}),
       ...(widget.widgetType === "html_widget" && widget.runtimeDiagnostics?.errors?.length ? { runtimeDiagnostics:widget.runtimeDiagnostics } : {}),
+      ...(widget.widgetType === "html_widget" && widget.sourceFormat === VISUAL_EXPLAINER_SOURCE_FORMAT && widget.visualDiagnostics ? { visualDiagnostics:structuredClone(widget.visualDiagnostics) } : {}),
     };
   }
   function requestWidgetRefinement(widget, instructionMode) {

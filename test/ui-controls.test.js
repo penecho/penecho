@@ -60,10 +60,21 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(html, /id="settingsApiRegion"/);
   assert.match(html, /id="settingsApiService"/);
   assert.match(html, /id="settingsApiModel"[^>]*list="settingsApiModelPresets"/);
-  const effortSelect = html.match(/<select id="settingsEffort"[\s\S]*?<\/select>/)?.[0] || "";
-  assert.match(effortSelect, /required/);
-  assert.doesNotMatch(effortSelect, /value=""|Provider default/);
-  for (const effort of ["none", "low", "medium", "high", "xhigh", "max"]) assert.match(effortSelect, new RegExp(`value="${effort}"`));
+  const effortInput = html.match(/<input id="settingsEffort"[^>]*>/)?.[0] || "",
+    effortOptions = html.match(/<div id="settingsEffortOptions"[\s\S]*?<\/div>/)?.[0] || "";
+  assert.match(effortInput, /role="combobox"/);
+  assert.match(effortInput, /aria-controls="settingsEffortOptions"/);
+  assert.match(effortInput, /aria-expanded="false"/);
+  assert.match(effortInput, /autocomplete="off"/);
+  assert.match(effortInput, /spellcheck="false"/);
+  assert.match(effortInput, /required/);
+  assert.match(html, /id="settingsEffortToggle"[^>]*aria-haspopup="listbox"[^>]*aria-controls="settingsEffortOptions"/);
+  assert.match(effortOptions, /role="listbox"[^>]*hidden/);
+  assert.doesNotMatch(effortOptions, /Provider default|Extra high|Maximum|>None<|>Low<|>Medium<|>High</);
+  for (const effort of ["none", "low", "medium", "high", "xhigh", "max"]) assert.match(effortOptions, new RegExp(`data-effort-value="${effort}"[^>]*>${effort}</button>`));
+  assert.match(functionSource(app, "showSettingsEffortOptions"), /hidden = false[\s\S]*aria-expanded/);
+  assert.match(functionSource(app, "chooseSettingsEffort"), /settingsEffort\.value = String\(value/);
+  assert.match(functionSource(app, "handleSettingsEffortKeydown"), /Escape[\s\S]*ArrowDown/);
   assert.match(html, /data-effort="config"[^>]*>[\s\S]*?Configured/);
   assert.match(html, /id="settingsTestConnection"[^>]*data-i18n="settingsTestConnection"/);
   assert.match(html, /id="settingsInstallCli"[^>]*hidden[^>]*data-i18n="settingsInstallCli"/);
@@ -82,6 +93,8 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(functionSource(app, "testCanvasConnection"), /\/api\/settings\/connections\/test[\s\S]*?settings\.editingConnectionId[\s\S]*?body\?\.installable/);
   assert.match(functionSource(app, "installCanvasCli"), /penechoDesktop\.installCli\(provider\)[\s\S]*?settingsCliPath\.value = result\.executable[\s\S]*?testCanvasConnection\(\)/);
   assert.match(css, /\.settings-connection-item\.editing\s*\{/);
+  assert.match(css, /\.settings-combobox-toggle\s*\{[^}]*position:\s*absolute[^}]*cursor:\s*pointer/);
+  assert.match(css, /\.settings-combobox-options\s*\{[^}]*position:\s*absolute[^}]*z-index:\s*12/);
   assert.doesNotMatch(css, /\.settings-connection-item\.active\s*\{/);
   assert.match(css, /\.settings-panel, \.configuration-panel\s*\{[^}]*color-scheme:\s*light[^}]*--panel-raised:\s*#ffffff/);
   assert.match(css, /\.settings-save\s*\{[^}]*color:\s*#fff;[^}]*background:\s*#4f46e5/);
@@ -522,11 +535,12 @@ test("canvas view mode exposes only quiet share and exit controls while preservi
     pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
     pointerMove = app.slice(app.indexOf('screen.addEventListener("pointermove"'), app.indexOf("function end(e)")),
     pointerEnd = functionSource(app, "end"),
-    penIndex = html.indexOf('data-mode="pen"'),
-    viewIndex = html.indexOf('id="canvasViewBtn"'),
-    eraserIndex = html.indexOf('data-mode="eraser"');
+    modeTools = html.match(/<div class="mode-tools">[\s\S]*?<\/div>/)?.[0] || "",
+    viewTools = html.match(/<span class="view-tools">[\s\S]*?<\/span>/)?.[0] || "";
 
-  assert.ok(penIndex < viewIndex && viewIndex < eraserIndex);
+  assert.doesNotMatch(modeTools, /id="canvasViewBtn"/);
+  assert.ok(viewTools.indexOf('id="canvasViewBtn"') < viewTools.indexOf('id="fullscreenBtn"'));
+  assert.ok(viewTools.indexOf('id="fullscreenBtn"') < viewTools.indexOf('id="gridToggle"'));
   assert.match(html, /id="canvasViewBtn"[^>]*aria-pressed="false"[^>]*data-i18n-aria="enterCanvasViewMode"[\s\S]*?<circle cx="12" cy="12" r="2\.8"/);
   assert.match(html, /id="canvasViewActions"[^>]*role="toolbar"[^>]*hidden[\s\S]*?id="canvasViewShareBtn"[\s\S]*?id="canvasViewCloseBtn"/);
   for (const key of ["enterCanvasViewMode", "exitCanvasViewMode", "canvasViewModeActions"]) {
@@ -616,7 +630,13 @@ test("declarative scenes and widgets render below the dedicated ink and interact
 test("plugin manager is a centered dynamic catalog with General HTML and bundled local plugins", () => {
   const html = read("public/index.html"), app = read("public/app.js"), zh = read("public/locales/zh.js");
   const css = read("public/style.css");
-  for (const id of ["pluginControl", "pluginButton", "pluginPopover", "pluginOptions", "pluginClose", "pluginRefresh", "pluginLocalTab", "pluginCreateTab", "pluginServerTab", "pluginLocalPanel", "pluginCreatePanel", "pluginServerPanel"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["pluginButton", "pluginPopover", "pluginOptions", "pluginClose", "pluginRefresh", "pluginLocalTab", "pluginCreateTab", "pluginServerTab", "pluginLocalPanel", "pluginCreatePanel", "pluginServerPanel"]) assert.match(html, new RegExp(`id="${id}"`));
+  const toolbar = html.match(/<nav class="toolbar"[\s\S]*?<\/nav>/)?.[0] || "",
+    settingsPanel = html.match(/<section id="settingsPanel"[\s\S]*?<\/section>\s*<\/div>\s*<\/section>/)?.[0] || "";
+  assert.doesNotMatch(html, /id="pluginControl"/);
+  assert.doesNotMatch(toolbar, /id="pluginButton"/);
+  assert.match(settingsPanel, /id="pluginButton"[^>]*aria-haspopup="dialog"[^>]*aria-controls="pluginPopover"[\s\S]*?data-i18n="settingsPluginsEntryHelp"/);
+  assert.match(app, /pluginButton\.onclick = \(\) => \{[\s\S]*?closeSettings\(false\);[\s\S]*?showPluginControl\(\);/);
   assert.doesNotMatch(html, /id="animationPluginEnabled"/);
   assert.match(app, /BUILTIN_PLUGIN_DEFINITIONS\s*=\s*Object\.freeze\(\[/);
   assert.match(app, /PLUGIN_DEFINITIONS\s*=\s*\[\.\.\.BUILTIN_PLUGIN_DEFINITIONS\]/);

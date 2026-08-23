@@ -15,11 +15,13 @@ recommended-refresh-seconds: 86400
 
 # Professional Diagrams
 
-Use only when a diagram materially needs established professional notation, compatibility with a domain tool, or copyable and editable domain source. Do not select this capability merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw. Explanatory, educational, conceptual, and overview visuals—including explanations of how a model or system works—belong in General HTML unless professional notation or source is genuinely necessary. Coverage includes process, BPMN, UML, architecture, topology, dependencies, lineage, ER/database, timelines; electrical/electronic circuits and IEC/IEEE schematics; control/signal systems; mechanical kinematics and assemblies; optics and apparatus; chemical structures and processes; biological pathways, medical devices and clinical paths; financial cash flow and risk; causal graphs, networks and geography. Professional fields not named here remain in scope.
+Use only when the required artifact needs established professional notation, a faithful quantitative chart with axes and scales, domain-tool compatibility, or editable domain source. Do not select it merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw. Explanation-, organization-, and planning-first compositions belong in Visual Explainer when available, otherwise General HTML. Behavior-first simulations, live dashboards, and browser tools belong in General HTML unless professional source defines the deliverable. Coverage includes process, BPMN, UML, architecture, topology, dependencies, lineage, ER/database, timelines; statistical and scientific charts; electrical/electronic circuits and IEC/IEEE schematics; control/signal systems; mechanical kinematics and assemblies; optics and apparatus; chemical structures and processes; biological pathways, medical devices and clinical paths; financial cash flow and risk; causal graphs, networks and geography. Professional fields not named here remain in scope.
+
+Choose exactly one primary Widget path. An explicit feasible professional format wins. C4/BPMN, editable circuits or schemas, GeoJSON, and exact Vega-Lite belong here; Transformer explanations, notes, itineraries, and schedules use Visual Explainer; simulators, live maps, and interactive schedulers use General HTML. Explanatory labels do not change a standard artifact, and manual positioning does not justify this path.
 
 The user's sketch and spatial relationships are authoritative. Preserve labels, arrows, containment, groups, lanes, order and terminology. Improve alignment, spacing, hierarchy and routing without inventing content.
 
-## Choose one output path
+## Choose one Professional Diagrams output path
 
 Return exactly one command and no prose.
 

@@ -25,7 +25,7 @@ test("explicit API endpoints must agree with the selected format", () => {
   assert.equal(resolveApiConfig("https://user:secret@example.test/v1", "openai"), null);
 });
 
-test("Anthropic effort maps none to disabled thinking and other levels to adaptive thinking", () => {
+test("Anthropic protocol preserves effort values while encoding disabled or adaptive thinking", () => {
   assert.equal(normalizedApiEffort("anthropic", ""), "medium");
   assert.equal(normalizedApiEffort("openai", ""), "medium");
   assert.deepEqual(anthropicEffortParameters("none"), { thinking:{ type:"disabled" } });
@@ -33,8 +33,12 @@ test("Anthropic effort maps none to disabled thinking and other levels to adapti
     thinking:{ type:"adaptive" }, output_config:{ effort:"medium" },
   });
   assert.deepEqual(anthropicEffortParameters("high", false), { output_config:{ effort:"high" } });
-  assert.deepEqual(anthropicEffortParameters("medium", true, { model:"claude-opus-4-5" }), { output_config:{ effort:"medium" } });
-  assert.deepEqual(anthropicEffortParameters("medium", true, { model:"claude-sonnet-4-5" }), {});
+  assert.deepEqual(anthropicEffortParameters("medium", true, { model:"claude-opus-4-5" }), {
+    thinking:{ type:"adaptive" }, output_config:{ effort:"medium" },
+  });
+  assert.deepEqual(anthropicEffortParameters("Provider_Native", true, { model:"claude-sonnet-4-5" }), {
+    thinking:{ type:"adaptive" }, output_config:{ effort:"Provider_Native" },
+  });
   assert.equal(anthropicResponseMaxTokens("none"), 20000);
   assert.equal(anthropicResponseMaxTokens("low"), 20000);
   assert.equal(anthropicResponseMaxTokens("medium"), 20000);

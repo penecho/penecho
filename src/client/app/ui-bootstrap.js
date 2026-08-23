@@ -861,7 +861,10 @@
     else hideEffortControl();
   };
   pluginButton.onclick = () => {
-    if (pluginPopover.hidden) showPluginControl();
+    if (pluginPopover.hidden) {
+      closeSettings(false);
+      showPluginControl();
+    }
     else hidePluginControl();
   };
   pluginClose.onclick = hidePluginControl;
@@ -1230,6 +1233,21 @@
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
+  settingsEffortToggle?.addEventListener("click", () => settingsEffortOptions.hidden ? showSettingsEffortOptions() : hideSettingsEffortOptions());
+  settingsEffort?.addEventListener("pointerdown", showSettingsEffortOptions);
+  settingsEffort?.addEventListener("input", () => {
+    updateSettingsEffortOptions();
+    showSettingsEffortOptions();
+  });
+  settingsEffort?.addEventListener("keydown", handleSettingsEffortKeydown);
+  settingsEffortOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-effort-value]");
+    if (option) chooseSettingsEffort(option.dataset.effortValue);
+  });
+  settingsEffortOptions?.addEventListener("keydown", handleSettingsEffortOptionKeydown);
+  document.addEventListener("pointerdown", (event) => {
+    if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
+  });
   if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
     updateSettingsProviderFields();

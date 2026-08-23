@@ -12,6 +12,10 @@ Alternative commercial licenses may be available. See COMMERCIAL-LICENSE.md.
 Third-party software
 --------------------
 
+AntV Infographic (npm package "@antv/infographic") is distributed under the
+MIT License. Copyright (c) 2025 AntV. The complete license text is included at
+public/vendor/antv-infographic.LICENSE.
+
 eventsource-parser (npm package "eventsource-parser") is distributed under the
 MIT License:
 

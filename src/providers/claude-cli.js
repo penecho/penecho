@@ -4,7 +4,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
-const { mapClaudeCliReasoningEffort } = require("./reasoning-effort.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 function findOnPath(name, env = process.env) {
@@ -58,7 +57,7 @@ function sanitizeClaudeEnv(env = process.env, effort = null) {
 
 function buildClaudeArgs({ systemPrompt, model, effort }) {
   const selectedEffort = String(effort || "").trim(), thinkingDisabled = selectedEffort.toLowerCase() === "none",
-    cliEffort = selectedEffort ? mapClaudeCliReasoningEffort(selectedEffort.toLowerCase(), model) : "";
+    cliEffort = thinkingDisabled ? "" : selectedEffort;
   const args = [
     "-p",
     "--input-format", "stream-json",

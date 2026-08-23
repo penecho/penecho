@@ -30,6 +30,8 @@ Every LLM page ends with `Test & Save`, and PenEcho always saves before checking
 
 The canvas toolbar exposes a fixed-width clickable `Reasoning` menu beside Auto AI for frequent per-request changes: `Configured`, `none`, `low`, `medium`, `high`, and the provider's highest practical level. `Configured` uses the selected connection's saved level; a toolbar choice overrides it without rewriting the connection.
 
+The Canvas connection editor uses a separate editable Reasoning field. It suggests the literal lowercase values `none`, `low`, `medium`, `high`, `xhigh`, and `max`, but also accepts provider-native strings; a custom value keeps its exact spelling when saved, shown again, and passed through to the provider.
+
 PenEcho maps this common scale to the selected model's native controls: Kimi's three levels, MiniMax's adaptive/disabled thinking mode, and model-specific Codex/Claude ceilings. PenEcho `medium` is a shared quality/speed intent rather than a promise that the provider has a same-named field: it stays native on Codex and Claude, becomes Kimi `high`, and enables MiniMax adaptive thinking. `none` cannot turn thinking off on Kimi or MiniMax-M2.x. Request records show both the selected and mapped values.
 
 ## CLI prerequisites

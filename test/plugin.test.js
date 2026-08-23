@@ -401,8 +401,10 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /never use a JSON, XML, YAML, source-code, or `<pre>` dump as the primary view/);
   assert.match(general.document, /locally renders its supported `diagram_source` formats from source alone/);
   assert.match(general.document, /Placement is semantic, not a search for unused canvas space/);
-  assert.match(general.document, /default capability for explanatory, educational, conceptual, and overview visuals[\s\S]*visual explanations of a model, system, structure, or architecture/);
-  assert.match(general.document, /Merely asking to draw, explain, or show an architecture, model, structure, process, flow, diagram, or chart is not enough[\s\S]*keep explanatory visuals in General HTML/);
+  assert.match(general.document, /## Capability router[\s\S]*Choose exactly one primary Widget path before authoring/);
+  assert.match(general.document, /Use Visual Explainer when[\s\S]*Use ordinary General HTML when custom behavior is primary[\s\S]*Use Professional Diagrams when/);
+  assert.match(general.document, /Transformer explanation is Visual Explainer[\s\S]*interactive attention simulator is General HTML[\s\S]*editable C4 model is Professional Diagrams/);
+  assert.match(general.document, /Merely asking to draw, explain, or show an architecture, model, structure, process, flow, diagram, or chart is not enough[\s\S]*Visual Explainer when available/);
   assert.match(general.document, /overlay only the solution path on an existing maze/);
   assert.match(general.document, /existing figures or objects[\s\S]*?position the transparent widget over their actual locations[\s\S]*?never redraw the figures/);
   assert.match(general.document, /Match the current PenEcho theme and nearby visual language/);
@@ -433,7 +435,8 @@ test("every built-in plugin uses a directory bundle", () => {
   for (const format of ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"])
     assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
-  assert.match(flowchart.document, /Use only when a diagram materially needs established professional notation[\s\S]*Do not select this capability merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw[\s\S]*belong in General HTML/);
+  assert.match(flowchart.document, /Use only when the required artifact needs established professional notation[\s\S]*faithful quantitative chart with axes and scales[\s\S]*Do not select it merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw/);
+  assert.match(flowchart.document, /C4\/BPMN[\s\S]*Transformer explanations[\s\S]*simulators, live maps/);
   assert.match(flowchart.document, /diagram background transparent by default[\s\S]*opaque or translucent backing[\s\S]*materially improves contrast, legibility, semantic grouping, or media presentation/);
   assert.match(flowchart.document, /palette and density that best match the current PenEcho theme and nearby Canvas content/);
   assert.match(flowchart.document, /use 3–5 meaningful phases[\s\S]*only when most inter-phase flow stays forward[\s\S]*Keep rework, exception and rejection branches beside the decision/);

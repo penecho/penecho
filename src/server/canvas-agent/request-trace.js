@@ -28,6 +28,13 @@ function safeValue(value) {
   return serialized === undefined ? null : JSON.parse(serialized);
 }
 
+function tracedEffort(state) {
+  const mapping = state.connection?.effortMapping || null,
+    requestedEffort = mapping?.requested || state.connection?.effort || state.header?.config?.reasoningEffort || null,
+    providerEffort = mapping && Object.hasOwn(mapping,"value") ? mapping.value : state.header?.config?.reasoningEffort ?? requestedEffort;
+  return { requestedEffort, providerEffort, effortMapping:safeValue(mapping) };
+}
+
 function isoTime(value, fallback = Date.now()) {
   const time = new Date(value ?? fallback);
   return Number.isNaN(time.getTime()) ? new Date(fallback).toISOString() : time.toISOString();
@@ -137,8 +144,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     const turn = event?.data?.turn ?? null, stepNumber = event?.data?.step ?? null;
     let step = trace.data.steps.find(item=>item.turn===turn&&item.step===stepNumber);
     if (!step && create) {
-      const requestId = trace.data.steps.length ? createRequestId() : trace.data.requestId, mappingEffort = state.header?.config?.reasoningEffort || state.connection?.effort || null,
-        visionAssets = state.unassignedVision.splice(0);
+      const requestId = trace.data.steps.length ? createRequestId() : trace.data.requestId, efforts = tracedEffort(state), visionAssets = state.unassignedVision.splice(0);
       step = {
         requestId,
         kind:"agent",
@@ -147,9 +153,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
         startedAt:isoTime(event?.time),
         completedAt:null,
         status:"in-flight",
-        requestedEffort:mappingEffort,
-        providerEffort:mappingEffort,
-        effortMapping:null,
+        ...efforts,
         payload:null,
         vision:visionAssets[0] || null,
         visionAssets,
@@ -205,8 +209,8 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     trace.data.events.push(event);
     if (event.type === "request/header") {
       state.header = event.data?.header || null;
-      const pendingStep = trace.data.steps.findLast(item=>item.status==="in-flight"), effort = state.header?.config?.reasoningEffort || state.connection?.effort || null;
-      if (pendingStep) pendingStep.requestedEffort = pendingStep.providerEffort = effort;
+      const pendingStep = trace.data.steps.findLast(item=>item.status==="in-flight");
+      if (pendingStep) Object.assign(pendingStep,tracedEffort(state));
     } else if (event.type === "request/context") {
       state.context = event.data || null;
     } else if (event.type === "step/start") {

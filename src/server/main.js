@@ -79,6 +79,8 @@ const API_PRESETS = Object.freeze({
 });
 const API_PRESET_IDS = new Set(Object.keys(API_PRESETS));
 const WIDGET_RENDERER = path.join(PUBLIC, "vendor", "penecho-dom-renderer.js");
+const VISUAL_EXPLAINER_VENDOR = path.join(PUBLIC, "vendor", "antv-infographic-0.2.20.min.js");
+const VISUAL_EXPLAINER_RUNTIME = path.join(PUBLIC, "visual-explainer-runtime.js");
 let AI_PROVIDER = normalizeAiProvider(process.env.AI_PROVIDER);
 let API_BASE_URL = firstNonEmpty(process.env.AI_API_URL, process.env.OPENAI_API_URL);
 let API_FORMAT = firstNonEmpty(process.env.AI_API_FORMAT, process.env.OPENAI_API_FORMAT)?.toLowerCase();
@@ -303,7 +305,7 @@ function providerEffort(uiEffort, provider = null) {
     activeProvider = provider?.provider || AI_PROVIDER,
     configured = provider ? activeProvider === "api" ? provider.apiEffort : provider.aiEffort : activeProvider === "api" ? API_EFFORT : AI_EFFORT,
     effort = !selected || selected === "config" ? configured : selected;
-  if (!selected || selected === "config") return String(effort || DEFAULT_REASONING_EFFORT).trim().toLowerCase();
+  if (!selected || selected === "config") return String(effort || DEFAULT_REASONING_EFFORT).trim();
   return normalizeReasoningEffort(selected);
 }
 
@@ -412,11 +414,16 @@ function connectionUpdates(connection) {
   };
 }
 
+function connectionEffort(value) {
+  const effort = String(value || "").trim() || DEFAULT_REASONING_EFFORT;
+  if (effort.length > 128 || /[\r\n\0]/.test(effort)) throw new Error("Enter a valid reasoning value.");
+  return effort;
+}
+
 function normalizeConnection(input, existing = null) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Connection is invalid.");
-  const provider = normalizeAiProvider(input.provider), rawEffort = String(input.effort || "").trim().toLowerCase(), effort = rawEffort || DEFAULT_REASONING_EFFORT;
+  const provider = normalizeAiProvider(input.provider), effort = connectionEffort(input.effort);
   if (!provider) throw new Error("Choose an AI provider.");
-  if (!new Set(["none", "low", "medium", "high", "xhigh", "max"]).has(effort)) throw new Error("Choose a supported reasoning effort.");
   const id = existing?.id || crypto.randomUUID(), connection = { id, provider, effort };
   if (provider === "api") {
     const apiFormat = String(input.apiFormat || "").trim().toLowerCase(), apiUrl = String(input.apiUrl || "").trim().replace(/\/+$/, ""), apiModel = String(input.apiModel || "").trim(), enteredKey = String(input.apiKey || "").trim(), apiKey = enteredKey || existing?.apiKey || (id === "default" ? API_KEY : ""), requestedPreset = String(input.apiPreset || "").trim();
@@ -533,7 +540,7 @@ function normalizeCanvasSettings(input) {
     if (tavilyApiKey.length > 4096 || /[\r\n\0]/.test(tavilyApiKey)) throw new Error("The Tavily API key is invalid.");
     return { PENECHO_SETTINGS_SCOPE:scope, ...(tavilyApiKey ? { TAVILY_API_KEY:tavilyApiKey } : {}) };
   }
-  const provider = normalizeAiProvider(input.provider), format = String(input.apiFormat || "").trim().toLowerCase(), preset = String(input.apiPreset || "").trim(), urlText = String(input.apiUrl || "").trim(), model = String(input.apiModel || "").trim(), key = String(input.apiKey || "").trim(), effort = String(input.effort || "").trim().toLowerCase() || DEFAULT_REASONING_EFFORT, imageFormat = String(input.imageFormat || "").trim().toLowerCase(), timeout = Number(input.timeoutSeconds), maxTokens = configuredMaxTokens(input.maxTokens), autoDelay = Number(input.autoDelaySeconds), traceLimit = Number(input.requestTraceLimit);
+  const provider = normalizeAiProvider(input.provider), format = String(input.apiFormat || "").trim().toLowerCase(), preset = String(input.apiPreset || "").trim(), urlText = String(input.apiUrl || "").trim(), model = String(input.apiModel || "").trim(), key = String(input.apiKey || "").trim(), effort = connectionEffort(input.effort), imageFormat = String(input.imageFormat || "").trim().toLowerCase(), timeout = Number(input.timeoutSeconds), maxTokens = configuredMaxTokens(input.maxTokens), autoDelay = Number(input.autoDelaySeconds), traceLimit = Number(input.requestTraceLimit);
   if (!provider) throw new Error("Choose an AI provider.");
   let url;
   if (provider === "api") {
@@ -545,7 +552,6 @@ function normalizeCanvasSettings(input) {
     if (!key && !API_KEY) throw new Error("Enter an API key.");
     if (key.length > 8192 || /[\r\n\0]/.test(key)) throw new Error("The API key is invalid.");
   }
-  if (effort && !new Set(["none", "low", "medium", "high", "xhigh", "max"]).has(effort)) throw new Error("Choose a supported reasoning effort.");
   if (!Number.isInteger(timeout) || timeout < 10 || timeout > 600) throw new Error("Timeout must be between 10 and 600 seconds.");
   if (maxTokens === null) throw new Error(`MAX_TOKENS must be an integer larger than ${MIN_MAX_TOKENS}.`);
   if (!Number.isFinite(autoDelay) || autoDelay < 0 || autoDelay > 60) throw new Error("Auto AI delay must be between 0 and 60 seconds.");
@@ -718,7 +724,7 @@ const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles appear in modelInput.enable
 
 Plugin styles are injected automatically after third-party styles and are not repeated in html. Reuse their classes, variables, palettes and density controls. Preserve an existing widget's visual language during refinement. For new widgets, follow the current uiTheme and nearby Canvas style when compatible, selecting the closest plugin palette and density rather than inventing unrelated chrome. Generated HTML may freely use inline JavaScript and may load arbitrary HTTPS third-party scripts, ES modules, styles, fonts, images or data endpoints when they materially improve syntax compatibility, layout or rendering; no library or professional source-format whitelist exists. For an HTML widget with semantic source, prefer rendering that source with an appropriate browser library loaded on demand inside that widget, following any matching plugin renderer contract first. Use mature, fixed, documented browser entries; never use latest tags, guess internal /lib or /dist paths, or invent library APIs. Prefer no dependency when native HTML/SVG/Canvas plus plugin CSS is sufficient. Resources load only with the widget that references them. Do not use frames, forms, cookies or storage. Never include secrets. Public HTTPS reference links are allowed, but must use target="_blank" and rel="noopener noreferrer" and must never navigate the widget itself. Use ordinary fetch with credentials:"omit" for public HTTPS data; the widget runtime automatically handles eligible CORS and direct-network failures through PenEcho, so no CORS workaround is needed. Use crossorigin="anonymous" for cross-origin assets where applicable. Reflow on resize and notify the snapshot bridge after the initial stable render and meaningful changes; wait for visible assets and library rendering before notifying, but never clear a successful render because a non-rendering follow-up fails. Network widgets own refresh timers and visible loading/error/last-update states.`;
 
-const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. Use native draw only for a very simple static sketch or annotation with about 10 or fewer basic primitives or line segments. For larger static visuals, animation, simulation, illustration, or custom graphics, use General HTML and prefer compact inline SVG. Prefer General HTML for explanatory, educational, conceptual, and overview visuals, including visual explanations of a model, system, structure, or architecture. Use a specialized professional capability only when established professional notation, compatibility with a domain tool, or copyable and editable professional source is materially needed; words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
+const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. Choose exactly one command path by the defining deliverable, not by trigger words, and never return speculative alternatives. Use native draw only for a very simple static sketch or annotation with about 10 or fewer basic primitives or line segments. This response mode does not expose the Canvas Agent Visual Explainer tool, so use General HTML as its explicit compatibility fallback for understanding-, organizing-, and planning-first visual compositions. Use General HTML directly when custom behavior is primary: interaction that changes the view or data, animation, simulation, live or refreshing data, a browser-native tool, freeform overlay, or custom illustration. Simple hover, responsive reflow, decorative motion, or wanting manual layout control is not enough to make behavior primary. Use a specialized professional capability when the required artifact needs established notation, a faithful quantitative chart with axes and scales, compatibility with a domain tool, or reusable editable professional source. Words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
 
 function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
   const sections = [ACTIVE_SYSTEM_PROMPT_BASE];
@@ -3341,7 +3347,10 @@ const server = http.createServer(async (req, res) => {
       const authorizationError = browserRequestError(req);
       if (authorizationError) return send(res, 403, { error:authorizationError });
       if (String(req.headers["content-type"] || "").split(";",1)[0].trim().toLowerCase() !== "application/json") return send(res, 415, { error:"Plugin creation requires application/json." });
-      const body = await readJson(req, 8 * 1024);
+      // The validated plugin contract permits up to 12 KiB of Markdown and
+      // 32 KiB of CSS, so the transport envelope must accommodate both while
+      // remaining tightly bounded.
+      const body = await readJson(req, 48 * 1024);
       if (!body || typeof body.document !== "string" || body.styles !== undefined && typeof body.styles !== "string") return send(res, 400, { error:"A plugin document and optional CSS string are required." });
       return send(res, 201, { plugin:saveLocalPluginDocument(body.document, body.styles || "") });
     } catch (error) {
@@ -3421,6 +3430,16 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(WIDGET_RENDERER).pipe(res);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/visual-explainer-vendor.js") {
+    res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
+    if (req.method === "HEAD") return res.end();
+    return fs.createReadStream(VISUAL_EXPLAINER_VENDOR).pipe(res);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/visual-explainer-runtime.js") {
+    res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
+    if (req.method === "HEAD") return res.end();
+    return fs.createReadStream(VISUAL_EXPLAINER_RUNTIME).pipe(res);
   }
   if (req.method === "GET" && url.pathname === "/api/debug/log") {
     if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname) || localAccessMode !== "open" && !hasAiSession(req)) return send(res, 404, "Not found", "text/plain; charset=utf-8");

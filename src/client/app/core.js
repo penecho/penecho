@@ -140,6 +140,9 @@
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
     settingsTavilySaved = document.querySelector("#settingsTavilySaved"),
     settingsEffort = document.querySelector("#settingsEffort"),
+    settingsEffortCombobox = document.querySelector("#settingsEffortCombobox"),
+    settingsEffortToggle = document.querySelector("#settingsEffortToggle"),
+    settingsEffortOptions = document.querySelector("#settingsEffortOptions"),
     settingsMaxTokens = document.querySelector("#settingsMaxTokens"),
     settingsTimeout = document.querySelector("#settingsTimeout"),
     settingsAutoDelay = document.querySelector("#settingsAutoDelay"),
@@ -388,8 +391,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourDone: "Finish",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
-      tourPluginsTitle: "Real photos and professional diagrams",
-      tourPluginsBody: "Real Photos is on by default and usually shows one web photo. Professional Diagrams is also on by default and creates editable professional visuals with copyable source. Manage both in Plugins.",
       tourHandTitle: "Move objects with the Hand tool",
       tourHandBody: "Choose Hand, then tap an image, animation, text box, or AI widget to reveal its controls. HTML widgets remain interactive; drag empty space to pan.",
       tourStudioThemeTitle: "Try the new Studio theme",
@@ -435,6 +436,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiEntryHelp: "Changes apply immediately",
       settingsSystemEntry: "System settings",
       settingsSystemEntryHelp: "Restart required after saving",
+      settingsPluginsEntryHelp: "Manage AI capabilities",
       settingsSearchEntry: "Internet search",
       settingsSearchReady: "Tavily key saved",
       settingsSearchNotConfigured: "Add a Tavily API key",
@@ -444,6 +446,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSearchDialogSubtitle: "Configure Tavily once, then enable search per device from the Canvas Agent composer.",
       settingsConnectionEditor: "Connection details",
       settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
+      settingsEffortSuggestions: "Reasoning suggestions",
+      settingsShowEffortSuggestions: "Show reasoning suggestions",
       settingsSavedConnections: "Saved connections",
       settingsConnectionCount: "{count} of {limit} connections",
       settingsAddConnection: "Add connection",
@@ -1215,7 +1219,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
-    { id: "plugins-v3", targets: ["#pluginButton"], titleKey: "tourPluginsTitle", bodyKey: "tourPluginsBody", placement: "bottom", radius: 8 },
     { id: "favorites-add-v1", targets: ["#craftsButton"], titleKey: "tourFavoritesTitle", bodyKey: "tourFavoritesBody", placement: "bottom", radius: 8 },
     { id: "hand-v1", targets: ["#handToolBtn"], titleKey: "tourHandTitle", bodyKey: "tourHandBody", placement: "bottom", radius: 7 },
     { id: "studio-theme-v1", targets: ["#theme"], titleKey: "tourStudioThemeTitle", bodyKey: "tourStudioThemeBody", placement: "bottom", radius: 8 },
@@ -1862,6 +1865,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const restoreFocus = settings.configurationRestoreFocus;
     settings.configurationMode = "";
     settings.configurationRestoreFocus = null;
+    hideSettingsEffortOptions();
     configurationLayer.hidden = true;
     configurationLayer.setAttribute("aria-hidden", "true");
     canvasSettingsForm.hidden = true;
@@ -1888,8 +1892,60 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function defaultConnectionEffort(provider = settingsProvider?.value || "api") {
     return "medium";
   }
+  function updateSettingsEffortOptions() {
+    const selected = settingsEffort.value.trim();
+    settingsEffortOptions?.querySelectorAll("[data-effort-value]").forEach((option) => option.setAttribute("aria-selected", String(option.dataset.effortValue === selected)));
+  }
+  function hideSettingsEffortOptions() {
+    if (!settingsEffortOptions) return;
+    settingsEffortOptions.hidden = true;
+    settingsEffort.setAttribute("aria-expanded", "false");
+    settingsEffortToggle?.setAttribute("aria-expanded", "false");
+  }
+  function showSettingsEffortOptions() {
+    if (!settingsEffortOptions || settingsEffort.disabled || settingsEffortToggle?.disabled) return;
+    updateSettingsEffortOptions();
+    settingsEffortOptions.hidden = false;
+    settingsEffort.setAttribute("aria-expanded", "true");
+    settingsEffortToggle?.setAttribute("aria-expanded", "true");
+  }
+  function chooseSettingsEffort(value) {
+    settingsEffort.value = String(value || "");
+    updateSettingsEffortOptions();
+    hideSettingsEffortOptions();
+    settingsEffort.focus({ preventScroll:true });
+  }
+  function handleSettingsEffortKeydown(event) {
+    if (event.key === "Escape") {
+      if (settingsEffortOptions?.hidden) return;
+      event.preventDefault();
+      hideSettingsEffortOptions();
+      return;
+    }
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    showSettingsEffortOptions();
+    const options = [...settingsEffortOptions.querySelectorAll("[data-effort-value]")], selected = options.find(option => option.getAttribute("aria-selected") === "true");
+    (selected || options[0])?.focus({ preventScroll:true });
+  }
+  function handleSettingsEffortOptionKeydown(event) {
+    const option = event.target.closest("[data-effort-value]");
+    if (!option) return;
+    const options = [...settingsEffortOptions.querySelectorAll("[data-effort-value]")], index = options.indexOf(option);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideSettingsEffortOptions();
+      settingsEffort.focus({ preventScroll:true });
+      return;
+    }
+    const next = event.key === "ArrowDown" ? options[(index + 1) % options.length] : event.key === "ArrowUp" ? options[(index - 1 + options.length) % options.length] : event.key === "Home" ? options[0] : event.key === "End" ? options.at(-1) : null;
+    if (!next) return;
+    event.preventDefault();
+    next.focus({ preventScroll:true });
+  }
   function selectDefaultConnectionEffort() {
     settingsEffort.value = defaultConnectionEffort();
+    updateSettingsEffortOptions();
   }
   function apiPresetForConnection(connection = {}) {
     if (connection.apiPreset && API_PRESETS[connection.apiPreset]) return [connection.apiPreset, API_PRESETS[connection.apiPreset]];
@@ -2011,6 +2067,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsApiSaved.dataset.saved = String(connection?.hasApiKey === true);
     settings.cli[provider] = { model:connection?.cliModel || "", path:connection?.cliPath || provider.replace("-cli", "") };
     settingsEffort.value = connection?.effort || defaultConnectionEffort(provider);
+    updateSettingsEffortOptions();
     canvasSettingsForm.dataset.editorHidden = "false";
     updateSettingsProviderFields();
     renderConnectionLists();
@@ -2021,6 +2078,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settings.editingConnectionId = null;
     canvasSettingsForm.dataset.editorHidden = "true";
     settingsApiKey.value = "";
+    hideSettingsEffortOptions();
     renderConnectionLists();
     setSettingsStatus();
   }
@@ -2124,6 +2182,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         "claude-cli":{ model:body.claudeModel, path:body.claudePath },
       };
       settingsEffort.value = body.effort || defaultConnectionEffort(body.provider);
+      updateSettingsEffortOptions();
       settingsMaxTokens.value = String(body.maxTokens);
       settingsTimeout.value = String(body.timeoutSeconds);
       settingsAutoDelay.value = String(body.autoDelaySeconds);

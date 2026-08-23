@@ -52,9 +52,9 @@ function resolveKimiLaunch(configuredPath = "kimi", env = process.env) {
 }
 
 function mapKimiEffort(effort) {
-  const normalized = String(effort || "").trim().toLowerCase();
-  if (!normalized || normalized === "config") return null;
-  return mapKimiReasoningEffort(normalized) || normalized;
+  const selected = String(effort || "").trim();
+  if (!selected || selected === "config") return null;
+  return mapKimiReasoningEffort(selected) || selected;
 }
 
 function sanitizeKimiEnv(env = process.env, effort = null) {
