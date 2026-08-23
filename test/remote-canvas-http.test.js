@@ -12,6 +12,8 @@ test("Remote Canvas allows only reviewed local routes and methods", () => {
   assert.equal(remoteCanvasTarget("GET", "/api/canvases"), "/api/canvases");
   assert.equal(remoteCanvasTarget("GET", "/api/canvas-agent/projects"), "/api/canvas-agent/projects");
   assert.throws(() => remoteCanvasTarget("POST", "/api/canvas-agent/projects"), /not available/);
+  assert.throws(() => remoteCanvasTarget("GET", "/api/canvas-agent/host-roots"), /not available/);
+  assert.throws(() => remoteCanvasTarget("POST", "/api/canvas-agent/projects/from-host-root"), /not available/);
   assert.equal(remoteCanvasTarget("DELETE", "/api/canvas-agent/projects/local-1234567890abcdef12345678"), "/api/canvas-agent/projects/local-1234567890abcdef12345678");
   assert.equal(remoteCanvasTarget("DELETE", "/api/canvas-agent/projects/file-1234567890abcdef12345678"), "/api/canvas-agent/projects/file-1234567890abcdef12345678");
   assert.equal(remoteCanvasTarget("GET", "/api/canvas-agent/projects/local-1234567890abcdef12345678/history"), "/api/canvas-agent/projects/local-1234567890abcdef12345678/history");

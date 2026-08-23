@@ -1525,14 +1525,6 @@ body[data-theme="studio"] footer, body[data-theme="studio"] #coords { color: #66
 .canvas-agent-project-choice[aria-pressed="true"] { color: #312e81; border-color: #a5b4fc; background: #eef2ff; }
 .canvas-agent-project-remove { width: 34px; color: #94a3b8; border: 0; border-radius: 8px; background: transparent; font-size: 18px; cursor: pointer; }
 .canvas-agent-project-remove:hover { color: #b91c1c; background: #fef2f2; }
-.canvas-agent-project-access { display: grid; gap: 5px; padding-top: 2px; }
-.canvas-agent-project-access[hidden] { display: none; }
-.canvas-agent-project-access > span { color: #475569; font-size: 10.5px; font-weight: 700; }
-.canvas-agent-project-access > div { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 10px; background: #f1f5f9; }
-.canvas-agent-project-access button { min-height: 32px; padding: 5px 8px; color: #475569; border: 0; border-radius: 8px; background: transparent; font-size: 10.5px; font-weight: 700; cursor: pointer; }
-.canvas-agent-project-access button.active { color: #312e81; background: #fff; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
-.canvas-agent-project-access button:disabled { opacity: .5; cursor: default; }
-.canvas-agent-project-access small { min-height: 28px; color: #64748b; font-size: 10px; line-height: 1.4; }
 .canvas-agent-project-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 5px; }
 .canvas-agent-project-add { min-height: 36px; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 9px; background: #eef2ff; font-size: 11px; font-weight: 750; cursor: pointer; }
 .canvas-agent-project-add:hover { border-color: #818cf8; background: #e0e7ff; }
@@ -1745,7 +1737,6 @@ body[data-theme="studio"] footer, body[data-theme="studio"] #coords { color: #66
   .canvas-agent-project-remove,
   .canvas-agent-project-roots > header button { width: 44px; min-width: 44px; height: 44px; }
   .canvas-agent-project-choice,
-  .canvas-agent-project-access button,
   .canvas-agent-project-add,
   .canvas-agent-project-root-list > button,
   .canvas-agent-project-root-select { min-height: 44px; }

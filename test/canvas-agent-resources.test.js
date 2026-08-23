@@ -251,6 +251,27 @@ test("allowed server roots expose opaque IDs and relative folders while rejectin
   await expectProjectError(store.browseRoot("root-000000000000000000000000", ""), "project_root_not_found");
 });
 
+test("local and LAN clients browse the PenEcho host home through the in-app root API without exposing it to Cloud roots", async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-host-roots-"));
+  t.after(() => fs.rm(directory, { recursive:true, force:true }));
+  const stateDirectory = path.join(directory, "state"), hostRoot = path.join(directory, "host-home"), projectFolder = path.join(hostRoot, "Workspace", "ReadOnlyProject");
+  await fs.mkdir(projectFolder, { recursive:true });
+  await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
+  const store = new CanvasAgentProjectStore({ stateDirectory, allowedRoots:[], hostRoots:[{ path:hostRoot, name:"Home" }] });
+
+  assert.deepEqual(await store.listRoots(), [], "Cloud has no implicit host-home root");
+  const hostRoots = await store.listHostRoots();
+  assert.equal(hostRoots.length, 1);
+  assert.equal(hostRoots[0].name, "Home");
+  const listing = await store.browseHostRoot(hostRoots[0].id, "Workspace");
+  assert.equal(listing.entries.some(entry => entry.relativePath === "Workspace/ReadOnlyProject"), true);
+  const project = await store.addFromHostRoot(hostRoots[0].id, "Workspace/ReadOnlyProject");
+  assert.equal(project.kind, "folder");
+  assert.equal(project.source, "native");
+  assert.equal((await store.resolve(project.id)).path, await fs.realpath(projectFolder));
+  await expectProjectError(store.browseRoot(hostRoots[0].id, ""), "project_root_not_found");
+});
+
 test("single-file conversation history stays in private state storage, is bounded to five, and is safely removed with its registration", async t => {
   const { directory, stateDirectory, store } = await fixture(t);
   const sourceDirectory = path.join(directory, "source-without-metadata"), sourceFile = path.join(sourceDirectory, "notes.txt"),
@@ -334,8 +355,10 @@ test("main resource routes separate native paths from roots and uploads and reco
   assert.match(routes, /\(\?:local\|file\)-\[0-9a-f\]\{24\}/);
   assert.match(routes, /req\.method === "POST" && url\.pathname === "\/api\/canvas-agent\/projects"[\s\S]*add\(body\?\.path, \{ kind:body\?\.kind, origin:"native" \}\)/);
   assert.match(routes, /"\/api\/canvas-agent\/projects\/from-root"[\s\S]*addFromRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
+  assert.match(routes, /"\/api\/canvas-agent\/projects\/from-host-root"[\s\S]*addFromHostRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
   assert.match(routes, /"\/api\/canvas-agent\/files"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.upload\(body\)/);
   assert.match(routes, /"\/api\/canvas-agent\/roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listRoots\(\)/);
+  assert.match(routes, /"\/api\/canvas-agent\/host-roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listHostRoots\(\)/);
   assert.match(routes, /canvasAgentRootEntriesMatch[\s\S]*getAll\("path"\)\.length > 1[\s\S]*browseRoot\(canvasAgentRootEntriesMatch\[1\], url\.searchParams\.get\("path"\) \|\| ""\)/);
   assert.match(mainSource, /PENECHO_CANVAS_AGENT_ALLOWED_ROOTS[\s\S]*path\.isAbsolute\(selectedPath\)/);
 
@@ -346,4 +369,5 @@ test("main resource routes separate native paths from roots and uploads and reco
   assert.match(rawProjectRoute, /methods:new Set\(\["GET"\]\)/, "Remote Canvas may list resources but cannot submit a raw native host path");
   assert.match(fromRootRoute, /methods:new Set\(\["POST"\]\)/);
   assert.match(filesRoute, /methods:new Set\(\["POST"\]\)/);
+  assert.equal(remoteCanvasHttpSource.includes("canvas-agent/host-roots"), false, "Cloud cannot bridge the implicit host-home browser");
 });

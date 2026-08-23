@@ -256,9 +256,9 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(preload, /copyText/);
   assert.match(canvasPreload, /penechoDesktopUpdate/);
   assert.match(canvasPreload, /installCli:provider => ipcRenderer\.invoke\("penecho:install-cli", provider\)/);
-  assert.match(canvasPreload, /pickProjectDirectory:\(\) => ipcRenderer\.invoke\("penecho:pick-project-directory"\)/);
+  assert.doesNotMatch(canvasPreload, /pickProjectDirectory|penecho:pick-project-directory/);
   assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
-  assert.match(main, /showOpenDialog\(mainWindow,[\s\S]*?properties:\["openDirectory", "createDirectory"\]/);
+  assert.doesNotMatch(main, /penecho:pick-project-directory|properties:\["openDirectory"/);
   assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);
   assert.doesNotMatch(canvasPreload, /openSettings/);
   assert.match(canvasPreload, /process\.platform !== "win32"/);
@@ -359,8 +359,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
 test("desktop Canvas file picker is sender-guarded, single-file, and type-limited", () => {
   const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8"),
     canvasPreload = fs.readFileSync(path.join(ROOT, "desktop", "canvas-preload.js"), "utf8"),
-    handler = main.match(/ipcMain\.handle\("penecho:pick-project-file", async event => \{([\s\S]*?)\n  \}\);/)?.[1] || "",
-    folderHandler = main.match(/ipcMain\.handle\("penecho:pick-project-directory", async event => \{([\s\S]*?)\n  \}\);/)?.[1] || "";
+    handler = main.match(/ipcMain\.handle\("penecho:pick-project-file", async event => \{([\s\S]*?)\n  \}\);/)?.[1] || "";
 
   assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
   assert.match(handler, /if \(!fromCanvas\(event\)\) return \{ canceled:true \}/);
@@ -377,8 +376,7 @@ test("desktop Canvas file picker is sender-guarded, single-file, and type-limite
   assert.doesNotMatch(handler, /name:"All files"|extensions:\["\*"\]/);
   assert.match(handler, /if \(result\.canceled \|\| !selectedPath\) return \{ canceled:true \}/);
   assert.match(handler, /pickerToken:issueNativePickerGrant\(\{ selectedPath, kind:"file" \}\)/);
-  assert.match(folderHandler, /if \(!fromCanvas\(event\)\) return \{ canceled:true \}/);
-  assert.match(folderHandler, /pickerToken:issueNativePickerGrant\(\{ selectedPath, kind:"folder" \}\)/);
+  assert.doesNotMatch(main, /penecho:pick-project-directory|kind:"folder"/);
 });
 
 test("desktop build dependencies are isolated from normal root installs", () => {
