@@ -305,7 +305,6 @@
     canvasAgentProjectButton.setAttribute("title",t("canvasAgentProject"));
     canvasAgentProjectPopover.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectClose.setAttribute("aria-label",t("canvasAgentProjectClose"));
-    canvasAgentProjectAccess.setAttribute("aria-label",t("canvasAgentAccessMode"));
     canvasAgentProjectAddFile.textContent=t("canvasAgentAddProjectFile");
     canvasAgentProjectUpload.textContent=t(canvasAgent.projectUploadBusy?"canvasAgentUploadingFile":"canvasAgentUploadFile");
     canvasAgentProjectRootBack.setAttribute("aria-label",t("canvasAgentRootBack"));
