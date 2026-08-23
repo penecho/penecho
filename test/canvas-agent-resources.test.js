@@ -263,12 +263,17 @@ test("local and LAN clients browse the PenEcho host home through the in-app root
   const hostRoots = await store.listHostRoots();
   assert.equal(hostRoots.length, 1);
   assert.equal(hostRoots[0].name, "Home");
+  assert.equal((await store.browseHostRoot(hostRoots[0].id, "")).selectable, false);
   const listing = await store.browseHostRoot(hostRoots[0].id, "Workspace");
+  assert.equal(listing.selectable, true);
   assert.equal(listing.entries.some(entry => entry.relativePath === "Workspace/ReadOnlyProject"), true);
   const project = await store.addFromHostRoot(hostRoots[0].id, "Workspace/ReadOnlyProject");
   assert.equal(project.kind, "folder");
   assert.equal(project.source, "native");
   assert.equal((await store.resolve(project.id)).path, await fs.realpath(projectFolder));
+  await expectProjectError(store.addFromHostRoot(hostRoots[0].id, ""), "project_root_path_invalid");
+  await expectProjectError(store.browseHostRoot(hostRoots[0].id, ".ssh"), "project_root_path_invalid");
+  await expectProjectError(store.browseHostRoot(hostRoots[0].id, "Library"), "project_root_path_invalid");
   await expectProjectError(store.browseRoot(hostRoots[0].id, ""), "project_root_not_found");
 });
 

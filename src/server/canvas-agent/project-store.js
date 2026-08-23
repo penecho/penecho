@@ -29,6 +29,7 @@ const PROJECT_HISTORY_FILE = "canvas-agent-history.json";
 const PROJECT_UPLOAD_DIRECTORY = "canvas-agent-files";
 const PROJECT_FILE_HISTORY_DIRECTORY = "canvas-agent-file-history";
 const PROJECT_ROOT_ID_KEY = "canvas-agent-root-id.key";
+const HOST_ROOT_DENIED_SEGMENTS = new Set(["appdata", "library"]);
 
 const DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".csv"]);
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
@@ -502,6 +503,9 @@ class CanvasAgentProjectStore {
 
   async resolveRootSelection(rootId, relativePath, options = {}) {
     const root = await this.rootById(rootId, options), normalized = normalizedRootRelative(relativePath);
+    if (options.host && (normalized.segments.some(segment => segment.startsWith(".")) || HOST_ROOT_DENIED_SEGMENTS.has(normalized.segments[0]?.toLowerCase()))) {
+      throw projectError("That private host folder is not available in the project browser.", 403, "project_root_path_invalid");
+    }
     let cursor = root.path;
     for (const segment of normalized.segments) {
       cursor = path.join(cursor, segment);
@@ -524,7 +528,8 @@ class CanvasAgentProjectStore {
       for await (const entry of directory) {
         scanned += 1;
         if (scanned > PROJECT_ROOT_SCAN_LIMIT) { truncated = true; break; }
-        if (entry.name.toLowerCase() === ".penecho" || /[\0-\x1f\x7f\u202a-\u202e\u2066-\u2069]/.test(entry.name) || entry.isSymbolicLink() || !entry.isDirectory()) continue;
+        if (entry.name.toLowerCase() === ".penecho" || options.host && (entry.name.startsWith(".") || HOST_ROOT_DENIED_SEGMENTS.has(entry.name.toLowerCase()))
+          || /[\0-\x1f\x7f\u202a-\u202e\u2066-\u2069]/.test(entry.name) || entry.isSymbolicLink() || !entry.isDirectory()) continue;
         const candidate = path.join(selected.canonical, entry.name), details = await fs.lstat(candidate).catch(() => null);
         if (!details?.isDirectory() || details.isSymbolicLink()) continue;
         const canonical = await fs.realpath(candidate).catch(() => null);
@@ -542,6 +547,7 @@ class CanvasAgentProjectStore {
     return {
       root:{ id:selected.root.id, name:selected.root.name }, rootId:selected.root.id, rootName:selected.root.name,
       path:selected.relativePath, relativePath:selected.relativePath, parentPath, entries, truncated,
+      selectable:!options.host || Boolean(selected.relativePath),
     };
   }
 
@@ -702,6 +708,9 @@ class CanvasAgentProjectStore {
   }
 
   async addFromHostRoot(rootId, relativePath = "") {
+    if (!normalizedRootRelative(relativePath).segments.length) {
+      throw projectError("Choose a folder inside the PenEcho host home.", 400, "project_root_path_invalid");
+    }
     const selected = await this.resolveRootSelection(rootId, relativePath, { host:true });
     return this.add(selected.canonical, { kind:"folder", origin:"native" });
   }
