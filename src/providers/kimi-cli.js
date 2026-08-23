@@ -224,9 +224,10 @@ function runProcess(launch, args, cwd, env, signal, onActivity = null) {
 }
 
 function imageParts(atlasImage) {
-  const match = atlasImage ? /^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(String(atlasImage)) : null;
-  if (atlasImage && !match) throw new Error("Kimi Code CLI received an invalid canvas image.");
-  return match ? { mimeType:match[1].toLowerCase(), buffer:Buffer.from(match[2], "base64") } : null;
+  const inputs = (Array.isArray(atlasImage) ? atlasImage : atlasImage ? [atlasImage] : []).filter(Boolean).slice(0, 5),
+    matches = inputs.map(value => /^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(String(value)));
+  if (matches.some(match => !match)) throw new Error("Kimi Code CLI received an invalid canvas image.");
+  return matches.map(match => ({ mimeType:match[1].toLowerCase(), buffer:Buffer.from(match[2], "base64") }));
 }
 
 async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
@@ -236,13 +237,13 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
     await fs.promises.chmod(workDir, 0o700).catch(() => {});
     const agentFile = path.join(workDir, KIMI_AGENT_FILE);
     await fs.promises.writeFile(agentFile, KIMI_AGENT_DEFINITION, { mode:0o600, flag:"wx" });
-    const image = imageParts(atlasImage);
-    let imageHint = "";
-    if (image) {
-      const file = path.join(workDir, image.mimeType === "image/webp" ? "canvas.webp" : "canvas.png");
-      await fs.promises.writeFile(file, image.buffer, { mode:0o600 });
-      imageHint = `\n\nA canvas image is available at @${path.basename(file)}. Inspect only this image as needed. Do not run shell commands, modify files, or use other tools.`;
+    const images = imageParts(atlasImage), files = [];
+    for (let index = 0; index < images.length; index++) {
+      const file = path.join(workDir, `canvas-${index + 1}.${images[index].mimeType === "image/webp" ? "webp" : "png"}`);
+      await fs.promises.writeFile(file, images[index].buffer, { mode:0o600 });
+      files.push(file);
     }
+    const imageHint = files.length ? `\n\nCanvas images are available at ${files.map(file => `@${path.basename(file)}`).join(", ")}. Inspect only these images as needed. Do not run shell commands, modify files, or use other tools.` : "";
     const launch = resolveKimiLaunch(executable, env), result = await runProcess(launch, buildKimiArgs({ model, prompt:`${String(prompt || "")}${imageHint}`, agentFile }), workDir, sanitizeKimiEnv(env, effort), signal, onActivity);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
@@ -272,7 +273,7 @@ function kimiHomeFromEnv(env) {
 }
 
 async function callKimiCli({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
-  const image = imageParts(atlasImage);
+  const images = imageParts(atlasImage);
   try {
     const launch = resolveKimiLaunch(executable, env);
     const { sharedKimiAcpClient } = require("./kimi-acp.js");
@@ -287,7 +288,7 @@ async function callKimiCli({ executable = "kimi", model = null, effort = null, p
       model,
       effort,
       prompt:String(prompt || ""),
-      image:image ? { mimeType:image.mimeType, data:image.buffer.toString("base64") } : null,
+      images:images.map(image => ({ mimeType:image.mimeType, data:image.buffer.toString("base64") })),
       signal,
       onActivity,
     });

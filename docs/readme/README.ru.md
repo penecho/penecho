@@ -50,7 +50,7 @@ PenEcho является официальным участником прогр�
 
 [Скачать с GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-Для установки через npm потребуется [Node.js 20.3 или новее](https://nodejs.org/), а также ключ API или авторизованный [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) либо [Claude Code CLI](https://code.claude.com/docs/en/overview).
+Для установки через npm потребуется [Node.js 22.19 или новее](https://nodejs.org/), а также ключ API или авторизованный [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) либо [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho

@@ -1455,8 +1455,8 @@
     context.fillRect(box.x, box.y, box.w, box.h);
     context.restore();
   }
-  function drawPending(p, context = ctx) {
-    if (p.items) return drawPendingBatch(p, context);
+  function drawPending(p, context = ctx, options = null) {
+    if (p.items) return drawPendingBatch(p, context, options);
     const ctx = context,
       b = draftBounds(p),
       progress = p.revealProgress ?? 1,
@@ -1488,6 +1488,7 @@
     if (p.animationScene) drawPendingAnimation(ctx, p.animationScene, p.animationPlayback ||= createAnimationPlayback(), b);
     else ctx.drawImage(p.image, b.x, b.y, imageWidth, imageHeight);
     ctx.restore();
+    if (options?.chrome === false) return;
     if (progress < 1) {
       const tipX = b.x + currentWidth * p.scaleX,
         tipY = b.y + Math.min(current, rows.length - 1) * rowHeight * p.scaleY + rowHeight * p.scaleY * 0.72,
@@ -1531,7 +1532,7 @@
     ctx.restore();
     drawCopyFeedback(ctx, b, s, p);
   }
-  function drawPendingBatch(p, context = ctx) {
+  function drawPendingBatch(p, context = ctx, options = null) {
     const ctx = context,
       batch = batchBounds(p),
       unit = 1 / state.scale,
@@ -1556,6 +1557,7 @@
       } else ctx.drawImage(item.image, box.x, box.y, box.w, box.h);
       ctx.restore();
     }
+    if (options?.chrome === false) return;
     if (p.items.length > 1 && batchChromeVisible) {
       ctx.save();
       ctx.strokeStyle = "#2679b866";

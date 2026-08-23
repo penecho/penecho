@@ -103,6 +103,12 @@
               </div>
             </div>
           </div>
+          <div id="canvasAgentControl" class="canvas-agent-control">
+            <button id="canvasAgentToggle" class="canvas-agent-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentPanel" data-i18n-aria="openCanvasAgent" aria-label="Open Canvas Agent" data-i18n-title="canvasAgent" title="Canvas Agent">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5l-4.5 3v-3H7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3Z"/><path d="M8 10h8M8 13h5"/></svg>
+              <span data-i18n="canvasAgent">Canvas Agent</span>
+            </button>
+          </div>
           <div id="pluginControl" class="plugin-control">
             <button id="pluginButton" class="plugin-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pluginPopover" data-i18n-aria="plugins" aria-label="Plugins" data-i18n-title="plugins" title="Plugins">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h3a2 2 0 1 1 4 0h3a2 2 0 0 1 2 2v3a2 2 0 1 0 0 4v3a2 2 0 0 1-2 2h-3a2 2 0 1 1-4 0H8a2 2 0 0 1-2-2v-3a2 2 0 1 0 0-4V6a2 2 0 0 1 2-2Z"/></svg>
@@ -121,6 +127,9 @@
             </button>
             <button data-mode="pen" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="pen" aria-label="Pen" data-i18n-title="pen" title="Pen">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
+            </button>
+            <button id="canvasViewBtn" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="enterCanvasViewMode" aria-label="View canvas" data-i18n-title="enterCanvasViewMode" title="View canvas">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
             </button>
             <button data-mode="eraser" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
@@ -312,6 +321,14 @@
       <div class="frame-corner corner-left" aria-hidden="true"></div>
       <div class="frame-corner corner-right" aria-hidden="true"></div>
       <section id="viewport" data-i18n-aria="canvas" aria-label="Zoomable handwritten AI canvas">
+        <div id="canvasViewActions" class="canvas-view-actions" role="toolbar" data-i18n-aria="canvasViewModeActions" aria-label="View mode actions" hidden>
+          <button id="canvasViewShareBtn" type="button" data-i18n-aria="shareCanvasCloud" aria-label="Share Canvas to PenEcho Cloud" data-i18n-title="shareCanvasCloud" title="Share Canvas to PenEcho Cloud">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.3 10.8 7.4-4.5M8.3 13.2l7.4 4.5"/></svg>
+          </button>
+          <button id="canvasViewCloseBtn" type="button" data-i18n-aria="exitCanvasViewMode" aria-label="Exit view mode" data-i18n-title="exitCanvasViewMode" title="Exit view mode">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
         <button id="canvasNavigationLock" class="canvas-navigation-lock" type="button" aria-pressed="false" data-i18n-aria="canvasLockNavigation" aria-label="Lock canvas navigation" data-i18n-title="canvasLockNavigation" title="Lock canvas navigation">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path class="navigation-lock-shackle open" d="M8 10V7.5a4 4 0 0 1 7.7-1.5"/>
@@ -381,6 +398,69 @@
           </div>
         </div>
         <div id="canvasNavigationLockHint" class="canvas-navigation-lock-hint" data-i18n="canvasNavigationLockedHint">Canvas view locked · Click the top-left lock to unlock</div>
+        <canvas id="canvasAgentWidgetPickerLayer" class="canvas-agent-widget-picker-layer" width="1" height="1" aria-hidden="true" hidden></canvas>
+        <section id="canvasAgentPanel" class="canvas-agent-panel" role="dialog" data-i18n-aria="canvasAgent" aria-label="Canvas Agent" aria-hidden="true" hidden>
+          <div id="canvasAgentResizeTop" class="canvas-agent-resize-edge top" role="separator" aria-orientation="horizontal" aria-controls="canvasAgentPanel" aria-valuemin="320" tabindex="0" data-edge="top" data-i18n-aria="canvasAgentResizeTop" aria-label="Resize Canvas Agent from the top edge"></div>
+          <div id="canvasAgentResizeLeft" class="canvas-agent-resize-edge left" role="separator" aria-orientation="vertical" aria-controls="canvasAgentPanel" aria-valuemin="360" tabindex="0" data-edge="left" data-i18n-aria="canvasAgentResizeLeft" aria-label="Resize Canvas Agent from the left edge"></div>
+          <div id="canvasAgentResizeRight" class="canvas-agent-resize-edge right" role="separator" aria-orientation="vertical" aria-controls="canvasAgentPanel" aria-valuemin="360" tabindex="0" data-edge="right" data-i18n-aria="canvasAgentResizeRight" aria-label="Resize Canvas Agent from the right edge"></div>
+          <header id="canvasAgentHead" class="canvas-agent-head" data-i18n-title="canvasAgentMove" title="Drag to move Canvas Agent">
+            <span class="canvas-agent-mark" aria-hidden="true"></span>
+            <div><strong data-i18n="canvasAgent">Canvas Agent</strong><small id="canvasAgentStatus" data-i18n="canvasAgentReadyConnect">Ready to connect</small></div>
+            <button id="canvasAgentHistory" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="canvasAgentHistoryPopover" data-i18n-title="canvasAgentHistory" title="Canvas Agent history" data-i18n-aria="canvasAgentHistory" aria-label="Canvas Agent history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5M4 4v4.5h4.5"/><path d="M12 8v4l2.5 1.5"/></svg></button>
+            <button id="canvasAgentSize" class="canvas-agent-size" type="button" data-i18n-title="canvasAgentResize" title="Change Canvas Agent height" data-i18n-aria="canvasAgentResize" aria-label="Change Canvas Agent height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4M12 5v14M8 15l4 4 4-4"/></svg></button>
+            <button id="canvasAgentNew" type="button" data-i18n-title="newCanvasAgentConversation" title="New Canvas Agent conversation" data-i18n-aria="newCanvasAgentConversation" aria-label="New Canvas Agent conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button id="canvasAgentClose" type="button" data-i18n-title="closeCanvasAgent" title="Close Canvas Agent" data-i18n-aria="closeCanvasAgent" aria-label="Close Canvas Agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </header>
+          <div id="canvasAgentHistoryPopover" class="canvas-agent-history-popover" role="menu" data-i18n-aria="canvasAgentHistory" aria-label="Canvas Agent history" hidden>
+            <div id="canvasAgentHistoryList" class="canvas-agent-history-list"></div>
+          </div>
+          <div id="canvasAgentHistoryView" class="canvas-agent-history-view" hidden>
+            <span data-i18n="canvasAgentHistoryViewing">Viewing saved conversation</span>
+            <button id="canvasAgentHistoryReturn" type="button" data-i18n="canvasAgentHistoryReturn">Back to current conversation</button>
+          </div>
+          <div id="canvasAgentTranscript" class="canvas-agent-transcript" role="log" aria-live="polite" aria-relevant="additions text">
+            <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Talk directly to your canvas.</strong><span data-i18n="canvasAgentEmptyBody">Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.</span></div>
+          </div>
+          <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
+          <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Image attachments" hidden></div>
+          <form id="canvasAgentForm" class="canvas-agent-composer">
+            <p id="canvasAgentInputHint" class="canvas-agent-input-hint" data-i18n="canvasAgentInputHint">Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.</p>
+            <textarea id="canvasAgentInput" rows="2" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask Canvas Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message Canvas Agent" aria-describedby="canvasAgentInputHint"></textarea>
+            <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
+              <canvas id="canvasAgentInkCanvas" width="1200" height="260" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a Canvas Agent message"></canvas>
+              <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk">Clear</button>
+            </div>
+            <section id="canvasAgentReferencePicker" class="canvas-agent-reference-picker" role="dialog" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" hidden>
+              <p id="canvasAgentReferenceHelp" class="canvas-agent-reference-help" data-i18n="canvasAgentReferenceHelp">Click a Widget on the canvas to add it automatically, or choose one below.</p>
+              <input id="canvasAgentReferenceSearch" type="search" data-i18n-placeholder="canvasAgentReferenceSearch" placeholder="Filter Widgets, or click one on the canvas" data-i18n-aria="canvasAgentReferenceSearch" aria-label="Filter Widgets, or click one on the canvas">
+              <div id="canvasAgentReferenceList" class="canvas-agent-reference-list" role="listbox" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Canvas Widgets"></div>
+              <p id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></p>
+            </section>
+            <footer class="canvas-agent-composer-actions">
+              <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach images" data-i18n-title="canvasAgentAttachTitle" title="Paste or attach up to five images">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
+                <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
+              </button>
+              <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+              </button>
+              <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
+              </button>
+              <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
+              </button>
+              <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Set a Tavily API key in Settings to enable internet search" data-tooltip="Set a Tavily API key in Settings to enable internet search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
+              </button>
+              <input id="canvasAgentImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+              <span class="canvas-agent-action-spacer"></span>
+              <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n="canvasAgentStop" hidden>Stop</button>
+              <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n="canvasAgentSend">Send</button>
+            </footer>
+          </form>
+          <div id="canvasAgentResizeBottom" class="canvas-agent-resize-edge bottom" role="separator" aria-orientation="horizontal" aria-controls="canvasAgentPanel" aria-valuemin="320" tabindex="0" data-edge="bottom" data-i18n-aria="canvasAgentResizeBottom" aria-label="Resize Canvas Agent from the bottom edge"></div>
+        </section>
         <div id="tip" data-i18n="tip">Pan: middle-mouse drag, Hand tool, or one finger · Zoom: wheel or pinch</div>
       </section>
     </section>
@@ -514,6 +594,7 @@
           <div class="settings-quick-heading"><h3 id="settingsConfigurationHeading" data-i18n="settingsConnections">AI connections</h3><button id="settingsOpenApi" type="button" data-i18n="settingsManage">Manage</button></div>
           <div id="settingsConnectionQuickList" class="settings-connection-quick-list"></div>
           <div class="settings-entry-actions">
+            <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">Add a Tavily API key</small></button>
             <button id="settingsOpenSystem" type="button"><strong data-i18n="settingsSystemEntry">System settings</strong><small data-i18n="settingsSystemEntryHelp">Restart required after saving</small></button>
           </div>
         </section>
@@ -558,6 +639,13 @@
             </div>
             <label class="settings-field"><span data-i18n="settingsTraceLimit">Keep request traces</span><input id="settingsTraceLimit" name="requestTraceLimit" type="number" min="1" max="1000" step="1" required></label>
             <div class="settings-row"><span id="settingsTraceLabel" data-i18n="settingsRequestTrace">Record request details</span><button id="settingsTraceToggle" class="settings-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settingsTraceLabel"><span class="settings-switch-thumb" aria-hidden="true"></span></button></div>
+          </section>
+          <section class="settings-group settings-search-group" aria-labelledby="settingsSearchHeading">
+            <div class="settings-section-heading">
+              <div><h3 id="settingsSearchHeading" data-i18n="settingsSearchSection">Internet search</h3><p data-i18n="settingsSearchDescription">Let Canvas Agent search current public web information through Tavily.</p></div>
+              <span id="settingsTavilySaved" class="settings-saved-badge" hidden data-i18n="settingsKeySaved">Key saved</span>
+            </div>
+            <label class="settings-field"><span data-i18n="settingsTavilyApiKey">Tavily API key</span><input id="settingsTavilyApiKey" name="tavilyApiKey" type="password" autocomplete="new-password" placeholder="tvly-…"><small data-i18n="settingsTavilyApiKeyHelp">Stored locally and sent only from the PenEcho service to Tavily when search is enabled.</small></label>
           </section>
           <div class="settings-form-footer">
             <button id="settingsEditorCancel" class="settings-editor-cancel" type="button" data-i18n="settingsCancel">Cancel</button>

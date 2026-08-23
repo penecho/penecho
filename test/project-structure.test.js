@@ -16,12 +16,13 @@ test("root JavaScript is limited to entry points and Electron Forge configuratio
   assert.deepEqual(rootScripts, ["cli.js", "forge.config.js", "server.js"]);
 });
 
-test("the browser application is maintained as five ordered source sections", () => {
+test("the browser application is maintained as six ordered source sections", () => {
   assert.deepEqual(SOURCES, [
     "src/client/app/core.js",
     "src/client/app/canvas-runtime.js",
     "src/client/app/persistence.js",
     "src/client/app/ai-runtime.js",
+    "src/client/app/canvas-agent-runtime.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
@@ -33,6 +34,7 @@ test("the browser application is maintained as five ordered source sections", ()
 test("server, provider, and CLI implementations live under src without unrelated main-only features", () => {
   for (const source of [
     "src/server/main.js", "src/server/cloud-connector.js", "src/server/activity-timeout.js", "src/server/api-config.js", "src/server/api-stream.js", "src/server/widget-patch.js", "src/server/typeset.js",
+    "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/cli-adapter.mjs", "src/server/canvas-agent/runtime.mjs",
     "src/providers/reasoning-effort.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
     "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/update.js",
     "public/access.html", "public/access.css", "public/access.js", "public/cloud-connect.css", "public/cloud-connect.js",

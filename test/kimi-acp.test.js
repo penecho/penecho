@@ -32,6 +32,8 @@ process.stdin.on("data",chunk=>{
     else if(message.method==="session/new")send({jsonrpc:"2.0",id:message.id,result:{sessionId:"session-"+message.id}});
     else if(message.method==="session/set_config_option")send({jsonrpc:"2.0",id:message.id,result:{}});
     else if(message.method==="session/prompt"){
+      const text=message.params.prompt.find(block=>block.type==="text")?.text;
+      if(text==="two-images"&&message.params.prompt.filter(block=>block.type==="image").length!==2){send({jsonrpc:"2.0",id:message.id,error:{message:"expected two images"}});continue;}
       send({jsonrpc:"2.0",method:"session/update",params:{sessionId:message.params.sessionId,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text:"Hel"}}}});
       send({jsonrpc:"2.0",method:"session/update",params:{sessionId:message.params.sessionId,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text:"lo"}}}});
       send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
@@ -56,6 +58,7 @@ test("Kimi ACP keeps one process while creating isolated sessions", async () => 
     assert.equal(await client.request({ prompt:"first", model:"kimi-code/k3", effort:"medium", onActivity:()=>activityCount++ }), "Hello");
     assert.ok(activityCount>0);
     assert.equal(await client.request({ prompt:"second" }), "Hello");
+    assert.equal(await client.request({ prompt:"two-images", images:[{mimeType:"image/png",data:"AA=="},{mimeType:"image/webp",data:"AQ=="}] }), "Hello");
   } finally {
     await client.close();
   }

@@ -26,7 +26,7 @@ The app remembers the last address in local WebView storage. It does not store t
 
 ## Local builds
 
-The mobile toolchain requires Node.js 22.12 or newer. Android additionally requires JDK 21 and Android SDK 35. iOS requires macOS, Xcode 16 or newer, and CocoaPods.
+The mobile toolchain requires Node.js 22.19 or newer. Android additionally requires JDK 21 and Android SDK 35. iOS requires macOS, Xcode 16 or newer, and CocoaPods.
 
 ```bash
 npm ci

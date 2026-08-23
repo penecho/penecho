@@ -75,6 +75,11 @@ test("Claude CLI input preserves a configured WebP image and MIME type", () => {
   assert.equal(Buffer.from(payload.message.content[1].source.data, "base64").toString("ascii", 0, 4), "RIFF");
 });
 
+test("Claude CLI input preserves a same-message image group", () => {
+  const payload=JSON.parse(claudeInput("compare",[PNG,WEBP]));
+  assert.deepEqual(payload.message.content.slice(1).map(part=>part.source.media_type),["image/png","image/webp"]);
+});
+
 test("Claude CLI input supports a text-only authoring request", () => {
   const payload = JSON.parse(claudeInput("improve this plugin"));
   assert.deepEqual(payload.message.content, [{ type:"text", text:"improve this plugin" }]);

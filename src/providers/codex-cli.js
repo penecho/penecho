@@ -66,7 +66,7 @@ function sanitizeCodexEnv(env = process.env, isolated = null) {
   return clean;
 }
 
-function buildCodexArgs({ workDir, imageFile, outputFile, model, effort }) {
+function buildCodexArgs({ workDir, imageFile, imageFiles, outputFile, model, effort }) {
   const disabledFeatures = [
       "apps", "auth_elicitation", "browser_use", "browser_use_external", "browser_use_full_cdp_access", "code_mode", "code_mode_host", "computer_use",
       "goals", "hooks", "image_generation", "in_app_browser", "memories", "multi_agent", "network_proxy", "plugins", "remote_plugin",
@@ -97,7 +97,8 @@ function buildCodexArgs({ workDir, imageFile, outputFile, model, effort }) {
     "-c", 'history.persistence="none"',
     "-C", workDir,
   );
-  if (imageFile) args.push("-i", imageFile);
+  const attachedImages = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 5) : imageFile ? [imageFile] : [];
+  for (const attachedImage of attachedImages) args.push("-i", attachedImage);
   args.push("-o", outputFile);
   if (model) args.push("--model", model);
   if (effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(mapCodexReasoningEffort(String(effort).trim().toLowerCase(), model))}`);
@@ -304,15 +305,16 @@ function decodeAtlasImage(dataUrl) {
 
 async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env, onProgress = null, onActivity = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-codex-"));
-  const image = atlasImage ? decodeAtlasImage(atlasImage) : null,
-    imageFile = image ? path.join(workDir, `atlas.${image.extension}`) : null,
+  const imageInputs = (Array.isArray(atlasImage) ? atlasImage : atlasImage ? [atlasImage] : []).filter(Boolean).slice(0, 5),
+    images = imageInputs.map(decodeAtlasImage),
+    imageFiles = images.map((image, index) => path.join(workDir, `atlas-${index + 1}.${image.extension}`)),
     outputFile = path.join(workDir, "last-message.txt");
   let caughtError = null, cleanupReady = Promise.resolve(), deferCleanup = false;
   try {
     await fs.promises.chmod(workDir, 0o700).catch(() => {});
-    if (image) await fs.promises.writeFile(imageFile, image.buffer, { mode: 0o600 });
+    await Promise.all(images.map((image, index) => fs.promises.writeFile(imageFiles[index], image.buffer, { mode:0o600 })));
     const launch = resolveCodexLaunch(executable, env),
-      args = buildCodexArgs({ workDir, imageFile, outputFile, model, effort }),
+      args = buildCodexArgs({ workDir, imageFiles, outputFile, model, effort }),
       childEnv = await prepareIsolatedRuntime(workDir, env),
       result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal, onProgress, onActivity);
     cleanupReady = result.cleanupReady || cleanupReady;

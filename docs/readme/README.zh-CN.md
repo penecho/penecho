@@ -77,7 +77,7 @@ PenEcho 是 **Kimi Open Source Friends** 的正式成员。该计划由 [Moonsho
 
 **桌面应用** — [前往 GitHub Releases 下载](https://github.com/penecho/penecho/releases/latest)。
 
-**npm 安装** — 需要 [Node.js 20.3 或更高版本](https://nodejs.org/)，并准备以下任意一种：API Key、已登录的 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、已登录的 [Codex CLI](https://developers.openai.com/codex/cli)，或已登录的 [Claude Code CLI](https://code.claude.com/docs/en/overview)。
+**npm 安装** — 需要 [Node.js 22.19 或更高版本](https://nodejs.org/)，并准备以下任意一种：API Key、已登录的 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、已登录的 [Codex CLI](https://developers.openai.com/codex/cli)，或已登录的 [Claude Code CLI](https://code.claude.com/docs/en/overview)。
 
 ```bash
 npm install -g penecho

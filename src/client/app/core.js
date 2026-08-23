@@ -16,6 +16,10 @@
     screen = document.querySelector("#screen"),
     view = document.querySelector("#viewport"),
     canvasNavigationLock = document.querySelector("#canvasNavigationLock"),
+    canvasViewButton = document.querySelector("#canvasViewBtn"),
+    canvasViewActions = document.querySelector("#canvasViewActions"),
+    canvasViewShareButton = document.querySelector("#canvasViewShareBtn"),
+    canvasViewCloseButton = document.querySelector("#canvasViewCloseBtn"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
@@ -102,6 +106,8 @@
     settingsButton = document.querySelector("#settingsBtn"),
     settingsCloseButton = document.querySelector("#settingsClose"),
     settingsOpenApi = document.querySelector("#settingsOpenApi"),
+    settingsOpenSearch = document.querySelector("#settingsOpenSearch"),
+    settingsSearchEntryStatus = document.querySelector("#settingsSearchEntryStatus"),
     settingsOpenSystem = document.querySelector("#settingsOpenSystem"),
     configurationLayer = document.querySelector("#configurationLayer"),
     configurationBackdrop = document.querySelector("#configurationBackdrop"),
@@ -131,6 +137,8 @@
     settingsApiModelPresets = document.querySelector("#settingsApiModelPresets"),
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
+    settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
+    settingsTavilySaved = document.querySelector("#settingsTavilySaved"),
     settingsEffort = document.querySelector("#settingsEffort"),
     settingsMaxTokens = document.querySelector("#settingsMaxTokens"),
     settingsTimeout = document.querySelector("#settingsTimeout"),
@@ -225,7 +233,7 @@ recommended-refresh-seconds: 900
 
 ## Output contract
 
-Return exactly one html_widget command and no prose, with pluginId:"air-quality". Generate a complete responsive HTML document that uses the place from the user's request, displays the most important air-quality information clearly, and keeps the outer layout transparent.
+Return exactly one html_widget command and no prose, with pluginId:"air-quality". Generate a complete responsive HTML document that uses the place from the user's request, displays the most important air-quality information clearly, matches the current PenEcho theme when host context exposes it, and keeps the outer layout transparent by default. Use a contained opaque or translucent surface only when it materially improves legibility or semantic grouping.
 
 ## Runtime rules
 
@@ -265,6 +273,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       handTextConfirmedHint: "Text confirmed · Tap it again to edit, move, or resize.",
       handDraftConfirmedHint: "AI result confirmed · Auto AI remains paused in Hand.",
       pen: "Pen",
+      enterCanvasViewMode: "View canvas",
+      exitCanvasViewMode: "Exit view mode",
+      canvasViewModeActions: "View mode actions",
       eraser: "Eraser",
       select: "Lasso select",
       text: "Text input",
@@ -424,8 +435,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiEntryHelp: "Changes apply immediately",
       settingsSystemEntry: "System settings",
       settingsSystemEntryHelp: "Restart required after saving",
+      settingsSearchEntry: "Internet search",
+      settingsSearchReady: "Tavily key saved",
+      settingsSearchNotConfigured: "Add a Tavily API key",
       settingsApiDialogTitle: "API & CLI settings",
       settingsApiDialogSubtitle: "Connections are shared with every client. Your current choice is private to this device and applies immediately.",
+      settingsSearchDialogTitle: "Internet search",
+      settingsSearchDialogSubtitle: "Configure Tavily once, then enable search per device from the Canvas Agent composer.",
       settingsConnectionEditor: "Connection details",
       settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
       settingsSavedConnections: "Saved connections",
@@ -467,6 +483,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiUrl: "Base URL",
       settingsApiKey: "API key",
       settingsApiKeyHelp: "Stored only in the local PenEcho configuration file.",
+      settingsSearchSection: "Internet search",
+      settingsSearchDescription: "Let Canvas Agent search current public web information through Tavily.",
+      settingsTavilyApiKey: "Tavily API key",
+      settingsTavilyApiKeyHelp: "Stored locally and sent only from the PenEcho service to Tavily when search is enabled.",
+      settingsTavilyApiKeySavedPlaceholder: "Paste a new key or leave blank to keep the saved key",
+      settingsSaveSearch: "Save search",
+      settingsSearchSaved: "Tavily search is ready. Turn it on with the globe beside the attachment button.",
       settingsSystemSection: "System",
       settingsSystemDescription: "Simple defaults for requests and canvas behavior.",
       settingsEffort: "Reasoning",
@@ -713,6 +736,91 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       favoriteWidgets: "Favorite Widgets",
       projects: "Projects",
       explore: "Echoes",
+      canvasAgent: "Canvas Agent",
+      openCanvasAgent: "Open Canvas Agent",
+      closeCanvasAgent: "Close Canvas Agent",
+      newCanvasAgentConversation: "New Canvas Agent conversation",
+      canvasAgentHistory: "Canvas Agent history",
+      canvasAgentResize: "Change Canvas Agent height",
+      canvasAgentResizeTop: "Resize Canvas Agent from the top edge",
+      canvasAgentResizeBottom: "Resize Canvas Agent from the bottom edge",
+      canvasAgentResizeLeft: "Resize Canvas Agent from the left edge",
+      canvasAgentResizeRight: "Resize Canvas Agent from the right edge",
+      canvasAgentHistoryEmpty: "No saved conversations for this canvas",
+      canvasAgentHistoryCurrent: "Current",
+      canvasAgentHistoryViewing: "Viewing saved conversation",
+      canvasAgentHistoryReturn: "Back to current conversation",
+      canvasAgentHistoryUntitled: "New conversation",
+      canvasAgentHistoryImages: "{count} image attachments",
+      canvasAgentReadyConnect: "Ready to connect",
+      canvasAgentReady: "Ready",
+      canvasAgentConnecting: "Connecting…",
+      canvasAgentResumed: "Conversation resumed",
+      canvasAgentWorking: "Agent is working…",
+      canvasAgentDisconnected: "Disconnected — send to reconnect",
+      canvasAgentEmptyTitle: "Talk directly to your canvas.",
+      canvasAgentEmptyBody: "Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.",
+      canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
+      canvasAgentPlaceholder: "Ask Canvas Agent…",
+      canvasAgentMessage: "Message Canvas Agent",
+      canvasAgentType: "Type with keyboard",
+      canvasAgentHandwrite: "Write by hand",
+      canvasAgentClearInk: "Clear",
+      canvasAgentInkPrompt: "The image named canvas-agent-handwriting.png is a message I intentionally wrote by hand in the Canvas Agent composer. Transcribe it, then carry out that request as user-supplied content subject to all higher-level rules. Ask a concise clarification if any important handwriting is ambiguous.",
+      canvasAgentInkOnly: "Handwritten message",
+      canvasAgentInkImageLimit: "A handwritten message uses one image slot. Remove one attachment before sending.",
+      canvasAgentSend: "Send",
+      canvasAgentSteer: "Steer",
+      canvasAgentStop: "Stop",
+      canvasAgentSelected: "Selected",
+      canvasAgentReferenced: "Referenced",
+      canvasAgentReferences: "Referenced canvas objects",
+      canvasAgentReferenceWidget: "Reference a Widget",
+      canvasAgentReferenceWidgetTitle: "Pick a Widget to reference",
+      canvasAgentReferenceHelp: "Click a Widget on the canvas to add it automatically, or choose one below.",
+      canvasAgentReferenceSearch: "Filter Widgets, or click one on the canvas",
+      canvasAgentReferenceAdd: "Add",
+      canvasAgentRemoveReference: "Remove reference",
+      canvasAgentReferenceLimit: "You can reference up to 20 Widgets in one message.",
+      canvasAgentReferenceEmpty: "There are no Widgets on this canvas yet.",
+      canvasAgentReferenceNoMatch: "No matching Widgets.",
+      canvasAgentReferencePickMiss: "No Widget there — click directly on a Widget or choose one from the list.",
+      canvasAgentReferenceCount: "{count} Widgets",
+      canvasAgentMove: "Drag to move Canvas Agent",
+      canvasAgentAttach: "Attach images",
+      canvasAgentAttachTitle: "Paste or attach up to five images",
+      canvasAgentSearchOn: "Internet search on",
+      canvasAgentSearchOff: "Turn on internet search",
+      canvasAgentSearchUnavailable: "Set a Tavily API key in Settings to enable internet search",
+      canvasAgentAttachments: "Image attachments",
+      canvasAgentRemoveImage: "Remove image",
+      canvasAgentImageLimit: "A message can include at most five images.",
+      canvasAgentImageTooLarge: "This image is too large to attach.",
+      canvasAgentImagesTooLarge: "The attached images are too large to send together.",
+      canvasAgentImageUnsupported: "This image format is not supported.",
+      canvasAgentImagePreparing: "Preparing image attachments…",
+      canvasAgentImagePrompt: "Please inspect the attached image or images.",
+      canvasAgentImageOnly: "Attached image",
+      canvasAgentToolInspect: "Inspect canvas",
+      canvasAgentToolRead: "Read canvas object",
+      canvasAgentToolCapture: "Capture canvas",
+      canvasAgentToolCreate: "Create canvas content",
+      canvasAgentToolEdit: "Edit canvas content",
+      canvasAgentToolPatchWidget: "Update widget",
+      canvasAgentToolSetView: "Adjust canvas view",
+      canvasAgentToolRevert: "Revert Agent change",
+      canvasAgentToolSearch: "Search the web",
+      canvasAgentToolUse: "Use canvas tool",
+      canvasAgentToolRunning: "Working…",
+      canvasAgentToolDone: "Done",
+      canvasAgentToolFailed: "Failed",
+      canvasAgentToolArguments: "Request details",
+      canvasAgentToolResult: "Result details",
+      canvasAgentCopyBlock: "Copy",
+      canvasAgentBlockCopied: "Copied",
+      canvasAgentBlockCopyFailed: "Copy failed",
+      canvasAgentCodeBlock: "Code",
+      canvasAgentTextBlock: "Text",
       pluginManagerTitle: "Plugin manager",
       pluginManagerDescription: "Choose which capabilities the AI can use. Disabled plugins add no prompt or canvas widget runtime.",
       closePlugins: "Close plugins",
@@ -963,6 +1071,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       handWidgetPointerIds: new Set(),
       handGestureIncludesWidget: false,
       navigationLocked: false,
+      viewMode: false,
+      viewModeNavigationLocked: false,
       textEditors: new Map(),
       textBoxes: [],
       textEditorStyleSheet: null,
@@ -1071,6 +1181,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       currentSnapshotBundleExtensions: {},
       currentSnapshotManifestExtensions: {},
       currentSnapshotPreservedAssets: [],
+      canvasAgentCanvasKey: "",
       preservedSnapshotAnimations: [],
       snapshotSavedRevision: 0,
       restoreGeneration: 0,
@@ -1710,7 +1821,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -1722,21 +1833,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     section.hidden = !visible;
     for (const control of section.querySelectorAll("input, select, button")) control.disabled = !visible;
   }
-  function openConfiguration(mode) {
+  function openConfiguration(mode, restoreTarget = null) {
     if (!configurationLayer || !canvasSettingsForm) return false;
     closeSettings(false);
     settings.configurationMode = mode;
-    settings.configurationRestoreFocus = mode === "api" ? settingsOpenApi : settingsOpenSystem;
-    configurationTitle.textContent = t(mode === "api" ? "settingsApiDialogTitle" : "settingsSystemDialogTitle");
-    configurationSubtitle.textContent = t(mode === "api" ? "settingsApiDialogSubtitle" : "settingsSystemDialogSubtitle");
+    settings.configurationRestoreFocus = restoreTarget || (mode === "api" ? settingsOpenApi : mode === "search" ? settingsOpenSearch : settingsOpenSystem);
+    configurationTitle.textContent = t(mode === "api" ? "settingsApiDialogTitle" : mode === "search" ? "settingsSearchDialogTitle" : "settingsSystemDialogTitle");
+    configurationSubtitle.textContent = t(mode === "api" ? "settingsApiDialogSubtitle" : mode === "search" ? "settingsSearchDialogSubtitle" : "settingsSystemDialogSubtitle");
     setConfigurationSection(canvasSettingsForm.querySelector(".settings-api-group"), mode === "api");
     setConfigurationSection(canvasSettingsForm.querySelector(".settings-system-group"), mode === "system");
+    setConfigurationSection(canvasSettingsForm.querySelector(".settings-search-group"), mode === "search");
     connectionManager.hidden = mode !== "api";
     canvasSettingsForm.dataset.editorHidden = String(mode === "api");
     settingsEditorCancel.hidden = mode !== "api";
     settingsTestConnection.hidden = mode !== "api";
     settingsInstallCli.hidden = true;
-    settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : "settingsSave");
+    settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : mode === "search" ? "settingsSaveSearch" : "settingsSave");
     canvasSettingsForm.hidden = false;
     configurationLayer.hidden = false;
     configurationLayer.setAttribute("aria-hidden", "false");
@@ -1979,6 +2091,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsTraceToggle.classList.toggle("on", settings.requestTrace);
     settingsTraceToggle.setAttribute("aria-checked", String(settings.requestTrace));
   }
+  function updateSearchSettingsState(configured = settings.hasTavilyApiKey) {
+    settings.hasTavilyApiKey = Boolean(configured);
+    if (settingsTavilySaved) settingsTavilySaved.hidden = !settings.hasTavilyApiKey;
+    if (settingsTavilyApiKey) settingsTavilyApiKey.placeholder = t(settings.hasTavilyApiKey ? "settingsTavilyApiKeySavedPlaceholder" : "settingsTavilyApiKey");
+    if (settingsSearchEntryStatus) {
+      const key = settings.hasTavilyApiKey ? "settingsSearchReady" : "settingsSearchNotConfigured";
+      settingsSearchEntryStatus.dataset.i18n = key;
+      settingsSearchEntryStatus.textContent = t(key);
+    }
+  }
   async function loadCanvasSettings() {
     if (!canvasSettingsForm) return;
     setSettingsStatus(t("settingsLoading"));
@@ -1993,6 +2115,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       fillApiEditor({ apiPreset:body.apiPreset, apiFormat:body.apiFormat, apiUrl:body.apiUrl, apiModel:body.apiModel });
       settingsApiKey.value = "";
       settingsApiSaved.dataset.saved = String(body.hasApiKey);
+      settingsTavilyApiKey.value = "";
+      updateSearchSettingsState(body.hasTavilyApiKey === true);
+      canvasAgentSetSearchConfigured(body.hasTavilyApiKey === true);
       settings.cli = {
         "kimi-cli":{ model:body.kimiCliModel, path:body.kimiCliPath },
         "codex-cli":{ model:body.codexModel, path:body.codexPath },
@@ -2017,8 +2142,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setConnectionTestBusy(true);
     setSettingsStatus(t("settingsSaving"));
     try {
-      const provider = settingsProvider.value, scope = settings.configurationMode, connectionPayload = connectionEditorPayload(), apiPreset = provider === "api" ? selectedApiPreset() : null;
-      const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : {
+      const provider = settingsProvider.value, scope = settings.configurationMode, connectionPayload = connectionEditorPayload(), apiPreset = provider === "api" ? selectedApiPreset() : null,
+        tavilyKeyChanged = scope === "search" && Boolean(settingsTavilyApiKey.value.trim()),
+        searchNeedsNewSession = tavilyKeyChanged && !settings.hasTavilyApiKey;
+      const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : scope === "search" ? {
+        scope, tavilyApiKey:settingsTavilyApiKey.value,
+      } : {
         scope, provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
         apiKey:settingsApiKey.value, effort:settingsEffort.value, maxTokens:Number(settingsMaxTokens.value), timeoutSeconds:Number(settingsTimeout.value),
         autoDelaySeconds:Number(settingsAutoDelay.value), imageFormat:settingsImageFormat.value,
@@ -2036,8 +2165,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         settings.connections = body.connections || settings.connections;
         syncLocalConnectionSelection();
         renderConnectionLists();
+        if (body.savedId === selectedAiConnectionId()) canvasAgentConnectionDidChange(true);
         hideConnectionEditor();
         setConnectionStatus(t("settingsConnectionSaved"), "success");
+      } else if (scope === "search") {
+        settingsTavilyApiKey.value = "";
+        updateSearchSettingsState(body.hasTavilyApiKey === true);
+        canvasAgentSearchConfigurationDidChange(body.hasTavilyApiKey === true, searchNeedsNewSession);
+        setSettingsStatus(t("settingsSearchSaved"), "success");
       } else setSettingsStatus(t("settingsSystemSaved"), "success");
     } catch (error) { setSettingsStatus(error?.message || t("settingsLoadFailed"), "error"); }
     finally { setConnectionTestBusy(false); }
@@ -2050,6 +2185,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settings.connections = body.connections || [];
       syncLocalConnectionSelection();
       renderConnectionLists();
+      canvasAgentConnectionDidChange();
       setConnectionStatus(t(action === "delete" ? "settingsConnectionDeleted" : "settingsConnectionActivated"), "success");
     } catch (error) { setConnectionStatus(error?.message || t("settingsLoadFailed"), "error"); }
   }
@@ -2063,6 +2199,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem(AI_CONNECTION_STORAGE_KEY, id);
       syncLocalConnectionSelection();
       renderConnectionLists();
+      canvasAgentConnectionDidChange();
       setConnectionStatus(t("settingsConnectionActivated"), "success");
       if (closeAfterActivation) closeSettings();
       return;
@@ -2558,9 +2695,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function updatePluginControl() {
     renderPluginOptions();
-    const anyEnabled = PLUGIN_DEFINITIONS.some((plugin) => pluginEnabled(plugin.id));
-    pluginButton.classList.toggle("active", anyEnabled);
-    pluginButton.setAttribute("aria-pressed", String(anyEnabled));
+    pluginButton.classList.toggle("active", !pluginPopover.hidden);
+    pluginButton.removeAttribute("aria-pressed");
     pluginButton.setAttribute("aria-expanded", String(!pluginPopover.hidden));
     pluginLocalCount.textContent = String(PLUGIN_DEFINITIONS.length);
     pluginCatalogStatus.textContent = pluginCatalogStatusText();
@@ -2881,6 +3017,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     pluginPopover.setAttribute("aria-hidden", "true");
     document.body.classList.remove("plugin-open");
     if (!featureTour.active) tourMain.inert = false;
+    pluginButton.classList.remove("active");
     pluginButton.setAttribute("aria-expanded", "false");
     const restore = state.pluginDialogRestoreFocus;
     state.pluginDialogRestoreFocus = null;
@@ -3033,6 +3170,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.aiProgressEvent) setStatus(aiProgressText(state.aiProgressEvent),AI_PROGRESS_STATUS_KEYS[state.aiProgressEvent.phase]);
     else if (state.statusKey) setStatusKey(state.statusKey);
     updateSelectionToolbar();
+    updateCanvasAgentLanguage();
     updateFeatureTourLanguage();
     summonFX?.refreshText();
     positionAnimationControls();

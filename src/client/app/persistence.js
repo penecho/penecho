@@ -1094,6 +1094,7 @@
     state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
     state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
     state.snapshotSavedRevision = savedUserRevision;
+    canvasAgentCanvasDidPersist(location, storedId);
     await refreshSnapshots();
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     return storedId;
@@ -1283,6 +1284,7 @@
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
       state.snapshotSavedRevision = state.userRevision;
+      canvasAgentCanvasDidChange({ id:item.id, location });
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       closeHistoryPanel();
@@ -1413,6 +1415,7 @@
     state.currentSnapshotBundleExtensions = {};
     state.currentSnapshotManifestExtensions = {};
     state.currentSnapshotPreservedAssets = [];
+    canvasAgentCanvasDidChange();
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -2194,6 +2197,13 @@
     context.moveTo(box.x + box.w / 2 - size * 0.48, box.y + box.h);
     context.lineTo(box.x + box.w / 2 + size * 0.48, box.y + box.h);
   }
+  function drawSelectionContent(selection, context = ctx) {
+    if (selection?.phase !== "active") return;
+    for (const fragment of selection.fragments) {
+      const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
+      context.drawImage(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
+    }
+  }
   function drawSelection(selection, context = ctx) {
     const ctx = context,
       unit = 1 / state.scale,
@@ -2210,10 +2220,7 @@
       ctx.restore();
       return;
     }
-    for (const fragment of selection.fragments) {
-      const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
-      ctx.drawImage(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
-    }
+    drawSelectionContent(selection, ctx);
     const path = selectionPathFor(selection);
     ctx.save();
     ctx.strokeStyle = "#2679b8";

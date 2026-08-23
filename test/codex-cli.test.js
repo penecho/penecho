@@ -54,6 +54,11 @@ test("omits the Codex image argument for a text-only request", () => {
   assert.ok(args.includes("answer.txt"));
 });
 
+test("attaches up to five Codex vision files in message order", () => {
+  const args=buildCodexArgs({workDir:"work",imageFiles:["one.png","two.webp"],outputFile:"answer.txt",model:null,effort:null});
+  assert.deepEqual(args.flatMap((value,index)=>value==="-i"?[args[index+1]]:[]),["one.png","two.webp"]);
+});
+
 test("passes only the required environment to the Codex process", () => {
   const env = sanitizeCodexEnv({ PATH: "bin", OPENAI_API_KEY: "secret", OPENAI_API_URL: "https://example.test", OPENAI_MODEL: "remote", HTTPS_PROXY: "http://user:secret@proxy.test", LOCAL_MODEL_URL: "https://remote-model.test", UNRELATED_SECRET: "private", CODEX_HOME: "host-codex", HOME: "host-home", USERPROFILE: "host-profile" });
   assert.equal(env.OPENAI_API_KEY, undefined);

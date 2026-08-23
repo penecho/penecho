@@ -46,12 +46,15 @@ test("Kimi stream-json extracts assistant content and detects tool activity", ()
 test("Kimi CLI receives a temporary canvas reference and returns assistant JSON", async () => {
   const executable = fakeKimi(`
 const fs=require("fs"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1],agentFile=args[args.indexOf("--agent-file")+1];
-const image=/@(canvas\\.(?:png|webp))/.exec(prompt)?.[1];
-if(!image||!fs.existsSync(image)||!agentFile||!fs.readFileSync(agentFile,"utf8").includes("tools: []"))process.exit(3);
+const images=[...prompt.matchAll(/@(canvas-[0-9]+[.](?:png|webp))/g)].map(match=>match[1]);
+if(images.length!==2||images.some(image=>!fs.existsSync(image))||!agentFile||!fs.readFileSync(agentFile,"utf8").includes("tools: []")){
+  process.stderr.write(JSON.stringify({images,cwd:process.cwd(),exists:images.map(image=>fs.existsSync(image)),agentFile,agentExists:Boolean(agentFile&&fs.existsSync(agentFile))}));
+  process.exit(3);
+}
 process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"none","commands":[]}'}]})+"\\n");
 `);
   let activityCount=0;
-  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:PNG, onActivity:()=>activityCount++ });
+  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:[PNG,PNG], onActivity:()=>activityCount++ });
   assert.equal(result, '{"intent":"none","commands":[]}');
   assert.ok(activityCount>0);
 });

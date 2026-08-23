@@ -50,7 +50,7 @@ PenEcho es miembro oficial de **Kimi Open Source Friends**, el programa de [Moon
 
 [Descargar desde GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-Para instalar mediante npm, necesitas [Node.js 20.3 o posterior](https://nodejs.org/) y una de estas opciones: una clave de API, [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) o [Claude Code CLI](https://code.claude.com/docs/en/overview), con la sesión iniciada.
+Para instalar mediante npm, necesitas [Node.js 22.19 o posterior](https://nodejs.org/) y una de estas opciones: una clave de API, [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), [Codex CLI](https://developers.openai.com/codex/cli) o [Claude Code CLI](https://code.claude.com/docs/en/overview), con la sesión iniciada.
 
 ```bash
 npm install -g penecho

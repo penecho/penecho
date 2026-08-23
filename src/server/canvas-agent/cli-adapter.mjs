@@ -1,0 +1,297 @@
+import { createHash, randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { CallId, LlmAdapter, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+
+const require = createRequire(import.meta.url)
+const { callKimiCli } = require('../../providers/kimi-cli.js')
+const { callCodexCli } = require('../../providers/codex-cli.js')
+const { callClaudeCli } = require('../../providers/claude-cli.js')
+
+const CLI_PROVIDERS = new Set(['kimi-cli', 'codex-cli', 'claude-cli'])
+const CLI_CONTEXT_WINDOW = 160_000
+const CLI_MAX_TOKENS = 8_192
+const CLI_MAX_IMAGES = 5
+const CLI_REQUEST_IMAGE_MAX_PIXELS = 2048 * 2048
+const CLI_REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
+const DEFAULT_CLI_TIMEOUT_MS = 180_000
+const MAX_CLI_PROMPT_CHARS = 500_000
+const CLI_RETRY_POLICY = resolveRetryPolicy({ mode:'normal', maxRetries:0 }, 'penecho-cli-llm.retryPolicy')
+
+const CLI_PROTOCOL_SYSTEM = `You are the model backend for DeepSeek Harness inside PenEcho Canvas.
+Harness, not this CLI process, owns the conversation, context, cancellation, and tool loop. You have no direct tools. Never inspect host files, run commands, browse directly, call MCP, delegate, or invent tool results. When a listed search tool is available, request it through Harness like any other listed tool.
+
+Return exactly one JSON object and no markdown fence or surrounding prose:
+- To answer the user: {"type":"final","text":"..."}
+- To ask Harness to run one listed tool: {"type":"tool_call","name":"canvas_inspect","arguments":{}}
+
+Choose at most one tool per response. Use only a tool listed in the request. The arguments must be one JSON object matching its schema. After Harness supplies the tool result, you will receive a new request containing the updated conversation and should choose the next tool or return the final answer. Do not expose private chain-of-thought.`
+
+function hash(value) {
+  return createHash('sha256').update(String(value)).digest('hex')
+}
+
+function bounded(value, limit = MAX_CLI_PROMPT_CHARS) {
+  const text = String(value ?? '')
+  if (text.length > limit) throw new Error('Canvas Agent CLI context exceeds the safe local CLI prompt limit. Start a new conversation or use a larger-context model.')
+  return text
+}
+
+function connectionSnapshot(connection) {
+  return Object.freeze({
+    id:String(connection.id),
+    name:String(connection.name || ''),
+    provider:String(connection.provider),
+    cliPath:String(connection.cliPath || connection.provider.replace('-cli', '')),
+    cliModel:String(connection.cliModel || ''),
+    effort:String(connection.effort || 'config'),
+  })
+}
+
+export function cliConnectionProfile(connection) {
+  if (!connection || !CLI_PROVIDERS.has(connection.provider)) throw new Error('Canvas Agent selected an unsupported CLI connection.')
+  const model = String(connection.cliModel || '').trim() || 'default'
+  return {
+    provider:`penecho-cli-${hash(connection.id).slice(0, 12)}`,
+    model,
+    displayName:connection.name || ({
+      'kimi-cli':'Kimi CLI',
+      'codex-cli':'Codex CLI',
+      'claude-cli':'Claude CLI',
+    }[connection.provider]),
+  }
+}
+
+function textContent(blocks) {
+  return blocks.map(block => {
+    if (!block || typeof block !== 'object') return null
+    if (block.type === 'text') return { type:'text', text:String(block.text || '') }
+    if (block.type === 'reasoning') return null
+    if (block.type === 'image') return { type:'image', attachmentId:String(block.attachment?.attachmentId || ''), note:'This active image is attached through the CLI vision input.' }
+    if (block.type === 'tool-call') {
+      return { type:'tool_call', id:String(block.id), name:String(block.name), arguments:String(block.arguments || '{}') }
+    }
+    if (block.type === 'tool-result') {
+      return {
+        type:'tool_result',
+        toolCallId:String(block.toolCallId),
+        isError:Boolean(block.isError),
+        content:textContent(Array.isArray(block.content) ? block.content : []),
+      }
+    }
+    return null
+  }).filter(Boolean)
+}
+
+function imageRefs(blocks, refs) {
+  for (const block of blocks) {
+    if (block?.type === 'image' && block.attachment) refs.push(block.attachment)
+    if (block?.type === 'tool-result' && Array.isArray(block.content)) imageRefs(block.content, refs)
+  }
+}
+
+async function activeImageDataUrls(messages, attachments, signal) {
+  if (!attachments) return []
+  let active = []
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index], refs = []
+    imageRefs(Array.isArray(message?.content) ? message.content : [], refs)
+    if (!refs.length) continue
+    active = message.role === 'user' && message.source?.kind === 'user'
+      ? refs.slice(0, CLI_MAX_IMAGES)
+      : refs.slice(-1)
+    break
+  }
+  return Promise.all(active.map(async ref => {
+    const image = await attachments.readImageRequest(ref, { maxPixels:CLI_REQUEST_IMAGE_MAX_PIXELS, maxBytes:CLI_REQUEST_IMAGE_MAX_BYTES }, signal)
+    return `data:${image.mediaType};base64,${Buffer.from(image.data).toString('base64')}`
+  }))
+}
+
+export async function serializeCliRequest(options, attachments) {
+  const conversation = options.messages.map(message => ({
+    role:message.role,
+    source:message.source?.kind || 'unknown',
+    content:textContent(Array.isArray(message.content) ? message.content : []),
+  }))
+  const tools = (options.tools || []).map(tool => ({
+    name:tool.name,
+    description:tool.description,
+    parameters:tool.parameters,
+  }))
+  const prompt = bounded(JSON.stringify({
+    purpose:options.purpose || 'conversation',
+    conversation,
+    availableTools:tools,
+    instruction:tools.length
+      ? 'Return one tool_call for the next necessary Harness action, or final when the task is complete.'
+      : 'No tools are available for this request. Return final.',
+  }))
+  const activeImages = await activeImageDataUrls(options.messages, attachments, options.signal)
+  return {
+    systemPrompt:bounded(`${CLI_PROTOCOL_SYSTEM}\n\n${String(options.system || '')}`),
+    prompt,
+    atlasImage:activeImages.length > 1 ? activeImages : activeImages[0] || null,
+  }
+}
+
+function jsonObject(text) {
+  const trimmed = String(text || '').trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
+  const candidate = fenced ? fenced[1] : trimmed
+  try { return JSON.parse(candidate) }
+  catch {
+    const start = candidate.indexOf('{'), end = candidate.lastIndexOf('}')
+    if (start >= 0 && end > start) return JSON.parse(candidate.slice(start, end + 1))
+    throw new Error('Canvas Agent CLI returned an invalid Harness decision. Expected one JSON object.')
+  }
+}
+
+export function parseCliDecision(output, toolNames = []) {
+  let value
+  try { value = jsonObject(output) }
+  catch (error) { throw new Error(`Canvas Agent CLI returned an invalid Harness decision: ${error.message}`) }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Canvas Agent CLI decision must be a JSON object.')
+  if (value.type === 'final') {
+    const text = String(value.text || '').trim()
+    if (!text) throw new Error('Canvas Agent CLI returned an empty final answer.')
+    return { type:'final', text }
+  }
+  if (value.type !== 'tool_call') throw new Error('Canvas Agent CLI decision type must be final or tool_call.')
+  const name = String(value.name || '')
+  if (!toolNames.includes(name)) throw new Error(`Canvas Agent CLI requested unavailable tool: ${name || '(empty)'}.`)
+  const args = typeof value.arguments === 'string' ? jsonObject(value.arguments) : value.arguments
+  if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Canvas Agent CLI tool arguments must be a JSON object.')
+  return { type:'tool_call', name, arguments:JSON.stringify(args) }
+}
+
+export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasImage, signal }) {
+  const request = {
+    executable:connection.cliPath,
+    model:connection.cliModel || null,
+    effort:connection.effort,
+    atlasImage,
+    signal,
+  }
+  if (connection.provider === 'kimi-cli') {
+    return callKimiCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}` })
+  }
+  if (connection.provider === 'codex-cli') {
+    return callCodexCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}` })
+  }
+  if (connection.provider === 'claude-cli') {
+    return callClaudeCli({ ...request, systemPrompt, prompt })
+  }
+  throw new Error(`Canvas Agent does not support CLI provider ${connection.provider}.`)
+}
+
+export class PenEchoCliAdapter extends LlmAdapter {
+  constructor({ callCli = callPenEchoCli, attachments = () => undefined, timeoutMs = () => DEFAULT_CLI_TIMEOUT_MS } = {}) {
+    super()
+    this.callCli = callCli
+    this.attachments = attachments
+    this.timeoutMs = timeoutMs
+    this.routes = new Map()
+  }
+
+  replaceConnections(connections) {
+    const routes = new Map()
+    for (const connection of connections) {
+      if (!CLI_PROVIDERS.has(connection?.provider)) continue
+      const profile = cliConnectionProfile(connection)
+      routes.set(profile.provider, { profile, connection:connectionSnapshot(connection) })
+    }
+    this.routes = routes
+    return [...routes.keys()]
+  }
+
+  route(provider) {
+    const route = this.routes.get(provider)
+    if (!route) throw new Error(`Canvas Agent CLI provider route is unavailable: ${provider}.`)
+    return route
+  }
+
+  providerInfo(provider) {
+    const route = this.route(provider)
+    return { id:provider, name:route.profile.displayName }
+  }
+
+  providerRetryPolicy() { return CLI_RETRY_POLICY }
+
+  async listModels(provider) {
+    const route = this.route(provider)
+    return [this.modelInfo(provider, route.profile.model)]
+  }
+
+  modelInfo(provider, model) {
+    return {
+      provider,
+      id:model,
+      name:model === 'default' ? 'CLI default model' : model,
+      inputModalities:['text', 'image'],
+      context:{ contextWindow:CLI_CONTEXT_WINDOW },
+      defaultMaxTokens:CLI_MAX_TOKENS,
+    }
+  }
+
+  async resolveModel(provider, model) {
+    this.route(provider)
+    return this.modelInfo(provider, model)
+  }
+
+  async prepareCall(provider, model) {
+    const route = this.route(provider)
+    const snapshot = route.connection
+    return {
+      model:this.modelInfo(provider, model),
+      stream:options => this.streamWithConnection(options, snapshot),
+    }
+  }
+
+  async * stream(options) {
+    yield * this.streamWithConnection(options, this.route(options.provider).connection)
+  }
+
+  async decision(options, connection) {
+    options.signal?.throwIfAborted()
+    const configured = Number(this.timeoutMs()), timeoutMs = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_CLI_TIMEOUT_MS,
+      controller = new AbortController(), timeoutError = Object.assign(new Error(`Canvas Agent CLI request timed out after ${Math.round(timeoutMs / 1000)} seconds.`), { name:'TimeoutError' }),
+      signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
+      timer = setTimeout(() => controller.abort(timeoutError), timeoutMs)
+    timer.unref?.()
+    try {
+      const request = await serializeCliRequest({ ...options, signal }, this.attachments())
+      const output = await this.callCli({ connection, ...request, signal, purpose:options.purpose || 'conversation' })
+      signal.throwIfAborted()
+      return parseCliDecision(output, (options.tools || []).map(tool => tool.name))
+    } catch (error) {
+      if (controller.signal.aborted && !options.signal?.aborted) throw timeoutError
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async * streamWithConnection(options, connection) {
+    const decision = await this.decision(options, connection)
+    if (decision.type === 'final') {
+      yield { type:'block-start', index:0, blockType:'text' }
+      yield { type:'text-delta', index:0, text:decision.text }
+      yield { type:'block-end', index:0, block:{ type:'text', text:decision.text } }
+      yield { type:'finish', reason:{ kind:'stop' } }
+      return
+    }
+    const id = CallId(`penecho_cli_${randomUUID()}`)
+    yield { type:'block-start', index:0, blockType:'tool-call' }
+    yield { type:'tool-call-delta', index:0, id, name:decision.name, argumentsDelta:decision.arguments }
+    yield { type:'block-end', index:0, block:{ type:'tool-call', id, name:decision.name, arguments:decision.arguments } }
+    yield { type:'finish', reason:{ kind:'tool-calls' } }
+  }
+}
+
+export const PenEchoCliLlmPlugin = {
+  name:'penecho-cli-llm',
+  inject:['llm', 'attachments'],
+  apply(ctx, { host }) {
+    host.installCliAdapter(ctx)
+  },
+}

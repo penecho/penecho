@@ -204,7 +204,7 @@ class KimiAcpClient {
     });
   }
 
-  async _request({ model, effort, prompt, image, signal, onActivity }) {
+  async _request({ model, effort, prompt, image, images, signal, onActivity }) {
     if (this.closed) throw acpInfraError("Kimi ACP client is closed.");
     if (signal?.aborted) throw abortError();
     const requestKeepAlive = setInterval(() => {}, 60_000);
@@ -226,7 +226,7 @@ class KimiAcpClient {
         if (thinking.error) throw new Error(`Kimi ACP rejected thinking effort "${mapped}": ${thinking.error.message}`);
       }
       stage = "prompted";
-      return await this._prompt({ sessionId, prompt, image, signal, onActivity });
+      return await this._prompt({ sessionId, prompt, image, images, signal, onActivity });
     } catch (error) {
       if (stage !== "prompted" && error.acpTransport && !error.acpInfraFailure) error.acpInfraFailure = true;
       throw error;
@@ -235,10 +235,11 @@ class KimiAcpClient {
     }
   }
 
-  _prompt({ sessionId, prompt, image, signal, onActivity }) {
+  _prompt({ sessionId, prompt, image, images, signal, onActivity }) {
     return new Promise((resolve, reject) => {
       const blocks = [];
-      if (image) blocks.push({ type:"image", data:image.data, mimeType:image.mimeType });
+      const activeImages = (Array.isArray(images) ? images : image ? [image] : []).filter(Boolean).slice(0, 5);
+      for (const activeImage of activeImages) blocks.push({ type:"image", data:activeImage.data, mimeType:activeImage.mimeType });
       blocks.push({ type:"text", text:String(prompt || "") });
       const state = {
         sessionId,

@@ -396,14 +396,21 @@ test("Codex CLI mode starts with no extra access or model-provider settings", { 
 });
 
 test("canvas settings expose no API secret and save validated configuration for restart", { timeout:10000 }, async () => {
-  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret" }));
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret", TAVILY_API_KEY:"saved-tavily-secret" }));
   try {
     const headers = { Origin:origin, "Content-Type":"application/json" };
     const currentResponse = await fetch(`${origin}/api/settings`, { headers:{ Origin:origin } }), current = await currentResponse.json();
     assert.equal(currentResponse.status, 200);
     assert.equal(current.hasApiKey, true);
+    assert.equal(current.hasTavilyApiKey, true);
     assert.equal(Object.hasOwn(current, "apiKey"), false);
+    assert.equal(Object.hasOwn(current, "tavilyApiKey"), false);
     assert.equal(current.maxTokens, 20000);
+    const searchResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ scope:"search", tavilyApiKey:"tvly-next-secret" }) }), search = await searchResponse.json();
+    assert.equal(searchResponse.status, 200, JSON.stringify(search));
+    assert.equal(search.searchApplied, true);
+    assert.equal(search.hasTavilyApiKey, true);
+    assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).canvasAgentSearchConfigured, true);
     const savedResponse = await fetch(`${origin}/api/settings`, {
       method:"POST", headers,
       body:JSON.stringify({ scope:"api", provider:"api", apiFormat:"anthropic", apiUrl:"https://api.example.test/anthropic/", apiModel:"model-next", apiKey:"", effort:"high", timeoutSeconds:120, autoDelaySeconds:2.5, imageFormat:"png", requestTrace:true, requestTraceLimit:25 }),
@@ -416,6 +423,7 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.match(text, /^AI_API_URL=https:\/\/api\.example\.test\/anthropic$/m);
     assert.match(text, /^AI_API_MODEL=model-next$/m);
     assert.match(text, /^AI_API_KEY=saved-secret$/m);
+    assert.match(text, /^TAVILY_API_KEY=tvly-next-secret$/m);
     assert.doesNotMatch(text, /^AUTO_AI_DELAY_SECONDS=/m);
     const switchedResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", provider:"codex-cli", codexModel:"gpt-hot", codexPath:"codex-next", effort:"high", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTrace:false, requestTraceLimit:100 }) });
     assert.equal(switchedResponse.status, 200);
@@ -750,7 +758,7 @@ test("Claude CLI mode sends the canvas to the authenticated local CLI with the s
 
 test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and temporary canvas reference", { timeout:20000 }, async () => {
   const directory=await fs.promises.mkdtemp(path.join(os.tmpdir(),"penecho-server-kimi-")),fakeCli=path.join(directory,"fake-kimi.js"),record=path.join(directory,"record.json");
-  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],image=/@(canvas\\.(?:png|webp))/.exec(prompt)?.[1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,imageExists:Boolean(image&&fs.existsSync(path.join(process.cwd(),image))),agent:fs.readFileSync(agentFile,"utf8")}));process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"answer","observedText":"hi","message":"hello","commands":[]}'}]})+"\\n");\n`);
+  await fs.promises.writeFile(fakeCli, `"use strict";const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],image=/@(canvas-[0-9]+[.](?:png|webp))/.exec(prompt)?.[1];fs.writeFileSync(${JSON.stringify(record)},JSON.stringify({args,imageExists:Boolean(image&&fs.existsSync(path.join(process.cwd(),image))),agent:fs.readFileSync(agentFile,"utf8")}));process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"answer","observedText":"hi","message":"hello","commands":[]}'}]})+"\\n");\n`);
   const {child,origin}=await startServer(serverEnv({AI_PROVIDER:"kimi-cli",KIMI_CLI_PATH:fakeCli,KIMI_CLI_MODEL:"kimi-code/k3",AI_EFFORT:"medium"}));
   try {
     const page=await fetch(origin),cookie=page.headers.get("set-cookie")?.split(";",1)[0],response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,Cookie:cookie},body:JSON.stringify(validPayload())}),body=await response.json(),saved=JSON.parse(await fs.promises.readFile(record,"utf8"));
@@ -1286,8 +1294,9 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
     assert.match(modelInput.widgetRenderingPolicy, /reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size/);
     assert.match(modelInput.widgetRenderingPolicy, /verify the longest labels and every section at the actual widget dimensions/);
     assert.match(modelInput.widgetRenderingPolicy, /For SVG, size text relative to its viewBox, not browser defaults/);
+    assert.match(modelInput.widgetRenderingPolicy, /Match the current uiTheme and nearby Canvas visual language/);
     assert.doesNotMatch(modelInput.widgetRenderingPolicy, /180-240px|at least 100px|at least 80px/);
-    assert.match(modelInput.widgetRenderingPolicy, /visualization backdrop transparent by default[\s\S]*opaque backdrop only when visually necessary or explicitly requested/);
+    assert.match(modelInput.widgetRenderingPolicy, /visualization backdrop transparent by default[\s\S]*smallest necessary opaque or translucent backing[\s\S]*materially improves contrast, legibility, semantic grouping, or media presentation/);
     assert.match(modelInput.widgetRenderingPolicy, /no outer background, border, corner radius, or box shadow/);
 
     const disabledResponse = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(validPayload()) }),
@@ -2024,6 +2033,7 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
   assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
   assert.match(source, /Use native draw only[\s\S]*?10 or fewer basic primitives or line segments[\s\S]*?larger static visuals[\s\S]*?General HTML/);
+  assert.match(source, /Prefer General HTML for explanatory, educational, conceptual, and overview visuals[\s\S]*?professional notation[\s\S]*?diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
   assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
   assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);

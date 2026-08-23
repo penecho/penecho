@@ -50,7 +50,7 @@ PenEcho は、[Moonshot AI](https://www.kimi.com/) が優れたオープンソ�
 
 [GitHub Releases からダウンロード](https://github.com/penecho/penecho/releases/latest)。
 
-npm でインストールする場合は、[Node.js 20.3 以降](https://nodejs.org/)と、API キー、認証済みの [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、[Codex CLI](https://developers.openai.com/codex/cli)、または [Claude Code CLI](https://code.claude.com/docs/en/overview) のいずれかが必要です。
+npm でインストールする場合は、[Node.js 22.19 以降](https://nodejs.org/)と、API キー、認証済みの [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、[Codex CLI](https://developers.openai.com/codex/cli)、または [Claude Code CLI](https://code.claude.com/docs/en/overview) のいずれかが必要です。
 
 ```bash
 npm install -g penecho

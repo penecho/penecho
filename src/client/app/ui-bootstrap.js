@@ -13,6 +13,72 @@
     state.pointerPreview = preview;
     requestInteractionLayerRender();
   }
+  function setCanvasViewMode(enabled) {
+    enabled = Boolean(enabled);
+    if (state.viewMode === enabled) return;
+    state.viewMode = enabled;
+    state.pointers.clear();
+    state.touches.clear();
+    state.touchGesture = null;
+    state.panGesture = null;
+    state.textTap = null;
+    state.pointerPreview = null;
+    document.body.classList.toggle("canvas-view-mode", enabled);
+    view.classList.toggle("view-mode", enabled);
+    canvasViewButton.setAttribute("aria-pressed", String(enabled));
+    canvasViewActions.hidden = !enabled;
+    const inactiveSurfaces = view.querySelectorAll([
+      ".canvas-navigation-lock",
+      ".widget-layer",
+      ".object-chrome-layer",
+      ".animation-controls",
+      ".image-edit-bar",
+      ".selection-overlay-layer",
+      ".text-editor-layer",
+      ".ai-embodiment",
+      ".canvas-agent-panel",
+    ].join(","));
+    if (enabled) {
+      for (const element of inactiveSurfaces) {
+        if (element.inert) continue;
+        element.inert = true;
+        element.dataset.canvasViewInert = "true";
+      }
+    } else {
+      for (const element of view.querySelectorAll('[data-canvas-view-inert="true"]')) {
+        element.inert = false;
+        delete element.dataset.canvasViewInert;
+      }
+    }
+    if (enabled) {
+      state.viewModeNavigationLocked = state.navigationLocked;
+      if (state.navigationLocked) setCanvasNavigationLocked(false);
+      if (!document.querySelector("#canvasAgentPanel")?.hidden) closeCanvasAgent();
+      closeRadialMenu();
+      document.activeElement?.blur?.();
+      setCanvasCursor("grab");
+      requestAnimationFrame(() => canvasViewCloseButton.focus({ preventScroll:true }));
+    } else {
+      if (state.viewModeNavigationLocked) setCanvasNavigationLocked(true);
+      state.viewModeNavigationLocked = false;
+      resetCanvasCursor();
+      requestAnimationFrame(() => canvasViewButton.focus({ preventScroll:true }));
+    }
+    requestInteractionLayerRender();
+    requestAnimationFrame(fit);
+  }
+  window.addEventListener("keydown", (event) => {
+    if (!state.viewMode || document.querySelector(".penecho-cloud-overlay")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setCanvasViewMode(false);
+      return;
+    }
+    if (event.key === "Tab" || canvasViewActions.contains(event.target) && ["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
   function beginCanvasPointerAction(e, point) {
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -97,6 +163,23 @@
   }
   screen.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    if (state.viewMode) {
+      if (e.pointerType === "mouse" && ![0, 1].includes(e.button)) return;
+      try { screen.setPointerCapture(e.pointerId); } catch {}
+      calibrateScreenClientRatio(e, false);
+      state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (e.pointerType === "touch") {
+        state.touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
+        if (state.touches.size >= 2) {
+          beginTouchGesture();
+          return;
+        }
+      }
+      state.panGesture = { id:e.pointerId, last:{ x:e.clientX, y:e.clientY } };
+      setCanvasCursor("grabbing");
+      setNavigating(true);
+      return;
+    }
     finishStaleWidgetHostGesture(e);
     if (Date.now() < state.textInputBlockedUntil) return;
     try {
@@ -180,6 +263,23 @@
   });
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    if (state.viewMode) {
+      const old = state.pointers.get(e.pointerId);
+      calibrateScreenClientRatio(e, true);
+      state.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (e.pointerType === "touch") state.touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (state.touches.size >= 2) {
+        if (!state.touchGesture) beginTouchGesture();
+        updateTouchGesture();
+        return;
+      }
+      if (state.panGesture?.id === e.pointerId && old) {
+        moveCanvas(e.clientX - old.x, e.clientY - old.y);
+        state.panGesture.last = { x:e.clientX, y:e.clientY };
+        setNavigating(true);
+      }
+      return;
+    }
     updateCanvasWidgetGestureResetTap(e);
     if (finishReleasedWidgetGesture(e)) return;
     const old = state.pointers.get(e.pointerId);
@@ -265,6 +365,20 @@
     coords.textContent = `x ${Math.round(p.x)} · y ${Math.round(p.y)} · ${Math.round(state.scale * 100)}%`;
   });
   function end(e) {
+    if (state.viewMode) {
+      state.pointers.delete(e.pointerId);
+      if (e.pointerType === "touch") state.touches.delete(e.pointerId);
+      state.touchGesture = null;
+      if (e.pointerType === "touch" && state.touches.size === 1) {
+        const [id, point] = state.touches.entries().next().value;
+        state.panGesture = { id, last:point };
+      } else if (state.panGesture?.id === e.pointerId || !state.touches.size) state.panGesture = null;
+      if (!state.panGesture) {
+        setCanvasCursor("grab");
+        setNavigating(false);
+      }
+      return;
+    }
     state.pointers.delete(e.pointerId);
     finishHandObjectFocus(e);
     if (e.pointerType === "touch") {
@@ -484,6 +598,9 @@
   document.querySelectorAll("[data-mode]").forEach((button) => {
     button.onclick = () => setCanvasMode(button.dataset.mode, { showHint:true });
   });
+  canvasViewButton.onclick = () => setCanvasViewMode(true);
+  canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
+  canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
@@ -1101,6 +1218,7 @@
   settingsBackdrop.addEventListener("pointerdown", () => closeSettings());
   settingsPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
   settingsOpenApi?.addEventListener("click", () => openConfiguration("api"));
+  settingsOpenSearch?.addEventListener("click", () => openConfiguration("search"));
   settingsOpenSystem?.addEventListener("click", () => openConfiguration("system"));
   configurationClose?.addEventListener("click", () => closeConfiguration());
   configurationBackdrop?.addEventListener("pointerdown", () => closeConfiguration());

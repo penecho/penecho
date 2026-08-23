@@ -25,7 +25,7 @@ The desktop service defaults to `127.0.0.1`. LAN listening is available only thr
 
 ## Local development and packaging
 
-Packaging requires Node.js 22.12 or newer on the build machine only.
+Packaging requires Node.js 22.19 or newer on the build machine only.
 
 ```bash
 npm ci

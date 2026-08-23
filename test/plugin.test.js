@@ -401,8 +401,12 @@ test("every built-in plugin uses a directory bundle", () => {
   assert.match(general.document, /never use a JSON, XML, YAML, source-code, or `<pre>` dump as the primary view/);
   assert.match(general.document, /locally renders its supported `diagram_source` formats from source alone/);
   assert.match(general.document, /Placement is semantic, not a search for unused canvas space/);
+  assert.match(general.document, /default capability for explanatory, educational, conceptual, and overview visuals[\s\S]*visual explanations of a model, system, structure, or architecture/);
+  assert.match(general.document, /Merely asking to draw, explain, or show an architecture, model, structure, process, flow, diagram, or chart is not enough[\s\S]*keep explanatory visuals in General HTML/);
   assert.match(general.document, /overlay only the solution path on an existing maze/);
   assert.match(general.document, /existing figures or objects[\s\S]*?position the transparent widget over their actual locations[\s\S]*?never redraw the figures/);
+  assert.match(general.document, /Match the current PenEcho theme and nearby visual language/);
+  assert.match(general.document, /contained opaque or translucent surface[\s\S]*?materially improves contrast, legibility, semantic grouping, or media presentation[\s\S]*?smallest necessary local surface/);
   assert.match(general.document, /Dynamic SVG fully supports/);
   assert.match(general.document, /multi-part SVG visual[\s\S]*?wrapping CSS layout with tight-viewBox panels[\s\S]*?never make the whole widget one fixed-size viewBox/);
   assert.match(general.document, /explicitly aim the camera at the subject and keep it centered after resize/);
@@ -429,7 +433,9 @@ test("every built-in plugin uses a directory bundle", () => {
   for (const format of ["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"])
     assert.match(flowchart.document, new RegExp(`\\\`${format}\\\``));
   assert.match(flowchart.document, /Do not include HTML, CSS, imports, URLs, or JavaScript in `diagram_source`/);
-  assert.match(flowchart.document, /diagram background transparent by default[\s\S]*opaque diagram background only when it is visually necessary or the user explicitly requests one/);
+  assert.match(flowchart.document, /Use only when a diagram materially needs established professional notation[\s\S]*Do not select this capability merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw[\s\S]*belong in General HTML/);
+  assert.match(flowchart.document, /diagram background transparent by default[\s\S]*opaque or translucent backing[\s\S]*materially improves contrast, legibility, semantic grouping, or media presentation/);
+  assert.match(flowchart.document, /palette and density that best match the current PenEcho theme and nearby Canvas content/);
   assert.match(flowchart.document, /use 3–5 meaningful phases[\s\S]*only when most inter-phase flow stays forward[\s\S]*Keep rework, exception and rejection branches beside the decision/);
   assert.match(flowchart.document, /multi-stage business process with repeated cross-phase returns[\s\S]*prefer `bpmn-xml` with explicit diagram geometry/);
   assert.match(flowchart.document, /reflows the diagram automatically as the widget is resized/);

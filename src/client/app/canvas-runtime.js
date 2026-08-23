@@ -3692,6 +3692,17 @@
     interactionCtx.beginPath();
     interactionCtx.rect(0, 0, SIZE, SIZE);
     interactionCtx.clip();
+    if (state.viewMode) {
+      if (state.selection) drawSelectionContent(state.selection, interactionCtx);
+      if (state.pending) {
+        interactionCtx.save();
+        interactionCtx.globalAlpha = 1 - (state.pending.fadeProgress || 0);
+        drawPending(state.pending, interactionCtx, { chrome:false });
+        interactionCtx.restore();
+      }
+      interactionCtx.restore();
+      return;
+    }
     if (state.drawing?.preview) drawPreview(state.drawing.preview, interactionCtx);
     drawPointerPreview(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);

@@ -24,6 +24,7 @@ const MAX_COMMAND_OUTPUT = 1024 * 1024;
 const REQUIRED_ASSETS = [
   "server.js",
   "src/server/main.js", "src/server/typeset.js", "src/server/api-config.js",
+  "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/runtime.mjs",
   "src/cli/update.js", "src/cli/configure-ui.js",
   "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
   "public/index.html", "public/access.html", "public/access.css", "public/access.js", "public/app.js", "public/draw.js", "public/selection.js", "public/tour.js", "public/style.css",
@@ -378,7 +379,7 @@ async function runKimiPreflight(configuration, options = {}) {
 
 function checkNodeVersion() {
   const [major,minor]=process.versions.node.split(".",2).map(Number);
-  return Number.isInteger(major)&&Number.isInteger(minor)&&(major>18||major===18&&minor>=17);
+  return Number.isInteger(major)&&Number.isInteger(minor)&&(major>22||major===22&&minor>=19);
 }
 
 function checkAssets(packageRoot = PACKAGE_ROOT) {
@@ -507,7 +508,7 @@ async function runDoctor(args, configuration, options = {}) {
   const output = options.output || process.stdout;
   let ready = true;
   const report = (ok, message) => { output.write(`[${ok ? "ok" : "fail"}] ${message}\n`); if (!ok) ready = false; };
-  report(checkNodeVersion(), `Node.js ${process.versions.node} (18.17+ required)`);
+  report(checkNodeVersion(), `Node.js ${process.versions.node} (22.19+ required)`);
   const missingAssets = checkAssets(configuration.packageRoot);
   report(missingAssets.length === 0, missingAssets.length ? `Missing PenEcho assets: ${missingAssets.join(", ")}` : "PenEcho assets are present");
   const port = await (options.portChecker || checkPortAvailable)(configuration.port, configuration.env.HOST || "0.0.0.0");
@@ -582,6 +583,10 @@ async function main(argv = process.argv.slice(2), options = {}) {
   catch (error) { errorOutput.write(`PenEcho: ${error.message}\nRun \`penecho --help\` for usage.\n`); return 1; }
   if (args.help) { output.write(helpText()); return 0; }
   if (args.version) { output.write(`${PACKAGE_JSON.version}\n`); return 0; }
+  if (!checkNodeVersion()) {
+    errorOutput.write(`PenEcho requires Node.js 22.19 or newer for the embedded DeepSeek Harness (current: ${process.versions.node}).\n`);
+    return 1;
+  }
   if (args.command === "start") {
     output.write(`PenEcho v${PACKAGE_JSON.version}\n`);
     if (args.uat) output.write(`PenEcho Cloud target: UAT (${UAT_CLOUD_ORIGIN})\n`);

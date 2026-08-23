@@ -91,7 +91,7 @@ Using these links directly supports the project:
 
 **Desktop app** — [download from GitHub Releases](https://github.com/penecho/penecho/releases/latest).
 
-**npm** — needs [Node.js 20.3+](https://nodejs.org/) and one of: an API key, an authenticated [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
+**npm** — needs [Node.js 22.19+](https://nodejs.org/) and one of: an API key, an authenticated [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code), an authenticated [Codex CLI](https://developers.openai.com/codex/cli), or an authenticated [Claude Code CLI](https://code.claude.com/docs/en/overview).
 
 ```bash
 npm install -g penecho

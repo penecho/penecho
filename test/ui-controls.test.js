@@ -512,6 +512,46 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.doesNotMatch(toggle, /localStorage|save\(/);
 });
 
+test("canvas view mode exposes only quiet share and exit controls while preserving pan and zoom", () => {
+  const html = read("public/index.html"),
+    app = read("public/app.js"),
+    css = read("public/style.css"),
+    zh = read("public/locales/zh.js"),
+    viewMode = functionSource(app, "setCanvasViewMode"),
+    renderInteraction = functionSource(app, "renderInteractionLayer"),
+    pointerDown = app.slice(app.indexOf('screen.addEventListener("pointerdown"'), app.indexOf('screen.addEventListener("pointermove"')),
+    pointerMove = app.slice(app.indexOf('screen.addEventListener("pointermove"'), app.indexOf("function end(e)")),
+    pointerEnd = functionSource(app, "end"),
+    penIndex = html.indexOf('data-mode="pen"'),
+    viewIndex = html.indexOf('id="canvasViewBtn"'),
+    eraserIndex = html.indexOf('data-mode="eraser"');
+
+  assert.ok(penIndex < viewIndex && viewIndex < eraserIndex);
+  assert.match(html, /id="canvasViewBtn"[^>]*aria-pressed="false"[^>]*data-i18n-aria="enterCanvasViewMode"[\s\S]*?<circle cx="12" cy="12" r="2\.8"/);
+  assert.match(html, /id="canvasViewActions"[^>]*role="toolbar"[^>]*hidden[\s\S]*?id="canvasViewShareBtn"[\s\S]*?id="canvasViewCloseBtn"/);
+  for (const key of ["enterCanvasViewMode", "exitCanvasViewMode", "canvasViewModeActions"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
+  assert.match(viewMode, /document\.body\.classList\.toggle\("canvas-view-mode", enabled\)/);
+  assert.match(viewMode, /view\.classList\.toggle\("view-mode", enabled\)/);
+  assert.match(viewMode, /element\.inert = true[\s\S]*?data-canvas-view-inert/);
+  assert.match(viewMode, /state\.viewModeNavigationLocked = state\.navigationLocked[\s\S]*?setCanvasNavigationLocked\(false\)/);
+  assert.match(viewMode, /closeCanvasAgent\(\)/);
+  assert.match(viewMode, /state\.viewModeNavigationLocked[\s\S]*?setCanvasNavigationLocked\(true\)/);
+  assert.match(app, /canvasViewActions\.contains\(event\.target\) && \["Enter", " "\]\.includes\(event\.key\)/);
+  assert.match(pointerDown, /if \(state\.viewMode\)[\s\S]*?state\.panGesture = \{ id:e\.pointerId/);
+  assert.match(pointerMove, /if \(state\.viewMode\)[\s\S]*?updateTouchGesture\(\)[\s\S]*?moveCanvas\(/);
+  assert.match(pointerEnd, /if \(state\.viewMode\)[\s\S]*?state\.touchGesture = null[\s\S]*?setCanvasCursor\("grab"\)/);
+  assert.match(renderInteraction, /if \(state\.viewMode\)[\s\S]*?drawSelectionContent\(state\.selection[\s\S]*?drawPending\(state\.pending, interactionCtx, \{ chrome:false \}\)[\s\S]*?return/);
+  assert.match(app, /canvasViewShareButton\.onclick = \(\) => document\.querySelector\("#shareCanvasBtn"\)\?\.click\(\)/);
+  assert.match(css, /\.canvas-view-actions\s*\{[^}]*opacity:\s*\.44/);
+  assert.match(css, /\.canvas-view-actions:hover,[\s\S]*?\.canvas-view-actions:focus-within\s*\{[^}]*opacity:\s*1/);
+  assert.match(css, /body\.canvas-view-mode main\s*\{[^}]*height:\s*100dvh[^}]*padding:\s*0/);
+  assert.match(css, /#viewport\.view-mode \.canvas-navigation-lock,[\s\S]*?#viewport\.view-mode #tip\s*\{\s*display:\s*none !important/);
+  assert.match(css, /#viewport\.view-mode \.canvas-widget-frame\s*\{\s*pointer-events:\s*none/);
+});
+
 test("declarative scenes and widgets render below the dedicated ink and interaction layers", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css");
   assert.ok(html.indexOf('src="animation.js"') < html.indexOf('src="app.js"'));
@@ -640,6 +680,10 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(zh, /copyPluginMarkdown:\s*"复制 Markdown"/);
   assert.match(css, /\.plugin-option-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.plugin-control\s*\{[^}]*height:\s*29px;\s*min-height:\s*29px/);
+  const updatePluginControl = functionSource(app, "updatePluginControl");
+  assert.match(updatePluginControl, /classList\.toggle\("active", !pluginPopover\.hidden\)/);
+  assert.match(updatePluginControl, /removeAttribute\("aria-pressed"\)/);
+  assert.doesNotMatch(updatePluginControl, /anyEnabled/);
   assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.plugin-control\s*\{\s*height:\s*38px;\s*min-height:\s*38px;\s*\}[\s\S]*?\.toolbar \.plugin-trigger\s*\{\s*height:\s*36px;\s*min-height:\s*36px/);
   assert.match(css, /\.plugin-modal-layer\s*\{[^}]*position:\s*fixed[^}]*place-items:\s*center/);
   assert.match(css, /\.plugin-modal\s*\{[^}]*color-scheme:\s*light[^}]*--ink:\s*#1c1f27[^}]*--panel-raised:\s*#ffffff[^}]*--gold-bright:\s*#4f46e5[^}]*width:\s*min\(920px, 100%\)[^}]*max-height/);
@@ -2629,4 +2673,22 @@ test("a multi-tool AI draft has one uniform group corner resize", () => {
   ]);
   const bounded = resize(items, target, items.map((item) => ({ ...item })), { x: 5000, y: 5000 }, 40, 800);
   assert.ok(bounded.x + bounded.w <= 800 && bounded.y + bounded.h <= 800);
+});
+
+test("Canvas Agent internet search is configured in Settings and toggled beside attachments", () => {
+  const html=read("public/index.html"),app=read("public/app.js"),server=read("src/server/main.js"),runtime=read("src/server/canvas-agent/runtime.mjs"),css=read("public/style.css"),zh=read("public/locales/zh.js");
+  for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsTavilyApiKey","settingsTavilySaved","canvasAgentSearch"]) assert.match(html,new RegExp(`id="${id}"`));
+  assert.ok(html.indexOf('id="canvasAgentAttach"')<html.indexOf('id="canvasAgentSearch"'));
+  assert.ok(html.indexOf('id="canvasAgentSearch"')<html.indexOf('id="canvasAgentImageInput"'));
+  assert.match(app,/settingsOpenSearch\?\.addEventListener\("click", \(\) => openConfiguration\("search"\)\)/);
+  assert.match(app,/canvasAgentSearch\.setAttribute\("aria-disabled",String\(!canvasAgent\.searchConfigured\)\)/);
+  assert.match(app,/canvasAgentSearch\.dataset\.tooltip = canvasAgent\.searchConfigured \? "" : label/);
+  assert.match(app,/webSearchEnabled:canvasAgent\.searchEnabled/);
+  assert.match(server,/hasTavilyApiKey:Boolean\(TAVILY_API_KEY\)/);
+  assert.match(server,/resolveWebSearch:\(\)=>\(\{ provider:"tavily", apiKey:TAVILY_API_KEY \|\| "" \}\)/);
+  assert.match(runtime,/name:'tavily_search'/);
+  assert.match(runtime,/include_answer:false, include_raw_content:false, include_images:false/);
+  assert.match(css,/\.canvas-agent-composer \.canvas-agent-search\.active \{ color: #4f46e5; background: transparent; \}/);
+  assert.match(css,/content: attr\(data-tooltip\)/);
+  for(const text of ["互联网搜索","Tavily API 密钥","请先在设置中填写 Tavily API 密钥"]) assert.match(zh,new RegExp(text));
 });
