@@ -723,11 +723,10 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 
 ### 10.3 本地资源能力
 
-- folder scope 只在被选中的 canonical 根目录内挂载 `read`、`read_image`、`write`、`edit`，以及按需 document/SQLite reader。主机通过真实 OS sandbox probe 后才增加 `bash`；否则只增加有界 `list_directory`。
-- `Read & Write` 模式对破坏性命令、shell 组合和不在小型只读集合内的命令逐次请求浏览器授权；`Full Access` 跳过重复授权，但绝不扩大目录或网络边界。
+- folder scope 当前只在被选中的 canonical 根目录内挂载 `list_directory`、`read`、`read_image`，以及按需 document/SQLite reader；不注册 `write`、`edit`、`bash` 或命令执行工具。旧客户端传入的 `full` 也归一为相同只读 session。
 - file scope 使用 PenEcho 自己的 exact-file 插件，只注册与该文件类型匹配的一个 reader，不复用会同时注册 mutator 的通用 ToolFs，不暴露父目录、siblings、Bash、write 或 edit。
 - folder 的 PDF/DOCX/XLSX/CSV 与 SQLite 工具先通过 `load_project_plugin` 惰性注册；单个同类文件直接注册唯一匹配 reader。SQLite 在独立、可强制终止的低内存子进程内只读执行。
-- Cloud 资源属于实际执行 Harness 的 Linked PenEcho host。资源 HTTP 与 Canvas Agent WebSocket 必须固定同一 `deviceId`；Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接 raw-path project POST。
+- 本地、LAN 与桌面页面通过 PenEcho 内置目录浏览器选择 host Home 下的非私有子目录，不调用系统目录选择器。Cloud 资源属于实际执行 Harness 的 Linked PenEcho host；资源 HTTP 与 Canvas Agent WebSocket 必须固定同一 `deviceId`，Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接本地隐式 Home root 或 raw-path project POST。
 - iPad/普通浏览器通过系统 file picker 上传最大 32 MiB 的受控副本；上传内容经扩展名、media type、magic、canonical base64，以及 Office ZIP 解压边界验证后写入 owner-only state。桌面原生 file picker 可以登记原文件，但仍使用 exact-file reader。
 
 ## 11. AI 连接集成

@@ -750,17 +750,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Auto AI is paused.",
       canvasAgentProject: "Choose project or file",
       canvasAgentProjectClose: "Close project chooser",
-      canvasAgentProjectBoundary: "Folder tools stay scoped; single files are read-only.",
+      canvasAgentProjectBoundary: "Folders and single files are read-only.",
       canvasAgentNoProject: "Browser",
       canvasAgentBrowserSpace: "Browser space",
       canvasAgentBrowserSpaceDetail: "No local project tools",
-      canvasAgentAccessMode: "Project access mode",
-      canvasAgentControlled: "Read & Write",
-      canvasAgentFull: "Full Access",
-      canvasAgentControlledHelp: "Read, write, and edit in this folder. If Bash is available on this host, critical commands ask first.",
-      canvasAgentFullHelp: "Same folder boundary. If Bash is available, critical commands run without another approval.",
-      canvasAgentFolderNoBashHelp: "Read, write, and edit stay inside this folder. This host does not expose Bash.",
-      canvasAgentAddProject: "Add local folder",
       canvasAgentAddProjectFile: "Add local file",
       canvasAgentUploadFile: "Upload file",
       canvasAgentUploadingFile: "Uploading…",
@@ -773,8 +766,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentRemoveFolderConfirm: "Remove “{name}” from PenEcho? The folder and its .penecho conversation history will stay on disk.",
       canvasAgentRemoveNativeFileConfirm: "Remove “{name}” from PenEcho? The original file will stay on disk, but its saved project conversations will be deleted.",
       canvasAgentRemoveUploadConfirm: "Delete the uploaded copy “{name}” and its saved project conversations from PenEcho? This cannot be undone.",
-      canvasAgentServerFolders: "Server folders",
-      canvasAgentServerFoldersDetail: "Folders shared by this PenEcho host",
+      canvasAgentServerFolders: "PenEcho host folders",
+      canvasAgentServerFoldersDetail: "Choose a read-only project folder in PenEcho",
+      canvasAgentNoHostFolders: "No host folders are available",
       canvasAgentRootBack: "Back",
       canvasAgentRootSelect: "Use this folder",
       canvasAgentRootTruncated: "Some folders are not shown.",
@@ -13764,11 +13758,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectPopover = document.querySelector("#canvasAgentProjectPopover"),
     canvasAgentProjectClose = document.querySelector("#canvasAgentProjectClose"),
     canvasAgentProjectList = document.querySelector("#canvasAgentProjectList"),
-    canvasAgentProjectAccess = document.querySelector("#canvasAgentProjectAccess"),
-    canvasAgentProjectControlled = document.querySelector("#canvasAgentProjectControlled"),
-    canvasAgentProjectFull = document.querySelector("#canvasAgentProjectFull"),
-    canvasAgentProjectModeHelp = document.querySelector("#canvasAgentProjectModeHelp"),
-    canvasAgentProjectAdd = document.querySelector("#canvasAgentProjectAdd"),
     canvasAgentProjectAddFile = document.querySelector("#canvasAgentProjectAddFile"),
     canvasAgentProjectUpload = document.querySelector("#canvasAgentProjectUpload"),
     canvasAgentProjectUploadInput = document.querySelector("#canvasAgentProjectUploadInput"),
@@ -13830,7 +13819,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_HISTORY_KEY = "penecho-canvas-agent-history-v1",
     CANVAS_AGENT_SEARCH_ENABLED_KEY = "penecho-canvas-agent-search-enabled-v1",
     CANVAS_AGENT_PROJECT_KEY = "penecho-canvas-agent-project-v1",
-    CANVAS_AGENT_PROJECT_ACCESS_KEY = "penecho-canvas-agent-project-access-v1",
     CANVAS_AGENT_PROJECT_UPLOAD_LIMIT = 32 * 1024 * 1024,
     CANVAS_AGENT_PROJECT_FILE_EXTENSIONS = new Set([
       ".pdf", ".docx", ".xlsx", ".csv", ".db", ".sqlite", ".sqlite3",
@@ -13898,7 +13886,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) === "true",
     sessionSearchConfigured:false,
     projectId:localStorage.getItem(CANVAS_AGENT_PROJECT_KEY) || "",
-    accessMode:localStorage.getItem(CANVAS_AGENT_PROJECT_ACCESS_KEY) === "full" ? "full" : "controlled",
+    accessMode:"controlled",
     projects:[],
     projectsLoaded:false,
     projectListRequestRevision:0,
@@ -14064,8 +14052,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectButton.setAttribute("title",t("canvasAgentProject"));
     canvasAgentProjectPopover.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectClose.setAttribute("aria-label",t("canvasAgentProjectClose"));
-    canvasAgentProjectAccess.setAttribute("aria-label",t("canvasAgentAccessMode"));
-    canvasAgentProjectAdd.textContent=t("canvasAgentAddProject");
     canvasAgentProjectAddFile.textContent=t("canvasAgentAddProjectFile");
     canvasAgentProjectUpload.textContent=t(canvasAgent.projectUploadBusy?"canvasAgentUploadingFile":"canvasAgentUploadFile");
     canvasAgentProjectRootBack.setAttribute("aria-label",t("canvasAgentRootBack"));
@@ -14099,7 +14085,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return String(project?.displayPath||project?.name||"").slice(0,1024);
   }
   function canvasAgentEffectiveAccessMode() {
-    return canvasAgentProjectById()?.kind==="file"?"controlled":canvasAgent.accessMode;
+    return "controlled";
+  }
+  function canvasAgentProjectRootApi() {
+    return window.PENECHO_CONFIG?.runtime==="cloud"
+      ? { roots:"/api/canvas-agent/roots", entries:"/api/canvas-agent/roots", select:"/api/canvas-agent/projects/from-root" }
+      : { roots:"/api/canvas-agent/host-roots", entries:"/api/canvas-agent/host-roots", select:"/api/canvas-agent/projects/from-host-root" };
   }
   function canvasAgentProjectFileSupported(filename) {
     const name=String(filename||"").trim().toLowerCase(),dot=name.lastIndexOf("."),extension=dot>=0?name.slice(dot):"";
@@ -14131,13 +14122,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectButton.title=project?`${project.name} — ${canvasAgentProjectDisplayPath(project)}`:t("canvasAgentProject");
   }
   function canvasAgentRenderProjectRoots() {
-    const view=canvasAgent.projectRootView,available=canvasAgent.projectRootsLoaded&&(canvasAgent.projectRoots.length>0||Boolean(view));
+    const view=canvasAgent.projectRootView,available=canvasAgent.projectRootsLoaded||Boolean(view);
     canvasAgentProjectRoots.hidden=!available;
     if(!available)return;
     canvasAgentProjectRootList.replaceChildren();
     canvasAgentProjectRootBack.hidden=!view;
     canvasAgentProjectRootPath.textContent=view?[view.rootName,view.relativePath].filter(Boolean).join("/"):t("canvasAgentServerFolders");
-    canvasAgentProjectRootSelect.hidden=!view;
+    canvasAgentProjectRootSelect.hidden=!view||view.selectable===false;
     canvasAgentProjectRootSelect.disabled=canvasAgent.projectRootBusy;
     canvasAgentProjectRootTruncated.hidden=!view?.truncated;
     if(canvasAgent.projectRootBusy){
@@ -14146,6 +14137,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     const entries=view?.entries||canvasAgent.projectRoots;
+    if(!entries.length){
+      const empty=document.createElement("button"),title=document.createElement("strong");
+      empty.type="button";empty.disabled=true;title.textContent=t("canvasAgentNoHostFolders");empty.append(title);canvasAgentProjectRootList.append(empty);return;
+    }
     for(const entry of entries){
       const choice=document.createElement("button"),title=document.createElement("strong"),detail=document.createElement("small");
       choice.type="button";
@@ -14177,7 +14172,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       choice.type="button";
       choice.setAttribute("aria-pressed",String(project.id===canvasAgent.projectId));
       title.textContent=project.name;
-      detail.textContent=project.kind==="file"?`${t("canvasAgentFileReadOnly")} · ${canvasAgentProjectDisplayPath(project)}`:canvasAgentProjectDisplayPath(project);
+      detail.textContent=`${t("canvasAgentFileReadOnly")} · ${canvasAgentProjectDisplayPath(project)}`;
       choice.append(title,detail);
       choice.addEventListener("click",()=>void canvasAgentSelectProject(project.id));
       remove.className="canvas-agent-project-remove";
@@ -14189,19 +14184,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       row.append(choice,remove);
       canvasAgentProjectList.append(row);
     }
-    const selected=canvasAgentProjectById(),selectedFolder=selected?.kind==="folder";
-    canvasAgentProjectAccess.hidden=!selectedFolder;
-    canvasAgentProjectControlled.disabled=canvasAgentProjectFull.disabled=!selectedFolder;
-    canvasAgentProjectControlled.classList.toggle("active",canvasAgent.accessMode==="controlled");
-    canvasAgentProjectFull.classList.toggle("active",canvasAgent.accessMode==="full");
-    const capabilities=canvasAgent.sessionProjectId===selected?.id?canvasAgent.sessionProjectCapabilities:null,
-      helpKey=capabilities?.bash===false?"canvasAgentFolderNoBashHelp":canvasAgent.accessMode==="full"?"canvasAgentFullHelp":"canvasAgentControlledHelp";
-    canvasAgentProjectModeHelp.textContent=t(helpKey);
-    const canPickFolder=typeof window.penechoDesktop?.pickProjectDirectory==="function",canPickFile=typeof window.penechoDesktop?.pickProjectFile==="function";
-    canvasAgentProjectAdd.hidden=!canPickFolder;
+    const canPickFile=typeof window.penechoDesktop?.pickProjectFile==="function";
     canvasAgentProjectAddFile.hidden=!canPickFile;
     canvasAgentProjectUpload.hidden=canPickFile;
-    canvasAgentProjectAdd.disabled=canvasAgentProjectAddFile.disabled=canvasAgent.projectUploadBusy;
+    canvasAgentProjectAddFile.disabled=canvasAgent.projectUploadBusy;
     canvasAgentProjectUpload.disabled=canvasAgent.projectUploadBusy;
     canvasAgentProjectUpload.textContent=t(canvasAgent.projectUploadBusy?"canvasAgentUploadingFile":"canvasAgentUploadFile");
     canvasAgentRenderProjectRoots();
@@ -14245,7 +14231,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.projectHistoryLoaded=true;
       canvasAgent.accessMode="controlled";
       localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
-      localStorage.setItem(CANVAS_AGENT_PROJECT_ACCESS_KEY,"controlled");
       canvasAgentBeginLocalConversation({persistCurrent:false});
       canvasAgentDropSessionIdentity();
     }
@@ -14255,7 +14240,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function canvasAgentEnsureProjectRoots({refresh=false}={}) {
     if(canvasAgent.projectRootsLoaded&&!refresh)return;
-    const body=await canvasAgentProjectRequest("/api/canvas-agent/roots");
+    const body=await canvasAgentProjectRequest(canvasAgentProjectRootApi().roots);
     canvasAgent.projectRoots=(Array.isArray(body?.roots)?body.roots:[]).filter(root=>root&&/^root-[0-9a-f]{24}$/.test(String(root.id||""))&&typeof root.name==="string").map(root=>({id:String(root.id),name:String(root.name).slice(0,120)}));
     canvasAgent.projectRootsLoaded=true;
     if(canvasAgent.projectRootView&&!canvasAgent.projectRoots.some(root=>root.id===canvasAgent.projectRootView.rootId))canvasAgent.projectRootView=null;
@@ -14265,11 +14250,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(canvasAgent.projectRootBusy||!/^root-[0-9a-f]{24}$/.test(String(rootId||"")))return;
     canvasAgent.projectRootBusy=true;canvasAgentSetProjectError();canvasAgentRenderProjectRoots();
     try{
-      const body=await canvasAgentProjectRequest(`/api/canvas-agent/roots/${encodeURIComponent(rootId)}/entries?path=${encodeURIComponent(String(relativePath||""))}`),view=body?.browser||body,
+      const body=await canvasAgentProjectRequest(`${canvasAgentProjectRootApi().entries}/${encodeURIComponent(rootId)}/entries?path=${encodeURIComponent(String(relativePath||""))}`),view=body?.browser||body,
         resolvedRootId=String(view?.rootId||view?.root?.id||""),rootName=String(view?.rootName||view?.root?.name||"").slice(0,120),resolvedPath=String(view?.relativePath??view?.path??"").slice(0,1024);
       if(resolvedRootId!==rootId||!rootName)throw Error("The server folder response is invalid.");
       const parentPath=view?.parentPath===null?null:String(view?.parentPath||"").slice(0,1024),entries=(Array.isArray(view?.entries)?view.entries:[]).filter(entry=>entry?.kind==="folder"&&typeof entry.name==="string"&&typeof (entry.relativePath??entry.path)==="string").slice(0,200).map(entry=>({name:String(entry.name).slice(0,255),relativePath:String(entry.relativePath??entry.path).slice(0,1024)}));
-      canvasAgent.projectRootView={rootId:resolvedRootId,rootName,relativePath:resolvedPath,parentPath,entries,truncated:Boolean(view?.truncated)};
+      canvasAgent.projectRootView={rootId:resolvedRootId,rootName,relativePath:resolvedPath,parentPath,entries,truncated:Boolean(view?.truncated),selectable:view?.selectable!==false};
     }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
     finally{canvasAgent.projectRootBusy=false;canvasAgentRenderProjectRoots();}
   }
@@ -14285,7 +14270,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const selectionRevision=canvasAgent.projectSelectionRevision;
     canvasAgent.projectRootBusy=true;canvasAgentSetProjectError();canvasAgentRenderProjectRoots();
     try{
-      const body=await canvasAgentProjectRequest("/api/canvas-agent/projects/from-root",{method:"POST",body:JSON.stringify({rootId:view.rootId,path:view.relativePath})});
+      const body=await canvasAgentProjectRequest(canvasAgentProjectRootApi().select,{method:"POST",body:JSON.stringify({rootId:view.rootId,path:view.relativePath})});
       canvasAgent.projectRootView=null;
       await canvasAgentEnsureProjects({refresh:true});
       await canvasAgentSelectProject(body?.project?.id,{expectedRevision:selectionRevision});
@@ -14313,7 +14298,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.projectHistory=[];
     canvasAgent.projectHistoryLoaded=!next;
     canvasAgent.accessMode="controlled";
-    localStorage.setItem(CANVAS_AGENT_PROJECT_ACCESS_KEY,"controlled");
     if(next)localStorage.setItem(CANVAS_AGENT_PROJECT_KEY,next);else localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
     canvasAgentBeginLocalConversation({persistCurrent:false});
     canvasAgentRenderProjects();
@@ -14339,18 +14323,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if(canvasAgent.projectId===projectId){await canvasAgentSelectProject("");await canvasAgent.projectHistoryWrite;}
       await canvasAgentProjectRequest(`/api/canvas-agent/projects/${encodeURIComponent(projectId)}`,{method:"DELETE"});
       await canvasAgentEnsureProjects({refresh:true});
-    }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
-  }
-  async function canvasAgentAddProject() {
-    if(typeof window.penechoDesktop?.pickProjectDirectory!=="function")return;
-    const selectionRevision=canvasAgent.projectSelectionRevision;
-    try{
-      canvasAgentSetProjectError();
-      const picked=await window.penechoDesktop.pickProjectDirectory();
-      if(picked?.canceled||!picked?.path||!picked?.pickerToken)return;
-      const body=await canvasAgentProjectRequest("/api/canvas-agent/projects",{method:"POST",body:JSON.stringify({path:picked.path,kind:"folder",pickerToken:picked.pickerToken})});
-      await canvasAgentEnsureProjects({refresh:true});
-      await canvasAgentSelectProject(body.project.id,{expectedRevision:selectionRevision});
     }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
   }
   async function canvasAgentAddProjectFile() {
@@ -14380,19 +14352,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       await canvasAgentSelectProject(body?.project?.id,{expectedRevision:selectionRevision});
     }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
     finally{data="";canvasAgentProjectUploadInput.value="";canvasAgent.projectUploadBusy=false;canvasAgentRenderProjects();}
-  }
-  async function canvasAgentSetAccessMode(mode) {
-    if(canvasAgentProjectById()?.kind!=="folder"||!["controlled","full"].includes(mode)||mode===canvasAgent.accessMode)return;
-    canvasAgentResolveApproval(false);
-    canvasAgentPersistCurrentConversation();
-    canvasAgent.accessMode=mode;
-    localStorage.setItem(CANVAS_AGENT_PROJECT_ACCESS_KEY,mode);
-    canvasAgentRenderProjects();
-    canvasAgentBeginLocalConversation({persistCurrent:false});
-    try{
-      if(canvasAgent.socket?.readyState===WebSocket.OPEN||canvasAgent.connectPromise)await canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false});
-      else canvasAgentDropSessionIdentity();
-    }catch(error){canvasAgentSetStatus(String(error?.message||error),"error");}
   }
   function canvasAgentResolveApproval(allowed) {
     const pending=canvasAgent.pendingApproval;
@@ -16267,14 +16226,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     void canvasAgentEnsureProjectRoots({refresh:true}).catch(error=>{canvasAgent.projectRoots=[];canvasAgent.projectRootsLoaded=true;canvasAgentRenderProjectRoots();canvasAgentSetProjectError(String(error?.message||error));});
   });
   canvasAgentProjectClose.addEventListener("click",canvasAgentHideProjectPopover);
-  canvasAgentProjectAdd.addEventListener("click",()=>void canvasAgentAddProject());
   canvasAgentProjectAddFile.addEventListener("click",()=>void canvasAgentAddProjectFile());
   canvasAgentProjectUpload.addEventListener("click",()=>{if(!canvasAgent.projectUploadBusy){canvasAgentProjectUploadInput.value="";canvasAgentProjectUploadInput.click();}});
   canvasAgentProjectUploadInput.addEventListener("change",()=>void canvasAgentUploadProjectFile(canvasAgentProjectUploadInput.files?.[0]));
   canvasAgentProjectRootBack.addEventListener("click",()=>void canvasAgentNavigateProjectRootBack());
   canvasAgentProjectRootSelect.addEventListener("click",()=>void canvasAgentSelectProjectRoot());
-  canvasAgentProjectControlled.addEventListener("click",()=>void canvasAgentSetAccessMode("controlled"));
-  canvasAgentProjectFull.addEventListener("click",()=>void canvasAgentSetAccessMode("full"));
   canvasAgentApprovalReject.addEventListener("click",()=>canvasAgentResolveApproval(false));
   canvasAgentApprovalAllow.addEventListener("click",()=>canvasAgentResolveApproval(true));
   canvasAgentHistory.addEventListener("click",()=>{

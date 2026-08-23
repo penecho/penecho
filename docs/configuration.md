@@ -59,8 +59,8 @@ Claude CLI requests use one isolated `claude -p` turn with tools, agents, MCP, p
 
 Canvas Agent can run without a resource, against one selected folder, or against one selected file. The selection belongs to the PenEcho host that executes the Agent, not necessarily the browser displaying the Canvas:
 
-- The macOS and Windows desktop applications use native, single-selection pickers for a local folder or file.
-- A Cloud Canvas can select an already registered resource or browse only the allowed roots configured on its currently pinned PenEcho host. Cloud receives opaque root IDs, safe labels, and relative folder names; it cannot submit a raw absolute host path.
+- Local, LAN, and desktop Canvas pages choose project folders in PenEcho's built-in host-folder browser. The local browser starts at the PenEcho host user's Home, hides private dot directories and platform application-data folders, and requires choosing a child folder rather than the whole Home directory.
+- A Cloud Canvas can select an already registered resource or use the same built-in browser only within the allowed roots configured on its currently pinned PenEcho host. Cloud receives opaque root IDs, safe labels, and relative folder names; it cannot submit a raw absolute host path or access the implicit local Home root.
 - An iPad or other browser cannot expose its local filesystem path or run Bash locally. It can upload one supported file, up to 32 MiB, as a private PenEcho-managed copy. Removing that resource deletes only the managed copy.
 
 Configure the folders that Cloud clients may browse with a JSON array in `~/.penecho/config.env`:
@@ -69,9 +69,9 @@ Configure the folders that Cloud clients may browse with a JSON array in `~/.pen
 PENECHO_CANVAS_AGENT_ALLOWED_ROOTS='[{"name":"Projects","path":"/srv/projects"},{"name":"Research","path":"/data/research"}]'
 ```
 
-Windows paths inside the JSON value need JSON escaping, for example `C:\\Users\\me\\Projects`. PenEcho resolves every configured root and every selected child again on the host, rejects symlink/junction escapes and `.penecho`, and never returns the canonical absolute path to Cloud. An empty or omitted array disables server-folder browsing without affecting native desktop selection.
+Windows paths inside the JSON value need JSON escaping, for example `C:\\Users\\me\\Projects`. PenEcho resolves every configured root and every selected child again on the host, rejects symlink/junction escapes and `.penecho`, and never returns the canonical absolute path to Cloud. An empty or omitted array disables Cloud folder browsing without affecting the local built-in Home browser or native single-file selection.
 
-Folder resources have two modes. `Read & Write` exposes bounded `read`, `read_image`, `write`, and `edit`; when a fully read/write-confined Bash runner is available, commands outside a small read-only set require per-command approval. `Full Access` removes those repeated command approvals but keeps the same folder and network boundary. PenEcho registers Bash only after an actual OS-sandbox probe succeeds (macOS Seatbelt or Linux bubblewrap); otherwise it exposes bounded directory listing instead. The Windows build currently keeps file tools available but does not advertise Bash because there is no equivalent fully confined runner yet.
+Folder resources are currently read-only. They expose bounded `list_directory`, `read`, and `read_image`, plus lazy document and SQLite readers. PenEcho does not register `write`, `edit`, Bash, or command execution, and the former `Read & Write` and `Full Access` controls are hidden. Legacy clients that still send `full` are normalized to the same read-only session.
 
 A single-file resource is always read-only and exact-file scoped. It exposes only the matching text, image, document, or SQLite reader: no parent directory, sibling files, Bash, write, or edit capability. PDF/DOCX/XLSX/CSV and SQLite readers are loaded on demand for folder projects; selecting one such file directly mounts only its matching reader. PDF text can be extracted or one bounded page can be rendered for visual inspection, DOCX returns bounded text, XLSX/CSV returns bounded table rows, and SQLite accepts one bounded read-only `SELECT`, `WITH`, or `EXPLAIN` query.
 

@@ -1233,6 +1233,8 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(functionSource(source,"canvasAgentProjectDisplayPath"),/project\?\.displayPath\|\|project\?\.name/);
   assert.doesNotMatch(functionSource(source,"canvasAgentUpdateProjectButton"),/project\.path/);
   assert.match(functionSource(source,"canvasAgentProjectRootApi"),/runtime==="cloud"[\s\S]*?\/api\/canvas-agent\/roots[\s\S]*?\/api\/canvas-agent\/host-roots[\s\S]*?from-host-root/);
+  assert.match(functionSource(source,"canvasAgentRenderProjectRoots"),/projectRootsLoaded\|\|Boolean\(view\)[\s\S]*?view\.selectable===false[\s\S]*?canvasAgentNoHostFolders/);
+  for(const dictionary of [core,zh])assert.match(dictionary,/canvasAgentNoHostFolders:/);
   assert.match(functionSource(source,"canvasAgentSelectProjectRoot"),/JSON\.stringify\(\{rootId:view\.rootId,path:view\.relativePath\}\)/);
   assert.match(functionSource(source,"canvasAgentSelectProjectRoot"),/selectionRevision=canvasAgent\.projectSelectionRevision[\s\S]*?expectedRevision:selectionRevision/);
   assert.match(functionSource(source,"canvasAgentLoadProjectHistory"),/selectedId=String\(projectId\|\|""\)[\s\S]*?projectSelectionRevision===revision[\s\S]*?if\(!stillSelected\(\)\)return false/);

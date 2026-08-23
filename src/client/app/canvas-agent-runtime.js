@@ -71,7 +71,6 @@
     CANVAS_AGENT_HISTORY_KEY = "penecho-canvas-agent-history-v1",
     CANVAS_AGENT_SEARCH_ENABLED_KEY = "penecho-canvas-agent-search-enabled-v1",
     CANVAS_AGENT_PROJECT_KEY = "penecho-canvas-agent-project-v1",
-    CANVAS_AGENT_PROJECT_ACCESS_KEY = "penecho-canvas-agent-project-access-v1",
     CANVAS_AGENT_PROJECT_UPLOAD_LIMIT = 32 * 1024 * 1024,
     CANVAS_AGENT_PROJECT_FILE_EXTENSIONS = new Set([
       ".pdf", ".docx", ".xlsx", ".csv", ".db", ".sqlite", ".sqlite3",
@@ -375,13 +374,13 @@
     canvasAgentProjectButton.title=project?`${project.name} — ${canvasAgentProjectDisplayPath(project)}`:t("canvasAgentProject");
   }
   function canvasAgentRenderProjectRoots() {
-    const view=canvasAgent.projectRootView,available=canvasAgent.projectRootsLoaded&&(canvasAgent.projectRoots.length>0||Boolean(view));
+    const view=canvasAgent.projectRootView,available=canvasAgent.projectRootsLoaded||Boolean(view);
     canvasAgentProjectRoots.hidden=!available;
     if(!available)return;
     canvasAgentProjectRootList.replaceChildren();
     canvasAgentProjectRootBack.hidden=!view;
     canvasAgentProjectRootPath.textContent=view?[view.rootName,view.relativePath].filter(Boolean).join("/"):t("canvasAgentServerFolders");
-    canvasAgentProjectRootSelect.hidden=!view;
+    canvasAgentProjectRootSelect.hidden=!view||view.selectable===false;
     canvasAgentProjectRootSelect.disabled=canvasAgent.projectRootBusy;
     canvasAgentProjectRootTruncated.hidden=!view?.truncated;
     if(canvasAgent.projectRootBusy){
@@ -390,6 +389,10 @@
       return;
     }
     const entries=view?.entries||canvasAgent.projectRoots;
+    if(!entries.length){
+      const empty=document.createElement("button"),title=document.createElement("strong");
+      empty.type="button";empty.disabled=true;title.textContent=t("canvasAgentNoHostFolders");empty.append(title);canvasAgentProjectRootList.append(empty);return;
+    }
     for(const entry of entries){
       const choice=document.createElement("button"),title=document.createElement("strong"),detail=document.createElement("small");
       choice.type="button";
@@ -480,7 +483,6 @@
       canvasAgent.projectHistoryLoaded=true;
       canvasAgent.accessMode="controlled";
       localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
-      localStorage.setItem(CANVAS_AGENT_PROJECT_ACCESS_KEY,"controlled");
       canvasAgentBeginLocalConversation({persistCurrent:false});
       canvasAgentDropSessionIdentity();
     }
@@ -504,7 +506,7 @@
         resolvedRootId=String(view?.rootId||view?.root?.id||""),rootName=String(view?.rootName||view?.root?.name||"").slice(0,120),resolvedPath=String(view?.relativePath??view?.path??"").slice(0,1024);
       if(resolvedRootId!==rootId||!rootName)throw Error("The server folder response is invalid.");
       const parentPath=view?.parentPath===null?null:String(view?.parentPath||"").slice(0,1024),entries=(Array.isArray(view?.entries)?view.entries:[]).filter(entry=>entry?.kind==="folder"&&typeof entry.name==="string"&&typeof (entry.relativePath??entry.path)==="string").slice(0,200).map(entry=>({name:String(entry.name).slice(0,255),relativePath:String(entry.relativePath??entry.path).slice(0,1024)}));
-      canvasAgent.projectRootView={rootId:resolvedRootId,rootName,relativePath:resolvedPath,parentPath,entries,truncated:Boolean(view?.truncated)};
+      canvasAgent.projectRootView={rootId:resolvedRootId,rootName,relativePath:resolvedPath,parentPath,entries,truncated:Boolean(view?.truncated),selectable:view?.selectable!==false};
     }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
     finally{canvasAgent.projectRootBusy=false;canvasAgentRenderProjectRoots();}
   }
@@ -548,7 +550,6 @@
     canvasAgent.projectHistory=[];
     canvasAgent.projectHistoryLoaded=!next;
     canvasAgent.accessMode="controlled";
-    localStorage.setItem(CANVAS_AGENT_PROJECT_ACCESS_KEY,"controlled");
     if(next)localStorage.setItem(CANVAS_AGENT_PROJECT_KEY,next);else localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
     canvasAgentBeginLocalConversation({persistCurrent:false});
     canvasAgentRenderProjects();
