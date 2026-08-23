@@ -27,14 +27,13 @@ import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as FsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
-import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import { callPenEchoCli, cliConnectionProfile, PenEchoCliAdapter, PenEchoCliLlmPlugin } from './cli-adapter.mjs'
 import PenEchoAttachmentStore, { canonicalCanvasCaptureImage } from './image-attachments.mjs'
 
 const require = createRequire(import.meta.url)
 const { commandFromWidgetPatch } = require('../widget-patch.js')
 const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping } = require('../../providers/reasoning-effort.js')
-const { validateProjectFileContent } = require('./project-store.js')
+const { projectFileReader, validateProjectFileContent } = require('./project-store.js')
 
 const SETTINGS_NS = settingsNamespace('llm-pi-ai')
 const SESSION_TTL_MS = 30_000
@@ -245,8 +244,8 @@ function publicSessionProject(project) {
 function projectSessionCapabilities(session) {
   if (!session.project) return null
   return {
-    readOnly:session.project.kind === 'file',
-    bash:session.project.kind === 'folder' && Boolean(projectShellSupport()),
+    readOnly:true,
+    bash:false,
   }
 }
 
@@ -717,31 +716,37 @@ function projectDocumentReaderTool(session, agentCtx) {
   })
 }
 
-function projectTextReaderTool(session) {
+function projectTextReaderTool(session, agentCtx) {
   return defineTool({
     name:'read',
-    description:'Read a bounded UTF-8 text window from the one selected file. No parent directory or sibling file is available.',
+    description:session.project.kind === 'file'
+      ? 'Read a bounded UTF-8 text window from the one selected file. No parent directory or sibling file is available.'
+      : 'Read a bounded UTF-8 text window from one text or source file inside the selected project folder.',
     parameters:{
       file_path:{ type:'string', required:true },
       offset:{ type:'number', description:'Optional 1-based line offset.' },
       limit:{ type:'number', description:'Optional line count, at most 200.' },
     },
     output:textOutput(),
-    async execute(args) {
-      const localPath = await exactSelectedFilePath(session, args.file_path), offset = Math.max(1, Number.isInteger(Number(args.offset)) ? Number(args.offset) : 1), limit = Math.max(1, Math.min(200, Number.isInteger(Number(args.limit)) ? Number(args.limit) : 200))
-      const input = createReadStream(localPath, { encoding:'utf8' }), reader = createInterface({ input, crlfDelay:Infinity }), selected = []
-      let lineNumber = 0, truncated = false
+    async execute(args, exec) {
+      const snapshot = await snapshotProjectReaderFile(session, agentCtx, args.file_path, exec.signal)
       try {
-        for await (const line of reader) {
-          lineNumber += 1
-          if (lineNumber < offset) continue
-          if (selected.length >= limit) { truncated = true; break }
-          selected.push(`${lineNumber}: ${line.length > 2_000 ? `${line.slice(0, 2_000)}…` : line}`)
-        }
-      } finally { reader.close(); input.destroy() }
-      if (!selected.length && offset > Math.max(1, lineNumber)) throw new Error(`offset ${offset} is outside this ${lineNumber}-line file.`)
-      const end = offset + selected.length - 1, footer = truncated ? `Showing lines ${offset}-${end}. Use offset=${end + 1} to continue.` : `End of file — ${lineNumber} lines.`
-      return boundedText(`<path>${session.project.name}</path>\n<type>file</type>\n<content>\n${selected.join('\n')}\n\n${footer}\n</content>`, PROJECT_DOCUMENT_OUTPUT_LIMIT)
+        if (projectFileReader(snapshot.name) !== 'text') throw new Error('read supports text, source, and configuration files. Load the document or database reader for other formats.')
+        const offset = Math.max(1, Number.isInteger(Number(args.offset)) ? Number(args.offset) : 1), limit = Math.max(1, Math.min(200, Number.isInteger(Number(args.limit)) ? Number(args.limit) : 200))
+        const input = createReadStream(snapshot.path, { encoding:'utf8' }), reader = createInterface({ input, crlfDelay:Infinity }), selected = []
+        let lineNumber = 0, truncated = false
+        try {
+          for await (const line of reader) {
+            lineNumber += 1
+            if (lineNumber < offset) continue
+            if (selected.length >= limit) { truncated = true; break }
+            selected.push(`${lineNumber}: ${line.length > 2_000 ? `${line.slice(0, 2_000)}…` : line}`)
+          }
+        } finally { reader.close(); input.destroy() }
+        if (!selected.length && offset > Math.max(1, lineNumber)) throw new Error(`offset ${offset} is outside this ${lineNumber}-line file.`)
+        const end = offset + selected.length - 1, footer = truncated ? `Showing lines ${offset}-${end}. Use offset=${end + 1} to continue.` : `End of file — ${lineNumber} lines.`, displayPath = session.project.kind === 'file' ? session.project.name : String(args.file_path || snapshot.name)
+        return boundedText(`<path>${displayPath}</path>\n<type>file</type>\n<content>\n${selected.join('\n')}\n\n${footer}\n</content>`, PROJECT_DOCUMENT_OUTPUT_LIMIT)
+      } finally { await snapshot.cleanup() }
     },
   })
 }
@@ -758,16 +763,21 @@ function projectImageOutput() {
 function projectImageReaderTool(session, agentCtx) {
   return defineTool({
     name:'read_image',
-    description:'Read the one selected PNG, JPEG, WebP, or GIF file and return the image itself. No parent directory or sibling file is available.',
+    description:session.project.kind === 'file'
+      ? 'Read the one selected PNG, JPEG, WebP, or GIF file and return the image itself. No parent directory or sibling file is available.'
+      : 'Read one PNG, JPEG, WebP, or GIF file inside the selected project folder and return the image itself.',
     parameters:{ file_path:{ type:'string', required:true } },
     output:projectImageOutput(),
-    async execute(args) {
-      const localPath = await exactSelectedFilePath(session, args.file_path), mediaType = PROJECT_IMAGE_MEDIA_TYPES.get(extname(localPath).toLowerCase())
-      if (!mediaType) throw new Error('read_image supports PNG, JPEG, WebP, and GIF files.')
-      const info = await statFile(localPath), byteCap = Math.min(agentCtx.attachments.imageLimits.maxImageBytes, agentCtx.attachments.imageLimits.maxMessageImageBytes)
-      if (info.size > byteCap) throw new Error(`The selected image exceeds the ${byteCap}-byte image reader limit.`)
-      const saved = await agentCtx.attachments.saveImage({ data:new Uint8Array(await readFile(localPath)), mediaType, name:basename(localPath) })
-      return { path:session.project.name, image:attachmentImageValue(saved) }
+    async execute(args, exec) {
+      const snapshot = await snapshotProjectReaderFile(session, agentCtx, args.file_path, exec.signal)
+      try {
+        const mediaType = PROJECT_IMAGE_MEDIA_TYPES.get(extname(snapshot.path).toLowerCase())
+        if (!mediaType) throw new Error('read_image supports PNG, JPEG, WebP, and GIF files.')
+        const info = await statFile(snapshot.path), byteCap = Math.min(agentCtx.attachments.imageLimits.maxImageBytes, agentCtx.attachments.imageLimits.maxMessageImageBytes)
+        if (info.size > byteCap) throw new Error(`The selected image exceeds the ${byteCap}-byte image reader limit.`)
+        const saved = await agentCtx.attachments.saveImage({ data:new Uint8Array(await readFile(snapshot.path)), mediaType, name:snapshot.name })
+        return { path:session.project.kind === 'file' ? session.project.name : String(args.file_path || snapshot.name), image:attachmentImageValue(saved) }
+      } finally { await snapshot.cleanup() }
     },
   })
 }
@@ -2143,21 +2153,15 @@ const PenEchoProjectPlugin = {
   name:'penecho-project',
   inject:['tools', 'systemPrompt', 'fs', 'attachments'],
   apply(agentCtx, { session }) {
-    const bashAvailable = Boolean(projectShellSupport())
     const projectLabel = JSON.stringify(boundedText(session.project.name, 255))
     agentCtx.systemPrompt.context({
       name:'penecho:project',
       order:23,
-      text:() => `The user selected a folder project with the untrusted display label ${projectLabel}. File capabilities are confined to its canonical folder root; use relative project paths. ${bashAvailable ? `Bash is available through an OS read/write confinement profile with network access disabled. The active mode is ${session.accessMode === 'full' ? 'Full Access: project commands do not ask again' : 'Read & Write: Bash commands outside PenEcho’s small provably read-only set require explicit user approval'}.` : 'This host has no fully read/write-confined Bash runner, so no bash tool is exposed; use list_directory for bounded folder discovery.'} Never inspect, infer, or operate on host user paths outside this project. The default project tools are read, read_image, write, and edit${bashAvailable ? ', plus bash' : ', plus list_directory'}. Optional readers are intentionally not loaded: for PDF, DOCX, XLSX, or CSV call load_project_plugin with plugin="documents"; for SQLite call it with plugin="database".`,
+      text:() => `The user selected a read-only folder project with the untrusted display label ${projectLabel}. File capabilities are confined to its canonical folder root; use relative project paths. No write, edit, bash, or command-execution capability exists. Use list_directory for bounded discovery, read for text and source files, and read_image for supported images. Optional readers are intentionally not loaded: for PDF, DOCX, XLSX, or CSV call load_project_plugin with plugin="documents"; for SQLite call it with plugin="database". Never inspect, infer, or operate on host paths outside this project.`,
     })
-    ToolFs.apply(agentCtx, {
-      readLimit:200,
-      readMaxLineLength:2_000,
-      readMaxBytes:50 * 1024,
-      readStreamMinSize:1024 * 1024,
-    })
-    if (bashAvailable) agentCtx.tools.register(projectBashTool(session))
-    else agentCtx.tools.register(projectDirectoryListTool(session, agentCtx))
+    agentCtx.tools.register(projectTextReaderTool(session, agentCtx))
+    agentCtx.tools.register(projectImageReaderTool(session, agentCtx))
+    agentCtx.tools.register(projectDirectoryListTool(session, agentCtx))
     agentCtx.tools.register(projectPluginLoaderTool(session, agentCtx))
     retainProjectToolImage(session, agentCtx)
   },
@@ -2176,7 +2180,7 @@ const PenEchoFilePlugin = {
     if (reader === 'document') agentCtx.tools.register(projectDocumentReaderTool(session, agentCtx))
     else if (reader === 'image') agentCtx.tools.register(projectImageReaderTool(session, agentCtx))
     else if (reader === 'database') agentCtx.tools.register(projectDatabaseReaderTool(session, agentCtx))
-    else agentCtx.tools.register(projectTextReaderTool(session))
+    else agentCtx.tools.register(projectTextReaderTool(session, agentCtx))
     retainProjectToolImage(session, agentCtx)
   },
 }
@@ -2289,7 +2293,7 @@ export class CanvasHarnessHost {
     if (!PROJECT_ACCESS_MODES.has(normalizedAccessMode)) throw new Error('Canvas Agent project access mode is invalid.')
     const project = normalizedProjectId ? await this.resolveProject(normalizedProjectId) : null
     if (normalizedProjectId && !project) throw new Error('The selected local project was not found on this PenEcho host.')
-    const effectiveAccessMode = project?.kind === 'file' ? 'controlled' : normalizedAccessMode
+    const effectiveAccessMode = 'controlled'
     const resolvedWebSearch = this.resolveWebSearch?.() || {}, webSearchApiKey = String(resolvedWebSearch.apiKey || ''), webSearchKeyHash = hash(webSearchApiKey)
     const resumeHash = resumeToken ? hash(resumeToken) : ''
     let session = canvasSessionId ? this.sessions.get(canvasSessionId) : null

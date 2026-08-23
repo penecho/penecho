@@ -34,7 +34,7 @@ function createNativePickerGrantStore({
   }
 
   function issue({ selectedPath, kind } = {}) {
-    if (!validSelection(selectedPath, kind)) throw new TypeError("A native picker grant requires an absolute file or folder path.");
+    if (!validSelection(selectedPath, kind)) throw new TypeError("A native picker grant requires an absolute file path.");
     const currentTime = now();
     prune(currentTime);
     let token = "";
