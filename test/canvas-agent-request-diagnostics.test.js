@@ -63,3 +63,59 @@ test("Canvas Agent request trace retains redacted CLI provider diagnostics",asyn
   assert.match(providerDiagnostic.trace.value.stderr,/<redacted>/);
   assert.doesNotMatch(serialized,/provider-secret-token|oauth-secret-value/);
 });
+
+test("Canvas Agent request trace records each widget patch protocol failure and retry independently",async t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-patch-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],calls=[],
+    tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),
+    connection={id:"patch-trace",provider:"codex-cli",name:"Patch trace",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},
+    html="<h1>Old trace body</h1>\n",
+    barePatch="--- widget.html\n+++ widget.html\n@@ -1 +1 @@\n-<h1>Old trace body</h1>\n+<h1>New trace body</h1>\n",
+    fixedPatch="--- a/widget.html\n+++ b/widget.html\n@@ -1 +1 @@\n-<h1>Old trace body</h1>\n+<h1>New trace body</h1>\n",
+    decisions=[
+      JSON.stringify({type:"tool_call",name:"canvas_patch_widget",arguments:{objectId:"widget-1",baseRevision:7,patch:barePatch}}),
+      JSON.stringify({type:"tool_call",name:"canvas_patch_widget",arguments:{objectId:"widget-1",baseRevision:7,patch:fixedPatch}}),
+      JSON.stringify({type:"final",text:"Patch corrected."}),
+    ],
+    {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),
+    host=new CanvasHarnessHost({
+      stateDirectory,
+      rootDirectory:ROOT,
+      resolveConnection:id=>id===connection.id?connection:null,
+      listConnections:()=>[connection],
+      conversationTrace:tracer,
+      callCli:async request=>{calls.push(request);return decisions.shift();},
+    });
+  t.after(async()=>{
+    await host.dispose();
+    fs.rmSync(stateDirectory,{recursive:true,force:true});
+  });
+  let session;
+  const widgetEdit={widgetType:"html_widget",pluginId:"general",title:"Trace",refreshSeconds:0,html,source:"",sourceFormat:"",box:{x:100,y:100,w:800,h:500}},send=(type,payload)=>{
+    messages.push({type,payload});
+    if(type!=="tool_request")return;
+    let result;
+    if(payload.name==="canvas_internal_widget")result={revision:7,hash:"widget-hash",containerSourceFormat:null,widgetEdit};
+    else if(payload.name==="canvas_internal_replace_widget")result={revision:8,changeId:payload.callId};
+    else throw new Error(`Unexpected browser tool ${payload.name}`);
+    queueMicrotask(()=>host.resolveToolResult(session,{requestId:payload.requestId,ok:true,result}));
+  };
+  session=await host.connect({clientId:"patch-trace-client",connectionId:connection.id,binding:{},send});
+  host.updateState(session,{revision:7,canvas:{width:20000,height:20000,contentBounds:{x:100,y:100,width:800,height:500}},counts:{widgets:1},objects:[{id:"widget-1",kind:"widget",box:{x:100,y:100,width:800,height:500}}]});
+  await host.submit(session,"Correct the widget heading.");
+  await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
+  assert.equal(calls.length,3);
+  const retryConversation=JSON.stringify(JSON.parse(calls[1].prompt).conversation);
+  assert.match(retryConversation,/Widget patch file headers are invalid/);
+  assert.match(retryConversation,/--- a\/widget\.html[\s\S]*\+\+\+ b\/widget\.html[\s\S]*a\/ and b\/ prefixes are mandatory/);
+  const directories=fs.readdirSync(requestTraceDirectory,{withFileTypes:true}).filter(entry=>entry.isDirectory());
+  assert.equal(directories.length,1);
+  const trace=JSON.parse(fs.readFileSync(path.join(requestTraceDirectory,directories[0].name,"trace.json"),"utf8")),records=trace.patchProtocol;
+  assert.deepEqual(records.map(record=>record.kind),["widget-patch-protocol-error","widget-patch-retry","widget-patch-retry-result"]);
+  assert.deepEqual(records.map(record=>record.attempt),[1,2,2]);
+  assert.deepEqual(records.map(record=>record.retryOf),[null,1,1]);
+  assert.equal(records[0].error.code,"WIDGET_PATCH_FILE_HEADER");
+  assert.deepEqual(records[0].headers,["--- widget.html","+++ widget.html"]);
+  assert.deepEqual(records[1].headers,["--- a/widget.html","+++ b/widget.html"]);
+  assert.equal(records[2].outcome,"applied");
+  assert.equal(JSON.stringify(records).includes("Old trace body"),false,"patch traces must store envelope metadata, not the complete diff body");
+});

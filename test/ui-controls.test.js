@@ -2699,7 +2699,7 @@ test("Canvas Agent internet search is configured in Settings and toggled beside 
   const html=read("public/index.html"),app=read("public/app.js"),server=read("src/server/main.js"),runtime=read("src/server/canvas-agent/runtime.mjs"),css=read("public/style.css"),zh=read("public/locales/zh.js");
   for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsTavilyApiKey","settingsTavilySaved","canvasAgentSearch"]) assert.match(html,new RegExp(`id="${id}"`));
   assert.ok(html.indexOf('id="canvasAgentAttach"')<html.indexOf('id="canvasAgentSearch"'));
-  assert.ok(html.indexOf('id="canvasAgentSearch"')<html.indexOf('id="canvasAgentImageInput"'));
+  assert.ok(html.indexOf('id="canvasAgentSearch"')<html.indexOf('id="canvasAgentFileInput"'));
   assert.match(app,/settingsOpenSearch\?\.addEventListener\("click", \(\) => openConfiguration\("search"\)\)/);
   assert.match(app,/canvasAgentSearch\.setAttribute\("aria-disabled",String\(!canvasAgent\.searchConfigured\)\)/);
   assert.match(app,/canvasAgentSearch\.dataset\.tooltip = canvasAgent\.searchConfigured \? "" : label/);
@@ -2707,8 +2707,14 @@ test("Canvas Agent internet search is configured in Settings and toggled beside 
   assert.match(server,/hasTavilyApiKey:Boolean\(TAVILY_API_KEY\)/);
   assert.match(server,/resolveWebSearch:\(\)=>\(\{ provider:"tavily", apiKey:TAVILY_API_KEY \|\| "" \}\)/);
   assert.match(runtime,/name:'tavily_search'/);
+  assert.doesNotMatch(runtime,/name:'load_search_skill'/);
+  assert.match(runtime,/name:'research_search'/);
+  assert.match(runtime,/name:'github_repository_search'/);
+  assert.match(runtime,/name:'duckduckgo_search'/);
+  assert.match(runtime,/name:'stock_symbol_search'/);
+  assert.match(runtime,/name:'stock_market_data'/);
   assert.match(runtime,/include_answer:false, include_raw_content:false, include_images:false/);
   assert.match(css,/\.canvas-agent-composer \.canvas-agent-search\.active \{ color: #4f46e5; background: transparent; \}/);
   assert.match(css,/content: attr\(data-tooltip\)/);
-  for(const text of ["互联网搜索","Tavily API 密钥","请先在设置中填写 Tavily API 密钥"]) assert.match(zh,new RegExp(text));
+  for(const text of ["互联网搜索","Tavily API 密钥","内置搜索已就绪","减少一次模型往返","查询股票数据"]) assert.match(zh,new RegExp(text));
 });

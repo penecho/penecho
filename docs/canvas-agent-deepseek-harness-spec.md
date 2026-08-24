@@ -30,7 +30,7 @@
 - 不把 `alwaysmain` 的代码、代理编排、reviewer、Web 搜索或 context atlas 合回 071。
 - 不允许模型读取任意本地文件、执行 bash/PowerShell、操作 Git/GitHub 或访问任意 URL。
 - 不允许模型直接访问 Canvas 内部对象或调用散落在 UI 中的 mutation 函数。
-- 不嵌套 CLI 自带的 agent loop、文件工具、shell、MCP 或会话；CLI 只作为无工具的模型传输层。
+- 不嵌套 CLI 自带的 agent loop、文件工具、shell 或 MCP；CLI 只作为无工具的模型传输层。允许为性能保留一个与 Harness conversation 一一对应的上游 provider conversation，但它只是由 Harness replay metadata 管理的可丢弃镜像，不是第二份历史权威。
 - 不在 Canvas 快照中保存聊天记录、Harness session 或附件。
 - 不在 Cloud 服务中执行 Harness、模型请求或 Canvas tool；Cloud 可编辑 Canvas 必须通过同账户 Linked Device 的受认证双向 bridge 回到本地主机。
 - 不展示模型的私有思维链；只展示可见回答、通用状态和工具活动。
@@ -112,7 +112,7 @@ src/server/main.js (CommonJS)
      -> PenEcho Canvas plugins
 ```
 
-禁止把 Harness 放进浏览器 bundle。API 请求直接走 Harness adapter；CLI 连接复用 071 已有的隔离 CLI adapter，允许其按模型 step 使用 ACP 或受控一次性进程，但上下文、工具循环和会话始终只有 Harness 一份。每个活跃 Canvas Agent 会话拥有独立 agent scope，但共享进程级只读服务，例如连接元数据镜像和 attachment backend。
+禁止把 Harness 放进浏览器 bundle。API 请求直接走 Harness adapter；CLI 连接走 Canvas Agent 专用的持久 transport，与旧画布 AI 的一次性 CLI adapter 在模块、进程和生命周期上隔离。一个活跃 Harness conversation 对应一个可丢弃的上游 CLI conversation：Codex 使用 `app-server` thread，Claude 使用长驻 `stream-json` 进程，Kimi 使用 ACP session。上下文、工具循环、压缩和续接判断始终只有 Harness 一份；每个活跃 Canvas Agent 会话拥有独立 agent scope，但共享进程级只读服务，例如连接元数据镜像和 attachment backend。
 
 ## 5. 插件组合
 
@@ -157,7 +157,9 @@ src/server/main.js (CommonJS)
 }
 ```
 
-压缩沿用 Harness basic compaction 的官方语义，但把模型路由上限统一为 160,000 token，并在 100,000 token 开始压缩。MVP 不增加 PenEcho 自定义摘要器。
+压缩沿用 Harness basic compaction 的官方语义，但把模型路由上限统一为 160,000 token，并在 100,000 token 开始压缩。MVP 不增加 PenEcho 自定义摘要器。Harness 同时是模型上下文缓存和压缩的唯一权威：PenEcho 不改写 session history，不注入 provider cache key、retention、breakpoint 或兼容 fallback，也不自行决定 cache 命中。CLI transport 可以把 provider 已报告的 token/cache usage 原样归一化给 Harness token meter 作观测，但不得据此改变历史或 provider 请求。
+
+固定、可复用且跨 step 不变的 Widget、Visual Explorer、项目能力和搜索指导必须注册为 prefix-stable Harness system-prompt sections；只有当前 Canvas digest、精简后的引用范围和开关状态进入 Harness runtime context。动态 snapshot 仍由 Harness 保存与 compaction，应用层不得删除、替换或合并旧 snapshot。
 
 ### 5.2 明确禁止装载的组件
 
@@ -229,14 +231,15 @@ src/server/main.js (CommonJS)
 
 #### `penecho-cli-llm`
 
-职责：把 071 的 Kimi/Codex/Claude CLI adapter 作为纯模型后端注册到 Harness LLM runtime。
+职责：把 Harness 专用的 Kimi/Codex/Claude 持久 CLI transport 作为纯模型后端注册到 Harness LLM runtime；不修改或复用旧画布 AI 的一次性请求生命周期。
 
 - 每个 CLI connection 使用 connection id 的短哈希生成独立 provider route；CLI 路径、模型和 effort 在一次 request 开始时做不可变快照。
 - Harness 将完整派生上下文、系统提示和八个核心 Canvas 工具 schema 序列化给 CLI；CLI 每步只能返回一个 `final` 或一个 `tool_call` JSON decision。
+- 第一步发送 Harness conversation snapshot；后续仅在 replay metadata、connection、system prompt、compaction marker 和存活进程全部一致时发送 Harness delta。任一条件不一致即销毁上游 conversation，并从当前 Harness snapshot 重建。
 - server 严格解析 decision，并再次校验工具名属于本轮 Harness schema；CLI 不能直接执行 Canvas 工具。
 - Codex 使用临时 HOME、只读 sandbox 并禁用工具/MCP；Claude 使用空工具与 strict MCP config；Kimi 使用空工具 agent/ACP，并拒绝观察到的 CLI tool activity。
 - 最新 Canvas image attachment 可通过现有 CLI vision input 传入；历史与工具结果仍由 Harness session log 管理。
-- 每次 CLI model step 同时受用户 Stop 和 071 当前 `AI_TIMEOUT_SECONDS` 约束，超时会终止现有 CLI 进程树。
+- 每次 CLI model step 同时受用户 Stop 和 071 当前 `AI_TIMEOUT_SECONDS` 约束。Stop/超时会取消可取消的上游 turn；本次 replay 未提交，因此下一步必须销毁或重建不再可信的上游 conversation。
 - CLI adapter 不注册 shell、filesystem、GitHub、Web、MCP、skills 或子代理能力。
 
 #### `penecho-credentials`
@@ -529,11 +532,15 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 - patch 目标只能是该 widget 的虚拟文件。
 - 服务端先读取当前虚拟 bundle 并生成 hash；浏览器提交时同时校验 Canvas revision 和该完整 bundle hash。
 - patch 上限 256 KiB；禁止 binary diff、路径穿越、新宿主文件和 Git 操作。
+- 每个 unified-diff file section 必须使用精确 `--- a/<virtual-path>` / `+++ b/<virtual-path>`；`widget.html` 的精确头为 `--- a/widget.html` / `+++ b/widget.html`。模型 persona、tool description 和拒绝消息必须同时给出这个可直接复制的例子。
+- 协议失败必须返回可操作的分类诊断，例如 file header、virtual path、hunk envelope、context line、size、unsupported operation 或 empty change；不得只返回通用 “patch rejected”。
+- 每次协议拒绝、拒绝后的每次重新 patch、以及该重试的 applied/browser-rejected 结果，都以独立小记录写入当前 request trace。记录只保存 object/artifact/revision、attempt/retryOf、byte count、file/hunk headers 和结构化错误，不复制完整 patch body。
+- 提示契约错误不得触发熔断、自动停止或降低模型能力；修正提示、返回精确诊断并允许模型按最新读取结果继续重试。Visual Explorer 已有的一轮成功自检预算属于产品策略，不是 patch 协议熔断。
 - 成功时也只生成一个 Canvas Undo 项。
 
 ### 7.7 固定 Widget 合同上下文
 
-Harness 在每个模型 step 自动注入完整的 `general`（General HTML）和 `flowchart`（Professional Diagrams）authoring contract，因此 compaction 不会移除它们。其他插件合同一律不进入 Canvas Agent 上下文，也不提供查询、安装、启用或下载能力。Canvas Agent 只能创建或修改这两类 Widget。
+Harness 在每个模型 step 通过稳定 system-prompt sections 自动注入完整的 `general`（General HTML）、`flowchart`（Professional Diagrams）authoring contract 和 Visual Explorer contract；这些固定合同不作为 runtime-context snapshot 写入会话历史，因此不会随每个 tool step 重复膨胀，也不会被 compaction 移除。其他插件合同一律不进入 Canvas Agent 上下文，也不提供查询、安装、启用或下载能力。Canvas Agent 只能创建或修改这两类 Widget。
 
 ### 7.8 `canvas_set_view`
 
@@ -724,10 +731,10 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 ### 10.3 本地资源能力
 
 - folder scope 当前只在被选中的 canonical 根目录内挂载 `list_directory`、`read`、`read_image`，以及按需 document/SQLite reader；不注册 `write`、`edit`、`bash` 或命令执行工具。旧客户端传入的 `full` 也归一为相同只读 session。
-- file scope 使用 PenEcho 自己的 exact-file 插件，只注册与该文件类型匹配的一个 reader，不复用会同时注册 mutator 的通用 ToolFs，不暴露父目录、siblings、Bash、write 或 edit。
-- folder 的 PDF/DOCX/XLSX/CSV 与 SQLite 工具先通过 `load_project_plugin` 惰性注册；单个同类文件直接注册唯一匹配 reader。SQLite 在独立、可强制终止的低内存子进程内只读执行。
+- file scope 使用 PenEcho 自己的 exact-file 插件，只注册与该文件类型匹配的一个 reader；任意其他格式使用有界十六进制/ASCII reader，且永不执行文件。不复用会同时注册 mutator 的通用 ToolFs，不暴露父目录、siblings、Bash、write 或 edit。
+- folder 的 PDF/DOCX/XLSX/CSV 与 SQLite 工具先通过 `load_project_plugin` 惰性注册；单个有效同类文件直接注册唯一匹配 reader。SQLite 在独立、可强制终止的低内存子进程内只读执行。
 - 本地、LAN 与桌面页面通过 PenEcho 内置目录浏览器选择 host Home 下的非私有子目录，不调用系统目录选择器。Cloud 资源属于实际执行 Harness 的 Linked PenEcho host；资源 HTTP 与 Canvas Agent WebSocket 必须固定同一 `deviceId`，Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接本地隐式 Home root 或 raw-path project POST。
-- iPad/普通浏览器通过系统 file picker 上传最大 32 MiB 的受控副本；上传内容经扩展名、media type、magic、canonical base64，以及 Office ZIP 解压边界验证后写入 owner-only state。桌面原生 file picker 可以登记原文件，但仍使用 exact-file reader。
+- iPad/普通浏览器通过系统 file picker、拖放或粘贴添加最大 32 MiB 的受控副本；非图片文件先作为可移除的待发送附件显示，必须由用户补充要求后再随消息发送，不能在添加时自动发起分析。相同文件只显示一个附件项，待发送附件的移除不弹确认并直接删除 managed copy；发送后在聊天消息内保留仅含安全 project id、文件名和大小的文件卡片。已知格式使用专用验证和 reader，其他格式退回只读有界 binary reader；副本写入 owner-only state。桌面原生 file picker 可以登记原文件，桌面系统剪贴板文件则复制为 managed attachment；两者均使用 exact-file reader。桌面文件卡片双击时由主进程重新验证 project id 后调用系统默认应用，浏览器和历史记录都不得获得绝对路径。
 
 ## 11. AI 连接集成
 
@@ -738,11 +745,11 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 | OpenAI API / compatible API | 支持 | 映射到 `llm-pi-ai` custom provider/profile |
 | Anthropic API / compatible API | 支持 | 映射到 `llm-pi-ai` provider/profile |
 | DeepSeek 官方 API | 支持 | 优先可使用官方 DeepSeek adapter；也可经兼容 profile，实施时固定一个路径 |
-| Kimi CLI | 支持 | 空工具 ACP/隔离进程作为 LLM transport，Harness 执行 Canvas tools |
-| Codex CLI | 支持 | 临时 HOME + read-only sandbox + 全工具关闭 |
-| Claude CLI | 支持 | `--tools ""` + strict MCP config + safe mode |
+| Kimi CLI | 支持 | Harness 专用长驻 ACP 进程 + 单 Harness conversation 的 ACP session；空工具，Harness 执行 Canvas tools |
+| Codex CLI | 支持 | Harness 专用 `app-server` 进程/thread + 临时 HOME + read-only sandbox + 全工具关闭 |
+| Claude CLI | 支持 | Harness 专用长驻 `stream-json` 进程 + `--tools ""` + strict MCP config + safe mode |
 
-现有 CLI adapters 不提供 Harness 原生增量 tool-call stream，因此由 `penecho-cli-llm` 定义一个很窄的 decision protocol：CLI 每一步返回一个 `final` 或一个 `tool_call` JSON 对象，插件翻译成 Harness `StreamChunk`。CLI 自带工具和会话全部关闭，所以不存在第二套上下文或第二个工具循环；取消继续使用现有 adapter 的 `AbortSignal` 和进程树终止逻辑。
+三种 CLI 都不提供与 Harness tool loop 等价的原生增量 tool-call stream，因此由 `penecho-cli-llm` 定义一个很窄的 decision protocol：CLI 每一步返回一个 `final` 或一个 `tool_call` JSON 对象，插件翻译成 Harness `StreamChunk`。CLI 自带工具全部关闭，也不运行第二个 agent loop。上游 provider conversation 只通过 Harness `ReplayEnvelope` 续接；Harness compaction、历史分叉、配置变化、取消或进程退出都会使它失效并触发 snapshot 重建。
 
 右上角 connection switch 是唯一模型选择来源。一个 Harness session 固定绑定一个 connection，防止一轮内混用 provider；切换 connection 或保存当前 connection 的模型配置时，客户端创建新的 Harness conversation。`ready.connectionId` 回传实际绑定值，提交前再次对比当前选择。
 
@@ -751,7 +758,7 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 - connection profile 必须声明模型名称、provider route、160,000 token 的 PenEcho context 上限，以及 `text + image` 输入；Canvas Agent 不接纳纯文本模型。
 - API 与 CLI bridge 都必须发送活跃图片；同消息用户附件最多 5 张，截图最多最新 1 张。
 - 只有 adapter 明确支持 reasoning 参数时，才传现有 071 reasoning effort；否则省略，不能伪造映射。
-- basic compaction 在 100,000 token（160,000 的 0.625）开始，保留最近 16% 的普通上下文并把 summary output 限制在 4,096 token。图片在模型看过后直接从模型 surface 移除，不参与图片形式的 compaction。
+- basic compaction 在 100,000 token（160,000 的 0.625）开始，保留最近 16% 的普通上下文并把 summary output 限制在 4,096 token。图片在模型看过后直接从模型 surface 移除，不参与图片形式的 compaction。以上全部通过 Harness 原生服务完成；PenEcho 不维护摘要、缓存提示或 provider cache 控制层。
 - `canvas_capture` 的 detail 只允许一个 Widget 或显式紧凑 region，输出最长边和单边都不超过 2,048px；结果必须返回逻辑区域、pixel/logical 双向映射和 pixels-per-logical-unit，让模型知道同尺寸下区域越紧，局部采样密度越高。
 
 ## 12. Canvas Agent UI
@@ -825,6 +832,7 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 src/server/canvas-agent/
   runtime.mjs                 # Cordis/Harness 进程级启动与关闭
   cli-adapter.mjs             # 071 CLI -> Harness LlmAdapter 的受控 decision protocol
+  harness-cli-sessions.mjs    # Harness 专用 provider process/conversation 生命周期
   harness-adapter.mjs         # 唯一直接 import Harness API 的隔离层
   host.mjs                    # agent/session 生命周期与事件投影
   protocol.mjs                # frame schema、seq、public error
@@ -872,7 +880,7 @@ test/
 - 进程级运行时只允许挂载 19 个插件：timer、PenEcho 内存 settings/credentials、local attachment、LLM/session/system-prompt/tools/agent、retry、tool timeout、token meter、tool-result pruner、basic compaction、pi-ai adapter、PenEcho CLI LLM adapter、project filesystem、filesystem observation policy 和 agent loop。
 - 无资源的 agent scope 只允许 `penecho-canvas` 插件注册八个核心工具：`canvas_inspect`、`canvas_read`、`canvas_capture`、`canvas_create`、`canvas_edit`、`canvas_patch_widget`、`canvas_set_view`、`canvas_revert`。选择资源后，额外能力严格来自 10.3 的 folder 或 exact-file 插件。
 - 不挂载通用 shell/sandbox bundle、GitHub、Web、MCP、skills、jobs、goals、delegation、persistence、command UI 或通用 base bundle。folder Bash 是 PenEcho 自己的窄工具并经过 OS 级能力探针和边界执行；浏览器 approval 只是该工具的逐次 RPC，不是 Harness 通用 approval 插件。
-- `llm-pi-ai` 保留是为了沿用 071 已有的 OpenAI-compatible 与 Anthropic-compatible API connections；`penecho-cli-llm` 只复用项目已有的三份 CLI adapter，没有引入第二套 CLI harness 依赖。两者都不进入 `public/app.js`，也不在普通画布路径初始化。
+- `llm-pi-ai` 保留是为了沿用 071 已有的 OpenAI-compatible 与 Anthropic-compatible API connections；`penecho-cli-llm` 的持久 session manager 位于 Canvas Agent ESM island，只复用 CLI 路径解析、环境净化等无状态安全 helper，不复用旧画布 AI 的一次性 request/session 实现。两者都不进入 `public/app.js`，也不在普通画布路径初始化。
 
 对应回归测试必须同时断言根依赖精确版本、运行时插件精确白名单和 agent 可见工具精确集合。任何新增 Harness 包、插件或工具都需要显式修改白名单并经过安全审查。
 
@@ -1008,7 +1016,7 @@ test/
 - 071 是唯一实现基线；`alwaysmain` 只作产品参考。
 - Harness 同进程嵌入 server，不使用 SDK 子进程。
 - Canvas 留在浏览器，工具通过认证 WebSocket RPC 执行。
-- Harness 负责 session/context/loop/compaction；PenEcho 不维护第二份模型历史。
+- Harness 负责 session/context/loop/compaction/model-context cache；PenEcho 不维护第二份模型历史，不改写 Harness history，也不注入 provider cache 控制。
 - 只暴露八个核心 Canvas 工具，默认串行；General HTML 与 Professional Diagrams 合同自动注入，其他插件合同不发送；不做第二层检索、生成、导出或发布能力。
 - 动态/交互内容只通过 HTML Widget 提供，不暴露 animation object 工具。
 - Widget 只允许单轴响应式改宽或改高；Image 可以自由拉伸。

@@ -173,12 +173,12 @@ process.stdout.write(JSON.stringify({type:"thread.started",thread_id:"test"})+"\
 process.stdout.write(JSON.stringify({type:"turn.started"})+"\\n");
 setTimeout(() => {
   process.stdout.write(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:${JSON.stringify(response)}}})+"\\n");
-  process.stdout.write(JSON.stringify({type:"turn.completed",usage:{}})+"\\n");
+  process.stdout.write(JSON.stringify({type:"turn.completed",usage:{input_tokens:140,cached_input_tokens:90,output_tokens:12}})+"\\n");
   setInterval(() => {}, 1000);
 }, 150);
 `);
   try {
-    let reportReceiving,activityCount=0;
+    let reportReceiving,activityCount=0,reportedUsage=null;
     const receiving = new Promise(resolve => { reportReceiving=resolve; }), request = callCodexCli({
       executable:fakeCli,
       prompt:"stream",
@@ -186,6 +186,7 @@ setTimeout(() => {
       env:testCodexEnv(directory),
       onProgress:phase => { if(phase === "receiving")reportReceiving(); },
       onActivity:() => activityCount++,
+      onUsage:usage => { reportedUsage=usage; },
     });
     assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
     let completionTimer;
@@ -195,6 +196,7 @@ setTimeout(() => {
     const content = await Promise.race([request, completionDeadline]).finally(() => clearTimeout(completionTimer));
     assert.equal(JSON.parse(content).message, "immediate");
     assert.ok(activityCount>0);
+    assert.deepEqual(reportedUsage,{input_tokens:140,cached_input_tokens:90,output_tokens:12});
     const workDir = await fs.promises.readFile(marker, "utf8"), deadline=Date.now()+5000;
     while(fs.existsSync(workDir)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
     assert.equal(fs.existsSync(workDir), false);

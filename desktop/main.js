@@ -3,7 +3,7 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-const { pathToFileURL } = require("node:url");
+const { fileURLToPath, pathToFileURL } = require("node:url");
 const {
   app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell,
 } = require("electron");
@@ -17,6 +17,7 @@ const { createUpdateManager } = require("./update-manager.js");
 const { lanHosts, lanUrls } = require("./network-access.js");
 const { desktopConfigurationEnvironment } = require("./config-environment.js");
 const { issueNativePickerGrant } = require("../src/server/canvas-agent/native-picker-grants.js");
+const { CanvasAgentProjectStore } = require("../src/server/canvas-agent/project-store.js");
 const pkg = require("../package.json");
 
 app.setName("PenEcho");
@@ -70,7 +71,8 @@ let mainWindow = null,
   currentLanUrls = [],
   settingsReadyToLaunch = false,
   cliOperation = null,
-  quitting = false;
+  quitting = false,
+  desktopProjectStore = null;
 
 const credentialProtector = process.platform === "darwin" ? null : safeStorage;
 
@@ -82,6 +84,11 @@ function userPaths() {
     secretFile:path.join(stateDir, "credentials.json"),
     privatePlugins:path.join(stateDir, "plugins", "private"),
   };
+}
+
+function canvasAgentDesktopProjectStore() {
+  if(!desktopProjectStore)desktopProjectStore=new CanvasAgentProjectStore({stateDirectory:userPaths().stateDir});
+  return desktopProjectStore;
 }
 
 function loadConfiguration() {
@@ -379,8 +386,86 @@ function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+const CANVAS_AGENT_CLIPBOARD_FILE_LIMIT = 32 * 1024 * 1024;
+
+function clipboardUriPaths(value) {
+  const paths=[];
+  for(const rawLine of String(value||"").split(/[\r\n\0]+/)){
+    const line=rawLine.trim();
+    if(!line||line==="copy"||line==="cut"||line.startsWith("#"))continue;
+    try{
+      const url=new URL(line);
+      if(url.protocol!=="file:")continue;
+      paths.push(fileURLToPath(url));
+    }catch{}
+  }
+  return paths;
+}
+
+function clipboardFilePaths() {
+  const formats=new Set(clipboard.availableFormats()),paths=[];
+  const add=value=>paths.push(...clipboardUriPaths(value));
+  for(const format of ["public.file-url","text/uri-list","x-special/gnome-copied-files"]){
+    if(!formats.has(format))continue;
+    try{
+      const buffer=clipboard.readBuffer(format);
+      add(buffer.toString("utf8"));
+      if(format==="public.file-url"&&process.platform==="darwin")add(buffer.toString("utf16le"));
+    }catch{}
+  }
+  if(process.platform==="darwin"&&formats.has("NSFilenamesPboardType")){
+    try{
+      const value=clipboard.readBuffer("NSFilenamesPboardType").toString("utf8");
+      for(const match of value.matchAll(/<string>([\s\S]*?)<\/string>/g)){
+        const decoded=match[1].replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").trim();
+        if(path.isAbsolute(decoded))paths.push(decoded);else add(decoded);
+      }
+    }catch{}
+  }
+  if(process.platform==="win32"){
+    for(const [format,encoding] of [["FileNameW","utf16le"],["FileName","utf8"]]){
+      if(!formats.has(format))continue;
+      try{for(const candidate of clipboard.readBuffer(format).toString(encoding).split("\0"))if(path.isAbsolute(candidate.trim()))paths.push(candidate.trim());}catch{}
+    }
+    if(formats.has("CF_HDROP")){
+      try{
+        const buffer=clipboard.readBuffer("CF_HDROP"),offset=buffer.length>=20?buffer.readUInt32LE(0):buffer.length,wide=buffer.length>=20&&buffer.readUInt32LE(16)!==0;
+        if(offset>=20&&offset<buffer.length)for(const candidate of buffer.subarray(offset).toString(wide?"utf16le":"utf8").split("\0"))if(path.isAbsolute(candidate.trim()))paths.push(candidate.trim());
+      }catch{}
+    }
+  }
+  return [...new Set(paths.filter(candidate=>typeof candidate==="string"&&candidate.length<=4096&&path.isAbsolute(candidate)))];
+}
+
+async function readCanvasClipboardFile() {
+  let failureCode="";
+  for(const selectedPath of clipboardFilePaths()){
+    try{
+      const canonical=await fs.promises.realpath(selectedPath),before=await fs.promises.lstat(canonical);
+      if(!before.isFile()||before.isSymbolicLink())continue;
+      if(before.size<1){failureCode="empty";continue;}
+      if(before.size>CANVAS_AGENT_CLIPBOARD_FILE_LIMIT){failureCode="too_large";continue;}
+      const data=await fs.promises.readFile(canonical),after=await fs.promises.lstat(canonical);
+      if(!after.isFile()||after.isSymbolicLink()||after.size!==before.size||after.mtimeMs!==before.mtimeMs||data.length!==before.size)continue;
+      return {ok:true,name:path.basename(canonical),size:data.length,lastModified:Math.trunc(after.mtimeMs),data:data.toString("base64")};
+    }catch{}
+  }
+  return {ok:false,code:failureCode||"unreadable"};
+}
+
 function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+  ipcMain.on("penecho:has-clipboard-file", event => { event.returnValue=fromCanvas(event)&&clipboardFilePaths().length>0; });
+  ipcMain.handle("penecho:read-clipboard-file", event => fromCanvas(event)?readCanvasClipboardFile():{ok:false});
+  ipcMain.handle("penecho:open-project-file", async (event,projectId) => {
+    if(!fromCanvas(event))return {ok:false};
+    try{
+      const project=await canvasAgentDesktopProjectStore().resolve(String(projectId||""));
+      if(project.kind!=="file")return {ok:false,code:"unavailable"};
+      const error=await shell.openPath(project.path);
+      return error?{ok:false,code:"open_failed"}:{ok:true};
+    }catch{return {ok:false,code:"unavailable"};}
+  });
   ipcMain.handle("penecho:pick-project-file", async event => {
     if (!fromCanvas(event)) return { canceled:true };
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -391,7 +476,7 @@ function registerIpc() {
         {
           name:"Readable files",
           extensions:[
-            "pdf", "docx", "xlsx", "csv", "db", "sqlite", "sqlite3",
+            "pdf", "docx", "xlsx", "csv", "pptx", "db", "sqlite", "sqlite3",
             "png", "jpg", "jpeg", "webp", "gif",
             "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "log",
             "json", "jsonc", "jsonl", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "config", "properties", "env", "xml", "xsd", "svg",
@@ -400,7 +485,7 @@ function registerIpc() {
             "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "sql", "graphql", "gql", "proto", "vue", "svelte", "astro", "tex", "lock", "diff", "patch",
           ],
         },
-        { name:"Documents", extensions:["pdf", "docx", "xlsx", "csv"] },
+        { name:"Documents", extensions:["pdf", "docx", "xlsx", "csv", "pptx"] },
         { name:"SQLite databases", extensions:["db", "sqlite", "sqlite3"] },
         { name:"Images", extensions:["png", "jpg", "jpeg", "webp", "gif"] },
         {

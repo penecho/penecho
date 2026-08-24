@@ -290,6 +290,65 @@ test("Canvas Agent exposes Tavily only when configured and executes it server-si
   assert.match(JSON.stringify(JSON.parse(calls[3].prompt).conversation),/"isError":true/);
 });
 
+test("Canvas Agent exposes research, GitHub, stock, and DuckDuckGo on the first model step without a Tavily key",async t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-built-in-search-test-"));
+  t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
+  const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],searchRequests=[],script=[
+    {type:"tool_call",name:"research_search",arguments:{query:"visual canvas agents",source:"crossref",maxResults:2,fromYear:2025}},
+    {type:"tool_call",name:"github_repository_search",arguments:{query:"visual canvas agent",maxResults:2,sort:"stars"}},
+    {type:"tool_call",name:"duckduckgo_search",arguments:{query:"PenEcho visual canvas",maxResults:2,timeRange:"month"}},
+    {type:"tool_call",name:"stock_symbol_search",arguments:{query:"Apple",maxResults:2}},
+    {type:"tool_call",name:"stock_market_data",arguments:{symbol:"AAPL",range:"5d",interval:"1d"}},
+    {type:"final",text:"The built-in search tools returned cited sources."},
+  ],connection={id:"built-in-search-cli",provider:"codex-cli",name:"Built-in Search CLI",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},host=new CanvasHarnessHost({
+    stateDirectory,rootDirectory:ROOT,
+    resolveConnection:id=>id===connection.id?connection:null,
+    listConnections:()=>[connection],
+    callCli:async request=>{calls.push(request);return JSON.stringify(script.shift());},
+  });
+  t.after(()=>host.dispose());
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async(input,init)=>{
+    const url=new URL(String(input));searchRequests.push({url,init});
+    if(url.hostname==="api.crossref.org")return new Response(JSON.stringify({message:{items:[{
+      DOI:"10.1234/penecho",title:["Visual Canvas Agents"],URL:"https://doi.org/10.1234/penecho",author:[{given:"Ada",family:"Lovelace"}],published:{"date-parts":[[2026,8,20]]},"container-title":["Canvas Research"],type:"journal-article","is-referenced-by-count":7,
+    }]}}),{status:200,headers:{"content-type":"application/json"}});
+    if(url.hostname==="api.github.com")return new Response(JSON.stringify({total_count:1,items:[{
+      full_name:"penecho/penecho",description:"Visual canvas agent",html_url:"https://github.com/penecho/penecho",stargazers_count:42,forks_count:5,open_issues_count:2,language:"JavaScript",topics:["canvas","agent"],license:{spdx_id:"MIT"},updated_at:"2026-08-20T00:00:00Z",default_branch:"main",
+    }]}),{status:200,headers:{"content-type":"application/json","x-ratelimit-limit":"10","x-ratelimit-remaining":"9","x-ratelimit-reset":"1787530000"}});
+    if(url.hostname==="html.duckduckgo.com")return new Response('<article><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fpenecho.ai%2F&amp;rut=test"><b>PenEcho</b> visual canvas</a><a class="result__snippet" href="https://penecho.ai/">A visual canvas for focused work.</a></article>',{status:200,headers:{"content-type":"text/html"}});
+    if(url.hostname==="query1.finance.yahoo.com"&&url.pathname==="/v1/finance/search")return new Response(JSON.stringify({quotes:[{symbol:"AAPL",longname:"Apple Inc.",shortname:"Apple Inc.",quoteType:"EQUITY",exchDisp:"NASDAQ",sector:"Technology",industry:"Consumer Electronics"}]}),{status:200,headers:{"content-type":"application/json"}});
+    if(url.hostname==="query1.finance.yahoo.com"&&url.pathname==="/v8/finance/chart/AAPL")return new Response(JSON.stringify({chart:{result:[{
+      meta:{currency:"USD",symbol:"AAPL",longName:"Apple Inc.",fullExchangeName:"NasdaqGS",instrumentType:"EQUITY",regularMarketTime:1787342401,regularMarketPrice:309.35,chartPreviousClose:305.93,regularMarketDayHigh:312.38,regularMarketDayLow:307.01,regularMarketVolume:46876815,fiftyTwoWeekHigh:344.57,fiftyTwoWeekLow:224.69,exchangeTimezoneName:"America/New_York"},
+      timestamp:[1787083200,1787169600],indicators:{quote:[{open:[303,307],high:[308,312.38],low:[301,307.01],close:[305.93,309.35],volume:[42000000,46876815]}],adjclose:[{adjclose:[305.93,309.35]}]},events:{dividends:{"1787083200":{date:1787083200,amount:.26}}},
+    }],error:null}}),{status:200,headers:{"content-type":"application/json"}});
+    throw new Error(`Unexpected search request: ${url.href}`);
+  };
+  t.after(()=>{globalThis.fetch=originalFetch});
+  const session=await host.connect({clientId:"built-in-search-client",connectionId:connection.id,webSearchEnabled:true,binding:{},send:(type,payload)=>messages.push({type,payload})});
+  host.updateState(session,{revision:1,canvas:{width:20000,height:20000},objects:[]});
+  await host.submit(session,"Find a paper, a GitHub repository, a backup web result, and Apple stock data.");
+  await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
+  assert.equal(calls.length,6);
+  const requests=calls.map(call=>JSON.parse(call.prompt)),toolNames=request=>request.availableTools.map(tool=>tool.name);
+  for(const name of ["research_search","github_repository_search","duckduckgo_search","stock_symbol_search","stock_market_data"])assert.equal(toolNames(requests[0]).includes(name),true,`${name} must be available on the first model step`);
+  assert.equal(toolNames(requests[0]).includes("load_search_skill"),false);
+  assert.equal(toolNames(requests[0]).includes("tavily_search"),false);
+  assert.equal(requests.every(request=>toolNames(request).includes("research_search")),true);
+  assert.deepEqual(searchRequests.map(request=>request.url.hostname),["api.crossref.org","api.github.com","html.duckduckgo.com","query1.finance.yahoo.com","query1.finance.yahoo.com"]);
+  assert.equal(searchRequests[0].url.searchParams.get("filter"),"from-pub-date:2025-01-01");
+  assert.equal(searchRequests[1].url.searchParams.get("sort"),"stars");
+  assert.equal(searchRequests[2].url.searchParams.get("df"),"m");
+  assert.equal(searchRequests[3].url.searchParams.get("q"),"Apple");
+  assert.equal(searchRequests[4].url.pathname,"/v8/finance/chart/AAPL");
+  assert.equal(searchRequests[4].url.searchParams.get("range"),"5d");
+  const conversation=JSON.stringify(requests[5].conversation);
+  for(const source of ["https://doi.org/10.1234/penecho","https://github.com/penecho/penecho","https://penecho.ai/","https://finance.yahoo.com/quote/AAPL/history/"])assert.equal(conversation.includes(source),true,source);
+  assert.equal(conversation.includes("309.35"),true);
+  assert.equal(session.webSearch.enabled,true);
+  assert.equal(messages.find(message=>message.type==="ready")?.payload.webSearchConfigured,true);
+});
+
 test("Canvas Agent CLI adapter turns isolated CLI decisions into Harness tool calls",async t=>{
   const stateDirectory = fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-cli-test-"));
   t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
@@ -340,13 +399,17 @@ test("Canvas Agent CLI adapter turns isolated CLI decisions into Harness tool ca
     assert.match(modelContext,/plugin_id="flowchart"[\s\S]*# Professional Diagrams/);
     for(const document of contractDocuments)assert.equal(modelContext.includes(document),true);
     assert.equal(modelContext.includes(visualExplorerContract),true);
+    for(const document of contractDocuments)assert.equal(conversationText.includes(document),false,"fixed Widget contracts must not be persisted as Harness runtime-context history");
+    assert.equal(conversationText.includes(visualExplorerContract),false,"the fixed Visual Explorer contract must remain in the prefix-stable system prompt");
     assert.match(modelContext,/Canvas Agent-only Visual Explorer extension[\s\S]*does not change Main Canvas AI/);
     assert.doesNotMatch(modelContext,/plugin_id="(?:weather|stocks|image-search)"/);
   }
-  assert.deepEqual(firstRequest.availableTools.map(tool=>tool.name).sort(),["canvas_capture","canvas_create","canvas_edit","canvas_inspect","canvas_patch_widget","canvas_read","canvas_revert","canvas_set_view"]);
+  assert.equal(calls[0].systemPrompt,calls[1].systemPrompt,"fixed Harness system-prompt sections must remain prefix-stable across steps");
+  assert.deepEqual(firstRequest.availableTools.map(tool=>tool.name).sort(),["canvas_capture","canvas_create","canvas_edit","canvas_inspect","canvas_patch_widget","canvas_read","canvas_revert","canvas_set_view","duckduckgo_search","github_repository_search","load_visual_skill","research_search","stock_market_data","stock_symbol_search","web_read"]);
   const toolDescriptions=Object.fromEntries(firstRequest.availableTools.map(tool=>[tool.name,tool.description]));
   assert.match(toolDescriptions.canvas_create,/New Visual Explorers are one General HTML item[\s\S]*penecho-visual-explorer\+html/);
   assert.match(toolDescriptions.canvas_read,/nl -ba -w6 -s TAB[\s\S]*six-column line number[\s\S]*first ASCII TAB/);
+  assert.match(toolDescriptions.canvas_patch_widget,/--- a\/<virtual-path>[\s\S]*\+\+\+ b\/<virtual-path>[\s\S]*--- a\/widget\.html[\s\S]*\+\+\+ b\/widget\.html[\s\S]*bare/);
   assert.equal("canvas_create_visual_explainer" in toolDescriptions,false);
   assert.equal("canvas_update_visual_explainer" in toolDescriptions,false);
   assert.ok(Buffer.byteLength(visualExplorerContract,"utf8")<=16000);
@@ -415,9 +478,20 @@ test("Canvas Agent reports the exact widget patch hunk and source line that mism
 });
 
 test("Canvas Agent CLI protocol rejects unregistered tool requests",async()=>{
-  const { PenEchoCliAdapter, parseCliDecision } = await import("../src/server/canvas-agent/cli-adapter.mjs");
+  const { PenEchoCliAdapter, normalizeCliTokenUsage, parseCliDecision } = await import("../src/server/canvas-agent/cli-adapter.mjs");
   assert.deepEqual(parseCliDecision('```json\n{"type":"final","text":"done"}\n```'),{type:"final",text:"done"});
   assert.throws(()=>parseCliDecision('{"type":"tool_call","name":"run_bash","arguments":{}}',["canvas_inspect"]),/unavailable tool/);
+  assert.deepEqual(normalizeCliTokenUsage({input_tokens:140,cached_input_tokens:90,output_tokens:12,output_tokens_details:{reasoning_tokens:4}}),{
+    inputTokens:50,outputTokens:12,cacheReadTokens:90,reasoningTokens:4,
+  });
+  const usageAdapter=new PenEchoCliAdapter({
+    callCli:async request=>{
+      request.onUsage({input_tokens:100,cached_input_tokens:75,output_tokens:9});
+      return '{"type":"final","text":"usage observed"}';
+    },
+  }),usageProvider=usageAdapter.replaceConnections([{id:"usage",provider:"codex-cli",cliPath:"codex",cliModel:"gpt-test",effort:"medium"}])[0],usageChunks=[];
+  for await(const chunk of usageAdapter.stream({provider:usageProvider,model:"gpt-test",messages:[],tools:[]}))usageChunks.push(chunk);
+  assert.deepEqual(usageChunks.find(chunk=>chunk.type==="usage")?.usage,{inputTokens:25,outputTokens:9,cacheReadTokens:75});
   const adapter=new PenEchoCliAdapter({
     timeoutMs:()=>10,
     callCli:({signal})=>new Promise((resolve,reject)=>signal.addEventListener("abort",()=>reject(signal.reason),{once:true})),
@@ -710,10 +784,11 @@ test("Canvas Agent caches five captures without rewriting Harness image history"
     callCli:async request=>{
       calls.push(request);
       if(captureIndex>=6)return JSON.stringify({type:"final",text:"Capture sequence complete."});
-      const x=captureIndex++*10;
+      const x=(captureIndex++%5)*10;
       return JSON.stringify({type:"tool_call",name:"canvas_capture",arguments:{target:"region",region:{x,y:0,width:100,height:100},quality:"detail",coordinates:"metadata"}});
     },
     conversationTrace:entry=>traceEvents.push(entry),
+    logger:entry=>console.log("HOST_LOG",JSON.stringify(entry)),
   });
   t.after(()=>host.dispose());
   let session;
@@ -730,7 +805,8 @@ test("Canvas Agent caches five captures without rewriting Harness image history"
   host.updateState(session,{revision:1,viewRevision:1,canvas:{width:20000,height:20000},objects:[]});
   await host.submit(session,"Inspect six distinct regions in sequence.");
   await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
-  assert.equal(browserCaptures.length,6);
+  assert.equal(browserCaptures.length,5);
+  assert.deepEqual(browserCaptures.map(args=>args.region.x),[0,10,20,30,40]);
   assert.equal(session.captureCache.size,5);
   assert.equal(calls[0].atlasImage,null);
   assert.equal(calls.slice(1,7).every(call=>typeof call.atlasImage==="string"),true,JSON.stringify(calls.map(call=>Array.isArray(call.atlasImage)?`array:${call.atlasImage.length}`:call.atlasImage===null?"none":typeof call.atlasImage)));
@@ -738,13 +814,16 @@ test("Canvas Agent caches five captures without rewriting Harness image history"
   const tracedCaptures=traceEvents.filter(entry=>entry.phase==="asset").map(entry=>entry.asset);
   assert.equal(tracedCaptures.length,6);
   assert.equal(tracedCaptures.every(asset=>asset.source==="capture"&&asset.mediaType==="image/webp"&&Buffer.from(asset.data).length>0),true);
+  const deliveredCaptures=messages.filter(message=>message.type==="session_event"&&message.payload.kind==="capture_message");
+  assert.equal(deliveredCaptures.length,0,"internal captures stay private");
+  assert.equal(session.backlog.filter(event=>event.kind==="capture_message").length,0);
   messages.length=0;
   await host.submit(session,"Answer without another screenshot.");
   await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
   assert.match(calls[7].atlasImage,/^data:image\/webp;base64,/);
 });
 
-test("Canvas Agent keeps WebP captures and their PNG fallback through attachment normalization",async t=>{
+test("Canvas Agent delivers requested Widgets in WebP or PNG form and replays a cached capture once per call",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-capture-format-test-"));
   t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
   const width=64,height=64,pixels=Buffer.alloc(width*height*3);
@@ -757,13 +836,15 @@ test("Canvas Agent keeps WebP captures and their PNG fallback through attachment
     {mediaType:"image/png",data:await source.clone().png({compressionLevel:9}).toBuffer()},
   ];
   for(const capture of captures)assert.equal((await sharp(capture.data).metadata()).hasProfile,true);
-  const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],traced=[],
+  const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],traced=[],browserCalls=[],
     connection={id:"capture-format-cli",provider:"codex-cli",name:"Capture Format CLI",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},
     host=new CanvasHarnessHost({
       stateDirectory,rootDirectory:ROOT,resolveConnection:id=>id===connection.id?connection:null,listConnections:()=>[connection],
       callCli:async request=>{
         calls.push(request);
-        if(calls.length<=captures.length)return JSON.stringify({type:"tool_call",name:"canvas_capture",arguments:{target:"region",region:{x:(calls.length-1)*100,y:0,width:64,height:64},quality:"detail",coordinates:"metadata"}});
+        if(calls.length===1)return JSON.stringify({type:"tool_call",name:"canvas_capture",arguments:{target:"object",objectId:"widget-webp",quality:"detail",coordinates:"none",deliverToUser:true}});
+        if(calls.length===2)return JSON.stringify({type:"tool_call",name:"canvas_capture",arguments:{target:"object",objectId:"widget-png",quality:"detail",coordinates:"none",deliverToUser:true}});
+        if(calls.length===3)return JSON.stringify({type:"tool_call",name:"canvas_capture",arguments:{target:"object",objectId:"widget-png",quality:"detail",coordinates:"none",deliverToUser:true}});
         return JSON.stringify({type:"final",text:"Capture formats verified."});
       },
       conversationTrace:entry=>traced.push(entry),
@@ -773,25 +854,143 @@ test("Canvas Agent keeps WebP captures and their PNG fallback through attachment
   const send=(type,payload)=>{
     messages.push({type,payload});
     if(type!=="tool_request")return;
+    browserCalls.push({callId:payload.callId,arguments:payload.arguments});
     const capture=captures[captureIndex++];
     queueMicrotask(()=>host.resolveToolResult(session,{requestId:payload.requestId,ok:true,result:{
-      dataUrl:`data:${capture.mediaType};base64,${capture.data.toString("base64")}`,width,height,quality:"detail",coordinates:"metadata",revision:1,viewRevision:1,
-      logicalRegion:payload.arguments.region,
+      dataUrl:`data:${capture.mediaType};base64,${capture.data.toString("base64")}`,width,height,quality:"detail",coordinates:"none",revision:1,viewRevision:1,
+      logicalRegion:{x:0,y:0,width:64,height:64},
     }}));
   };
   session=await host.connect({clientId:"capture-format-client",connectionId:connection.id,binding:{},send});
-  host.updateState(session,{revision:1,viewRevision:1,canvas:{width:20000,height:20000},objects:[]});
+  host.updateState(session,{revision:1,viewRevision:1,canvas:{width:20000,height:20000},objects:[
+    {id:"widget-webp",kind:"widget"},{id:"widget-png",kind:"widget"},
+  ]});
   await host.submit(session,"Inspect the WebP capture and its PNG fallback.");
   await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"),4000);
-  assert.equal(calls.length,3);
+  assert.equal(calls.length,4);
+  assert.equal(browserCalls.length,2,"the third Widget request reuses cached bytes without a browser capture");
+  assert.deepEqual(browserCalls.map(call=>call.arguments.objectId),["widget-webp","widget-png"]);
+  assert.equal(session.captureCache.size,2);
   assert.match(calls[1].atlasImage,/^data:image\/webp;base64,/);
   assert.match(calls[2].atlasImage,/^data:image\/png;base64,/);
-  for(const request of calls.slice(1)){
+  for(const request of calls.slice(1,3)){
     const encoded=Buffer.from(request.atlasImage.split(",",2)[1],"base64"),metadata=await sharp(encoded).metadata();
     assert.equal(metadata.hasProfile,false);
   }
+  const delivered=messages.filter(message=>message.type==="session_event"&&message.payload.kind==="capture_message");
+  assert.equal(delivered.length,3);
+  assert.deepEqual(delivered.map(message=>message.payload.attachment.mediaType),["image/webp","image/png","image/png"]);
+  assert.deepEqual(delivered.map(message=>message.payload.target),["object","object","object"]);
+  assert.deepEqual(delivered.map(message=>message.payload.objectId),["widget-webp","widget-png","widget-png"]);
+  const toolCalls=messages.filter(message=>message.type==="session_event"&&message.payload.kind==="tool_call"&&message.payload.name==="canvas_capture");
+  assert.deepEqual(delivered.map(message=>message.payload.callId),toolCalls.map(message=>message.payload.callId));
+  for(const message of delivered){
+    assert.match(message.payload.attachment.dataUrl,/^data:image\/(?:png|webp);base64,[A-Za-z0-9+/=]+$/);
+    assert.equal(message.payload.attachment.bytes<=1200*1024,true);
+  }
+  assert.equal(session.backlog.filter(event=>event.kind==="capture_message").length,3);
   const assets=traced.filter(entry=>entry.phase==="asset").map(entry=>entry.asset);
-  assert.deepEqual(assets.map(asset=>asset.mediaType),["image/webp","image/png"]);
+  assert.deepEqual(assets.map(asset=>asset.mediaType),["image/webp","image/png","image/png"]);
+});
+
+test("Canvas Agent delivers requested page captures and keeps resume backlog transport-safe",async t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-page-capture-test-"));
+  t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
+  const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],browserCalls=[],
+    image="data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==",
+    script=[
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"viewport",quality:"basic",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"canvas",quality:"basic",coordinates:"none"}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"canvas",quality:"basic",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"canvas",quality:"basic",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"canvas",quality:"basic",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"canvas",quality:"basic",coordinates:"none",deliverToUser:true}},
+      {type:"final",text:"Requested page screenshots delivered."},
+    ],
+    connection={id:"page-capture-cli",provider:"codex-cli",name:"Page Capture CLI",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},
+    host=new CanvasHarnessHost({
+      stateDirectory,rootDirectory:ROOT,resolveConnection:id=>id===connection.id?connection:null,listConnections:()=>[connection],
+      callCli:async request=>{calls.push(request);return JSON.stringify(script.shift());},
+    });
+  t.after(()=>host.dispose());
+  let session;
+  const send=(type,payload)=>{
+    messages.push({type,payload});
+    if(type!=="tool_request")return;
+    browserCalls.push({callId:payload.callId,target:payload.arguments.target});
+    queueMicrotask(()=>host.resolveToolResult(session,{requestId:payload.requestId,ok:true,result:{
+      dataUrl:image,width:1,height:1,quality:"basic",coordinates:"none",revision:1,viewRevision:1,
+      logicalRegion:{x:0,y:0,width:100,height:80},
+    }}));
+  };
+  session=await host.connect({clientId:"page-capture-client",connectionId:connection.id,binding:{},send});
+  host.updateState(session,{revision:1,viewRevision:1,canvas:{width:20000,height:20000},objects:[]});
+  await host.submit(session,"Show me the current page and complete page screenshots.");
+  await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"),4000);
+  assert.equal(calls.length,7);
+  assert.deepEqual(browserCalls.map(call=>call.target),["viewport","canvas"]);
+  assert.equal(session.captureCache.size,2);
+  const delivered=messages.filter(message=>message.type==="session_event"&&message.payload.kind==="capture_message");
+  const toolCalls=messages.filter(message=>message.type==="session_event"&&message.payload.kind==="tool_call"&&message.payload.name==="canvas_capture");
+  assert.equal(toolCalls.length,6);
+  assert.equal(delivered.length,5);
+  assert.deepEqual(delivered.map(message=>message.payload.target),["viewport","canvas","canvas","canvas","canvas"]);
+  assert.equal(new Set(delivered.map(message=>message.payload.callId)).size,5);
+  assert.equal(delivered.some(message=>message.payload.callId===toolCalls[1].payload.callId),false,"the internal cache priming call emits nothing");
+  const retained=session.backlog.filter(event=>event.kind==="capture_message");
+  assert.equal(retained.length,4);
+  assert.deepEqual([...new Set(retained.map(event=>event.target))],["canvas"]);
+
+  const runtime=read("src/server/canvas-agent/runtime.mjs");
+  assert.match(runtime,/const MAX_CAPTURE_DELIVERY_EVENTS = 4/);
+  const maxBytes=1200*1024,worstEvent=index=>({
+    kind:"capture_message",callId:`worst-${index}`,target:"canvas",
+    attachment:{attachmentId:`worst-${index}`,name:"penecho-canvas-detail.webp",mediaType:"image/webp",bytes:maxBytes,width:1440,height:1440,
+      dataUrl:`data:image/webp;base64,${"A".repeat(Math.ceil(maxBytes/3)*4)}`},
+  }),readyFrame=JSON.stringify({
+    version:1,type:"ready",canvasSessionId:"capture-client",clientId:"capture-client",seq:1,
+    payload:{resumeToken:"r".repeat(256),connectionId:"page-capture-cli",harnessSessionId:"h".repeat(64),webSearchConfigured:true,webSearchEnabled:true,
+      project:null,projectCapabilities:null,accessMode:"controlled",resumed:true,backlog:[0,1,2,3].map(worstEvent)},
+  });
+  assert.equal(Buffer.byteLength(readyFrame)<8*1024*1024,true,`wor-case ready frame was ${Buffer.byteLength(readyFrame)} bytes`);
+});
+
+test("Canvas Agent rejects requested deliveries outside clean Widget, viewport, and Canvas targets",async t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-delivery-validation-test-"));
+  t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
+  const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],browserCalls=[],
+    script=[
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"object",objectId:"widget-stale",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"object",objectId:"image-current",coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"region",region:{x:0,y:0,width:100,height:100},coordinates:"none",deliverToUser:true}},
+      {type:"tool_call",name:"canvas_capture",arguments:{target:"viewport",coordinates:"metadata",deliverToUser:true}},
+      {type:"final",text:"All invalid deliveries were rejected."},
+    ],
+    connection={id:"delivery-validation-cli",provider:"codex-cli",name:"Delivery Validation CLI",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},
+    host=new CanvasHarnessHost({
+      stateDirectory,rootDirectory:ROOT,resolveConnection:id=>id===connection.id?connection:null,listConnections:()=>[connection],
+      callCli:async request=>{calls.push(request);return JSON.stringify(script.shift());},
+    });
+  t.after(()=>host.dispose());
+  const send=(type,payload)=>{
+    messages.push({type,payload});
+    if(type==="tool_request")browserCalls.push(payload.arguments);
+  };
+  const session=await host.connect({clientId:"delivery-validation-client",connectionId:connection.id,binding:{},send});
+  host.updateState(session,{revision:1,viewRevision:1,canvas:{width:20000,height:20000},objects:[{id:"widget-current",kind:"widget"},{id:"image-current",kind:"image"}]});
+  await host.submit(session,"Try to deliver invalid screenshots.");
+  await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"),4000);
+  assert.equal(calls.length,5);
+  assert.equal(browserCalls.length,0,"invalid delivery requests never reach the browser capture path");
+  assert.equal(messages.some(message=>message.type==="session_event"&&message.payload.kind==="capture_message"),false);
+  const errors=JSON.stringify(JSON.parse(calls.at(-1).prompt).conversation);
+  for(const message of [
+    "requested Widget was not found",
+    "Only a Widget can be delivered",
+    "current page framing",
+    "coordinates=\\\\?\"none\\\\?\"",
+  ])assert.match(errors,new RegExp(message));
+  assert.equal(messages.some(message=>message.type==="session_event"&&message.payload.kind==="assistant_message"&&message.payload.text==="All invalid deliveries were rejected."),true);
 });
 
 test("Canvas Agent converts JPEG request projections to a bounded PNG fallback",async t=>{
@@ -852,6 +1051,7 @@ test("Canvas Agent rejects captures outside hard raster and encoded-byte policie
   assert.equal(browserCalls.length,2);
   assert.match(JSON.stringify(JSON.parse(calls[1].prompt).conversation),/basic raster limit/);
   assert.match(JSON.stringify(JSON.parse(calls[2].prompt).conversation),/basic encoded-byte limit/);
+  assert.equal(messages.some(message=>message.type==="session_event"&&message.payload.kind==="capture_message"),false);
   assert.equal(messages.some(message=>message.type==="session_event"&&message.payload.kind==="assistant_message"&&message.payload.text==="Rejected both oversized captures."),true);
 });
 
@@ -885,7 +1085,7 @@ test("DeepSeek Harness mounts with only the PenEcho Canvas capability surface",a
   assert.equal(messages[0].payload.resumeToken.length>20,true);
   const resumeToken=messages[0].payload.resumeToken;
   const toolSchemas=session.handle.agent.ctx.tools.schemas(session.handle.agent),visible = toolSchemas.map(tool=>tool.name).sort();
-  assert.deepEqual(visible,["canvas_capture","canvas_create","canvas_edit","canvas_inspect","canvas_patch_widget","canvas_read","canvas_revert","canvas_set_view"]);
+  assert.deepEqual(visible,["canvas_capture","canvas_create","canvas_edit","canvas_inspect","canvas_patch_widget","canvas_read","canvas_revert","canvas_set_view","duckduckgo_search","github_repository_search","load_visual_skill","research_search","stock_market_data","stock_symbol_search","web_read"]);
   const schemaText=JSON.stringify(toolSchemas);
   assert.match(schemaText,/resize_widget/);
   assert.match(schemaText,/resize_image/);
@@ -897,10 +1097,13 @@ test("DeepSeek Harness mounts with only the PenEcho Canvas capability surface",a
   assert.equal(htmlWidgetSchema.required.includes("html"),true);
   assert.equal(diagramWidgetSchema.required.includes("source"),true);
   assert.equal(diagramWidgetSchema.required.includes("sourceFormat"),true);
-  const canvasAgentRuntime=read("src/server/canvas-agent/runtime.mjs");
+  const canvasAgentRuntime=read("src/server/canvas-agent/runtime.mjs"),canvasAgentCliAdapter=read("src/server/canvas-agent/cli-adapter.mjs"),modelContextIntegration=`${canvasAgentRuntime}\n${canvasAgentCliAdapter}`;
   assert.match(canvasAgentRuntime,/const createVisualExplainer = defineTool\([\s\S]*name:'canvas_create_visual_explainer'/);
   assert.match(canvasAgentRuntime,/const updateVisualExplainer = defineTool\([\s\S]*name:'canvas_update_visual_explainer'/);
   assert.match(canvasAgentRuntime,/do not expose new create\/update entry points to Canvas Agent/);
+  for(const forbidden of ["prompt_cache_key","promptCacheKey","cache_control","cacheRetention","cacheBreakpoint","suppressRuntimeContext","rewriteHistory","replaceHistory"]){
+    assert.equal(modelContextIntegration.includes(forbidden),false,`${forbidden} must remain Harness-owned and absent from the PenEcho integration`);
+  }
   assert.equal(schemaText.includes("resize_object"),false);
   assert.equal(schemaText.includes("animate_scene"),false);
   for (const forbidden of ["bash","run_bash","read_file","write_file","github","web_search"]) assert.equal(visible.includes(forbidden),false);
@@ -992,17 +1195,49 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   fs.mkdirSync(projectCandidate);
   const projectDirectory=fs.realpathSync(projectCandidate);
   fs.writeFileSync(path.join(projectDirectory,"inside.txt"),"inside\n");
+  fs.writeFileSync(path.join(projectDirectory,"long.txt"),Array.from({length:2101},(_,index)=>`line ${index+1}`).join("\n"));
+  fs.writeFileSync(path.join(projectDirectory,"wide.txt"),Array.from({length:80},(_,index)=>`${index+1}-${"x".repeat(1000)}`).join("\n"));
   const outsidePath=path.join(stateDirectory,"outside.txt");
   fs.writeFileSync(outsidePath,"outside secret\n");
-  fs.writeFileSync(path.join(projectDirectory,"table.csv"),"name,value\nPenEcho,5\n");
-  const ExcelJS=require("exceljs"),workbook=new ExcelJS.Workbook(),worksheet=workbook.addWorksheet("Summary");
-  worksheet.addRows([["name","value"],["PenEcho",5]]);
-  await workbook.xlsx.writeFile(path.join(projectDirectory,"table.xlsx"));
-  const JSZip=require("jszip"),wordArchive=new JSZip();
+  const spreadsheetRows=[
+    `<row r="1"><c r="A1" t="inlineStr"><is><t>name</t></is></c><c r="B1" t="inlineStr"><is><t>value</t></is></c></row>`,
+    `<row r="2"><c r="A2" t="inlineStr"><is><t>PenEcho</t></is></c><c r="B2"><v>5</v></c></row>`,
+    ...Array.from({length:248},(_,index)=>{const row=index+3;return `<row r="${row}"><c r="A${row}" t="inlineStr"><is><t>Item ${row}</t></is></c><c r="B${row}"><v>${row}</v></c></row>`;}),
+  ].join("");
+  fs.writeFileSync(path.join(projectDirectory,"table.csv"),["name,value","PenEcho,5",...Array.from({length:248},(_,index)=>`Item ${index+3},${index+3}`)].join("\n"));
+  const JSZip=require("jszip"),spreadsheetNamespace="http://schemas.openxmlformats.org/spreadsheetml/2006/main",spreadsheetArchive=new JSZip(),spreadsheetXml={
+    workbook:`<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="${spreadsheetNamespace}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Summary" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    worksheet:`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="${spreadsheetNamespace}"><sheetData>${spreadsheetRows}</sheetData></worksheet>`,
+  };
+  spreadsheetArchive.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+  spreadsheetArchive.folder("_rels").file(".rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+  spreadsheetArchive.folder("xl").file("workbook.xml",spreadsheetXml.workbook).folder("_rels").file("workbook.xml.rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`);
+  spreadsheetArchive.folder("xl").folder("worksheets").file("sheet1.xml",spreadsheetXml.worksheet);
+  const spreadsheetBytes=await spreadsheetArchive.generateAsync({type:"nodebuffer",compression:"DEFLATE"});
+  fs.writeFileSync(path.join(projectDirectory,"table.xlsx"),spreadsheetBytes);
+  const prefixSpreadsheetTags=xml=>xml.replace(`xmlns="${spreadsheetNamespace}"`,`xmlns:x="${spreadsheetNamespace}"`).replace(/<(\/?)(workbook|sheets|sheet|worksheet|sheetData|row|c|is|t|v)(?=[\s>])/g,"<$1x:$2"),
+    prefixedArchive=await JSZip.loadAsync(spreadsheetBytes),prefixedWorkbookXml=prefixSpreadsheetTags(spreadsheetXml.workbook),prefixedWorksheetXml=prefixSpreadsheetTags(spreadsheetXml.worksheet);
+  assert.notEqual(prefixedWorkbookXml,spreadsheetXml.workbook,"the compatibility fixture must namespace-prefix workbook tags");
+  prefixedArchive.file("xl/workbook.xml",prefixedWorkbookXml).file("xl/worksheets/sheet1.xml",prefixedWorksheetXml);
+  fs.writeFileSync(path.join(projectDirectory,"prefixed.xlsx"),await prefixedArchive.generateAsync({type:"nodebuffer",compression:"DEFLATE"}));
+  const invalidSpreadsheetArchive=await JSZip.loadAsync(spreadsheetBytes);
+  invalidSpreadsheetArchive.file("xl/workbook.xml","<workbook");
+  fs.writeFileSync(path.join(projectDirectory,"invalid.xlsx"),await invalidSpreadsheetArchive.generateAsync({type:"nodebuffer",compression:"DEFLATE"}));
+  const wordArchive=new JSZip(),wordParagraphs=["PenEcho Word reader",...Array.from({length:249},(_,index)=>`Word line ${index+2}`)].map(value=>`<w:p><w:r><w:t>${value}</w:t></w:r></w:p>`).join("");
   wordArchive.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
   wordArchive.folder("_rels").file(".rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
-  wordArchive.folder("word").file("document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>PenEcho Word reader</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`);
+  wordArchive.folder("word").file("document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${wordParagraphs}<w:sectPr/></w:body></w:document>`);
   fs.writeFileSync(path.join(projectDirectory,"notes.docx"),await wordArchive.generateAsync({type:"nodebuffer",compression:"DEFLATE"}));
+  const presentationArchive=new JSZip(),presentationNamespace="http://schemas.openxmlformats.org/presentationml/2006/main",drawingNamespace="http://schemas.openxmlformats.org/drawingml/2006/main",officeRelationshipNamespace="http://schemas.openxmlformats.org/officeDocument/2006/relationships",packageRelationshipNamespace="http://schemas.openxmlformats.org/package/2006/relationships";
+  presentationArchive.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/></Types>`);
+  presentationArchive.folder("ppt").file("presentation.xml",`<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="${presentationNamespace}" xmlns:r="${officeRelationshipNamespace}"><p:sldIdLst><p:sldId id="256" r:id="rId1"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst></p:presentation>`)
+    .folder("_rels").file("presentation.xml.rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${packageRelationshipNamespace}"><Relationship Id="rId1" Type="${officeRelationshipNamespace}/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="${officeRelationshipNamespace}/slide" Target="slides/slide2.xml"/></Relationships>`);
+  presentationArchive.folder("ppt").folder("slides").file("slide1.xml",`<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:p="${presentationNamespace}" xmlns:d="${drawingNamespace}"><p:cSld><p:spTree><p:sp><p:txBody><d:p><d:r><d:t>Quarterly update</d:t></d:r></d:p><d:p><d:r><d:t>Revenue grew</d:t></d:r><d:br/><d:r><d:t>Inventory stable</d:t></d:r></d:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`)
+    .file("slide2.xml",`<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:p="${presentationNamespace}" xmlns:a="${drawingNamespace}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Next steps</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`)
+    .folder("_rels").file("slide1.xml.rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${packageRelationshipNamespace}"><Relationship Id="rIdNotes" Type="${officeRelationshipNamespace}/notesSlide" Target="../notesSlides/notesSlide1.xml"/><Relationship Id="rIdImage" Type="${officeRelationshipNamespace}/image" Target="../media/image1.png"/></Relationships>`);
+  presentationArchive.folder("ppt").folder("notesSlides").file("notesSlide1.xml",`<?xml version="1.0" encoding="UTF-8"?><p:notes xmlns:p="${presentationNamespace}" xmlns:d="${drawingNamespace}"><p:cSld><p:spTree><p:sp><p:txBody><d:p><d:r><d:t>Discuss regional performance</d:t></d:r></d:p><d:p><d:fld id="{1}" type="slidenum"><d:t>1</d:t></d:fld></d:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`);
+  presentationArchive.folder("ppt").folder("media").file("image1.png",Buffer.from([0x89,0x50,0x4e,0x47]));
+  fs.writeFileSync(path.join(projectDirectory,"slides.pptx"),await presentationArchive.generateAsync({type:"nodebuffer",compression:"DEFLATE"}));
   fs.writeFileSync(path.join(projectDirectory,"sample.pdf"),minimalPdf("PenEcho PDF reader"));
   t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
   const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),projectId="local-1234567890abcdef12345678",
@@ -1032,6 +1267,19 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   const signal=new AbortController().signal,readInside=await host.context.tools.execute({callId:"read-inside",name:"read",arguments:{file_path:"inside.txt"},agent:session.handle.agent,signal});
   assert.equal(readInside.isError,false,JSON.stringify(readInside));
   assert.match(readInside.content[0].text,/inside/);
+  const readLong=await host.context.tools.execute({callId:"read-long",name:"read",arguments:{file_path:"long.txt"},agent:session.handle.agent,signal});
+  assert.equal(readLong.isError,false,JSON.stringify(readLong));
+  assert.match(readLong.content[0].text,/2000: line 2000[\s\S]*Showing lines 1-2000 of 2101[\s\S]*offset=2001/);
+  assert.doesNotMatch(readLong.content[0].text,/2001: line 2001/);
+  const readLongTail=await host.context.tools.execute({callId:"read-long-tail",name:"read",arguments:{file_path:"long.txt",offset:2001},agent:session.handle.agent,signal});
+  assert.equal(readLongTail.isError,false,JSON.stringify(readLongTail));
+  assert.match(readLongTail.content[0].text,/2001: line 2001[\s\S]*2101: line 2101[\s\S]*End of file - total 2101 lines/);
+  const readWide=await host.context.tools.execute({callId:"read-wide",name:"read",arguments:{file_path:"wide.txt"},agent:session.handle.agent,signal});
+  assert.equal(readWide.isError,false,JSON.stringify(readWide));
+  assert.match(readWide.content[0].text,/Output capped[\s\S]*Use offset=\d+ to continue/);
+  const oversizedReadLimit=await host.context.tools.execute({callId:"read-limit",name:"read",arguments:{file_path:"inside.txt",limit:2001},agent:session.handle.agent,signal});
+  assert.equal(oversizedReadLimit.isError,true);
+  assert.match(oversizedReadLimit.content[0].text,/limit must be less than or equal to 2000/);
   const readOutside=await host.context.tools.execute({callId:"read-outside",name:"read",arguments:{file_path:outsidePath},agent:session.handle.agent,signal});
   assert.equal(readOutside.isError,true);
   assert.doesNotMatch(readOutside.content[0].text,/outside secret/);
@@ -1044,13 +1292,31 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   assert.equal(session.handle.agent.ctx.tools.schemas(session.handle.agent).some(tool=>tool.name==="read_document"),true);
   const document=await host.context.tools.execute({callId:"read-csv",name:"read_document",arguments:{file_path:"table.csv"},agent:session.handle.agent,signal});
   assert.equal(document.isError,false,JSON.stringify(document));
-  assert.match(document.content[0].text,/name\tvalue[\s\S]*PenEcho\t5/);
+  assert.match(document.content[0].text,/name\tvalue[\s\S]*PenEcho\t5[\s\S]*250: Item 250\t250[\s\S]*End of file - total 250 rows/);
   const spreadsheet=await host.context.tools.execute({callId:"read-xlsx",name:"read_document",arguments:{file_path:"table.xlsx",sheet:"Summary"},agent:session.handle.agent,signal});
   assert.equal(spreadsheet.isError,false,JSON.stringify(spreadsheet));
-  assert.match(spreadsheet.content[0].text,/Sheet: Summary[\s\S]*PenEcho\t5/);
+  assert.match(spreadsheet.content[0].text,/Sheet: Summary[\s\S]*PenEcho\t5[\s\S]*250: Item 250\t250[\s\S]*End of file - total 250 rows/);
+  const prefixedSpreadsheet=await host.context.tools.execute({callId:"read-prefixed-xlsx",name:"read_document",arguments:{file_path:"prefixed.xlsx",sheet:"Summary"},agent:session.handle.agent,signal});
+  assert.equal(prefixedSpreadsheet.isError,false,JSON.stringify(prefixedSpreadsheet));
+  assert.match(prefixedSpreadsheet.content[0].text,/Sheet: Summary[\s\S]*Available sheets: Summary[\s\S]*PenEcho\t5/);
+  const invalidSpreadsheet=await host.context.tools.execute({callId:"read-invalid-xlsx",name:"read_document",arguments:{file_path:"invalid.xlsx"},agent:session.handle.agent,signal});
+  assert.equal(invalidSpreadsheet.isError,true);
+  assert.match(invalidSpreadsheet.content[0].text,/XLSX workbook could not be parsed[\s\S]*standard XLSX[\s\S]*CSV/);
+  assert.doesNotMatch(invalidSpreadsheet.content[0].text,/Cannot read properties|node_modules|\/Users\//);
   const word=await host.context.tools.execute({callId:"read-docx",name:"read_document",arguments:{file_path:"notes.docx"},agent:session.handle.agent,signal});
   assert.equal(word.isError,false,JSON.stringify(word));
-  assert.match(word.content[0].text,/PenEcho Word reader/);
+  assert.match(word.content[0].text,/PenEcho Word reader[\s\S]*Word line 250[\s\S]*End of file - total 500 lines/);
+  const presentation=await host.context.tools.execute({callId:"read-pptx",name:"read_document",arguments:{file_path:"slides.pptx"},agent:session.handle.agent,signal});
+  assert.equal(presentation.isError,false,JSON.stringify(presentation));
+  assert.match(presentation.content[0].text,/Presentation: slides\.pptx[\s\S]*Slides: 2[\s\S]*Slide 1[\s\S]*Quarterly update[\s\S]*Revenue grew[\s\S]*Inventory stable[\s\S]*Speaker notes:[\s\S]*Discuss regional performance[\s\S]*Embedded images: 1[\s\S]*Slide 2[\s\S]*Next steps/);
+  assert.doesNotMatch(presentation.content[0].text,/\n1\n/,"generated slide-number fields must not leak from speaker notes");
+  const secondSlide=await host.context.tools.execute({callId:"read-pptx-slide",name:"read_document",arguments:{file_path:"slides.pptx",slide:2},agent:session.handle.agent,signal});
+  assert.equal(secondSlide.isError,false,JSON.stringify(secondSlide));
+  assert.match(secondSlide.content[0].text,/Slides: 2[\s\S]*Slide 2[\s\S]*Next steps/);
+  assert.doesNotMatch(secondSlide.content[0].text,/Quarterly update/);
+  const missingSlide=await host.context.tools.execute({callId:"read-pptx-missing-slide",name:"read_document",arguments:{file_path:"slides.pptx",slide:3},agent:session.handle.agent,signal});
+  assert.equal(missingSlide.isError,true);
+  assert.match(missingSlide.content[0].text,/slide 3[\s\S]*2-slide presentation/);
   const pdf=await host.context.tools.execute({callId:"read-pdf",name:"read_document",arguments:{file_path:"sample.pdf",page:1,render_page:true},agent:session.handle.agent,signal});
   assert.equal(pdf.isError,false,JSON.stringify(pdf));
   assert.match(pdf.content[0].text,/PenEcho PDF reader/);
@@ -1087,6 +1353,7 @@ test("Canvas Agent single-file scope exposes only its exact read-only reader",as
   assert.equal(messages[0].payload.project.path,"selected.txt");
   assert.equal(JSON.stringify(messages[0].payload).includes(root),false,"ready must not disclose the host path");
   assert.equal(messages[0].payload.accessMode,"controlled","single files remain read-only even if the client asks for Full Access");
+  assert.deepEqual(host.activeProjectIds(),[projectId]);
   const signal=new AbortController().signal,readResult=await host.context.tools.execute({callId:"read-selected",name:"read",arguments:{file_path:"selected.txt"},agent:session.handle.agent,signal});
   assert.equal(readResult.isError,false,JSON.stringify(readResult));
   assert.match(readResult.content[0].text,/selected content/);
@@ -1095,7 +1362,30 @@ test("Canvas Agent single-file scope exposes only its exact read-only reader",as
   assert.match(sibling.content[0].text,/Only the selected file/);
   assert.equal(fs.readFileSync(siblingPath,"utf8"),"private sibling\n");
   await host.dispose();disposed=true;
+  assert.deepEqual(host.activeProjectIds(),[]);
   assert.equal(fs.existsSync(path.join(stateDirectory,"canvas-agent-runtime",session.id)),false,"ephemeral session runtime must be removed");
+});
+
+test("Canvas Agent reads an arbitrary file only through a bounded non-executing binary reader",async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-binary-tools-")),stateDirectory=path.join(root,"state"),files=path.join(root,"files");
+  fs.mkdirSync(files,{recursive:true});
+  const selectedPath=path.join(files,"sample.pdf"),siblingPath=path.join(files,"sibling.pdf");
+  fs.writeFileSync(selectedPath,Buffer.from([0x7f,0x45,0x4c,0x46,0,1,2,3,0x50,0x65,0x6e,0x45,0x63,0x68,0x6f]));
+  fs.writeFileSync(siblingPath,Buffer.from("private sibling"));
+  const projectId="file-00112233445566778899aabb",project={id:projectId,kind:"file",source:"upload",name:"sample.pdf",displayPath:"sample.pdf",path:fs.realpathSync(selectedPath),reader:"binary",bytes:fs.statSync(selectedPath).size},
+    connection={id:"binary-test",provider:"api",name:"Binary Test",apiFormat:"openai",apiUrl:"http://127.0.0.1:9/v1",apiModel:"test-model",apiKey:"test-key",effort:"medium"},
+    {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),host=new CanvasHarnessHost({stateDirectory,rootDirectory:ROOT,resolveConnection:id=>id===connection.id?connection:null,listConnections:()=>[connection],resolveProject:async id=>id===projectId?project:null});
+  t.after(async()=>{await host.dispose();fs.rmSync(root,{recursive:true,force:true});});
+  const session=await host.connect({clientId:"binary-client",connectionId:connection.id,projectId,binding:{},send:()=>{}}),visible=session.handle.agent.ctx.tools.schemas(session.handle.agent).map(tool=>tool.name);
+  assert.equal(visible.includes("read_binary"),true);
+  for(const forbidden of ["read","read_image","read_document","read_database","load_project_plugin","write","edit","bash"])assert.equal(visible.includes(forbidden),false,forbidden);
+  const signal=new AbortController().signal,result=await host.context.tools.execute({callId:"read-binary",name:"read_binary",arguments:{file_path:"sample.pdf",offset:0,length:15},agent:session.handle.agent,signal});
+  assert.equal(result.isError,false,JSON.stringify(result));
+  assert.match(result.content[0].text,/7f 45 4c 46 00 01 02 03 50 65 6e 45 63 68 6f/);
+  assert.match(result.content[0].text,/\|\.ELF\.\.\.\.PenEcho\|/);
+  const sibling=await host.context.tools.execute({callId:"read-binary-sibling",name:"read_binary",arguments:{file_path:"sibling.pdf"},agent:session.handle.agent,signal});
+  assert.equal(sibling.isError,true);
+  assert.match(sibling.content[0].text,/Only the selected file/);
 });
 
 test("Canvas Agent reads a selected SQLite database with one bounded read-only tool",async t=>{
@@ -1183,21 +1473,18 @@ test("Canvas Agent pins a narrow Harness dependency and runtime plugin allowlist
   }
 });
 
-test("Canvas Agent browser, iPad, and desktop pickers match the server reader extensions",()=>{
+test("Canvas Agent unified attachment picker accepts any file while the native linked-file picker stays specialized",()=>{
   const store=read("src/server/canvas-agent/project-store.js"),source=read("src/client/app/canvas-agent-runtime.js"),html=read("public/index.html"),desktop=read("desktop/main.js"),
     quoted=value=>[...String(value||"").matchAll(/"([^"]+)"/g)].map(match=>match[1]),
     serverBlocks=[...store.matchAll(/const (?:DOCUMENT|IMAGE|DATABASE|TEXT)_EXTENSIONS = new Set\(\[([\s\S]*?)\]\);/g)],
     expected=[...new Set(serverBlocks.flatMap(match=>quoted(match[1])))].sort(),
-    browser=quoted(source.match(/CANVAS_AGENT_PROJECT_FILE_EXTENSIONS = new Set\(\[([\s\S]*?)\]\),/)?.[1]),
-    native=quoted(desktop.match(/name:"Readable files",\s*extensions:\[([\s\S]*?)\],\s*\},/)?.[1]).map(extension=>`.${extension}`),
-    accepted=String(html.match(/id="canvasAgentProjectUploadInput"[^>]*accept="([^"]+)"/)?.[1]||"").split(",").filter(Boolean);
+    native=quoted(desktop.match(/name:"Readable files",\s*extensions:\[([\s\S]*?)\],\s*\},/)?.[1]).map(extension=>`.${extension}`);
   assert.equal(serverBlocks.length,4);
-  assert.deepEqual([...new Set(browser)].sort(),expected);
   assert.deepEqual([...new Set(native)].sort(),expected);
-  assert.deepEqual([...new Set(accepted)].sort(),expected);
-  assert.equal(browser.length,new Set(browser).size);
   assert.equal(native.length,new Set(native).size);
-  assert.equal(accepted.length,new Set(accepted).size);
+  assert.match(html,/id="canvasAgentFileInput"[^>]*type="file"[^>]*\smultiple(?:\s|=|>)/);
+  assert.doesNotMatch(html,/id="canvasAgentFileInput"[^>]*\saccept=/);
+  assert.doesNotMatch(source,/CANVAS_AGENT_PROJECT_FILE_EXTENSIONS|canvasAgentProjectFileSupported/);
   assert.doesNotMatch(desktop,/name:"All files"[\s\S]*?extensions:\["\*"\]/);
 });
 
@@ -1210,10 +1497,10 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.doesNotMatch(readSource,/Math\.min\(start\+199/);
   assert.match(readSource,/maximum=200000[\s\S]*contentFormat:"nl -ba -w6 -s TAB"[\s\S]*originalEndsWithNewline/);
   assert.match(runtime,/The default range is 200 lines from startLine; an explicit endLine may request a larger range, while returned content is capped at 200,000 characters\./);
-  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProject","canvasAgentProjectPopover","canvasAgentProjectList","canvasAgentProjectAddFile","canvasAgentProjectUpload","canvasAgentProjectUploadInput","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentSize","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentImageInput","canvasAgentInput","canvasAgentInputHint","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
-  for(const removed of ["canvasAgentProjectAdd","canvasAgentProjectAccess","canvasAgentProjectControlled","canvasAgentProjectFull"])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));
-  assert.match(html,/id="canvasAgentProjectUploadInput"[^>]*accept="[^"]*\.pdf[^"]*\.docx[^"]*\.xlsx[^"]*\.sqlite3[^"]*\.webp[^"]*\.yaml[^"]*\.ts[^"]*"/);
-  assert.doesNotMatch(html,/id="canvasAgentProjectUploadInput"[^>]*\smultiple(?:\s|=|>)/);
+  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProject","canvasAgentProjectPopover","canvasAgentProjectList","canvasAgentProjectActions","canvasAgentProjectAddFile","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentSize","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentFileInput","canvasAgentInput","canvasAgentInputHint","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
+  for(const removed of ["canvasAgentProjectAdd","canvasAgentProjectAccess","canvasAgentProjectControlled","canvasAgentProjectFull","canvasAgentProjectUpload","canvasAgentProjectUploadInput","canvasAgentImageInput"])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));
+  assert.match(html,/id="canvasAgentFileInput"[^>]*type="file"[^>]*\smultiple(?:\s|=|>)/);
+  assert.doesNotMatch(html,/id="canvasAgentFileInput"[^>]*\saccept=/);
   assert.match(html,/id="canvasAgentInput"[^>]*aria-describedby="canvasAgentInputHint"/);
   assert.match(source,/runtime !== "viewer"/);
   assert.match(source,/runtime === "cloud"\s*\?\s*"\/api\/v1\/remote-canvas\/canvas-agent"\s*:\s*"\/api\/canvas-agent\/socket"/);
@@ -1223,12 +1510,27 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(functionSource(source,"canvasAgentAddProjectFile"),/pickerToken:picked\.pickerToken/);
   assert.match(source,/projectId:canvasAgent\.projectId[\s\S]*?accessMode:canvasAgentEffectiveAccessMode\(\)/);
   assert.match(source,/CANVAS_AGENT_PROJECT_UPLOAD_LIMIT = 32 \* 1024 \* 1024/);
-  assert.match(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentProjectFileBase64\(file\)[\s\S]*?\/api\/canvas-agent\/files[\s\S]*?finally\{data="";canvasAgentProjectUploadInput\.value=""/);
-  assert.match(functionSource(source,"canvasAgentUploadProjectFile"),/selectionRevision=canvasAgent\.projectSelectionRevision[\s\S]*?expectedRevision:selectionRevision/);
+  assert.match(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentProjectFileBase64\(file\)[\s\S]*?\/api\/canvas-agent\/files[\s\S]*?mediaType:String\(file\.type\|\|""\)[\s\S]*?finally\{data="";canvasAgentFileInput\.value=""/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentSelectProject|canvasAgentSubmitMessage|canvasAgentFilePrompt/);
   assert.doesNotMatch(functionSource(source,"canvasAgentUploadProjectFile"),/localStorage|sessionStorage|indexedDB/);
-  assert.match(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentProjectUploadInput\.value="";canvasAgentSetProjectError\(t\("canvasAgentFileUnsupported"\)\)/);
-  assert.doesNotMatch(functionSource(source,"canvasAgentUploadProjectFile"),/mediaType:file\.type/);
-  assert.match(functionSource(source,"canvasAgentRenderProjects"),/canvasAgentFileReadOnly[\s\S]*?canvasAgentProjectUpload\.hidden=canPickFile/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentFileUnsupported|projectFileSupported/);
+  assert.match(functionSource(source,"canvasAgentRenderProjects"),/canvasAgentFileReadOnly[\s\S]*?canvasAgentProjectActions\.hidden=!canPickFile/);
+  assert.match(functionSource(source,"canvasAgentHandleFiles"),/canvasAgentFileFingerprint[\s\S]*?canvasAgentImageFile[\s\S]*?projectFiles\.length!==1\|\|images\.length[\s\S]*?canvasAgentAddProjectAttachment\(projectFiles\[0\]\)[\s\S]*?canvasAgentAddAttachments\(images\)/);
+  assert.match(functionSource(source,"canvasAgentAddProjectAttachment"),/existingFile\?\.fingerprint===fingerprint[\s\S]*?canvasAgentUploadProjectFile\(file\)[\s\S]*?kind:"file"[\s\S]*?projectId:project\.id[\s\S]*?deleteOnRemove:project\.reused!==true/);
+  assert.match(functionSource(source,"canvasAgentRenderAttachments"),/attachment\.kind==="file"[\s\S]*?canvasAgentRemoveAttachment[\s\S]*?canvasAgentCreateFilePreview/);
+  assert.match(functionSource(source,"canvasAgentRemoveAttachment"),/attachment\.kind!=="file"[\s\S]*?method:"DELETE"/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentRemoveAttachment"),/confirm/);
+  assert.match(functionSource(source,"canvasAgentSubmitMessage"),/projectAttachment&&!text[\s\S]*?canvasAgentFileInstructionRequired[\s\S]*?canvasAgentSelectProject\(projectAttachment\.projectId\)[\s\S]*?displayAttachments=projectAttachment\?\[projectAttachment\]:outgoingAttachments/);
+  assert.match(functionSource(source,"canvasAgentNormalizeHistoryFile"),/file-\[0-9a-f\]\{24\}[\s\S]*?CANVAS_AGENT_PROJECT_UPLOAD_LIMIT[\s\S]*?projectId/);
+  assert.match(functionSource(source,"canvasAgentNormalizeHistoryItem"),/item\.files[\s\S]*?canvasAgentNormalizeHistoryFile[\s\S]*?files\.length\?\{files\}/);
+  assert.match(source,/function canvasAgentRow\([\s\S]*?canvasAgentNormalizeHistoryFile[\s\S]*?files\.length\?\{files\}/);
+  assert.match(source,/function canvasAgentCreateFilePreview\([\s\S]*?openProjectFile[\s\S]*?dblclick[\s\S]*?canvasAgentOpenProjectFile/);
+  assert.match(functionSource(source,"canvasAgentAppendMessageElement"),/item\.files[\s\S]*?fileAttachments[\s\S]*?canvasAgentCreateFilePreview/);
+  assert.doesNotMatch(source,/canvasAgentFilePrompt|canvasAgentFileOnly|Analyze copied file/);
+  assert.match(core,/canvasAgentAttach: "Attach file"[\s\S]*?canvasAgentAttachTitle: "Attach one file or up to five images"/);
+  assert.match(zh,/canvasAgentAttach: "添加文件"[\s\S]*?canvasAgentAttachTitle: "添加一个文件或最多五张图片"/);
+  assert.match(core,/canvasAgentServerFolders: "Create project from host folders"/);
+  assert.match(zh,/canvasAgentServerFolders: "从主机文件夹创建项目"/);
   assert.match(functionSource(source,"canvasAgentHandleMessage"),/projectCapabilities[\s\S]*?typeof capabilities\.bash==="boolean"[\s\S]*?typeof capabilities\.readOnly==="boolean"/);
   assert.match(functionSource(source,"canvasAgentProjectDisplayPath"),/project\?\.displayPath\|\|project\?\.name/);
   assert.doesNotMatch(functionSource(source,"canvasAgentUpdateProjectButton"),/project\.path/);
@@ -1305,12 +1607,22 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(runtime,/projected\.kind !== 'assistant_delta'/);
   assert.match(runtime,/verbatim transcription[\s\S]*fenced Markdown code block[\s\S]*appropriate language tag[\s\S]*text for prose or handwriting transcription/);
   assert.match(runtime,/name:'tavily_search'/);
+  assert.doesNotMatch(runtime,/name:'load_search_skill'/);
+  assert.match(runtime,/name:'research_search'/);
+  assert.match(runtime,/name:'github_repository_search'/);
+  assert.match(runtime,/name:'duckduckgo_search'/);
+  assert.match(runtime,/name:'stock_symbol_search'/);
+  assert.match(runtime,/name:'stock_market_data'/);
+  assert.match(runtime,/for \(const factory of \[[^\]]*researchSearchTool, githubRepositorySearchTool, duckDuckGoSearchTool, stockSymbolSearchTool, stockMarketDataTool\]\)/);
   assert.match(runtime,/if \(!session\.webSearch\?\.enabled\) throw new Error\('Internet search is off\./);
   assert.match(runtime,/authorization:`Bearer \$\{apiKey\}`/);
   assert.doesNotMatch(runtime,/include_raw_content:true/);
   assert.match(source,/canvasAgentHead\.addEventListener\("pointerdown",canvasAgentBeginPanelDrag\)/);
   assert.match(source,/\["pointerdown","pointermove","pointerup","pointercancel","wheel"\][\s\S]*?canvasAgentPanel\.addEventListener[\s\S]*?stopPropagation/);
-  assert.match(source,/document\.addEventListener\("paste"[\s\S]*?stopImmediatePropagation\(\)[\s\S]*?canvasAgentAddAttachments/);
+  assert.match(source,/document\.addEventListener\("paste"[\s\S]*?canvasAgentClipboardFiles[\s\S]*?hasClipboardFile[\s\S]*?stopImmediatePropagation\(\)[\s\S]*?canvasAgentDesktopClipboardFile/);
+  assert.match(functionSource(source,"canvasAgentClipboardFiles"),/dataTransfer\?\.files[\s\S]*?item\.kind==="file"[\s\S]*?getAsFile/);
+  assert.match(functionSource(source,"canvasAgentDesktopClipboardFile"),/readClipboardFile[\s\S]*?atob\(payload\.data\)[\s\S]*?new File/);
+  assert.match(functionSource(source,"canvasAgentSubmitMessage"),/textOverride[\s\S]*?includeDraftMedia[\s\S]*?canvasAgentSendRequest/);
   assert.match(source,/canvasAgentTranscript\.addEventListener\("wheel"[\s\S]*?followLatest = false/);
   assert.match(functionSource(source,"canvasAgentPrepareInkAttachment"),/getImageData[\s\S]*canvasAgentPrepareAttachment[\s\S]*canvas-agent-handwriting\.png/);
   assert.match(source,/canvasAgentInkCanvas\.addEventListener\("pointerdown",canvasAgentInkPointerDown\)/);
@@ -1322,9 +1634,17 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(source,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"[\s\S]*images:outgoingAttachments\.map[\s\S]*canvasAgentClearReferences\(\)/);
   assert.match(source,/document\.createElement\("details"\)[\s\S]*?document\.createElement\("summary"\)/);
   assert.match(functionSource(source,"canvasAgentRenderMessageBody"),/canvasAgentFencedSegments[\s\S]*canvas-agent-copy-block-button[\s\S]*writeClipboardText\(segment\.text\)/);
-  assert.match(source,/target\.messageText \+= event\.text[\s\S]*canvasAgentRenderMessageBody\(target\.body,target\.messageText,"assistant"\)/);
+  assert.match(source,/target\.messageText = canvasAgentMessageText\(target\.messageText \+ \(event\.text \|\| ""\)\)[\s\S]*canvasAgentRenderMessageBody\(target\.body,target\.messageText,"assistant",\{final:false\}\)/);
+  assert.match(source,/assistant_message[\s\S]*?if\(typeof event\.text==="string"\)target\.messageText=canvasAgentMessageText\(event\.text\)[\s\S]*?canvasAgentRenderMessageBody\(target\.body,target\.messageText,"assistant",\{final:true\}\)/);
+  assert.match(functionSource(source,"canvasAgentAppendMarkdown"),/createElement\("h3"\)[\s\S]*createElement\(orderedList\?"ol":"ul"\)[\s\S]*createElement\("blockquote"\)/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentRenderMessageBody"),/innerHTML/);
   assert.match(source,/querySelectorAll\("\.canvas-agent-copy-block"\)[\s\S]*canvasAgentBlockCopied[\s\S]*canvasAgentBlockCopyFailed/);
-  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock"]) assert.match(dictionary,new RegExp(`${key}:`));
+  assert.match(functionSource(source,"canvasAgentCopyAssistantMessage"),/target\?\.messageText[\s\S]*?historyItem\.copyable!==true[\s\S]*?writeClipboardText\(text\)/);
+  assert.match(functionSource(source,"canvasAgentAppendMessageElement"),/item\.role==="assistant"[\s\S]*?canvas-agent-message-copy[\s\S]*?item\.copyable===true/);
+  assert.match(functionSource(source,"canvasAgentMarkTurnSummaryCopyable"),/toolRows\.values[\s\S]*?assistantRows\.entries[\s\S]*?lastToolStep[\s\S]*?historyItem\?\.final!==false[\s\S]*?candidates\.at\(-1\)[\s\S]*?canvasAgentSetAssistantCopyReady\(target,true\)/);
+  assert.match(source,/function canvasAgentHandleEvent[\s\S]*?assistant_delta[\s\S]*?final:false[\s\S]*?assistant_message[\s\S]*?turn_end[\s\S]*?reason\?\.kind==="completed"[\s\S]*?canvasAgentMarkTurnSummaryCopyable\(event\.turn\)/);
+  assert.match(css,/\.canvas-agent-message-actions\[hidden\]\s*\{\s*display: none/);
+  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCopyResponse","canvasAgentResponseCopied","canvasAgentResponseCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock"]) assert.match(dictionary,new RegExp(`${key}:`));
   assert.match(source,/canvasAgentToolInspect[\s\S]*?canvasAgentToolSetView/);
   assert.match(source,/CANVAS_AGENT_HISTORY_KEY = "penecho-canvas-agent-history-v1"/);
   assert.match(source,/CANVAS_AGENT_HISTORY_LIMIT = 5/);
@@ -1459,6 +1779,50 @@ test("Canvas Agent browser compression keeps reducing or rejects instead of retu
     assert.deepEqual(attempted,["image/webp","image/png"]);
     assert.equal(result.mediaType,"image/png");
   }
+});
+
+test("Canvas Agent validates capture delivery and browser target errors without widening ordinary canvas tools",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),css=read("public/style.css"),
+    policy={maxBytes:1200*1024,maxLongEdge:1440},valid={
+      attachment:{name:"../penecho canvas.png",mediaType:"image/png",bytes:4,width:2,height:2,dataUrl:"data:image/png;base64,AAAAAA=="}
+    },
+    context={atob:value=>Buffer.from(value,"base64").toString("binary"),canvasClientId:()=>"capture-client",CANVAS_AGENT_DETAIL_CAPTURE_POLICY:policy},
+    normalize=vm.runInNewContext(`(() => { ${functionSource(source,"canvasAgentCaptureAttachment")} return canvasAgentCaptureAttachment; })()`,context),
+    attachment=normalize(valid);
+  assert.equal(attachment.name,"penecho-canvas.png");
+  assert.equal(attachment.kind,"canvas_capture");
+  assert.equal(normalize({attachment:{...valid.attachment,mediaType:"image/webp"}}),null);
+  assert.equal(normalize({attachment:{...valid.attachment,bytes:3}}),null);
+  assert.equal(normalize({attachment:{...valid.attachment,mediaType:"image/jpeg",dataUrl:"data:image/jpeg;base64,abcd"}}),null);
+  assert.equal(normalize({attachment:{...valid.attachment,width:policy.maxLongEdge+1}}),null);
+  assert.equal(normalize({attachment:{...valid.attachment,bytes:policy.maxBytes+1,dataUrl:`data:image/png;base64,${"a".repeat(policy.maxBytes+2)}`}}),null);
+  assert.match(source,/event\.kind === "capture_message"[\s\S]*?canvasAgentRow\("assistant",t\("canvasAgentScreenshot"\),\[attachment\]\)/);
+  assert.match(functionSource(source,"canvasAgentAppendMessageElement"),/link\.download=attachment\.name/);
+  assert.match(css,/\.canvas-agent-message-images\.capture \.canvas-agent-capture-link/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentNormalizeHistoryItem"),/dataUrl/);
+  assert.match(functionSource(source,"canvasAgentAssertToolKeys"),/canvas_capture:\["target","objectId","region","quality","coordinates","deliverToUser"\]/);
+
+  const runtime=read("src/server/canvas-agent/runtime.mjs");
+  assert.match(runtime,/deliverToUser:\{ type:'boolean', default:false \}/);
+  assert.match(runtime,/set deliverToUser=true only when the user explicitly asks for a Widget or current Canvas\/page screenshot/);
+  assert.match(functionSource(runtime,"assertCanvasCaptureDeliveryAllowed"),/deliverToUser !== true[\s\S]*CAPTURE_DELIVERY_INVALID_TARGET[\s\S]*CAPTURE_DELIVERY_CLEAN_CAPTURE_REQUIRED[\s\S]*OBJECT_NOT_FOUND[\s\S]*CAPTURE_DELIVERY_WIDGET_REQUIRED/);
+  assert.match(functionSource(runtime,"emitCanvasCaptureMessage"),/deliverToUser !== true[\s\S]*kind:'capture_message'/);
+  assert.doesNotMatch(functionSource(runtime,"captureCacheKey"),/deliverToUser/);
+
+  const targetContext={
+      viewportRect:()=>({x:0,y:0,w:100,h:80}),
+      canvasAgentContentBounds:()=>({x:10,y:20,w:30,h:40}),
+      canvasAgentValidatedRegion:region=>region?.width>0?region:null,
+      canvasAgentObject:id=>id==="widget-current"?{kind:"widget"}:null,
+      canvasAgentBox:()=>({x:10,y:20,w:30,h:40}),
+      canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
+    },
+    target=vm.runInNewContext(`(() => { ${functionSource(source,"canvasAgentTargetRegion")} return canvasAgentTargetRegion; })()`,targetContext);
+  assert.deepEqual(target({target:"canvas"}),{x:10,y:20,w:30,h:40});
+  assert.deepEqual(target({target:"object",objectId:"widget-current"}),{x:10,y:20,w:30,h:40});
+  assert.throws(()=>target({target:"object",objectId:"widget-stale"}),error=>error.code==="OBJECT_NOT_FOUND"&&error.details.objectId==="widget-stale");
+  assert.throws(()=>target({target:"selection"}),error=>error.code==="INVALID_TARGET"&&error.details.target==="selection");
+  assert.match(functionSource(source,"canvasAgentCapture"),/object\.kind!=="widget"[\s\S]*?DETAIL_TARGET_REQUIRED/);
 });
 
 test("Canvas Agent plans the nearest clear Widget slot outside a crowded viewport and reports focused typography",()=>{

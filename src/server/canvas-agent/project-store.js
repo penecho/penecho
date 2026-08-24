@@ -14,6 +14,7 @@ const PROJECT_HISTORY_TEXT_LIMIT = 20_000;
 const PROJECT_REGISTRY_LIMIT = 100;
 const PROJECT_FILE_LIMIT = 64 * 1024 * 1024;
 const PROJECT_UPLOAD_LIMIT = 32 * 1024 * 1024;
+const PROJECT_UPLOAD_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const PROJECT_ROOT_PATH_LIMIT = 1_024;
 const PROJECT_ROOT_DEPTH_LIMIT = 16;
 const PROJECT_ROOT_ENTRY_LIMIT = 200;
@@ -29,9 +30,11 @@ const PROJECT_HISTORY_FILE = "canvas-agent-history.json";
 const PROJECT_UPLOAD_DIRECTORY = "canvas-agent-files";
 const PROJECT_FILE_HISTORY_DIRECTORY = "canvas-agent-file-history";
 const PROJECT_ROOT_ID_KEY = "canvas-agent-root-id.key";
+const PROJECT_UPLOAD_TEMP_FILE_PATTERN = /^\.upload-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/i;
+const PROJECT_UPLOAD_CONTENT_FILE_PATTERN = /^content(?:\.[^\0-\x1f\x7f/\\:\u202a-\u202e\u2066-\u2069]{0,255})?$/u;
 const HOST_ROOT_DENIED_SEGMENTS = new Set(["appdata", "library"]);
 
-const DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".csv"]);
+const DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".csv", ".pptx"]);
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 const DATABASE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 const TEXT_EXTENSIONS = new Set([
@@ -52,20 +55,7 @@ const TEXT_FILENAMES = new Set([
   ".npmrc", ".nvmrc", ".prettierrc", ".eslintrc",
 ]);
 
-const UPLOAD_MEDIA_TYPES = Object.freeze({
-  ".pdf":new Set(["application/pdf", "application/octet-stream"]),
-  ".docx":new Set(["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", "application/octet-stream"]),
-  ".xlsx":new Set(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip", "application/octet-stream"]),
-  ".csv":new Set(["text/csv", "text/plain", "application/csv", "application/vnd.ms-excel", "application/octet-stream"]),
-  ".png":new Set(["image/png"]),
-  ".jpg":new Set(["image/jpeg"]),
-  ".jpeg":new Set(["image/jpeg"]),
-  ".webp":new Set(["image/webp"]),
-  ".gif":new Set(["image/gif"]),
-  ".db":new Set(["application/vnd.sqlite3", "application/x-sqlite3", "application/octet-stream"]),
-  ".sqlite":new Set(["application/vnd.sqlite3", "application/x-sqlite3", "application/octet-stream"]),
-  ".sqlite3":new Set(["application/vnd.sqlite3", "application/x-sqlite3", "application/octet-stream"]),
-});
+const PROJECT_FILE_READERS = new Set(["text", "image", "document", "database", "binary"]);
 
 function projectError(message, status = 400, code = "project_invalid") {
   return Object.assign(new Error(message), { status, code });
@@ -163,22 +153,9 @@ function projectFileReader(filename) {
   return null;
 }
 
-function validateUploadMediaType(filename, mediaType) {
-  const extension = path.extname(filename).toLowerCase(), normalized = normalizedMediaType(mediaType);
-  if (!normalized) return "";
-  const explicit = UPLOAD_MEDIA_TYPES[extension];
-  if (explicit) {
-    if (!explicit.has(normalized)) throw projectError("The uploaded file type does not match its filename.", 415, "project_file_type_invalid");
-    return normalized;
-  }
-  if (projectFileReader(filename) === "text") {
-    if (normalized.startsWith("text/") || [
-      "application/json", "application/ld+json", "application/xml", "application/yaml", "application/x-yaml",
-      "application/toml", "application/javascript", "application/sql", "application/graphql", "application/octet-stream",
-      "application/x-sh", "image/svg+xml",
-    ].includes(normalized)) return normalized;
-  }
-  throw projectError("The uploaded file type does not match its filename.", 415, "project_file_type_invalid");
+function validateUploadMediaType(_filename, mediaType) {
+  try { return normalizedMediaType(mediaType); }
+  catch { return ""; }
 }
 
 function safeUploadName(input) {
@@ -308,8 +285,12 @@ async function validateUploadContent(filename, bytes) {
   const extension = path.extname(filename).toLowerCase(), reader = projectFileReader(filename);
   if (extension === ".pdf") {
     if (bytes.subarray(0, Math.min(1_024, bytes.length)).indexOf(Buffer.from("%PDF-")) < 0) throw uploadContentError("The uploaded PDF signature is invalid.");
-  } else if (extension === ".docx" || extension === ".xlsx") {
-    const names = await officeZipEntries(bytes), required = extension === ".docx" ? "word/document.xml" : "xl/workbook.xml";
+  } else if ([".docx", ".xlsx", ".pptx"].includes(extension)) {
+    const names = await officeZipEntries(bytes), required = {
+      ".docx":"word/document.xml",
+      ".xlsx":"xl/workbook.xml",
+      ".pptx":"ppt/presentation.xml",
+    }[extension];
     if (!names.has("[Content_Types].xml") || !names.has(required)) {
       throw uploadContentError(`The uploaded ${extension.slice(1).toUpperCase()} is missing required Office content.`);
     }
@@ -331,6 +312,16 @@ async function validateUploadContent(filename, bytes) {
   } else if (reader === "text") {
     validateUtf8Upload(bytes, "text file");
   }
+}
+
+async function uploadedFileReader(filename, bytes) {
+  const specialized = projectFileReader(filename);
+  if (specialized) {
+    try { await validateUploadContent(filename, bytes); return specialized; }
+    catch { return "binary"; }
+  }
+  try { validateUtf8Upload(bytes, "text file"); return "text"; }
+  catch { return "binary"; }
 }
 
 function normalizedRootRelative(input, { allowEmpty = true } = {}) {
@@ -374,8 +365,7 @@ async function regularReadableFile(input, unavailableMessage = "The selected fil
   const handle = await fs.open(canonical, "r").catch(() => null);
   if (!handle) throw projectError("The selected file is not readable.", 403, "project_file_unreadable");
   await handle.close();
-  const reader = projectFileReader(canonical);
-  if (!reader) throw projectError("That file type is not supported.", 415, "project_file_type_invalid");
+  const reader = projectFileReader(canonical) || "binary";
   return { canonical, info, reader };
 }
 
@@ -395,7 +385,7 @@ function normalizedRegistryProject(project) {
 }
 
 class CanvasAgentProjectStore {
-  constructor({ stateDirectory, allowedRoots = [], hostRoots = [] }) {
+  constructor({ stateDirectory, allowedRoots = [], hostRoots = [], logger = null }) {
     if (!stateDirectory) throw new Error("Canvas Agent project storage requires a state directory.");
     this.stateDirectory = path.resolve(stateDirectory);
     this.registryFile = path.join(this.stateDirectory, "canvas-agent-projects.json");
@@ -403,6 +393,7 @@ class CanvasAgentProjectStore {
     this.fileHistoryDirectory = path.join(this.stateDirectory, PROJECT_FILE_HISTORY_DIRECTORY);
     this.allowedRoots = Array.isArray(allowedRoots) ? [...allowedRoots] : [];
     this.hostRoots = Array.isArray(hostRoots) ? [...hostRoots] : [];
+    this.logger = typeof logger === "function" ? logger : null;
     this.rootIdSecretPromise = null;
     this.queue = Promise.resolve();
   }
@@ -590,8 +581,9 @@ class CanvasAgentProjectStore {
     if (project.source !== "upload" || project.kind !== "file" || !PROJECT_FILE_ID_PATTERN.test(project.id)) {
       throw projectError("The uploaded file record is invalid.", 409, "project_upload_identity_invalid");
     }
-    const safeName = safeUploadName(project.name), managedName = String(project.managedName || ""), extension = path.extname(safeName).toLowerCase();
-    if (managedName !== `content${extension}` || !projectFileReader(project.name)) {
+    const safeName = safeUploadName(project.name), managedName = String(project.managedName || ""), extension = path.extname(safeName).toLowerCase(), storedReader = String(project.reader || ""), specializedReader = projectFileReader(safeName),
+      readerMatches = specializedReader ? storedReader === specializedReader || storedReader === "binary" : storedReader === "text" || storedReader === "binary";
+    if (managedName !== `content${extension}` || !PROJECT_FILE_READERS.has(storedReader) || !readerMatches) {
       throw projectError("The uploaded file identity is invalid.", 409, "project_upload_identity_invalid");
     }
     const rootInfo = await fs.lstat(this.uploadDirectory).catch(error => error?.code === "ENOENT" ? null : Promise.reject(error));
@@ -620,7 +612,7 @@ class CanvasAgentProjectStore {
     }
     project.name = safeName;
     project.displayPath = safeName;
-    project.reader = projectFileReader(safeName);
+    project.reader = storedReader;
     project.mediaType = validateUploadMediaType(safeName, project.mediaType);
     return { directory, file, info:fileInfo };
   }
@@ -723,13 +715,128 @@ class CanvasAgentProjectStore {
     return fs.realpath(this.uploadDirectory);
   }
 
-  async upload({ name:inputName, mediaType:inputMediaType, data, bytes } = {}) {
-    const name = safeUploadName(inputName), reader = projectFileReader(name);
-    if (!reader) throw projectError("That file type is not supported.", 415, "project_file_type_invalid");
-    const mediaType = validateUploadMediaType(name, inputMediaType), decoded = decodeCanonicalBase64(data, bytes);
-    await validateUploadContent(name, decoded);
+  async cleanupUploadTemporaryFiles(directory) {
+    if (!directory) return 0;
+    let removed = 0;
+    for (const name of await fs.readdir(directory)) {
+      if (!PROJECT_UPLOAD_TEMP_FILE_PATTERN.test(name)) continue;
+      const candidate = path.join(directory, name), info = await fs.lstat(candidate).catch(error => error?.code === "ENOENT" ? null : Promise.reject(error));
+      if (!info || !info.isFile() || info.isSymbolicLink() || await fs.realpath(candidate) !== candidate) continue;
+      await fs.unlink(candidate);
+      removed += 1;
+    }
+    return removed;
+  }
+
+  async deleteUploadPlans(upload, history) {
+    if (upload?.file) await fs.unlink(upload.file);
+    if (upload?.directory) await fs.rmdir(upload.directory);
+    if (history?.historyFile) await fs.unlink(history.historyFile);
+    if (history?.historyDirectory) await fs.rmdir(history.historyDirectory);
+  }
+
+  async cleanupOrphanUploadDirectories(referencedIds, protectedIds, result) {
+    const rootInfo = await fs.lstat(this.uploadDirectory).catch(error => error?.code === "ENOENT" ? null : Promise.reject(error));
+    if (!rootInfo) return;
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw projectError("The upload storage directory is unsafe.", 409, "project_upload_identity_invalid");
+    const canonicalRoot = await fs.realpath(this.uploadDirectory);
+    for (const id of await fs.readdir(canonicalRoot)) {
+      if (!PROJECT_FILE_ID_PATTERN.test(id)) continue;
+      const directory = path.join(canonicalRoot, id);
+      try {
+        const info = await fs.lstat(directory);
+        if (!info.isDirectory() || info.isSymbolicLink() || await fs.realpath(directory) !== directory) {
+          result.skipped.push(id);
+          continue;
+        }
+        result.temporaryFiles += await this.cleanupUploadTemporaryFiles(directory);
+        if (referencedIds.has(id) || protectedIds.has(id)) continue;
+        const entries = await fs.readdir(directory);
+        if (entries.length > 1 || entries.some(name => !PROJECT_UPLOAD_CONTENT_FILE_PATTERN.test(name))) {
+          result.skipped.push(id);
+          continue;
+        }
+        const files = [];
+        let safe = true;
+        for (const name of entries) {
+          const file = path.join(directory, name), fileInfo = await fs.lstat(file);
+          if (!fileInfo.isFile() || fileInfo.isSymbolicLink() || await fs.realpath(file) !== file) { safe = false; break; }
+          files.push(file);
+        }
+        if (!safe) { result.skipped.push(id); continue; }
+        const history = await this.fileHistoryDeletionPlan({ id, kind:"file", source:"upload" });
+        for (const file of files) await fs.unlink(file);
+        await fs.rmdir(directory);
+        if (history.historyFile) await fs.unlink(history.historyFile);
+        if (history.historyDirectory) await fs.rmdir(history.historyDirectory);
+        result.orphanIds.push(id);
+      } catch (error) {
+        if (error?.code === "ENOENT") continue;
+        result.skipped.push(id);
+      }
+    }
+  }
+
+  async cleanupUploadsLocked(options = {}) {
+    const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now(), protectedIds = new Set(
+      (Array.isArray(options.protectedProjectIds) ? options.protectedProjectIds : []).map(String).filter(id => PROJECT_FILE_ID_PATTERN.test(id)),
+    ), projects = await this.readRegistry(), retained = [], result = { expiredIds:[], orphanIds:[], temporaryFiles:0, skipped:[] };
+    for (const project of projects) {
+      const expired = project.source === "upload" && !protectedIds.has(project.id) && now - project.lastOpenedAt >= PROJECT_UPLOAD_IDLE_TTL_MS;
+      if (!expired) { retained.push(project); continue; }
+      try {
+        const validated = await this.validateUploadRecord(project, { allowMissing:true });
+        if (validated.directory) result.temporaryFiles += await this.cleanupUploadTemporaryFiles(validated.directory);
+        const upload = await this.uploadDeletionPlan(project), history = await this.fileHistoryDeletionPlan(project);
+        await this.deleteUploadPlans(upload, history);
+        result.expiredIds.push(project.id);
+      } catch {
+        retained.push(project);
+        result.skipped.push(project.id);
+      }
+    }
+    if (retained.length !== projects.length) await this.writeRegistry(retained);
+    const referencedIds = new Set(retained.filter(project => project.source === "upload").map(project => project.id));
+    await this.cleanupOrphanUploadDirectories(referencedIds, protectedIds, result);
+    result.skipped = [...new Set(result.skipped)];
+    return result;
+  }
+
+  reportCleanupWarning(entry) {
+    try { this.logger?.({ type:"canvas-agent-upload-cleanup-warning", ...entry }); }
+    catch {}
+  }
+
+  async cleanupUploadsBestEffortLocked(options = {}) {
+    try {
+      const result = await this.cleanupUploadsLocked(options);
+      if (result.skipped.length) this.reportCleanupWarning({ skippedProjectIds:result.skipped });
+      return result;
+    } catch (error) {
+      this.reportCleanupWarning({ errorCode:typeof error?.code === "string" ? error.code.slice(0, 64) : "cleanup_failed" });
+      return { expiredIds:[], orphanIds:[], temporaryFiles:0, skipped:[], failed:true };
+    }
+  }
+
+  cleanupUploads(options = {}) {
+    return this.mutate(() => this.cleanupUploadsBestEffortLocked(options));
+  }
+
+  async upload({ name:inputName, mediaType:inputMediaType, data, bytes } = {}, options = {}) {
+    const name = safeUploadName(inputName), mediaType = validateUploadMediaType(name, inputMediaType), decoded = decodeCanonicalBase64(data, bytes), reader = await uploadedFileReader(name, decoded), sha256=crypto.createHash("sha256").update(decoded).digest("hex");
     return this.mutate(async () => {
+      const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+      await this.cleanupUploadsBestEffortLocked({ now, protectedProjectIds:options.protectedProjectIds });
       const projects = await this.readRegistry();
+      const duplicate=projects.find(project=>project.source==="upload"&&project.name===name&&project.bytes===decoded.length&&project.sha256===sha256);
+      if(duplicate){
+        const validated=await this.validateUploadRecord(duplicate),stored=await fs.readFile(validated.file);
+        if(stored.length===decoded.length&&crypto.createHash("sha256").update(stored).digest("hex")===sha256){
+          const record={...duplicate,lastOpenedAt:now};
+          await this.writeRegistry([record,...projects.filter(project=>project.id!==record.id)]);
+          return {...this.publicProject(record),reused:true};
+        }
+      }
       if (projects.length >= PROJECT_REGISTRY_LIMIT) throw projectError("The project list already contains 100 resources.", 409, "project_limit");
       const uploadRoot = await this.ensureUploadRoot(), extension = path.extname(name).toLowerCase(), managedName = `content${extension}`;
       let id, directory;
@@ -748,14 +855,14 @@ class CanvasAgentProjectStore {
         await fs.rename(temporary, destination);
         await fs.chmod(destination, 0o600);
         stored = true;
-        const now = Date.now(), record = {
+        const record = {
           id, kind:"file", source:"upload", origin:"upload", name, path:destination, displayPath:name, managedName,
           reader, mediaType, bytes:decoded.length,
-          sha256:crypto.createHash("sha256").update(decoded).digest("hex"),
+          sha256,
           addedAt:now, lastOpenedAt:now,
         };
         await this.writeRegistry([record, ...projects]);
-        return this.publicProject(record);
+        return {...this.publicProject(record),reused:false};
       } catch (error) {
         await fs.unlink(temporary).catch(cleanupError => { if (cleanupError?.code !== "ENOENT") throw cleanupError; });
         if (stored) await fs.unlink(destination).catch(cleanupError => { if (cleanupError?.code !== "ENOENT") throw cleanupError; });
@@ -767,17 +874,14 @@ class CanvasAgentProjectStore {
 
   async resolve(id, { touch = false } = {}) {
     if (!PROJECT_ID_PATTERN.test(String(id || ""))) throw projectError("The selected project id is invalid.");
-    const projects = await this.readRegistry(), project = projects.find(entry => entry.id === id);
-    if (!project) throw projectError("The selected project was not found.", 404, "project_not_found");
-    await this.validateRecord(project);
-    if (touch) {
-      project.lastOpenedAt = Date.now();
-      await this.mutate(async () => {
-        const latest = await this.readRegistry(), current = latest.find(entry => entry.id === id);
-        if (current) { current.lastOpenedAt = project.lastOpenedAt; await this.writeRegistry(latest); }
-      });
-    }
-    return this.publicProject(project, { resolved:true });
+    const operation = async () => {
+      const projects = await this.readRegistry(), project = projects.find(entry => entry.id === id);
+      if (!project) throw projectError("The selected project was not found.", 404, "project_not_found");
+      await this.validateRecord(project);
+      if (touch) { project.lastOpenedAt = Date.now(); await this.writeRegistry(projects); }
+      return this.publicProject(project, { resolved:true });
+    };
+    return touch ? this.mutate(operation) : operation();
   }
 
   async validateHistoryDirectory(directory, { allowMissing = true } = {}) {
@@ -844,6 +948,10 @@ class CanvasAgentProjectStore {
         : project.id === opaqueId(project.kind === "folder" ? "local" : "file", project.path);
       if (project.source !== "upload" && !identityMatches) {
         throw projectError("The selected resource registration changed identity.", 409, "project_changed");
+      }
+      if (project.source === "upload") {
+        const validated = await this.validateUploadRecord(project, { allowMissing:true });
+        if (validated.directory) await this.cleanupUploadTemporaryFiles(validated.directory);
       }
       const uploadDeletion = project.source === "upload" ? await this.uploadDeletionPlan(project) : null;
       const historyDeletion = project.kind === "file" ? await this.fileHistoryDeletionPlan(project) : null;
@@ -920,6 +1028,7 @@ module.exports = {
   PROJECT_REGISTRY_LIMIT,
   PROJECT_FILE_LIMIT,
   PROJECT_UPLOAD_LIMIT,
+  PROJECT_UPLOAD_IDLE_TTL_MS,
   PROJECT_ROOT_DEPTH_LIMIT,
   PROJECT_ROOT_ENTRY_LIMIT,
   PROJECT_ROOT_SCAN_LIMIT,

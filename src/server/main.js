@@ -1,8 +1,6 @@
 "use strict";
 
 const http = require("http");
-const https = require("https");
-const dns = require("dns").promises;
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
@@ -34,6 +32,13 @@ const { attachCanvasAgent } = require("./canvas-agent/http.js");
 const { createCanvasAgentRequestTracer } = require("./canvas-agent/request-trace.js");
 const { CanvasAgentProjectStore } = require("./canvas-agent/project-store.js");
 const { consumeNativePickerGrant } = require("./canvas-agent/native-picker-grants.js");
+const {
+  PUBLIC_FETCH_MAX_URL_LENGTH,
+  PUBLIC_FETCH_TIMEOUT_MS,
+  waitForPublicFetchSlot,
+  releasePublicFetchSlot,
+  fetchPublicResponse,
+} = require("./public-fetch.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
 let sharp = null;
@@ -91,6 +96,7 @@ const CANVAS_AGENT_PROJECT_STORE = new CanvasAgentProjectStore({
   stateDirectory:STATE_DIRECTORY || CLOUD_STATE_DIRECTORY,
   allowedRoots:CANVAS_AGENT_ALLOWED_ROOTS,
   hostRoots:CANVAS_AGENT_HOST_ROOTS,
+  logger:log,
 });
 const PENECHO_CLOUD_ENV = String(process.env.PENECHO_CLOUD_ENV || "prod").trim().toLowerCase() === "uat" ? "uat" : "prod";
 const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "https://internaltest.penecho.ai" : "https://penecho.ai")).replace(/\/$/, "");
@@ -128,6 +134,10 @@ const API_PRESETS = Object.freeze({
 const API_PRESET_IDS = new Set(Object.keys(API_PRESETS));
 const WIDGET_RENDERER = path.join(PUBLIC, "vendor", "penecho-dom-renderer.js");
 const VISUAL_EXPLAINER_VENDOR = path.join(PUBLIC, "vendor", "antv-infographic-0.2.20.min.js");
+const VISUAL_EXPLORER_MANIM_WEB_ASSETS = new Map([
+  ["/visual-explorer-manim-web/manim-web.browser.js", path.join(PUBLIC, "vendor", "manim-web-0.3.24", "manim-web.browser.js")],
+  ["/visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js", path.join(PUBLIC, "vendor", "manim-web-0.3.24", "MathJaxBundle-xSidSV0E.js")],
+]);
 const VISUAL_EXPLAINER_RUNTIME = path.join(PUBLIC, "visual-explainer-runtime.js");
 let AI_PROVIDER = normalizeAiProvider(process.env.AI_PROVIDER);
 let API_BASE_URL = firstNonEmpty(process.env.AI_API_URL, process.env.OPENAI_API_URL);
@@ -169,15 +179,9 @@ const MAX_WIDGET_AREA = 40000000;
 const MAX_ENABLED_PLUGINS = 12;
 const MAX_PLUGIN_CONNECT_ORIGINS = 8;
 const MAX_LOCAL_PLUGINS = 64;
-const PUBLIC_FETCH_MAX_BYTES = 4 * 1024 * 1024;
-const PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024;
-const PUBLIC_FETCH_TIMEOUT_MS = 12000;
-const PUBLIC_FETCH_QUEUE_TIMEOUT_MS = 30000;
 const AI_PROGRESS_HEARTBEAT_MS = process.env.NODE_ENV === "test" && /^\d+$/.test(process.env.PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS || "")
   ? Math.max(10, Math.min(1000, Number(process.env.PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS)))
   : 10000;
-const PUBLIC_FETCH_MAX_REDIRECTS = 4;
-const PUBLIC_FETCH_MAX_CONCURRENT = 20;
 const PLUGIN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CANVAS_SNAPSHOT_ID_PATTERN = /^\d{10,16}-[a-zA-Z0-9-]{8,64}$/;
 const CANVAS_PROJECT_ID_PATTERN = /^project-[a-zA-Z0-9-]{8,64}$/;
@@ -292,9 +296,7 @@ let localAccessGlobalFailures = [];
 let localAccessGlobalBlockedUntil = 0;
 const localAccessClientFailures = new Map();
 const localAccessVerificationClients = new Set();
-const publicFetchQueue = [];
 const activeLocalRequests = new Map();
-let activePublicFetches = 0;
 let cloudConnector = null;
 
 function firstNonEmpty(...values) {
@@ -524,6 +526,7 @@ function canvasSettings() {
     apiModel:MODEL || "",
     hasApiKey:Boolean(API_KEY),
     hasTavilyApiKey:Boolean(TAVILY_API_KEY),
+    webSearchAvailable:true,
     kimiCliModel:KIMI_CLI.model || "", kimiCliPath:KIMI_CLI.executable || "kimi",
     codexModel:CODEX_CLI.model || "", codexPath:CODEX_CLI.executable || "codex",
     claudeModel:CLAUDE_CLI.model || "", claudePath:CLAUDE_CLI.executable || "claude",
@@ -584,7 +587,6 @@ function normalizeCanvasSettings(input) {
   if (!new Set(["api", "system", "search"]).has(scope)) throw new Error("Choose which settings to save.");
   if (scope === "search") {
     const tavilyApiKey = String(input.tavilyApiKey || "").trim();
-    if (!tavilyApiKey && !TAVILY_API_KEY) throw new Error("Enter a Tavily API key.");
     if (tavilyApiKey.length > 4096 || /[\r\n\0]/.test(tavilyApiKey)) throw new Error("The Tavily API key is invalid.");
     return { PENECHO_SETTINGS_SCOPE:scope, ...(tavilyApiKey ? { TAVILY_API_KEY:tavilyApiKey } : {}) };
   }
@@ -1596,140 +1598,6 @@ function isLanClient(address) {
 function isAllowedCliHost(hostname) {
   const value = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "").split("%", 1)[0];
   return isLoopbackHostname(value) || LOCAL_HOSTNAMES.has(value) || LOCAL_INTERFACE_ADDRESSES.has(value);
-}
-const PUBLIC_FETCH_BLOCKED_ADDRESSES = new net.BlockList();
-for (const [address, prefix] of [
-  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
-  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16],
-  ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
-]) PUBLIC_FETCH_BLOCKED_ADDRESSES.addSubnet(address, prefix, "ipv4");
-for (const [address, prefix] of [
-  ["::", 128], ["::1", 128], ["100::", 64], ["2001:2::", 48], ["2001:db8::", 32],
-  ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8],
-]) PUBLIC_FETCH_BLOCKED_ADDRESSES.addSubnet(address, prefix, "ipv6");
-function publicFetchFailure(message, status = 400) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
-}
-function publicFetchAbortError() {
-  const error = new Error("The public data request was cancelled.");
-  error.name = "AbortError";
-  return error;
-}
-function waitForPublicFetchSlot(signal) {
-  if (signal?.aborted) return Promise.reject(publicFetchAbortError());
-  if (activePublicFetches < PUBLIC_FETCH_MAX_CONCURRENT) {
-    activePublicFetches++;
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    const entry = { resolve, reject, signal, done:false, timer:null, abort:null },
-      fail = (error) => {
-        if (entry.done) return;
-        entry.done = true;
-        clearTimeout(entry.timer);
-        signal?.removeEventListener("abort", entry.abort);
-        const index = publicFetchQueue.indexOf(entry);
-        if (index >= 0) publicFetchQueue.splice(index, 1);
-        reject(error);
-      };
-    entry.abort = () => fail(publicFetchAbortError());
-    entry.timer = setTimeout(() => fail(publicFetchFailure("The public data request waited in the queue for 30 seconds.", 504)), PUBLIC_FETCH_QUEUE_TIMEOUT_MS);
-    signal?.addEventListener("abort", entry.abort, { once:true });
-    publicFetchQueue.push(entry);
-  });
-}
-function releasePublicFetchSlot() {
-  activePublicFetches = Math.max(0, activePublicFetches - 1);
-  while (publicFetchQueue.length) {
-    const entry = publicFetchQueue.shift();
-    if (!entry || entry.done) continue;
-    entry.done = true;
-    clearTimeout(entry.timer);
-    entry.signal?.removeEventListener("abort", entry.abort);
-    if (entry.signal?.aborted) {
-      entry.reject(publicFetchAbortError());
-      continue;
-    }
-    activePublicFetches++;
-    entry.resolve();
-    break;
-  }
-}
-function publicFetchAddressAllowed(value) {
-  const address = normalizedIp(value), family = net.isIP(address);
-  return Boolean(family) && !LOCAL_INTERFACE_ADDRESSES.has(address.toLowerCase())
-    && !PUBLIC_FETCH_BLOCKED_ADDRESSES.check(address, family === 4 ? "ipv4" : "ipv6");
-}
-async function resolvedPublicFetchTarget(value) {
-  if (typeof value !== "string" || !value || value.length > PUBLIC_FETCH_MAX_URL_LENGTH) throw publicFetchFailure("A public HTTPS URL is required.");
-  let url;
-  try { url = new URL(value); } catch { throw publicFetchFailure("A valid public HTTPS URL is required."); }
-  if (url.protocol !== "https:" || url.username || url.password) throw publicFetchFailure("Only public HTTPS URLs without embedded credentials are supported.");
-  url.hash = "";
-  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, ""), literalFamily = net.isIP(hostname);
-  if (!hostname || isLoopbackHostname(hostname) || hostname.endsWith(".localhost") || hostname.endsWith(".local") || LOCAL_HOSTNAMES.has(hostname)) throw publicFetchFailure("Local and private destinations are not available.", 403);
-  let addresses;
-  if (literalFamily) addresses = [{ address:hostname, family:literalFamily }];
-  else {
-    try { addresses = await dns.lookup(hostname, { all:true, verbatim:true }); }
-    catch { throw publicFetchFailure("The public data host could not be resolved.", 502); }
-  }
-  if (!addresses.length || addresses.some(({ address }) => !publicFetchAddressAllowed(address))) throw publicFetchFailure("Local and private destinations are not available.", 403);
-  const selected = addresses[0];
-  return { url, address:normalizedIp(selected.address), family:net.isIP(normalizedIp(selected.address)) };
-}
-function publicFetchContentType(value) {
-  return String(value || "").slice(0, 200) || "application/octet-stream";
-}
-async function fetchPublicResponse(value, signal, redirects = 0) {
-  const target = await resolvedPublicFetchTarget(value),
-    response = await new Promise((resolve, reject) => {
-      const request = https.request(target.url, {
-        method:"GET",
-        signal,
-        headers:{
-          "Accept":"*/*",
-          "Accept-Language":"zh-CN,zh;q=0.9,en;q=0.7",
-          "User-Agent":"Mozilla/5.0 (compatible; PenEcho/0.8; public-data-reader)",
-        },
-        lookup(_hostname, options, callback) {
-          if (options && typeof options === "object" && options.all) callback(null, [{ address:target.address, family:target.family }]);
-          else callback(null, target.address, target.family);
-        },
-      }, resolve);
-      request.once("error", reject);
-      request.end();
-    }),
-    status = Number(response.statusCode) || 502,
-    location = Array.isArray(response.headers.location) ? response.headers.location[0] : response.headers.location;
-  if ([301, 302, 303, 307, 308].includes(status) && location) {
-    response.resume();
-    if (redirects >= PUBLIC_FETCH_MAX_REDIRECTS) throw publicFetchFailure("The public data request redirected too many times.", 508);
-    let next;
-    try { next = new URL(location, target.url).href; } catch { throw publicFetchFailure("The public data source returned an invalid redirect.", 502); }
-    return fetchPublicResponse(next, signal, redirects + 1);
-  }
-  const noBody = [204, 205, 304].includes(status),
-    contentType = noBody ? "text/plain; charset=utf-8" : publicFetchContentType(response.headers["content-type"]);
-  const declaredLength = Number(response.headers["content-length"]);
-  if (Number.isFinite(declaredLength) && declaredLength > PUBLIC_FETCH_MAX_BYTES) {
-    response.destroy();
-    throw publicFetchFailure("The public data response is too large.", 413);
-  }
-  const body = await new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    response.on("data", (chunk) => {
-      size += chunk.length;
-      if (size > PUBLIC_FETCH_MAX_BYTES) return response.destroy(publicFetchFailure("The public data response is too large.", 413));
-      chunks.push(chunk);
-    });
-    response.once("end", () => resolve(Buffer.concat(chunks)));
-    response.once("error", reject);
-  });
-  return { status:status >= 200 && status <= 599 ? status : 502, contentType, body, finalUrl:target.url.href };
 }
 function requestHost(req) {
   const value = typeof req.headers.host === "string" ? req.headers.host.trim() : "";
@@ -3139,7 +3007,7 @@ const server = http.createServer(async (req, res) => {
       return send(res,status,{error:error.message||"PenEcho Cloud request failed.",code:error.code||"cloud_request_failed"});
     }
   }
-  if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort(), canvasAgentSearchConfigured:Boolean(TAVILY_API_KEY) });
+  if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort(), canvasAgentSearchConfigured:true });
   const canvasAgentProjectMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})$/.exec(url.pathname),
     canvasAgentProjectHistoryMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})\/history$/.exec(url.pathname),
     canvasAgentRootEntriesMatch = /^\/api\/canvas-agent\/roots\/(root-[0-9a-f]{24})\/entries$/.exec(url.pathname),
@@ -3181,7 +3049,8 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/canvas-agent/files") {
         if (!isJsonRequest(req)) return send(res, 415, { error:"File upload requires application/json." });
         const body = await readJson(req, 46 * 1024 * 1024);
-        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.upload(body) });
+        const protectedProjectIds = await canvasAgent.activeProjectIds();
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.upload(body, { protectedProjectIds }) });
       }
       if (req.method === "GET" && url.pathname === "/api/canvas-agent/roots") {
         if (url.search) return send(res, 400, { error:"Server root listing does not accept query parameters." });
@@ -3321,7 +3190,7 @@ const server = http.createServer(async (req, res) => {
         Object.assign(DEFAULT_CONNECTION, connectionFromEnvironment("default"));
       }
       if (scope === "search") applyHotSearchConfiguration(selected);
-      return send(res, 200, { ok:true, providerApplied:scope === "api", searchApplied:scope === "search", restartRequired:scope === "system", hasTavilyApiKey:Boolean(TAVILY_API_KEY) });
+      return send(res, 200, { ok:true, providerApplied:scope === "api", searchApplied:scope === "search", restartRequired:scope === "system", hasTavilyApiKey:Boolean(TAVILY_API_KEY), webSearchAvailable:true });
     } catch (error) { return send(res, 400, { error:error?.message || "Could not save settings." }); }
   }
   if (url.pathname === "/api/settings/connections") {
@@ -3352,7 +3221,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config.js") {
-    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp:process.env.PENECHO_DESKTOP_APP==="true",canvasAgent:true,canvasAgentSearchConfigured:Boolean(TAVILY_API_KEY)};
+    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp:process.env.PENECHO_DESKTOP_APP==="true",canvasAgent:true,canvasAgentSearchConfigured:true};
     if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
     return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
   }
@@ -3569,6 +3438,12 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(VISUAL_EXPLAINER_VENDOR).pipe(res);
+  }
+  const visualExplorerManimWebAsset = VISUAL_EXPLORER_MANIM_WEB_ASSETS.get(url.pathname);
+  if ((req.method === "GET" || req.method === "HEAD") && visualExplorerManimWebAsset) {
+    res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
+    if (req.method === "HEAD") return res.end();
+    return fs.createReadStream(visualExplorerManimWebAsset).pipe(res);
   }
   if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/visual-explainer-runtime.js") {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
@@ -3853,19 +3728,22 @@ if (startupConfigurationError) {
   console.error(`PenEcho configuration error: ${startupConfigurationError}`);
   log({ type:"server-start-error", provider:AI_PROVIDER, error:startupConfigurationError });
   process.exitCode = 1;
-} else server.listen(PORT, HOST, () => {
-  const address = server.address(), listeningPort = typeof address === "object" && address ? address.port : PORT;
-  cloudConnector = new CloudConnector({ stateDir:CLOUD_STATE_DIRECTORY, executeRequest:executeCloudCommand, executeHttpRequest:remoteCanvasHttpExecutor(), executeCanvasAgentRequest:canvasAgent.executeRemote, logger:log, defaultOrigin:DEFAULT_CLOUD_ORIGIN, capabilities:{ modelConfigured:!providerConfigurationError() } });
-  cloudConnector.start();
-  console.log(`PenEcho: http://${HOST}:${listeningPort} (${AI_PROVIDER || "invalid provider"})`);
-  if (HOST.trim() === "0.0.0.0") {
-    const lanUrls = [...LAN_IPV4_ADDRESSES].sort((a,b) => a.localeCompare(b, undefined, { numeric:true })).map(ip => `http://${ip}:${listeningPort}`);
-    console.log("LAN access (open one of these addresses on another device):");
-    if (lanUrls.length) for (const url of lanUrls) console.log(`  ${url}`);
-    else console.log("  No non-loopback IPv4 address was detected.");
-    console.log(`If LAN access fails, check that inbound TCP port ${listeningPort} is allowed by the host firewall or applicable routing policy.`);
-  }
-  log({ type:"server-start", host:HOST, port:listeningPort, provider:AI_PROVIDER,requestTrace:REQUEST_TRACE_ENABLED?REQUEST_TRACE_LIMIT:0,aiImageFormat:AI_IMAGE_FORMAT,imageEncoder:AI_IMAGE_FORMAT!=="png"&&Boolean(sharp) });
-});
+} else {
+  void CANVAS_AGENT_PROJECT_STORE.cleanupUploads().catch(error=>log({type:"canvas-agent-upload-cleanup-error",errorCode:typeof error?.code==="string"?error.code.slice(0,64):"cleanup_failed"}));
+  server.listen(PORT, HOST, () => {
+    const address = server.address(), listeningPort = typeof address === "object" && address ? address.port : PORT;
+    cloudConnector = new CloudConnector({ stateDir:CLOUD_STATE_DIRECTORY, executeRequest:executeCloudCommand, executeHttpRequest:remoteCanvasHttpExecutor(), executeCanvasAgentRequest:canvasAgent.executeRemote, logger:log, defaultOrigin:DEFAULT_CLOUD_ORIGIN, capabilities:{ modelConfigured:!providerConfigurationError() } });
+    cloudConnector.start();
+    console.log(`PenEcho: http://${HOST}:${listeningPort} (${AI_PROVIDER || "invalid provider"})`);
+    if (HOST.trim() === "0.0.0.0") {
+      const lanUrls = [...LAN_IPV4_ADDRESSES].sort((a,b) => a.localeCompare(b, undefined, { numeric:true })).map(ip => `http://${ip}:${listeningPort}`);
+      console.log("LAN access (open one of these addresses on another device):");
+      if (lanUrls.length) for (const url of lanUrls) console.log(`  ${url}`);
+      else console.log("  No non-loopback IPv4 address was detected.");
+      console.log(`If LAN access fails, check that inbound TCP port ${listeningPort} is allowed by the host firewall or applicable routing policy.`);
+    }
+    log({ type:"server-start", host:HOST, port:listeningPort, provider:AI_PROVIDER,requestTrace:REQUEST_TRACE_ENABLED?REQUEST_TRACE_LIMIT:0,aiImageFormat:AI_IMAGE_FORMAT,imageEncoder:AI_IMAGE_FORMAT!=="png"&&Boolean(sharp) });
+  });
+}
 
 module.exports = server;

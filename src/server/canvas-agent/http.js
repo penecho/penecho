@@ -194,6 +194,11 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
   });
 
   return {
+    async activeProjectIds() {
+      if (!hostPromise) return [];
+      try { return (await hostPromise).activeProjectIds(); }
+      catch { return []; }
+    },
     async close() {
       server.off("upgrade", upgrade);
       for (const client of wss.clients) client.close(1001, "PenEcho server closing");

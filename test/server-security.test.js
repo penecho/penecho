@@ -385,13 +385,17 @@ test("server uses applied global configuration and one timeout for every executo
 });
 
 test("Codex CLI mode starts with no extra access or model-provider settings", { timeout: 10000 }, async () => {
-  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0"}));
+  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0",TAVILY_API_KEY:""}));
   try {
     const localPage=await fetch(origin);
     assert.equal(localPage.status,200);
     assert.ok(localPage.headers.get("set-cookie"));
     const config=await fetch(`${origin}/api/config`).then(response=>response.json());
     assert.equal(config.aiEffort,"config");
+    assert.equal(config.canvasAgentSearchConfigured,true);
+    const settings=await fetch(`${origin}/api/settings`,{headers:{Origin:origin}}).then(response=>response.json());
+    assert.equal(settings.hasTavilyApiKey,false);
+    assert.equal(settings.webSearchAvailable,true);
   } finally { await stopServer(child); }
 });
 
@@ -403,6 +407,7 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.equal(currentResponse.status, 200);
     assert.equal(current.hasApiKey, true);
     assert.equal(current.hasTavilyApiKey, true);
+    assert.equal(current.webSearchAvailable, true);
     assert.equal(Object.hasOwn(current, "apiKey"), false);
     assert.equal(Object.hasOwn(current, "tavilyApiKey"), false);
     assert.equal(current.maxTokens, 20000);
@@ -410,6 +415,7 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.equal(searchResponse.status, 200, JSON.stringify(search));
     assert.equal(search.searchApplied, true);
     assert.equal(search.hasTavilyApiKey, true);
+    assert.equal(search.webSearchAvailable, true);
     assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).canvasAgentSearchConfigured, true);
     const savedResponse = await fetch(`${origin}/api/settings`, {
       method:"POST", headers,

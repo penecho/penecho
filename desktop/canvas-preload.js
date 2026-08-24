@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld("penechoDesktopUpdate", updateApi);
 contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
   installCli:provider => ipcRenderer.invoke("penecho:install-cli", provider),
   pickProjectFile:() => ipcRenderer.invoke("penecho:pick-project-file"),
+  hasClipboardFile:() => ipcRenderer.sendSync("penecho:has-clipboard-file"),
+  readClipboardFile:() => ipcRenderer.invoke("penecho:read-clipboard-file"),
+  openProjectFile:projectId => ipcRenderer.invoke("penecho:open-project-file", projectId),
 }));
 
 function element(tag, className, value) {

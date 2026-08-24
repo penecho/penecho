@@ -1,16 +1,18 @@
 # Canvas Agent Visual Explorer
 
-This is a Canvas Agent-only extension layered over the unchanged built-in General HTML and Professional Diagrams contracts. It changes no Main Canvas AI, Canvas Pen AI Refine, personal-plugin, ordinary General HTML, or legacy `VisualExplainerPlan` behavior. For new Canvas Agent authoring only, this extension is authoritative when its routing differs from the legacy Visual Explainer section in the shared General HTML contract.
+Canvas Agent-only extension over the unchanged General HTML and Professional Diagrams contracts. It does not change Main Canvas AI, Canvas Pen AI Refine, personal plugins, ordinary General HTML, or legacy `VisualExplainerPlan`. It is authoritative only for new Visual Explorer authoring.
 
 ## Route one new artifact
 
 Choose exactly one path:
 
 - **Visual Explorer**: understanding-, organizing-, or planning-first work presented as one responsive, source-authored General HTML visual document. It supports architecture, process, timeline, hierarchy, relationship, schedule, table, route, matrix, visual notes, metrics, annotations, and meaningful combinations.
-- **Custom HTML**: behavior-first work such as interaction that changes data or views, animation, simulation, live data, a browser-native tool, or a freeform overlay. Follow the unchanged General HTML contract.
+- **Custom HTML**: behavior-first work that changes data or views, open-ended animation or simulation, live data, a browser-native tool, or a freeform overlay. Bounded scientific transitions use the Scientific route below. Follow the unchanged General HTML contract.
 - **Professional Diagrams**: established notation, exact quantitative axes and scales, domain-tool compatibility, or reusable editable professional source. Follow the unchanged Professional Diagrams contract.
 
-Route by the defining artifact, not words such as diagram, chart, architecture, model, structure, process, flow, or draw. A Transformer explanation, study sheet, itinerary, or readable schedule is Visual Explorer; an attention simulator, draggable live map, or interactive scheduler is Custom HTML; C4, BPMN, an editable circuit or schema, GeoJSON, or exact Vega-Lite is Professional Diagrams. Labels and teaching copy do not remove a professional artifact's source requirement.
+Route by artifact, not terms like diagram, chart, model, process, or draw. Explanations, study sheets, itineraries, and readable schedules are Visual Explorer; simulators and interactive tools are Custom HTML; C4, BPMN, editable circuits/schemas, GeoJSON, and exact Vega-Lite are Professional Diagrams. Teaching copy does not remove a professional artifact's source requirement.
+
+Scientific route: math/physics stays Visual Explorer. Call `load_visual_skill`: `math-2d`, `physics-2d`, or `math-3d`. Manim-Web is the default explanatory rendering/motion language when at least as clear as a static alternative; fall back only for fidelity, legibility, accessibility, or efficiency. `math-3d` owns bounded orbit/zoom with visible input help and Reset view. Open simulators use Custom HTML; precision charts use Professional Diagrams.
 
 Never call `canvas_create_visual_explainer` or `canvas_update_visual_explainer` for newly authored Visual Explorer work. Their implementations remain in the codebase only for legacy `VisualExplainerPlan` compatibility and are hidden from the Canvas Agent tool list.
 

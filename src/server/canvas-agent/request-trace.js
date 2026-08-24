@@ -160,6 +160,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       screenshots:[],
       events:[],
       diagnostics:[],
+      patchProtocol:[],
       final:null,
       error:null,
       note:"DeepSeek Harness server trace; sessionId is a non-resumable debug correlation ID.",
@@ -221,6 +222,18 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     if (entry.phase === "asset") {
       if (state.active) { persistAsset(state,state.active,entry.asset); write(state.active); }
       else state.pendingAssets.push(entry.asset);
+      return;
+    }
+    if (entry.phase === "patch-protocol") {
+      if (!state.active) return;
+      const pendingStep = state.active.data.steps.findLast(item=>item.status==="in-flight"), record = safeValue(entry.record || {});
+      state.active.data.patchProtocol.push({
+        recordedAt:isoTime(now()),
+        turn:pendingStep?.turn ?? null,
+        step:pendingStep?.step ?? null,
+        ...(record && typeof record === "object" && !Array.isArray(record) ? record : { value:record }),
+      });
+      write(state.active);
       return;
     }
     if (entry.phase === "diagnostic") {

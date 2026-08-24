@@ -1326,6 +1326,8 @@
       title:widget.title,
       html:widget.html,
       pluginStyles:manifest.styles || "",
+      ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
+      ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
     }, widget.hostOrigin || location.origin);
   }
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {

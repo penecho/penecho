@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { CallId, LlmAdapter, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { HarnessCliSessionManager } from './harness-cli-sessions.mjs'
 
 const require = createRequire(import.meta.url)
 const { callKimiCli } = require('../../providers/kimi-cli.js')
@@ -119,8 +120,8 @@ async function activeImageDataUrls(messages, attachments, signal) {
   }))
 }
 
-export async function serializeCliRequest(options, attachments) {
-  const conversation = options.messages.map(message => ({
+function serializeCliPrompt(options, messages, mode) {
+  const conversation = messages.map(message => ({
     role:message.role,
     source:message.source?.kind || 'unknown',
     content:textContent(Array.isArray(message.content) ? message.content : []),
@@ -132,12 +133,18 @@ export async function serializeCliRequest(options, attachments) {
   }))
   const prompt = bounded(JSON.stringify({
     purpose:options.purpose || 'conversation',
-    conversation,
+    ...(mode === 'delta' ? { conversationDelta:conversation } : { conversation }),
     availableTools:tools,
+    contextMode:mode,
     instruction:tools.length
-      ? 'Return one tool_call for the next necessary Harness action, or final when the task is complete.'
-      : 'No tools are available for this request. Return final.',
+      ? `${mode === 'delta' ? 'Continue from the CLI conversation already in memory using only this authoritative Harness delta. ' : ''}Return one tool_call for the next necessary Harness action, or final when the task is complete.`
+      : `${mode === 'delta' ? 'Continue from the CLI conversation already in memory using only this authoritative Harness delta. ' : ''}No tools are available for this request. Return final.`,
   }))
+  return prompt
+}
+
+export async function serializeCliRequest(options, attachments, { messages = options.messages, mode = 'snapshot' } = {}) {
+  const prompt = serializeCliPrompt(options, messages, mode)
   const activeImages = await activeImageDataUrls(options.messages, attachments, options.signal)
   return {
     systemPrompt:bounded(`${CLI_PROTOCOL_SYSTEM}\n\n${String(options.system || '')}`),
@@ -158,6 +165,24 @@ function jsonObject(text) {
   }
 }
 
+function cliReplayAnchor(messages) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message?.role !== 'assistant' || message?.source?.kind !== 'model') continue
+    return message.source.replayState?.response === undefined
+      ? { index:-1, replay:null }
+      : { index, replay:message.source.replayState.response }
+  }
+  return { index:-1, replay:null }
+}
+
+function harnessSurfaceMarker(messages) {
+  const checkpoints = messages.flatMap(message => message?.source?.kind === 'plugin' && message.source.plugin === 'compact'
+    ? [`${String(message.source.compactionId || '')}:${String(message.source.sourceCommandId || '')}`]
+    : [])
+  return checkpoints.length ? hash(JSON.stringify(checkpoints)) : ''
+}
+
 export function parseCliDecision(output, toolNames = []) {
   let value
   try { value = jsonObject(output) }
@@ -176,7 +201,29 @@ export function parseCliDecision(output, toolNames = []) {
   return { type:'tool_call', name, arguments:JSON.stringify(args) }
 }
 
-export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasImage, signal }) {
+function reportedTokenCount(value) {
+  const count=Number(value)
+  return Number.isFinite(count)&&count>=0?Math.floor(count):null
+}
+
+export function normalizeCliTokenUsage(value) {
+  if (!value || typeof value!=='object' || Array.isArray(value)) return null
+  const totalInput=reportedTokenCount(value.input_tokens??value.prompt_tokens??value.inputTokens),
+    cacheRead=reportedTokenCount(value.cached_input_tokens??value.cache_read_tokens??value.input_tokens_details?.cached_tokens??value.cachedInputTokens??value.cacheReadTokens),
+    cacheWrite=reportedTokenCount(value.cache_creation_input_tokens??value.cache_write_tokens??value.cacheWriteInputTokens??value.cacheWriteTokens),
+    output=reportedTokenCount(value.output_tokens??value.completion_tokens??value.outputTokens),
+    reasoning=reportedTokenCount(value.reasoning_output_tokens??value.output_tokens_details?.reasoning_tokens??value.reasoningTokens)
+  if ([totalInput,cacheRead,cacheWrite,output,reasoning].every(count=>count===null)) return null
+  return {
+    inputTokens:Math.max(0,(totalInput??0)-(cacheRead??0)-(cacheWrite??0)),
+    outputTokens:output??0,
+    ...(cacheRead!==null&&cacheRead>0?{cacheReadTokens:cacheRead}:{}),
+    ...(cacheWrite!==null&&cacheWrite>0?{cacheWriteTokens:cacheWrite}:{}),
+    ...(reasoning!==null&&reasoning>0?{reasoningTokens:reasoning}:{}),
+  }
+}
+
+export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasImage, signal, onUsage = null }) {
   const request = {
     executable:connection.cliPath,
     model:connection.cliModel || null,
@@ -188,7 +235,7 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
     return callKimiCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}` })
   }
   if (connection.provider === 'codex-cli') {
-    return callCodexCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}` })
+    return callCodexCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}`, onUsage })
   }
   if (connection.provider === 'claude-cli') {
     return callClaudeCli({ ...request, systemPrompt, prompt })
@@ -197,9 +244,12 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
 }
 
 export class PenEchoCliAdapter extends LlmAdapter {
-  constructor({ callCli = callPenEchoCli, attachments = () => undefined, timeoutMs = () => DEFAULT_CLI_TIMEOUT_MS, onDiagnostic = () => {} } = {}) {
+  constructor({ callCli, sessionManager, attachments = () => undefined, timeoutMs = () => DEFAULT_CLI_TIMEOUT_MS, onDiagnostic = () => {} } = {}) {
     super()
-    this.callCli = callCli
+    this.callCli = typeof callCli === 'function' ? callCli : callPenEchoCli
+    this.sessionManager = sessionManager === undefined
+      ? (typeof callCli === 'function' ? null : new HarnessCliSessionManager())
+      : sessionManager
     this.attachments = attachments
     this.timeoutMs = timeoutMs
     this.onDiagnostic = typeof onDiagnostic === 'function' ? onDiagnostic : () => {}
@@ -272,10 +322,30 @@ export class PenEchoCliAdapter extends LlmAdapter {
       timer = setTimeout(() => controller.abort(timeoutError), timeoutMs)
     timer.unref?.()
     try {
-      const request = await serializeCliRequest({ ...options, signal }, this.attachments())
-      const output = await this.callCli({ connection, ...request, signal, purpose:options.purpose || 'conversation' })
+      let usage=null
+      let output, replayState
+      if (this.sessionManager) {
+        const messages = Array.isArray(options.messages) ? options.messages : [], anchor = cliReplayAnchor(messages), replayMessageIndex = anchor.index, replay = anchor.replay,
+          requestOptions = { ...options, signal }, attachments = this.attachments(),
+          result = await this.sessionManager.request({
+            connection,
+            harnessSessionId:String(options.sessionId || ''),
+            systemPrompt:bounded(`${CLI_PROTOCOL_SYSTEM}\n\n${String(options.system || '')}`),
+            surfaceMarker:harnessSurfaceMarker(messages),
+            fullRequest:() => serializeCliRequest(requestOptions, attachments),
+            deltaRequest:() => serializeCliRequest({ ...requestOptions, messages:messages.slice(replayMessageIndex + 1) }, attachments, { messages:messages.slice(replayMessageIndex + 1), mode:'delta' }),
+            signal,
+            replay,
+            onUsage:value=>{usage=normalizeCliTokenUsage(value)},
+          })
+        output = result.output
+        replayState = result.replayState
+      } else {
+        const request = await serializeCliRequest({ ...options, signal }, this.attachments())
+        output = await this.callCli({ connection, ...request, signal, purpose:options.purpose || 'conversation', onUsage:value=>{usage=normalizeCliTokenUsage(value)} })
+      }
       signal.throwIfAborted()
-      return parseCliDecision(output, (options.tools || []).map(tool => tool.name))
+      return { ...parseCliDecision(output, (options.tools || []).map(tool => tool.name)), ...(usage?{usage}:{}), ...(replayState?{replayState}:{}) }
     } catch (error) {
       if (error?.traceDiagnostic) {
         try {
@@ -301,14 +371,24 @@ export class PenEchoCliAdapter extends LlmAdapter {
       yield { type:'block-start', index:0, blockType:'text' }
       yield { type:'text-delta', index:0, text:decision.text }
       yield { type:'block-end', index:0, block:{ type:'text', text:decision.text } }
-      yield { type:'finish', reason:{ kind:'stop' } }
+      if (decision.usage) yield { type:'usage', usage:decision.usage }
+      yield { type:'finish', reason:{ kind:'stop' }, ...(decision.replayState?{replayState:decision.replayState}:{}) }
       return
     }
     const id = CallId(`penecho_cli_${randomUUID()}`)
     yield { type:'block-start', index:0, blockType:'tool-call' }
     yield { type:'tool-call-delta', index:0, id, name:decision.name, argumentsDelta:decision.arguments }
     yield { type:'block-end', index:0, block:{ type:'tool-call', id, name:decision.name, arguments:decision.arguments } }
-    yield { type:'finish', reason:{ kind:'tool-calls' } }
+    if (decision.usage) yield { type:'usage', usage:decision.usage }
+    yield { type:'finish', reason:{ kind:'tool-calls' }, ...(decision.replayState?{replayState:decision.replayState}:{}) }
+  }
+
+  async disposeSession(sessionId) {
+    await this.sessionManager?.disposeSession(sessionId)
+  }
+
+  async dispose() {
+    await this.sessionManager?.dispose()
   }
 }
 

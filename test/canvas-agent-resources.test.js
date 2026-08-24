@@ -12,6 +12,7 @@ const {
   CanvasAgentProjectStore,
   PROJECT_HISTORY_LIMIT,
   PROJECT_UPLOAD_LIMIT,
+  PROJECT_UPLOAD_IDLE_TTL_MS,
 } = require("../src/server/canvas-agent/project-store.js");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -116,7 +117,10 @@ test("single-file runtime exposes one exact canonical file and no sibling-capabl
   );
   assert.match(filePluginBlock, /exactly one read-only file/);
   assert.match(filePluginBlock, /No write, edit, bash, or directory-listing capability exists/);
-  assert.match(filePluginBlock, /agentCtx\.tools\.register\(project(?:Document|Image|Database|Text)ReaderTool/);
+  assert.match(filePluginBlock, /agentCtx\.tools\.register\(project(?:Document|Image|Database|Text|Binary)ReaderTool/);
+  assert.match(runtimeSource, /const PenEchoDocumentReaderPlugin = \{[\s\S]*?name:'penecho-document-reader'[\s\S]*?agentCtx\.tools\.register\(projectDocumentReaderTool/);
+  assert.match(filePluginBlock, /agentCtx\.plugin\(PenEchoDocumentReaderPlugin/);
+  assert.doesNotMatch(filePluginBlock, /agentCtx\.tools\.register\(projectDocumentReaderTool/);
   assert.doesNotMatch(filePluginBlock, /ToolFs\.apply|projectBashTool|projectPluginLoaderTool/);
   assert.match(runtimeSource, /meta:\{ cwd:project\?\.kind === 'folder' \? project\.path : projectRuntimeDirectory \}/);
   assert.match(runtimeSource, /session\.project\?\.kind === 'file'\) await agentCtx\.plugin\(PenEchoFilePlugin/);
@@ -149,6 +153,7 @@ test("uploaded files require canonical base64, honor the 32 MiB boundary, use pr
   assert.equal(permissionBits(await fs.stat(uploadRoot)), 0o700);
   assert.equal(permissionBits(await fs.stat(managedDirectory)), 0o700);
   assert.equal(permissionBits(await fs.stat(managedFile)), 0o600);
+  await fs.writeFile(path.join(managedDirectory, ".upload-12345678-1234-4123-8123-123456789abc.tmp"), "partial", { mode:0o600 });
 
   const stateSentinel = path.join(stateDirectory, "keep-this-state-file.txt");
   await fs.writeFile(stateSentinel, "keep", { mode:0o600 });
@@ -171,25 +176,50 @@ test("uploaded files require canonical base64, honor the 32 MiB boundary, use pr
   assert.equal(await fs.readFile(nativeFile, "utf8"), "native source");
 });
 
-test("uploaded specialized files are content-validated before private storage is created", async t => {
-  const { stateDirectory, store } = await fixture(t);
+test("uploading the same file reuses one managed browser item", async t => {
+  const { store } = await fixture(t),content=Buffer.from("same copied file","utf8"),input={name:"copied.txt",mediaType:"text/plain",bytes:content.length,data:content.toString("base64")};
+  const first=await store.upload(input,{now:1_000}),second=await store.upload(input,{now:2_000}),changed=Buffer.from("different file!","utf8"),third=await store.upload({name:"copied.txt",mediaType:"text/plain",bytes:changed.length,data:changed.toString("base64")},{now:3_000});
+  assert.equal(second.id,first.id);
+  assert.equal(first.reused,false);
+  assert.equal(second.reused,true);
+  assert.notEqual(third.id,first.id);
+  assert.equal((await store.list()).filter(project=>project.name==="copied.txt").length,2);
+});
+
+test("uploads accept every file type while unsafe specialized content falls back to the binary reader", async t => {
+  const { store } = await fixture(t);
   const invalidPdf = Buffer.from("not a PDF", "utf8");
-  await expectProjectError(store.upload({
+  const forgedPdf = await store.upload({
     name:"forged.pdf", mediaType:"application/pdf", bytes:invalidPdf.length, data:invalidPdf.toString("base64"),
-  }), "project_file_content_invalid");
+  });
+  assert.equal(forgedPdf.reader, "binary");
   const invalidDatabase = Buffer.from("not sqlite", "utf8");
-  await expectProjectError(store.upload({
+  const forgedDatabase = await store.upload({
     name:"forged.sqlite", mediaType:"application/x-sqlite3", bytes:invalidDatabase.length, data:invalidDatabase.toString("base64"),
-  }), "project_file_content_invalid");
+  });
+  assert.equal(forgedDatabase.reader, "binary");
 
   const incompleteOffice = new JSZip();
   incompleteOffice.file("[Content_Types].xml", "<Types/>");
   const incompleteBytes = await incompleteOffice.generateAsync({ type:"nodebuffer", compression:"DEFLATE" });
-  await expectProjectError(store.upload({
+  const incompleteDocument = await store.upload({
     name:"incomplete.docx", mediaType:"application/zip", bytes:incompleteBytes.length, data:incompleteBytes.toString("base64"),
-  }), "project_file_content_invalid");
+  });
+  assert.equal(incompleteDocument.reader, "binary");
+  const incompletePresentation = await store.upload({
+    name:"incomplete.pptx", mediaType:"application/zip", bytes:incompleteBytes.length, data:incompleteBytes.toString("base64"),
+  });
+  assert.equal(incompletePresentation.reader, "binary");
 
-  await assertMissing(path.join(stateDirectory, "canvas-agent-files"));
+  const unknownText = Buffer.from("custom text format", "utf8"), textUpload = await store.upload({
+    name:"notes.penecho-custom", mediaType:"application/x-penecho-custom", bytes:unknownText.length, data:unknownText.toString("base64"),
+  });
+  assert.equal(textUpload.reader, "text");
+  const unknownBinary = Buffer.from([0, 1, 2, 0xff]), binaryUpload = await store.upload({
+    name:"archive.unknown", mediaType:"not a valid media type", bytes:unknownBinary.length, data:unknownBinary.toString("base64"),
+  });
+  assert.equal(binaryUpload.reader, "binary");
+  assert.equal(binaryUpload.mediaType, "");
 
   const validOffice = new JSZip();
   validOffice.file("[Content_Types].xml", "<Types/>");
@@ -200,6 +230,93 @@ test("uploaded specialized files are content-validated before private storage is
   });
   assert.equal(uploaded.reader, "document");
   assert.equal((await store.resolve(uploaded.id)).bytes, validBytes.length);
+  const validPresentation = new JSZip();
+  validPresentation.file("[Content_Types].xml", "<Types/>");
+  validPresentation.folder("ppt").file("presentation.xml", "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"/>");
+  const validPresentationBytes = await validPresentation.generateAsync({ type:"nodebuffer", compression:"DEFLATE" });
+  const uploadedPresentation = await store.upload({
+    name:"slides.pptx", mediaType:"application/zip", bytes:validPresentationBytes.length, data:validPresentationBytes.toString("base64"),
+  });
+  assert.equal(uploadedPresentation.reader, "document");
+});
+
+test("uploaded copies expire after 24 inactive hours while current and recent files remain", async t => {
+  const { store } = await fixture(t), now = 2_000_000_000_000;
+  const upload = (name, openedAt) => {
+    const content = Buffer.from(name, "utf8");
+    return store.upload({ name, bytes:content.length, data:content.toString("base64") }, { now:openedAt });
+  };
+  const expired = await upload("expired.txt", now - PROJECT_UPLOAD_IDLE_TTL_MS);
+  const current = await upload("current.txt", now - PROJECT_UPLOAD_IDLE_TTL_MS);
+  const recent = await upload("recent.txt", now - PROJECT_UPLOAD_IDLE_TTL_MS + 1);
+  const expiredPath = (await store.resolve(expired.id)).path, expiredDirectory = path.dirname(expiredPath), expiredHistory = path.join(store.fileHistoryDirectory, expired.id);
+  await store.writeHistory(expired.id, { conversations:[conversation(1)] });
+
+  const first = await store.cleanupUploads({ now, protectedProjectIds:[current.id] });
+  assert.deepEqual(first.expiredIds, [expired.id]);
+  await assertMissing(expiredPath);
+  await assertMissing(expiredDirectory);
+  await assertMissing(expiredHistory);
+  assert.equal((await store.resolve(current.id)).name, "current.txt");
+  assert.equal((await store.resolve(recent.id)).name, "recent.txt");
+
+  const second = await store.cleanupUploads({ now });
+  assert.deepEqual(second.expiredIds, [current.id]);
+  await expectProjectError(store.resolve(current.id), "project_not_found");
+  assert.equal((await store.resolve(recent.id)).name, "recent.txt");
+});
+
+test("opening an uploaded file serializes its activity touch before cleanup", async t => {
+  const { store } = await fixture(t), now = Date.now(), content = Buffer.from("opening", "utf8");
+  const uploaded = await store.upload({ name:"opening.txt", bytes:content.length, data:content.toString("base64") }, { now:now - PROJECT_UPLOAD_IDLE_TTL_MS });
+  const [opened, cleanup] = await Promise.all([
+    store.resolve(uploaded.id, { touch:true }),
+    store.cleanupUploads({ now }),
+  ]);
+  assert.equal(opened.id, uploaded.id);
+  assert.deepEqual(cleanup.expiredIds, []);
+  assert.equal((await store.resolve(uploaded.id)).name, "opening.txt");
+});
+
+test("each upload removes safe orphan copies and their private history", async t => {
+  const { store } = await fixture(t), now = 2_000_000_000_000, content = Buffer.from("orphan", "utf8");
+  const orphan = await store.upload({ name:"orphan.penecho-custom", bytes:content.length, data:content.toString("base64") }, { now });
+  const orphanPath = (await store.resolve(orphan.id)).path, orphanDirectory = path.dirname(orphanPath), orphanHistory = path.join(store.fileHistoryDirectory, orphan.id);
+  await store.writeHistory(orphan.id, { conversations:[conversation(2)] });
+  await fs.writeFile(path.join(orphanDirectory, ".upload-12345678-1234-4123-8123-123456789abc.tmp"), "partial", { mode:0o600 });
+  await store.writeRegistry([]);
+
+  const nextContent = Buffer.from("next", "utf8"), next = await store.upload({ name:"next.txt", bytes:nextContent.length, data:nextContent.toString("base64") }, { now });
+  await assertMissing(orphanPath);
+  await assertMissing(orphanDirectory);
+  await assertMissing(orphanHistory);
+  assert.equal((await store.resolve(next.id)).name, "next.txt");
+});
+
+test("automatic cleanup failures are logged without blocking cleanup callers or uploads", async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-cleanup-failure-")), stateDirectory = path.join(directory, "state"), warnings = [];
+  await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
+  t.after(() => fs.rm(directory, { recursive:true, force:true }));
+  class FailingCleanupStore extends CanvasAgentProjectStore {
+    async cleanupUploadsLocked() { throw new Error("simulated cleanup failure"); }
+  }
+  const store = new FailingCleanupStore({ stateDirectory, logger:entry => warnings.push(entry) });
+
+  const cleanup = await store.cleanupUploads();
+  assert.equal(cleanup.failed, true);
+  assert.equal(warnings[0]?.errorCode, "cleanup_failed");
+  assert.equal(JSON.stringify(warnings).includes("simulated cleanup failure"), false, "cleanup warnings do not expose filesystem error details");
+
+  const content = Buffer.from("upload continues", "utf8"), uploaded = await store.upload({
+    name:"continues.txt", bytes:content.length, data:content.toString("base64"),
+  });
+  assert.equal((await store.resolve(uploaded.id)).name, "continues.txt");
+
+  const storeWithBrokenLogger = new FailingCleanupStore({ stateDirectory:path.join(directory, "broken-logger"), logger:() => { throw new Error("logger failed"); } });
+  const secondContent = Buffer.from("logger cannot block", "utf8"), second = await storeWithBrokenLogger.upload({
+    name:"logger.txt", bytes:secondContent.length, data:secondContent.toString("base64"),
+  });
+  assert.equal((await storeWithBrokenLogger.resolve(second.id)).name, "logger.txt");
 });
 
 test("allowed server roots expose opaque IDs and relative folders while rejecting absolute, traversal, metadata, and symlink paths", async t => {
@@ -361,11 +478,12 @@ test("main resource routes separate native paths from roots and uploads and reco
   assert.match(routes, /req\.method === "POST" && url\.pathname === "\/api\/canvas-agent\/projects"[\s\S]*add\(body\?\.path, \{ kind:body\?\.kind, origin:"native" \}\)/);
   assert.match(routes, /"\/api\/canvas-agent\/projects\/from-root"[\s\S]*addFromRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
   assert.match(routes, /"\/api\/canvas-agent\/projects\/from-host-root"[\s\S]*addFromHostRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
-  assert.match(routes, /"\/api\/canvas-agent\/files"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.upload\(body\)/);
+  assert.match(routes, /"\/api\/canvas-agent\/files"[\s\S]*canvasAgent\.activeProjectIds\(\)[\s\S]*CANVAS_AGENT_PROJECT_STORE\.upload\(body, \{ protectedProjectIds \}\)/);
   assert.match(routes, /"\/api\/canvas-agent\/roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listRoots\(\)/);
   assert.match(routes, /"\/api\/canvas-agent\/host-roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listHostRoots\(\)/);
   assert.match(routes, /canvasAgentRootEntriesMatch[\s\S]*getAll\("path"\)\.length > 1[\s\S]*browseRoot\(canvasAgentRootEntriesMatch\[1\], url\.searchParams\.get\("path"\) \|\| ""\)/);
   assert.match(mainSource, /PENECHO_CANVAS_AGENT_ALLOWED_ROOTS[\s\S]*path\.isAbsolute\(selectedPath\)/);
+  assert.match(mainSource, /CANVAS_AGENT_PROJECT_STORE\.cleanupUploads\(\)[^\n]*;\s*server\.listen/, "startup cleanup must not gate server listening");
 
   const remoteLines = remoteCanvasHttpSource.split(/\r?\n/);
   const rawProjectRoute = remoteLines.find(line => line.includes("pattern:/^\\/api\\/canvas-agent\\/projects$/")) || "";

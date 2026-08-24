@@ -258,6 +258,14 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(canvasPreload, /installCli:provider => ipcRenderer\.invoke\("penecho:install-cli", provider\)/);
   assert.doesNotMatch(canvasPreload, /pickProjectDirectory|penecho:pick-project-directory/);
   assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
+  assert.match(canvasPreload, /hasClipboardFile:\(\) => ipcRenderer\.sendSync\("penecho:has-clipboard-file"\)/);
+  assert.match(canvasPreload, /readClipboardFile:\(\) => ipcRenderer\.invoke\("penecho:read-clipboard-file"\)/);
+  assert.match(canvasPreload, /openProjectFile:projectId => ipcRenderer\.invoke\("penecho:open-project-file", projectId\)/);
+  assert.match(main, /ipcMain\.on\("penecho:has-clipboard-file"[\s\S]*?fromCanvas\(event\)/);
+  assert.match(main, /ipcMain\.handle\("penecho:read-clipboard-file"[\s\S]*?fromCanvas\(event\)/);
+  assert.match(main, /public\.file-url[\s\S]*?text\/uri-list[\s\S]*?x-special\/gnome-copied-files/);
+  assert.match(main, /CANVAS_AGENT_CLIPBOARD_FILE_LIMIT = 32 \* 1024 \* 1024/);
+  assert.match(main, /ipcMain\.handle\("penecho:open-project-file"[\s\S]*?fromCanvas\(event\)[\s\S]*?canvasAgentDesktopProjectStore\(\)\.resolve[\s\S]*?shell\.openPath\(project\.path\)/);
   assert.doesNotMatch(main, /penecho:pick-project-directory|properties:\["openDirectory"/);
   assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);
   assert.doesNotMatch(canvasPreload, /openSettings/);
@@ -366,7 +374,7 @@ test("desktop Canvas file picker is sender-guarded, single-file, and type-limite
   assert.match(handler, /dialog\.showOpenDialog\(mainWindow, \{/);
   assert.match(handler, /properties:\["openFile"\]/);
   assert.doesNotMatch(handler, /multiSelections/);
-  assert.match(handler, /name:"Documents", extensions:\["pdf", "docx", "xlsx", "csv"\]/);
+  assert.match(handler, /name:"Documents", extensions:\["pdf", "docx", "xlsx", "csv", "pptx"\]/);
   assert.match(handler, /name:"SQLite databases", extensions:\["db", "sqlite", "sqlite3"\]/);
   assert.match(handler, /name:"Images", extensions:\["png", "jpg", "jpeg", "webp", "gif"\]/);
   assert.match(handler, /name:"Text, source, and configuration"/);

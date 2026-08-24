@@ -186,7 +186,7 @@ function codexEventError(event) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function runJsonProcess(launch, args, prompt, cwd, env, signal, onProgress = null, onActivity = null) {
+function runJsonProcess(launch, args, prompt, cwd, env, signal, onProgress = null, onActivity = null, onUsage = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -244,6 +244,7 @@ function runJsonProcess(launch, args, prompt, cwd, env, signal, onProgress = nul
       if (event?.type === "turn.completed") {
         if (signal?.aborted) return failEarly(abortError(traceDiagnostic()));
         if (!finalContent) return failEarly(new Error("Codex CLI completed the turn without a final agent message."));
+        try { if (event.usage && typeof event.usage === "object") onUsage?.(event.usage); } catch {}
         finishEarly(finalContent);
       } else if (event?.type === "turn.failed" || event?.type === "error") {
         const detail = codexEventError(event), error = new Error(`Codex CLI turn failed${detail ? `: ${detail}` : "."}`);
@@ -302,7 +303,7 @@ function decodeAtlasImage(dataUrl) {
   return { buffer:Buffer.from(match[2], "base64"), extension:format, mimeType:`image/${format}` };
 }
 
-async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env, onProgress = null, onActivity = null }) {
+async function callCodexCli({ executable, model, effort, prompt, atlasImage, signal, env = process.env, onProgress = null, onActivity = null, onUsage = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-codex-"));
   const imageInputs = (Array.isArray(atlasImage) ? atlasImage : atlasImage ? [atlasImage] : []).filter(Boolean).slice(0, 5),
     images = imageInputs.map(decodeAtlasImage),
@@ -315,7 +316,7 @@ async function callCodexCli({ executable, model, effort, prompt, atlasImage, sig
     const launch = resolveCodexLaunch(executable, env),
       args = buildCodexArgs({ workDir, imageFiles, outputFile, model, effort }),
       childEnv = await prepareIsolatedRuntime(workDir, env),
-      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal, onProgress, onActivity);
+      result = await runJsonProcess(launch, args, prompt, workDir, childEnv, signal, onProgress, onActivity, onUsage);
     cleanupReady = result.cleanupReady || cleanupReady;
     deferCleanup = Boolean(result.deferCleanup);
     if (signal?.aborted) throw abortError();

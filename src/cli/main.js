@@ -31,8 +31,18 @@ const REQUIRED_ASSETS = [
 ];
 
 const PROVIDER_OPTIONS = "api, kimi-cli, codex-cli, or claude-cli";
-const KIMI_INSTALL_GUIDANCE = "Kimi Code CLI is not available. Install it, sign in, then test the connection again:\n  macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\n  Windows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\n  Verify: kimi --version\n  Authenticate: kimi login\n  Official guide: https://github.com/MoonshotAI/kimi-code";
+const CLI_UPGRADE_COMMANDS = Object.freeze({
+  "kimi-cli":Object.freeze({ posix:"curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash", win32:"irm https://code.kimi.com/kimi-code/install.ps1 | iex" }),
+  "codex-cli":Object.freeze({ posix:"curl -fsSL https://chatgpt.com/codex/install.sh | sh", win32:"irm https://chatgpt.com/codex/install.ps1 | iex" }),
+  "claude-cli":Object.freeze({ posix:"curl -fsSL https://claude.ai/install.sh | bash", win32:"irm https://claude.ai/install.ps1 | iex" }),
+});
 const CLI_PREFLIGHT_TIMEOUT_MS = 30000;
+
+function cliUpgradeCommand(provider, platform = process.platform) {
+  const commands = CLI_UPGRADE_COMMANDS[provider];
+  if (!commands) throw new Error("Choose Kimi CLI, Codex CLI, or Claude CLI.");
+  return platform === "win32" ? commands.win32 : commands.posix;
+}
 
 function parsePort(value) {
   const text = String(value ?? "").trim();
@@ -366,14 +376,14 @@ async function runKimiPreflight(configuration, options = {}) {
   const runner = options.runner || runCaptured;
   let launch;
   try { launch = resolveKimiLaunch(configuration.env.KIMI_CLI_PATH || "kimi", configuration.env); }
-  catch (error) { return { ok:false, error:`${error.message}\n${KIMI_INSTALL_GUIDANCE}` }; }
+  catch (error) { return { ok:false, error:error.message }; }
   try {
     const env = { ...configuration.env, KIMI_CODE_NO_AUTO_UPDATE:"1" },
       version = await runner(launch, ["--version"], { cwd:configuration.cwd, env, timeoutMs:CLI_PREFLIGHT_TIMEOUT_MS });
-    if (version.code !== 0) return { ok:false, error:`Kimi Code CLI could not report its version.\n${KIMI_INSTALL_GUIDANCE}` };
+    if (version.code !== 0) return { ok:false, error:"Kimi Code CLI could not report its version." };
     return { ok:true, version:(version.stdout || version.stderr).trim().split(/\r?\n/, 1)[0] || "Kimi Code CLI" };
   } catch (error) {
-    return { ok:false, error:`Kimi Code CLI check failed: ${error.message}\n${KIMI_INSTALL_GUIDANCE}` };
+    return { ok:false, error:`Kimi Code CLI check failed: ${error.message}` };
   }
 }
 
@@ -643,21 +653,19 @@ async function main(argv = process.argv.slice(2), options = {}) {
   } else if (configuration.provider === "kimi-cli") {
     const kimi = await runKimiPreflight(configuration, { runner:options.runner });
     if (!kimi.ok) {
-      errorOutput.write(`PenEcho Kimi check failed: ${kimi.error}\nRun \`penecho doctor --kimi\` for full diagnostics.\n`);
-      return 1;
+      errorOutput.write(`PenEcho Kimi check warning: ${kimi.error}\nUpgrade or repair Kimi Code CLI:\n  ${cliUpgradeCommand("kimi-cli", options.platform)}\nPenEcho will start, but Kimi requests may fail until this is resolved. Run \`penecho doctor --kimi\` for full diagnostics.\n`);
+    } else {
+      output.write(`PenEcho is using Kimi CLI (${kimi.version}).\nIf Canvas requests cannot reach Kimi, verify or install the CLI yourself:\n  macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\n  Windows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\n  Verify: kimi --version\n  Authenticate: kimi login\n  Official guide: https://github.com/MoonshotAI/kimi-code\n`);
     }
-    output.write(`PenEcho is using Kimi CLI (${kimi.version}).\nIf Canvas requests cannot reach Kimi, verify or install the CLI yourself:\n  macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash\n  Windows PowerShell: irm https://code.kimi.com/kimi-code/install.ps1 | iex\n  Verify: kimi --version\n  Authenticate: kimi login\n  Official guide: https://github.com/MoonshotAI/kimi-code\n`);
   } else if (configuration.provider === "codex-cli") {
     const codex = await runCodexPreflight(configuration, { runner: options.runner });
     if (!codex.ok) {
-      errorOutput.write(`PenEcho Codex check failed: ${codex.error}\nRun \`penecho doctor --codex\` for full diagnostics.\n`);
-      return 1;
+      errorOutput.write(`PenEcho Codex check warning: ${codex.error}\nUpgrade or repair Codex CLI:\n  ${cliUpgradeCommand("codex-cli", options.platform)}\nPenEcho will start, but Codex requests may fail until this is resolved. Run \`penecho doctor --codex\` for full diagnostics.\n`);
     }
   } else {
     const claude = await runClaudePreflight(configuration, { runner: options.runner });
     if (!claude.ok) {
-      errorOutput.write(`PenEcho Claude check failed: ${claude.error}\nRun \`penecho doctor --claude\` for full diagnostics.\n`);
-      return 1;
+      errorOutput.write(`PenEcho Claude check warning: ${claude.error}\nUpgrade or repair Claude Code:\n  ${cliUpgradeCommand("claude-cli", options.platform)}\nPenEcho will start, but Claude requests may fail until this is resolved. Run \`penecho doctor --claude\` for full diagnostics.\n`);
     }
   }
   configuration.env.PENECHO_CONFIG_FILE = configuration.configFile;

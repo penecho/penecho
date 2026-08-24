@@ -688,6 +688,29 @@ test("widget patch strips non-diff boundary lines but rejects unsafe envelopes a
   assert.equal(commandFromWidgetPatch({ tool:"widget_patch", patch:`--- a/widget.html\n+++ b/widget.html\n${validHunk}`, title:"model metadata" }, htmlEdit()), null);
 });
 
+test("widget patch diagnoses bare file headers with the exact canonical headers", () => {
+  const diagnostics={includeLocationDetails:true}, patch=[
+    "--- widget.html",
+    "+++ widget.html",
+    "@@ -3,3 +3,3 @@",
+    " <body>",
+    "-<h1>Old</h1>",
+    "+<h1>New</h1>",
+    " <p>Keep</p>",
+    "",
+  ].join("\n");
+  assert.equal(commandFromWidgetPatch(patchCommand(patch),htmlEdit(),diagnostics),null);
+  assert.deepEqual(diagnostics,{
+    includeLocationDetails:true,
+    reason:"invalid-file-header-prefix",
+    path:"widget.html",
+    submittedOldHeader:"--- widget.html",
+    submittedNewHeader:"+++ widget.html",
+    expectedOldHeader:"--- a/widget.html",
+    expectedNewHeader:"+++ b/widget.html",
+  });
+});
+
 test("widget patch accepts non-diff tool boundary lines", () => {
   const patch = [
       "*** Begin Patch",

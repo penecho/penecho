@@ -7,6 +7,7 @@
   <link rel="icon" href="data:,">
   <title>PenEcho | Handwritten AI Canvas</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="canvas-agent-activity.css">
   <link rel="stylesheet" href="cloud-connect.css">
   <link rel="stylesheet" href="remote-canvas.css">
   <link rel="stylesheet" href="viewer.css">
@@ -409,14 +410,12 @@
           <section id="canvasAgentProjectPopover" class="canvas-agent-project-popover" role="dialog" data-i18n-aria="canvasAgentProject" aria-label="Choose project or file" hidden>
             <header><div><strong data-i18n="canvasAgentProject">Choose project or file</strong><small data-i18n="canvasAgentProjectBoundary">Folders and single files are read-only.</small></div><button id="canvasAgentProjectClose" type="button" data-i18n-aria="canvasAgentProjectClose" aria-label="Close project chooser">×</button></header>
             <div id="canvasAgentProjectList" class="canvas-agent-project-list"></div>
-            <div class="canvas-agent-project-actions">
+            <div id="canvasAgentProjectActions" class="canvas-agent-project-actions" hidden>
               <button id="canvasAgentProjectAddFile" class="canvas-agent-project-add" type="button" data-i18n="canvasAgentAddProjectFile">Add local file</button>
-              <button id="canvasAgentProjectUpload" class="canvas-agent-project-add" type="button" data-i18n="canvasAgentUploadFile">Upload file</button>
-              <input id="canvasAgentProjectUploadInput" type="file" accept=".pdf,.docx,.xlsx,.csv,.db,.sqlite,.sqlite3,.png,.jpg,.jpeg,.webp,.gif,.txt,.text,.md,.markdown,.mdx,.rst,.adoc,.log,.json,.jsonc,.jsonl,.ndjson,.yaml,.yml,.toml,.ini,.cfg,.conf,.config,.properties,.env,.xml,.xsd,.svg,.html,.htm,.css,.scss,.sass,.less,.js,.jsx,.mjs,.cjs,.ts,.tsx,.mts,.cts,.py,.pyi,.rb,.php,.java,.kt,.kts,.go,.rs,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.scala,.swift,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.sql,.graphql,.gql,.proto,.vue,.svelte,.astro,.tex,.lock,.diff,.patch" hidden>
             </div>
             <section id="canvasAgentProjectRoots" class="canvas-agent-project-roots" hidden>
-              <header><button id="canvasAgentProjectRootBack" type="button" data-i18n-aria="canvasAgentRootBack" aria-label="Back" hidden>←</button><strong id="canvasAgentProjectRootPath" data-i18n="canvasAgentServerFolders">Server folders</strong></header>
-              <small data-i18n="canvasAgentServerFoldersDetail">Folders shared by this PenEcho host</small>
+              <header><button id="canvasAgentProjectRootBack" type="button" data-i18n-aria="canvasAgentRootBack" aria-label="Back" hidden>←</button><strong id="canvasAgentProjectRootPath" data-i18n="canvasAgentServerFolders">Create project from host folders</strong></header>
+              <small data-i18n="canvasAgentServerFoldersDetail">Choose a host folder to create a read-only project</small>
               <div id="canvasAgentProjectRootList" class="canvas-agent-project-root-list"></div>
               <button id="canvasAgentProjectRootSelect" class="canvas-agent-project-root-select" type="button" data-i18n="canvasAgentRootSelect" hidden>Use this folder</button>
               <small id="canvasAgentProjectRootTruncated" class="canvas-agent-project-root-truncated" data-i18n="canvasAgentRootTruncated" hidden>Some folders are not shown.</small>
@@ -434,7 +433,7 @@
             <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Talk directly to your canvas.</strong><span data-i18n="canvasAgentEmptyBody">Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.</span></div>
           </div>
           <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
-          <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Image attachments" hidden></div>
+          <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Attachments" hidden></div>
           <section id="canvasAgentApproval" class="canvas-agent-approval" role="alertdialog" aria-modal="false" data-i18n-aria="canvasAgentApproval" aria-label="Authorize project command" hidden>
             <strong data-i18n="canvasAgentApprovalTitle">Authorize critical command?</strong>
             <span id="canvasAgentApprovalReason"></span>
@@ -455,7 +454,7 @@
               <p id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></p>
             </section>
             <footer class="canvas-agent-composer-actions">
-              <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach images" data-i18n-title="canvasAgentAttachTitle" title="Paste or attach up to five images">
+              <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach file" data-i18n-title="canvasAgentAttachTitle" title="Attach one file or up to five images">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
                 <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
               </button>
@@ -468,10 +467,10 @@
               <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
               </button>
-              <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Set a Tavily API key in Settings to enable internet search" data-tooltip="Set a Tavily API key in Settings to enable internet search">
+              <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
               </button>
-              <input id="canvasAgentImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+              <input id="canvasAgentFileInput" type="file" multiple hidden>
               <span class="canvas-agent-action-spacer"></span>
               <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n="canvasAgentStop" hidden>Stop</button>
               <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n="canvasAgentSend">Send</button>
@@ -615,7 +614,7 @@
             <button id="pluginButton" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pluginPopover" data-i18n-aria="plugins" aria-label="Plugins">
               <strong data-i18n="plugins">Plugins</strong><small data-i18n="settingsPluginsEntryHelp">Manage AI capabilities</small>
             </button>
-            <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">Add a Tavily API key</small></button>
+            <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">Built-in search ready · Tavily optional</small></button>
             <button id="settingsOpenSystem" type="button"><strong data-i18n="settingsSystemEntry">System settings</strong><small data-i18n="settingsSystemEntryHelp">Restart required after saving</small></button>
           </div>
         </section>
@@ -663,10 +662,10 @@
           </section>
           <section class="settings-group settings-search-group" aria-labelledby="settingsSearchHeading">
             <div class="settings-section-heading">
-              <div><h3 id="settingsSearchHeading" data-i18n="settingsSearchSection">Internet search</h3><p data-i18n="settingsSearchDescription">Let Canvas Agent search current public web information through Tavily.</p></div>
+              <div><h3 id="settingsSearchHeading" data-i18n="settingsSearchSection">Internet search</h3><p data-i18n="settingsSearchDescription">Keep research, GitHub, stock, and public web search ready for faster answers when internet search is on.</p></div>
               <span id="settingsTavilySaved" class="settings-saved-badge" hidden data-i18n="settingsKeySaved">Key saved</span>
             </div>
-            <label class="settings-field"><span data-i18n="settingsTavilyApiKey">Tavily API key</span><input id="settingsTavilyApiKey" name="tavilyApiKey" type="password" autocomplete="new-password" placeholder="tvly-…"><small data-i18n="settingsTavilyApiKeyHelp">Stored locally and sent only from the PenEcho service to Tavily when search is enabled.</small></label>
+            <label class="settings-field"><span data-i18n="settingsTavilyApiKey">Tavily API key</span><input id="settingsTavilyApiKey" name="tavilyApiKey" type="password" autocomplete="new-password" placeholder="tvly-…"><small data-i18n="settingsTavilyApiKeyHelp">Optional primary web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled.</small></label>
           </section>
           <div class="settings-form-footer">
             <button id="settingsEditorCancel" class="settings-editor-cancel" type="button" data-i18n="settingsCancel">Cancel</button>
@@ -783,6 +782,7 @@
   <script src="plugins.js"></script>
   <script src="summon.js"></script>
   <script src="app.js"></script>
+  <script src="canvas-agent-activity.js"></script>
   <script src="cloud-connect.js"></script>
   <script src="viewer.js" defer></script>
 </body>

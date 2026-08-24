@@ -22,6 +22,9 @@
     })(),
     rendererUrl = new URL("widget-renderer.js", location.href).href,
     visualExplainerVendorUrl = new URL("visual-explainer-vendor.js?v=0.2.20", location.href).href,
+    visualExplorerManimWebUrl = new URL("visual-explorer-manim-web/manim-web.browser.js?v=0.3.24", location.href).href,
+    visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
+    authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     cloudCsrf = remoteCanvas ? document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || "" : "",
@@ -42,7 +45,7 @@
   inner.setAttribute("title", "Dynamic canvas widget");
   inner.addEventListener("load", forwardWidgetState);
   document.body.append(inner);
-  function runtime(runtimeVersion) {
+  function runtime(runtimeVersion, scienceMode = false) {
     const UPDATED = "penecho-widget-updated",
       DRAG_START = "penecho-widget-drag-start",
       DRAG_MOVE = "penecho-widget-drag-move",
@@ -785,6 +788,43 @@
       });
       return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
     }
+    function boundedSnapshotHook(hook, phase, timeoutMs = 5000) {
+      if (typeof hook !== "function") return Promise.resolve();
+      const boundedTimeout = Math.max(250, Math.min(5000, Number(timeoutMs) || 5000));
+      let timer;
+      return new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(Error(`Widget snapshot ${phase} hook timed out`)), boundedTimeout);
+        Promise.resolve().then(() => hook()).then(resolve, reject);
+      }).finally(() => clearTimeout(timer)).catch((error) => {
+        throw Error(`Widget snapshot ${phase} hook failed: ${String(error?.message || error).slice(0, 200)}`);
+      });
+    }
+    async function scienceSnapshot(message, hooks) {
+      const totalTimeoutMs = Math.max(1000, Math.min(17500, Number(message.timeoutMs) || 17500)),
+        hookTimeoutMs = Math.max(250, Math.min(1500, Math.floor(totalTimeoutMs * 0.15))),
+        captureTimeoutMs = Math.max(500, totalTimeoutMs - hookTimeoutMs - 250);
+      try {
+        await boundedSnapshotHook(hooks.beforeSnapshot, "before", hookTimeoutMs);
+        return await snapshotDocument({ ...message, timeoutMs:captureTimeoutMs }, true);
+      } catch (error) {
+        parent.postMessage({
+          type:"penecho-widget-snapshot-error",
+          runtimeVersion,
+          requestId:message.requestId,
+          error:String(error?.message || "Scientific Widget snapshot preparation failed").slice(0, 300),
+        }, "*");
+      } finally {
+        try {
+          await boundedSnapshotHook(hooks.afterSnapshot, "after", Math.min(1000, hookTimeoutMs));
+        } catch (error) {
+          console.warn("PenEcho scientific Widget snapshot restore failed:", String(error?.message || error).slice(0, 200));
+        }
+      }
+    }
+    async function snapshot(message) {
+      const hooks = globalThis.__penechoScienceSnapshotHooks;
+      return scienceMode && hooks ? scienceSnapshot(message, hooks) : snapshotDocument(message, false);
+    }
     async function snapshotPrimarySvg(requestedWidth, requestedHeight, scale) {
       const visible = [...document.querySelectorAll("svg")].map((svg) => ({ svg, rect:svg.getBoundingClientRect() }))
         .filter(({ rect }) => rect.width > 0 && rect.height > 0);
@@ -811,7 +851,7 @@
         URL.revokeObjectURL(url);
       }
     }
-    async function snapshot(message) {
+    async function snapshotDocument(message, requirePresentedFrame = false) {
       let restoreSvgStyles = () => {},
         restoreCompatibleColors = () => {};
       try {
@@ -821,7 +861,8 @@
           timeoutMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
         // Read the presented widget without pausing its live runtime. Cancelling
         // animation frames here can blank maps and canvases for the whole save.
-        await settleSnapshotFrame();
+        const presentedFrame = await settleSnapshotFrame();
+        if (requirePresentedFrame && !presentedFrame) throw Error("Widget frame was not presented");
         restoreSvgStyles = inlineSvgComputedStyles();
         restoreCompatibleColors = inlineSnapshotCompatibleColors();
         let captureExpired = false;
@@ -966,9 +1007,10 @@
     }
   }
 
-  function csp(allowNestedFrames = false) {
+  function csp(allowNestedFrames = false, scienceMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
-    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    const manimSource = scienceMode ? ` ${visualExplorerManimWebUrl} ${visualExplorerManimMathJaxUrl}` : "";
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}${manimSource}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function visualExplainerAllowsNestedFrames(planElement) {
@@ -1106,7 +1148,138 @@
     return inlineScriptHasWindowBinding(script) ? `(() => {\n${script}\n})();` : script;
   }
 
-  function widgetDocument(html, pluginStyles = "", documentVersion = 0) {
+  function scienceWidgetMode(parsed, sourceFormat, frameworkVersion) {
+    if (sourceFormat !== "penecho-visual-explorer+html" || frameworkVersion !== "penecho-visual-explorer/1") return false;
+    const skills = [...parsed.querySelectorAll("meta")].filter(meta => meta.getAttribute("name") === "penecho-visual-skill");
+    return skills.length === 1 && ["math-2d", "physics-2d", "math-3d"].includes(skills[0].getAttribute("content"));
+  }
+
+  function scienceUsesManim(parsed) {
+    return [...parsed.querySelectorAll("script:not([src])")].some((element) => {
+      const type = String(element.getAttribute("type") || "").trim().toLowerCase().split(";",1)[0];
+      const source = String(element.textContent || "");
+      return type === "module" && rewriteScienceModuleImports(source, authoredManimWebUrl, visualExplorerManimWebUrl) !== source;
+    });
+  }
+
+  function rewriteScienceModuleImports(source, sourceUrl, targetUrl) {
+    const text = String(source || ""), replacements = [], tokens = [];
+    let index = 0;
+    const identifierStart = /[A-Za-z_$]/, identifierPart = /[A-Za-z0-9_$]/;
+    while (index < text.length) {
+      const char = text[index], next = text[index + 1];
+      if (/\s/.test(char)) {
+        index++;
+        continue;
+      }
+      if (char === "/" && next === "/") {
+        index += 2;
+        while (index < text.length && !/[\r\n]/.test(text[index])) index++;
+        continue;
+      }
+      if (char === "/" && next === "*") {
+        index += 2;
+        while (index < text.length && !(text[index] === "*" && text[index + 1] === "/")) index++;
+        index = Math.min(text.length, index + 2);
+        continue;
+      }
+      if (char === "'" || char === '"' || char === "`") {
+        const quote = char, start = index++, valueStart = index;
+        while (index < text.length) {
+          if (text[index] === "\\") {
+            index += 2;
+            continue;
+          }
+          if (text[index++] === quote) break;
+        }
+        const value = text.slice(valueStart, Math.max(valueStart, index - 1));
+        if (value === sourceUrl) {
+          const previous = tokens[tokens.length - 1], beforePrevious = tokens[tokens.length - 2];
+          let exactImport = previous?.text === "import" && previous.kind === "identifier";
+          if (previous?.text === "(" && previous.kind === "punctuation" && beforePrevious?.text === "import" && beforePrevious.kind === "identifier") exactImport = true;
+          if (previous?.text === "from" && previous.kind === "identifier") {
+            let cursor = tokens.length - 2, importToken = false;
+            while (cursor >= 0) {
+              const token = tokens[cursor--];
+              if (token.kind === "identifier" && token.text === "import") {
+                importToken = true;
+                break;
+              }
+              if (!(token.kind === "identifier" || ["{", "}", "*", ","].includes(token.text))) break;
+            }
+            exactImport = exactImport || importToken;
+          }
+          if (exactImport) replacements.push([start, index, `${quote}${targetUrl}${quote}`]);
+        }
+        tokens.push({ kind:"string", text:value, quote });
+        continue;
+      }
+      if (identifierStart.test(char)) {
+        const start = index++;
+        while (index < text.length && identifierPart.test(text[index])) index++;
+        tokens.push({ kind:"identifier", text:text.slice(start, index) });
+        continue;
+      }
+      tokens.push({ kind:"punctuation", text:char });
+      index++;
+    }
+    let result = text;
+    for (const [start, end, replacement] of replacements.reverse()) {
+      result = result.slice(0, start) + replacement + result.slice(end);
+    }
+    return result;
+  }
+
+  function scienceRuntime(documentVersion, waitForAuthoredReady = true) {
+    const nativeRequestAnimationFrame = typeof requestAnimationFrame === "function" ? requestAnimationFrame.bind(globalThis) : null;
+    let authoredReady = !waitForAuthoredReady, rendererReady = false, readyScheduled = false;
+    const snapshotHooks = { beforeSnapshot:null, afterSnapshot:null };
+    let restoreGetContext = () => {};
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "getContext"),
+        originalGetContext = HTMLCanvasElement.prototype.getContext;
+      if (typeof originalGetContext === "function") {
+        const wrappedGetContext = function(type, attributes) {
+          if (type === "webgl" || type === "webgl2") attributes = { ...(attributes || {}), preserveDrawingBuffer:true };
+          return originalGetContext.call(this, type, attributes);
+        };
+        Object.defineProperty(HTMLCanvasElement.prototype, "getContext", { value:wrappedGetContext, writable:true, configurable:true });
+        restoreGetContext = () => {
+          if (descriptor) Object.defineProperty(HTMLCanvasElement.prototype, "getContext", descriptor);
+          else delete HTMLCanvasElement.prototype.getContext;
+        };
+      }
+    } catch {}
+    function requestTwoFrames(callback) {
+      const request = typeof globalThis.requestAnimationFrame === "function" ? globalThis.requestAnimationFrame.bind(globalThis) : nativeRequestAnimationFrame;
+      if (!request) return;
+      request(() => request(callback));
+    }
+    function finishReady() {
+      if (readyScheduled || !authoredReady || !rendererReady) return;
+      readyScheduled = true;
+      try { restoreGetContext(); } catch {}
+      requestTwoFrames(() => {
+        delete globalThis.__penechoScienceRendererReady;
+        parent.postMessage({ type:"penecho-widget-document-ready", runtimeVersion:documentVersion }, "*");
+      });
+    }
+    globalThis.__penechoScienceRendererReady = () => {
+      rendererReady = true;
+      finishReady();
+    };
+    globalThis.__penechoScienceSnapshotHooks = snapshotHooks;
+    globalThis.penechoWidgetReady = (options) => {
+      if (options && typeof options === "object") {
+        snapshotHooks.beforeSnapshot = typeof options.beforeSnapshot === "function" ? options.beforeSnapshot : null;
+        snapshotHooks.afterSnapshot = typeof options.afterSnapshot === "function" ? options.afterSnapshot : null;
+      }
+      authoredReady = true;
+      finishReady();
+    };
+  }
+
+  function widgetDocument(html, pluginStyles = "", documentVersion = 0, sourceFormat = "", frameworkVersion = "") {
     const parsed = new DOMParser().parseFromString(html, "text/html");
     parsed.querySelectorAll("base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
@@ -1124,6 +1297,18 @@
       element.textContent = scoped;
       element.dataset.penechoScopedWindowBindings = "";
     });
+    const scienceMode = scienceWidgetMode(parsed, sourceFormat, frameworkVersion),
+      waitForAuthoredReady = scienceMode && scienceUsesManim(parsed);
+    if (scienceMode) {
+      parsed.querySelectorAll("script:not([src])").forEach((element) => {
+        const type = String(element.getAttribute("type") || "").trim().toLowerCase();
+        if (type !== "module") return;
+        element.textContent = rewriteScienceModuleImports(element.textContent || "", authoredManimWebUrl, visualExplorerManimWebUrl);
+      });
+      const scienceBootstrap = parsed.createElement("script");
+      scienceBootstrap.textContent = `(${scienceRuntime.toString()})(${JSON.stringify(documentVersion)},${JSON.stringify(waitForAuthoredReady)})`;
+      parsed.head.prepend(scienceBootstrap);
+    }
     parsed.querySelectorAll("img[src],video[src],audio[src],source[src]").forEach((element) => {
       const value = element.getAttribute("src") || "";
       if (/^(?:data:|blob:)/i.test(value)) {
@@ -1136,7 +1321,7 @@
     const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan));
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode);
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1152,7 +1337,7 @@
     const bridgeStyle = parsed.createElement("style");
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);touch-action:none!important;overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{cursor:grabbing!important;user-select:none!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     parsed.head.append(bridgeStyle);
-    if (visualPlan) {
+    if (visualPlan && !scienceMode) {
       const visualReady = parsed.createElement("script");
       visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{if(sent||!visual||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
       parsed.body.append(visualReady);
@@ -1166,7 +1351,11 @@
     const renderer = parsed.createElement("script");
     renderer.src = rendererUrl;
     parsed.body.append(renderer);
-    if (visualPlan) {
+    if (scienceMode) {
+      const rendererReady = parsed.createElement("script");
+      rendererReady.textContent = "if(typeof globalThis.html2canvas===\"function\")globalThis.__penechoScienceRendererReady?.();delete globalThis.__penechoScienceRendererReady";
+      parsed.body.append(rendererReady);
+    } else if (visualPlan) {
       const rendererReady = parsed.createElement("script");
       rendererReady.textContent = `globalThis.__penechoVisualRendererReady?.();delete globalThis.__penechoVisualRendererReady`;
       parsed.body.append(rendererReady);
@@ -1176,7 +1365,7 @@
       parsed.body.append(ready);
     }
     const bridge = parsed.createElement("script");
-    bridge.textContent = `(${runtime.toString()})(${JSON.stringify(documentVersion)})`;
+    bridge.textContent = `(${runtime.toString()})(${JSON.stringify(documentVersion)},${JSON.stringify(scienceMode)})`;
     // Establish the bridge early. The end marker runs after widget-authored scripts and
     // the bundled renderer, without waiting for unrelated images or other load events.
     policy.after(bridge);
@@ -1283,7 +1472,7 @@
         innerDocumentReady = false;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
         parent.postMessage({ type:"penecho-widget-runtime-diagnostics", errors:[], truncated:false }, parentOrigin);
-        const documentSource = widgetDocument(message.html, message.pluginStyles || "", runtimeVersion);
+        const documentSource = widgetDocument(message.html, message.pluginStyles || "", runtimeVersion, message.sourceFormat, message.frameworkVersion);
         inner.removeAttribute("src");
         inner.srcdoc = documentSource;
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"

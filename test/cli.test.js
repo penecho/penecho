@@ -412,6 +412,34 @@ test("Kimi startup identifies the provider and prints manual installation guidan
   assert.match(output.text(), /github\.com\/MoonshotAI\/kimi-code/);
 });
 
+test("CLI preflight failures print one upgrade command without blocking startup", async () => {
+  const providers = [
+    { name:"kimi", pathName:"KIMI_CLI_PATH", label:"Kimi", command:"curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash" },
+    { name:"codex", pathName:"CODEX_CLI_PATH", label:"Codex", command:"curl -fsSL https://chatgpt.com/codex/install.sh | sh" },
+    { name:"claude", pathName:"CLAUDE_CLI_PATH", label:"Claude", command:"curl -fsSL https://claude.ai/install.sh | bash" },
+  ];
+  for (const provider of providers) {
+    const directory = temporaryDirectory(), output = capture(), errorOutput = capture(), starts = [];
+    const cliProvider = `${provider.name}-cli`;
+    const code = await main([`--${provider.name}`], {
+      env:{ AI_PROVIDER:cliProvider, [provider.pathName]:process.execPath, PATH:process.env.PATH }, home:directory, cwd:directory, packageRoot:ROOT,
+      platform:"darwin",
+      output:output.stream, errorOutput:errorOutput.stream,
+      runner:async () => ({ code:1, stdout:"", stderr:"test failure" }),
+      startServer:async configuration => { starts.push(configuration.provider); return { listening:true, close() {} }; },
+      updateScheduler:() => {},
+    });
+    assert.equal(code, 0, errorOutput.text());
+    assert.deepEqual(starts, [cliProvider]);
+    assert.match(errorOutput.text(), new RegExp(`PenEcho ${provider.label} check warning`));
+    assert.match(errorOutput.text(), /Upgrade or repair/);
+    assert.match(errorOutput.text(), new RegExp(provider.command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.equal((errorOutput.text().match(/install\.(?:sh|ps1)/g) || []).length, 1);
+    assert.match(errorOutput.text(), /PenEcho will start/);
+    assert.match(errorOutput.text(), new RegExp(`penecho doctor --${provider.name}`));
+  }
+});
+
 test("doctor is diagnostic-only and reports the unified timeout", async () => {
   const directory = temporaryDirectory(), output = capture(), configuration = resolveConfiguration(parseArgs(["doctor", "--codex"]), {
     env:{ AI_PROVIDER:"codex-cli", AI_TIMEOUT_SECONDS:"180", PORT:"3888", CODEX_CLI_PATH:process.execPath, PATH:process.env.PATH },

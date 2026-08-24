@@ -14,6 +14,70 @@ const FILES = Object.freeze([
     source:"node_modules/@antv/infographic/LICENSE",
     target:"public/vendor/antv-infographic.LICENSE",
   },
+  {
+    source:"node_modules/manim-web/dist/manim-web.browser.js",
+    target:"public/vendor/manim-web-0.3.24/manim-web.browser.js",
+  },
+  {
+    source:"node_modules/manim-web/dist/MathJaxBundle-xSidSV0E.js",
+    target:"public/vendor/manim-web-0.3.24/MathJaxBundle-xSidSV0E.js",
+  },
+  {
+    source:"node_modules/manim-web/LICENSE",
+    target:"public/vendor/manim-web.LICENSE",
+  },
+  {
+    source:"scripts/manim-web-third-party-notices.md",
+    target:"public/vendor/manim-web-licenses/THIRD-PARTY-NOTICES.md",
+  },
+  {
+    source:"node_modules/@mathjax/src/LICENSE",
+    target:"public/vendor/manim-web-licenses/mathjax-LICENSE",
+  },
+  {
+    source:"node_modules/mhchemparser/LICENSE.txt",
+    target:"public/vendor/manim-web-licenses/mhchemparser-LICENSE.txt",
+  },
+  {
+    source:"node_modules/mj-context-menu/LICENSE",
+    target:"public/vendor/manim-web-licenses/mj-context-menu-LICENSE",
+  },
+  {
+    source:"node_modules/speech-rule-engine/LICENSE",
+    target:"public/vendor/manim-web-licenses/speech-rule-engine-LICENSE",
+  },
+  {
+    source:"node_modules/earcut/LICENSE",
+    target:"public/vendor/manim-web-licenses/earcut-LICENSE",
+  },
+  {
+    source:"node_modules/gif.js/README.md",
+    target:"public/vendor/manim-web-licenses/gif.js-README.md",
+  },
+  {
+    source:"node_modules/katex/LICENSE",
+    target:"public/vendor/manim-web-licenses/katex-LICENSE",
+  },
+  {
+    source:"node_modules/opentype.js/LICENSE",
+    target:"public/vendor/manim-web-licenses/opentype.js-LICENSE",
+  },
+  {
+    source:"node_modules/polygon-clipping/LICENSE.md",
+    target:"public/vendor/manim-web-licenses/polygon-clipping-LICENSE.md",
+  },
+  {
+    source:"node_modules/splaytree/Readme.md",
+    target:"public/vendor/manim-web-licenses/splaytree-README.md",
+  },
+  {
+    source:"node_modules/three/LICENSE",
+    target:"public/vendor/manim-web-licenses/three-LICENSE",
+  },
+  {
+    source:"node_modules/typia/LICENSE",
+    target:"public/vendor/manim-web-licenses/typia-LICENSE",
+  },
 ]);
 
 function expectedFiles() {

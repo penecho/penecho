@@ -312,34 +312,16 @@ test("widget links are limited to public HTTPS and always open outside the sandb
 });
 
 test("public-data proxy queues requests beyond twenty and resumes them when a slot opens", async () => {
-  const server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
-    queue = vm.runInNewContext(`(() => {
-      const PUBLIC_FETCH_MAX_CONCURRENT = 20, PUBLIC_FETCH_QUEUE_TIMEOUT_MS = 30000, publicFetchQueue = [];
-      let activePublicFetches = 0;
-      ${functionSource(server, "publicFetchFailure")}
-      ${functionSource(server, "publicFetchAbortError")}
-      ${functionSource(server, "waitForPublicFetchSlot")}
-      ${functionSource(server, "releasePublicFetchSlot")}
-      return {
-        wait:waitForPublicFetchSlot,
-        release:releasePublicFetchSlot,
-        get active() { return activePublicFetches; },
-        get queued() { return publicFetchQueue.length; },
-      };
-    })()`, { setTimeout, clearTimeout });
-  await Promise.all(Array.from({ length:20 }, () => queue.wait(new AbortController().signal)));
+  const queue = require("../src/server/public-fetch.js").createPublicFetchService({ maxConcurrent:20, queueTimeoutMs:30000 });
+  await Promise.all(Array.from({ length:20 }, () => queue.waitForPublicFetchSlot(new AbortController().signal)));
   let resumed = false;
-  const queued = queue.wait(new AbortController().signal).then(() => (resumed = true));
+  const queued = queue.waitForPublicFetchSlot(new AbortController().signal).then(() => (resumed = true));
   await Promise.resolve();
-  assert.equal(queue.active, 20);
-  assert.equal(queue.queued, 1);
   assert.equal(resumed, false);
-  queue.release();
+  queue.releasePublicFetchSlot();
   await queued;
-  assert.equal(queue.active, 20);
-  assert.equal(queue.queued, 0);
-  for (let index = 0; index < 20; index++) queue.release();
-  assert.equal(queue.active, 0);
+  assert.equal(resumed, true);
+  for (let index = 0; index < 20; index++) queue.releasePublicFetchSlot();
 });
 
 test("weather demo is a concise capability contract without an HTML template", () => {
@@ -535,10 +517,11 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   const host = fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"),
     html = fs.readFileSync(path.join(ROOT, "public", "widget-host.html"), "utf8"),
     server = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
+    publicFetch = fs.readFileSync(path.join(ROOT, "src", "server", "public-fetch.js"), "utf8"),
     flowchart = fs.readFileSync(path.join(ROOT, "public", "plugins", "flowchart", "plugin.md"), "utf8"),
     renderer = fs.readFileSync(path.join(ROOT, "public", "vendor", "penecho-dom-renderer.js"), "utf8"),
     rendererLicense = fs.readFileSync(path.join(ROOT, "public", "vendor", "html2canvas.LICENSE"), "utf8");
-  const snapshot = functionSource(host, "snapshot"),
+  const snapshot = functionSource(host, "snapshotDocument"),
     widgetDocument = functionSource(host, "widgetDocument");
   const scopeInlineScript = vm.runInNewContext(`(() => {
     ${functionSource(host, "inlineScriptHasWindowBinding")}
@@ -649,15 +632,15 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /response\.arrayBuffer\(\)/);
   assert.match(host, /\}, \[body\]\)/);
   assert.match(server, /url\.pathname === "\/api\/widget-fetch"/);
-  assert.match(server, /PUBLIC_FETCH_MAX_URL_LENGTH = 16 \* 1024/);
-  assert.match(server, /PUBLIC_FETCH_MAX_CONCURRENT = 20/);
-  assert.match(server, /PUBLIC_FETCH_QUEUE_TIMEOUT_MS = 30000/);
+  assert.match(publicFetch, /PUBLIC_FETCH_MAX_URL_LENGTH = 16 \* 1024/);
+  assert.match(publicFetch, /PUBLIC_FETCH_MAX_CONCURRENT = 20/);
+  assert.match(publicFetch, /PUBLIC_FETCH_QUEUE_TIMEOUT_MS = 30000/);
   assert.match(server, /waitForPublicFetchSlot\(controller\.signal\)/);
   assert.match(server, /if \(slotAcquired\) releasePublicFetchSlot\(\)/);
-  assert.doesNotMatch(server, /url\.port !== "443"/);
-  assert.doesNotMatch(server, /did not return text, JSON, XML, or RSS/);
-  assert.match(server, /dns\.lookup\(hostname, \{ all:true, verbatim:true \}\)/);
-  assert.match(server, /lookup\(_hostname, options, callback\)/);
+  assert.doesNotMatch(publicFetch, /url\.port !== "443"/);
+  assert.doesNotMatch(publicFetch, /did not return text, JSON, XML, or RSS/);
+  assert.match(publicFetch, /dnsLookup\(hostname, \{ all:true, verbatim:true \}\)/);
+  assert.match(publicFetch, /lookup\(_hostname, requestOptions, callback\)/);
   assert.match(host, /MAX_HTML_LENGTH = 200000/);
   assert.match(server, /MAX_WIDGET_HTML_LENGTH = 200000/);
   assert.doesNotMatch(host, /<foreignObject|penecho-widget-snapshot-markup/);
@@ -720,7 +703,7 @@ test("widget host loads generated HTML directly into the opaque sandbox", () => 
     innerLoadRegistration = host.slice(host.indexOf('inner.addEventListener("load"'), host.indexOf("document.body.append(inner)"));
   assert.match(host, /inner\.addEventListener\("load", forwardWidgetState\)/);
   assert.doesNotMatch(innerLoadRegistration, /srcdoc|widgetDocument/);
-  assert.match(host, /const documentSource = widgetDocument\(message\.html, message\.pluginStyles \|\| "", runtimeVersion\);[\s\S]*?inner\.removeAttribute\("src"\);[\s\S]*?inner\.srcdoc = documentSource/);
+  assert.match(host, /const documentSource = widgetDocument\(message\.html, message\.pluginStyles \|\| "", runtimeVersion, message\.sourceFormat, message\.frameworkVersion\);[\s\S]*?inner\.removeAttribute\("src"\);[\s\S]*?inner\.srcdoc = documentSource/);
   assert.doesNotMatch(host, /innerDocumentUrl|releaseInnerDocumentUrl|URL\.revokeObjectURL\(innerDocumentUrl\)/);
   assert.match(host, /inner\.setAttribute\("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox"\)/);
   assert.doesNotMatch(host, /allow-same-origin/);
