@@ -121,7 +121,7 @@ test("single-file runtime exposes one exact canonical file and no sibling-capabl
   assert.match(runtimeSource, /const PenEchoDocumentReaderPlugin = \{[\s\S]*?name:'penecho-document-reader'[\s\S]*?agentCtx\.tools\.register\(projectDocumentReaderTool/);
   assert.match(filePluginBlock, /agentCtx\.plugin\(PenEchoDocumentReaderPlugin/);
   assert.doesNotMatch(filePluginBlock, /agentCtx\.tools\.register\(projectDocumentReaderTool/);
-  assert.doesNotMatch(filePluginBlock, /ToolFs\.apply|projectBashTool|projectPluginLoaderTool/);
+  assert.doesNotMatch(filePluginBlock, /ToolFs\.apply|projectBashTool|projectPluginLoaderTool|projectGlobTool|projectGrepTool/);
   assert.match(runtimeSource, /meta:\{ cwd:project\?\.kind === 'folder' \? project\.path : projectRuntimeDirectory \}/);
   assert.match(runtimeSource, /session\.project\?\.kind === 'file'\) await agentCtx\.plugin\(PenEchoFilePlugin/);
 });

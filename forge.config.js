@@ -62,7 +62,7 @@ module.exports = {
     name:"PenEcho",
     executableName:"PenEcho",
     icon:ICON,
-    asar:{ unpack:"**/node_modules/{sharp,@img}/**/*" },
+    asar:{ unpack:"**/node_modules/{sharp,@img,@vscode}/**/*" },
     prune:true,
     appBundleId:"app.penecho.desktop",
     appCategoryType:"public.app-category.productivity",

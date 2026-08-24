@@ -297,6 +297,7 @@ let localAccessGlobalBlockedUntil = 0;
 const localAccessClientFailures = new Map();
 const localAccessVerificationClients = new Set();
 const activeLocalRequests = new Map();
+const CLI_RESOLUTION_TASKS = new Map();
 let cloudConnector = null;
 
 function firstNonEmpty(...values) {
@@ -327,6 +328,37 @@ function applyHotProviderConfiguration(updates) {
   CODEX_CLI = { executable:String(updates.CODEX_CLI_PATH || CODEX_CLI.executable || "codex").trim() || "codex", model:String(updates.CODEX_CLI_MODEL ?? CODEX_CLI.model ?? "").trim() || null, effort:AI_EFFORT, timeoutMs:MODEL_TIMEOUT_MS };
   CLAUDE_CLI = { executable:String(updates.CLAUDE_CLI_PATH || CLAUDE_CLI.executable || "claude").trim() || "claude", model:String(updates.CLAUDE_CLI_MODEL ?? CLAUDE_CLI.model ?? "").trim() || null, effort:AI_EFFORT, timeoutMs:MODEL_TIMEOUT_MS };
   LOCAL_CLI = AI_PROVIDER === "kimi-cli" ? { ...KIMI_CLI, label:"Kimi CLI", doctor:"kimi" } : AI_PROVIDER === "codex-cli" ? { ...CODEX_CLI, label:"Codex CLI", doctor:"codex" } : AI_PROVIDER === "claude-cli" ? { ...CLAUDE_CLI, label:"Claude CLI", doctor:"claude" } : null;
+}
+
+function applyCliResolution(provider, executable) {
+  const selected = String(executable || "").trim();
+  if (!selected) return;
+  if (provider === "kimi-cli") KIMI_CLI = { ...KIMI_CLI, executable:selected };
+  else if (provider === "codex-cli") CODEX_CLI = { ...CODEX_CLI, executable:selected };
+  else if (provider === "claude-cli") CLAUDE_CLI = { ...CLAUDE_CLI, executable:selected };
+  else return;
+  if (AI_PROVIDER === provider) {
+    const cli = provider === "kimi-cli" ? KIMI_CLI : provider === "codex-cli" ? CODEX_CLI : CLAUDE_CLI;
+    LOCAL_CLI = { ...cli, label:provider === "kimi-cli" ? "Kimi CLI" : provider === "codex-cli" ? "Codex CLI" : "Claude CLI", doctor:provider.replace("-cli", "") };
+  }
+  if (DEFAULT_CONNECTION?.provider === provider) DEFAULT_CONNECTION.cliPath = selected;
+}
+
+function setCliResolutionTask(provider, task) {
+  if (!["kimi-cli", "codex-cli", "claude-cli"].includes(provider) || !task?.then) return;
+  const tracked = Promise.resolve(task), forget = () => { if (CLI_RESOLUTION_TASKS.get(provider) === tracked) CLI_RESOLUTION_TASKS.delete(provider); };
+  CLI_RESOLUTION_TASKS.set(provider, tracked);
+  tracked.then(forget, forget);
+}
+
+async function resolvedCliProvider(provider) {
+  if (!provider?.local) return provider;
+  const task = CLI_RESOLUTION_TASKS.get(provider.provider);
+  if (!task) return provider;
+  const result = await task.catch(() => null);
+  if (!result?.ok || !result.executable) return provider;
+  const key = provider.provider === "kimi-cli" ? "kimi" : provider.provider === "codex-cli" ? "codex" : "claude";
+  return { ...provider, [key]:{ ...provider[key], executable:result.executable }, local:{ ...provider.local, executable:result.executable } };
 }
 
 function applyHotSearchConfiguration(updates) {
@@ -2224,6 +2256,7 @@ function completeRequestTrace(trace, status, httpStatus, body=null, error=null) 
   });
 }
 async function callModel(modelInput, atlasImage, retryInstruction="", effort, externalSignal = null, provider = activeProviderSnapshot(), onProgress = null) {
+  provider = await resolvedCliProvider(provider);
   const controller = new AbortController(), timeout = createActivityAwareTimeout(controller, provider.timeoutMs * reasoningEffortTimeoutMultiplier(effort)),
     streamActivity = () => { timeout.activity(); onProgress?.("activity"); };
   const abortFromClient = () => controller.abort();
@@ -2615,6 +2648,7 @@ function communityMetadataPrompt({kind,language,current,context},repair="") {
   return `${repair?`Correct the previous invalid response. ${short(repair,240)}\n\n`:""}Prepare ${requestedLanguage} metadata for this PenEcho ${kind}. The attached image is an automatically generated read-only screenshot of the exact item being shared. Preserve a useful existing draft when it is already accurate, and improve it when the image supports a clearer result.\n\n<draft-json>\n${JSON.stringify({current,context})}\n</draft-json>`;
 }
 async function requestCommunityMetadataModel(prompt,atlasImage,effort,signal,provider=activeProviderSnapshot(),onActivity=null) {
+  provider=await resolvedCliProvider(provider);
   if(provider.provider==="kimi-cli")return callKimiCli({...provider.kimi,effort,prompt:`${COMMUNITY_METADATA_SYSTEM}\n\n${prompt}`,atlasImage,signal,onActivity});
   if(provider.provider==="codex-cli")return callCodexCli({...provider.codex,effort,prompt:`${COMMUNITY_METADATA_SYSTEM}\n\n${prompt}`,atlasImage,signal,onActivity});
   if(provider.provider==="claude-cli")return callClaudeCli({...provider.claude,effort,systemPrompt:COMMUNITY_METADATA_SYSTEM,prompt,atlasImage,signal,onActivity});
@@ -2662,6 +2696,7 @@ function pluginBundleFromModel(content, currentStyles="") {
   throw validationError || new Error("Plugin output does not contain a valid bundle");
 }
 async function requestPluginAuthoringModel(prompt, effort, signal, provider = activeProviderSnapshot(), onActivity = null) {
+  provider = await resolvedCliProvider(provider);
   if (provider.provider === "kimi-cli") return callKimiCli({ ...provider.kimi, effort, prompt:`${PLUGIN_AUTHORING_SYSTEM}\n\n${prompt}`, signal, onActivity });
   if (provider.provider === "codex-cli") return callCodexCli({ ...provider.codex, effort, prompt:`${PLUGIN_AUTHORING_SYSTEM}\n\n${prompt}`, signal, onActivity });
   if (provider.provider === "claude-cli") return callClaudeCli({ ...provider.claude, effort, systemPrompt:PLUGIN_AUTHORING_SYSTEM, prompt, signal, onActivity });
@@ -3715,6 +3750,8 @@ const canvasAgent = attachCanvasAgent({
   conversationLogger:DEBUG_ARTIFACTS?log:null,
   conversationTrace:canvasAgentRequestTracer,
 });
+server.applyCliResolution = applyCliResolution;
+server.setCliResolutionTask = setCliResolutionTask;
 server.on("close",()=>{
   cloudConnector?.close();
   void canvasAgent.close().catch(error=>log({type:"canvas-agent-close-error",error:String(error?.message||error)}));

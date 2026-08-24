@@ -1577,6 +1577,22 @@ body[data-theme="studio"] footer, body[data-theme="studio"] #coords { color: #66
 .canvas-agent-message.user .canvas-agent-message-role { text-align: right; }
 .canvas-agent-message-body { padding: 9px 11px; color: #334155; border: 1px solid #e2e8f0; border-radius: 12px 12px 12px 4px; background: #f8fafc; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .canvas-agent-message.user .canvas-agent-message-body { color: #312e81; border-color: #dcd9ff; border-radius: 12px 12px 4px; background: #efefff; }
+.canvas-agent-message.error { width: min(94%, 460px); }
+.canvas-agent-message.error .canvas-agent-message-role { color: #991b1b; }
+.canvas-agent-error { overflow: hidden; color: #7f1d1d; border: 1px solid #fecaca; border-radius: 12px 12px 12px 4px; background: #fff7f7; }
+.canvas-agent-error > summary { display: grid; min-height: 42px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 11px; cursor: pointer; list-style: none; }
+.canvas-agent-error > summary::-webkit-details-marker { display: none; }
+.canvas-agent-error > summary:hover, .canvas-agent-error > summary:focus-visible { background: #fef2f2; outline: none; }
+.canvas-agent-error-summary { font-size: 12.5px; font-weight: 650; line-height: 1.45; }
+.canvas-agent-error-action { display: inline-flex; align-items: center; gap: 5px; color: #b91c1c; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.canvas-agent-error-action::after { width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; content: ""; transform: rotate(45deg) translateY(-2px); transition: transform .18s ease; }
+.canvas-agent-error[open] .canvas-agent-error-action::after { transform: rotate(225deg) translate(-2px, -2px); }
+.canvas-agent-error-body { display: grid; gap: 5px; padding: 8px 11px 10px; border-top: 1px solid #fecaca; background: #fff; }
+.canvas-agent-error-code { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 7px; }
+.canvas-agent-error-code[hidden] { display: none; }
+.canvas-agent-error-label { color: #991b1b; font-size: 9.5px; font-weight: 750; line-height: 1.3; text-transform: uppercase; letter-spacing: .04em; }
+.canvas-agent-error-code code { overflow: hidden; color: #7f1d1d; font: 10.5px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-agent-error-message { max-height: 180px; overflow: auto; margin: 0; color: #475569; font: 10.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .canvas-agent-message-body.is-markdown { white-space: normal; }
 .canvas-agent-message-body.is-markdown > :first-child { margin-top: 0; }
 .canvas-agent-message-body.is-markdown > :last-child { margin-bottom: 0; }

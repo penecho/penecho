@@ -87,11 +87,12 @@ test("Canvas Agent local projects are host-owned and keep only five conversation
   await assert.rejects(store.add(path.parse(root).root),/filesystem root/);
   const conversations=Array.from({length:6},(_,index)=>({
     id:`conversation-${index}`,createdAt:100+index,updatedAt:100+index,title:`Conversation ${index}`,
-    items:[{id:`message-${index}`,type:"message",role:"user",text:`Message ${index}`}],
+    items:[{id:`message-${index}`,type:"message",role:"user",text:`Message ${index}`},...(index===5?[{id:"error-5",type:"error",code:"RATE_LIMIT",message:"Too many requests",eventKey:"turn:1"}]:[])],
   }));
   const written=await store.writeHistory(project.id,{conversations});
   assert.equal(written.length,5);
   assert.equal(written[0].id,"conversation-5");
+  assert.deepEqual(written[0].items[1],{id:"error-5",type:"error",code:"RATE_LIMIT",message:"Too many requests",eventKey:"turn:1"});
   assert.deepEqual(await store.readHistory(project.id),written);
   const historyFile=path.join(projectDirectory,".penecho","canvas-agent-history.json");
   assert.equal(fs.existsSync(historyFile),true);
@@ -508,6 +509,32 @@ test("Canvas Agent CLI protocol rejects unregistered tool requests",async()=>{
     callCli:({signal})=>new Promise((resolve,reject)=>signal.addEventListener("abort",()=>reject(signal.reason),{once:true})),
   }),provider=adapter.replaceConnections([{id:"timeout",provider:"claude-cli",cliPath:"claude",cliModel:"",effort:"medium"}])[0];
   await assert.rejects(async()=>{for await(const chunk of adapter.stream({provider,model:"default",messages:[],tools:[]}))void chunk;},/timed out/);
+});
+
+test("Canvas Agent CLI sends a fresh authoritative Harness snapshot on every model step",async()=>{
+  const {PenEchoCliAdapter}=await import("../src/server/canvas-agent/cli-adapter.mjs"),requests=[],wirePrompts=[];
+  const adapter=new PenEchoCliAdapter({callCli:async request=>{
+    wirePrompts.push(request.prompt);
+    requests.push(JSON.parse(request.prompt));
+    return JSON.stringify({type:"final",text:`answer-${requests.length}`});
+  }}),provider=adapter.replaceConnections([{id:"one-shot",provider:"claude-cli",cliPath:"claude",cliModel:"opus",effort:"medium"}])[0],
+    initialMessage={role:"user",source:{kind:"user"},content:[{type:"text",text:"first request"}]},first=[];
+  for await(const chunk of adapter.stream({provider,model:"opus",sessionId:"harness-one-shot",system:"system",messages:[initialMessage],tools:[]}))first.push(chunk);
+  const secondMessages=[
+    initialMessage,
+    {role:"assistant",source:{kind:"model",provider,model:"opus"},content:[{type:"text",text:"answer-1"}]},
+    {role:"user",source:{kind:"tool"},content:[{type:"text",text:"tool result"}]},
+  ],second=[];
+  for await(const chunk of adapter.stream({provider,model:"opus",sessionId:"harness-one-shot",system:"system",messages:secondMessages,tools:[]}))second.push(chunk);
+  assert.equal(requests.length,2,"each Harness step must invoke the isolated CLI path again");
+  assert.equal(requests[0].conversation.length,1);
+  assert.equal(requests[1].conversation.length,3,"the next one-shot request must come from the full Harness history");
+  assert.equal(Object.hasOwn(requests[1],"conversationDelta"),false);
+  assert.equal(Object.hasOwn(requests[1],"contextMode"),false);
+  assert.ok(wirePrompts.every(prompt=>prompt.indexOf('"availableTools":')<prompt.indexOf('"conversation":[')),"stable tool contracts must precede dynamic history for provider prefix caching");
+  assert.equal(first.find(chunk=>chunk.type==="finish")?.replayState,undefined);
+  assert.equal(second.find(chunk=>chunk.type==="finish")?.replayState,undefined);
+  assert.equal(adapter.sessionManager,undefined);
 });
 
 test("Canvas Agent CLI keeps the user visual reference beside the latest generated capture",async()=>{
@@ -1206,6 +1233,10 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   fs.mkdirSync(projectCandidate);
   const projectDirectory=fs.realpathSync(projectCandidate);
   fs.writeFileSync(path.join(projectDirectory,"inside.txt"),"inside\n");
+  fs.mkdirSync(path.join(projectDirectory,"nested"));
+  fs.writeFileSync(path.join(projectDirectory,"nested","nested.txt"),"nested\n");
+  fs.mkdirSync(path.join(projectDirectory,".penecho"));
+  fs.writeFileSync(path.join(projectDirectory,".penecho","private.txt"),"private project metadata\n");
   fs.writeFileSync(path.join(projectDirectory,"long.txt"),Array.from({length:2101},(_,index)=>`line ${index+1}`).join("\n"));
   fs.writeFileSync(path.join(projectDirectory,"wide.txt"),Array.from({length:80},(_,index)=>`${index+1}-${"x".repeat(1000)}`).join("\n"));
   const outsidePath=path.join(stateDirectory,"outside.txt");
@@ -1266,7 +1297,7 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
     if(type==="tool_request"&&payload.name==="project_approval")queueMicrotask(()=>host.resolveToolResult(session,{requestId:payload.requestId,ok:true,result:{allowed:false}}));
   }});
   const visible=session.handle.agent.ctx.tools.schemas(session.handle.agent).map(tool=>tool.name).sort();
-  for(const name of ["list_directory","load_project_plugin","read","read_image"])assert.equal(visible.includes(name),true,name);
+  for(const name of ["glob","grep","list_directory","load_project_plugin","read","read_image"])assert.equal(visible.includes(name),true,name);
   for(const name of ["write","edit","bash"])assert.equal(visible.includes(name),false,`${name} must stay hidden in read-only project mode`);
   assert.equal(visible.includes("read_document"),false,"document readers must remain lazy");
   assert.equal(visible.some(name=>/playwright/i.test(name)),false);
@@ -1298,6 +1329,25 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   assert.equal(listed.isError,false,JSON.stringify(listed));
   assert.match(listed.content[0].text,/inside\.txt/);
   assert.doesNotMatch(listed.content[0].text,/outside\.txt/);
+  const globbed=await host.context.tools.execute({callId:"glob-project",name:"glob",arguments:{pattern:"*.txt"},agent:session.handle.agent,signal});
+  assert.equal(globbed.isError,false,JSON.stringify(globbed));
+  assert.match(globbed.content[0].text,/inside\.txt/);
+  assert.match(globbed.content[0].text,/nested\/nested\.txt/);
+  assert.doesNotMatch(globbed.content[0].text,/\.penecho|private project metadata/);
+  assert.doesNotMatch(globbed.content[0].text,/outside\.txt/);
+  const grepped=await host.context.tools.execute({callId:"grep-project",name:"grep",arguments:{pattern:"inside",include:"*.txt"},agent:session.handle.agent,signal});
+  assert.equal(grepped.isError,false,JSON.stringify(grepped));
+  assert.match(grepped.content[0].text,/Found 1 match[\s\S]*inside\.txt[\s\S]*Line 1: inside/);
+  assert.doesNotMatch(grepped.content[0].text,/outside secret/);
+  const globOutside=await host.context.tools.execute({callId:"glob-outside",name:"glob",arguments:{pattern:"*",path:".."},agent:session.handle.agent,signal});
+  assert.equal(globOutside.isError,true);
+  assert.doesNotMatch(globOutside.content[0].text,/outside secret/);
+  const grepOutside=await host.context.tools.execute({callId:"grep-outside",name:"grep",arguments:{pattern:"outside",path:outsidePath},agent:session.handle.agent,signal});
+  assert.equal(grepOutside.isError,true);
+  assert.doesNotMatch(grepOutside.content[0].text,/outside secret/);
+  const invalidGrep=await host.context.tools.execute({callId:"grep-invalid",name:"grep",arguments:{pattern:"["},agent:session.handle.agent,signal});
+  assert.equal(invalidGrep.isError,true);
+  assert.match(invalidGrep.content[0].text,/pattern was rejected by ripgrep/);
   const loaded=await host.context.tools.execute({callId:"load-documents",name:"load_project_plugin",arguments:{plugin:"documents"},agent:session.handle.agent,signal});
   assert.equal(loaded.isError,false);
   assert.equal(session.handle.agent.ctx.tools.schemas(session.handle.agent).some(tool=>tool.name==="read_document"),true);
@@ -1360,7 +1410,7 @@ test("Canvas Agent single-file scope exposes only its exact read-only reader",as
   const session=await host.connect({clientId:"file-client",connectionId:connection.id,projectId,accessMode:"full",binding:{},send:(type,payload)=>messages.push({type,payload})}),
     visible=session.handle.agent.ctx.tools.schemas(session.handle.agent).map(tool=>tool.name);
   assert.equal(visible.includes("read"),true);
-  for(const forbidden of ["read_image","read_document","read_database","load_project_plugin","write","edit","bash"])assert.equal(visible.includes(forbidden),false,forbidden);
+  for(const forbidden of ["glob","grep","list_directory","read_image","read_document","read_database","load_project_plugin","write","edit","bash"])assert.equal(visible.includes(forbidden),false,forbidden);
   assert.equal(messages[0].payload.project.path,"selected.txt");
   assert.equal(JSON.stringify(messages[0].payload).includes(root),false,"ready must not disclose the host path");
   assert.equal(messages[0].payload.accessMode,"controlled","single files remain read-only even if the client asks for Full Access");
@@ -1499,6 +1549,20 @@ test("Canvas Agent unified attachment picker accepts any file while the native l
   assert.doesNotMatch(desktop,/name:"All files"[\s\S]*?extensions:\["\*"\]/);
 });
 
+test("Canvas Agent maps provider failures to concise localized error categories",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),context={CANVAS_AGENT_ERROR_MESSAGE_LIMIT:8000,t:key=>key};
+  vm.runInNewContext(`${functionSource(source,"canvasAgentHistoryText")}\n${functionSource(source,"canvasAgentNormalizeError")}\n${functionSource(source,"canvasAgentErrorKind")}\n${functionSource(source,"canvasAgentErrorSummary")}`,context);
+  assert.equal(context.canvasAgentErrorKind({code:"PI_AI_ERROR",message:"Concurrency limit exceeded for account, please retry later"}),"busy");
+  assert.equal(context.canvasAgentErrorKind({code:"UNKNOWN",message:"Canvas Agent CLI request timed out after 180 seconds."}),"timeout");
+  assert.equal(context.canvasAgentErrorKind({code:"429",message:"Too many requests"}),"rate_limit");
+  assert.equal(context.canvasAgentErrorKind({code:"CONTEXT_LENGTH_EXCEEDED",message:"Maximum context window reached"}),"request_too_large");
+  assert.equal(context.canvasAgentErrorKind({code:"INVALID_API_KEY",message:"Authentication failed"}),"authentication");
+  assert.equal(context.canvasAgentErrorKind({code:"MODEL_NOT_FOUND",message:"Model was not found"}),"model_unavailable");
+  assert.equal(context.canvasAgentErrorKind({code:"ECONNREFUSED",message:"Connection refused"}),"connection");
+  assert.equal(context.canvasAgentErrorKind({code:"PI_AI_ERROR",message:"Unexpected provider failure"}),"generic");
+  assert.equal(context.canvasAgentErrorSummary({code:"PI_AI_ERROR",message:"Concurrency limit exceeded"}),"canvasAgentErrorBusy");
+});
+
 test("Canvas Agent UI and browser Facade support local and Cloud runtimes and are revision guarded",()=>{
   const html=read("public/index.html"), core=read("src/client/app/core.js"), zh=read("public/locales/zh.js"), persistence=read("src/client/app/persistence.js"), source=read("src/client/app/canvas-agent-runtime.js"), server=read("src/server/main.js"), http=read("src/server/canvas-agent/http.js"), runtime=read("src/server/canvas-agent/runtime.mjs"), requestTrace=read("src/server/canvas-agent/request-trace.js"), css=read("public/style.css");
   const numberedResourceView=vm.runInNewContext(`(${functionSource(source,"canvasAgentLineNumberedResourceView")})`);
@@ -1559,7 +1623,7 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(runtime,/session\.project\?\.kind === 'folder'\) await agentCtx\.plugin\(PenEchoProjectPlugin/);
   assert.match(runtime,/session\.project\?\.kind === 'file'\) await agentCtx\.plugin\(PenEchoFilePlugin/);
   const folderPlugin=runtime.slice(runtime.indexOf("const PenEchoProjectPlugin"),runtime.indexOf("const PenEchoFilePlugin"));
-  assert.match(folderPlugin,/projectTextReaderTool[\s\S]*projectImageReaderTool[\s\S]*projectDirectoryListTool[\s\S]*projectPluginLoaderTool/);
+  assert.match(folderPlugin,/projectTextReaderTool[\s\S]*projectImageReaderTool[\s\S]*projectGlobTool[\s\S]*projectGrepTool[\s\S]*projectDirectoryListTool[\s\S]*projectPluginLoaderTool/);
   assert.match(folderPlugin,/No write, edit, bash, or command-execution capability exists/);
   assert.doesNotMatch(folderPlugin,/ToolFs|projectBashTool/);
   assert.match(runtime,/load_project_plugin/);
@@ -1654,8 +1718,15 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(functionSource(source,"canvasAgentAppendMessageElement"),/item\.role==="assistant"[\s\S]*?canvas-agent-message-copy[\s\S]*?item\.copyable===true/);
   assert.match(functionSource(source,"canvasAgentMarkTurnSummaryCopyable"),/toolRows\.values[\s\S]*?assistantRows\.entries[\s\S]*?lastToolStep[\s\S]*?historyItem\?\.final!==false[\s\S]*?candidates\.at\(-1\)[\s\S]*?canvasAgentSetAssistantCopyReady\(target,true\)/);
   assert.match(source,/function canvasAgentHandleEvent[\s\S]*?assistant_delta[\s\S]*?final:false[\s\S]*?assistant_message[\s\S]*?turn_end[\s\S]*?reason\?\.kind==="completed"[\s\S]*?canvasAgentMarkTurnSummaryCopyable\(event\.turn\)/);
+  assert.match(source,/turn_end[\s\S]*?lastTurnError=event\.reason\?\.kind==="error"\?canvasAgentNormalizeError[\s\S]*?canvasAgentErrorRow\(canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
+  assert.match(source,/agent_status[\s\S]*?status === "idle"&&canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
+  assert.match(source,/envelope\.type === "error"[\s\S]*?canvasAgentNormalizeError\(envelope\.payload\)[\s\S]*?canvasAgentErrorRow\(error/);
+  assert.match(functionSource(source,"canvasAgentNormalizeHistoryItem"),/item\.type === "error"[\s\S]*?code:error\.code[\s\S]*?message:error\.message/);
+  assert.match(functionSource(source,"canvasAgentAppendErrorElement"),/createElement\("details"\)[\s\S]*?createElement\("summary"\)[\s\S]*?canvas-agent-error-message/);
   assert.match(css,/\.canvas-agent-message-actions\[hidden\]\s*\{\s*display: none/);
-  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCopyResponse","canvasAgentResponseCopied","canvasAgentResponseCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock"]) assert.match(dictionary,new RegExp(`${key}:`));
+  assert.match(css,/\.canvas-agent-error > summary\s*\{[^}]*min-height: 42px/);
+  assert.match(css,/\.canvas-agent-error-message\s*\{[^}]*white-space: pre-wrap/);
+  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCopyResponse","canvasAgentResponseCopied","canvasAgentResponseCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock","canvasAgentErrorBusy","canvasAgentErrorTimeout","canvasAgentErrorRateLimit","canvasAgentErrorRequestTooLarge","canvasAgentErrorAuthentication","canvasAgentErrorModelUnavailable","canvasAgentErrorConnection","canvasAgentErrorGeneric","canvasAgentErrorViewDetails","canvasAgentErrorCode","canvasAgentErrorMessage"]) assert.match(dictionary,new RegExp(`${key}:`));
   assert.match(source,/canvasAgentToolInspect[\s\S]*?canvasAgentToolSetView/);
   assert.match(source,/CANVAS_AGENT_HISTORY_KEY = "penecho-canvas-agent-history-v1"/);
   assert.match(source,/CANVAS_AGENT_HISTORY_LIMIT = 5/);
@@ -1732,7 +1803,7 @@ test("Canvas Agent focus and active turns suppress Auto AI while submitted turns
   assert.match(functionSource(agent,"canvasAgentSyncTriggerState"),/\(canvasAgent\.requestPending \|\| canvasAgent\.running\) && canvasAgentPanel\.hidden[\s\S]*classList\.toggle\("is-busy",busy\)[\s\S]*aria-busy/);
   assert.match(functionSource(agent,"canvasAgentAnimatePanel"),/canvasAgentToggle\.getBoundingClientRect\(\)[\s\S]*document\.body\.append\(proxy\)[\s\S]*proxy\.animate/);
   assert.match(functionSource(agent,"closeCanvasAgent"),/getBoundingClientRect\(\)[\s\S]*canvasAgentPanel\.hidden = true[\s\S]*canvasAgentSyncTriggerState\(\)[\s\S]*canvasAgentAnimatePanel\(false,panelRect\)/);
-  assert.match(agent,/let requestSent = false;[\s\S]*canvasAgentBeginRequest\(\);[\s\S]*canvasAgentInput\.disabled = true/);
+  assert.match(agent,/let requestSent = false;[\s\S]*canvasAgentInput\.disabled = true[\s\S]*canvasAgentBeginRequest\(\)/);
   assert.match(agent,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"/);
 });
 

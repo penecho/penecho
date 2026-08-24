@@ -9,12 +9,14 @@ const { Writable } = require("node:stream");
 
 const {
   apiConfigurationIssues,
+  cliCandidates,
   codexBundledModels,
   configuredTimeoutSeconds,
   helpText,
   main,
   parseArgs,
   resolveConfiguration,
+  resolveCliPreflight,
   runClaudePreflight,
   runCodexPreflight,
   runKimiPreflight,
@@ -396,20 +398,18 @@ test("Kimi, Codex, and Claude preflight use only their documented offline checks
   assert.deepEqual(calls, ["--version", "--version", "login status", "--version", "auth status"]);
 });
 
-test("Kimi startup identifies the provider and prints manual installation guidance", async () => {
+test("Kimi startup identifies the resolved provider after the server is available", async () => {
   const directory = temporaryDirectory(), output = capture(), errorOutput = capture();
   const code = await main(["--kimi"], {
     env:{ AI_PROVIDER:"kimi-cli", KIMI_CLI_PATH:process.execPath, PATH:process.env.PATH }, home:directory, cwd:directory, packageRoot:ROOT,
+    candidates:[{ executable:process.execPath, source:"configured" }], awaitCliPreflight:true,
     output:output.stream, errorOutput:errorOutput.stream,
     runner:async () => ({ code:0, stdout:"kimi-code 0.test\n", stderr:"" }),
     startServer:async () => ({ listening:true, close() {} }),
     updateScheduler:() => {},
   });
   assert.equal(code, 0, errorOutput.text());
-  assert.match(output.text(), /using Kimi CLI/);
-  assert.match(output.text(), /code\.kimi\.com\/kimi-code\/install\.sh/);
-  assert.match(output.text(), /kimi login/);
-  assert.match(output.text(), /github\.com\/MoonshotAI\/kimi-code/);
+  assert.match(output.text(), /using the configured Kimi Code CLI/);
 });
 
 test("CLI preflight failures print one upgrade command without blocking startup", async () => {
@@ -423,7 +423,7 @@ test("CLI preflight failures print one upgrade command without blocking startup"
     const cliProvider = `${provider.name}-cli`;
     const code = await main([`--${provider.name}`], {
       env:{ AI_PROVIDER:cliProvider, [provider.pathName]:process.execPath, PATH:process.env.PATH }, home:directory, cwd:directory, packageRoot:ROOT,
-      platform:"darwin",
+      platform:"darwin", candidates:[{ executable:process.execPath, source:"configured" }], awaitCliPreflight:true,
       output:output.stream, errorOutput:errorOutput.stream,
       runner:async () => ({ code:1, stdout:"", stderr:"test failure" }),
       startServer:async configuration => { starts.push(configuration.provider); return { listening:true, close() {} }; },
@@ -435,8 +435,105 @@ test("CLI preflight failures print one upgrade command without blocking startup"
     assert.match(errorOutput.text(), /Upgrade or repair/);
     assert.match(errorOutput.text(), new RegExp(provider.command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.equal((errorOutput.text().match(/install\.(?:sh|ps1)/g) || []).length, 1);
-    assert.match(errorOutput.text(), /PenEcho will start/);
+    assert.match(errorOutput.text(), /PenEcho has started/);
     assert.match(errorOutput.text(), new RegExp(`penecho doctor --${provider.name}`));
+  }
+});
+
+test("explicit authentication failures print login commands instead of upgrade commands", async () => {
+  for (const provider of [
+    { name:"codex", pathName:"CODEX_CLI_PATH", command:"codex login" },
+    { name:"claude", pathName:"CLAUDE_CLI_PATH", command:"claude auth login" },
+  ]) {
+    const directory = temporaryDirectory(), errorOutput = capture();
+    const code = await main([`--${provider.name}`], {
+      env:{ AI_PROVIDER:`${provider.name}-cli`, [provider.pathName]:process.execPath, PATH:"" }, home:directory, cwd:directory, packageRoot:ROOT,
+      candidates:[{ executable:process.execPath, source:"configured" }], awaitCliPreflight:true,
+      output:capture().stream, errorOutput:errorOutput.stream,
+      runner:async (_launch, args) => args[0] === "--version" ? { code:0, stdout:`${provider.name} test\n`, stderr:"" } : { code:1, stdout:"", stderr:"not logged in" },
+      startServer:async () => ({ listening:true }), updateScheduler:() => {},
+    });
+    assert.equal(code, 0);
+    assert.match(errorOutput.text(), new RegExp(provider.command.replaceAll(" ", "\\s")));
+    assert.doesNotMatch(errorOutput.text(), /install\.(?:sh|ps1)/);
+  }
+});
+
+test("CLI discovery prefers managed executables and deduplicates their system aliases", () => {
+  const directory = temporaryDirectory(), home = path.join(directory, "home"), stateDir = path.join(directory, "state"), systemBin = path.join(directory, "system-bin");
+  for (const provider of ["kimi", "codex", "claude"]) {
+    const managed = provider === "claude" ? path.join(home, ".local", "bin", provider) : path.join(stateDir, "tools", provider, "bin", provider),
+      system = path.join(systemBin, provider), aliasDirectory = path.join(directory, `${provider}-alias`), alias = path.join(aliasDirectory, provider);
+    for (const file of [managed, system]) { fs.mkdirSync(path.dirname(file), { recursive:true }); fs.writeFileSync(file, "test", { mode:0o700 }); }
+    fs.mkdirSync(aliasDirectory, { recursive:true });
+    fs.symlinkSync(managed, alias);
+    const candidates = cliCandidates(`${provider}-cli`, { env:{ PATH:[aliasDirectory, systemBin].join(path.delimiter) }, home, stateDir, platform:"linux" });
+    assert.deepEqual(candidates.map(candidate => candidate.executable), [managed, system]);
+    assert.deepEqual(candidates.map(candidate => candidate.source), ["managed", "system"]);
+  }
+});
+
+test("Kimi, Codex, and Claude preflight fall back from managed to system executables", async () => {
+  for (const provider of ["kimi", "codex", "claude"]) {
+    const directory = temporaryDirectory(), managed = path.join(directory, "managed", provider), system = path.join(directory, "system", provider), envName = `${provider.toUpperCase()}_CLI_PATH`;
+    for (const file of [managed, system]) { fs.mkdirSync(path.dirname(file), { recursive:true }); fs.writeFileSync(file, "test", { mode:0o700 }); }
+    const configuration = isolatedConfiguration(parseArgs([`--${provider}`]), { AI_PROVIDER:`${provider}-cli`, [envName]:managed, PATH:"" }), calls = [];
+    const result = await resolveCliPreflight(configuration, {
+      candidates:[{ executable:managed, source:"managed" }, { executable:system, source:"system" }],
+      runner:async (launch, args) => {
+        calls.push([launch.command, ...args]);
+        if (launch.command === managed) return { code:1, stdout:"", stderr:"managed failed" };
+        return { code:0, stdout:args[0] === "--version" ? `${provider} system\n` : "logged in\n", stderr:"" };
+      },
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.executable, system);
+    assert.equal(result.source, "system");
+    assert.equal(result.failures.length, 1);
+    assert.equal(calls[0][0], managed);
+    assert.ok(calls.some(call => call[0] === system));
+  }
+});
+
+test("CLI preflight begins only after the server starts and never delays main", async () => {
+  const directory = temporaryDirectory(), output = capture(), errorOutput = capture(), events = [];
+  let finishRunner, task;
+  const code = await main(["--codex"], {
+    env:{ AI_PROVIDER:"codex-cli", CODEX_CLI_PATH:process.execPath, PATH:"" }, home:directory, cwd:directory, packageRoot:ROOT,
+    candidates:[{ executable:process.execPath, source:"managed" }], output:output.stream, errorOutput:errorOutput.stream,
+    startServer:async () => {
+      events.push("server");
+      return {
+        listening:true,
+        setCliResolutionTask(_provider, value) { events.push("task"); task = value; },
+        applyCliResolution() { events.push("apply"); },
+      };
+    },
+    runner:async () => { events.push("preflight"); return new Promise(resolve => { finishRunner = resolve; }); },
+    updateScheduler:() => {},
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(events, ["server", "preflight", "task"]);
+  assert.equal(typeof finishRunner, "function");
+  finishRunner({ code:1, stdout:"", stderr:"failed" });
+  await task;
+  assert.match(errorOutput.text(), /PenEcho has started/);
+});
+
+test("a successful system fallback is shared with the running server", async () => {
+  for (const provider of ["kimi", "codex", "claude"]) {
+    const directory = temporaryDirectory(), managed = path.join(directory, "managed", provider), system = path.join(directory, "system", provider), envName = `${provider.toUpperCase()}_CLI_PATH`, applied = [];
+    for (const file of [managed, system]) { fs.mkdirSync(path.dirname(file), { recursive:true }); fs.writeFileSync(file, "test", { mode:0o700 }); }
+    const code = await main([`--${provider}`], {
+      env:{ AI_PROVIDER:`${provider}-cli`, [envName]:managed, PATH:"" }, home:directory, cwd:directory, packageRoot:ROOT,
+      candidates:[{ executable:managed, source:"managed" }, { executable:system, source:"system" }], awaitCliPreflight:true,
+      output:capture().stream, errorOutput:capture().stream,
+      runner:async (launch, args) => launch.command === managed ? { code:1, stdout:"", stderr:"failed" } : { code:0, stdout:args[0] === "--version" ? `${provider} system\n` : "logged in\n", stderr:"" },
+      startServer:async () => ({ listening:true, applyCliResolution:(selected, executable) => applied.push([selected, executable]) }),
+      updateScheduler:() => {},
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(applied, [[`${provider}-cli`, system]]);
   }
 });
 

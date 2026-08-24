@@ -746,8 +746,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       openCanvasAgent: "Open Canvas Agent",
       closeCanvasAgent: "Close Canvas Agent",
       newCanvasAgentConversation: "New Canvas Agent conversation",
-      canvasAgentAutoAIFocusPaused: "Canvas Agent has focus · Auto AI is paused.",
-      canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Auto AI is paused.",
+      canvasAgentAutoAIFocusPaused: "Canvas Agent has focus · Canvas Auto AI is paused.",
+      canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Canvas Auto AI is paused.",
       canvasAgentProject: "Choose project or file",
       canvasAgentProjectClose: "Close project chooser",
       canvasAgentProjectBoundary: "Folders and single files are read-only.",
@@ -795,6 +795,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentResumed: "Conversation resumed",
       canvasAgentWorking: "Agent is working…",
       canvasAgentDisconnected: "Disconnected — send to reconnect",
+      canvasAgentErrorBusy: "The AI service is busy, so processing stopped early. Continue shortly.",
+      canvasAgentErrorTimeout: "The Agent took too long to respond, so processing stopped early. Continue when ready.",
+      canvasAgentErrorRateLimit: "The AI request limit was reached. Continue later.",
+      canvasAgentErrorRequestTooLarge: "This request is too large. Reduce its content and try again.",
+      canvasAgentErrorAuthentication: "This AI connection needs to be signed in or reconfigured.",
+      canvasAgentErrorModelUnavailable: "The selected model is unavailable. Choose another model or connection.",
+      canvasAgentErrorConnection: "The AI service could not be reached. Check the connection and try again.",
+      canvasAgentErrorGeneric: "The Agent could not finish this request. Open the error details for more information.",
+      canvasAgentErrorViewDetails: "View details",
+      canvasAgentErrorCode: "Error code",
+      canvasAgentErrorMessage: "Original message",
       canvasAgentEmptyTitle: "Talk directly to your canvas.",
       canvasAgentEmptyBody: "Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.",
       canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
@@ -13835,6 +13846,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_HISTORY_LIMIT = 5,
     CANVAS_AGENT_HISTORY_ITEM_LIMIT = 120,
     CANVAS_AGENT_HISTORY_TEXT_LIMIT = 20000,
+    CANVAS_AGENT_ERROR_MESSAGE_LIMIT = 8000,
     CANVAS_AGENT_MARKDOWN_TEXT_LIMIT = 12000,
     CANVAS_AGENT_MARKDOWN_LINE_LIMIT = 240,
     CANVAS_AGENT_MARKDOWN_MARKER_LIMIT = 800,
@@ -13874,6 +13886,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     incomingSeq:0,
     running:false,
     requestPending:false,
+    lastTurnError:null,
     automaticAIStatusRestore:null,
     assistantRows:new Map(),
     toolRows:new Map(),
@@ -14063,6 +14076,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentApproval.setAttribute("aria-label",t("canvasAgentApproval"));
     const statusKey = { ready:"canvasAgentReady", connecting:"canvasAgentConnecting", running:"canvasAgentWorking", offline:"canvasAgentDisconnected", history:"canvasAgentHistoryViewing" }[canvasAgentPanel.dataset.status];
     if (statusKey) canvasAgentStatus.textContent = t(statusKey);
+    else if(canvasAgentPanel.dataset.status==="error"&&canvasAgent.lastTurnError)canvasAgentStatus.textContent=canvasAgentErrorSummary(canvasAgent.lastTurnError);
     for (const target of canvasAgent.toolRows.values()) canvasAgentRenderToolRow(target);
     for (const block of canvasAgentTranscript.querySelectorAll(".canvas-agent-copy-block")) {
       block.querySelector(".canvas-agent-copy-block-language").textContent=canvasAgentBlockLabel(block.dataset.language||"");
@@ -14070,6 +14084,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.textContent=t(key);
     }
     for (const button of canvasAgentTranscript.querySelectorAll(".canvas-agent-message-copy")) canvasAgentSetAssistantCopyState(button,button.dataset.copyState||"idle");
+    for(const row of canvasAgentTranscript.querySelectorAll(".canvas-agent-message.error"))if(row._canvasAgentErrorTarget)canvasAgentRenderErrorElement(row._canvasAgentErrorTarget);
     canvasAgentSyncSelection();
     if (!canvasAgentReferencePicker.hidden) canvasAgentRenderReferencePicker(canvasAgentReferenceSearch.value);
     canvasAgentRenderHistoryList();
@@ -14394,6 +14409,36 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function canvasAgentHistoryText(value, limit = CANVAS_AGENT_HISTORY_TEXT_LIMIT) {
     return String(value || "").slice(0,limit);
   }
+  function canvasAgentNormalizeError(value) {
+    const source=value&&typeof value==="object"?value:{message:value}, nested=source.error&&typeof source.error==="object"?source.error:null,
+      code=canvasAgentHistoryText(source.code||source.name||nested?.code||nested?.name||"",128).replace(/[\0-\x1f\x7f]/g,"").trim(),
+      fallback=typeof value==="string"?value:"",
+      message=canvasAgentHistoryText(source.message||nested?.message||fallback||"Canvas Agent failed.",CANVAS_AGENT_ERROR_MESSAGE_LIMIT).trim()||"Canvas Agent failed.";
+    return {code,message};
+  }
+  function canvasAgentErrorKind(value) {
+    const error=canvasAgentNormalizeError(value),code=error.code.toUpperCase(),message=error.message.toLowerCase();
+    if(/CONCURRENC|CAPACITY|SERVER_BUSY/.test(code)||/concurrenc|too many simultaneous|server is busy|service is busy/.test(message))return "busy";
+    if(/TIMEOUT|ETIMEDOUT/.test(code)||/timed? out|timeout/.test(message))return "timeout";
+    if(/RATE_LIMIT|TOO_MANY_REQUESTS|RESOURCE_EXHAUSTED|QUOTA/.test(code)||code==="429"||/rate limit|too many requests|quota exceeded|\b(?:http )?429\b/.test(message))return "rate_limit";
+    if(/CONTEXT_LENGTH|REQUEST_TOO_LARGE|PAYLOAD_TOO_LARGE|TOKEN_LIMIT/.test(code)||/context (?:length|window)|too many tokens|request (?:is )?too large|maximum token/.test(message))return "request_too_large";
+    if(/UNAUTHENTICATED|UNAUTHORIZED|AUTHENTICATION_FAILED|INVALID_API_KEY|API_KEY_INVALID|LOGIN_REQUIRED/.test(code)||code==="401"||/\bunauthorized\b|\bunauthenticated\b|authentication failed|invalid api key|please (?:log|sign) in|not logged in|\b(?:http )?401\b/.test(message))return "authentication";
+    if(/MODEL_NOT_FOUND|MODEL_UNAVAILABLE|UNKNOWN_MODEL/.test(code)||/model .*?(?:not found|unavailable|does not exist|not supported)/.test(message))return "model_unavailable";
+    if(/ECONN|ENOTFOUND|EAI_AGAIN|NETWORK|SOCKET|CONNECTION/.test(code)||/network error|fetch failed|connection (?:failed|closed|reset|refused)|socket hang up|could not connect/.test(message))return "connection";
+    return "generic";
+  }
+  function canvasAgentErrorSummary(value) {
+    return t({
+      busy:"canvasAgentErrorBusy",
+      timeout:"canvasAgentErrorTimeout",
+      rate_limit:"canvasAgentErrorRateLimit",
+      request_too_large:"canvasAgentErrorRequestTooLarge",
+      authentication:"canvasAgentErrorAuthentication",
+      model_unavailable:"canvasAgentErrorModelUnavailable",
+      connection:"canvasAgentErrorConnection",
+      generic:"canvasAgentErrorGeneric",
+    }[canvasAgentErrorKind(value)]);
+  }
   function canvasAgentMessageText(value) {
     const text=String(value||"");
     if(text.length<=CANVAS_AGENT_HISTORY_TEXT_LIMIT)return text;
@@ -14422,6 +14467,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       ...(item.role==="assistant"?{final:item.final!==false,...(typeof item.copyable==="boolean"?{copyable:item.copyable}:{})}:{}),
       };
     }
+    if (item.type === "error") {
+      const error=canvasAgentNormalizeError(item);
+      return {
+        id:canvasAgentHistoryText(item.id,128)||canvasClientId(),
+        type:"error",
+        code:error.code,
+        message:error.message,
+        eventKey:canvasAgentHistoryText(item.eventKey,128),
+      };
+    }
     if (item.type === "tool") return {
       id:canvasAgentHistoryText(item.id,128) || canvasClientId(),
       type:"tool",
@@ -14440,6 +14495,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for(const item of items){
       if(item.type==="message"&&item.role==="user"){finish();continue;}
       if(item.type==="tool"){candidate=null;continue;}
+      if(item.type==="error"){candidate=null;continue;}
       if(item.type!=="message"||item.role!=="assistant")continue;
       if(typeof item.copyable==="boolean"){candidate=null;continue;}
       candidate=item.final!==false&&String(item.text||"").trim()?item:null;
@@ -14573,12 +14629,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentHideHistoryPopover();
     canvasAgentSetHistoryViewing("");
     canvasAgentRenderConversation(canvasAgent.currentConversation,true);
-    canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
+    if(!canvasAgent.running&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
+    else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
     canvasAgentInput.focus();
   }
   function canvasAgentBeginLocalConversation({persistCurrent=true}={}) {
     if (persistCurrent) canvasAgentPersistCurrentConversation();
     canvasAgent.currentConversation=canvasAgentNewConversationRecord();
+    canvasAgent.lastTurnError=null;
     canvasAgentSetHistoryViewing("");
     canvasAgentHideHistoryPopover();
     canvasAgentClearTranscript({showEmpty:true});
@@ -15554,6 +15612,57 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const name=String(attachment.name||"penecho-canvas-capture").replace(/[^\w.-]+/g,"-").replace(/^[.-]+/,"").slice(0,180)||"penecho-canvas-capture";
     return {id:canvasClientId(),kind:"canvas_capture",name,mediaType:match[1],bytes,width,height,dataUrl:match[0]};
   }
+  function canvasAgentRenderErrorElement(target) {
+    const item=target.historyItem,error=canvasAgentNormalizeError(item);
+    target.summaryText.textContent=canvasAgentErrorSummary(error);
+    target.action.textContent=t("canvasAgentErrorViewDetails");
+    target.codeRow.hidden=!error.code;
+    target.codeLabel.textContent=t("canvasAgentErrorCode");
+    target.code.textContent=error.code;
+    target.messageLabel.textContent=t("canvasAgentErrorMessage");
+    target.message.textContent=error.message;
+  }
+  function canvasAgentAppendErrorElement(item,append=true) {
+    if(append)canvasAgentTranscript.querySelector(".canvas-agent-empty")?.remove();
+    const row=document.createElement("article"),label=document.createElement("span"),details=document.createElement("details"),summary=document.createElement("summary"),summaryText=document.createElement("span"),action=document.createElement("span"),body=document.createElement("div"),codeRow=document.createElement("div"),codeLabel=document.createElement("span"),code=document.createElement("code"),messageLabel=document.createElement("span"),message=document.createElement("pre");
+    row.className="canvas-agent-message assistant error";
+    label.className="canvas-agent-message-role";
+    label.textContent="Agent";
+    details.className="canvas-agent-error";
+    summaryText.className="canvas-agent-error-summary";
+    action.className="canvas-agent-error-action";
+    body.className="canvas-agent-error-body";
+    codeRow.className="canvas-agent-error-code";
+    codeLabel.className=messageLabel.className="canvas-agent-error-label";
+    message.className="canvas-agent-error-message";
+    summary.append(summaryText,action);
+    codeRow.append(codeLabel,code);
+    body.append(codeRow,messageLabel,message);
+    details.append(summary,body);
+    row.append(label,details);
+    const target={row,details,summaryText,action,codeRow,codeLabel,code,messageLabel,message,historyItem:item};
+    row._canvasAgentErrorTarget=target;
+    canvasAgentRenderErrorElement(target);
+    if(append)canvasAgentTranscript.append(row);
+    return target;
+  }
+  function canvasAgentErrorRow(value,{eventKey=""}={}) {
+    const error=canvasAgentNormalizeError(value),key=canvasAgentHistoryText(eventKey,128);
+    if(!canvasAgent.currentConversation)canvasAgent.currentConversation=canvasAgentNewConversationRecord();
+    const existing=key?canvasAgent.currentConversation.items.find(item=>item.type==="error"&&item.eventKey===key):null;
+    if(existing){
+      const target=[...canvasAgentTranscript.querySelectorAll(".canvas-agent-message.error")].map(row=>row._canvasAgentErrorTarget).find(candidate=>candidate?.historyItem===existing);
+      return target||null;
+    }
+    const item={id:canvasClientId(),type:"error",code:error.code,message:error.message,eventKey:key};
+    canvasAgent.currentConversation.items.push(item);
+    if(canvasAgent.currentConversation.items.length>CANVAS_AGENT_HISTORY_ITEM_LIMIT)canvasAgent.currentConversation.items.splice(0,canvasAgent.currentConversation.items.length-CANVAS_AGENT_HISTORY_ITEM_LIMIT);
+    const target=canvasAgentAppendErrorElement(item,!canvasAgent.viewingHistoryId);
+    canvasAgentScheduleHistoryPersist(0);
+    if(!canvasAgent.viewingHistoryId)canvasAgentScrollToLatest();
+    canvasAgentSyncInputHint();
+    return target;
+  }
   function canvasAgentAppendMessageElement(item, attachments = [], append = true) {
     if (append) canvasAgentTranscript.querySelector(".canvas-agent-empty")?.remove();
     const row = document.createElement("article");
@@ -15703,6 +15812,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (item.type==="message") {
         const target=canvasAgentAppendMessageElement(item,[],true);
         if (active&&item.role==="assistant"&&item.eventKey) canvasAgent.assistantRows.set(item.eventKey,target);
+      } else if(item.type==="error") {
+        canvasAgentAppendErrorElement(item,true);
       } else if (item.type==="tool") {
         const target=canvasAgentAppendToolElement(item,true);
         if (active&&item.callId) canvasAgent.toolRows.set(item.callId,target);
@@ -15725,6 +15836,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!event || typeof event !== "object") return;
     if (event.kind === "turn_start") {
       canvasAgent.requestPending = false;
+      canvasAgent.lastTurnError = null;
       canvasAgentSetRunning(true);
     }
     else if (event.kind === "user_message" && replay && event.text) canvasAgentRow("user",event.text);
@@ -15774,7 +15886,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } else if (event.kind === "turn_end") {
       canvasAgent.requestPending = false;
       if(event.reason?.kind==="completed")canvasAgentMarkTurnSummaryCopyable(event.turn);
+      canvasAgent.lastTurnError=event.reason?.kind==="error"?canvasAgentNormalizeError(event.reason?.error||event.reason):null;
       canvasAgentSetRunning(false);
+      if(canvasAgent.lastTurnError){
+        canvasAgentErrorRow(canvasAgent.lastTurnError,{eventKey:`turn:${event.turn}`});
+        canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
+      }
       canvasAgentSyncState();
       canvasAgentPersistCurrentConversation();
     }
@@ -15785,6 +15902,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (envelope?.version !== CANVAS_AGENT_PROTOCOL_VERSION || !Number.isSafeInteger(envelope.seq) || envelope.seq <= canvasAgent.incomingSeq) return;
     canvasAgent.incomingSeq = envelope.seq;
     if (envelope.type === "ready") {
+      canvasAgent.lastTurnError=null;
       canvasAgent.sessionId = envelope.canvasSessionId;
       canvasAgent.resumeToken = String(envelope.payload?.resumeToken || canvasAgent.resumeToken || "");
       canvasAgent.connectionId = String(envelope.payload?.connectionId || "");
@@ -15815,13 +15933,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else if (envelope.type === "agent_status") {
       canvasAgent.requestPending = false;
       canvasAgentSetRunning(envelope.payload?.status !== "idle");
+      if(envelope.payload?.status === "idle"&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
     }
     else if (envelope.type === "tool_request") await canvasAgentExecuteTool(envelope.payload);
     else if (envelope.type === "error") {
+      const error=canvasAgentNormalizeError(envelope.payload);
       canvasAgent.requestPending = false;
+      canvasAgent.lastTurnError=error;
       canvasAgentSyncTriggerState();
       canvasAgentResumeAutomaticAI();
-      canvasAgentSetStatus(envelope.payload?.message || "Canvas Agent failed","error");
+      canvasAgentErrorRow(error,{eventKey:`envelope:${envelope.seq}`});
+      canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
       if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
     }
   }
@@ -15902,7 +16024,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       });
       socket.addEventListener("message",event=>void canvasAgentHandleMessage(event));
       socket.addEventListener("close",()=>{
-        const wasPending = Boolean(canvasAgent.connectReject);
+        const wasPending = Boolean(canvasAgent.connectReject),hadActiveTurn=canvasAgent.requestPending||canvasAgent.running;
         canvasAgent.connectReject?.(Error("Canvas Agent connection closed."));
         canvasAgent.connectResolve = canvasAgent.connectReject = null;
         canvasAgent.connectPromise = null;
@@ -15914,9 +16036,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         canvasAgentSend.textContent = t("canvasAgentSend");
         canvasAgentSyncTriggerState();
         canvasAgentResumeAutomaticAI();
-        if (!wasPending) canvasAgentSetStatus(t("canvasAgentDisconnected"),"offline");
+        if(hadActiveTurn&&!canvasAgent.lastTurnError){
+          const error=canvasAgentNormalizeError({code:"CONNECTION_CLOSED",message:"Canvas Agent connection closed."});
+          canvasAgent.lastTurnError=error;
+          canvasAgentErrorRow(error,{eventKey:`connection:${Date.now()}`});
+          canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
+        }else if(canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
+        else if (!wasPending) canvasAgentSetStatus(t("canvasAgentDisconnected"),"offline");
       });
-      socket.addEventListener("error",()=>canvasAgentSetStatus("Could not connect to Canvas Agent","error"));
+      socket.addEventListener("error",()=>canvasAgentSetStatus(t("canvasAgentErrorConnection"),"error"));
     });
     return canvasAgentConnect();
   }

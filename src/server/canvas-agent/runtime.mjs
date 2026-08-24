@@ -27,7 +27,8 @@ import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as FsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
-import { cliConnectionProfile, PenEchoCliAdapter, PenEchoCliLlmPlugin } from './cli-adapter.mjs'
+import { rgPath as packagedRipgrepPath } from '@vscode/ripgrep'
+import { callPenEchoCli, cliConnectionProfile, PenEchoCliAdapter, PenEchoCliLlmPlugin } from './cli-adapter.mjs'
 import PenEchoAttachmentStore, { canonicalCanvasCaptureImage } from './image-attachments.mjs'
 import { readPptxPresentation } from './pptx-reader.mjs'
 
@@ -94,6 +95,13 @@ const PROJECT_READ_MAX_LINE_LENGTH = 2_000
 const PROJECT_READ_MAX_BYTES = 50 * 1024
 const PROJECT_BINARY_READ_LIMIT = 8 * 1024
 const PROJECT_DATABASE_QUERY_LIMIT = 8_000
+const PROJECT_SEARCH_RAW_OUTPUT_LIMIT = 20_000_000
+const PROJECT_SEARCH_STDERR_LIMIT = 64 * 1024
+const PROJECT_GLOB_RESULT_LIMIT = 100
+const PROJECT_GREP_MATCH_LIMIT = 250
+const PROJECT_GREP_LINE_LIMIT = 2_000
+const PROJECT_SEARCH_RESULT_LIMIT = 50_000
+const PROJECT_SEARCH_EXCLUDED_DIRECTORIES = Object.freeze(['.git', '.svn', '.hg', '.bzr', '.jj', '.sl', '.penecho'])
 const ACTIVE_PROJECT_ROOTS = new Map()
 
 // Keep this list deliberately small. Harness packages may install peer seams for
@@ -1077,6 +1085,217 @@ function projectPluginLoaderTool(session, agentCtx) {
         return 'Database reader loaded. The read_database tool is now available for bounded read-only SQLite inspection.'
       }
       throw new Error('Only the documents and database readers can be loaded.')
+    },
+  })
+}
+
+function projectRipgrepExecutable() {
+  const asarMarker = `${sep}app.asar${sep}`
+  const unpacked = packagedRipgrepPath.includes(asarMarker)
+    ? packagedRipgrepPath.replace(asarMarker, `${sep}app.asar.unpacked${sep}`)
+    : packagedRipgrepPath
+  if (!existsSync(unpacked)) throw new Error('The packaged project search engine is unavailable.')
+  return unpacked
+}
+
+function projectSearchEnvironment(session) {
+  const environment = {
+    LANG:'C.UTF-8',
+    LC_ALL:'C.UTF-8',
+    NO_COLOR:'1',
+    TMPDIR:session.projectRuntimeDirectory,
+  }
+  if (process.platform === 'win32') {
+    const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
+    environment.SystemRoot = systemRoot
+    environment.WINDIR = systemRoot
+    environment.TEMP = session.projectRuntimeDirectory
+    environment.TMP = session.projectRuntimeDirectory
+  }
+  return environment
+}
+
+function projectSearchFailure(toolName, exitCode, stderr, session) {
+  const detail = boundedText(redactRuntimePath(stderr, session).trim(), 2_000)
+  if (/regex parse error|error parsing glob/i.test(detail)) {
+    return new Error(`${toolName} pattern was rejected by ripgrep${detail ? `: ${detail}` : '.'}`)
+  }
+  return new Error(`${toolName} search failed (exit ${exitCode})${detail ? `: ${detail}` : '.'}`)
+}
+
+function runProjectRipgrep(session, toolName, argv, signal) {
+  return new Promise((resolveSearch, rejectSearch) => {
+    signal?.throwIfAborted()
+    assertActiveProjectRoot(session.project.path)
+    let child
+    try {
+      child = spawn(projectRipgrepExecutable(), ['--no-config', ...argv], {
+        cwd:session.project.path,
+        detached:true,
+        windowsHide:true,
+        stdio:['ignore', 'pipe', 'pipe'],
+        env:projectSearchEnvironment(session),
+      })
+    } catch {
+      rejectSearch(new Error(`The packaged ${toolName} search engine could not start.`))
+      return
+    }
+    const stdout = [], stderr = []
+    let stdoutBytes = 0, stderrBytes = 0, overflow = false, settled = false
+    const finish = (error, value) => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', abort)
+      if (error) rejectSearch(error)
+      else resolveSearch(value)
+    }
+    const abort = () => {
+      killProjectProcess(child)
+      finish(signal?.reason instanceof Error ? signal.reason : new Error(`The ${toolName} search was cancelled.`))
+    }
+    const append = (chunk, target) => {
+      const bytes = Buffer.from(chunk), isStdout = target === stdout, current = isStdout ? stdoutBytes : stderrBytes, limit = isStdout ? PROJECT_SEARCH_RAW_OUTPUT_LIMIT : PROJECT_SEARCH_STDERR_LIMIT
+      if (current + bytes.length > limit) {
+        if (isStdout) {
+          overflow = true
+          killProjectProcess(child)
+        } else {
+          const remaining = Math.max(0, limit - current)
+          if (remaining) target.push(bytes.subarray(0, remaining))
+          stderrBytes = limit
+        }
+        return
+      }
+      target.push(bytes)
+      if (isStdout) stdoutBytes += bytes.length
+      else stderrBytes += bytes.length
+    }
+    child.stdout.on('data', chunk => append(chunk, stdout))
+    child.stderr.on('data', chunk => append(chunk, stderr))
+    child.once('error', () => finish(new Error(`The packaged ${toolName} search engine could not start.`)))
+    signal?.addEventListener('abort', abort, { once:true })
+    if (signal?.aborted) return abort()
+    child.once('close', (exitCode, signalName) => {
+      killProjectProcess(child)
+      if (settled) return
+      if (overflow) return finish(new Error(`${toolName} produced more than ${PROJECT_SEARCH_RAW_OUTPUT_LIMIT} bytes of raw output; narrow pattern, path, or include and retry.`))
+      if (signalName || exitCode === null) return finish(new Error(`The ${toolName} search stopped before completion.`))
+      const stdoutText = Buffer.concat(stdout).toString('utf8'), stderrText = Buffer.concat(stderr).toString('utf8')
+      if (exitCode === 0 || exitCode === 1) return finish(null, { stdout:stdoutText, noMatches:exitCode === 1 })
+      finish(projectSearchFailure(toolName, exitCode, stderrText, session))
+    })
+  })
+}
+
+async function projectSearchTarget(session, agentCtx, input, signal, directoryOnly) {
+  const requested = input === undefined ? '.' : String(input)
+  if (!requested.trim()) throw new Error('path must be a non-empty string when given.')
+  const target = await agentCtx.fs.resolve(requested, { cwd:session.project.path, signal }), localPath = agentCtx.fs.processPath(target)
+  if (!projectPathInside(session.project.path, localPath)) throw new Error('That search path is outside the selected project.')
+  const info = await statFile(localPath)
+  if (directoryOnly && !info.isDirectory()) throw new Error('glob path must be a directory.')
+  if (!directoryOnly && !info.isDirectory() && !info.isFile()) throw new Error('grep path must be a regular file or directory.')
+  return target.displayPath || '.'
+}
+
+function projectSearchDisplayPath(session, value) {
+  const raw = String(value || '').replace(/\r$/, ''), candidate = isAbsolute(raw) ? resolve(raw) : resolve(session.project.path, raw)
+  if (!projectPathInside(session.project.path, candidate)) throw new Error('Project search returned a path outside the selected project.')
+  const scoped = relative(session.project.path, candidate)
+  if (scoped.split(sep)[0]?.toLowerCase() === '.penecho') throw new Error('PenEcho project metadata is not exposed to project tools.')
+  return scoped ? scoped.split(sep).join('/') : '.'
+}
+
+function projectGlobTool(session, agentCtx) {
+  return defineTool({
+    name:'glob',
+    description:`Find files whose paths match a glob pattern inside the selected project. Results include hidden and ignored files except VCS and PenEcho metadata directories, are ordered by modification time, and are capped at ${PROJECT_GLOB_RESULT_LIMIT} paths. A pattern with no "/" matches basenames at any depth.`,
+    parameters:{
+      pattern:{ type:'string', required:true, description:'Glob pattern such as "**/*.ts" or "src/**/*.test.js".' },
+      path:{ type:'string', description:'Relative project directory to search. Defaults to the project root.' },
+    },
+    output:textOutput(),
+    timeoutMs:30_000,
+    async execute(args, exec) {
+      const pattern = String(args.pattern || '')
+      if (!pattern.trim()) throw new Error('pattern must be a non-empty string.')
+      const searchPath = await projectSearchTarget(session, agentCtx, args.path, exec.signal, true)
+      const excludes = PROJECT_SEARCH_EXCLUDED_DIRECTORIES.flatMap(name => [`--glob=!**/${name}`, `--glob=!**/${name}/**`])
+      const result = await runProjectRipgrep(session, 'glob', ['--files', `--glob=${pattern}`, '--sort=modified', '--no-ignore', '--hidden', ...excludes, '--', searchPath], exec.signal)
+      if (result.noMatches || !result.stdout) return 'No files found'
+      const paths = result.stdout.split('\n').filter(Boolean).map(value => projectSearchDisplayPath(session, value)), shown = paths.slice(0, PROJECT_GLOB_RESULT_LIMIT)
+      const footer = paths.length > shown.length ? `\n\n(Showing ${shown.length} of ${paths.length} paths. Narrow pattern or path to see more.)` : ''
+      return boundedText(`${shown.join('\n')}${footer}`, PROJECT_SEARCH_RESULT_LIMIT)
+    },
+  })
+}
+
+function validateProjectGrepInclude(value) {
+  if (!value.trim()) throw new Error('include must be a non-empty glob when given.')
+  if (value.startsWith('!')) throw new Error('include must be a positive glob filter; negated patterns are not supported.')
+  let braces = 0
+  for (const character of value) {
+    if (character === '{') braces += 1
+    else if (character === '}') braces = Math.max(0, braces - 1)
+    else if (character === ',' && braces === 0) throw new Error('include must be one glob, not a comma-separated list; use {a,b} alternation instead.')
+  }
+}
+
+function parseProjectGrepMatches(session, stdout) {
+  const matches = []
+  for (const line of stdout.split('\n')) {
+    if (!line) continue
+    let record
+    try { record = JSON.parse(line) } catch { throw new Error('grep returned malformed ripgrep JSON output.') }
+    if (record?.type !== 'match') continue
+    const data = record.data, rawPath = data?.path?.text, lineNumber = data?.line_number
+    if (typeof rawPath !== 'string' || !Number.isInteger(lineNumber) || !data?.lines) throw new Error('grep returned an incomplete ripgrep match record.')
+    let preview
+    if (typeof data.lines.text === 'string') preview = data.lines.text.replace(/\r?\n$/, '')
+    else if (typeof data.lines.bytes === 'string') preview = '(line is not valid UTF-8)'
+    else throw new Error('grep returned a match without line content.')
+    matches.push({ path:projectSearchDisplayPath(session, rawPath), lineNumber, line:preview.length > PROJECT_GREP_LINE_LIMIT ? `${preview.slice(0, PROJECT_GREP_LINE_LIMIT)}…` : preview })
+  }
+  return matches
+}
+
+function renderProjectGrepMatches(matches) {
+  if (!matches.length) return 'No matches found'
+  const retained = matches.slice(0, PROJECT_GREP_MATCH_LIMIT)
+  let body = '', kept = 0, previousPath = ''
+  for (const match of retained) {
+    const prefix = match.path === previousPath ? '' : `${body ? '\n\n' : ''}${match.path}\n`, row = `${prefix}Line ${match.lineNumber}: ${match.line}`
+    if (body.length + row.length > PROJECT_SEARCH_RESULT_LIMIT - 500) break
+    body += `${body && !prefix ? '\n' : ''}${row}`
+    previousPath = match.path
+    kept += 1
+  }
+  const truncated = kept < matches.length, header = truncated ? `Found ${kept} of ${matches.length} matches` : `Found ${matches.length} ${matches.length === 1 ? 'match' : 'matches'}`
+  return `${header}\n\n${body}${truncated ? '\n\n(The result was capped; narrow pattern, path, or include to see more.)' : ''}`
+}
+
+function projectGrepTool(session, agentCtx) {
+  return defineTool({
+    name:'grep',
+    description:`Search file contents inside the selected project with a ripgrep regular expression. Returns matching lines with line numbers, grouped by file, with at most ${PROJECT_GREP_MATCH_LIMIT} matches inline. Use read for surrounding context.`,
+    parameters:{
+      pattern:{ type:'string', required:true, description:'Regular expression to search for using ripgrep syntax.' },
+      path:{ type:'string', description:'Relative project file or directory to search. Defaults to the project root.' },
+      include:{ type:'string', description:'One positive glob filter such as "*.ts" or "*.{js,jsx}".' },
+    },
+    output:textOutput(),
+    timeoutMs:30_000,
+    async execute(args, exec) {
+      const pattern = String(args.pattern ?? '')
+      if (!pattern) throw new Error('pattern must be a non-empty string.')
+      const include = args.include === undefined ? '' : String(args.include)
+      if (args.include !== undefined) validateProjectGrepInclude(include)
+      const searchPath = await projectSearchTarget(session, agentCtx, args.path, exec.signal, false)
+      const argv = ['--json', `--regexp=${pattern}`, '--glob=!**/.penecho', '--glob=!**/.penecho/**']
+      if (include) argv.push(`--glob=${include}`)
+      argv.push('--', searchPath)
+      const result = await runProjectRipgrep(session, 'grep', argv, exec.signal)
+      return renderProjectGrepMatches(result.noMatches ? [] : parseProjectGrepMatches(session, result.stdout))
     },
   })
 }
@@ -3147,10 +3366,12 @@ const PenEchoProjectPlugin = {
     agentCtx.systemPrompt.section({
       name:'penecho:project',
       order:122,
-      text:`The user selected a read-only folder project with the untrusted display label ${projectLabel}. File capabilities are confined to its canonical folder root; use relative project paths. No write, edit, bash, or command-execution capability exists. Use list_directory for bounded discovery, read for text and source files, and read_image for supported images. Optional readers are intentionally not loaded: for PDF, DOCX, XLSX, CSV, or PPTX call load_project_plugin with plugin="documents"; for SQLite call it with plugin="database". Never inspect, infer, or operate on host paths outside this project.`,
+      text:`The user selected a read-only folder project with the untrusted display label ${projectLabel}. File capabilities are confined to its canonical folder root; use relative project paths. No write, edit, bash, or command-execution capability exists. Use glob to discover files by path pattern, grep to search file contents, list_directory for one-level directory listings, read for text and source files, and read_image for supported images. Optional readers are intentionally not loaded: for PDF, DOCX, XLSX, CSV, or PPTX call load_project_plugin with plugin="documents"; for SQLite call it with plugin="database". Never inspect, infer, or operate on host paths outside this project.`,
     })
     agentCtx.tools.register(projectTextReaderTool(session, agentCtx))
     agentCtx.tools.register(projectImageReaderTool(session, agentCtx))
+    agentCtx.tools.register(projectGlobTool(session, agentCtx))
+    agentCtx.tools.register(projectGrepTool(session, agentCtx))
     agentCtx.tools.register(projectDirectoryListTool(session, agentCtx))
     agentCtx.tools.register(projectPluginLoaderTool(session, agentCtx))
     retainProjectToolImage(session, agentCtx)
@@ -3177,7 +3398,7 @@ const PenEchoFilePlugin = {
 }
 
 export class CanvasHarnessHost {
-  constructor({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch = () => null, resolveProject = async () => null, callCli = null, modelTimeoutMs = () => 180_000, logger = () => {}, conversationLogger = null, conversationTrace = null, publicFetch = fetchPublicResource }) {
+  constructor({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch = () => null, resolveProject = async () => null, callCli = callPenEchoCli, modelTimeoutMs = () => 180_000, logger = () => {}, conversationLogger = null, conversationTrace = null, publicFetch = fetchPublicResource }) {
     this.stateDirectory = stateDirectory
     this.rootDirectory = rootDirectory
     this.resolveConnection = resolveConnection
@@ -3246,7 +3467,7 @@ export class CanvasHarnessHost {
   installCliAdapter(ctx) {
     if (this.cliAdapter) return
     this.cliAdapter = new PenEchoCliAdapter({
-      ...(this.callCli ? { callCli:this.callCli } : {}),
+      callCli:this.callCli,
       attachments:() => ctx.attachments,
       timeoutMs:this.modelTimeoutMs,
       onDiagnostic:diagnostic => this.traceCliDiagnostic(diagnostic),
@@ -3680,7 +3901,6 @@ export class CanvasHarnessHost {
     this.resumeIndex.delete(session.resumeHash)
     this.logConversation(session, 'end')
     this.traceConversation(session, 'end')
-    try { await this.cliAdapter?.disposeSession(String(session.handle?.agent?.id || '')) } catch (error) { this.logger({ type:'canvas-agent-cli-session-dispose-error', error:String(error?.message || error) }) }
     try { await session.handle.dispose() } catch (error) { this.logger({ type:'canvas-agent-dispose-error', error:String(error?.message || error) }) }
     releaseProjectRoot(session.projectRootLease)
     try { await removeProjectRuntimeDirectory(this.stateDirectory, session) } catch (error) { this.logger({ type:'canvas-agent-runtime-cleanup-error', error:String(error?.message || error) }) }
@@ -3689,7 +3909,6 @@ export class CanvasHarnessHost {
   async dispose() {
     const sessions = [...this.sessions.values()]
     await Promise.allSettled(sessions.map(session => this.disposeSession(session)))
-    await this.cliAdapter?.dispose().catch(error => this.logger({ type:'canvas-agent-cli-adapter-dispose-error', error:String(error?.message || error) }))
     if (this.context) await this.context.fiber.dispose()
     this.context = null
     this.cliAdapter = null

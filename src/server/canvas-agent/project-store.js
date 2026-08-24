@@ -87,6 +87,11 @@ function normalizedHistoryItem(item) {
     attachmentCount:Math.max(0, Math.min(5, Number(item.attachmentCount) || 0)),
     eventKey:boundedString(item.eventKey, 128),
   };
+  if (item.type === "error") return {
+    id:boundedString(item.id, 128), type:"error",
+    code:boundedString(item.code, 128), message:boundedString(item.message, 8_000),
+    eventKey:boundedString(item.eventKey, 128),
+  };
   if (item.type === "tool") return {
     id:boundedString(item.id, 128), type:"tool", callId:boundedString(item.callId, 256),
     name:boundedString(item.name, 128), argumentsText:boundedString(item.argumentsText, 8_000),
