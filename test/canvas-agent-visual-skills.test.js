@@ -36,7 +36,7 @@ function readText(relativePath) {
   return readFileSync(path.join(ROOT, relativePath), "utf8");
 }
 
-test("scientific visual skills are bounded and only their router is fixed prompt content", async t => {
+test("scientific visual skills stay out of the cold prompt and load into durable system content", async t => {
   const stateDirectory = mkdtempSync(path.join(tmpdir(), "penecho-visual-skills-prompt-"));
   t.after(() => rmSync(stateDirectory, { recursive: true, force: true }));
   const { CanvasHarnessHost } = await import("../src/server/canvas-agent/runtime.mjs");
@@ -69,7 +69,7 @@ test("scientific visual skills are bounded and only their router is fixed prompt
       calls.push(request);
       return calls.length === 1
         ? JSON.stringify({ type:"tool_call", name:"load_visual_skill", arguments:{ skill:"math-2d" } })
-        : "Loaded the selected skill.";
+        : JSON.stringify({ type:"final", text:"Loaded the selected skill." });
     },
   });
   t.after(() => host.dispose());
@@ -86,19 +86,32 @@ test("scientific visual skills are bounded and only their router is fixed prompt
   assert.equal(calls.length, 2);
   const firstRequest = JSON.parse(calls[0].prompt), secondRequest = JSON.parse(calls[1].prompt);
   const schema = firstRequest.availableTools.find(tool => tool.name === "load_visual_skill");
-  assert.equal(schema.description.includes("before authoring a scientific Visual Explorer"), true);
+  assert.equal(schema.description.includes("durable session system prompt"), true);
+  assert.equal(schema.description.includes("before authoring a matching scientific Visual Explorer"), true);
   assert.deepEqual(schema.parameters.properties.skill, { type:"string", enum:SKILLS });
   assert.deepEqual(schema.parameters.required, ["skill"]);
-  assert.match(calls[0].systemPrompt, /Scientific route:.*`load_visual_skill`/);
-  assert.equal(calls[1].systemPrompt, calls[0].systemPrompt);
+  assert.match(calls[0].systemPrompt, /call `load_visual_skill` with the closest available skill before authoring/i);
+  assert.notEqual(calls[1].systemPrompt, calls[0].systemPrompt);
   assert.deepEqual(secondRequest.availableTools, firstRequest.availableTools);
-  for (const document of skillDocuments.values()) {
+  for (const [skill, document] of skillDocuments) {
     assert.equal(calls[0].systemPrompt.includes(document), false);
     assert.equal(JSON.stringify(firstRequest.availableTools).includes(document), false);
+    assert.equal(calls[1].systemPrompt.includes(document), skill === "math-2d");
   }
+  const selectedDocument = skillDocuments.get("math-2d");
+  const selectedHash = createHash("sha256").update(selectedDocument).digest("hex");
+  assert.equal(calls[1].systemPrompt.includes(`<penecho_visual_skill id="math-2d" sha256="${selectedHash}">`), true);
   const toolResult = secondRequest.conversation.flatMap(message => message.content).find(part => part.type === "tool_result");
   const persistedResult = JSON.parse(toolResult.content[0].text);
-  assert.equal(persistedResult.contract, skillDocuments.get("math-2d"));
+  assert.deepEqual(persistedResult, {
+    skill:"math-2d",
+    loadedSkills:["math-2d"],
+    sha256:selectedHash,
+    loaded:true,
+    alreadyLoaded:false,
+  });
+  assert.equal(Object.hasOwn(persistedResult, "contract"), false);
+  assert.equal(JSON.stringify(secondRequest.conversation).includes(selectedDocument), false);
 });
 
 test("scientific Visual Explorer contracts make Manim-Web the default explanatory language", () => {
@@ -146,7 +159,7 @@ test("math-3d contract provides bounded interactive camera exploration with visi
   assert.doesNotMatch(document, /unconstrained user reorientation/);
 });
 
-test("load_visual_skill returns one full contract and tracks state per session", async t => {
+test("load_visual_skill returns only load metadata and tracks state per session", async t => {
   const stateDirectory = mkdtempSync(path.join(tmpdir(), "penecho-visual-skills-tool-"));
   t.after(() => rmSync(stateDirectory, { recursive: true, force: true }));
   const { CanvasHarnessHost } = await import("../src/server/canvas-agent/runtime.mjs");
@@ -168,7 +181,13 @@ test("load_visual_skill returns one full contract and tracks state per session",
     skill:"math-2d",
     loadedSkills:["math-2d"],
     sha256:createHash("sha256").update(document).digest("hex"),
-    contract:document,
+    loaded:true,
+    alreadyLoaded:false,
+  });
+  assert.equal(Object.hasOwn(result, "contract"), false);
+  assert.deepEqual(await tool.execute({ skill:"math-2d" }, { callId:"visual-skill-repeat" }), {
+    ...result,
+    alreadyLoaded:true,
   });
   assert.deepEqual([...first.visualSkillsLoaded], ["math-2d"]);
   assert.deepEqual([...second.visualSkillsLoaded], []);

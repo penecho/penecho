@@ -32,4 +32,48 @@ function createActivityAwareTimeout(controller, totalTimeoutMs, options = {}) {
   };
 }
 
-module.exports = { createActivityAwareTimeout, STREAM_IDLE_GRACE_MS };
+function createIdleAndTotalTimeout(controller, idleTimeoutMs, totalTimeoutMs, options = {}) {
+  const idleLimitMs = Math.max(1, Number(idleTimeoutMs) || 1),
+    totalLimitMs = Math.max(idleLimitMs, Number(totalTimeoutMs) || idleLimitMs),
+    now = options.now || Date.now,
+    scheduleTimer = options.setTimeout || setTimeout,
+    cancelTimer = options.clearTimeout || clearTimeout,
+    reasonFor = typeof options.reasonFor === "function" ? options.reasonFor : () => undefined;
+  let lastActivityAt = now(), idleTimer = null, totalTimer = null, cleared = false;
+
+  const abort = (kind, limitMs) => {
+    if (cleared || controller.signal.aborted) return;
+    controller.abort(reasonFor(kind, limitMs));
+  };
+  const scheduleIdle = () => {
+    if (idleTimer !== null) cancelTimer(idleTimer);
+    const remaining = Math.max(1, idleLimitMs - (now() - lastActivityAt));
+    idleTimer = scheduleTimer(() => {
+      if (cleared || controller.signal.aborted) return;
+      const nextRemaining = idleLimitMs - (now() - lastActivityAt);
+      if (nextRemaining > 0) return scheduleIdle();
+      abort("idle", idleLimitMs);
+    }, remaining);
+    idleTimer?.unref?.();
+  };
+
+  scheduleIdle();
+  totalTimer = scheduleTimer(() => abort("total", totalLimitMs), totalLimitMs);
+  totalTimer?.unref?.();
+
+  return {
+    activity() {
+      if (cleared || controller.signal.aborted) return;
+      lastActivityAt = now();
+      scheduleIdle();
+    },
+    clear() {
+      cleared = true;
+      if (idleTimer !== null) cancelTimer(idleTimer);
+      if (totalTimer !== null) cancelTimer(totalTimer);
+      idleTimer = totalTimer = null;
+    },
+  };
+}
+
+module.exports = { createActivityAwareTimeout, createIdleAndTotalTimeout, STREAM_IDLE_GRACE_MS };

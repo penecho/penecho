@@ -19,6 +19,7 @@
     canvasViewButton = document.querySelector("#canvasViewBtn"),
     canvasViewActions = document.querySelector("#canvasViewActions"),
     canvasViewShareButton = document.querySelector("#canvasViewShareBtn"),
+    canvasViewDownloadButton = document.querySelector("#canvasViewDownloadBtn"),
     canvasViewCloseButton = document.querySelector("#canvasViewCloseBtn"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
@@ -129,12 +130,16 @@
     settingsApiRegion = document.querySelector("#settingsApiRegion"),
     settingsApiService = document.querySelector("#settingsApiService"),
     settingsCliFields = document.querySelector("#settingsCliFields"),
+    settingsKimiCliRecommendation = document.querySelector("#settingsKimiCliRecommendation"),
     settingsCliModel = document.querySelector("#settingsCliModel"),
     settingsCliPath = document.querySelector("#settingsCliPath"),
     settingsApiFormat = document.querySelector("#settingsApiFormat"),
     settingsApiUrl = document.querySelector("#settingsApiUrl"),
     settingsApiModel = document.querySelector("#settingsApiModel"),
+    settingsApiModelOptions = document.querySelector("#settingsApiModelOptions"),
     settingsApiModelPresets = document.querySelector("#settingsApiModelPresets"),
+    settingsFetchModels = document.querySelector("#settingsFetchModels"),
+    settingsFetchModelsLabel = settingsFetchModels?.querySelector("[data-i18n='settingsFetchModels']"),
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
@@ -430,6 +435,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsCliModel: "Model (optional)",
       settingsCliPath: "Command or path",
       settingsCliHelp: "Uses the CLI's existing local login. Test the connection for installation and sign-in guidance.",
+      settingsKimiCodingRecommendationTitle: "Recommended: connect with the Kimi Coding API",
+      settingsKimiCodingRecommendationBody: "Create and copy an API key in the Kimi Code Console, then add an API connection using the OpenAI-compatible format and this Base URL.",
+      settingsKimiCodingConsole: "Open Kimi Code Console",
+      settingsKimiCodingRecommendationReason: "Kimi CLI may not reliably reuse the Harness context cache, which can increase latency and usage.",
       settingsConfiguration: "Configuration",
       settingsConnections: "AI connections",
       settingsManage: "Manage",
@@ -474,6 +483,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsConnectionDeleted: "Connection deleted.",
       settingsConnectionSaved: "Connection saved. Devices using it will apply the changes to new requests immediately.",
       settingsDeleteConfirm: "Delete this connection?",
+      settingsFetchModels: "Fetch models",
+      settingsFetchingModels: "Fetching models…",
+      settingsModelsFetched: "Found {count} models. Choose one or keep typing.",
+      settingsModelFetchFailed: "Could not fetch models from the provider.",
+      settingsModelSuggestions: "Available models",
       settingsSystemDialogTitle: "System settings",
       settingsSystemDialogSubtitle: "Saved changes take effect after PenEcho restarts.",
       settingsKeySaved: "Key saved",
@@ -793,6 +807,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentConnecting: "Connecting…",
       canvasAgentResumed: "Conversation resumed",
       canvasAgentWorking: "Agent is working…",
+      canvasAgentInitialStatePreparing: "Preparing the initial Canvas state…",
       canvasAgentDisconnected: "Disconnected — send to reconnect",
       canvasAgentErrorBusy: "The AI service is busy, so processing stopped early. Continue shortly.",
       canvasAgentErrorTimeout: "The Agent took too long to respond, so processing stopped early. Continue when ready.",
@@ -810,6 +825,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
       canvasAgentPlaceholder: "Ask Canvas Agent…",
       canvasAgentMessage: "Message Canvas Agent",
+      canvasAgentPromptSuggestions: "Suggested prompts",
+      canvasAgentPromptSuggestionsTitle: "Try asking",
+      canvasAgentPromptMore: "More",
+      canvasAgentPromptLess: "Collapse",
+      canvasAgentPromptFileLabel: "Explain current content",
+      canvasAgentPromptFile: "Read the current file and explain its purpose, overall structure, key relationships, and important details with clear text and visuals. If no readable file is available, explain the current canvas view instead. Preserve the original meaning and list no more than three points that need confirmation.",
+      canvasAgentPromptArchitectureLabel: "Project architecture",
+      canvasAgentPromptArchitecture: "Analyze the current project architecture. Use an intuitive architecture diagram to show the main modules, dependencies, and data flow, then walk through the key directories or files layer by layer.",
+      canvasAgentPromptSimpleDiagramLabel: "Simple visual diagram",
+      canvasAgentPromptSimpleDiagram: "Create a separate, simplified diagram based on the current content without changing the original. Keep only the core concepts, essential relationships, and necessary labels; use clear hierarchy, grouping, and arrows, and minimize text and decoration so someone without prior context can understand it at a glance.",
+      canvasAgentPromptPptLabel: "PPT-ready view",
+      canvasAgentPromptPpt: "Reorganize the current view into a clear layout that is ready to copy into a presentation. Improve the information hierarchy, alignment, and spacing; when finished, capture the final view and send the image in this conversation.",
+      canvasAgentPromptHandwritingLabel: "Enrich handwriting",
+      canvasAgentPromptHandwriting: "Keep the current handwriting unchanged: do not edit, erase, or move it. Add a transparent explanatory visual layer around it. You may overlap parts of the handwriting only if it remains clearly legible; add annotations, connectors, graphics, links, or motion in suitable places to provide context and make the notes more vivid and intuitive.",
+      canvasAgentPromptExcelLabel: "Analyze Excel",
+      canvasAgentPromptExcel: "Analyze the attached Excel file. First summarize its worksheets, fields, and data quality, then identify the key metrics, trends, anomalies, and conclusions and present them clearly on the canvas with suitable charts and concise explanations.",
+      canvasAgentPromptTransformerLabel: "Explain Transformer",
+      canvasAgentPromptTransformer: "Explain the Transformer architecture with an intuitive layered structure. Show the data flow through input representations, attention, residual connections, normalization, and output, label the key tensor shapes, and include corresponding pseudocode with a step-by-step explanation.",
+      canvasAgentPromptUkTripLabel: "15-day UK trip",
+      canvasAgentPromptUkTrip: "Create a map for a 15-day trip through the United Kingdom. Label each day's cities, route, transportation, suggested stay, and representative sights, with a clear legend and itinerary summary.",
+      canvasAgentPromptOrganizeLabel: "Organize this canvas",
+      canvasAgentPromptOrganize: "Review the current canvas, identify its themes and hierarchy, and organize it into clear visual notes. Preserve the original information and separately mark anything uncertain or needing more detail.",
       canvasAgentType: "Type with keyboard",
       canvasAgentHandwrite: "Write by hand",
       canvasAgentClearInk: "Clear",
@@ -979,6 +1016,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDeleted: "Widget deleted",
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
+      downloadWidget: "Download Widget image",
+      widgetDownloading: "Preparing Widget image…",
+      widgetDownloaded: "Widget image downloaded",
+      widgetDownloadFailed: "Widget image could not be downloaded",
       favoriteWidget: "Favorite widget",
       favoriteWidgetSaving: "Saving favorite…",
       unfavoriteWidget: "Remove widget favorite",
@@ -1018,7 +1059,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetSnapshotRequests = new Map(),
     widgetHostPointerAnchors = new Map(),
     screenCalibration = new Map();
-  let diagramRuntimePromise = null;
+  let diagramRuntimePromise = null,
+    pluginCatalogLoadPromise = null;
   let screenClientRatio = 1;
   function normalizeTheme(theme) {
     return SUPPORTED_THEMES.has(theme) ? theme : "studio";
@@ -1876,7 +1918,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -1930,9 +1972,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settings.currentProvider = provider;
     settingsApiFields.hidden = !api;
     settingsCliFields.hidden = api;
+    settingsKimiCliRecommendation.hidden = provider !== "kimi-cli";
     for (const control of settingsApiFields.querySelectorAll("input, select")) control.disabled = !api || settings.configurationMode !== "api";
     for (const control of settingsCliFields.querySelectorAll("input, select")) control.disabled = api || settings.configurationMode !== "api";
+    clearFetchedApiModels();
     settingsApiSaved.hidden = !api || settingsApiSaved.dataset.saved !== "true";
+    updateConnectionModelFetchState();
     showCliInstaller("", false);
     if (!api) {
       const values = settings.cli[provider] || {};
@@ -2008,13 +2053,81 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const family = settingsApiFormat?.value || "openai";
     return API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
   }
-  function updateApiModelPresets(family) {
+  function apiModelSuggestions() {
+    const presets = API_MODELS[settingsApiFormat?.value || "openai"] || [], presetValues = new Set(presets);
+    return [...new Set([...presets, ...settings.fetchedApiModels.filter(model => !presetValues.has(model))])];
+  }
+  function updateApiModelChoices() {
     if (!settingsApiModelPresets) return;
-    settingsApiModelPresets.replaceChildren(...(API_MODELS[family] || []).map(model => {
+    const models = apiModelSuggestions();
+    settingsApiModelPresets.replaceChildren(...models.map(model => {
       const option = document.createElement("option");
       option.value = model;
       return option;
     }));
+    settingsApiModelOptions?.replaceChildren(...models.map(model => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.role = "option";
+      option.dataset.apiModelValue = model;
+      option.textContent = model;
+      return option;
+    }));
+    updateApiModelSelection();
+  }
+  function updateApiModelSelection() {
+    const selected = settingsApiModel?.value.trim() || "";
+    settingsApiModelOptions?.querySelectorAll("[data-api-model-value]").forEach(option => option.setAttribute("aria-selected", String(option.dataset.apiModelValue === selected)));
+  }
+  function clearFetchedApiModels() {
+    settings.fetchedApiModels = [];
+    hideApiModelOptions();
+    updateApiModelChoices();
+  }
+  function hideApiModelOptions() {
+    if (!settingsApiModelOptions) return;
+    settingsApiModelOptions.hidden = true;
+    settingsApiModel?.setAttribute("aria-expanded", "false");
+  }
+  function showApiModelOptions() {
+    if (!settingsApiModelOptions || settingsApiModel?.disabled || !settingsApiModelOptions.firstElementChild) return;
+    updateApiModelSelection();
+    settingsApiModelOptions.hidden = false;
+    settingsApiModel.setAttribute("aria-expanded", "true");
+  }
+  function chooseApiModel(value) {
+    settingsApiModel.value = String(value || "");
+    updateApiModelSelection();
+    hideApiModelOptions();
+    settingsApiModel.focus({ preventScroll:true });
+  }
+  function handleApiModelKeydown(event) {
+    if (event.key === "Escape") {
+      if (settingsApiModelOptions?.hidden) return;
+      event.preventDefault();
+      hideApiModelOptions();
+      return;
+    }
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    showApiModelOptions();
+    const options = [...settingsApiModelOptions.querySelectorAll("[data-api-model-value]")], selected = options.find(option => option.getAttribute("aria-selected") === "true");
+    (selected || options[0])?.focus({ preventScroll:true });
+  }
+  function handleApiModelOptionKeydown(event) {
+    const option = event.target.closest("[data-api-model-value]");
+    if (!option) return;
+    const options = [...settingsApiModelOptions.querySelectorAll("[data-api-model-value]")], index = options.indexOf(option);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideApiModelOptions();
+      settingsApiModel.focus({ preventScroll:true });
+      return;
+    }
+    const next = event.key === "ArrowDown" ? options[(index + 1) % options.length] : event.key === "ArrowUp" ? options[(index - 1 + options.length) % options.length] : event.key === "Home" ? options[0] : event.key === "End" ? options.at(-1) : null;
+    if (!next) return;
+    event.preventDefault();
+    next.focus({ preventScroll:true });
   }
   function updateApiPresetFields(applyDefaults = false, resetModel = false) {
     if (!settingsApiFormat || !settingsApiPresetFields) return;
@@ -2022,7 +2135,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       enabled = presetFamily && settingsProvider?.value === "api" && settings.configurationMode === "api";
     settingsApiPresetFields.hidden = !presetFamily;
     for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
-    updateApiModelPresets(family);
+    if (resetModel) clearFetchedApiModels();
+    updateApiModelChoices();
     const preset = selectedApiPreset();
     if (!applyDefaults || !preset) return;
     settingsApiUrl.value = preset.url;
@@ -2030,6 +2144,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function fillApiEditor(connection = {}) {
     const matched = apiPresetForConnection(connection), preset = matched?.[1] || null;
+    settings.fetchedApiModels = [];
+    hideApiModelOptions();
     settingsApiFormat.value = preset?.family || (connection.apiFormat === "anthropic" ? "anthropic" : "openai");
     settingsApiRegion.value = preset?.region || "global";
     settingsApiService.value = preset?.service || "api";
@@ -2131,6 +2247,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasSettingsForm.dataset.editorHidden = "true";
     settingsApiKey.value = "";
     hideSettingsEffortOptions();
+    hideApiModelOptions();
     renderConnectionLists();
     setSettingsStatus();
   }
@@ -2149,10 +2266,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
     };
   }
+  function connectionModelDiscoverySignature() {
+    const connection = connectionEditorPayload();
+    return JSON.stringify([settings.editingConnectionId || "", connection.provider, connection.apiFormat, connection.apiUrl, connection.apiKey]);
+  }
+  function updateConnectionModelFetchState() {
+    if (!settingsFetchModels) return;
+    const api = settingsProvider?.value === "api" && settings.configurationMode === "api";
+    settingsFetchModels.disabled = settings.connectionActionBusy || settings.fetchingApiModels || !api;
+    settingsFetchModels.setAttribute("aria-busy", String(settings.fetchingApiModels && api));
+    settingsFetchModelsLabel.textContent = settings.fetchingApiModels && api ? t("settingsFetchingModels") : t("settingsFetchModels");
+  }
   function setConnectionTestBusy(busy) {
+    settings.connectionActionBusy = busy;
     settingsTestConnection.disabled = busy;
     settingsSaveButton.disabled = busy;
     settingsInstallCli.disabled = busy;
+    updateConnectionModelFetchState();
   }
   function showCliInstaller(provider, visible) {
     settingsInstallCli.hidden = !visible || !window.penechoDesktop?.installCli || !["kimi-cli", "codex-cli", "claude-cli"].includes(provider);
@@ -2175,6 +2305,49 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setSettingsStatus(body?.message || t("settingsConnectionTestPassed"), "success");
     } catch (error) { setSettingsStatus(error?.message || t("settingsConnectionTestFailed"), "error"); }
     finally { setConnectionTestBusy(false); }
+  }
+  function normalizeFetchedApiModels(models) {
+    if (!Array.isArray(models) || models.length > 256) throw new Error(t("settingsModelFetchFailed"));
+    if (models.some(model => typeof model !== "string")) throw new Error(t("settingsModelFetchFailed"));
+    const values = models.map(model => model.trim());
+    if (values.some(model => model.length > 200 || /[\r\n\0]/.test(model)) || new Set(values).size !== values.length) throw new Error(t("settingsModelFetchFailed"));
+    return [...new Set(values)].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+  }
+  async function fetchConnectionModels() {
+    if (settingsFetchModels?.disabled || settingsProvider.value !== "api") return;
+    if (![settingsApiFormat, settingsApiUrl, settingsApiKey].every(control => control.checkValidity())) return;
+    const connection = connectionEditorPayload(), requestSignature = connectionModelDiscoverySignature();
+    setConnectionTestBusy(true);
+    settings.fetchingApiModels = true;
+    updateConnectionModelFetchState();
+    hideApiModelOptions();
+    setSettingsStatus(t("settingsFetchingModels"));
+    try {
+      const response = await fetch("/api/settings/connections/models", {
+        method:"POST", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ id:settings.editingConnectionId, connection }),
+      });
+      let body = null;
+      try { body = await response.json(); } catch {}
+      if (!response.ok) throw new Error(body?.error || t("settingsModelFetchFailed"));
+      if (requestSignature !== connectionModelDiscoverySignature()) {
+        setSettingsStatus();
+        return;
+      }
+      settings.fetchedApiModels = normalizeFetchedApiModels(body?.models);
+      updateApiModelChoices();
+      if (!settingsApiModel.value.trim() && settings.fetchedApiModels.length) settingsApiModel.value = settings.fetchedApiModels[0];
+      updateApiModelSelection();
+      showApiModelOptions();
+      settingsApiModel.focus({ preventScroll:true });
+      setSettingsStatus(t("settingsModelsFetched").replace("{count}", String(settings.fetchedApiModels.length)), "success");
+    } catch (error) {
+      hideApiModelOptions();
+      setSettingsStatus(error?.message || t("settingsModelFetchFailed"), "error");
+    } finally {
+      settings.fetchingApiModels = false;
+      setConnectionTestBusy(false);
+    }
   }
   async function installCanvasCli() {
     const provider = settingsInstallCli.dataset.provider;
@@ -2532,6 +2705,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         document: manifest.document,
       }));
   }
+  function canvasAgentWidgetCapabilities() {
+    const privatePluginIds = dataPluginDefinitions()
+      .filter((plugin) => plugin.builtIn === false && pluginEnabled(plugin.id) && pluginManifests.has(plugin.id))
+      .map((plugin) => plugin.id)
+      .sort();
+    return {
+      version:1,
+      professionalEnabled:pluginEnabled("flowchart") && pluginManifests.has("flowchart"),
+      privatePluginIds,
+    };
+  }
   function pluginRequestPayload() {
     const payload = Object.fromEntries(PLUGIN_DEFINITIONS.filter((plugin) => plugin.requestField && pluginEnabled(plugin.id)).map((plugin) => [plugin.requestField, true])),
       plugins = enabledPluginDescriptors();
@@ -2547,7 +2731,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})(?:\\?v=[a-f0-9]{6,16})?$`).test(value) ? value : null;
   }
   async function loadPluginDocuments() {
-    if (state.pluginCatalogLoading) return false;
+    if (pluginCatalogLoadPromise) return pluginCatalogLoadPromise;
+    let resolveSharedLoad,loadSucceeded=false;
+    pluginCatalogLoadPromise=new Promise((resolve)=>{resolveSharedLoad=resolve;});
+    const catalogWasLoaded=state.pluginCatalogLoaded;
     state.pluginCatalogLoading = true;
     state.pluginCatalogError = "";
     updatePluginControl();
@@ -2628,11 +2815,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.pendingWidget && pluginEnabled(state.pendingWidget.pluginId)) mountWidget(state.pendingWidget);
       persistPluginSettings();
       requestRender();
+      if(catalogWasLoaded)canvasAgentConnectionDidChange(true);
+      loadSucceeded=true;
       return true;
     } catch (error) {
       state.pluginCatalogError = error.message;
       return false;
     } finally {
+      resolveSharedLoad(loadSucceeded);
+      pluginCatalogLoadPromise=null;
       state.pluginCatalogLoading = false;
       updatePluginControl();
       updatePluginAuthoringUi();
@@ -3229,6 +3420,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (plugin.documentPath) applyWidgetPluginState(pluginId, state.plugins[pluginId]);
     else plugin.onChange?.(state.plugins[pluginId]);
     updatePluginControl();
+    if (pluginId === "flowchart" || plugin.builtIn === false) canvasAgentConnectionDidChange(true);
     return true;
   }
   function setEffort(value) {

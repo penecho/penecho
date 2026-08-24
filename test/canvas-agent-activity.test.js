@@ -226,7 +226,7 @@ test("Canvas Agent activity is a removable user-only sibling outside capture and
   assert.doesNotMatch(source,/extractActivityTerms|phaseTerms|promptTerms/,"the activity layer does not guess or decorate prompt keywords");
   assert.doesNotMatch(source,/\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|sendFollowUpMessage|canvasAgentSendEnvelope/,"the activity layer must not call a model or network service");
   assert.doesNotMatch(source,/root\.style|setAttribute\(["']style/,"strict CSP positioning stays class/data driven");
-  assert.match(serverRuntime,/Optional public status:[\s\S]*?at most twice per user turn[\s\S]*?never expose reasoning, paths, IDs, arguments, or unverified results/);
+  assert.match(serverRuntime,/Optional public status:[\s\S]*?at most twice per user turn[\s\S]*?Never expose hidden reasoning, paths, IDs, arguments, or unverified results/);
   assert.doesNotMatch(runtime,/canvasAgentActivityOverlay|penechoModelHidden|canvas-agent-activity/);
   for(const name of ["canvasAgentCapture","canvasAgentAllObjects","canvasAgentDigest","canvasAgentRead"]){
     const start=runtime.indexOf(`function ${name}(`);

@@ -11,6 +11,7 @@ const {
   callKimiCliSpawn,
   kimiAssistantText,
   kimiEventHasToolActivity,
+  kimiEventToolName,
   mapKimiEffort,
   sanitizeKimiEnv,
 } = require("../src/providers/kimi-cli.js");
@@ -41,6 +42,8 @@ test("Kimi stream-json extracts assistant content and detects tool activity", ()
   assert.equal(kimiEventHasToolActivity({ role:"assistant", content:"answer" }), false);
   assert.equal(kimiEventHasToolActivity({ role:"assistant", tool_calls:[{ type:"function" }] }), true);
   assert.equal(kimiEventHasToolActivity({ role:"assistant", content:[{ type:"tool_use", name:"Read" }] }), true);
+  assert.equal(kimiEventToolName({ role:"assistant", tool_calls:[{ function:{ name:"Bash" } }] }), "Bash");
+  assert.equal(kimiEventToolName({ role:"assistant", content:[{ type:"tool_use", name:"ReadMediaFile" }] }), "ReadMediaFile");
 });
 
 test("Kimi CLI receives a temporary canvas reference and returns assistant JSON", async () => {
@@ -82,11 +85,18 @@ test("Kimi effort maps PenEcho levels onto low, high, and max", () => {
   assert.equal(mapKimiEffort("config"), null);
 });
 
-test("Kimi CLI rejects malformed canvas images and attempted tools", async () => {
+test("Kimi CLI rejects malformed canvas images and recovers from an attempted built-in tool", async () => {
   const executable = fakeKimi(`
-process.stdout.write(JSON.stringify({role:"assistant",content:"",tool_calls:[{type:"function",function:{name:"Bash"}}]})+"\\n");
-setInterval(()=>{},1000);
+const fs=require("fs"),args=process.argv.slice(2),prompt=args[args.indexOf("--prompt")+1],marker=".attempted-tool";
+if(!fs.existsSync(marker)){
+  fs.writeFileSync(marker,"1");
+  process.stdout.write(JSON.stringify({role:"assistant",content:"",tool_calls:[{type:"function",function:{name:"Bash"}}]})+"\\n");
+  setInterval(()=>{},1000);
+}else{
+  if(!prompt.includes("ERROR: PenEcho rejected your Kimi/CLI built-in tool call (Bash)")||!prompt.includes("HARNESS REQUEST.availableTools"))process.exit(4);
+  process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"type":"final","text":"recovered"}'}]})+"\\n");
+}
 `);
   await assert.rejects(callKimiCliSpawn({ executable, prompt:"test", atlasImage:"data:image/svg+xml;base64,PHN2Zz4=" }), /invalid canvas image/);
-  await assert.rejects(callKimiCliSpawn({ executable, prompt:"test" }), /attempted to use a tool while tools are disabled/);
+  assert.equal(await callKimiCliSpawn({ executable, prompt:"test" }), '{"type":"final","text":"recovered"}');
 });

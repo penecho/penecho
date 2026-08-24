@@ -159,7 +159,7 @@ src/server/main.js (CommonJS)
 
 压缩沿用 Harness basic compaction 的官方语义，但把模型路由上限统一为 160,000 token，并在 100,000 token 开始压缩。MVP 不增加 PenEcho 自定义摘要器。Harness 同时是模型上下文缓存和压缩的唯一权威：PenEcho 不改写 session history，不注入 provider cache key、retention、breakpoint 或兼容 fallback，也不自行决定 cache 命中。CLI transport 可以把 provider 已报告的 token/cache usage 原样归一化给 Harness token meter 作观测，但不得据此改变历史或 provider 请求。
 
-固定、可复用且跨 step 不变的 Widget、Visual Explorer、项目能力和搜索指导必须注册为 prefix-stable Harness system-prompt sections；只有当前 Canvas digest、精简后的引用范围和开关状态进入 Harness runtime context。动态 snapshot 仍由 Harness 保存与 compaction，应用层不得删除、替换或合并旧 snapshot。
+固定、可复用且跨 step 不变的 Visual Explorer、Widget 路由和已启用 private HTML contract 必须注册为 prefix-stable Harness system-prompt sections；普通 General HTML 及已启用的 Professional contract 由模型按需加载为只追加的 session system section。只有当前 Canvas digest、精简后的引用范围和开关状态进入 Harness runtime context。动态 snapshot 仍由 Harness 保存与 compaction，应用层不得删除、替换或合并旧 snapshot。
 
 ### 5.2 明确禁止装载的组件
 
@@ -540,7 +540,7 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 
 ### 7.7 固定 Widget 合同上下文
 
-Harness 在每个模型 step 通过稳定 system-prompt sections 自动注入完整的 `general`（General HTML）、`flowchart`（Professional Diagrams）authoring contract 和 Visual Explorer contract；这些固定合同不作为 runtime-context snapshot 写入会话历史，因此不会随每个 tool step 重复膨胀，也不会被 compaction 移除。其他插件合同一律不进入 Canvas Agent 上下文，也不提供查询、安装、启用或下载能力。Canvas Agent 只能创建或修改这两类 Widget。
+Harness 在每个模型 step 自动注入 Canvas-Agent-only Visual Explorer contract 和当前 Widget 路由。普通 `general`（General HTML）contract 始终可通过 `load_widget_contract` 按需加入只追加的 session system section；`flowchart`（Professional Diagrams）只有浏览器确认插件已启用时才出现在路由、loader enum 和创建 schema 中，并在调用 loader 后注入。浏览器当前已启用且主机重新验证为 `builtIn:false` 的 private HTML contract 会按原插件 id 注入；未启用、未知、内置冲突或非 HTML private 插件会令该 capability handshake 失败。每个会话最多 12 个 private contract、合计 48 KiB。所有注入 contract 都不写入普通 tool-result 历史，因而不会被 compaction 摘要替代。共享 `public/plugins/*/plugin.md` 仍只服务原有 Canvas AI 插件链路，不被 Canvas Agent 改写。
 
 ### 7.8 `canvas_set_view`
 
@@ -1017,7 +1017,7 @@ test/
 - Harness 同进程嵌入 server，不使用 SDK 子进程。
 - Canvas 留在浏览器，工具通过认证 WebSocket RPC 执行。
 - Harness 负责 session/context/loop/compaction/model-context cache；PenEcho 不维护第二份模型历史，不改写 Harness history，也不注入 provider cache 控制。
-- 只暴露八个核心 Canvas 工具，默认串行；General HTML 与 Professional Diagrams 合同自动注入，其他插件合同不发送；不做第二层检索、生成、导出或发布能力。
+- 保留八个核心 Canvas 工具并默认串行；Visual Explorer 常驻，General HTML 按需加载，Professional 仅在插件启用后可按需加载，已启用 private HTML 由主机校验后注入；不做第二层插件检索、安装、生成、导出或发布能力。
 - 动态/交互内容只通过 HTML Widget 提供，不暴露 animation object 工具。
 - Widget 只允许单轴响应式改宽或改高；Image 可以自由拉伸。
 - MVP 不提供文件、shell、GitHub、Web、MCP、skill、subagent。

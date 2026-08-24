@@ -20,6 +20,7 @@
     canvasViewButton = document.querySelector("#canvasViewBtn"),
     canvasViewActions = document.querySelector("#canvasViewActions"),
     canvasViewShareButton = document.querySelector("#canvasViewShareBtn"),
+    canvasViewDownloadButton = document.querySelector("#canvasViewDownloadBtn"),
     canvasViewCloseButton = document.querySelector("#canvasViewCloseBtn"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
@@ -130,12 +131,16 @@
     settingsApiRegion = document.querySelector("#settingsApiRegion"),
     settingsApiService = document.querySelector("#settingsApiService"),
     settingsCliFields = document.querySelector("#settingsCliFields"),
+    settingsKimiCliRecommendation = document.querySelector("#settingsKimiCliRecommendation"),
     settingsCliModel = document.querySelector("#settingsCliModel"),
     settingsCliPath = document.querySelector("#settingsCliPath"),
     settingsApiFormat = document.querySelector("#settingsApiFormat"),
     settingsApiUrl = document.querySelector("#settingsApiUrl"),
     settingsApiModel = document.querySelector("#settingsApiModel"),
+    settingsApiModelOptions = document.querySelector("#settingsApiModelOptions"),
     settingsApiModelPresets = document.querySelector("#settingsApiModelPresets"),
+    settingsFetchModels = document.querySelector("#settingsFetchModels"),
+    settingsFetchModelsLabel = settingsFetchModels?.querySelector("[data-i18n='settingsFetchModels']"),
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
@@ -431,6 +436,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsCliModel: "Model (optional)",
       settingsCliPath: "Command or path",
       settingsCliHelp: "Uses the CLI's existing local login. Test the connection for installation and sign-in guidance.",
+      settingsKimiCodingRecommendationTitle: "Recommended: connect with the Kimi Coding API",
+      settingsKimiCodingRecommendationBody: "Create and copy an API key in the Kimi Code Console, then add an API connection using the OpenAI-compatible format and this Base URL.",
+      settingsKimiCodingConsole: "Open Kimi Code Console",
+      settingsKimiCodingRecommendationReason: "Kimi CLI may not reliably reuse the Harness context cache, which can increase latency and usage.",
       settingsConfiguration: "Configuration",
       settingsConnections: "AI connections",
       settingsManage: "Manage",
@@ -475,6 +484,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsConnectionDeleted: "Connection deleted.",
       settingsConnectionSaved: "Connection saved. Devices using it will apply the changes to new requests immediately.",
       settingsDeleteConfirm: "Delete this connection?",
+      settingsFetchModels: "Fetch models",
+      settingsFetchingModels: "Fetching models…",
+      settingsModelsFetched: "Found {count} models. Choose one or keep typing.",
+      settingsModelFetchFailed: "Could not fetch models from the provider.",
+      settingsModelSuggestions: "Available models",
       settingsSystemDialogTitle: "System settings",
       settingsSystemDialogSubtitle: "Saved changes take effect after PenEcho restarts.",
       settingsKeySaved: "Key saved",
@@ -794,6 +808,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentConnecting: "Connecting…",
       canvasAgentResumed: "Conversation resumed",
       canvasAgentWorking: "Agent is working…",
+      canvasAgentInitialStatePreparing: "Preparing the initial Canvas state…",
       canvasAgentDisconnected: "Disconnected — send to reconnect",
       canvasAgentErrorBusy: "The AI service is busy, so processing stopped early. Continue shortly.",
       canvasAgentErrorTimeout: "The Agent took too long to respond, so processing stopped early. Continue when ready.",
@@ -811,6 +826,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
       canvasAgentPlaceholder: "Ask Canvas Agent…",
       canvasAgentMessage: "Message Canvas Agent",
+      canvasAgentPromptSuggestions: "Suggested prompts",
+      canvasAgentPromptSuggestionsTitle: "Try asking",
+      canvasAgentPromptMore: "More",
+      canvasAgentPromptLess: "Collapse",
+      canvasAgentPromptFileLabel: "Explain current content",
+      canvasAgentPromptFile: "Read the current file and explain its purpose, overall structure, key relationships, and important details with clear text and visuals. If no readable file is available, explain the current canvas view instead. Preserve the original meaning and list no more than three points that need confirmation.",
+      canvasAgentPromptArchitectureLabel: "Project architecture",
+      canvasAgentPromptArchitecture: "Analyze the current project architecture. Use an intuitive architecture diagram to show the main modules, dependencies, and data flow, then walk through the key directories or files layer by layer.",
+      canvasAgentPromptSimpleDiagramLabel: "Simple visual diagram",
+      canvasAgentPromptSimpleDiagram: "Create a separate, simplified diagram based on the current content without changing the original. Keep only the core concepts, essential relationships, and necessary labels; use clear hierarchy, grouping, and arrows, and minimize text and decoration so someone without prior context can understand it at a glance.",
+      canvasAgentPromptPptLabel: "PPT-ready view",
+      canvasAgentPromptPpt: "Reorganize the current view into a clear layout that is ready to copy into a presentation. Improve the information hierarchy, alignment, and spacing; when finished, capture the final view and send the image in this conversation.",
+      canvasAgentPromptHandwritingLabel: "Enrich handwriting",
+      canvasAgentPromptHandwriting: "Keep the current handwriting unchanged: do not edit, erase, or move it. Add a transparent explanatory visual layer around it. You may overlap parts of the handwriting only if it remains clearly legible; add annotations, connectors, graphics, links, or motion in suitable places to provide context and make the notes more vivid and intuitive.",
+      canvasAgentPromptExcelLabel: "Analyze Excel",
+      canvasAgentPromptExcel: "Analyze the attached Excel file. First summarize its worksheets, fields, and data quality, then identify the key metrics, trends, anomalies, and conclusions and present them clearly on the canvas with suitable charts and concise explanations.",
+      canvasAgentPromptTransformerLabel: "Explain Transformer",
+      canvasAgentPromptTransformer: "Explain the Transformer architecture with an intuitive layered structure. Show the data flow through input representations, attention, residual connections, normalization, and output, label the key tensor shapes, and include corresponding pseudocode with a step-by-step explanation.",
+      canvasAgentPromptUkTripLabel: "15-day UK trip",
+      canvasAgentPromptUkTrip: "Create a map for a 15-day trip through the United Kingdom. Label each day's cities, route, transportation, suggested stay, and representative sights, with a clear legend and itinerary summary.",
+      canvasAgentPromptOrganizeLabel: "Organize this canvas",
+      canvasAgentPromptOrganize: "Review the current canvas, identify its themes and hierarchy, and organize it into clear visual notes. Preserve the original information and separately mark anything uncertain or needing more detail.",
       canvasAgentType: "Type with keyboard",
       canvasAgentHandwrite: "Write by hand",
       canvasAgentClearInk: "Clear",
@@ -980,6 +1017,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDeleted: "Widget deleted",
       widgetSourceCopied: "Widget source copied",
       widgetSourceCopyFailed: "Widget source could not be copied",
+      downloadWidget: "Download Widget image",
+      widgetDownloading: "Preparing Widget image…",
+      widgetDownloaded: "Widget image downloaded",
+      widgetDownloadFailed: "Widget image could not be downloaded",
       favoriteWidget: "Favorite widget",
       favoriteWidgetSaving: "Saving favorite…",
       unfavoriteWidget: "Remove widget favorite",
@@ -1019,7 +1060,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     widgetSnapshotRequests = new Map(),
     widgetHostPointerAnchors = new Map(),
     screenCalibration = new Map();
-  let diagramRuntimePromise = null;
+  let diagramRuntimePromise = null,
+    pluginCatalogLoadPromise = null;
   let screenClientRatio = 1;
   function normalizeTheme(theme) {
     return SUPPORTED_THEMES.has(theme) ? theme : "studio";
@@ -1877,7 +1919,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -1931,9 +1973,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settings.currentProvider = provider;
     settingsApiFields.hidden = !api;
     settingsCliFields.hidden = api;
+    settingsKimiCliRecommendation.hidden = provider !== "kimi-cli";
     for (const control of settingsApiFields.querySelectorAll("input, select")) control.disabled = !api || settings.configurationMode !== "api";
     for (const control of settingsCliFields.querySelectorAll("input, select")) control.disabled = api || settings.configurationMode !== "api";
+    clearFetchedApiModels();
     settingsApiSaved.hidden = !api || settingsApiSaved.dataset.saved !== "true";
+    updateConnectionModelFetchState();
     showCliInstaller("", false);
     if (!api) {
       const values = settings.cli[provider] || {};
@@ -2009,13 +2054,81 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const family = settingsApiFormat?.value || "openai";
     return API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
   }
-  function updateApiModelPresets(family) {
+  function apiModelSuggestions() {
+    const presets = API_MODELS[settingsApiFormat?.value || "openai"] || [], presetValues = new Set(presets);
+    return [...new Set([...presets, ...settings.fetchedApiModels.filter(model => !presetValues.has(model))])];
+  }
+  function updateApiModelChoices() {
     if (!settingsApiModelPresets) return;
-    settingsApiModelPresets.replaceChildren(...(API_MODELS[family] || []).map(model => {
+    const models = apiModelSuggestions();
+    settingsApiModelPresets.replaceChildren(...models.map(model => {
       const option = document.createElement("option");
       option.value = model;
       return option;
     }));
+    settingsApiModelOptions?.replaceChildren(...models.map(model => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.role = "option";
+      option.dataset.apiModelValue = model;
+      option.textContent = model;
+      return option;
+    }));
+    updateApiModelSelection();
+  }
+  function updateApiModelSelection() {
+    const selected = settingsApiModel?.value.trim() || "";
+    settingsApiModelOptions?.querySelectorAll("[data-api-model-value]").forEach(option => option.setAttribute("aria-selected", String(option.dataset.apiModelValue === selected)));
+  }
+  function clearFetchedApiModels() {
+    settings.fetchedApiModels = [];
+    hideApiModelOptions();
+    updateApiModelChoices();
+  }
+  function hideApiModelOptions() {
+    if (!settingsApiModelOptions) return;
+    settingsApiModelOptions.hidden = true;
+    settingsApiModel?.setAttribute("aria-expanded", "false");
+  }
+  function showApiModelOptions() {
+    if (!settingsApiModelOptions || settingsApiModel?.disabled || !settingsApiModelOptions.firstElementChild) return;
+    updateApiModelSelection();
+    settingsApiModelOptions.hidden = false;
+    settingsApiModel.setAttribute("aria-expanded", "true");
+  }
+  function chooseApiModel(value) {
+    settingsApiModel.value = String(value || "");
+    updateApiModelSelection();
+    hideApiModelOptions();
+    settingsApiModel.focus({ preventScroll:true });
+  }
+  function handleApiModelKeydown(event) {
+    if (event.key === "Escape") {
+      if (settingsApiModelOptions?.hidden) return;
+      event.preventDefault();
+      hideApiModelOptions();
+      return;
+    }
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    showApiModelOptions();
+    const options = [...settingsApiModelOptions.querySelectorAll("[data-api-model-value]")], selected = options.find(option => option.getAttribute("aria-selected") === "true");
+    (selected || options[0])?.focus({ preventScroll:true });
+  }
+  function handleApiModelOptionKeydown(event) {
+    const option = event.target.closest("[data-api-model-value]");
+    if (!option) return;
+    const options = [...settingsApiModelOptions.querySelectorAll("[data-api-model-value]")], index = options.indexOf(option);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideApiModelOptions();
+      settingsApiModel.focus({ preventScroll:true });
+      return;
+    }
+    const next = event.key === "ArrowDown" ? options[(index + 1) % options.length] : event.key === "ArrowUp" ? options[(index - 1 + options.length) % options.length] : event.key === "Home" ? options[0] : event.key === "End" ? options.at(-1) : null;
+    if (!next) return;
+    event.preventDefault();
+    next.focus({ preventScroll:true });
   }
   function updateApiPresetFields(applyDefaults = false, resetModel = false) {
     if (!settingsApiFormat || !settingsApiPresetFields) return;
@@ -2023,7 +2136,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       enabled = presetFamily && settingsProvider?.value === "api" && settings.configurationMode === "api";
     settingsApiPresetFields.hidden = !presetFamily;
     for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
-    updateApiModelPresets(family);
+    if (resetModel) clearFetchedApiModels();
+    updateApiModelChoices();
     const preset = selectedApiPreset();
     if (!applyDefaults || !preset) return;
     settingsApiUrl.value = preset.url;
@@ -2031,6 +2145,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function fillApiEditor(connection = {}) {
     const matched = apiPresetForConnection(connection), preset = matched?.[1] || null;
+    settings.fetchedApiModels = [];
+    hideApiModelOptions();
     settingsApiFormat.value = preset?.family || (connection.apiFormat === "anthropic" ? "anthropic" : "openai");
     settingsApiRegion.value = preset?.region || "global";
     settingsApiService.value = preset?.service || "api";
@@ -2132,6 +2248,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasSettingsForm.dataset.editorHidden = "true";
     settingsApiKey.value = "";
     hideSettingsEffortOptions();
+    hideApiModelOptions();
     renderConnectionLists();
     setSettingsStatus();
   }
@@ -2150,10 +2267,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
     };
   }
+  function connectionModelDiscoverySignature() {
+    const connection = connectionEditorPayload();
+    return JSON.stringify([settings.editingConnectionId || "", connection.provider, connection.apiFormat, connection.apiUrl, connection.apiKey]);
+  }
+  function updateConnectionModelFetchState() {
+    if (!settingsFetchModels) return;
+    const api = settingsProvider?.value === "api" && settings.configurationMode === "api";
+    settingsFetchModels.disabled = settings.connectionActionBusy || settings.fetchingApiModels || !api;
+    settingsFetchModels.setAttribute("aria-busy", String(settings.fetchingApiModels && api));
+    settingsFetchModelsLabel.textContent = settings.fetchingApiModels && api ? t("settingsFetchingModels") : t("settingsFetchModels");
+  }
   function setConnectionTestBusy(busy) {
+    settings.connectionActionBusy = busy;
     settingsTestConnection.disabled = busy;
     settingsSaveButton.disabled = busy;
     settingsInstallCli.disabled = busy;
+    updateConnectionModelFetchState();
   }
   function showCliInstaller(provider, visible) {
     settingsInstallCli.hidden = !visible || !window.penechoDesktop?.installCli || !["kimi-cli", "codex-cli", "claude-cli"].includes(provider);
@@ -2176,6 +2306,49 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setSettingsStatus(body?.message || t("settingsConnectionTestPassed"), "success");
     } catch (error) { setSettingsStatus(error?.message || t("settingsConnectionTestFailed"), "error"); }
     finally { setConnectionTestBusy(false); }
+  }
+  function normalizeFetchedApiModels(models) {
+    if (!Array.isArray(models) || models.length > 256) throw new Error(t("settingsModelFetchFailed"));
+    if (models.some(model => typeof model !== "string")) throw new Error(t("settingsModelFetchFailed"));
+    const values = models.map(model => model.trim());
+    if (values.some(model => model.length > 200 || /[\r\n\0]/.test(model)) || new Set(values).size !== values.length) throw new Error(t("settingsModelFetchFailed"));
+    return [...new Set(values)].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+  }
+  async function fetchConnectionModels() {
+    if (settingsFetchModels?.disabled || settingsProvider.value !== "api") return;
+    if (![settingsApiFormat, settingsApiUrl, settingsApiKey].every(control => control.checkValidity())) return;
+    const connection = connectionEditorPayload(), requestSignature = connectionModelDiscoverySignature();
+    setConnectionTestBusy(true);
+    settings.fetchingApiModels = true;
+    updateConnectionModelFetchState();
+    hideApiModelOptions();
+    setSettingsStatus(t("settingsFetchingModels"));
+    try {
+      const response = await fetch("/api/settings/connections/models", {
+        method:"POST", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ id:settings.editingConnectionId, connection }),
+      });
+      let body = null;
+      try { body = await response.json(); } catch {}
+      if (!response.ok) throw new Error(body?.error || t("settingsModelFetchFailed"));
+      if (requestSignature !== connectionModelDiscoverySignature()) {
+        setSettingsStatus();
+        return;
+      }
+      settings.fetchedApiModels = normalizeFetchedApiModels(body?.models);
+      updateApiModelChoices();
+      if (!settingsApiModel.value.trim() && settings.fetchedApiModels.length) settingsApiModel.value = settings.fetchedApiModels[0];
+      updateApiModelSelection();
+      showApiModelOptions();
+      settingsApiModel.focus({ preventScroll:true });
+      setSettingsStatus(t("settingsModelsFetched").replace("{count}", String(settings.fetchedApiModels.length)), "success");
+    } catch (error) {
+      hideApiModelOptions();
+      setSettingsStatus(error?.message || t("settingsModelFetchFailed"), "error");
+    } finally {
+      settings.fetchingApiModels = false;
+      setConnectionTestBusy(false);
+    }
   }
   async function installCanvasCli() {
     const provider = settingsInstallCli.dataset.provider;
@@ -2533,6 +2706,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         document: manifest.document,
       }));
   }
+  function canvasAgentWidgetCapabilities() {
+    const privatePluginIds = dataPluginDefinitions()
+      .filter((plugin) => plugin.builtIn === false && pluginEnabled(plugin.id) && pluginManifests.has(plugin.id))
+      .map((plugin) => plugin.id)
+      .sort();
+    return {
+      version:1,
+      professionalEnabled:pluginEnabled("flowchart") && pluginManifests.has("flowchart"),
+      privatePluginIds,
+    };
+  }
   function pluginRequestPayload() {
     const payload = Object.fromEntries(PLUGIN_DEFINITIONS.filter((plugin) => plugin.requestField && pluginEnabled(plugin.id)).map((plugin) => [plugin.requestField, true])),
       plugins = enabledPluginDescriptors();
@@ -2548,7 +2732,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return new RegExp(`^plugins/(?:private/)?(?:[a-z0-9][a-z0-9-]{0,63}/${suffix}${legacy})(?:\\?v=[a-f0-9]{6,16})?$`).test(value) ? value : null;
   }
   async function loadPluginDocuments() {
-    if (state.pluginCatalogLoading) return false;
+    if (pluginCatalogLoadPromise) return pluginCatalogLoadPromise;
+    let resolveSharedLoad,loadSucceeded=false;
+    pluginCatalogLoadPromise=new Promise((resolve)=>{resolveSharedLoad=resolve;});
+    const catalogWasLoaded=state.pluginCatalogLoaded;
     state.pluginCatalogLoading = true;
     state.pluginCatalogError = "";
     updatePluginControl();
@@ -2629,11 +2816,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.pendingWidget && pluginEnabled(state.pendingWidget.pluginId)) mountWidget(state.pendingWidget);
       persistPluginSettings();
       requestRender();
+      if(catalogWasLoaded)canvasAgentConnectionDidChange(true);
+      loadSucceeded=true;
       return true;
     } catch (error) {
       state.pluginCatalogError = error.message;
       return false;
     } finally {
+      resolveSharedLoad(loadSucceeded);
+      pluginCatalogLoadPromise=null;
       state.pluginCatalogLoading = false;
       updatePluginControl();
       updatePluginAuthoringUi();
@@ -3230,6 +3421,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (plugin.documentPath) applyWidgetPluginState(pluginId, state.plugins[pluginId]);
     else plugin.onChange?.(state.plugins[pluginId]);
     updatePluginControl();
+    if (pluginId === "flowchart" || plugin.builtIn === false) canvasAgentConnectionDidChange(true);
     return true;
   }
   function setEffort(value) {
@@ -4548,6 +4740,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
       copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
+      snapshotDataUrl: "",
       contentVersion: 0,
       snapshotVersion: -1,
       shell: null,
@@ -4564,6 +4757,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       favorite: item.favorite === true,
       favoriteBusy: false,
       favoritePendingVersion: null,
+      downloadBusy: false,
     };
   }
   function restoreWidgets(items) {
@@ -4943,6 +5137,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (message.type === "penecho-widget-updated") {
       widget.contentVersion++;
+      widget.snapshotDataUrl = "";
       if (widget.favorite) {
         widget.favorite = false;
         syncObjectChrome();
@@ -4962,6 +5157,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     try {
       widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
+      widget.snapshotDataUrl = message.dataUrl;
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
@@ -6565,7 +6761,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function objectChromeAnchor(element) {
     if (!element?.getBoundingClientRect) return null;
     const rect = element.getBoundingClientRect(),
-      viewRect = view.getBoundingClientRect(),
+      viewRect = view.getBoundingClientRect?.() || {left:0,top:0},
       anchor = {
         x:rect.left - viewRect.left,
         y:rect.top - viewRect.top,
@@ -6616,6 +6812,38 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setStatusKey(copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
     return copied;
   }
+  function widgetImageFilename(widget) {
+    const title = String(widget?.title || "penecho-widget")
+      .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, "-")
+      .replace(/[.\s]+$/g, "")
+      .trim()
+      .slice(0, 120);
+    return `${title || "penecho-widget"}.png`;
+  }
+  async function downloadWidgetImage(widget) {
+    if (!widget || widget.downloadBusy) return false;
+    widget.downloadBusy = true;
+    syncObjectChrome();
+    setStatusKey("widgetDownloading");
+    try {
+      await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
+      if (!widget.snapshotDataUrl?.startsWith("data:image/png;base64,")) throw Error(t("widgetExportFailed"));
+      const link = document.createElement("a");
+      link.href = widget.snapshotDataUrl;
+      link.download = widgetImageFilename(widget);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setStatusKey("widgetDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("widgetDownloadFailed")}: ${String(error?.message || error)}`);
+      return false;
+    } finally {
+      widget.downloadBusy = false;
+      syncObjectChrome();
+    }
+  }
   function widgetEditContext(widget, instructionMode) {
     const sourceMirrorsHtml = widgetUsesHtmlCopySource(widget);
     return {
@@ -6660,6 +6888,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
     favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
+    download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
   });
   function screenObjectBox(box) {
     return {
@@ -6716,13 +6945,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
       });
     }
+    if (options.download) items.push({
+      key:`widget:${widget.id}:tool-download`,
+      kind:"download",
+      label:t("downloadWidget"),
+      baseWidth:36,
+      iconOnly:true,
+      busy:widget.downloadBusy === true,
+      activate:() => void downloadWidgetImage(widget),
+    });
     if (!items.length) return;
     const gap = 4,
       groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
       groupVerticalWidth = Math.max(...items.map(item => item.baseWidth)),
       groupVerticalHeight = items.length * 34 + gap * (items.length - 1),
-      controlScale = 1,
-      widgetToolGroup = `widget-${widget.id}`;
+      widgetToolGroup = `widget-${widget.id}-tools`;
     let horizontalOffset = 0;
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -6731,6 +6968,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         box,
         widget,
         widgetTool:true,
+        widgetToolPlacement:"right-middle",
         widgetToolGroup,
         groupRefineCandidate:options.refine || null,
         groupItemCount:items.length,
@@ -6739,7 +6977,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         groupVerticalHeight,
         groupHorizontalOffset:horizontalOffset,
         groupVerticalOffset:index * (34 + gap),
-        controlScale,
+        controlScale:1,
         baseHeight:34,
         handToolbar:Boolean(options.handToolbar),
         handToolbarKey:options.handToolbarKey || "",
@@ -6764,8 +7002,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (viewportWidth <= 0 || viewportHeight <= 0 || right < -8 || bottom < -8 || screenBox.left > viewportWidth + 8 || screenBox.top > viewportHeight + 8) return null;
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
-      above = screenBox.top - height - chromeGap,
-      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
+      viewRect = view.getBoundingClientRect?.() || {left:0,top:0},
+      obstacles = [...(globalThis.document?.querySelectorAll?.(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .canvas-agent-control, .object-chrome-button") || [])]
+        .filter(element => element.dataset.objectChromeKey !== ignoreKey && (!spec?.widgetToolGroup || element.dataset.widgetToolGroup !== spec.widgetToolGroup))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
+        }),
+      overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + position.w + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + position.h + 5 > obstacle.y),
+      fits = (position, extraBottom = 0) => position.x >= 6 && position.y >= 6 && position.x + position.w <= viewportWidth - 6 && position.y + position.h + extraBottom <= viewportHeight - 6 && !overlapsObstacle(position),
+      fallbackPosition = (position, extraBottom = 0) => ({
+        ...position,
+        x:Math.max(6, Math.min(Math.max(6, viewportWidth - position.w - 6), position.x)),
+        y:Math.max(6, Math.min(Math.max(6, viewportHeight - position.h - extraBottom - 6), position.y)),
+      });
     if (spec?.widgetTool) {
       const horizontalWidth = spec.groupHorizontalWidth * controlScale,
         verticalWidth = spec.groupVerticalWidth * controlScale,
@@ -6773,26 +7023,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         hintSpace = spec.groupRefineCandidate && widgetRefineHintVisible(spec.groupRefineCandidate) ? 88 : 0,
         gap = chromeGap * controlScale,
         positions = [
-          { side:"top", layout:"horizontal", x:right - horizontalWidth, y:screenBox.top - height - gap, w:horizontalWidth, h:height },
-          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
           { side:"right", layout:"vertical", x:right + gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
-          { side:"bottom", layout:"horizontal", x:right - horizontalWidth, y:bottom + gap, w:horizontalWidth, h:height },
-          { side:"bottom", layout:"horizontal", x:screenBox.left, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
+          { side:"right", layout:"vertical", x:right + gap, y:bottom - verticalHeight, w:verticalWidth, h:verticalHeight },
+          { side:"bottom", layout:"horizontal", x:screenBox.left + screenBox.width / 2 - horizontalWidth / 2, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"top", layout:"horizontal", x:screenBox.left + screenBox.width / 2 - horizontalWidth / 2, y:screenBox.top - height - gap, w:horizontalWidth, h:height },
           { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
-        ].map(position => ({
-          ...position,
-          x:Math.max(6, Math.min(Math.max(6, viewportWidth - position.w - 6), position.x)),
-          y:Math.max(6, Math.min(Math.max(6, viewportHeight - position.h - hintSpace - 12), position.y)),
-        })),
-        viewRect = view.getBoundingClientRect(),
-        obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
-          .filter(element => element.dataset.objectChromeKey !== ignoreKey && element.dataset.widgetToolGroup !== spec.widgetToolGroup)
-          .map(element => {
-          const rect = element.getBoundingClientRect();
-          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
-        }),
-        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + position.w + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + position.h + 5 > obstacle.y),
-        groupPosition = positions.find(position => !overlapsObstacle(position)) || positions[0];
+          { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
+          { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:bottom - verticalHeight, w:verticalWidth, h:verticalHeight },
+        ],
+        groupPosition = positions.find(position => fits(position, hintSpace)) || fallbackPosition(positions[0], hintSpace);
       const vertical = groupPosition.layout === "vertical",
         alignRight = vertical && groupPosition.side === "left";
       return {
@@ -6803,10 +7043,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         baseHeight,
       };
     }
+    if (spec?.widgetCore) {
+      const topY = screenBox.top - height - chromeGap,
+        centerY = screenBox.top + screenBox.height / 2 - height / 2,
+        positions = kind === "move" ? [
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:topY, w:width, h:height },
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + chromeGap, w:width, h:height },
+        ] : kind === "cancel" ? [
+          { x:screenBox.left, y:topY, w:width, h:height },
+          { x:screenBox.left - width - chromeGap, y:centerY, w:width, h:height },
+          { x:screenBox.left, y:bottom + chromeGap, w:width, h:height },
+        ] : [
+          { x:right - width, y:topY, w:width, h:height },
+          { x:right + chromeGap, y:centerY, w:width, h:height },
+          { x:right - width, y:bottom + chromeGap, w:width, h:height },
+        ],
+        position = positions.find(candidate => fits(candidate)) || fallbackPosition(positions[0]);
+      return { x:position.x, y:position.y, scale:1, baseWidth, baseHeight };
+    }
+    const above = screenBox.top - height - chromeGap,
+      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
-    else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
-    else if (kind === "accept") x = clampX(right + 7);
+    else if (kind === "cancel") x = clampX(screenBox.left - width - chromeGap);
+    else if (kind === "accept") x = clampX(right + chromeGap);
     else x = clampX(screenBox.left + screenBox.width / 2 + 38);
     return { x, y, scale:1, baseWidth, baseHeight };
   }
@@ -6818,6 +7078,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (kind === "refine") return t("widgetRefine");
     if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
     if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
+    if (kind === "download") return t("downloadWidget");
     return t("hand");
   }
   function widgetRefineConfirmationPosition(anchor, width, height, viewportWidth, viewportHeight) {
@@ -6964,7 +7225,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = ["copy", "refine", "favorite", "share"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine", "favorite", "share", "download"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -7093,11 +7354,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         }
       } else if (record.kind === "widget") {
         const box = widgetBox(handTarget);
-        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, ...shared, priority:2 });
+        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, widgetCore:true, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
-          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
-          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
-          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
+          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
+          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, download:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
         }
       }
     }
@@ -7105,10 +7366,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.pendingWidget) {
       const widget = state.pendingWidget,
         box = widgetBox(widget);
-      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
-      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
-      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
-      addWidgetToolSpecs(specs, widget, { copy:true });
+      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, widgetCore:true, priority:4 });
+      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:rejectPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
+      addWidgetToolSpecs(specs, widget, { copy:true, download:true });
     }
     return specs;
   }
@@ -7143,7 +7404,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       else button.removeAttribute("aria-busy");
       if (spec.kind === "refine") button.removeAttribute("title");
       else button.title = label;
-      if (["copy", "refine", "favorite", "share"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
+      if (["copy", "refine", "favorite", "share", "download"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
       if (spec.kind === "refine") {
         const hint = button.querySelector(".widget-refine-hint"),
           visible = widgetRefineHintVisible(spec.refineCandidate),
@@ -8913,9 +9174,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return `penecho-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
   }
   async function exportCanvasPng() {
-    const button = document.querySelector("#exportPngBtn");
-    if (button.disabled) return;
-    button.disabled = true;
+    const buttons = [document.querySelector("#exportPngBtn"), canvasViewDownloadButton].filter(Boolean);
+    if (buttons.some(button => button.disabled)) return;
+    for (const button of buttons) button.disabled = true;
     let canvas = null;
     try {
       canvas = await renderExportCanvas();
@@ -8937,7 +9198,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setStatus(`${t("exportError")}${error.message}`);
     } finally {
       if (canvas) canvas.width = canvas.height = 1;
-      button.disabled = false;
+      for (const button of buttons) button.disabled = false;
     }
   }
   function imageFromBlob(blob) {
@@ -13810,6 +14071,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentApprovalAllow = document.querySelector("#canvasAgentApprovalAllow"),
     canvasAgentForm = document.querySelector("#canvasAgentForm"),
     canvasAgentInputHint = document.querySelector("#canvasAgentInputHint"),
+    canvasAgentPromptSuggestions = document.querySelector("#canvasAgentPromptSuggestions"),
+    canvasAgentPromptToggle = document.querySelector("#canvasAgentPromptToggle"),
+    canvasAgentPromptToggleLabel = document.querySelector("#canvasAgentPromptToggleLabel"),
+    canvasAgentPromptList = document.querySelector("#canvasAgentPromptList"),
     canvasAgentInput = document.querySelector("#canvasAgentInput"),
     canvasAgentInkInput = document.querySelector("#canvasAgentInkInput"),
     canvasAgentInkCanvas = document.querySelector("#canvasAgentInkCanvas"),
@@ -13856,6 +14121,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_WIDTH_MIN = 360,
     CANVAS_AGENT_SIZE_STEPS = 40,
     CANVAS_AGENT_RESIZE_KEY_STEP = 20,
+    CANVAS_AGENT_INPUT_MAX_LINES = 10,
     CANVAS_AGENT_MAX_REFERENCES = 20,
     CANVAS_AGENT_MAX_ATTACHMENTS = 5,
     CANVAS_AGENT_MAX_SOURCE_BYTES = 12 * 1024 * 1024,
@@ -13869,7 +14135,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_COMPACT_TEXT_MIN_PX = 8,
     CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused"]),
     CANVAS_AGENT_LAYOUT_CAPTURE_POLICY = Object.freeze({id:"canvas-layout-v1",maxLongEdge:1024,maxPixels:520000,quality:.72,maxBytes:700*1024}),
-    CANVAS_AGENT_DETAIL_CAPTURE_POLICY = Object.freeze({id:"canvas-detail-v1",maxLongEdge:1440,maxPixels:1800000,quality:.88,maxBytes:1200*1024});
+    CANVAS_AGENT_DETAIL_CAPTURE_POLICY = Object.freeze({id:"canvas-detail-v1",maxLongEdge:1440,maxPixels:1800000,quality:.88,maxBytes:1200*1024}),
+    CANVAS_AGENT_PROMPT_SUGGESTIONS = Object.freeze([
+      {label:"canvasAgentPromptFileLabel",prompt:"canvasAgentPromptFile"},
+      {label:"canvasAgentPromptArchitectureLabel",prompt:"canvasAgentPromptArchitecture"},
+      {label:"canvasAgentPromptSimpleDiagramLabel",prompt:"canvasAgentPromptSimpleDiagram"},
+      {label:"canvasAgentPromptOrganizeLabel",prompt:"canvasAgentPromptOrganize"},
+      {label:"canvasAgentPromptHandwritingLabel",prompt:"canvasAgentPromptHandwriting"},
+      {label:"canvasAgentPromptPptLabel",prompt:"canvasAgentPromptPpt"},
+      {label:"canvasAgentPromptExcelLabel",prompt:"canvasAgentPromptExcel"},
+      {label:"canvasAgentPromptTransformerLabel",prompt:"canvasAgentPromptTransformer"},
+      {label:"canvasAgentPromptUkTripLabel",prompt:"canvasAgentPromptUkTrip"},
+    ]);
   const canvasAgent = {
     socket:null,
     connectPromise:null,
@@ -13897,11 +14174,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     referencePickActive:false,
     referenceHoverId:"",
     inputMode:"text",
+    promptSuggestionsExpanded:false,
     inkPresent:false,
     inkStroke:null,
     searchConfigured:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured),
     searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) === "true",
     sessionSearchConfigured:false,
+    sessionSearchEnabled:false,
     projectId:localStorage.getItem(CANVAS_AGENT_PROJECT_KEY) || "",
     accessMode:"controlled",
     projects:[],
@@ -13985,6 +14264,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const busy = (canvasAgent.requestPending || canvasAgent.running) && canvasAgentPanel.hidden;
     canvasAgentControl.classList.toggle("is-busy",busy);
     canvasAgentToggle.setAttribute("aria-busy",String(busy));
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentBeginRequest() {
     canvasAgent.requestPending = true;
@@ -14035,10 +14315,76 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentStatus.textContent = text;
     canvasAgentPanel.dataset.status = kind;
   }
+  function canvasAgentSetComposerActionLabel(button,key) {
+    const label=t(key),text=button.querySelector(".canvas-agent-action-label");
+    if(text)text.textContent=label;
+    button.setAttribute("aria-label",label);
+    button.setAttribute("title",label);
+  }
+  function canvasAgentSetPromptSuggestionsExpanded(expanded) {
+    canvasAgent.promptSuggestionsExpanded=Boolean(expanded);
+    canvasAgentPromptSuggestions?.classList.toggle("expanded",canvasAgent.promptSuggestionsExpanded);
+    canvasAgentPromptToggle?.setAttribute("aria-expanded",String(canvasAgent.promptSuggestionsExpanded));
+    if(canvasAgentPromptToggleLabel)canvasAgentPromptToggleLabel.textContent=t(canvasAgent.promptSuggestionsExpanded?"canvasAgentPromptLess":"canvasAgentPromptMore");
+  }
+  function canvasAgentRenderPromptSuggestions() {
+    if(!canvasAgentPromptList)return;
+    canvasAgentPromptList.replaceChildren();
+    for(const suggestion of CANVAS_AGENT_PROMPT_SUGGESTIONS){
+      const button=document.createElement("button"),label=t(suggestion.label),prompt=t(suggestion.prompt);
+      button.type="button";
+      button.dataset.promptKey=suggestion.prompt;
+      button.textContent=label;
+      button.setAttribute("aria-label",label);
+      button.setAttribute("title",prompt);
+      button.addEventListener("click",()=>canvasAgentChoosePromptSuggestion(suggestion.prompt));
+      canvasAgentPromptList.append(button);
+    }
+    canvasAgentPromptSuggestions.setAttribute("aria-label",t("canvasAgentPromptSuggestions"));
+    canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
+  }
+  function canvasAgentShouldShowPromptSuggestions() {
+    return Boolean(canvasAgentPromptSuggestions
+      && !canvasAgentPanel.hidden
+      && canvasAgentForm.contains(document.activeElement)
+      && canvasAgent.inputMode==="text"
+      && !canvasAgent.inkPresent
+      && !canvasAgentInput.value.trim()
+      && !canvasAgent.requestPending
+      && !canvasAgent.running
+      && !canvasAgent.viewingHistoryId
+      && !canvasAgent.pendingApproval
+      && !canvasAgent.attachmentBusy
+      && !canvasAgent.projectUploadBusy
+      && !canvasAgentInput.disabled
+      && canvasAgentReferencePicker.hidden
+      && canvasAgentApproval.hidden);
+  }
+  function canvasAgentSyncPromptSuggestions() {
+    if(!canvasAgentPromptSuggestions)return;
+    const visible=canvasAgentShouldShowPromptSuggestions();
+    canvasAgentPromptSuggestions.hidden=!visible;
+    if(visible)canvasAgentInputHint.hidden=true;
+    else{
+      if(canvasAgent.promptSuggestionsExpanded)canvasAgentSetPromptSuggestionsExpanded(false);
+      canvasAgentSyncInputHint();
+    }
+  }
+  function canvasAgentChoosePromptSuggestion(promptKey) {
+    const suggestion=CANVAS_AGENT_PROMPT_SUGGESTIONS.find(item=>item.prompt===promptKey);
+    if(!suggestion||canvasAgentInput.disabled)return false;
+    canvasAgentInput.value=t(suggestion.prompt);
+    canvasAgentSetPromptSuggestionsExpanded(false);
+    canvasAgentInput.dispatchEvent(new Event("input",{bubbles:true}));
+    canvasAgentInput.focus();
+    canvasAgentInput.setSelectionRange?.(canvasAgentInput.value.length,canvasAgentInput.value.length);
+    return true;
+  }
   function updateCanvasAgentLanguage() {
-    canvasAgentSend.textContent = t(canvasAgent.running ? "canvasAgentSteer" : "canvasAgentSend");
-    canvasAgentStop.textContent = t("canvasAgentStop");
+    canvasAgentSetComposerActionLabel(canvasAgentSend,canvasAgent.running ? "canvasAgentSteer" : "canvasAgentSend");
+    canvasAgentSetComposerActionLabel(canvasAgentStop,"canvasAgentStop");
     canvasAgentInputHint.textContent = t("canvasAgentInputHint");
+    canvasAgentRenderPromptSuggestions();
     canvasAgentInput.setAttribute("placeholder",t("canvasAgentPlaceholder"));
     canvasAgentInput.setAttribute("aria-label",t("canvasAgentMessage"));
     canvasAgentInkCanvas.setAttribute("aria-label",t("canvasAgentHandwrite"));
@@ -14091,6 +14437,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentRenderProjects();
     if (canvasAgentTranscript.querySelector(".canvas-agent-empty")) canvasAgentRenderEmpty();
     canvasAgentSyncInputHint();
+    canvasAgentSyncPromptSuggestions();
   }
   async function canvasAgentProjectRequest(path, options = {}) {
     const response=await fetch(path,{cache:"no-store",credentials:"same-origin",...options,headers:{accept:"application/json",...(options.body?{"content-type":"application/json"}:{}),...(options.headers||{})}}),body=await response.json().catch(()=>({}));
@@ -14396,6 +14743,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(!pending)return;
     canvasAgent.pendingApproval=null;
     canvasAgentApproval.hidden=true;
+    canvasAgentSyncPromptSuggestions();
     pending.resolve({allowed:Boolean(allowed)});
   }
   function canvasAgentRequestApproval(args) {
@@ -14404,7 +14752,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentApprovalCommand.textContent=String(args?.command||"");
     canvasAgentApproval.hidden=false;
     canvasAgentApprovalAllow.focus();
-    return new Promise(resolve=>{canvasAgent.pendingApproval={resolve};});
+    return new Promise(resolve=>{canvasAgent.pendingApproval={resolve};canvasAgentSyncPromptSuggestions();});
   }
   function canvasAgentHistoryText(value, limit = CANVAS_AGENT_HISTORY_TEXT_LIMIT) {
     return String(value || "").slice(0,limit);
@@ -14614,6 +14962,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentPanel.dataset.historyViewing=String(Boolean(viewing));
     canvasAgentHistoryView.hidden=!viewing;
     canvasAgentSyncInputHint();
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentViewStoredConversation(id) {
     canvasAgentPersistCurrentConversation();
@@ -14795,6 +15144,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentRenderReferencePicker("");
       canvasAgentReferenceSearch.focus();
     }
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentRenderReferencePicker(query="") {
     if (!canvasAgentReferenceList) return;
@@ -15173,6 +15523,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function canvasAgentSyncAttachmentButton() {
     canvasAgentAttach.disabled=canvasAgent.attachmentBusy||canvasAgent.projectUploadBusy;
+    canvasAgentSyncPromptSuggestions();
   }
   async function canvasAgentAddAttachments(files) {
     if (canvasAgent.attachmentBusy||canvasAgent.projectUploadBusy) return;
@@ -15224,6 +15575,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const hasConversation=Boolean(canvasAgent.currentConversation?.items?.length), hasDraft=Boolean(canvasAgentInput.value.trim()||canvasAgent.inkPresent||canvasAgent.attachments.length||canvasAgent.references.length);
     canvasAgentInputHint.hidden=hasConversation||hasDraft||Boolean(canvasAgent.viewingHistoryId);
   }
+  function canvasAgentResizeInput() {
+    if(!canvasAgentInput||canvasAgentInput.hidden)return;
+    canvasAgentInput.style.height="auto";
+    const styles=getComputedStyle(canvasAgentInput),lineHeight=Number.parseFloat(styles.lineHeight)||20,
+      padding=(Number.parseFloat(styles.paddingTop)||0)+(Number.parseFloat(styles.paddingBottom)||0),
+      minimum=Number.parseFloat(styles.minHeight)||lineHeight+padding,maxHeight=Math.max(minimum,lineHeight*CANVAS_AGENT_INPUT_MAX_LINES+padding),
+      contentHeight=canvasAgentInput.scrollHeight,nextHeight=Math.min(Math.max(contentHeight,minimum),maxHeight),overflowing=contentHeight>maxHeight+.5;
+    canvasAgentInput.style.height=`${Math.ceil(nextHeight)}px`;
+    canvasAgentInput.classList.toggle("canvas-agent-input-overflowing",overflowing);
+  }
   function canvasAgentSetInputMode(mode) {
     canvasAgent.inputMode=mode==="ink"?"ink":"text";
     const ink=canvasAgent.inputMode==="ink";
@@ -15233,7 +15594,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentInkMode.classList.toggle("active",ink);
     canvasAgentTextMode.setAttribute("aria-pressed",String(!ink));
     canvasAgentInkMode.setAttribute("aria-pressed",String(ink));
+    if(!ink)canvasAgentResizeInput();
     (ink?canvasAgentInkCanvas:canvasAgentInput).focus?.();
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearInkDraft() {
     canvasAgentInkContext?.clearRect(0,0,canvasAgentInkCanvas.width,canvasAgentInkCanvas.height);
@@ -15826,7 +16189,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function canvasAgentSetRunning(running) {
     canvasAgent.running = running;
     canvasAgentStop.hidden = !running;
-    canvasAgentSend.textContent = t(running ? "canvasAgentSteer" : "canvasAgentSend");
+    canvasAgentSetComposerActionLabel(canvasAgentSend,running ? "canvasAgentSteer" : "canvasAgentSend");
     canvasAgentSetStatus(t(running ? "canvasAgentWorking" : "canvasAgentReady"),running ? "running" : "ready");
     canvasAgentSyncTriggerState();
     if (running) canvasAgentPauseAutomaticAI();
@@ -15912,6 +16275,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.sessionProjectCapabilities=capabilities&&typeof capabilities.bash==="boolean"&&typeof capabilities.readOnly==="boolean"
         ? {bash:capabilities.bash,readOnly:capabilities.readOnly}:null;
       canvasAgent.sessionSearchConfigured = envelope.payload?.webSearchConfigured === true;
+      canvasAgent.sessionSearchEnabled = envelope.payload?.webSearchEnabled === true;
       canvasAgentSetSearchConfigured(canvasAgent.sessionSearchConfigured);
       canvasAgentRenderProjects();
       try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
@@ -15975,6 +16339,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.followLatest = true;
     if (showEmpty) canvasAgentRenderEmpty();
   }
+  async function canvasAgentCurrentWidgetCapabilities() {
+    if (!state.pluginCatalogLoaded) await loadPluginDocuments();
+    return canvasAgentWidgetCapabilities();
+  }
   async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true}={}) {
     if (resetProjection) canvasAgentBeginLocalConversation();
     if (canvasAgent.connectPromise) {
@@ -15990,8 +16358,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
     canvasAgent.running = false;
     canvasAgentStop.hidden = true;
-    canvasAgentSend.textContent = t("canvasAgentSend");
-    return canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{connectionId,webSearchEnabled:canvasAgent.searchEnabled,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}));
+    canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
+    const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
+    return canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}));
   }
   async function canvasAgentConnect() {
     await canvasAgentEnsureProjects();
@@ -16006,6 +16375,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return canvasAgentConnect();
     }
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
+    const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
     await canvasAgentWaitForReady(()=>{
       const socket = new WebSocket(canvasAgentSocketUrl());
       canvasAgent.socket = socket;
@@ -16018,6 +16388,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           clientId:canvasAgent.clientId,
           connectionId:selectedAiConnectionId(),
           webSearchEnabled:canvasAgent.searchEnabled,
+          widgetCapabilities,
           projectId:canvasAgent.projectId,
           accessMode:canvasAgentEffectiveAccessMode(),
         });
@@ -16033,7 +16404,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         canvasAgent.requestPending = false;
         canvasAgent.running = false;
         canvasAgentStop.hidden = true;
-        canvasAgentSend.textContent = t("canvasAgentSend");
+        canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
         canvasAgentSyncTriggerState();
         canvasAgentResumeAutomaticAI();
         if(hadActiveTurn&&!canvasAgent.lastTurnError){
@@ -16054,7 +16425,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     void action.catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   }
   async function canvasAgentEnsureSearchSession() {
-    if (!canvasAgent.searchEnabled || canvasAgent.sessionSearchConfigured || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionId) return;
+    if (canvasAgent.sessionSearchEnabled === canvasAgent.searchEnabled || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionId) return;
     await canvasAgentStartNewConversation(selectedAiConnectionId());
   }
 
@@ -16188,6 +16559,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       sampling:{maxWidth:policy.maxLongEdge,maxHeight:policy.maxLongEdge,maxPixels:policy.maxPixels,pixelsPerLogicalUnit:Math.min(scaleX,scaleY),note:"Tighter logical regions receive more image pixels per Canvas unit."},
       coordinateGrid:{step:gridStep,labels:"absolute canvas logical coordinates",rendered:coordinates === "grid"},
     };
+  }
+  function canvasAgentSameInitialRegion(capture, digest) {
+    const actual=capture?.logicalRegion, expected=digest?.canvas?.contentBounds || digest?.viewport;
+    return actual && expected && ["x","y","width","height"].every(key=>Math.abs(Number(actual[key])-Number(expected[key]))<.01);
+  }
+  function canvasAgentDigestHasContent(digest) {
+    const counts=digest?.counts||{};
+    return Boolean(digest?.canvas?.contentBounds)||["inkTiles","widgets","textBoxes","images"].some(key=>Number(counts[key])>0);
+  }
+  async function canvasAgentInitialTurnState() {
+    for (let attempt=0;attempt<3;attempt++) {
+      const before=canvasAgentDigest("objects");
+      if(!canvasAgentDigestHasContent(before))return {digest:before,empty:true};
+      const capture=await canvasAgentCapture({target:"canvas",quality:"basic",coordinates:"none"}), digest=canvasAgentDigest("objects");
+      if (before.revision!==digest.revision || before.viewRevision!==digest.viewRevision || capture.revision!==digest.revision
+        || capture.viewRevision!==digest.viewRevision || !canvasAgentSameInitialRegion(capture,digest)) continue;
+      const match=/^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(capture.dataUrl||""));
+      if(!match)throw canvasAgentToolError("CAPTURE_ENCODING_FAILED","The initial Canvas state could not be encoded.");
+      const {dataUrl,...metadata}=capture, extension=match[1].slice("image/".length);
+      return {
+        digest,
+        capture:{target:"canvas",...metadata},
+        image:{mediaType:match[1],data:match[2],name:`penecho-initial-canvas.${extension}`},
+      };
+    }
+    throw canvasAgentToolError("INITIAL_STATE_CHANGED","The Canvas changed while its initial state was being prepared. Try sending again.");
   }
   function canvasAgentObjectContent(object) {
     if (object.kind === "widget") return widgetEditContext(object.item,"agent");
@@ -16331,6 +16728,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function canvasAgentRecordChange(changeId,historyEntry) {
     canvasAgent.latestChange=historyEntry ? {changeId:String(changeId || ""),revision:state.userRevision,historyEntry} : null;
   }
+  function canvasAgentWidgetPluginAllowed(pluginId,widgetType) {
+    if(widgetType==="diagram_source")return pluginId==="flowchart"&&pluginEnabled("flowchart")&&pluginManifests.has("flowchart");
+    const definition=PLUGIN_DEFINITIONS.find(plugin=>plugin.id===pluginId),canvasAgentPlugin=pluginId==="general"||pluginId==="flowchart"||definition?.builtIn===false;
+    return canvasAgentPlugin&&pluginEnabled(pluginId)&&pluginManifests.has(pluginId);
+  }
   async function canvasAgentPrepareCreateItems(items) {
     if (!Array.isArray(items)||!items.length||items.length>24) throw canvasAgentToolError("INVALID_BATCH","Provide between 1 and 24 create items.");
     const requested={widget:items.filter(item=>item?.type === "widget").length,text:items.filter(item=>item?.type === "text").length,image:items.filter(item=>item?.type === "image").length};
@@ -16345,9 +16747,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if(!record)throw canvasAgentToolError("INVALID_TEXT","Text content or geometry was rejected.");
         const placed=canvasAgentPlacementBox(record.w,record.h,raw.placement,reserved);record.x=Math.round(placed.x);record.y=Math.round(placed.y);reserved.push(canvasAgentBox({kind:"text",item:record}));prepared.push({type,kind:"text",record,placed});
       } else if (type === "widget") {
-        const widgetType=raw.widgetType === "diagram_source" ? "diagram_source" : "html_widget",pluginId=String(raw.pluginId || (widgetType === "diagram_source"?"flowchart":"general"));
-        if(!["general","flowchart"].includes(pluginId))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE","Canvas Agent may create Widgets only with General HTML or Professional Diagrams.");
-        if(!pluginManifests.has(pluginId)||!pluginEnabled(pluginId))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Plugin ${pluginId} is unavailable or disabled.`);
+        const widgetType=String(raw.widgetType||"");
+        if(!["html_widget","diagram_source"].includes(widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Widget type ${widgetType||"(missing)"} is unavailable to Canvas Agent.`);
+        const pluginId=String(raw.pluginId || (widgetType === "diagram_source"?"flowchart":"general"));
+        if(!canvasAgentWidgetPluginAllowed(pluginId,widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Plugin ${pluginId} is unavailable, disabled, or not available to Canvas Agent.`);
         if(widgetType === "diagram_source")await ensurePluginRuntime("flowchart");
         const width=Math.max(300,Math.min(SIZE,Number(raw.width)||Math.max(600,Math.min(1200,visible.w*.7)))),height=Math.max(200,Math.min(SIZE,Number(raw.height)||Math.max(400,Math.min(800,visible.h*.7)))),placed=canvasAgentPlacementBox(width,height,raw.placement,reserved),
           record=widgetRecord({tool:widgetType,widgetType,pluginId,x:placed.x,y:placed.y,w:width,h:height,contentW:width,contentH:height,title:String(raw.title||"Canvas widget"),refreshSeconds:Number.isFinite(Number(raw.refreshSeconds))?Number(raw.refreshSeconds):0,html:typeof raw.html === "string"?raw.html:"",source:typeof raw.source === "string"?raw.source:"",sourceFormat:raw.sourceFormat,diagramKind:raw.diagramKind,frameworkVersion:raw.frameworkVersion,copyText:raw.copyText,copyLabel:raw.copyLabel});
@@ -16498,6 +16901,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (await canvasAgentHash(currentEdit) !== String(args.expectedHash || "")) throw Error("Widget changed after it was read. Read it again before patching.");
     const command = args.command;
     if (!command || command.pluginId !== object.item.pluginId || !["html_widget","diagram_source"].includes(command.tool)) throw Error("Patched widget command is invalid.");
+    if(!canvasAgentWidgetPluginAllowed(command.pluginId,command.tool))throw Error("The Widget plugin is unavailable, disabled, or not available to Canvas Agent.");
     const record = widgetRecord({...command,id:object.item.id,widgetType:command.tool,contentW:object.item.contentW,contentH:object.item.contentH});
     if (!record) throw Error("Patched widget content was rejected by Canvas validation.");
     save();
@@ -16649,6 +17053,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.panelMotionFrame=0;
       canvasAgentRestorePanelSize();
       canvasAgentRestorePanelPosition();
+      canvasAgentResizeInput();
       canvasAgentAnimatePanel(true,canvasAgentPanel.getBoundingClientRect(),focus?()=>
         (canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus():null);
     });
@@ -16782,6 +17187,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   },{passive:false});
   canvasAgentTextMode.addEventListener("click",()=>canvasAgentSetInputMode("text"));
   canvasAgentInkMode.addEventListener("click",()=>canvasAgentSetInputMode("ink"));
+  canvasAgentPromptToggle.addEventListener("click",()=>canvasAgentSetPromptSuggestionsExpanded(!canvasAgent.promptSuggestionsExpanded));
   canvasAgentClearInkButton.addEventListener("click",()=>canvasAgentClearInkDraft());
   canvasAgentInkCanvas.addEventListener("pointerdown",canvasAgentInkPointerDown);
   canvasAgentInkCanvas.addEventListener("pointermove",canvasAgentInkPointerMove);
@@ -16832,11 +17238,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         : text||t("canvasAgentImagePrompt"), displayText=displayTextOverride===null?(text||(inkAttachment?t("canvasAgentInkOnly"):t("canvasAgentImageOnly"))):String(displayTextOverride);
       await canvasAgentConnect();
       await canvasAgentEnsureSearchSession();
+      canvasAgentSetStatus(t("canvasAgentInitialStatePreparing"),"connecting");
+      const initialState=await canvasAgentInitialTurnState();
       canvasAgentSyncState();
       canvasAgentRow("user",displayText,displayAttachments);
-      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),webSearchEnabled:canvasAgent.searchEnabled});
+      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),initialState,webSearchEnabled:canvasAgent.searchEnabled});
       requestSent = true;
-      if(clearInput)canvasAgentInput.value = "";
+      if(clearInput){canvasAgentInput.value = "";canvasAgentResizeInput();}
       if(includeDraftMedia){canvasAgentClearAttachments();canvasAgentClearInkDraft();canvasAgentClearReferences();}
       return true;
     } catch (error) {
@@ -16859,7 +17267,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(canvasAgent.projectUploadBusy){canvasAgentSetStatus(t("canvasAgentFilePreparing"),"connecting");return;}
     void canvasAgentSubmitMessage();
   });
-  canvasAgentInput.addEventListener("input",canvasAgentSyncInputHint);
+  canvasAgentInput.addEventListener("input",()=>{canvasAgentResizeInput();canvasAgentSyncInputHint();canvasAgentSyncPromptSuggestions();});
   canvasAgentInput.addEventListener("keydown",event=>{
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -16887,6 +17295,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     void canvasAgentHandleFiles(files);
   });
   for (const type of ["pointerdown","pointermove","pointerup","pointercancel","wheel"]) canvasAgentPanel.addEventListener(type,event=>event.stopPropagation(),{passive:type === "wheel"});
+  canvasAgentForm.addEventListener("focusin",canvasAgentSyncPromptSuggestions);
+  canvasAgentForm.addEventListener("focusout",()=>queueMicrotask(canvasAgentSyncPromptSuggestions));
   canvasAgentPanel.addEventListener("focusin",canvasAgentPauseAutomaticAI);
   canvasAgentPanel.addEventListener("focusout",()=>queueMicrotask(canvasAgentResumeAutomaticAI));
   canvasAgentTranscript.addEventListener("scroll",canvasAgentSyncFollowLatest,{passive:true});
@@ -16906,7 +17316,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(files.length)void canvasAgentHandleFiles(files);
     else void canvasAgentDesktopClipboardFile().then(file=>file?canvasAgentHandleFiles([file]):canvasAgentSetStatus(t("canvasAgentFileReadFailed"),"error")).catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   },true);
-  if (typeof ResizeObserver==="function") new ResizeObserver(canvasAgentSchedulePanelSizeSave).observe(canvasAgentPanel);
+  if (typeof ResizeObserver==="function") new ResizeObserver(()=>{canvasAgentSchedulePanelSizeSave();canvasAgentResizeInput();}).observe(canvasAgentPanel);
+  canvasAgentResizeInput();
   window.addEventListener("resize",()=>requestAnimationFrame(()=>{canvasAgentRestorePanelSize();canvasAgentRestorePanelPosition();}),{passive:true});
   window.addEventListener("beforeunload",canvasAgentPersistCurrentConversation);
   canvasAgentUpdateSearchButton();
@@ -17515,6 +17926,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   canvasViewButton.onclick = () => setCanvasViewMode(true);
   canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
   canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
+  canvasViewDownloadButton.onclick = exportCanvasPng;
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
@@ -18142,6 +18554,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
   canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
   settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
   settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
@@ -18161,6 +18574,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   settingsEffortOptions?.addEventListener("keydown", handleSettingsEffortOptionKeydown);
   document.addEventListener("pointerdown", (event) => {
     if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
+    if (!document.querySelector("#settingsApiModelCombobox")?.contains(event.target)) hideApiModelOptions();
   });
   if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
@@ -18171,11 +18585,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
   });
-  settingsApiRegion?.addEventListener("change", () => updateApiPresetFields(true, false));
+  settingsApiRegion?.addEventListener("change", () => {
+    updateApiPresetFields(true, false);
+    clearFetchedApiModels();
+  });
   settingsApiService?.addEventListener("change", () => {
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
   });
+  settingsApiUrl?.addEventListener("input", clearFetchedApiModels);
+  settingsApiKey?.addEventListener("input", clearFetchedApiModels);
+  settingsApiModel?.addEventListener("input", updateApiModelSelection);
+  settingsApiModel?.addEventListener("keydown", handleApiModelKeydown);
+  settingsApiModelOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-api-model-value]");
+    if (option) chooseApiModel(option.dataset.apiModelValue);
+  });
+  settingsApiModelOptions?.addEventListener("keydown", handleApiModelOptionKeydown);
   settingsTraceToggle?.addEventListener("click", () => {
     settings.requestTrace = !settings.requestTrace;
     updateTraceToggle();

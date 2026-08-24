@@ -130,6 +130,57 @@ function startApiServer(responseContent = '{"intent":"none","commands":[]}', opt
   });
 }
 
+function startModelDiscoveryServer() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", chunk => chunks.push(chunk));
+    req.on("end", () => {
+      const request = {
+        method:req.method,
+        path:req.url,
+        authorization:String(req.headers.authorization || ""),
+        xApiKey:String(req.headers["x-api-key"] || ""),
+        anthropicVersion:String(req.headers["anthropic-version"] || ""),
+        accept:String(req.headers.accept || ""),
+        body:Buffer.concat(chunks).toString("utf8"),
+      };
+      requests.push(request);
+      if (request.path === "/openai/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ data:[{ id:"zeta-model" }, { model:"alpha-model" }, "alpha-model", { name:"gamma-model" }] }));
+        return;
+      }
+      if (request.path === "/anthropic/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json; charset=utf-8" });
+        res.end(JSON.stringify(["claude-4-model", "claude-3-model", "claude-4-model"]));
+        return;
+      }
+      if (request.path === "/error/v1/models") {
+        res.writeHead(401, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ error:"provider-secret-error-body" }));
+        return;
+      }
+      if (request.path === "/malformed/v1/models") {
+        res.writeHead(200, { "Content-Type":"application/json" });
+        res.end(JSON.stringify({ data:{ id:"invalid-envelope" } }));
+        return;
+      }
+      if (request.path === "/plain/v1/models") {
+        res.writeHead(200, { "Content-Type":"text/plain; charset=utf-8" });
+        res.end("[]");
+        return;
+      }
+      res.writeHead(404, { "Content-Type":"application/json" });
+      res.end("{}");
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve({ server, requests, origin:`http://127.0.0.1:${server.address().port}` }));
+  });
+}
+
 function outboundModelText(rawRequest) {
   const request = JSON.parse(rawRequest);
   return request.messages[1].content.find(part => part.type === "text").text;
@@ -536,6 +587,65 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
   } finally { await stopServer(child); }
 });
 
+test("connection model discovery validates requests and safely lists provider models", { timeout:10000 }, async () => {
+  const provider = await startModelDiscoveryServer(), { child, origin, stateDir } = await startServer(apiServerEnv(provider.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const create = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${provider.origin}/anthropic/v1/messages`, apiModel:"manual-model", apiKey:"anthropic-saved-key", effort:"medium" } }) }), created = await create.json();
+    assert.equal(create.status, 200, JSON.stringify(created));
+    const connection = created.connections.find(item => item.apiFormat === "anthropic"), storedAfterCreate = await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8");
+
+    const openai = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiModel:"", apiKey:"openai-key", effort:"medium" } }) }), openaiBody = await openai.json();
+    assert.equal(openai.status, 200, JSON.stringify(openaiBody));
+    assert.deepEqual(openaiBody.models, ["alpha-model", "gamma-model", "zeta-model"]);
+
+    const anthropic = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ id:connection.id, connection:{ provider:"api", apiFormat:"anthropic", apiUrl:`${provider.origin}/anthropic/v1/messages`, apiModel:"manual-model", apiKey:"", effort:"medium" } }) }), anthropicBody = await anthropic.json();
+    assert.equal(anthropic.status, 200, JSON.stringify(anthropicBody));
+    assert.deepEqual(anthropicBody.models, ["claude-3-model", "claude-4-model"]);
+    assert.equal(Object.hasOwn(anthropicBody, "apiKey"), false);
+    assert.doesNotMatch(JSON.stringify(anthropicBody), /anthropic-saved-key/);
+    assert.deepEqual(provider.requests.map(request => request.path), ["/openai/v1/models", "/anthropic/v1/models"]);
+    assert.equal(provider.requests[0].method, "GET");
+    assert.equal(provider.requests[0].accept, "application/json");
+    assert.equal(provider.requests[0].authorization, "Bearer openai-key");
+    assert.equal(provider.requests[0].xApiKey, "");
+    assert.equal(provider.requests[1].accept, "application/json");
+    assert.equal(provider.requests[1].authorization, "");
+    assert.equal(provider.requests[1].xApiKey, "anthropic-saved-key");
+    assert.equal(provider.requests[1].anthropicVersion, "2023-06-01");
+
+    const upstreamError = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/error/v1`, apiKey:"bad-key", effort:"medium" } }) }), upstreamErrorBody = await upstreamError.json();
+    assert.equal(upstreamError.status, 502);
+    assert.match(upstreamErrorBody.error, /HTTP 401/);
+    assert.doesNotMatch(upstreamErrorBody.error, /provider-secret-error-body/);
+    const malformed = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/malformed/v1`, apiKey:"valid-key", effort:"medium" } }) });
+    assert.equal(malformed.status, 502);
+    assert.equal((await malformed.json()).error, "Provider returned an invalid model list.");
+    const wrongType = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/plain/v1`, apiKey:"valid-key", effort:"medium" } }) });
+    assert.equal(wrongType.status, 502);
+    assert.equal((await wrongType.json()).error, "Provider returned a non-JSON model list.");
+
+    const requestCount = provider.requests.length;
+    for (const [label, body] of [
+      ["provider", { connection:{ provider:"codex-cli", effort:"medium" } }],
+      ["url", { connection:{ provider:"api", apiFormat:"openai", apiUrl:"file:///tmp/models", apiKey:"key", effort:"medium" } }],
+      ["key", { connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiKey:"key\n", effort:"medium" } }],
+      ["id", { id:"missing-connection", connection:{ provider:"api", apiFormat:"openai", apiUrl:`${provider.origin}/openai/v1`, apiKey:"key", effort:"medium" } }],
+    ]) {
+      const response = await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers, body:JSON.stringify(body) }), parsed = await response.json();
+      assert.equal(response.status, 400, `${label}: ${JSON.stringify(parsed)}`);
+    }
+    assert.equal(provider.requests.length, requestCount);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ Origin:"https://evil.example", "Content-Type":"application/json" }, body:"{}" })).status, 403);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:"{}" })).status, 403);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { method:"POST", headers:{ Origin:origin }, body:"{}" })).status, 415);
+    assert.equal((await fetch(`${origin}/api/settings/connections/models`, { headers })).status, 405);
+    assert.equal(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"), storedAfterCreate);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => provider.server.close(resolve));
+  }
+});
+
 test("two clients independently route requests through the shared connection list", { timeout:10000 }, async () => {
   const openai = await startApiServer('{"intent":"none","commands":[]}', { delayMs:250 }), anthropic = await startApiServer('{"intent":"none","commands":[]}', { format:"anthropic", delayMs:250 });
   const { child, origin, stateDir } = await startServer(apiServerEnv(openai.origin)), headers = { Origin:origin, "Content-Type":"application/json" };
@@ -784,7 +894,7 @@ test("Kimi CLI mode uses the documented prompt stream, no-tools agent, and tempo
     assert.ok(saved.args.includes("--agent-file"));
     assert.match(saved.agent,/tools: \[\]/);
     assert.match(saved.agent,/subagents: \[\]/);
-    assert.match(saved.agent,/Use only content supplied in the prompt, including virtual-file read views/);
+    assert.match(saved.agent,/Use only supplied content and images[\s\S]*Even if Kimi advertises built-in tools, never invoke them[\s\S]*If the prompt contains HARNESS REQUEST\.availableTools/);
     assert.doesNotMatch(saved.agent,/must not attempt to read files/);
     assert.equal(saved.args[saved.args.indexOf("--model")+1],"kimi-code/k3");
   } finally {

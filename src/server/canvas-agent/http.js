@@ -8,15 +8,24 @@ const MAX_REMOTE_AGENT_CHANNELS = 8;
 const REMOTE_AGENT_CHANNEL_TTL_MS = 5 * 60_000;
 const REMOTE_AGENT_POLL_MS = 15_000;
 
-function attachCanvasAgent({ server, authorize, resolveConnection, listConnections, resolveWebSearch = () => null, resolveProject = async () => null, stateDirectory, rootDirectory, modelTimeoutMs, logger = () => {}, conversationLogger = null, conversationTrace = null }) {
+function attachCanvasAgent({ server, authorize, resolveConnection, listConnections, resolveWebSearch = () => null, resolveWidgetCapabilities = () => ({ professionalEnabled:false, privatePlugins:[] }), resolveProject = async () => null, stateDirectory, rootDirectory, modelTimeoutMs, logger = () => {}, conversationLogger = null, conversationTrace = null }) {
   const wss = new WebSocketServer({ noServer:true, maxPayload:8 * 1024 * 1024, perMessageDeflate:false });
   let hostPromise = null;
+  const harnessFactory = async () => {
+    const runtime = await import("./runtime.mjs");
+    return new runtime.CanvasHarnessHost({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch, resolveWidgetCapabilities, resolveProject, modelTimeoutMs, logger, conversationLogger, conversationTrace });
+  };
+  const nativeFactory = async () => {
+    const codexNativeHost = await import("./codex-native-host.mjs");
+    return new codexNativeHost.CodexNativeHost({ stateDirectory, rootDirectory, resolveConnection, resolveWebSearch, resolveWidgetCapabilities, resolveProject, modelTimeoutMs, logger, conversationLogger, conversationTrace });
+  };
   const host = () => {
-    if (!hostPromise) hostPromise = Promise.all([
-      import("./runtime.mjs"),
-      import("./protocol.mjs"),
-    ]).then(async ([runtime]) => {
-      const instance = new runtime.CanvasHarnessHost({ stateDirectory, rootDirectory, resolveConnection, listConnections, resolveWebSearch, resolveProject, modelTimeoutMs, logger, conversationLogger, conversationTrace });
+    if (!hostPromise) hostPromise = import("./host-router.mjs").then(async hostRouter => {
+      const instance = new hostRouter.CanvasAgentHostRouter({
+        resolveConnection,
+        harnessFactory,
+        nativeFactory,
+      });
       await instance.initialize();
       return instance;
     });
@@ -25,18 +34,24 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
 
   const peers = new Set(), remoteChannels = new Map();
   function createPeer({ sendFrame, closeTransport = () => {} }) {
-    const binding = {}, state = { session:null, incomingSeq:0, outgoingSeq:0, closed:false, receiveQueue:Promise.resolve() };
+    const binding = {}, state = { session:null, sessionGeneration:0, incomingSeq:0, outgoingSeq:0, closed:false, receiveQueue:Promise.resolve() };
+    const sendForGeneration = generation => {
+      if (!Number.isSafeInteger(generation)) throw new Error("Canvas Agent session generation is invalid.");
+      return (type, payload, identity = state.session) => {
+        if (state.closed || generation !== state.sessionGeneration) return;
+        state.outgoingSeq += 1;
+        sendFrame(JSON.stringify({
+          version:1,
+          type,
+          canvasSessionId:identity?.id || "",
+          clientId:identity?.clientId || "",
+          seq:state.outgoingSeq,
+          payload,
+        }));
+      };
+    };
     const send = (type, payload, identity = state.session) => {
-      if (state.closed) return;
-      state.outgoingSeq += 1;
-      sendFrame(JSON.stringify({
-        version:1,
-        type,
-        canvasSessionId:identity?.id || "",
-        clientId:identity?.clientId || "",
-        seq:state.outgoingSeq,
-        payload,
-      }));
+      sendForGeneration(state.sessionGeneration)(type, payload, identity);
     };
     const fail = (error, fatal = false) => {
       send("error", { message:String(error?.message || error || "Canvas Agent failed."), fatal });
@@ -53,41 +68,59 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
         const runtime = await host();
         if (envelope.type === "hello") {
           if (state.session) throw new Error("Canvas Agent hello was already accepted.");
-          state.session = await runtime.connect({
+          const generation = ++state.sessionGeneration, send = sendForGeneration(generation);
+          const session = await runtime.connect({
             canvasSessionId:envelope.canvasSessionId || envelope.payload?.canvasSessionId || "",
             resumeToken:String(envelope.payload?.resumeToken || ""),
             clientId:String(envelope.clientId || envelope.payload?.clientId || ""),
             connectionId:String(envelope.payload?.connectionId || "default"),
             webSearchEnabled:envelope.payload?.webSearchEnabled === true,
+            widgetCapabilities:envelope.payload?.widgetCapabilities,
             projectId:String(envelope.payload?.projectId || ""),
             accessMode:String(envelope.payload?.accessMode || "controlled"),
             binding,
             send,
           });
+          if (generation !== state.sessionGeneration) {
+            await runtime.disposeSession(session).catch(() => {});
+            throw new Error("Canvas Agent session replacement is no longer current.");
+          }
+          state.session = session;
           return;
         }
         if (state.session?.binding !== binding) throw new Error("Canvas Agent session moved to another connection.");
-        if (!state.session || envelope.canvasSessionId && envelope.canvasSessionId !== state.session.id) throw new Error("Canvas Agent session is not established.");
+        if (!state.session) throw new Error("Canvas Agent session is not established.");
+        if (envelope.canvasSessionId && envelope.canvasSessionId !== state.session.id) return;
         if (envelope.type === "state_sync") runtime.updateState(state.session, envelope.payload?.digest);
         else if (envelope.type === "user_turn" || envelope.type === "steer") {
           runtime.setWebSearchEnabled(state.session, envelope.payload?.webSearchEnabled === true);
-          void runtime.submit(state.session, envelope.payload?.text, envelope.type === "steer", envelope.payload?.images, envelope.payload?.references).catch(error => fail(error));
+          void runtime.submit(state.session, envelope.payload?.text, envelope.type === "steer", envelope.payload?.images, envelope.payload?.references, envelope.payload?.initialState).catch(error => fail(error));
         }
-        else if (envelope.type === "cancel") runtime.cancel(state.session);
+        else if (envelope.type === "cancel") await runtime.cancel(state.session);
         else if (envelope.type === "tool_result") runtime.resolveToolResult(state.session, envelope.payload);
         else if (envelope.type === "new_conversation") {
           const previous = state.session, connectionId = String(envelope.payload?.connectionId || previous.connectionId);
           if (!resolveConnection(connectionId)) throw new Error("The selected AI connection was not found.");
-          await runtime.disposeSession(previous);
-          state.session = await runtime.connect({
+          // The browser may defer this frame while its panel is hidden; when it arrives,
+          // replacement must release the old Codex process/thread before creating a new owner.
+          const generation = ++state.sessionGeneration;
+          state.session = null;
+          const send = sendForGeneration(generation);
+          const replacement = await runtime.replaceSession(previous, {
             clientId:previous.clientId,
             connectionId,
             webSearchEnabled:envelope.payload?.webSearchEnabled === true,
+            widgetCapabilities:envelope.payload?.widgetCapabilities,
             projectId:String(envelope.payload?.projectId || ""),
             accessMode:String(envelope.payload?.accessMode || "controlled"),
             binding,
             send,
           });
+          if (generation !== state.sessionGeneration) {
+            await runtime.disposeSession(replacement).catch(() => {});
+            throw new Error("Canvas Agent session replacement is no longer current.");
+          }
+          state.session = replacement;
         } else if (envelope.type === "ping") send("pong", { time:Date.now() });
       } catch (error) {
         fail(error, !state.session);
@@ -103,7 +136,10 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
       state.closed = true;
       peers.delete(peer);
       await state.receiveQueue.catch(() => {});
-      if (state.session) await host().then(runtime => runtime.disconnect(state.session, binding)).catch(() => {});
+      const session = state.session;
+      state.session = null;
+      state.sessionGeneration += 1;
+      if (session) await host().then(runtime => runtime.disconnect(session, binding)).catch(() => {});
     };
     const peer = { receive, disconnect };
     peers.add(peer);

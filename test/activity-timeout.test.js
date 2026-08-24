@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { createActivityAwareTimeout, STREAM_IDLE_GRACE_MS } = require("../src/server/activity-timeout.js");
+const { createActivityAwareTimeout, createIdleAndTotalTimeout, STREAM_IDLE_GRACE_MS } = require("../src/server/activity-timeout.js");
 
 function fakeClock() {
   let current = 0, nextId = 0;
@@ -53,4 +53,36 @@ test("activity-aware timeout does not add idle grace when no stream data arrives
   clock.advanceTo(100);
   assert.equal(controller.signal.aborted,true);
   assert.equal(STREAM_IDLE_GRACE_MS,10_000);
+});
+
+test("idle-and-total timeout refreshes the idle deadline when output remains active", () => {
+  const clock = fakeClock(), controller = new AbortController(), reasons = [], timeout = createIdleAndTotalTimeout(controller,20,60,{
+    now:clock.now,
+    setTimeout:clock.setTimeout,
+    clearTimeout:clock.clearTimeout,
+    reasonFor:(kind,limitMs) => { reasons.push({kind,limitMs}); return new Error(kind); },
+  });
+  clock.advanceTo(15);
+  timeout.activity();
+  clock.advanceTo(34);
+  assert.equal(controller.signal.aborted,false);
+  clock.advanceTo(35);
+  assert.equal(controller.signal.aborted,true);
+  assert.deepEqual(reasons,[{kind:"idle",limitMs:20}]);
+});
+
+test("idle-and-total timeout enforces a hard total cap despite recent activity", () => {
+  const clock = fakeClock(), controller = new AbortController(), reasons = [], timeout = createIdleAndTotalTimeout(controller,30,70,{
+    now:clock.now,
+    setTimeout:clock.setTimeout,
+    clearTimeout:clock.clearTimeout,
+    reasonFor:(kind,limitMs) => { reasons.push({kind,limitMs}); return new Error(kind); },
+  });
+  for (const time of [20,40,60,69]) {
+    clock.advanceTo(time);
+    timeout.activity();
+  }
+  clock.advanceTo(70);
+  assert.equal(controller.signal.aborted,true);
+  assert.deepEqual(reasons,[{kind:"total",limitMs:70}]);
 });

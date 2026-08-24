@@ -7,6 +7,7 @@ const { spawn } = require("child_process");
 const { mapKimiReasoningEffort } = require("./reasoning-effort.js");
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
+const MAX_KIMI_TOOL_RECOVERIES = 2;
 const KIMI_AGENT_FILE = "penecho-canvas-agent.md";
 const KIMI_AGENT_DEFINITION = `---
 name: penecho-canvas
@@ -15,8 +16,33 @@ tools: []
 subagents: []
 ---
 
-You are an isolated response generator for PenEcho Canvas. Follow the user prompt exactly and return only the requested response. Use only content supplied in the prompt, including virtual-file read views. You have no tools and must not access the host filesystem, run commands, access the network, delegate work, or modify the environment.
+You are an isolated response generator for PenEcho Canvas. Follow the user prompt exactly and return only the requested response. Use only supplied content and images, including virtual-file read views. Even if Kimi advertises built-in tools, never invoke them or access the host, network, subagents, or environment. If the prompt contains HARNESS REQUEST.availableTools, PenEcho tool access means returning its specified Harness JSON with a listed name; Harness executes it.
 `;
+
+function normalizeKimiToolName(value) {
+  const name = String(value || "").split(":", 1)[0].trim().replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 80);
+  return name || "unknown Kimi tool";
+}
+
+function kimiToolRecoveryPrompt(value) {
+  const name = normalizeKimiToolName(value);
+  return `ERROR: PenEcho rejected your Kimi/CLI built-in tool call (${name}). Never invoke Kimi built-ins such as ReadMediaFile, Read, Bash, MCP, or Agent. Continue the same task using only the content and images already supplied, and return exactly the response required by the original prompt. If it contains HARNESS REQUEST.availableTools, request a PenEcho tool only by returning its specified tool_call JSON with a listed name; do not execute it yourself.`;
+}
+
+function kimiEventToolName(event) {
+  const calls = [event?.tool_calls, event?.toolCalls, event?.message?.tool_calls, event?.message?.toolCalls]
+    .find(value => Array.isArray(value) && value.length > 0);
+  const call = calls?.[0], parts = [event?.content, event?.message?.content].flatMap(value => Array.isArray(value) ? value : []),
+    toolPart = parts.find(part => ["tool_call", "tool_use", "tool_result"].includes(String(part?.type || "").toLowerCase()));
+  return normalizeKimiToolName(call?.function?.name || call?.name || toolPart?.name || event?.toolName || event?.tool_name || event?.name);
+}
+
+function kimiToolViolationError(event) {
+  const name = kimiEventToolName(event), error = new Error(`Kimi Code CLI built-in tool call was rejected: ${name}.`);
+  error.kimiToolViolation = true;
+  error.kimiToolName = name;
+  return error;
+}
 
 function findOnPath(name, env = process.env) {
   const directories = String(env.PATH || env.Path || "").split(path.delimiter).filter(Boolean);
@@ -185,7 +211,7 @@ function runProcess(launch, args, cwd, env, signal, onActivity = null) {
       try { event = JSON.parse(line); } catch { events.push({ type:"invalid-json", preview:line.slice(0,200) }); return; }
       events.push({ type:String(event?.type || event?.kind || "unknown"), ...(kimiEventError(event) ? { error:kimiEventError(event).slice(0,500) } : {}) });
       if (events.length > 64) events.shift();
-      if (kimiEventHasToolActivity(event)) return failEarly(new Error("Kimi Code CLI attempted to use a tool while tools are disabled."));
+      if (kimiEventHasToolActivity(event)) return failEarly(kimiToolViolationError(event));
       const detail = kimiEventError(event);
       if (["error", "failed", "turn.failed"].includes(String(event?.type || "").toLowerCase())) return failEarly(new Error(`Kimi Code CLI failed${detail ? `: ${detail}` : "."}`));
       const contentText = kimiAssistantText(event);
@@ -243,14 +269,31 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
       await fs.promises.writeFile(file, images[index].buffer, { mode:0o600 });
       files.push(file);
     }
-    const imageHint = files.length ? `\n\nCanvas images are available at ${files.map(file => `@${path.basename(file)}`).join(", ")}. Inspect only these images as needed. Do not run shell commands, modify files, or use other tools.` : "";
-    const launch = resolveKimiLaunch(executable, env), result = await runProcess(launch, buildKimiArgs({ model, prompt:`${String(prompt || "")}${imageHint}`, agentFile }), workDir, sanitizeKimiEnv(env, effort), signal, onActivity);
-    cleanupReady = result.cleanupReady || cleanupReady;
-    deferCleanup = Boolean(result.deferCleanup);
-    if (signal?.aborted) throw abortError();
-    if (result.content?.trim()) return result.content.trim();
-    const detail = result.stderr.trim().slice(-4000);
-    throw new Error(`Kimi Code CLI returned no assistant response${detail ? `: ${detail}` : "."}`);
+    const imageHint = files.length ? `\n\nCanvas images are attached through ${files.map(file => `@${path.basename(file)}`).join(", ")}. Use the supplied visual content directly; never call ReadMediaFile or another CLI tool.` : "";
+    const launch = resolveKimiLaunch(executable, env), basePrompt = `${String(prompt || "")}${imageHint}`, cleanEnv = sanitizeKimiEnv(env, effort);
+    let activePrompt = basePrompt;
+    for (let recoveries = 0;;) {
+      let result;
+      try {
+        result = await runProcess(launch, buildKimiArgs({ model, prompt:activePrompt, agentFile }), workDir, cleanEnv, signal, onActivity);
+      } catch (error) {
+        cleanupReady = error.cleanupReady || cleanupReady;
+        deferCleanup = deferCleanup || Boolean(error.deferCleanup);
+        if (!error.kimiToolViolation || recoveries >= MAX_KIMI_TOOL_RECOVERIES || signal?.aborted) throw error;
+        await cleanupReady.catch(() => {});
+        cleanupReady = Promise.resolve();
+        deferCleanup = false;
+        recoveries += 1;
+        activePrompt = `${basePrompt}\n\n${kimiToolRecoveryPrompt(error.kimiToolName)}`;
+        continue;
+      }
+      cleanupReady = result.cleanupReady || cleanupReady;
+      deferCleanup = Boolean(result.deferCleanup);
+      if (signal?.aborted) throw abortError();
+      if (result.content?.trim()) return result.content.trim();
+      const detail = result.stderr.trim().slice(-4000);
+      throw new Error(`Kimi Code CLI returned no assistant response${detail ? `: ${detail}` : "."}`);
+    }
   } catch (error) {
     caughtError = error;
     cleanupReady = error.cleanupReady || cleanupReady;
@@ -304,7 +347,10 @@ module.exports = {
   callKimiCliSpawn,
   kimiAssistantText,
   kimiEventHasToolActivity,
+  kimiEventToolName,
+  kimiToolRecoveryPrompt,
   mapKimiEffort,
+  normalizeKimiToolName,
   resolveKimiLaunch,
   sanitizeKimiEnv,
 };

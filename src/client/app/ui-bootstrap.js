@@ -601,6 +601,7 @@
   canvasViewButton.onclick = () => setCanvasViewMode(true);
   canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
   canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
+  canvasViewDownloadButton.onclick = exportCanvasPng;
   [selectionTypesetButton, selectionDeleteButton, selectionCancelButton].filter(Boolean).forEach((button) => {
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => event.stopPropagation());
@@ -1228,6 +1229,7 @@
   configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
   canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
   settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
   settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
@@ -1247,6 +1249,7 @@
   settingsEffortOptions?.addEventListener("keydown", handleSettingsEffortOptionKeydown);
   document.addEventListener("pointerdown", (event) => {
     if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
+    if (!document.querySelector("#settingsApiModelCombobox")?.contains(event.target)) hideApiModelOptions();
   });
   if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
   settingsProvider?.addEventListener("change", () => {
@@ -1257,11 +1260,23 @@
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
   });
-  settingsApiRegion?.addEventListener("change", () => updateApiPresetFields(true, false));
+  settingsApiRegion?.addEventListener("change", () => {
+    updateApiPresetFields(true, false);
+    clearFetchedApiModels();
+  });
   settingsApiService?.addEventListener("change", () => {
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
   });
+  settingsApiUrl?.addEventListener("input", clearFetchedApiModels);
+  settingsApiKey?.addEventListener("input", clearFetchedApiModels);
+  settingsApiModel?.addEventListener("input", updateApiModelSelection);
+  settingsApiModel?.addEventListener("keydown", handleApiModelKeydown);
+  settingsApiModelOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-api-model-value]");
+    if (option) chooseApiModel(option.dataset.apiModelValue);
+  });
+  settingsApiModelOptions?.addEventListener("keydown", handleApiModelOptionKeydown);
   settingsTraceToggle?.addEventListener("click", () => {
     settings.requestTrace = !settings.requestTrace;
     updateTraceToggle();

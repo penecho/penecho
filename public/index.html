@@ -104,12 +104,6 @@
               </div>
             </div>
           </div>
-          <div id="canvasAgentControl" class="canvas-agent-control">
-            <button id="canvasAgentToggle" class="canvas-agent-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentPanel" data-i18n-aria="openCanvasAgent" aria-label="Open Canvas Agent" data-i18n-title="canvasAgent" title="Canvas Agent">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5l-4.5 3v-3H7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3Z"/><path d="M8 10h8M8 13h5"/></svg>
-              <span data-i18n="canvasAgent">Canvas Agent</span>
-            </button>
-          </div>
           <div id="craftsControl" class="plugin-control">
             <button id="craftsButton" class="plugin-trigger crafts-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="craftsPopover" data-i18n-aria="savedCrafts" aria-label="Favorites" data-i18n-title="savedCrafts" title="Favorites">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -320,6 +314,9 @@
           <button id="canvasViewShareBtn" type="button" data-i18n-aria="shareCanvasCloud" aria-label="Share Canvas to PenEcho Cloud" data-i18n-title="shareCanvasCloud" title="Share Canvas to PenEcho Cloud">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.3 10.8 7.4-4.5M8.3 13.2l7.4 4.5"/></svg>
           </button>
+          <button id="canvasViewDownloadBtn" type="button" data-i18n-aria="exportPng" aria-label="Export PNG" data-i18n-title="exportPng" title="Export PNG">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>
+          </button>
           <button id="canvasViewCloseBtn" type="button" data-i18n-aria="exitCanvasViewMode" aria-label="Exit view mode" data-i18n-title="exitCanvasViewMode" title="Exit view mode">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
           </button>
@@ -442,39 +439,51 @@
           </section>
           <form id="canvasAgentForm" class="canvas-agent-composer">
             <p id="canvasAgentInputHint" class="canvas-agent-input-hint" data-i18n="canvasAgentInputHint">Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.</p>
-            <textarea id="canvasAgentInput" rows="2" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask Canvas Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message Canvas Agent" aria-describedby="canvasAgentInputHint"></textarea>
-            <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
-              <canvas id="canvasAgentInkCanvas" width="1200" height="260" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a Canvas Agent message"></canvas>
-              <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk">Clear</button>
-            </div>
-            <section id="canvasAgentReferencePicker" class="canvas-agent-reference-picker" role="dialog" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" hidden>
-              <p id="canvasAgentReferenceHelp" class="canvas-agent-reference-help" data-i18n="canvasAgentReferenceHelp">Click a Widget on the canvas to add it automatically, or choose one below.</p>
-              <input id="canvasAgentReferenceSearch" type="search" data-i18n-placeholder="canvasAgentReferenceSearch" placeholder="Filter Widgets, or click one on the canvas" data-i18n-aria="canvasAgentReferenceSearch" aria-label="Filter Widgets, or click one on the canvas">
-              <div id="canvasAgentReferenceList" class="canvas-agent-reference-list" role="listbox" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Canvas Widgets"></div>
-              <p id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></p>
+            <section id="canvasAgentPromptSuggestions" class="canvas-agent-prompt-suggestions" role="group" data-i18n-aria="canvasAgentPromptSuggestions" aria-label="Suggested prompts" hidden>
+              <header><span data-i18n="canvasAgentPromptSuggestionsTitle">Try asking</span><button id="canvasAgentPromptToggle" type="button" aria-expanded="false" aria-controls="canvasAgentPromptList"><span id="canvasAgentPromptToggleLabel" data-i18n="canvasAgentPromptMore">More</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button></header>
+              <div id="canvasAgentPromptList" class="canvas-agent-prompt-list"></div>
             </section>
-            <footer class="canvas-agent-composer-actions">
-              <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach file" data-i18n-title="canvasAgentAttachTitle" title="Attach one file or up to five images">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
-                <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
-              </button>
-              <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-              </button>
-              <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
-              </button>
-              <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
-              </button>
-              <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
-              </button>
-              <input id="canvasAgentFileInput" type="file" multiple hidden>
-              <span class="canvas-agent-action-spacer"></span>
-              <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n="canvasAgentStop" hidden>Stop</button>
-              <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n="canvasAgentSend">Send</button>
-            </footer>
+            <div class="canvas-agent-composer-surface">
+              <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask Canvas Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message Canvas Agent" aria-describedby="canvasAgentInputHint"></textarea>
+              <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
+                <canvas id="canvasAgentInkCanvas" width="1200" height="260" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a Canvas Agent message"></canvas>
+                <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk">Clear</button>
+              </div>
+              <section id="canvasAgentReferencePicker" class="canvas-agent-reference-picker" role="dialog" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" hidden>
+                <p id="canvasAgentReferenceHelp" class="canvas-agent-reference-help" data-i18n="canvasAgentReferenceHelp">Click a Widget on the canvas to add it automatically, or choose one below.</p>
+                <input id="canvasAgentReferenceSearch" type="search" data-i18n-placeholder="canvasAgentReferenceSearch" placeholder="Filter Widgets, or click one on the canvas" data-i18n-aria="canvasAgentReferenceSearch" aria-label="Filter Widgets, or click one on the canvas">
+                <div id="canvasAgentReferenceList" class="canvas-agent-reference-list" role="listbox" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Canvas Widgets"></div>
+                <p id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></p>
+              </section>
+              <footer class="canvas-agent-composer-actions">
+                <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach file" data-i18n-title="canvasAgentAttachTitle" title="Attach one file or up to five images">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
+                  <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
+                </button>
+                <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+                </button>
+                <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
+                </button>
+                <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
+                </button>
+                <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
+                </button>
+                <input id="canvasAgentFileInput" type="file" multiple hidden>
+                <span class="canvas-agent-action-spacer"></span>
+                <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n-aria="canvasAgentStop" aria-label="Stop" data-i18n-title="canvasAgentStop" title="Stop" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+                  <span class="canvas-agent-action-label" data-i18n="canvasAgentStop">Stop</span>
+                </button>
+                <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n-aria="canvasAgentSend" aria-label="Send" data-i18n-title="canvasAgentSend" title="Send">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></svg>
+                  <span class="canvas-agent-action-label" data-i18n="canvasAgentSend">Send</span>
+                </button>
+              </footer>
+            </div>
           </form>
           <div id="canvasAgentResizeBottom" class="canvas-agent-resize-edge bottom" role="separator" aria-orientation="horizontal" aria-controls="canvasAgentPanel" aria-valuemin="320" tabindex="0" data-edge="bottom" data-i18n-aria="canvasAgentResizeBottom" aria-label="Resize Canvas Agent from the bottom edge"></div>
         </section>
@@ -489,6 +498,12 @@
 
     <footer>
       <span id="coords">x 10000 · y 10000 · 100%</span>
+      <div id="canvasAgentControl" class="canvas-agent-control">
+        <button id="canvasAgentToggle" class="canvas-agent-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentPanel" data-i18n-aria="openCanvasAgent" aria-label="Open Canvas Agent" data-i18n-title="canvasAgent" title="Canvas Agent">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5l-4.5 3v-3H7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3Z"/><path d="M8 10h8M8 13h5"/></svg>
+          <span data-i18n="canvasAgent">Canvas Agent</span>
+        </button>
+      </div>
       <span id="canvasHint" class="canvas-hint" role="status" aria-live="polite" hidden></span>
     </footer>
   </main>
@@ -626,17 +641,22 @@
             </div>
             <label class="settings-field settings-provider-field"><span data-i18n="settingsProvider">AI provider</span><select id="settingsProvider" name="provider"><option value="api">API</option><option value="kimi-cli">Kimi CLI</option><option value="codex-cli">Codex CLI</option><option value="claude-cli">Claude CLI</option></select></label>
             <div id="settingsApiFields">
-            <div class="settings-fields two-column">
-              <label><span data-i18n="settingsApiFormat">API format</span><select id="settingsApiFormat" name="apiFormat"><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="kimi">Kimi</option><option value="minimax">MiniMax</option></select></label>
-              <label><span data-i18n="settingsApiModel">Model</span><input id="settingsApiModel" name="apiModel" list="settingsApiModelPresets" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol" required></label>
-            </div>
-            <datalist id="settingsApiModelPresets"></datalist>
+            <label class="settings-field"><span data-i18n="settingsApiFormat">API format</span><select id="settingsApiFormat" name="apiFormat"><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="kimi">Kimi</option><option value="minimax">MiniMax</option></select></label>
             <div id="settingsApiPresetFields" class="settings-fields two-column settings-preset-fields" hidden>
               <label><span data-i18n="settingsApiRegion">Access region</span><select id="settingsApiRegion" name="apiRegion"><option value="global" data-i18n="settingsApiRegionGlobal">Global</option><option value="china" data-i18n="settingsApiRegionChina">Mainland China</option></select></label>
               <label><span data-i18n="settingsApiService">Service</span><select id="settingsApiService" name="apiService"><option value="api" data-i18n="settingsApiServiceApi">API</option><option value="coding" data-i18n="settingsApiServiceCoding">Coding Plan</option></select></label>
             </div>
             <label class="settings-field"><span data-i18n="settingsApiUrl">Base URL</span><input id="settingsApiUrl" name="apiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1" required></label>
             <label class="settings-field"><span data-i18n="settingsApiKey">API key</span><input id="settingsApiKey" name="apiKey" type="password" autocomplete="new-password" placeholder="Paste a new key or leave blank to keep the saved key"><small data-i18n="settingsApiKeyHelp">Stored only in the local PenEcho configuration file.</small></label>
+            <div class="settings-field settings-model-field">
+              <label for="settingsApiModel"><span data-i18n="settingsApiModel">Model</span></label>
+              <div id="settingsApiModelCombobox" class="settings-model-control">
+                <input id="settingsApiModel" name="apiModel" list="settingsApiModelPresets" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="settingsApiModelOptions" aria-expanded="false" autocomplete="off" spellcheck="false" placeholder="gpt-5.6-sol" required>
+                <button id="settingsFetchModels" class="settings-fetch-models" type="button" aria-busy="false"><span data-i18n="settingsFetchModels">Fetch models</span></button>
+                <div id="settingsApiModelOptions" class="settings-combobox-options" role="listbox" data-i18n-aria="settingsModelSuggestions" aria-label="Available models" hidden></div>
+              </div>
+            </div>
+            <datalist id="settingsApiModelPresets"></datalist>
             </div>
             <div id="settingsCliFields" hidden>
               <div class="settings-fields two-column">
@@ -644,6 +664,12 @@
                 <label><span data-i18n="settingsCliPath">Command or path</span><input id="settingsCliPath" autocomplete="off" spellcheck="false" placeholder="codex"></label>
               </div>
               <p class="settings-note" data-i18n="settingsCliHelp">Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.</p>
+              <aside id="settingsKimiCliRecommendation" class="settings-provider-notice" role="note" hidden>
+                <strong data-i18n="settingsKimiCodingRecommendationTitle">Recommended: connect with the Kimi Coding API</strong>
+                <p data-i18n="settingsKimiCodingRecommendationBody">Create and copy an API key in the Kimi Code Console, then add an API connection using the OpenAI-compatible format and this Base URL.</p>
+                <div><code>https://api.kimi.com/coding/v1</code><a href="https://www.kimi.com/code/console" target="_blank" rel="noopener noreferrer" data-i18n="settingsKimiCodingConsole">Open Kimi Code Console</a></div>
+                <small data-i18n="settingsKimiCodingRecommendationReason">Kimi CLI may not reliably reuse the Harness context cache, which can increase latency and usage.</small>
+              </aside>
             </div>
             <div class="settings-field"><label for="settingsEffort"><span data-i18n="settingsEffort">Reasoning</span></label><div id="settingsEffortCombobox" class="settings-combobox"><input id="settingsEffort" name="effort" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="settingsEffortOptions" aria-expanded="false" autocomplete="off" spellcheck="false" maxlength="128" required><button id="settingsEffortToggle" class="settings-combobox-toggle" type="button" aria-haspopup="listbox" aria-controls="settingsEffortOptions" aria-expanded="false" data-i18n-aria="settingsShowEffortSuggestions" aria-label="Show reasoning suggestions" data-i18n-title="settingsShowEffortSuggestions" title="Show reasoning suggestions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><div id="settingsEffortOptions" class="settings-combobox-options" role="listbox" data-i18n-aria="settingsEffortSuggestions" aria-label="Reasoning suggestions" hidden><button type="button" role="option" data-effort-value="none" aria-selected="false">none</button><button type="button" role="option" data-effort-value="low" aria-selected="false">low</button><button type="button" role="option" data-effort-value="medium" aria-selected="false">medium</button><button type="button" role="option" data-effort-value="high" aria-selected="false">high</button><button type="button" role="option" data-effort-value="xhigh" aria-selected="false">xhigh</button><button type="button" role="option" data-effort-value="max" aria-selected="false">max</button></div></div><small data-i18n="settingsEffortToolbarHelp">You can quickly change reasoning for any request from the Canvas toolbar.</small></div>
           </section>

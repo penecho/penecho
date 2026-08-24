@@ -583,9 +583,9 @@
     return `penecho-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
   }
   async function exportCanvasPng() {
-    const button = document.querySelector("#exportPngBtn");
-    if (button.disabled) return;
-    button.disabled = true;
+    const buttons = [document.querySelector("#exportPngBtn"), canvasViewDownloadButton].filter(Boolean);
+    if (buttons.some(button => button.disabled)) return;
+    for (const button of buttons) button.disabled = true;
     let canvas = null;
     try {
       canvas = await renderExportCanvas();
@@ -607,7 +607,7 @@
       setStatus(`${t("exportError")}${error.message}`);
     } finally {
       if (canvas) canvas.width = canvas.height = 1;
-      button.disabled = false;
+      for (const button of buttons) button.disabled = false;
     }
   }
   function imageFromBlob(blob) {

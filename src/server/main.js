@@ -147,6 +147,10 @@ let TAVILY_API_KEY = firstNonEmpty(process.env.TAVILY_API_KEY);
 let API_PRESET = API_PRESET_IDS.has(String(process.env.PENECHO_API_PRESET || "")) ? String(process.env.PENECHO_API_PRESET) : "";
 const MAX_BODY = 9 * 1024 * 1024;
 const DEFAULT_MODEL_TIMEOUT_MS = 180000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 15000;
+const MODEL_DISCOVERY_MAX_RESPONSE_BYTES = 512 * 1024;
+const MODEL_DISCOVERY_MAX_MODELS = 256;
+const MODEL_DISCOVERY_MAX_ID_LENGTH = 200;
 const MODEL_FINAL_JSON_TARGET_TOKENS = 6144;
 const MODEL_REASONING_BUDGET_FRACTION = "one half";
 const LOG_DIR = STATE_DIRECTORY ? path.join(STATE_DIRECTORY, "logs") : path.join(ROOT, "logs");
@@ -179,6 +183,7 @@ const MAX_WIDGET_AREA = 40000000;
 const MAX_ENABLED_PLUGINS = 12;
 const MAX_PLUGIN_CONNECT_ORIGINS = 8;
 const MAX_LOCAL_PLUGINS = 64;
+const MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES = 48 * 1024;
 const AI_PROGRESS_HEARTBEAT_MS = process.env.NODE_ENV === "test" && /^\d+$/.test(process.env.PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS || "")
   ? Math.max(10, Math.min(1000, Number(process.env.PENECHO_TEST_AI_PROGRESS_HEARTBEAT_MS)))
   : 10000;
@@ -524,6 +529,125 @@ function normalizeConnection(input, existing = null) {
   }
   connection.name = connectionTitle(connection);
   return connection;
+}
+
+function normalizeModelDiscoveryRequest(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Connection is invalid.");
+  const requestedId = String(input.id || "").trim();
+  if (requestedId.length > 128 || /[\r\n\0]/.test(requestedId)) throw new Error("Connection was not found.");
+  const store = connectionStore(), existing = requestedId ? findConnection(store, requestedId) : null;
+  if (requestedId && !existing) throw new Error("Connection was not found.");
+  const connection = input.connection;
+  if (!connection || typeof connection !== "object" || Array.isArray(connection) || normalizeAiProvider(connection.provider) !== "api") throw new Error("Choose an API connection.");
+  const apiFormat = String(connection.apiFormat || "").trim().toLowerCase();
+  if (!new Set(["openai", "anthropic"]).has(apiFormat)) throw new Error("Choose an API format.");
+  if (typeof connection.apiUrl !== "string" || connection.apiUrl.length > 2048 || /[\r\n\0]/.test(connection.apiUrl)) throw new Error("Enter a valid API base URL.");
+  const apiUrl = connection.apiUrl.trim().replace(/\/+$/, "");
+  let url;
+  try { url = new URL(apiUrl); } catch { throw new Error("Enter a valid API base URL."); }
+  if (!new Set(["http:", "https:"]).has(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash) throw new Error("Enter an HTTP(S) API base URL without a query, fragment, or embedded credentials.");
+  if (typeof connection.apiKey !== "string" || connection.apiKey.length > 8192 || /[\r\n\0]/.test(connection.apiKey)) throw new Error("Enter a valid API key.");
+  const enteredKey = connection.apiKey.trim();
+  const savedKey = !enteredKey && existing?.provider === "api" && typeof existing.apiKey === "string" ? existing.apiKey : "";
+  const apiKey = enteredKey || savedKey;
+  if (!apiKey || apiKey.length > 8192 || /[\r\n\0]/.test(apiKey)) throw new Error("Enter an API key, or edit a connection with a saved key.");
+  if (!resolveApiConfig(apiUrl, apiFormat)) throw new Error("Enter a valid API base URL for the selected format.");
+  return { apiFormat, apiUrl, apiKey };
+}
+
+function modelDiscoveryEndpoint(apiUrl, apiFormat) {
+  const url = new URL(apiUrl);
+  url.search = "";
+  url.hash = "";
+  const basePath = url.pathname.replace(/\/+$/, "");
+  if (apiFormat === "openai") {
+    const explicit = /\/chat\/completions$/i.test(basePath), modelBase = explicit ? basePath.replace(/\/chat\/completions$/i, "") : basePath;
+    url.pathname = `${modelBase}/models`;
+  } else {
+    const explicit = /\/v1\/messages$/i.test(basePath), versioned = !explicit && /\/v1$/i.test(basePath), suffix = explicit || versioned ? "/models" : "/v1/models";
+    const modelBase = explicit ? basePath.replace(/\/messages$/i, "") : basePath;
+    url.pathname = `${modelBase}${suffix}`;
+  }
+  return url;
+}
+
+function modelDiscoveryError(message, status = 502) {
+  const error = new Error(message);
+  error.status = status;
+  error.safeMessage = message;
+  return error;
+}
+
+function discoveredModelValues(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.models)) return payload.models;
+    if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data) && Array.isArray(payload.data.models)) return payload.data.models;
+  }
+  throw modelDiscoveryError("Provider returned an invalid model list.");
+}
+
+function normalizeDiscoveredModels(payload) {
+  const values = discoveredModelValues(payload);
+  if (values.length > MODEL_DISCOVERY_MAX_MODELS) throw modelDiscoveryError("Provider returned too many models.");
+  const models = new Set();
+  for (const value of values) {
+    const model = typeof value === "string" ? value : value && typeof value === "object" && !Array.isArray(value) && typeof (value.id ?? value.model ?? value.name) === "string" ? value.id ?? value.model ?? value.name : "";
+    const normalized = model.trim();
+    if (!normalized || normalized.length > MODEL_DISCOVERY_MAX_ID_LENGTH || /[\u0000-\u001f\u007f-\u009f]/.test(normalized)) throw modelDiscoveryError("Provider returned an invalid model identifier.");
+    models.add(normalized);
+  }
+  if (!models.size) throw modelDiscoveryError("Provider returned no usable models.");
+  return [...models].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+}
+
+async function readModelDiscoveryResponse(response) {
+  const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json" && !contentType.endsWith("+json")) throw modelDiscoveryError("Provider returned a non-JSON model list.");
+  if (!response.body?.getReader) throw modelDiscoveryError("Provider returned an unreadable model list.");
+  const reader = response.body.getReader(), chunks = [];
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > MODEL_DISCOVERY_MAX_RESPONSE_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw modelDiscoveryError("Provider returned an oversized model list.");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal:true }).decode(Buffer.concat(chunks)));
+  } catch {
+    throw modelDiscoveryError("Provider returned malformed JSON.");
+  }
+}
+
+async function discoverConnectionModels(request) {
+  const endpoint = modelDiscoveryEndpoint(request.apiUrl, request.apiFormat), controller = new AbortController(), timeout = setTimeout(() => controller.abort(), MODEL_DISCOVERY_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method:"GET",
+      redirect:"error",
+      credentials:"omit",
+      cache:"no-store",
+      signal:controller.signal,
+      headers:{
+        Accept:"application/json",
+        ...(request.apiFormat === "anthropic" ? { "x-api-key":request.apiKey, "anthropic-version":"2023-06-01" } : { Authorization:`Bearer ${request.apiKey}` }),
+      },
+    });
+    if (!response.ok) throw modelDiscoveryError(`Provider returned HTTP ${response.status} while listing models.`);
+    return normalizeDiscoveredModels(await readModelDiscoveryResponse(response));
+  } catch (error) {
+    if (error?.safeMessage) throw error;
+    if (controller.signal.aborted) throw modelDiscoveryError("Provider model discovery timed out.", 504);
+    throw modelDiscoveryError("Unable to fetch models from the provider.");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function connectionStore() {
@@ -2811,6 +2935,43 @@ function localPluginCatalog() {
     return [];
   }
 }
+
+function canvasAgentPrivateHtmlOneShot(document) {
+  const source=String(document||""),heading=/^##[ \t]+One-shot example[ \t]*\r?$/im.exec(source);
+  if(!heading)return false;
+  const tail=source.slice(heading.index+heading[0].length),next=/^##[ \t]+/m.exec(tail),oneShot=next?tail.slice(0,next.index):tail;
+  return /\bhtml_widget\b/i.test(oneShot)&&!/\bdiagram_source\b/i.test(oneShot);
+}
+
+function resolveCanvasAgentWidgetCapabilities(value = {}) {
+  const catalog = localPluginCatalog(), builtIns = new Set(catalog.filter(item=>item.builtIn!==false&&!item.error).map(item=>item.id)),
+    requestedIds = Array.isArray(value?.privatePluginIds) ? value.privatePluginIds : [];
+  if ((value?.version!==undefined&&value.version!==1)||(value?.professionalEnabled===true||requestedIds.length)&&value?.version!==1
+    ||requestedIds.length>MAX_ENABLED_PLUGINS||requestedIds.some(id=>typeof id!=="string"||!PLUGIN_ID_PATTERN.test(id)||id.length>64)||new Set(requestedIds).size!==requestedIds.length) {
+    throw new Error("Canvas Agent private plugin capabilities are invalid.");
+  }
+  const privateCatalog = new Map(catalog.filter(item=>item.builtIn===false&&!item.error).map(item=>[item.id,item])), privatePlugins=[];let totalBytes=0;
+  for (const id of requestedIds) {
+    const entry=privateCatalog.get(id);
+    if(!entry||BUILTIN_PLUGIN_IDS.has(id)||builtIns.has(id))throw new Error(`Canvas Agent private plugin ${id} is unavailable.`);
+    const file=entry.legacy?path.join(PRIVATE_PLUGIN_DIRECTORY,`${id}.md`):path.join(PRIVATE_PLUGIN_DIRECTORY,id,"plugin.md");
+    let stat,document;
+    try { stat=fs.lstatSync(file);if(!stat.isFile()||stat.size>MAX_PLUGIN_DOCUMENT_BYTES)throw new Error();document=fs.readFileSync(file,"utf8"); }
+    catch { throw new Error(`Canvas Agent private plugin ${id} cannot be read.`); }
+    let manifest;
+    try { manifest=PLUGIN_FORMAT.parse(document); } catch { throw new Error(`Canvas Agent private plugin ${id} is invalid.`); }
+    totalBytes+=Buffer.byteLength(manifest.document,"utf8");
+    if(manifest.id!==id||!canvasAgentPrivateHtmlOneShot(manifest.document)||totalBytes>MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES)throw new Error(`Canvas Agent private HTML plugin ${id} is invalid or exceeds the session budget.`);
+    privatePlugins.push({
+      id:manifest.id,name:manifest.name,version:manifest.version,connect:[...manifest.connect],
+      recommendedRefreshSeconds:manifest.recommendedRefreshSeconds,document:manifest.document,
+    });
+  }
+  return {
+    professionalEnabled:value?.professionalEnabled===true&&builtIns.has("flowchart"),
+    privatePlugins,
+  };
+}
 const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
@@ -3253,6 +3414,19 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       const guidance = cliInstallationGuidance(provider);
       return send(res, 400, { error:connectionTestErrorMessage(error, provider), ...(guidance ? { guidance, installable:true, provider } : {}) });
+    }
+  }
+  if (url.pathname === "/api/settings/connections/models") {
+    const settingsError = browserRequestError(req);
+    if (settingsError) return send(res, 403, { error:settingsError });
+    if (req.method !== "POST") return send(res, 405, { error:"Method Not Allowed" });
+    if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
+    try {
+      const request = normalizeModelDiscoveryRequest(await readJson(req, 16 * 1024));
+      return send(res, 200, { ok:true, models:await discoverConnectionModels(request) });
+    } catch (error) {
+      const status = Number.isInteger(error?.status) ? error.status : error?.message === "Request too large" ? 413 : 400;
+      return send(res, status, { error:error?.safeMessage || error?.message || "Could not fetch models." });
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config.js") {
@@ -3742,6 +3916,7 @@ const canvasAgent = attachCanvasAgent({
   resolveConnection:id=>findConnection(connectionStore(),String(id||"default")),
   listConnections:()=>{const store=connectionStore();return[store.defaultConnection,...store.connections]},
   resolveWebSearch:()=>({ provider:"tavily", apiKey:TAVILY_API_KEY || "" }),
+  resolveWidgetCapabilities:resolveCanvasAgentWidgetCapabilities,
   resolveProject:id=>CANVAS_AGENT_PROJECT_STORE.resolve(id, { touch:true }),
   stateDirectory:STATE_DIRECTORY||CLOUD_STATE_DIRECTORY,
   rootDirectory:ROOT,

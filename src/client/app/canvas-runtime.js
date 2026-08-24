@@ -1057,6 +1057,7 @@
       copyText: widgetType === "diagram_source" ? source : allowCopy && typeof item.copyText === "string" ? item.copyText.trim() : "",
       copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
+      snapshotDataUrl: "",
       contentVersion: 0,
       snapshotVersion: -1,
       shell: null,
@@ -1073,6 +1074,7 @@
       favorite: item.favorite === true,
       favoriteBusy: false,
       favoritePendingVersion: null,
+      downloadBusy: false,
     };
   }
   function restoreWidgets(items) {
@@ -1452,6 +1454,7 @@
     }
     if (message.type === "penecho-widget-updated") {
       widget.contentVersion++;
+      widget.snapshotDataUrl = "";
       if (widget.favorite) {
         widget.favorite = false;
         syncObjectChrome();
@@ -1471,6 +1474,7 @@
     }
     try {
       widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
+      widget.snapshotDataUrl = message.dataUrl;
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
@@ -3074,7 +3078,7 @@
   function objectChromeAnchor(element) {
     if (!element?.getBoundingClientRect) return null;
     const rect = element.getBoundingClientRect(),
-      viewRect = view.getBoundingClientRect(),
+      viewRect = view.getBoundingClientRect?.() || {left:0,top:0},
       anchor = {
         x:rect.left - viewRect.left,
         y:rect.top - viewRect.top,
@@ -3125,6 +3129,38 @@
     setStatusKey(copied ? "widgetSourceCopied" : "widgetSourceCopyFailed");
     return copied;
   }
+  function widgetImageFilename(widget) {
+    const title = String(widget?.title || "penecho-widget")
+      .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, "-")
+      .replace(/[.\s]+$/g, "")
+      .trim()
+      .slice(0, 120);
+    return `${title || "penecho-widget"}.png`;
+  }
+  async function downloadWidgetImage(widget) {
+    if (!widget || widget.downloadBusy) return false;
+    widget.downloadBusy = true;
+    syncObjectChrome();
+    setStatusKey("widgetDownloading");
+    try {
+      await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
+      if (!widget.snapshotDataUrl?.startsWith("data:image/png;base64,")) throw Error(t("widgetExportFailed"));
+      const link = document.createElement("a");
+      link.href = widget.snapshotDataUrl;
+      link.download = widgetImageFilename(widget);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setStatusKey("widgetDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("widgetDownloadFailed")}: ${String(error?.message || error)}`);
+      return false;
+    } finally {
+      widget.downloadBusy = false;
+      syncObjectChrome();
+    }
+  }
   function widgetEditContext(widget, instructionMode) {
     const sourceMirrorsHtml = widgetUsesHtmlCopySource(widget);
     return {
@@ -3169,6 +3205,7 @@
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
     favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
+    download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
   });
   function screenObjectBox(box) {
     return {
@@ -3225,13 +3262,21 @@
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
       });
     }
+    if (options.download) items.push({
+      key:`widget:${widget.id}:tool-download`,
+      kind:"download",
+      label:t("downloadWidget"),
+      baseWidth:36,
+      iconOnly:true,
+      busy:widget.downloadBusy === true,
+      activate:() => void downloadWidgetImage(widget),
+    });
     if (!items.length) return;
     const gap = 4,
       groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
       groupVerticalWidth = Math.max(...items.map(item => item.baseWidth)),
       groupVerticalHeight = items.length * 34 + gap * (items.length - 1),
-      controlScale = 1,
-      widgetToolGroup = `widget-${widget.id}`;
+      widgetToolGroup = `widget-${widget.id}-tools`;
     let horizontalOffset = 0;
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -3240,6 +3285,7 @@
         box,
         widget,
         widgetTool:true,
+        widgetToolPlacement:"right-middle",
         widgetToolGroup,
         groupRefineCandidate:options.refine || null,
         groupItemCount:items.length,
@@ -3248,7 +3294,7 @@
         groupVerticalHeight,
         groupHorizontalOffset:horizontalOffset,
         groupVerticalOffset:index * (34 + gap),
-        controlScale,
+        controlScale:1,
         baseHeight:34,
         handToolbar:Boolean(options.handToolbar),
         handToolbarKey:options.handToolbarKey || "",
@@ -3273,8 +3319,20 @@
     if (viewportWidth <= 0 || viewportHeight <= 0 || right < -8 || bottom < -8 || screenBox.left > viewportWidth + 8 || screenBox.top > viewportHeight + 8) return null;
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value)),
-      above = screenBox.top - height - chromeGap,
-      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
+      viewRect = view.getBoundingClientRect?.() || {left:0,top:0},
+      obstacles = [...(globalThis.document?.querySelectorAll?.(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .canvas-agent-control, .object-chrome-button") || [])]
+        .filter(element => element.dataset.objectChromeKey !== ignoreKey && (!spec?.widgetToolGroup || element.dataset.widgetToolGroup !== spec.widgetToolGroup))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
+        }),
+      overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + position.w + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + position.h + 5 > obstacle.y),
+      fits = (position, extraBottom = 0) => position.x >= 6 && position.y >= 6 && position.x + position.w <= viewportWidth - 6 && position.y + position.h + extraBottom <= viewportHeight - 6 && !overlapsObstacle(position),
+      fallbackPosition = (position, extraBottom = 0) => ({
+        ...position,
+        x:Math.max(6, Math.min(Math.max(6, viewportWidth - position.w - 6), position.x)),
+        y:Math.max(6, Math.min(Math.max(6, viewportHeight - position.h - extraBottom - 6), position.y)),
+      });
     if (spec?.widgetTool) {
       const horizontalWidth = spec.groupHorizontalWidth * controlScale,
         verticalWidth = spec.groupVerticalWidth * controlScale,
@@ -3282,26 +3340,16 @@
         hintSpace = spec.groupRefineCandidate && widgetRefineHintVisible(spec.groupRefineCandidate) ? 88 : 0,
         gap = chromeGap * controlScale,
         positions = [
-          { side:"top", layout:"horizontal", x:right - horizontalWidth, y:screenBox.top - height - gap, w:horizontalWidth, h:height },
-          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
           { side:"right", layout:"vertical", x:right + gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
-          { side:"bottom", layout:"horizontal", x:right - horizontalWidth, y:bottom + gap, w:horizontalWidth, h:height },
-          { side:"bottom", layout:"horizontal", x:screenBox.left, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
+          { side:"right", layout:"vertical", x:right + gap, y:bottom - verticalHeight, w:verticalWidth, h:verticalHeight },
+          { side:"bottom", layout:"horizontal", x:screenBox.left + screenBox.width / 2 - horizontalWidth / 2, y:bottom + gap, w:horizontalWidth, h:height },
+          { side:"top", layout:"horizontal", x:screenBox.left + screenBox.width / 2 - horizontalWidth / 2, y:screenBox.top - height - gap, w:horizontalWidth, h:height },
           { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
-        ].map(position => ({
-          ...position,
-          x:Math.max(6, Math.min(Math.max(6, viewportWidth - position.w - 6), position.x)),
-          y:Math.max(6, Math.min(Math.max(6, viewportHeight - position.h - hintSpace - 12), position.y)),
-        })),
-        viewRect = view.getBoundingClientRect(),
-        obstacles = [...document.querySelectorAll(".top-row, .toolbar, .animation-controls:not([hidden]), .image-edit-bar:not([hidden]), .selection-context-toolbar, .text-editor, .ai-embodiment, .object-chrome-button")]
-          .filter(element => element.dataset.objectChromeKey !== ignoreKey && element.dataset.widgetToolGroup !== spec.widgetToolGroup)
-          .map(element => {
-          const rect = element.getBoundingClientRect();
-          return { x:rect.left - viewRect.left, y:rect.top - viewRect.top, w:rect.width, h:rect.height };
-        }),
-        overlapsObstacle = position => obstacles.some(obstacle => position.x < obstacle.x + obstacle.w + 5 && position.x + position.w + 5 > obstacle.x && position.y < obstacle.y + obstacle.h + 5 && position.y + position.h + 5 > obstacle.y),
-        groupPosition = positions.find(position => !overlapsObstacle(position)) || positions[0];
+          { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
+          { side:"left", layout:"vertical", x:screenBox.left - verticalWidth - gap, y:bottom - verticalHeight, w:verticalWidth, h:verticalHeight },
+        ],
+        groupPosition = positions.find(position => fits(position, hintSpace)) || fallbackPosition(positions[0], hintSpace);
       const vertical = groupPosition.layout === "vertical",
         alignRight = vertical && groupPosition.side === "left";
       return {
@@ -3312,10 +3360,30 @@
         baseHeight,
       };
     }
+    if (spec?.widgetCore) {
+      const topY = screenBox.top - height - chromeGap,
+        centerY = screenBox.top + screenBox.height / 2 - height / 2,
+        positions = kind === "move" ? [
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:topY, w:width, h:height },
+          { x:screenBox.left + screenBox.width / 2 - width / 2, y:bottom + chromeGap, w:width, h:height },
+        ] : kind === "cancel" ? [
+          { x:screenBox.left, y:topY, w:width, h:height },
+          { x:screenBox.left - width - chromeGap, y:centerY, w:width, h:height },
+          { x:screenBox.left, y:bottom + chromeGap, w:width, h:height },
+        ] : [
+          { x:right - width, y:topY, w:width, h:height },
+          { x:right + chromeGap, y:centerY, w:width, h:height },
+          { x:right - width, y:bottom + chromeGap, w:width, h:height },
+        ],
+        position = positions.find(candidate => fits(candidate)) || fallbackPosition(positions[0]);
+      return { x:position.x, y:position.y, scale:1, baseWidth, baseHeight };
+    }
+    const above = screenBox.top - height - chromeGap,
+      y = clampY(above >= 6 ? above : screenBox.top + chromeGap);
     let x;
     if (kind === "move") x = clampX(screenBox.left + screenBox.width / 2 - width / 2);
-    else if (kind === "cancel") x = clampX(screenBox.left - width - 7);
-    else if (kind === "accept") x = clampX(right + 7);
+    else if (kind === "cancel") x = clampX(screenBox.left - width - chromeGap);
+    else if (kind === "accept") x = clampX(right + chromeGap);
     else x = clampX(screenBox.left + screenBox.width / 2 + 38);
     return { x, y, scale:1, baseWidth, baseHeight };
   }
@@ -3327,6 +3395,7 @@
     if (kind === "refine") return t("widgetRefine");
     if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
     if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
+    if (kind === "download") return t("downloadWidget");
     return t("hand");
   }
   function widgetRefineConfirmationPosition(anchor, width, height, viewportWidth, viewportHeight) {
@@ -3473,7 +3542,7 @@
     button.type = "button";
     button.className = `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
-    button.innerHTML = ["copy", "refine", "favorite", "share"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
+    button.innerHTML = ["copy", "refine", "favorite", "share", "download"].includes(kind) ? `${OBJECT_CHROME_ICONS[kind]}<span class="object-chrome-label"></span>${kind === "refine" ? '<span class="widget-refine-hint" hidden></span>' : ""}` : OBJECT_CHROME_ICONS[kind];
     ensureObjectChromeStyleRule(button);
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -3602,11 +3671,11 @@
         }
       } else if (record.kind === "widget") {
         const box = widgetBox(handTarget);
-        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, ...shared, priority:2 });
+        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, widgetCore:true, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
-          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
-          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
-          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
+          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
+          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, download:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
         }
       }
     }
@@ -3614,10 +3683,10 @@
     if (state.pendingWidget) {
       const widget = state.pendingWidget,
         box = widgetBox(widget);
-      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, priority:4 });
-      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, activate:rejectPendingWidget, priority:5 });
-      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
-      addWidgetToolSpecs(specs, widget, { copy:true });
+      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, widgetCore:true, priority:4 });
+      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:rejectPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
+      addWidgetToolSpecs(specs, widget, { copy:true, download:true });
     }
     return specs;
   }
@@ -3652,7 +3721,7 @@
       else button.removeAttribute("aria-busy");
       if (spec.kind === "refine") button.removeAttribute("title");
       else button.title = label;
-      if (["copy", "refine", "favorite", "share"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
+      if (["copy", "refine", "favorite", "share", "download"].includes(spec.kind)) button.querySelector(".object-chrome-label").textContent = label;
       if (spec.kind === "refine") {
         const hint = button.querySelector(".widget-refine-hint"),
           visible = widgetRefineHintVisible(spec.refineCandidate),

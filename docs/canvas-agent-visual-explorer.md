@@ -2,21 +2,23 @@
 
 Canvas Agent Visual Explorer creates one responsive, source-authored General HTML Widget for understanding-, organizing-, or planning-first work. It is an isolated Canvas Agent extension: Main Canvas AI, Canvas Pen AI Refine, the shared General HTML contract, personal plugins, and existing General HTML behavior are unchanged.
 
+It is the Canvas Agent default for substantial pasted text and requests to explain, learn, analyze, or organize equations, projects, documents, and other material, even when the user does not explicitly ask for an infographic. It yields to direct edits or supplements to existing Canvas/page elements and to requests whose defining result is interaction, simulation, live data, a small ordinary HTML tool, or another enabled artifact.
+
 ## Output contract
 
-The canonical artifact is one complete, readable HTML document built from semantic HTML, inline CSS, and inline SVG. JavaScript is used only when it adds useful behavior. CSS Grid or Flexbox owns the overall composition; local SVG owns relationships such as arrows, brackets, routes, networks, and compact drawings. The first render must already be complete and useful without interaction, and `widget.html` is the sole reusable source.
+The canonical artifact is one complete, readable HTML document built from semantic HTML, inline CSS, inline SVG, and only the JavaScript that materially improves the result. The first render must already be complete and useful without interaction, and `widget.html` is the sole reusable source.
 
 Visual Explorer plans information before styling and uses a `Macro → Meso → Micro` reading hierarchy: a 3–5 second global model, roughly 30-second anchored drill-downs, and up to three minutes of high-value numbers, rules, constraints, exceptions, and evidence. It compresses repetition into shared annotations, legends, axes, or tables and prioritizes relationships and structure over completeness.
 
+Concise document mode is selected directly, without a confirmation question, when the user asks for something simple, concise, clear, direct, intuitive, visual-first, at-a-glance, lower-text, or easier to understand; asks to simplify or visually clarify an existing result; requests a one-page, one-slide, presentation-ready, executive-summary, or quick-overview visual; targets Word, PowerPoint/PPT, slides, decks, reports, documents, handouts, export, download, print, or embedding; or supplies a straightforward concept that does not need dense analysis. Words such as explain, analyze, summarize, learn, document, or infographic do not trigger it by themselves when the request actually calls for comprehensive technical depth.
+
+The mode preserves the 3–5 second overview but favors diagrams, arrows, comparisons, small tables, and short labels; each module is normally a title plus one very short introduction or 1–3 labels. It omits nonessential prose and micro-detail so exported text remains readable and unclipped. When compact format and technical depth conflict, required facts, relationships, numbers, and conclusions remain, but are compressed into visual structure instead of paragraphs.
+
 The topic selects the dominant grammar instead of inheriting one fixed layout. Supported choices include pipeline, layered system, causal or relationship map, hub-and-spoke, timeline or schedule lanes, comparison or matrix, hierarchy, feedback loop, route or spatial map, visual notes, and meaningful combinations. A pipeline is used only for real sequence or transformation. Importance determines area, related details stay close, metrics stay beside what they explain, and connectors represent real relationships.
 
-References provide composition evidence only. Their reading order, density, proportions, typography, grouping, whitespace, color roles, and connector language may guide the design, but labels, values, and claims must come from the user's factual material.
+References provide composition evidence only. Their reading order, density, proportions, typography, grouping, whitespace, color roles, and connector language may guide the design, but labels, values, and claims must come from the user's factual material. There is no mandatory orientation or panel arrangement: the information hierarchy chooses the layout, and connectors represent only real relationships.
 
-The protected prompt deliberately contains no complete HTML/CSS layout exemplar. Before authoring, the model privately compares three materially different semantic compositions, rejects generic card dashboards, and implements only the strongest candidate. There is no default orientation, panel count, KPI strip, A–D scheme, palette, or rounded-card system. Equal-weight non-code profiles cover technical systems, relationships, routes, timelines, comparisons, hierarchies or visual notes, and feedback or state structures without giving one grammar a copyable DOM advantage.
-
-The authoring prompt asks each new document to record the selected layout as lowercase kebab-case `data-visual-grammar` and `data-composition` attributes on its root `<main>`. This soft authoring convention supports source review and diversity diagnostics; it is not runtime-validated provenance, and it describes rather than chooses the result. Density follows real evidence, and every drill-down must remain anchored to the Macro model instead of filling a preset poster slot.
-
-Typography is planned against the focused Canvas display rather than the raw Widget coordinate system. Ordinary body copy targets about 15 focused-view pixels and compact supporting labels stay at or above 8. The model supplies its real body, smallest-caption, and title source sizes to `canvas_inspect`; if the returned prediction is too small, it raises source typography, simplifies the evidence, adjusts the aspect ratio, or uses more Canvas space and then inspects again. A larger Widget can reduce focused scale, so only the returned prediction—not raw dimensions—can establish legibility.
+Typography is planned against the focused Canvas display rather than raw Widget coordinates. The model supplies its actual body, caption, and title source sizes to `canvas_inspect`; when its prediction is too small, the model simplifies content, increases typography, changes the aspect ratio, or uses more Canvas space before creating the Widget.
 
 Every newly authored Visual Explorer uses exactly these markers:
 
@@ -34,9 +36,9 @@ Every newly authored Visual Explorer uses exactly these markers:
 
 ## Canvas Agent workflow
 
-1. Inspect the Canvas. On a nonempty Canvas, capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` before requesting placement.
-2. Call `canvas_inspect` with `plannedWidget.sourceFormat:"penecho-visual-explorer+html"`, the intended dimensions, and source typography. Treat its width, height, and absolute `createPlacement` as authoritative.
-3. Call `canvas_create` once with exactly one `general/html_widget`, the complete HTML, both exact markers, and the exact proposed dimensions and placement.
+1. Use the host-supplied authoritative initial Canvas state. On a nonempty Canvas, capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` before requesting placement if that overview was not already supplied.
+2. If the host-supplied initial state explicitly declares an empty Canvas at the current revision, skip the unchanged inspect/capture and create directly with finite dimensions and `placement.mode:"auto"`. Otherwise call `canvas_inspect` with `plannedWidget.sourceFormat:"penecho-visual-explorer+html"`, the intended dimensions, and source typography. Treat its width, height, and absolute `createPlacement` as authoritative.
+3. Call `canvas_create` once with exactly one `general/html_widget`, the complete HTML, both exact markers, and either the empty-Canvas auto placement or the exact nonempty-Canvas proposal.
 4. Capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` to verify scale, placement, and overlap.
 5. Capture the created Widget with `target:"object"`, `quality:"detail"`, and `coordinates:"none"` to review hierarchy, typography, clipping, connectors, density, and visual-grammar fidelity.
 6. If one concrete defect remains, read `widget.json` and only the needed lines of `widget.html`, then make one bounded, minimal `canvas_patch_widget` unified diff that changes only `widget.html`.
@@ -64,7 +66,7 @@ Every scientific artifact is explanation-first. Its initial static HTML/SVG is c
 
 ### Two-stage lazy loading
 
-Scientific instructions and code are absent from the initial Canvas Agent prompt. The always-visible `load_visual_skill` router selects exactly one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading a skill returns that contract as a tool result for the current session; it does not mutate the system prompt or tool list. Repeating the call returns the complete contract so normal conversation compaction can recover it.
+Scientific instructions and code are absent from the initial Canvas Agent prompt. The always-visible `load_visual_skill` router selects one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading appends the full contract to a durable, prefix-stable session system-prompt section; the ordinary tool result contains only its id, hash, and load state. Repeating the call reports `alreadyLoaded` without duplicating the contract.
 
 Authored scientific HTML declares exactly one matching marker:
 

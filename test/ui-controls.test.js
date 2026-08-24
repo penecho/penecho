@@ -92,6 +92,14 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(functionSource(app, "fillConnectionEditor"), /connection\?\.effort \|\| defaultConnectionEffort\(provider\)/);
   assert.match(functionSource(app, "testCanvasConnection"), /\/api\/settings\/connections\/test[\s\S]*?settings\.editingConnectionId[\s\S]*?body\?\.installable/);
   assert.match(functionSource(app, "installCanvasCli"), /penechoDesktop\.installCli\(provider\)[\s\S]*?settingsCliPath\.value = result\.executable[\s\S]*?testCanvasConnection\(\)/);
+  assert.match(html, /id="settingsKimiCliRecommendation"[^>]*role="note"[^>]*hidden/);
+  assert.match(html, /https:\/\/api\.kimi\.com\/coding\/v1[\s\S]*?https:\/\/www\.kimi\.com\/code\/console/);
+  assert.match(functionSource(app, "updateSettingsProviderFields"), /settingsKimiCliRecommendation\.hidden = provider !== "kimi-cli"/);
+  assert.match(css, /\.settings-provider-notice\[hidden\]\s*\{\s*display:\s*none/);
+  for (const key of ["settingsKimiCodingRecommendationTitle", "settingsKimiCodingRecommendationBody", "settingsKimiCodingConsole", "settingsKimiCodingRecommendationReason"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
   assert.match(css, /\.settings-connection-item\.editing\s*\{/);
   assert.match(css, /\.settings-combobox-toggle\s*\{[^}]*position:\s*absolute[^}]*cursor:\s*pointer/);
   assert.match(css, /\.settings-combobox-options\s*\{[^}]*position:\s*absolute[^}]*z-index:\s*12/);
@@ -108,6 +116,32 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
+});
+
+test("API connection models can be fetched into an editable dropdown", () => {
+  const html = read("public/index.html"), core = read("src/client/app/core.js"), bootstrap = read("src/client/app/ui-bootstrap.js"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
+  const format = html.indexOf('id="settingsApiFormat"'), url = html.indexOf('id="settingsApiUrl"'), key = html.indexOf('id="settingsApiKey"'), model = html.indexOf('id="settingsApiModel"'), fetchButton = html.indexOf('id="settingsFetchModels"');
+  assert.ok(format > -1 && format < url && url < key && key < model && model < fetchButton);
+  assert.match(html, /id="settingsApiModel"[^>]*list="settingsApiModelPresets"[^>]*role="combobox"[^>]*aria-controls="settingsApiModelOptions"/);
+  assert.match(html, /id="settingsApiModelOptions"[^>]*role="listbox"[^>]*hidden/);
+  assert.match(html, /id="settingsFetchModels"[^>]*aria-busy="false/);
+  assert.match(html, /<span data-i18n="settingsFetchModels">Fetch models<\/span>/);
+  assert.match(functionSource(core, "fetchConnectionModels"), /connectionEditorPayload\(\)[\s\S]*?\/api\/settings\/connections\/models[\s\S]*?id:settings\.editingConnectionId/);
+  assert.match(functionSource(core, "fetchConnectionModels"), /settings\.fetchedApiModels = normalizeFetchedApiModels[\s\S]*?if \(!settingsApiModel\.value\.trim\(\)/);
+  assert.match(functionSource(core, "fetchConnectionModels"), /requestSignature[\s\S]*?connectionModelDiscoverySignature\(\)[\s\S]*?setSettingsStatus\(\)[\s\S]*?return/);
+  assert.match(functionSource(core, "normalizeFetchedApiModels"), /\.sort\(\(a, b\)/);
+  assert.match(functionSource(core, "updateConnectionModelFetchState"), /aria-busy[\s\S]*settingsFetchingModels/);
+  assert.match(functionSource(core, "handleApiModelKeydown"), /Escape[\s\S]*ArrowDown/);
+  assert.match(bootstrap, /settingsFetchModels\?\.addEventListener\("click"[^\n]*fetchConnectionModels/);
+  assert.match(bootstrap, /settingsApiModelOptions\?\.addEventListener\("click"[\s\S]*?chooseApiModel/);
+  assert.match(css, /\.settings-model-control\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.settings-fetch-models\s*\{[^}]*height:\s*36px[^}]*white-space:\s*nowrap/);
+  assert.match(css, /\.settings-combobox-options\[hidden\]\s*\{\s*display:\s*none/);
+  for (const keyName of ["settingsFetchModels", "settingsFetchingModels", "settingsModelsFetched", "settingsModelFetchFailed", "settingsModelSuggestions"]) {
+    assert.match(core, new RegExp(`${keyName}:`));
+    assert.match(zh, new RegExp(`${keyName}:`));
+  }
+  assert.equal(app, require("../scripts/build-client.js").compiledSource(), "public/app.js must match client sources");
 });
 
 test("closing Settings moves focus outside before hiding it from accessibility APIs", () => {
@@ -401,7 +435,7 @@ test("contextual footer hints persist, settle from blue, and follow widget and t
   assert.match(zh, /pluginPreview:\s*"预览"/);
   assert.doesNotMatch(showHint, /setTimeout|hidden\s*=\s*true/);
   assert.match(showHint, /Array\.isArray\(keys\)[\s\S]*?candidates\.filter\(\(key\) => key !== state\.canvasHintKey\)[\s\S]*?Math\.random\(\)/);
-  assert.match(css, /\.canvas-hint\s*\{[^}]*flex:\s*1 1 auto[^}]*min-width:\s*0[^}]*max-width:\s*none[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/);
+  assert.match(css, /\.canvas-hint\s*\{[^}]*grid-column:\s*3[^}]*min-width:\s*0[^}]*max-width:\s*none[^}]*overflow:\s*hidden[^}]*justify-self:\s*end[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/);
   assert.match(css, /\.canvas-hint\.is-new\s*\{[^}]*animation:\s*canvasHintSettle 10s/);
   assert.match(css, /@keyframes canvasHintSettle\s*\{[\s\S]*?#2f80ed[\s\S]*?var\(--muted\)/);
   assert.match(startWidget, /widget\.widgetType === "html_widget"[\s\S]*?showCanvasHint\(\["canvasHintWidgetAdded", "canvasHintWidgetAddedAlt", "canvasHintRefineInPlace", "canvasHintAIAddsOnly"\]\)/);
@@ -525,7 +559,7 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.doesNotMatch(toggle, /localStorage|save\(/);
 });
 
-test("canvas view mode exposes only quiet share and exit controls while preserving pan and zoom", () => {
+test("canvas view mode exposes quiet share, download, and exit controls while preserving pan and zoom", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -542,7 +576,7 @@ test("canvas view mode exposes only quiet share and exit controls while preservi
   assert.doesNotMatch(viewTools, /id="canvasViewBtn"/);
   assert.ok(viewTools.indexOf('id="fullscreenBtn"') < viewTools.indexOf('id="gridToggle"'));
   assert.match(html, /id="canvasViewBtn"[^>]*aria-pressed="false"[^>]*data-i18n-aria="enterCanvasViewMode"[\s\S]*?<circle cx="12" cy="12" r="2\.8"/);
-  assert.match(html, /id="canvasViewActions"[^>]*role="toolbar"[^>]*hidden[\s\S]*?id="canvasViewShareBtn"[\s\S]*?id="canvasViewCloseBtn"/);
+  assert.match(html, /id="canvasViewActions"[^>]*role="toolbar"[^>]*hidden[\s\S]*?id="canvasViewShareBtn"[\s\S]*?id="canvasViewDownloadBtn"[\s\S]*?id="canvasViewCloseBtn"/);
   for (const key of ["enterCanvasViewMode", "exitCanvasViewMode", "canvasViewModeActions"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
@@ -559,6 +593,7 @@ test("canvas view mode exposes only quiet share and exit controls while preservi
   assert.match(pointerEnd, /if \(state\.viewMode\)[\s\S]*?state\.touchGesture = null[\s\S]*?setCanvasCursor\("grab"\)/);
   assert.match(renderInteraction, /if \(state\.viewMode\)[\s\S]*?drawSelectionContent\(state\.selection[\s\S]*?drawPending\(state\.pending, interactionCtx, \{ chrome:false \}\)[\s\S]*?return/);
   assert.match(app, /canvasViewShareButton\.onclick = \(\) => document\.querySelector\("#shareCanvasBtn"\)\?\.click\(\)/);
+  assert.match(app, /canvasViewDownloadButton\.onclick = exportCanvasPng/);
   assert.match(css, /\.canvas-view-actions\s*\{[^}]*opacity:\s*\.44/);
   assert.match(css, /\.canvas-view-actions:hover,[\s\S]*?\.canvas-view-actions:focus-within\s*\{[^}]*opacity:\s*1/);
   assert.match(css, /body\.canvas-view-mode main\s*\{[^}]*height:\s*100dvh[^}]*padding:\s*0/);
@@ -1150,6 +1185,11 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     pointerHit = functionSource(app, "widgetPointerHit"),
     messageHandler = functionSource(app, "handleWidgetMessage"),
     finishWidgetGesture = functionSource(app, "finishWidgetGesture"),
+    chromePosition = vm.runInNewContext(`(${functionSource(app, "objectChromePosition")})`, {
+      state:{panX:0,panY:0,scale:1},
+      view:{clientWidth:1200,clientHeight:800,getBoundingClientRect:()=>({left:0,top:0})},
+      screenObjectBox:box=>({left:box.x,top:box.y,width:box.w,height:box.h}),
+    }),
     positionWidget = vm.runInNewContext(`(${functionSource(app, "positionWidget")})`, {
       state:{ panX:10, panY:20, scale:0.2 },
       updateWidgetRenderVisibility() {},
@@ -1181,6 +1221,14 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.equal(declaration.width, "1200px");
   assert.equal(declaration.height, "800px");
   assert.equal(declaration.transform, "translate3d(30px,60px,0) scale(0.1,0.1)");
+  const chromeBox={x:400,y:100,w:300,h:200},
+    sideToolSpec={widgetTool:true,widgetToolPlacement:"right-middle",widgetToolGroup:"tools",groupHorizontalWidth:116,groupVerticalWidth:36,groupVerticalHeight:110,groupHorizontalOffset:0,groupVerticalOffset:0,baseWidth:36,baseHeight:34,controlScale:1},
+    fallbackToolSpec={...sideToolSpec,groupHorizontalWidth:234,groupVerticalWidth:118,groupVerticalHeight:72,baseWidth:118};
+  assert.deepEqual({x:chromePosition(chromeBox,"move","",{widgetCore:true}).x,y:chromePosition(chromeBox,"move","",{widgetCore:true}).y},{x:533,y:59});
+  assert.deepEqual({x:chromePosition(chromeBox,"cancel","",{widgetCore:true}).x,y:chromePosition(chromeBox,"cancel","",{widgetCore:true}).y},{x:400,y:59});
+  assert.deepEqual({x:chromePosition(chromeBox,"accept","",{widgetCore:true}).x,y:chromePosition(chromeBox,"accept","",{widgetCore:true}).y},{x:664,y:59});
+  assert.deepEqual({x:chromePosition(chromeBox,"download","",sideToolSpec).x,y:chromePosition(chromeBox,"download","",sideToolSpec).y},{x:707,y:145});
+  assert.deepEqual({x:chromePosition({x:900,y:200,w:250,h:200},"copy","",fallbackToolSpec).x,y:chromePosition({x:900,y:200,w:250,h:200},"copy","",fallbackToolSpec).y},{x:908,y:407});
   assert.match(frameRule, /color-scheme:\s*light/);
   assert.match(frameRule, /background:\s*transparent/);
   assert.match(functionSource(app, "serializedWidgets"), /contentW:\s*widget\.contentW[\s\S]*?contentH:\s*widget\.contentH/);
@@ -1209,7 +1257,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(functionSource(app, "widgetRecord"), /favoriteBusy: false[\s\S]*?favoritePendingVersion: null/);
   assert.match(messageHandler, /penecho-widget-snapshot-error[\s\S]*?console\.warn\("PenEcho widget snapshot failed:"/);
   assert.doesNotMatch(messageHandler, /requestWidgetSnapshot/);
-  assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 3);
+  assert.equal((app.match(/requestWidgetSnapshot\(/g) || []).length, 4);
   assert.match(app, /WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,[\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000/);
   assert.doesNotMatch(app, /WIDGET_(?:BACKGROUND_SNAPSHOT_DELAY|SNAPSHOT_CACHE_REFRESH|SNAPSHOT_CACHE_STAGGER)_MS|scheduleWidgetSnapshot|snapshotTimer|snapshotCapturedAt/);
   assert.match(requestSnapshot, /widget\.snapshotPromise = snapshotPromise[\s\S]*?return await snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
@@ -1361,6 +1409,12 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(frameRule, /background:\s*transparent/);
   assert.doesNotMatch(frameRule, /box-shadow|border-radius/);
   assert.doesNotMatch(css, /canvas-widget-toolbar/);
+  assert.match(functionSource(app,"downloadWidgetImage"),/requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true\)[\s\S]*?link\.download = widgetImageFilename\(widget\)[\s\S]*?link\.click\(\)/);
+  assert.match(app,/function addWidgetToolSpecs[\s\S]*?kind:"download"[\s\S]*?widgetToolGroup = `widget-\$\{widget\.id\}-tools`[\s\S]*?widgetToolPlacement:"right-middle"/);
+  for (const key of ["downloadWidget","widgetDownloading","widgetDownloaded","widgetDownloadFailed"]) {
+    assert.match(app,new RegExp(`${key}:`));
+    assert.match(read("public/locales/zh.js"),new RegExp(`${key}:`));
+  }
   assert.match(read("src/server/main.js"), /Keep user-facing text natively selectable and do not globally disable text selection/);
 });
 
@@ -1435,8 +1489,8 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(chrome, /editWidget = state\.mode === "hand" && state\.widgetEdit \? selectedWidget\(\) : null/);
   const handChrome = chrome.slice(chrome.indexOf("const specs = [];", chrome.indexOf("return specs;") + 1));
   assert.doesNotMatch(handChrome, /addWidgetToolSpecs\([^\n]*refine:/);
-  assert.match(handChrome, /state\.widgetEdit\?\.id === handTarget\.id[\s\S]*?editWidget === handTarget[\s\S]*?addWidgetToolSpecs\(specs, handTarget, \{ copy:true, community:true, handToolbar:true/);
-  assert.match(chrome, /state\.pendingWidget[\s\S]*?addWidgetToolSpecs\(specs, widget, \{ copy:true \}\)/);
+  assert.match(handChrome, /state\.widgetEdit\?\.id === handTarget\.id[\s\S]*?editWidget === handTarget[\s\S]*?addWidgetToolSpecs\(specs, handTarget, \{ copy:true, community:true, download:true, handToolbar:true/);
+  assert.match(chrome, /state\.pendingWidget[\s\S]*?addWidgetToolSpecs\(specs, widget, \{ copy:true, download:true \}\)/);
   assert.match(request, /supersedeActiveAI\("widget-refine"\)[\s\S]*?captureCurrentViewport:true[\s\S]*?widgetEditTarget:widget/);
   assert.match(functionSource(app, "requestAI"), /let attentionBox = dirtySnapshot[\s\S]*?if \(requestedAttentionBox\) attentionBox = requestedAttentionBox/);
   assert.match(request, /clearTimeout\(state\.timer\)[\s\S]*?state\.timer = 0[\s\S]*?supersedeActiveAI\("widget-refine"\)/);
@@ -1519,16 +1573,17 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(scheduleAutomatic, /activeWidgetRefinement\(\)[\s\S]*?return[\s\S]*?state\.timer = setTimeout/);
   assert.match(app, /widgetRefinePending:/);
   assert.match(zh, /widgetRefinePending:/);
-  assert.match(functionSource(app, "objectChromePosition"), /positions = \[[\s\S]*?layout:"horizontal"[\s\S]*?side:"right", layout:"vertical"[\s\S]*?side:"bottom", layout:"horizontal"[\s\S]*?side:"left", layout:"vertical"/);
+  assert.match(functionSource(app, "objectChromePosition"), /positions = \[[\s\S]*?side:"right", layout:"vertical"[\s\S]*?screenBox\.top \+ screenBox\.height \/ 2 - verticalHeight \/ 2[\s\S]*?side:"bottom", layout:"horizontal"[\s\S]*?side:"left", layout:"vertical"/);
+  assert.match(functionSource(app, "objectChromePosition"), /kind === "cancel" \? \[[\s\S]*?x:screenBox\.left, y:topY[\s\S]*?x:right - width, y:topY/);
   assert.match(functionSource(app, "objectChromePosition"), /spec\.groupHorizontalOffset[\s\S]*?vertical \? spec\.groupVerticalOffset/);
   assert.match(functionSource(app, "objectChromePosition"), /ignoreKey[\s\S]*?\.object-chrome-button/);
-  assert.match(functionSource(app, "objectChromePosition"), /chromeGap = 7[\s\S]*?above = screenBox\.top - height - chromeGap[\s\S]*?gap = chromeGap \* controlScale/);
+  assert.match(functionSource(app, "objectChromePosition"), /chromeGap = 7[\s\S]*?gap = chromeGap \* controlScale[\s\S]*?above = screenBox\.top - height - chromeGap/);
   const syncChrome = functionSource(app, "syncObjectChrome");
   assert.match(syncChrome, /objectChromePosition\(spec\.box, spec\.kind, spec\.key, spec\)/);
   assert.match(syncChrome, /spec\.kind === "refine"\) button\.removeAttribute\("title"\)/);
   assert.doesNotMatch(syncChrome, /button\.title = spec\.kind === "refine"/);
   assert.doesNotMatch(app, /function widgetToolScale/);
-  assert.match(app, /function addWidgetToolSpecs\(specs, widget, options = \{\}\)[\s\S]*?controlScale = 1[\s\S]*?baseHeight:34/);
+  assert.match(app, /function addWidgetToolSpecs\(specs, widget, options = \{\}\)[\s\S]*?controlScale:1[\s\S]*?baseHeight:34/);
   assert.match(app, /kind:"favorite"[\s\S]*?baseWidth:36,[\s\S]*?iconOnly:true/);
   assert.match(app, /kind:"share"[\s\S]*?baseWidth:36,[\s\S]*?iconOnly:true/);
   assert.match(syncChrome, /classList\.toggle\("icon-only", Boolean\(spec\.iconOnly\)\)/);
@@ -1546,7 +1601,7 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(read("public/style.css"), /\.object-chrome-button\.widget-tool\.icon-only \{[^}]*gap: 0;[^}]*padding: 0;/);
   assert.match(read("public/style.css"), /\.object-chrome-button\.widget-tool\.icon-only \.object-chrome-label \{ display: none; \}/);
   assert.match(read("public/style.css"), /\.object-chrome-button\.favorite\.is-favorite svg \{ fill: currentColor; \}/);
-  assert.match(read("public/style.css"), /\.object-chrome-button\.favorite\.loading::after \{[^}]*animation: history-save-spin \.8s linear infinite;/);
+  assert.match(read("public/style.css"), /\.object-chrome-button\.loading::after \{[^}]*animation: history-save-spin \.8s linear infinite;/);
   assert.match(read("public/style.css"), /object-chrome-button[^}]*scale\(var\(--object-control-scale, 1\)\)/);
 });
 
