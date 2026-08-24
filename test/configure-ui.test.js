@@ -133,14 +133,12 @@ test("Novita API presets expose the OpenAI and Anthropic endpoints and current m
   const typePrompt = ui.selects.find(item => item.message === "API type"),
     modelPrompt = ui.selects.find(item => item.message === "Model"),
     effortPrompt = ui.selects.find(item => item.message === "Reasoning effort"),
-    kimiK3 = modelPrompt.choices.find(choice => choice.value === "moonshotai/kimi-k3"),
-    glm = modelPrompt.choices.find(choice => choice.value === "zai-org/glm-5.2");
+    kimiK3 = modelPrompt.choices.find(choice => choice.value === "moonshotai/kimi-k3");
   assert.ok(typePrompt.choices.some(choice => choice.value === "novita-openai"));
   assert.ok(typePrompt.choices.some(choice => choice.value === "novita-anthropic"));
   assert.match(kimiK3.description, /1,048,576-token context/);
   assert.match(kimiK3.description, /text, image, and video input/);
   assert.match(kimiK3.description, /adaptive or disabled thinking/);
-  assert.match(glm.description, /text-only input/);
   assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
   assert.equal(saved[0].AI_API_FORMAT, "anthropic");
   assert.equal(saved[0].AI_API_URL, "https://api.novita.ai/anthropic");

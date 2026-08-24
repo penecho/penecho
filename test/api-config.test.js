@@ -25,20 +25,6 @@ test("Novita presets retain current endpoint and model metadata", () => {
     inputModalities:["text", "image", "video"],
     thinking:["adaptive", "disabled"],
   });
-  assert.deepEqual(NOVITA_MODELS["zai-org/glm-5.2"], {
-    modelId:"zai-org/glm-5.2",
-    contextWindow:1048576,
-    pricingUsdPerMillionTokens:{ input:1.4, output:4.4, cacheRead:0.26, cacheWrite:null },
-    inputModalities:["text"],
-    thinking:["adaptive", "disabled"],
-  });
-  assert.deepEqual(NOVITA_MODELS["deepseek/deepseek-v4-flash-0731"], {
-    modelId:"deepseek/deepseek-v4-flash-0731",
-    contextWindow:1048576,
-    pricingUsdPerMillionTokens:{ input:0.14, output:0.28, cacheRead:0.028, cacheWrite:null },
-    inputModalities:["text"],
-    thinking:["adaptive", "disabled"],
-  });
 });
 
 test("API format selection builds the matching endpoint", () => {

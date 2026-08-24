@@ -19,20 +19,6 @@ const NOVITA_MODELS = Object.freeze({
     inputModalities:Object.freeze(["text", "image", "video"]),
     thinking:Object.freeze(["adaptive", "disabled"]),
   }),
-  "zai-org/glm-5.2":Object.freeze({
-    modelId:"zai-org/glm-5.2",
-    contextWindow:1048576,
-    pricingUsdPerMillionTokens:Object.freeze({ input:1.4, output:4.4, cacheRead:0.26, cacheWrite:null }),
-    inputModalities:Object.freeze(["text"]),
-    thinking:Object.freeze(["adaptive", "disabled"]),
-  }),
-  "deepseek/deepseek-v4-flash-0731":Object.freeze({
-    modelId:"deepseek/deepseek-v4-flash-0731",
-    contextWindow:1048576,
-    pricingUsdPerMillionTokens:Object.freeze({ input:0.14, output:0.28, cacheRead:0.028, cacheWrite:null }),
-    inputModalities:Object.freeze(["text"]),
-    thinking:Object.freeze(["adaptive", "disabled"]),
-  }),
 });
 
 function resolveApiConfig(value, formatOverride) {
