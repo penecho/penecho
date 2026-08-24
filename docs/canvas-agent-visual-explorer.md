@@ -12,7 +12,11 @@ The topic selects the dominant grammar instead of inheriting one fixed layout. S
 
 References provide composition evidence only. Their reading order, density, proportions, typography, grouping, whitespace, color roles, and connector language may guide the design, but labels, values, and claims must come from the user's factual material.
 
-The protected prompt includes one complete dense pipeline HTML example only as an implementation anchor for responsive Grid, local SVG, typography, and semantic color. It explicitly forbids copying that DOM or layout when another grammar fits, and includes non-pipeline company-landscape and technology-history counterexamples.
+The protected prompt deliberately contains no complete HTML/CSS layout exemplar. Before authoring, the model privately compares three materially different semantic compositions, rejects generic card dashboards, and implements only the strongest candidate. There is no default orientation, panel count, KPI strip, A–D scheme, palette, or rounded-card system. Equal-weight non-code profiles cover technical systems, relationships, routes, timelines, comparisons, hierarchies or visual notes, and feedback or state structures without giving one grammar a copyable DOM advantage.
+
+The authoring prompt asks each new document to record the selected layout as lowercase kebab-case `data-visual-grammar` and `data-composition` attributes on its root `<main>`. This soft authoring convention supports source review and diversity diagnostics; it is not runtime-validated provenance, and it describes rather than chooses the result. Density follows real evidence, and every drill-down must remain anchored to the Macro model instead of filling a preset poster slot.
+
+Typography is planned against the focused Canvas display rather than the raw Widget coordinate system. Ordinary body copy targets about 15 focused-view pixels and compact supporting labels stay at or above 8. The model supplies its real body, smallest-caption, and title source sizes to `canvas_inspect`; if the returned prediction is too small, it raises source typography, simplifies the evidence, adjusts the aspect ratio, or uses more Canvas space and then inspects again. A larger Widget can reduce focused scale, so only the returned prediction—not raw dimensions—can establish legibility.
 
 Every newly authored Visual Explorer uses exactly these markers:
 
