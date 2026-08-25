@@ -132,6 +132,7 @@ const API_PRESETS = Object.freeze({
   "minimax-china-coding":Object.freeze({ family:"minimax", format:"anthropic", url:"https://api.minimaxi.com/anthropic" }),
 });
 const API_PRESET_IDS = new Set(Object.keys(API_PRESETS));
+const DEEPSEEK_SEARCH_PROVIDER_IDS = new Set(["deepseek-official", "opencode-go"]);
 const WIDGET_RENDERER = path.join(PUBLIC, "vendor", "penecho-dom-renderer.js");
 const VISUAL_EXPLAINER_VENDOR = path.join(PUBLIC, "vendor", "antv-infographic-0.2.20.min.js");
 const VISUAL_EXPLORER_MANIM_WEB_ASSETS = new Map([
@@ -144,6 +145,8 @@ let API_BASE_URL = firstNonEmpty(process.env.AI_API_URL, process.env.OPENAI_API_
 let API_FORMAT = firstNonEmpty(process.env.AI_API_FORMAT, process.env.OPENAI_API_FORMAT)?.toLowerCase();
 let API_KEY = firstNonEmpty(process.env.AI_API_KEY, process.env.OPENAI_API_KEY);
 let TAVILY_API_KEY = firstNonEmpty(process.env.TAVILY_API_KEY);
+let DEEPSEEK_SEARCH_API_KEY = firstNonEmpty(process.env.DEEPSEEK_SEARCH_API_KEY, process.env.DEEPSEEK_API_KEY);
+let DEEPSEEK_SEARCH_PROVIDER = normalizeDeepSeekSearchProvider(process.env.DEEPSEEK_SEARCH_PROVIDER) || "deepseek-official";
 let API_PRESET = API_PRESET_IDS.has(String(process.env.PENECHO_API_PRESET || "")) ? String(process.env.PENECHO_API_PRESET) : "";
 const MAX_BODY = 9 * 1024 * 1024;
 const DEFAULT_MODEL_TIMEOUT_MS = 180000;
@@ -371,6 +374,14 @@ async function resolvedCliProvider(provider) {
 
 function applyHotSearchConfiguration(updates) {
   if (Object.hasOwn(updates, "TAVILY_API_KEY")) TAVILY_API_KEY = firstNonEmpty(updates.TAVILY_API_KEY);
+  if (Object.hasOwn(updates, "DEEPSEEK_SEARCH_API_KEY")) DEEPSEEK_SEARCH_API_KEY = firstNonEmpty(updates.DEEPSEEK_SEARCH_API_KEY);
+  if (Object.hasOwn(updates, "DEEPSEEK_SEARCH_PROVIDER")) DEEPSEEK_SEARCH_PROVIDER = normalizeDeepSeekSearchProvider(updates.DEEPSEEK_SEARCH_PROVIDER) || "deepseek-official";
+}
+
+function normalizeDeepSeekSearchProvider(value) {
+  const provider = String(value || "").trim().toLowerCase();
+  if (provider === "deepseek") return "deepseek-official";
+  return DEEPSEEK_SEARCH_PROVIDER_IDS.has(provider) ? provider : "";
 }
 
 function normalizeAiImageFormat(value) {
@@ -685,6 +696,8 @@ function canvasSettings() {
     apiModel:MODEL || "",
     hasApiKey:Boolean(API_KEY),
     hasTavilyApiKey:Boolean(TAVILY_API_KEY),
+    hasDeepSeekSearchApiKey:Boolean(DEEPSEEK_SEARCH_API_KEY),
+    deepSeekSearchProvider:DEEPSEEK_SEARCH_PROVIDER,
     webSearchAvailable:true,
     kimiCliModel:KIMI_CLI.model || "", kimiCliPath:KIMI_CLI.executable || "kimi",
     codexModel:CODEX_CLI.model || "", codexPath:CODEX_CLI.executable || "codex",
@@ -745,9 +758,11 @@ function normalizeCanvasSettings(input) {
   const scope = String(input.scope || "").trim();
   if (!new Set(["api", "system", "search"]).has(scope)) throw new Error("Choose which settings to save.");
   if (scope === "search") {
-    const tavilyApiKey = String(input.tavilyApiKey || "").trim();
+    const tavilyApiKey = String(input.tavilyApiKey || "").trim(), deepseekSearchApiKey=String(input.deepseekSearchApiKey||"").trim(), requestedDeepSeekSearchProvider=String(input.deepSeekSearchProvider||"").trim(), deepSeekSearchProvider=requestedDeepSeekSearchProvider?normalizeDeepSeekSearchProvider(requestedDeepSeekSearchProvider):DEEPSEEK_SEARCH_PROVIDER;
     if (tavilyApiKey.length > 4096 || /[\r\n\0]/.test(tavilyApiKey)) throw new Error("The Tavily API key is invalid.");
-    return { PENECHO_SETTINGS_SCOPE:scope, ...(tavilyApiKey ? { TAVILY_API_KEY:tavilyApiKey } : {}) };
+    if (deepseekSearchApiKey.length > 8192 || /[\r\n\0]/.test(deepseekSearchApiKey)) throw new Error("The DeepSeek search API key is invalid.");
+    if (!deepSeekSearchProvider) throw new Error("Choose where the DeepSeek Flash search key comes from.");
+    return { PENECHO_SETTINGS_SCOPE:scope, DEEPSEEK_SEARCH_PROVIDER:deepSeekSearchProvider, ...(deepseekSearchApiKey ? { DEEPSEEK_SEARCH_API_KEY:deepseekSearchApiKey } : {}), ...(tavilyApiKey ? { TAVILY_API_KEY:tavilyApiKey } : {}) };
   }
   const provider = normalizeAiProvider(input.provider), format = String(input.apiFormat || "").trim().toLowerCase(), preset = String(input.apiPreset || "").trim(), urlText = String(input.apiUrl || "").trim(), model = String(input.apiModel || "").trim(), key = String(input.apiKey || "").trim(), effort = connectionEffort(input.effort), imageFormat = String(input.imageFormat || "").trim().toLowerCase(), timeout = Number(input.timeoutSeconds), maxTokens = configuredMaxTokens(input.maxTokens), autoDelay = Number(input.autoDelaySeconds), traceLimit = Number(input.requestTraceLimit);
   if (!provider) throw new Error("Choose an AI provider.");
@@ -775,6 +790,20 @@ function normalizeCanvasSettings(input) {
     AI_EFFORT:effort, AI_TIMEOUT_SECONDS:String(timeout), MAX_TOKENS:String(maxTokens),
     AUTO_AI_DELAY_SECONDS:String(autoDelay), PENECHO_AI_IMAGE_FORMAT:imageFormat,
     PENECHO_REQUEST_TRACE:String(input.requestTrace === true), PENECHO_REQUEST_TRACE_LIMIT:String(traceLimit),
+  };
+}
+
+function normalizeSearchTestRequest(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Search test settings are invalid.");
+  const requestedProvider=String(input.deepSeekSearchProvider||"").trim(), deepSeekSearchProvider=normalizeDeepSeekSearchProvider(requestedProvider)||DEEPSEEK_SEARCH_PROVIDER,
+    submittedDeepSeekKey=String(input.deepseekSearchApiKey||"").trim(), submittedTavilyKey=String(input.tavilyApiKey||"").trim();
+  if (!deepSeekSearchProvider) throw new Error("Choose where the DeepSeek Flash search key comes from.");
+  if (submittedDeepSeekKey.length > 8192 || /[\r\n\0]/.test(submittedDeepSeekKey)) throw new Error("The DeepSeek search API key is invalid.");
+  if (submittedTavilyKey.length > 4096 || /[\r\n\0]/.test(submittedTavilyKey)) throw new Error("The Tavily API key is invalid.");
+  return {
+    deepseekProvider:deepSeekSearchProvider,
+    deepseekApiKey:submittedDeepSeekKey||DEEPSEEK_SEARCH_API_KEY||"",
+    tavilyApiKey:submittedTavilyKey||TAVILY_API_KEY||"",
   };
 }
 
@@ -3370,6 +3399,16 @@ const server = http.createServer(async (req, res) => {
     });
     return send(res, 200, { removed });
   }
+  if (url.pathname === "/api/settings/search/test") {
+    const settingsError = browserRequestError(req);
+    if (settingsError) return send(res, 403, { error:settingsError });
+    if (req.method !== "POST") return send(res, 405, { error:"Method Not Allowed" });
+    if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
+    try {
+      const configuration=normalizeSearchTestRequest(await readJson(req,16*1024)), { testCanvasSearchProviders }=await import("./canvas-agent/runtime.mjs");
+      return send(res,200,{ ok:true, results:await testCanvasSearchProviders(configuration) });
+    } catch(error) { return send(res,400,{ error:error?.message||"Could not test search providers." }); }
+  }
   if (url.pathname === "/api/settings") {
     const settingsError = req.method === "GET" ? publicFetchRequestError(req) : browserRequestError(req);
     if (settingsError) return send(res, 403, { error:settingsError });
@@ -3382,7 +3421,7 @@ const server = http.createServer(async (req, res) => {
       delete updates.PENECHO_SETTINGS_SCOPE;
       const providerNames = new Set(["AI_PROVIDER", "AI_API_FORMAT", "AI_API_URL", "AI_API_MODEL", "AI_API_KEY", "AI_EFFORT", "PENECHO_API_PRESET", "KIMI_CLI_MODEL", "KIMI_CLI_PATH", "CODEX_CLI_MODEL", "CODEX_CLI_PATH", "CLAUDE_CLI_MODEL", "CLAUDE_CLI_PATH"]),
         systemNames = new Set(["AI_TIMEOUT_SECONDS", "MAX_TOKENS", "AUTO_AI_DELAY_SECONDS", "PENECHO_AI_IMAGE_FORMAT", "PENECHO_REQUEST_TRACE", "PENECHO_REQUEST_TRACE_LIMIT"]),
-        scopeNames = scope === "api" ? providerNames : scope === "search" ? new Set(["TAVILY_API_KEY"]) : systemNames,
+        scopeNames = scope === "api" ? providerNames : scope === "search" ? new Set(["DEEPSEEK_SEARCH_PROVIDER", "DEEPSEEK_SEARCH_API_KEY", "TAVILY_API_KEY"]) : systemNames,
         selected = Object.fromEntries(Object.entries(updates).filter(([name]) => scopeNames.has(name)));
       writeCanvasConfiguration(selected);
       if (scope === "api") {
@@ -3390,7 +3429,7 @@ const server = http.createServer(async (req, res) => {
         Object.assign(DEFAULT_CONNECTION, connectionFromEnvironment("default"));
       }
       if (scope === "search") applyHotSearchConfiguration(selected);
-      return send(res, 200, { ok:true, providerApplied:scope === "api", searchApplied:scope === "search", restartRequired:scope === "system", hasTavilyApiKey:Boolean(TAVILY_API_KEY), webSearchAvailable:true });
+      return send(res, 200, { ok:true, providerApplied:scope === "api", searchApplied:scope === "search", restartRequired:scope === "system", deepSeekSearchProvider:DEEPSEEK_SEARCH_PROVIDER, hasDeepSeekSearchApiKey:Boolean(DEEPSEEK_SEARCH_API_KEY), hasTavilyApiKey:Boolean(TAVILY_API_KEY), webSearchAvailable:true });
     } catch (error) { return send(res, 400, { error:error?.message || "Could not save settings." }); }
   }
   if (url.pathname === "/api/settings/connections") {
@@ -3919,7 +3958,7 @@ const canvasAgent = attachCanvasAgent({
   authorize:browserRequestError,
   resolveConnection:id=>findConnection(connectionStore(),String(id||"default")),
   listConnections:()=>{const store=connectionStore();return[store.defaultConnection,...store.connections]},
-  resolveWebSearch:()=>({ provider:"tavily", apiKey:TAVILY_API_KEY || "" }),
+  resolveWebSearch:()=>({ provider:DEEPSEEK_SEARCH_API_KEY?DEEPSEEK_SEARCH_PROVIDER:TAVILY_API_KEY?"tavily":"built-in", deepseekProvider:DEEPSEEK_SEARCH_PROVIDER, deepseekApiKey:DEEPSEEK_SEARCH_API_KEY||"", tavilyApiKey:TAVILY_API_KEY||"", apiKey:TAVILY_API_KEY||"" }),
   resolveWidgetCapabilities:resolveCanvasAgentWidgetCapabilities,
   resolveProject:id=>CANVAS_AGENT_PROJECT_STORE.resolve(id, { touch:true }),
   stateDirectory:STATE_DIRECTORY||CLOUD_STATE_DIRECTORY,

@@ -20,6 +20,7 @@ function validCanvasAgentEntriesQuery(searchParams) {
 
 const ROUTES = [
   { pattern:/^\/api\/settings$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/settings\/search\/test$/, methods:new Set(["POST"]) },
   { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/widget-fetch$/, methods:new Set(["GET", "POST"]), query:true },
   { pattern:/^\/api\/canvas-projects$/, methods:new Set(["GET", "POST"]) },

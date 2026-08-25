@@ -120,9 +120,20 @@
             <button data-mode="pen" class="active icon-button" type="button" aria-pressed="true" data-i18n-aria="pen" aria-label="Pen" data-i18n-title="pen" title="Pen">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
             </button>
-            <button data-mode="eraser" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
-            </button>
+            <div id="eraserToolControl" class="eraser-tool-control">
+              <button id="eraserToolBtn" data-mode="eraser" data-active-eraser="eraser" class="icon-button" type="button" aria-pressed="false" aria-haspopup="menu" aria-expanded="false" aria-controls="eraserToolMenu" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
+                <svg data-eraser-icon="freehand" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
+                <svg data-eraser-icon="area" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/><path d="m9 15-2-2 5-5a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-3 3H9ZM9 15h7"/></svg>
+              </button>
+              <div id="eraserToolMenu" class="eraser-tool-menu" role="menu" data-i18n-aria="eraserOptions" aria-label="Eraser options" hidden>
+                <button id="eraserFreehandBtn" class="eraser-tool-option" type="button" role="menuitemradio" aria-checked="true" data-eraser-mode="eraser" data-i18n-aria="eraser" aria-label="Eraser" data-i18n-title="eraser" title="Eraser">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 20-4-4L14 5a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20H7Z"/><path d="m11 8 6 6M7 20h12"/></svg>
+                </button>
+                <button id="eraserAreaBtn" class="eraser-tool-option" type="button" role="menuitemradio" aria-checked="false" data-eraser-mode="area-eraser" data-i18n-aria="areaEraser" aria-label="Area erase" data-i18n-title="areaEraser" title="Area erase">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/><path d="m9 15-2-2 5-5a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-3 3H9ZM9 15h7"/></svg>
+                </button>
+              </div>
+            </div>
             <button id="lassoToolBtn" data-mode="select" class="icon-button" type="button" aria-pressed="false" data-i18n-aria="select" aria-label="Lasso select" data-i18n-title="select" title="Lasso select">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 5.5c3.2 3.1-.8 7.5-5.1 8.8-4.9 1.5-11.2-.1-10.2-4.5.8-3.8 6.6-5.7 11.2-4.6 4.1 1 6.4 5 4.4 8.5-1.4 2.5-4.8 3.8-7.8 4.1"/><path d="m8 16 3 1.8-2.3 2.6"/></svg>
             </button>
@@ -403,7 +414,7 @@
             <button id="canvasAgentNew" type="button" data-i18n-title="newCanvasAgentConversation" title="New Canvas Agent conversation" data-i18n-aria="newCanvasAgentConversation" aria-label="New Canvas Agent conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
             <button id="canvasAgentClose" type="button" data-i18n-title="closeCanvasAgent" title="Close Canvas Agent" data-i18n-aria="closeCanvasAgent" aria-label="Close Canvas Agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </header>
-          <dialog id="canvasAgentProjectPopover" class="canvas-agent-project-dialog" aria-labelledby="canvasAgentProjectTitle" aria-describedby="canvasAgentProjectDescription">
+          <dialog id="canvasAgentProjectPopover" class="canvas-agent-project-dialog" aria-labelledby="canvasAgentProjectTitle" aria-describedby="canvasAgentProjectDescription canvasAgentProjectBoundary">
             <header class="canvas-agent-project-dialog-head">
               <div>
                 <span class="canvas-agent-project-eyebrow" data-i18n="canvasAgentWorkspace">Workspace</span>
@@ -413,6 +424,10 @@
               <button id="canvasAgentProjectClose" class="canvas-agent-project-close" type="button" data-i18n-aria="canvasAgentProjectClose" aria-label="Close project manager"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </header>
             <div class="canvas-agent-project-dialog-body">
+              <p id="canvasAgentProjectBoundary" class="canvas-agent-project-boundary">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6z"/><path d="m9.5 12 1.7 1.7 3.6-3.9"/></svg>
+                <span data-i18n="canvasAgentProjectBoundary">This version supports read access only. For file safety, modifying files is not supported.</span>
+              </p>
               <section class="canvas-agent-resource-group canvas-agent-project-group" aria-labelledby="canvasAgentProjectsTitle">
                 <header>
                   <div>
@@ -483,38 +498,41 @@
                 <p id="canvasAgentReferenceNote" class="canvas-agent-reference-note"></p>
               </section>
               <footer class="canvas-agent-composer-actions">
-                <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach file" data-i18n-title="canvasAgentAttachTitle" title="Attach one file or up to five images">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
-                  <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
-                </button>
-                <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Manage projects and files" data-i18n-aria="canvasAgentProject" aria-label="Manage projects and files">
-                  <svg class="canvas-agent-project-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg>
-                  <svg class="canvas-agent-project-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
-                  <span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">No project</span>
-                  <svg class="canvas-agent-project-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 14 4-4 4 4"/></svg>
-                </button>
-                <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-                </button>
-                <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
-                </button>
-                <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
-                </button>
-                <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
-                </button>
-                <input id="canvasAgentFileInput" type="file" multiple hidden>
-                <span class="canvas-agent-action-spacer"></span>
-                <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n-aria="canvasAgentStop" aria-label="Stop" data-i18n-title="canvasAgentStop" title="Stop" hidden>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                  <span class="canvas-agent-action-label" data-i18n="canvasAgentStop">Stop</span>
-                </button>
-                <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n-aria="canvasAgentSend" aria-label="Send" data-i18n-title="canvasAgentSend" title="Send">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></svg>
-                  <span class="canvas-agent-action-label" data-i18n="canvasAgentSend">Send</span>
-                </button>
+                <div class="canvas-agent-tool-actions">
+                  <button id="canvasAgentAttach" class="canvas-agent-attach" type="button" data-i18n-aria="canvasAgentAttach" aria-label="Attach file" data-i18n-title="canvasAgentAttachTitle" title="Attach one file or up to five images">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
+                    <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
+                  </button>
+                  <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Manage projects and files" data-i18n-aria="canvasAgentProject" aria-label="Manage projects and files">
+                    <svg class="canvas-agent-project-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg>
+                    <svg class="canvas-agent-project-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+                    <span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">No project</span>
+                    <svg class="canvas-agent-project-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 14 4-4 4 4"/></svg>
+                  </button>
+                  <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+                  </button>
+                  <button id="canvasAgentTextMode" class="canvas-agent-input-mode active" type="button" aria-pressed="true" data-i18n-aria="canvasAgentType" aria-label="Type with keyboard" data-i18n-title="canvasAgentType" title="Type with keyboard">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v12M8 18h8"/></svg>
+                  </button>
+                  <button id="canvasAgentInkMode" class="canvas-agent-input-mode" type="button" aria-pressed="false" data-i18n-aria="canvasAgentHandwrite" aria-label="Write by hand" data-i18n-title="canvasAgentHandwrite" title="Write by hand">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14.5 7.5 3 3"/></svg>
+                  </button>
+                  <button id="canvasAgentSearch" class="canvas-agent-search" type="button" aria-pressed="false" aria-disabled="true" data-i18n-aria="canvasAgentSearchUnavailable" aria-label="Internet search is unavailable in this build" data-tooltip="Internet search is unavailable in this build">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3c-2.4 2.5-3.6 5.5-3.6 9S9.6 18.5 12 21"/></svg>
+                  </button>
+                  <input id="canvasAgentFileInput" type="file" multiple hidden>
+                </div>
+                <div class="canvas-agent-primary-actions">
+                  <button id="canvasAgentStop" class="canvas-agent-stop" type="button" data-i18n-aria="canvasAgentStop" aria-label="Stop" data-i18n-title="canvasAgentStop" title="Stop" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+                    <span class="canvas-agent-action-label" data-i18n="canvasAgentStop">Stop</span>
+                  </button>
+                  <button id="canvasAgentSend" class="canvas-agent-send" type="submit" data-i18n-aria="canvasAgentSend" aria-label="Send" data-i18n-title="canvasAgentSend" title="Send">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></svg>
+                    <span class="canvas-agent-action-label" data-i18n="canvasAgentSend">Send</span>
+                  </button>
+                </div>
               </footer>
             </div>
           </form>
@@ -662,7 +680,7 @@
             <button id="pluginButton" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pluginPopover" data-i18n-aria="plugins" aria-label="Plugins">
               <strong data-i18n="plugins">Plugins</strong><small data-i18n="settingsPluginsEntryHelp">Manage AI capabilities</small>
             </button>
-            <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">Built-in search ready · Tavily optional</small></button>
+            <button id="settingsOpenSearch" type="button"><strong data-i18n="settingsSearchEntry">Internet search</strong><small id="settingsSearchEntryStatus" data-i18n="settingsSearchNotConfigured">DuckDuckGo + built-in search ready · DeepSeek Flash or Tavily optional</small></button>
             <button id="settingsOpenSystem" type="button"><strong data-i18n="settingsSystemEntry">System settings</strong><small data-i18n="settingsSystemEntryHelp">Restart required after saving</small></button>
           </div>
         </section>
@@ -721,16 +739,36 @@
           </section>
           <section class="settings-group settings-search-group" aria-labelledby="settingsSearchHeading">
             <div class="settings-section-heading">
-              <div><h3 id="settingsSearchHeading" data-i18n="settingsSearchSection">Internet search</h3><p data-i18n="settingsSearchDescription">Keep research, GitHub, stock, and public web search ready for faster answers when internet search is on.</p></div>
-              <span id="settingsTavilySaved" class="settings-saved-badge" hidden data-i18n="settingsKeySaved">Key saved</span>
+              <div><h3 id="settingsSearchHeading" data-i18n="settingsSearchSection">Internet search</h3><p data-i18n="settingsSearchDescription">On by default. DeepSeek Flash or Tavily can be added, while DuckDuckGo, research, GitHub, and stock search remain available as backups.</p></div>
+              <div class="settings-search-saved-badges">
+                <span id="settingsDeepSeekSearchSaved" class="settings-saved-badge" hidden data-i18n="settingsDeepSeekSearchSaved">Flash key saved</span>
+                <span id="settingsTavilySaved" class="settings-saved-badge" hidden data-i18n="settingsTavilySaved">Tavily saved</span>
+                <span id="settingsDuckDuckGoReady" class="settings-saved-badge" data-i18n="settingsDuckDuckGoReady">DuckDuckGo fallback ready</span>
+              </div>
             </div>
-            <label class="settings-field"><span data-i18n="settingsTavilyApiKey">Tavily API key</span><input id="settingsTavilyApiKey" name="tavilyApiKey" type="password" autocomplete="new-password" placeholder="tvly-…"><small data-i18n="settingsTavilyApiKeyHelp">Optional primary web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled.</small></label>
+            <label class="settings-field"><span data-i18n="settingsDeepSeekSearchProvider">Flash key provider</span><select id="settingsDeepSeekSearchProvider" name="deepSeekSearchProvider"><option value="deepseek-official" data-i18n="settingsDeepSeekSearchProviderOfficial">DeepSeek official</option><option value="opencode-go" data-i18n="settingsDeepSeekSearchProviderOpenCodeGo">OpenCode Go</option></select><small data-i18n="settingsDeepSeekSearchProviderHelp">Choose where this key was issued. PenEcho automatically sends native Flash search to the matching endpoint.</small></label>
+            <aside id="settingsOpenCodeGoSearchSetup" class="settings-provider-notice" hidden>
+              <strong data-i18n="settingsOpenCodeGoSearchSetupTitle">OpenCode Go setup</strong>
+              <p data-i18n="settingsOpenCodeGoSearchSetupBody">Open the Go page in your current OpenCode Workspace, enable China-hosted DeepSeek models, then copy the Go API key and paste it below.</p>
+              <a href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer" data-i18n="settingsOpenCodeGoSearchSetupLink">Open OpenCode Go</a>
+            </aside>
+            <label class="settings-field"><span data-i18n="settingsDeepSeekSearchApiKey">Flash search API key</span><input id="settingsDeepSeekSearchApiKey" name="deepseekSearchApiKey" type="password" autocomplete="new-password" placeholder="sk-…"><small data-i18n="settingsDeepSeekSearchApiKeyHelp">Preferred current-web provider. Each search uses a separate DeepSeek V4 Flash model turn with native web search; the key stays local until search is enabled and called.</small></label>
+            <label class="settings-field"><span data-i18n="settingsTavilyApiKey">Tavily API key</span><input id="settingsTavilyApiKey" name="tavilyApiKey" type="password" autocomplete="new-password" placeholder="tvly-…"><small data-i18n="settingsTavilyApiKeyHelp">Optional fallback web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled and called.</small></label>
+            <div class="settings-search-test-status" aria-labelledby="settingsSearchTestStatusTitle">
+              <strong id="settingsSearchTestStatusTitle" data-i18n="settingsSearchTestStatusTitle">Current search status</strong>
+              <div id="settingsSearchTestResults" class="settings-search-test-results" role="status" aria-live="polite" aria-busy="false">
+                <div data-search-test-provider="flash"><span id="settingsSearchTestFlashLabel">Flash native search</span><output data-state="idle" data-i18n="settingsSearchTestNotTested">Not tested</output></div>
+                <div data-search-test-provider="tavily"><span>Tavily</span><output data-state="idle" data-i18n="settingsSearchTestNotTested">Not tested</output></div>
+                <div data-search-test-provider="duckduckgo"><span>DuckDuckGo</span><output data-state="idle" data-i18n="settingsSearchTestNotTested">Not tested</output></div>
+              </div>
+            </div>
           </section>
           <div class="settings-form-footer">
             <button id="settingsEditorCancel" class="settings-editor-cancel" type="button" data-i18n="settingsCancel">Cancel</button>
             <p id="settingsSaveStatus" class="settings-save-status" role="status" aria-live="polite"></p>
             <button id="settingsInstallCli" class="settings-install-cli" type="button" hidden data-i18n="settingsInstallCli">Install CLI</button>
             <button id="settingsTestConnection" class="settings-test-connection" type="button" data-i18n="settingsTestConnection">Test connection</button>
+            <button id="settingsTestSearch" class="settings-test-search" type="button" hidden data-i18n="settingsTestSearch">Test search</button>
             <button id="settingsSave" class="settings-save" type="submit" data-i18n="settingsSaveConnection">Save connection</button>
           </div>
         </form>

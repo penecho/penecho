@@ -21,6 +21,11 @@
     canvasViewShareButton = document.querySelector("#canvasViewShareBtn"),
     canvasViewDownloadButton = document.querySelector("#canvasViewDownloadBtn"),
     canvasViewCloseButton = document.querySelector("#canvasViewCloseBtn"),
+    eraserToolControl = document.querySelector("#eraserToolControl"),
+    eraserToolButton = document.querySelector("#eraserToolBtn"),
+    eraserToolMenu = document.querySelector("#eraserToolMenu"),
+    eraserFreehandButton = document.querySelector("#eraserFreehandBtn"),
+    eraserAreaButton = document.querySelector("#eraserAreaBtn"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
@@ -142,8 +147,14 @@
     settingsFetchModelsLabel = settingsFetchModels?.querySelector("[data-i18n='settingsFetchModels']"),
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
+    settingsDeepSeekSearchProvider = document.querySelector("#settingsDeepSeekSearchProvider"),
+    settingsOpenCodeGoSearchSetup = document.querySelector("#settingsOpenCodeGoSearchSetup"),
+    settingsDeepSeekSearchApiKey = document.querySelector("#settingsDeepSeekSearchApiKey"),
+    settingsDeepSeekSearchSaved = document.querySelector("#settingsDeepSeekSearchSaved"),
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
     settingsTavilySaved = document.querySelector("#settingsTavilySaved"),
+    settingsSearchTestResults = document.querySelector("#settingsSearchTestResults"),
+    settingsSearchTestFlashLabel = document.querySelector("#settingsSearchTestFlashLabel"),
     settingsEffort = document.querySelector("#settingsEffort"),
     settingsEffortCombobox = document.querySelector("#settingsEffortCombobox"),
     settingsEffortToggle = document.querySelector("#settingsEffortToggle"),
@@ -156,6 +167,7 @@
     settingsTraceLimit = document.querySelector("#settingsTraceLimit"),
     settingsSaveButton = document.querySelector("#settingsSave"),
     settingsTestConnection = document.querySelector("#settingsTestConnection"),
+    settingsTestSearch = document.querySelector("#settingsTestSearch"),
     settingsInstallCli = document.querySelector("#settingsInstallCli"),
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
@@ -287,6 +299,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exitCanvasViewMode: "Exit view mode",
       canvasViewModeActions: "View mode actions",
       eraser: "Eraser",
+      eraserOptions: "Eraser options",
+      areaEraser: "Area erase",
       select: "Lasso select",
       text: "Text input",
       textMixedMode: "Preview Markdown + LaTeX formatting",
@@ -449,12 +463,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSystemEntryHelp: "Restart required after saving",
       settingsPluginsEntryHelp: "Manage AI capabilities",
       settingsSearchEntry: "Internet search",
-      settingsSearchReady: "Tavily + built-in backup ready",
-      settingsSearchNotConfigured: "Built-in search ready · Tavily optional",
+      settingsSearchDeepSeekReady: "Flash search + DuckDuckGo + built-in ready",
+      settingsSearchAllReady: "Flash search + Tavily + DuckDuckGo + built-in ready",
+      settingsSearchTavilyReady: "Tavily + DuckDuckGo + built-in ready",
+      settingsSearchNotConfigured: "DuckDuckGo + built-in search ready · Flash or Tavily optional",
       settingsApiDialogTitle: "API & CLI settings",
       settingsApiDialogSubtitle: "Connections are shared with every client. Your current choice is private to this device and applies immediately.",
       settingsSearchDialogTitle: "Internet search",
-      settingsSearchDialogSubtitle: "Built-in research, GitHub, stock, and backup web search are ready; Tavily is an optional primary provider.",
+      settingsSearchDialogSubtitle: "Choose DeepSeek official or OpenCode Go for native Flash search; Tavily, DuckDuckGo, research, GitHub, and stock search remain available as backups.",
       settingsConnectionEditor: "Connection details",
       settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
       settingsEffortSuggestions: "Reasoning suggestions",
@@ -504,12 +520,40 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiKey: "API key",
       settingsApiKeyHelp: "Stored only in the local PenEcho configuration file.",
       settingsSearchSection: "Internet search",
-      settingsSearchDescription: "Keep research, GitHub, stock, and public web search ready for faster answers when internet search is on.",
+      settingsSearchDescription: "On by default. DeepSeek Flash or Tavily can be added, while DuckDuckGo, research, GitHub, and stock search remain available as backups.",
+      settingsDeepSeekSearchProvider: "Flash key provider",
+      settingsDeepSeekSearchProviderOfficial: "DeepSeek official",
+      settingsDeepSeekSearchProviderOpenCodeGo: "OpenCode Go",
+      settingsDeepSeekSearchProviderHelp: "Choose where this key was issued. PenEcho automatically sends native Flash search to the matching endpoint.",
+      settingsOpenCodeGoSearchSetupTitle: "OpenCode Go setup",
+      settingsOpenCodeGoSearchSetupBody: "Open the Go page in your current OpenCode Workspace, enable China-hosted DeepSeek models, then copy the Go API key and paste it below.",
+      settingsOpenCodeGoSearchSetupLink: "Open OpenCode Go",
+      settingsDeepSeekSearchApiKey: "Flash search API key",
+      settingsDeepSeekSearchApiKeyHelp: "Preferred current-web provider. Each search uses a separate DeepSeek V4 Flash model turn with native web search; the key stays local until search is enabled and called.",
+      settingsSearchTestStatusTitle: "Current search status",
+      settingsTestSearch: "Test search",
+      settingsTestingSearch: "Testing search…",
+      settingsSearchTestFlashLabel: "Flash native search ({provider})",
+      settingsSearchTestNotTested: "Not tested",
+      settingsSearchTestNotConfigured: "Not configured",
+      settingsSearchTestTesting: "Testing…",
+      settingsSearchTestAvailable: "Available · result returned",
+      settingsSearchTestRegionAccessRequired: "Enable China-hosted model",
+      settingsSearchTestHttpError: "Unavailable · HTTP {status}",
+      settingsSearchTestNoResults: "No usable results",
+      settingsSearchTestRequestFailed: "Unavailable",
+      settingsSearchTestTimeout: "Timed out",
+      settingsSearchTestFailed: "Could not test search providers.",
+      settingsSearchTestComplete: "Search test finished.",
+      settingsDeepSeekSearchApiKeySavedPlaceholder: "Paste a new key or leave blank to keep the saved key",
+      settingsDeepSeekSearchSaved: "Flash key saved",
       settingsTavilyApiKey: "Tavily API key",
-      settingsTavilyApiKeyHelp: "Optional primary web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled.",
+      settingsTavilyApiKeyHelp: "Optional fallback web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled and called.",
       settingsTavilyApiKeySavedPlaceholder: "Paste a new key or leave blank to keep the saved key",
+      settingsTavilySaved: "Tavily saved",
+      settingsDuckDuckGoReady: "DuckDuckGo fallback ready",
       settingsSaveSearch: "Save search",
-      settingsSearchSaved: "Search is ready. Turn it on with the globe beside the attachment button.",
+      settingsSearchSaved: "Search settings saved. Internet search is on by default and can be turned off with the globe button.",
       settingsSystemSection: "System",
       settingsSystemDescription: "Simple defaults for requests and canvas behavior.",
       settingsEffort: "Reasoning",
@@ -671,6 +715,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintTextAlt: "After confirming text near a widget, switch to Pen and tap AI Refine.",
       canvasHintEraser: "Eraser removes ink only; use Hand controls to delete canvas objects.",
       canvasHintEraserAlt: "Erase an instruction before AI runs without changing widgets beneath it.",
+      canvasHintAreaEraser: "Drag a rectangle to delete all ink inside it when you release.",
+      canvasHintAreaEraserAlt: "Area erase affects canvas ink only; widgets and other objects stay unchanged.",
       ready: "Ready",
       aiBusy: "AI is working. Please wait.",
       noInk: "Write something first",
@@ -718,6 +764,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selectionCancel: "Cancel",
       selectionTypesetting: "Typesetting selection...",
       selectionDeleted: "Selected region deleted",
+      areaEraseTooSmall: "Drag a larger area to erase",
+      areaEraseDeleted: "Ink in the selected area was deleted",
       pendingConfirm: "Confirm or discard the current AI draft first",
       merged: "AI merged",
       plugins: "Plugins",
@@ -765,7 +813,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Canvas Auto AI is paused.",
       canvasAgentProject: "Manage projects and files",
       canvasAgentProjectClose: "Close project manager",
-      canvasAgentProjectBoundary: "Folders and single files are read-only.",
+      canvasAgentProjectBoundary: "This version supports read access only. For file safety, modifying files is not supported.",
       canvasAgentWorkspace: "Workspace",
       canvasAgentProjectManager: "Project manager",
       canvasAgentProjectManagerDescription: "Projects are folders. Files are added from the Canvas Agent composer.",
@@ -851,6 +899,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptFocusVisual: "Visualize",
       canvasAgentPromptFocusSimplify: "Simplify",
       canvasAgentPromptFocusOrganize: "Organize",
+      canvasAgentPromptFocusRevise: "Revise",
       canvasAgentPromptFocusSlides: "Slides",
       canvasAgentPromptFocusAnalyze: "Analyze",
       canvasAgentPromptFocusLearn: "Learn",
@@ -869,6 +918,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptTransformer: "Explain Transformer with a layered diagram and pseudocode, including data flow and tensor shapes.",
       canvasAgentPromptUkTrip: "Create a 15-day UK travel map with daily routes, transport, stays, and highlights.",
       canvasAgentPromptOrganize: "Turn the current canvas into clear visual notes, with themes, hierarchy, and information gaps.",
+      canvasAgentPromptApplyAnnotations: "Apply my new Canvas annotations and sketches: add, remove, move, resize, or reconnect only clearly marked content, and ask about ambiguity first.",
       canvasAgentPromptImageVisual: "Explain the current image's subjects, structure, relationships, and important details visually.",
       canvasAgentPromptImageLayer: "Keep the image unchanged and add a transparent explanation layer with labels, links, graphics, or motion.",
       canvasAgentPromptImagePublish: "Extract the image's key information; publish visuals to Canvas and send the summary in chat.",
@@ -947,8 +997,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentToolPatchWidget: "Update widget",
       canvasAgentToolSetView: "Adjust canvas view",
       canvasAgentToolRevert: "Revert Agent change",
+      canvasAgentToolRunProjectCommand: "Run project command",
+      canvasAgentToolReadDocument: "Read document",
+      canvasAgentToolReadProjectFile: "Read project file",
+      canvasAgentToolReadBinary: "Inspect binary file",
+      canvasAgentToolReadProjectImage: "Inspect project image",
+      canvasAgentToolReadDatabase: "Query project database",
+      canvasAgentToolLoadDocumentReader: "Load document reader",
+      canvasAgentToolLoadDatabaseReader: "Load database reader",
+      canvasAgentToolFindProjectFiles: "Find project files",
+      canvasAgentToolSearchProjectFiles: "Search project contents",
+      canvasAgentToolListProjectFolder: "List project folder",
       canvasAgentToolSearch: "Search the web",
+      canvasAgentToolReadWeb: "Read web page",
       canvasAgentToolStock: "Look up stock data",
+      canvasAgentToolVisualMath2D: "Use Canvas Math 2D",
+      canvasAgentToolVisualPhysics2D: "Use Canvas Physics 2D",
+      canvasAgentToolVisualMath3D: "Use Canvas Math 3D",
+      canvasAgentToolGeneralHtml: "Use Canvas General HTML",
+      canvasAgentToolProfessionalDiagrams: "Use Canvas Professional Diagrams",
+      canvasAgentToolTargetViewport: "viewport",
+      canvasAgentToolTargetCanvas: "entire canvas",
+      canvasAgentToolTargetObject: "canvas object",
+      canvasAgentToolTargetSelection: "selection",
+      canvasAgentToolTargetRegion: "canvas region",
       canvasAgentToolUse: "Use canvas tool",
       canvasAgentToolRunning: "Working…",
       canvasAgentToolDone: "Done",
@@ -1201,6 +1273,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const tiles = new Map(),
     state = {
       mode: "pen",
+      eraserMode: "eraser",
       scale: 0.1,
       panX: 0,
       panY: 0,
@@ -1287,6 +1360,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiDraftReturnMode: null,
       pendingHistoryRestored: false,
       pointerPreview: null,
+      areaEraseGesture: null,
       copyGeneration: 0,
       selection: null,
       selectionGesture: null,
@@ -1973,7 +2047,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, deepSeekSearchProvider:"deepseek-official", hasDeepSeekSearchApiKey:false, hasTavilyApiKey:false, searchTestResults:null, searchTestGeneration:0, searchTestBusy:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -1999,6 +2073,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasSettingsForm.dataset.editorHidden = String(mode === "api");
     settingsEditorCancel.hidden = mode !== "api";
     settingsTestConnection.hidden = mode !== "api";
+    settingsTestSearch.hidden = mode !== "search";
     settingsInstallCli.hidden = true;
     settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : mode === "search" ? "settingsSaveSearch" : "settingsSave");
     canvasSettingsForm.hidden = false;
@@ -2335,6 +2410,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function setConnectionTestBusy(busy) {
     settings.connectionActionBusy = busy;
     settingsTestConnection.disabled = busy;
+    if (settingsTestSearch) settingsTestSearch.disabled = busy;
     settingsSaveButton.disabled = busy;
     settingsInstallCli.disabled = busy;
     updateConnectionModelFetchState();
@@ -2429,15 +2505,94 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsTraceToggle.classList.toggle("on", settings.requestTrace);
     settingsTraceToggle.setAttribute("aria-checked", String(settings.requestTrace));
   }
-  function updateSearchSettingsState(configured = settings.hasTavilyApiKey) {
-    settings.hasTavilyApiKey = Boolean(configured);
+  function searchTestConfigured(provider) {
+    if (provider === "duckduckgo") return true;
+    if (provider === "flash") return Boolean(settingsDeepSeekSearchApiKey?.value.trim() || settings.hasDeepSeekSearchApiKey);
+    return Boolean(settingsTavilyApiKey?.value.trim() || settings.hasTavilyApiKey);
+  }
+  function searchTestStatusCopy(result) {
+    const state = result?.state || "request_failed", key = {
+      available:"settingsSearchTestAvailable",
+      not_configured:"settingsSearchTestNotConfigured",
+      region_access_required:"settingsSearchTestRegionAccessRequired",
+      http_error:"settingsSearchTestHttpError",
+      no_results:"settingsSearchTestNoResults",
+      request_failed:"settingsSearchTestRequestFailed",
+      timeout:"settingsSearchTestTimeout",
+      not_tested:"settingsSearchTestNotTested",
+      testing:"settingsSearchTestTesting",
+    }[state] || "settingsSearchTestRequestFailed";
+    return { state, key, text:t(key).replace("{status}", String(result?.httpStatus || "—")) };
+  }
+  function renderSearchTestStatuses(results = settings.searchTestResults, testing = false) {
+    if (!settingsSearchTestResults) return;
+    if (Array.isArray(results)) settings.searchTestResults = results;
+    const byProvider = new Map((Array.isArray(results) ? results : []).map(result => [result?.id, result]));
+    const provider = settingsDeepSeekSearchProvider?.value === "opencode-go" ? "opencode-go" : "deepseek-official",
+      providerLabel = t(provider === "opencode-go" ? "settingsDeepSeekSearchProviderOpenCodeGo" : "settingsDeepSeekSearchProviderOfficial");
+    if (settingsSearchTestFlashLabel) settingsSearchTestFlashLabel.textContent = t("settingsSearchTestFlashLabel").replace("{provider}", providerLabel);
+    for (const row of settingsSearchTestResults.querySelectorAll("[data-search-test-provider]")) {
+      const id=row.dataset.searchTestProvider, configured=searchTestConfigured(id), result=byProvider.get(id), status=result || { state:configured ? testing ? "testing" : "not_tested" : "not_configured" }, copy=searchTestStatusCopy(status), output=row.querySelector("output");
+      if (!output) continue;
+      output.dataset.state = copy.state;
+      output.dataset.i18n = copy.key;
+      output.textContent = copy.text;
+    }
+  }
+  function resetSearchTestStatuses() {
+    settings.searchTestGeneration += 1;
+    settings.searchTestResults = null;
+    renderSearchTestStatuses();
+  }
+  function setSearchTestBusy(busy) {
+    settings.searchTestBusy = busy;
+    setConnectionTestBusy(busy);
+    settingsSearchTestResults?.setAttribute("aria-busy", String(busy));
+    if (settingsTestSearch) settingsTestSearch.textContent = t(busy ? "settingsTestingSearch" : "settingsTestSearch");
+  }
+  async function testCanvasSearch() {
+    if (!settingsTestSearch || settings.searchTestBusy) return;
+    const generation=++settings.searchTestGeneration;
+    setSearchTestBusy(true);
+    renderSearchTestStatuses(null, true);
+    setSettingsStatus(t("settingsTestingSearch"));
+    try {
+      const response=await fetch("/api/settings/search/test",{
+        method:"POST",headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ deepSeekSearchProvider:settingsDeepSeekSearchProvider.value, deepseekSearchApiKey:settingsDeepSeekSearchApiKey.value, tavilyApiKey:settingsTavilyApiKey.value }),
+      });
+      let body=null;
+      try { body=await response.json(); } catch {}
+      if (!response.ok || !Array.isArray(body?.results)) throw new Error(body?.error || t("settingsSearchTestFailed"));
+      if (generation !== settings.searchTestGeneration) return;
+      renderSearchTestStatuses(body.results);
+      setSettingsStatus(t("settingsSearchTestComplete"), "success");
+    } catch(error) {
+      if (generation !== settings.searchTestGeneration) return;
+      const failed=["flash","tavily","duckduckgo"].map(id=>({ id, state:searchTestConfigured(id)?"request_failed":"not_configured" }));
+      renderSearchTestStatuses(failed);
+      setSettingsStatus(error?.message || t("settingsSearchTestFailed"), "error");
+    } finally { setSearchTestBusy(false); }
+  }
+  function updateSearchSettingsState({ provider=settings.deepSeekSearchProvider, deepseek=settings.hasDeepSeekSearchApiKey, tavily=settings.hasTavilyApiKey } = {}) {
+    settings.deepSeekSearchProvider = ["deepseek-official", "opencode-go"].includes(provider) ? provider : "deepseek-official";
+    settings.hasDeepSeekSearchApiKey = Boolean(deepseek);
+    settings.hasTavilyApiKey = Boolean(tavily);
+    if (settingsDeepSeekSearchProvider) settingsDeepSeekSearchProvider.value = settings.deepSeekSearchProvider;
+    updateDeepSeekSearchProviderNotice();
+    if (settingsDeepSeekSearchSaved) settingsDeepSeekSearchSaved.hidden = !settings.hasDeepSeekSearchApiKey;
+    if (settingsDeepSeekSearchApiKey) settingsDeepSeekSearchApiKey.placeholder = t(settings.hasDeepSeekSearchApiKey ? "settingsDeepSeekSearchApiKeySavedPlaceholder" : "settingsDeepSeekSearchApiKey");
     if (settingsTavilySaved) settingsTavilySaved.hidden = !settings.hasTavilyApiKey;
     if (settingsTavilyApiKey) settingsTavilyApiKey.placeholder = t(settings.hasTavilyApiKey ? "settingsTavilyApiKeySavedPlaceholder" : "settingsTavilyApiKey");
     if (settingsSearchEntryStatus) {
-      const key = settings.hasTavilyApiKey ? "settingsSearchReady" : "settingsSearchNotConfigured";
+      const key = settings.hasDeepSeekSearchApiKey && settings.hasTavilyApiKey ? "settingsSearchAllReady" : settings.hasDeepSeekSearchApiKey ? "settingsSearchDeepSeekReady" : settings.hasTavilyApiKey ? "settingsSearchTavilyReady" : "settingsSearchNotConfigured";
       settingsSearchEntryStatus.dataset.i18n = key;
       settingsSearchEntryStatus.textContent = t(key);
     }
+    resetSearchTestStatuses();
+  }
+  function updateDeepSeekSearchProviderNotice() {
+    if (settingsOpenCodeGoSearchSetup) settingsOpenCodeGoSearchSetup.hidden = settingsDeepSeekSearchProvider?.value !== "opencode-go";
   }
   async function loadCanvasSettings() {
     if (!canvasSettingsForm) return;
@@ -2453,8 +2608,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       fillApiEditor({ apiPreset:body.apiPreset, apiFormat:body.apiFormat, apiUrl:body.apiUrl, apiModel:body.apiModel });
       settingsApiKey.value = "";
       settingsApiSaved.dataset.saved = String(body.hasApiKey);
+      settingsDeepSeekSearchApiKey.value = "";
       settingsTavilyApiKey.value = "";
-      updateSearchSettingsState(body.hasTavilyApiKey === true);
+      updateSearchSettingsState({ provider:body.deepSeekSearchProvider, deepseek:body.hasDeepSeekSearchApiKey === true, tavily:body.hasTavilyApiKey === true });
       canvasAgentSetSearchConfigured(body.webSearchAvailable === true);
       settings.cli = {
         "kimi-cli":{ model:body.kimiCliModel, path:body.kimiCliPath },
@@ -2482,10 +2638,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setSettingsStatus(t("settingsSaving"));
     try {
       const provider = settingsProvider.value, scope = settings.configurationMode, connectionPayload = connectionEditorPayload(), apiPreset = provider === "api" ? selectedApiPreset() : null,
+        deepseekProviderChanged = scope === "search" && settingsDeepSeekSearchProvider.value !== settings.deepSeekSearchProvider,
+        deepseekKeyChanged = scope === "search" && Boolean(settingsDeepSeekSearchApiKey.value.trim()),
         tavilyKeyChanged = scope === "search" && Boolean(settingsTavilyApiKey.value.trim()),
-        searchNeedsNewSession = tavilyKeyChanged && !settings.hasTavilyApiKey;
+        searchNeedsNewSession = deepseekProviderChanged || (deepseekKeyChanged && !settings.hasDeepSeekSearchApiKey) || (tavilyKeyChanged && !settings.hasTavilyApiKey);
       const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : scope === "search" ? {
-        scope, tavilyApiKey:settingsTavilyApiKey.value,
+        scope, deepSeekSearchProvider:settingsDeepSeekSearchProvider.value, deepseekSearchApiKey:settingsDeepSeekSearchApiKey.value, tavilyApiKey:settingsTavilyApiKey.value,
       } : {
         scope, provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
         apiKey:settingsApiKey.value, effort:settingsEffort.value, maxTokens:Number(settingsMaxTokens.value), timeoutSeconds:Number(settingsTimeout.value),
@@ -2511,8 +2669,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         hideConnectionEditor();
         setConnectionStatus(t("settingsConnectionSaved"), "success");
       } else if (scope === "search") {
+        settingsDeepSeekSearchApiKey.value = "";
         settingsTavilyApiKey.value = "";
-        updateSearchSettingsState(body.hasTavilyApiKey === true);
+        updateSearchSettingsState({ provider:body.deepSeekSearchProvider, deepseek:body.hasDeepSeekSearchApiKey === true, tavily:body.hasTavilyApiKey === true });
         canvasAgentSearchConfigurationDidChange(body.webSearchAvailable === true, searchNeedsNewSession);
         setSettingsStatus(t("settingsSearchSaved"), "success");
       } else setSettingsStatus(t("settingsSystemSaved"), "success");
@@ -3536,6 +3695,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateHistorySaveFeedbackLanguage();
     renderSnapshotList();
     renderConnectionLists();
+    renderSearchTestStatuses();
+    if (settings.searchTestBusy && settingsTestSearch) settingsTestSearch.textContent = t("settingsTestingSearch");
     updateNewCanvasDialog();
     renderCanvasHint(false);
     if (state.aiProgressEvent) setStatus(aiProgressText(state.aiProgressEvent),AI_PROGRESS_STATUS_KEYS[state.aiProgressEvent.phase]);

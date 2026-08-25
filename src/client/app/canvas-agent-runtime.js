@@ -82,6 +82,7 @@
     CANVAS_AGENT_HISTORY_LIMIT = 5,
     CANVAS_AGENT_HISTORY_ITEM_LIMIT = 120,
     CANVAS_AGENT_HISTORY_TEXT_LIMIT = 20000,
+    CANVAS_AGENT_CONTINUATION_TEXT_LIMIT = 80000,
     CANVAS_AGENT_ERROR_MESSAGE_LIMIT = 8000,
     CANVAS_AGENT_MARKDOWN_TEXT_LIMIT = 12000,
     CANVAS_AGENT_MARKDOWN_LINE_LIMIT = 240,
@@ -110,6 +111,7 @@
     CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
       simpleDiagram:{prompt:"canvasAgentPromptSimpleDiagram",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
       organize:{prompt:"canvasAgentPromptOrganize",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
+      applyAnnotations:{prompt:"canvasAgentPromptApplyAnnotations",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       ppt:{prompt:"canvasAgentPromptPpt",focus:"canvasAgentPromptFocusSlides",icon:"slides"},
       excel:{prompt:"canvasAgentPromptExcel",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       transformer:{prompt:"canvasAgentPromptTransformer",focus:"canvasAgentPromptFocusLearn",icon:"study"},
@@ -157,8 +159,9 @@
       handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
+      revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","m13.5-9 3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","organize","ppt","excel","transformer","ukTrip"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","organize","applyAnnotations","ppt","excel","transformer","ukTrip"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -169,7 +172,7 @@
       file:["file","fileLayer","filePublish"],
       project:["architecture","projectPlan","projectPublish"],
       selection:["selectionVisual","selectionLayer","selectionPublish"],
-      notes:["notesVisual","handwriting","notesPublish"],
+      notes:["notesVisual","applyAnnotations","handwriting"],
       canvas:["canvasVisual","canvasLayer","canvasPublish"],
     });
   const canvasAgent = {
@@ -184,6 +187,7 @@
     sessionReady:false,
     pendingHandshakeId:"",
     pendingProvider:"",
+    pendingConnectionChange:null,
     sessionProjectId:"",
     sessionAccessMode:"controlled",
     sessionProjectCapabilities:null,
@@ -215,7 +219,7 @@
     inkPresent:false,
     inkStroke:null,
     searchConfigured:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured),
-    searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) === "true",
+    searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) !== "false",
     sessionSearchConfigured:false,
     sessionSearchEnabled:false,
     projectId:localStorage.getItem(CANVAS_AGENT_PROJECT_KEY) || "",
@@ -244,6 +248,7 @@
     panelMotionProxy:null,
     currentConversation:null,
     viewingHistoryId:"",
+    pendingConversationHistory:[],
     historyPersistTimer:0,
     viewRevision:0,
     viewSignature:"",
@@ -1084,6 +1089,17 @@
     const now=Date.now();
     return {id:canvasClientId(),createdAt:now,updatedAt:now,title:"",items:[]};
   }
+  function canvasAgentConversationHistory(conversation) {
+    const messages=(conversation?.items||[]).filter(item=>item?.type==="message"&&["user","assistant"].includes(item.role)&&item.final!==false&&String(item.text||"").trim()).slice(-CANVAS_AGENT_HISTORY_ITEM_LIMIT),retained=[];
+    let remaining=CANVAS_AGENT_CONTINUATION_TEXT_LIMIT;
+    for(let index=messages.length-1;index>=0&&remaining>0;index--){
+      const item=messages[index],text=String(item.text||"").slice(-remaining);
+      if(!text)continue;
+      retained.unshift({role:item.role,text});
+      remaining-=text.length;
+    }
+    return retained;
+  }
   function canvasAgentRenderEmpty() {
     const empty=document.createElement("div"), title=document.createElement("strong"), body=document.createElement("span");
     empty.className="canvas-agent-empty";
@@ -1117,7 +1133,7 @@
       title.textContent=conversation.title||t("canvasAgentHistoryUntitled");
       meta.textContent=[canvasAgentHistoryTime(conversation.updatedAt),current?t("canvasAgentHistoryCurrent"):""].filter(Boolean).join(" · ");
       button.append(title,meta);
-      button.addEventListener("click",()=>current?canvasAgentReturnToCurrentConversation():canvasAgentViewStoredConversation(conversation.id));
+      button.addEventListener("click",()=>current?canvasAgentHideHistoryPopover():void canvasAgentViewStoredConversation(conversation.id));
       canvasAgentHistoryList.append(button);
     }
   }
@@ -1132,15 +1148,27 @@
     canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
   }
-  function canvasAgentViewStoredConversation(id) {
+  async function canvasAgentViewStoredConversation(id) {
     canvasAgentPersistCurrentConversation();
     const conversation=canvasAgentHistoryForCanvas().find(item=>item.id===id);
     if (!conversation) return;
     canvasAgentHideHistoryPopover();
-    canvasAgentSetHistoryViewing(conversation.id);
+    canvasAgent.currentConversation=conversation;
+    canvasAgent.pendingConversationHistory=canvasAgentConversationHistory(conversation);
+    canvasAgent.lastTurnError=null;
+    canvasAgentSetHistoryViewing("");
+    canvasAgentDropSessionIdentity();
+    canvasAgentClearTranscript();
     canvasAgentRenderConversation(conversation,false);
-    canvasAgentSetStatus(t("canvasAgentHistoryViewing"),"history");
-    canvasAgentHistoryReturn.focus();
+    canvasAgentClearAttachments();
+    canvasAgentClearReferences();
+    canvasAgentClearInkDraft();
+    canvasAgentRenderHistoryList();
+    canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
+    try {
+      await canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,preserveConversation:true});
+      canvasAgentInput.focus();
+    } catch (error) { canvasAgentSetStatus(String(error?.message||error),"error"); }
   }
   function canvasAgentReturnToCurrentConversation() {
     canvasAgentHideHistoryPopover();
@@ -1150,19 +1178,22 @@
     else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN&&canvasAgent.sessionReady?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
     canvasAgentInput.focus();
   }
-  function canvasAgentBeginLocalConversation({persistCurrent=true,submitExecution=null}={}) {
+  function canvasAgentBeginLocalConversation({persistCurrent=true,submitExecution=null,preserveDraft=false}={}) {
     if (submitExecution) canvasAgentAssertSubmitExecution(submitExecution);
     else canvasAgentInvalidateSubmitExecution();
     canvasAgentBeginSessionTransition();
     if (persistCurrent) canvasAgentPersistCurrentConversation();
     canvasAgent.currentConversation=canvasAgentNewConversationRecord();
+    canvasAgent.pendingConversationHistory=[];
     canvasAgent.lastTurnError=null;
     canvasAgentSetHistoryViewing("");
     canvasAgentHideHistoryPopover();
     canvasAgentClearTranscript({showEmpty:true});
-    canvasAgentClearAttachments();
-    canvasAgentClearReferences();
-    canvasAgentClearInkDraft();
+    if(!preserveDraft){
+      canvasAgentClearAttachments();
+      canvasAgentClearReferences();
+      canvasAgentClearInkDraft();
+    }
     canvasAgentRenderHistoryList();
   }
   function canvasAgentDropSessionIdentity() {
@@ -2362,6 +2393,32 @@
     return target;
   }
   function canvasAgentToolIntent(name,args = {}) {
+    const compact=value=>{
+      const text=String(value||"").replace(/\s+/g," ").trim();
+      return text.length>100?`${text.slice(0,100)}…`:text;
+    },quoted=value=>{
+      const text=compact(value);
+      return text?`“${text}”`:"";
+    },visualSkillKey={
+      "math-2d":"canvasAgentToolVisualMath2D",
+      "physics-2d":"canvasAgentToolVisualPhysics2D",
+      "math-3d":"canvasAgentToolVisualMath3D",
+    }[String(args?.skill||"")],widgetContractKey={
+      "general-html":"canvasAgentToolGeneralHtml",
+      "professional-diagrams":"canvasAgentToolProfessionalDiagrams",
+    }[String(args?.route||"")],projectPluginKey={
+      documents:"canvasAgentToolLoadDocumentReader",
+      database:"canvasAgentToolLoadDatabaseReader",
+    }[String(args?.plugin||"")],canvasTargetKey={
+      viewport:"canvasAgentToolTargetViewport",
+      canvas:"canvasAgentToolTargetCanvas",
+      object:"canvasAgentToolTargetObject",
+      selection:"canvasAgentToolTargetSelection",
+      region:"canvasAgentToolTargetRegion",
+    };
+    if(name==="load_visual_skill"&&visualSkillKey)return t(visualSkillKey);
+    if(name==="load_widget_contract"&&widgetContractKey)return t(widgetContractKey);
+    if(name==="load_project_plugin"&&projectPluginKey)return t(projectPluginKey);
     const key = {
       canvas_inspect:"canvasAgentToolInspect",
       canvas_read:"canvasAgentToolRead",
@@ -2371,16 +2428,40 @@
       canvas_patch_widget:"canvasAgentToolPatchWidget",
       canvas_set_view:"canvasAgentToolSetView",
       canvas_revert:"canvasAgentToolRevert",
+      bash:"canvasAgentToolRunProjectCommand",
+      read_document:"canvasAgentToolReadDocument",
+      read:"canvasAgentToolReadProjectFile",
+      read_binary:"canvasAgentToolReadBinary",
+      read_image:"canvasAgentToolReadProjectImage",
+      read_database:"canvasAgentToolReadDatabase",
+      glob:"canvasAgentToolFindProjectFiles",
+      grep:"canvasAgentToolSearchProjectFiles",
+      list_directory:"canvasAgentToolListProjectFolder",
       tavily_search:"canvasAgentToolSearch",
+      deepseek_search:"canvasAgentToolSearch",
       research_search:"canvasAgentToolSearch",
       github_repository_search:"canvasAgentToolSearch",
       duckduckgo_search:"canvasAgentToolSearch",
+      web_read:"canvasAgentToolReadWeb",
       stock_symbol_search:"canvasAgentToolStock",
       stock_market_data:"canvasAgentToolStock",
     }[name] || "canvasAgentToolUse";
-    const intent = t(key), summary = ["canvas_create","canvas_edit"].includes(name) ? String(args?.summary || "").replace(/\s+/g," ").trim() : "";
-    if (!summary) return intent;
-    return `${intent} · ${summary.length > 100 ? `${summary.slice(0,100)}…` : summary}`;
+    const intent=t(key),search=["tavily_search","deepseek_search","research_search","github_repository_search","duckduckgo_search"].includes(name),fileReader=["read_document","read","read_binary","read_image"].includes(name),target=canvasTargetKey[String(args?.target||args?.scope||"")],patchPath=/^\+\+\+ b\/([^\n\r]+)/m.exec(String(args?.patch||""))?.[1],detail=
+      search||name==="stock_symbol_search"?quoted(args?.query):
+      name==="stock_market_data"?compact(args?.symbol):
+      name==="web_read"?compact(args?.url):
+      name==="bash"?quoted(args?.command):
+      ["glob","grep"].includes(name)?quoted(args?.pattern):
+      fileReader?compact(args?.file_path):
+      name==="read_database"?[compact(args?.file_path),quoted(args?.query)].filter(Boolean).join(" · "):
+      name==="list_directory"?compact(args?.path||"."):
+      ["canvas_create","canvas_edit"].includes(name)?compact(args?.summary):
+      name==="canvas_read"&&args?.resource&&args.resource!=="content"?compact(args.resource):
+      name==="canvas_patch_widget"?compact(patchPath):
+      ["canvas_inspect","canvas_capture","canvas_set_view"].includes(name)&&target?t(target):
+      key==="canvasAgentToolUse"?compact(name):"";
+    if(!detail)return intent;
+    return `${intent} · ${detail}`;
   }
   function canvasAgentRenderToolRow(target) {
     target.intent.textContent = canvasAgentToolIntent(target.name,target.arguments);
@@ -2515,6 +2596,9 @@
       }
       canvasAgentSyncState();
       canvasAgentPersistCurrentConversation();
+      const pendingConnectionChange=canvasAgent.pendingConnectionChange;
+      canvasAgent.pendingConnectionChange=null;
+      if(pendingConnectionChange)canvasAgentConnectionDidChange(pendingConnectionChange.force,pendingConnectionChange.provider);
     }
   }
   async function canvasAgentHandleMessage(message) {
@@ -2527,9 +2611,9 @@
     const readyHandshake = envelope.type === "ready" && Boolean(canvasAgent.connectPromise) && Boolean(envelope.canvasSessionId)
       && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
     const currentSessionEnvelope = Boolean(canvasAgent.sessionReady) && Boolean(envelope.canvasSessionId) && envelope.canvasSessionId === canvasAgent.sessionId;
-    const pendingFatalError = envelope.type === "error" && envelope.payload?.fatal === true && Boolean(canvasAgent.connectPromise)
+    const pendingHandshakeError = envelope.type === "error" && Boolean(canvasAgent.connectPromise)
       && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
-    if (!readyHandshake && !currentSessionEnvelope && !pendingFatalError) return;
+    if (!readyHandshake && !currentSessionEnvelope && !pendingHandshakeError) return;
     canvasAgent.incomingSeq = envelope.seq;
     if (envelope.type === "ready") {
       canvasAgent.lastTurnError=null;
@@ -2547,6 +2631,7 @@
       canvasAgent.pendingProvider = "";
       canvasAgent.sessionSearchConfigured = envelope.payload?.webSearchConfigured === true;
       canvasAgent.sessionSearchEnabled = envelope.payload?.webSearchEnabled === true;
+      canvasAgent.pendingConversationHistory=[];
       canvasAgentSetSearchConfigured(canvasAgent.sessionSearchConfigured);
       canvasAgentRenderProjects();
       try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,engine:canvasAgent.sessionEngine,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
@@ -2580,7 +2665,11 @@
       canvasAgentResumeAutomaticAI();
       canvasAgentErrorRow(error,{eventKey:`envelope:${envelope.seq}`});
       canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
-      if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+      if(pendingHandshakeError){
+        canvasAgent.sessionReady=Boolean(canvasAgent.sessionId);
+        canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+        canvasAgent.connectResolve=canvasAgent.connectReject=null;
+      }else if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
     }
   }
   function canvasAgentSocketUrl() {
@@ -2626,31 +2715,53 @@
     if (!state.pluginCatalogLoaded) await loadPluginDocuments();
     return canvasAgentWidgetCapabilities();
   }
-  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true,submitExecution=null}={}) {
+  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true,submitExecution=null,preserveDraft=false,preserveConversation=false}={}) {
     connectionId=String(connectionId||"");
-    if (resetProjection) canvasAgentBeginLocalConversation({submitExecution});
+    if (resetProjection) canvasAgentBeginLocalConversation({submitExecution,preserveDraft});
     else if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
     if (canvasAgent.connectPromise) {
       await canvasAgent.connectPromise;
-      return canvasAgentStartNewConversation(connectionId,{resetProjection:false,submitExecution});
+      return canvasAgentStartNewConversation(connectionId,{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
     }
     if (canvasAgent.socket?.readyState !== WebSocket.OPEN) return canvasAgentConnect({submitExecution});
-    canvasAgent.currentConversation.items=[];
-    canvasAgentClearTranscript({showEmpty:true});
-    canvasAgentClearAttachments();
-    canvasAgentClearReferences();
-    canvasAgentClearInkDraft();
+    if(!preserveConversation){
+      canvasAgent.currentConversation.items=[];
+      canvasAgentClearTranscript({showEmpty:true});
+    }
+    if(!preserveDraft){
+      canvasAgentClearAttachments();
+      canvasAgentClearReferences();
+      canvasAgentClearInkDraft();
+    }
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
     canvasAgent.running = false;
     canvasAgentStop.hidden = true;
     canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
     const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
     if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
-    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
     canvasAgentBeginSessionTransition();
     const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
-    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}),{handshakeId,provider});
-    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
+    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode(),...(canvasAgent.pendingConversationHistory.length?{conversationHistory:canvasAgent.pendingConversationHistory}:{})}),{handshakeId,provider});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
+  }
+  async function canvasAgentChangeConnection(connectionId = selectedAiConnectionId(), {submitExecution=null}={}) {
+    connectionId=String(connectionId||"");
+    if(canvasAgent.connectPromise){
+      await canvasAgent.connectPromise;
+      return canvasAgentChangeConnection(connectionId,{submitExecution});
+    }
+    if(canvasAgent.socket?.readyState!==WebSocket.OPEN||!canvasAgent.sessionId||!canvasAgent.sessionReady)return canvasAgentConnect({submitExecution});
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    else canvasAgentInvalidateSubmitExecution();
+    const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentChangeConnection(selectedAiConnectionId(),{submitExecution});
+    canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
+    canvasAgentBeginSessionTransition();
+    const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
+    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("change_connection",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}),{handshakeId,provider});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentChangeConnection(selectedAiConnectionId(),{submitExecution});
   }
   async function canvasAgentConnect(options) {
     const {submitExecution=null}=options||{};
@@ -2659,6 +2770,10 @@
     const connectionId = selectedAiConnectionId();
     if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId) {
       if (canvasAgent.sessionReady&&canvasAgent.connectionId === connectionId&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()) return;
+      if(canvasAgent.sessionReady&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()){
+        await canvasAgentChangeConnection(connectionId,{submitExecution});
+        return;
+      }
       await canvasAgentStartNewConversation(connectionId,{submitExecution});
       return canvasAgentConnect({submitExecution});
     }
@@ -2691,6 +2806,7 @@
           widgetCapabilities,
           projectId:canvasAgent.projectId,
           accessMode:canvasAgentEffectiveAccessMode(),
+          ...(canvasAgent.pendingConversationHistory.length?{conversationHistory:canvasAgent.pendingConversationHistory}:{}),
         });
       });
       socket.addEventListener("message",event=>void canvasAgentHandleMessage(event));
@@ -2731,15 +2847,16 @@
     return canvasAgentConnectionProvider(selectedAiConnectionId());
   }
   function canvasAgentConnectionDidChange(force = false, nextProvider = canvasAgentSelectedConnectionProvider()) {
-    const provider=String(nextProvider||""),codexTransition=canvasAgent.sessionEngine==="codex-native"||canvasAgent.pendingProvider==="codex-cli"||provider==="codex-cli";
+    const provider=String(nextProvider||"");
     const connectionActive = canvasAgent.socket?.readyState === WebSocket.OPEN || Boolean(canvasAgent.connectPromise);
-    if (!connectionActive || !codexTransition && canvasAgentPanel.hidden || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
-    const action = force || codexTransition ? canvasAgentStartNewConversation(selectedAiConnectionId()) : canvasAgentConnect();
+    if (!connectionActive || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
+    if(canvasAgent.running||canvasAgent.requestPending){canvasAgent.pendingConnectionChange={force,provider};return;}
+    const action = canvasAgentChangeConnection(selectedAiConnectionId());
     void action.catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   }
   async function canvasAgentEnsureSearchSession(submitExecution=null) {
     if (canvasAgent.sessionSearchEnabled === canvasAgent.searchEnabled || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionReady || !canvasAgent.sessionId) return;
-    await canvasAgentStartNewConversation(selectedAiConnectionId(),{submitExecution});
+    await canvasAgentStartNewConversation(selectedAiConnectionId(),{submitExecution,preserveDraft:true});
   }
 
   function canvasAgentValidatedRegion(value) {

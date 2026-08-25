@@ -33,6 +33,8 @@ test("Remote Canvas allows only reviewed local routes and methods", () => {
   assert.equal(remoteCanvasTarget("GET", "/api/cloud/favorites/123e4567-e89b-42d3-a456-426614174000"), "/api/cloud/favorites/123e4567-e89b-42d3-a456-426614174000");
   assert.equal(remoteCanvasTarget("POST", "/api/cloud/community/share"), "/api/cloud/community/share");
   assert.equal(remoteCanvasTarget("POST", "/api/widget-fetch"), "/api/widget-fetch");
+  assert.equal(remoteCanvasTarget("POST", "/api/settings/search/test"), "/api/settings/search/test");
+  assert.throws(() => remoteCanvasTarget("GET", "/api/settings/search/test"), /not available/);
   assert.equal(remoteCanvasTarget("GET", "/plugins/private/air-quality/plugin.md"), "/plugins/private/air-quality/plugin.md");
   assert.equal(remoteCanvasTarget("GET", "/plugins/private/air-quality/styles.css"), "/plugins/private/air-quality/styles.css");
   assert.equal(remoteCanvasTarget("GET", "/plugins/private/legacy-widget.md"), "/plugins/private/legacy-widget.md");

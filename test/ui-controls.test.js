@@ -295,7 +295,7 @@ test("hand is the only object interaction mode and uses dedicated, clamped move 
   assert.match(app, /acceptPendingWidget\(\{ showHint:true \}\)/);
   assert.match(mode, /view\.classList\.toggle\("hand-mode", mode === "hand"\)/);
   assert.match(mode, /requestInteractionLayerRender\(\)/);
-  assert.match(mode, /finalizingPendingWidgetForEraser = mode === "eraser"[\s\S]*?\["hand", "pen"\]\.includes\(state\.mode\)[\s\S]*?acceptPendingWidget\(\{ restoreMode:false, allowRevisionMismatch:true \}\)/);
+  assert.match(mode, /eraserMode = \["eraser", "area-eraser"\]\.includes\(mode\)[\s\S]*?finalizingPendingWidgetForEraser = eraserMode[\s\S]*?\["hand", "pen"\]\.includes\(state\.mode\)[\s\S]*?acceptPendingWidget\(\{ restoreMode:false, allowRevisionMismatch:true \}\)/);
   assert.match(mode, /leavingDraftHand[\s\S]*?acceptPending\(\{ restoreMode:false \}\)/);
   assert.match(functionSource(app, "beginCanvasPointerAction"), /state\.mode === "hand"[\s\S]*?state\.panGesture[\s\S]*?setCanvasCursor\("grabbing"\)/);
   assert.ok(pointerDown.indexOf('state.mode !== "hand"') < pointerDown.indexOf("widgetPointerHit(point"));
@@ -392,11 +392,14 @@ test("switching from Pen to Eraser finalizes a pending widget regardless of revi
       pendingHistoryRestored:false,
       selection:null,
       pointerPreview:null,
+      areaEraseGesture:null,
+      eraserMode:"eraser",
       busy:false,
     };
   let accepted = 0;
   vm.runInNewContext(`(${setCanvasMode})("eraser")`, {
     state,
+    eraserToolButton:button,
     document:{
       querySelector:() => button,
       querySelectorAll:() => [button],
@@ -410,6 +413,9 @@ test("switching from Pen to Eraser finalizes a pending widget regardless of revi
     },
     updateWidgetRefinePointer() {},
     updateAutoControl() {},
+    updateEraserToolUI() {},
+    hideEraserToolMenu() {},
+    cancelAreaEraseGesture() {},
     deselectAnimation() {},
     view:{ classList:{ toggle() {} } },
     resetCanvasCursor() {},
@@ -524,6 +530,53 @@ test("pen ink stays above widgets and the eraser exposes a dashed footprint", ()
   assert.match(beginPointer, /state\.drawing = \{[\s\S]*?erase: erasing,[\s\S]*?\};[\s\S]*?updateCanvasPointerPreview\(e\)/);
   assert.match(finishPointer, /const wasErasing = state\.drawing\.erase;[\s\S]*?finishDrawing\(e\.pointerType\);[\s\S]*?state\.pointerPreview = null;[\s\S]*?requestInteractionLayerRender\(\)/);
   assert.match(app, /screen\.addEventListener\("pointerleave", \(\) => \{[\s\S]*?state\.pointerPreview = null;[\s\S]*?requestInteractionLayerRender\(\)/);
+});
+
+test("clicking eraser switches its current mode and shows two auto-closing choices", () => {
+  const html = read("public/index.html"),
+    app = read("public/app.js"),
+    css = read("public/style.css"),
+    zh = read("public/locales/zh.js"),
+    begin = functionSource(app, "beginCanvasPointerAction"),
+    move = app.slice(app.indexOf('screen.addEventListener("pointermove"'), app.indexOf("function end(e)")),
+    end = functionSource(app, "end"),
+    finish = functionSource(app, "finishAreaEraseGesture"),
+    erase = functionSource(app, "eraseInkRegion"),
+    clearDirty = functionSource(app, "clearDirtyInkRegion"),
+    draw = functionSource(app, "drawAreaEraseSelection"),
+    box = vm.runInNewContext(`(${functionSource(app, "areaEraseBox")})`, { state:{ areaEraseGesture:null } });
+
+  assert.match(html, /id="eraserToolBtn"[^>]*data-mode="eraser"[^>]*aria-haspopup="menu"[^>]*aria-controls="eraserToolMenu"/);
+  assert.match(html, /id="eraserToolMenu"[^>]*role="menu"[^>]*hidden[\s\S]*?data-eraser-mode="eraser"[\s\S]*?data-eraser-mode="area-eraser"/);
+  assert.equal((html.match(/data-eraser-mode=/g) || []).length, 2);
+  assert.match(html, /data-eraser-icon="area"[\s\S]*?<rect[^>]*stroke-dasharray="3 2"/);
+  assert.match(css, /#eraserToolBtn \[data-eraser-icon\]\s*\{\s*display:\s*none/);
+  assert.match(css, /data-active-eraser="eraser"\][^\{]*data-eraser-icon="freehand"[\s\S]*?data-active-eraser="area-eraser"\][^\{]*data-eraser-icon="area"[^\{]*\{\s*display:\s*block/);
+  assert.match(functionSource(app, "updateEraserToolUI"), /dataset\.activeEraser = state\.eraserMode/);
+  assert.doesNotMatch(functionSource(app, "updateEraserToolUI"), /toggleAttribute\("hidden"/);
+  assert.match(css, /\.eraser-tool-menu\s*\{[^}]*top:\s*calc\(100% \+ 6px\)[^}]*display:\s*flex/);
+  assert.match(css, /\.eraser-tool-option\[aria-checked="true"\]\s*\{[^}]*color:/);
+  assert.match(app, /ERASER_TOOL_MENU_MS = 5000/);
+  assert.doesNotMatch(app, /ERASER_TOOL_HOLD_MS|eraserToolHold|finishEraserToolHold/);
+  assert.match(functionSource(app, "showEraserToolMenu"), /clearTimeout\(eraserToolMenuTimer\)[\s\S]*?hidden = false[\s\S]*?setTimeout\(\(\) => hideEraserToolMenu\(\), ERASER_TOOL_MENU_MS\)/);
+  assert.match(functionSource(app, "hideEraserToolMenu"), /clearTimeout\(eraserToolMenuTimer\)[\s\S]*?eraserToolMenuTimer = 0/);
+  assert.match(functionSource(app, "selectEraserMode"), /state\.eraserMode = mode[\s\S]*?setCanvasMode\(mode, \{ showHint:true \}\)[\s\S]*?options\.keepMenuOpen\) showEraserToolMenu\(\)/);
+  assert.match(app, /eraserToolButton\?\.addEventListener\("click", \(\) => selectEraserMode\(state\.eraserMode, \{ keepMenuOpen:true \}\)\)/);
+  assert.match(app, /selectEraserMode\(button\.dataset\.eraserMode, \{ keepMenuOpen:true \}\)/);
+  assert.match(begin, /state\.mode === "area-eraser"[\s\S]*?beginAreaEraseGesture\(e, point\)/);
+  assert.match(move, /state\.areaEraseGesture\?\.id === e\.pointerId[\s\S]*?updateAreaEraseGesture\(e\)/);
+  assert.match(end, /state\.areaEraseGesture\?\.id === e\.pointerId[\s\S]*?finishAreaEraseGesture\(e\)/);
+  assert.match(finish, /event\.type === "pointercancel"[\s\S]*?box\.w \* state\.scale < 4[\s\S]*?eraseInkRegion\(box\)/);
+  assert.deepEqual({ ...box({ start:{ x:9, y:13 }, current:{ x:3, y:4 } }) }, { x:3, y:4,w:6,h:9 });
+  assert.match(draw, /rgba\(220, 38, 38, \.1\)[\s\S]*?setLineDash[\s\S]*?fillRect[\s\S]*?strokeRect/);
+  assert.match(erase, /save\(\);[\s\S]*?recordBefore\(tx, ty\)[\s\S]*?clearRect\(localPart\.x[\s\S]*?state\.userRevision\+\+[\s\S]*?recomputeDirtyBounds\(\)[\s\S]*?filterErasedDirtyHotspots\(touchedTiles\)[\s\S]*?save\(\)/);
+  assert.match(clearDirty, /state\.dirtyInkTiles[\s\S]*?DIRTY_MASK_SCALE[\s\S]*?state\.dirtyInkBounds\.delete\(tileKey\)/);
+  assert.doesNotMatch(erase, /requestAI\(/);
+  assert.doesNotMatch(erase, /invalidateRecognition\(/);
+  for (const key of ["eraserOptions", "areaEraser", "canvasHintAreaEraser", "canvasHintAreaEraserAlt", "areaEraseTooSmall", "areaEraseDeleted"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
 });
 
 test("canvas navigation guidance emphasizes middle-mouse panning for at least ten seconds", () => {
@@ -2778,15 +2831,28 @@ test("a multi-tool AI draft has one uniform group corner resize", () => {
 
 test("Canvas Agent internet search is configured in Settings and toggled beside attachments", () => {
   const html=read("public/index.html"),app=read("public/app.js"),server=read("src/server/main.js"),runtime=read("src/server/canvas-agent/runtime.mjs"),css=read("public/style.css"),zh=read("public/locales/zh.js");
-  for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsTavilyApiKey","settingsTavilySaved","canvasAgentSearch"]) assert.match(html,new RegExp(`id="${id}"`));
+  for(const id of ["settingsOpenSearch","settingsSearchEntryStatus","settingsDeepSeekSearchProvider","settingsOpenCodeGoSearchSetup","settingsDeepSeekSearchApiKey","settingsDeepSeekSearchSaved","settingsTavilyApiKey","settingsTavilySaved","settingsDuckDuckGoReady","settingsSearchTestResults","settingsSearchTestFlashLabel","settingsTestSearch","canvasAgentSearch"]) assert.match(html,new RegExp(`id="${id}"`));
   assert.ok(html.indexOf('id="canvasAgentAttach"')<html.indexOf('id="canvasAgentSearch"'));
   assert.ok(html.indexOf('id="canvasAgentSearch"')<html.indexOf('id="canvasAgentFileInput"'));
   assert.match(app,/settingsOpenSearch\?\.addEventListener\("click", \(\) => openConfiguration\("search"\)\)/);
   assert.match(app,/canvasAgentSearch\.setAttribute\("aria-disabled",String\(!canvasAgent\.searchConfigured\)\)/);
   assert.match(app,/canvasAgentSearch\.dataset\.tooltip = canvasAgent\.searchConfigured \? "" : label/);
+  assert.match(app,/localStorage\.getItem\(CANVAS_AGENT_SEARCH_ENABLED_KEY\) !== "false"/);
+  assert.match(app,/settingsTestSearch\?\.addEventListener\("click", \(\) => void testCanvasSearch\(\)\)/);
+  assert.match(app,/fetch\("\/api\/settings\/search\/test"/);
+  assert.ok(html.indexOf('id="settingsSearchTestResults"')<html.indexOf('id="settingsTestSearch"'));
+  assert.ok(html.indexOf('id="settingsTestSearch"')<html.indexOf('id="settingsSave"'));
   assert.match(app,/webSearchEnabled:canvasAgent\.searchEnabled/);
+  assert.match(server,/deepSeekSearchProvider:DEEPSEEK_SEARCH_PROVIDER/);
+  assert.match(server,/hasDeepSeekSearchApiKey:Boolean\(DEEPSEEK_SEARCH_API_KEY\)/);
   assert.match(server,/hasTavilyApiKey:Boolean\(TAVILY_API_KEY\)/);
-  assert.match(server,/resolveWebSearch:\(\)=>\(\{ provider:"tavily", apiKey:TAVILY_API_KEY \|\| "" \}\)/);
+  assert.match(server,/url\.pathname === "\/api\/settings\/search\/test"/);
+  assert.match(server,/deepseekApiKey:DEEPSEEK_SEARCH_API_KEY\|\|""/);
+  assert.match(server,/tavilyApiKey:TAVILY_API_KEY\|\|""/);
+  assert.match(runtime,/name:'deepseek_search'/);
+  assert.match(runtime,/model:DEEPSEEK_SEARCH_MODEL/);
+  assert.match(runtime,/type:'web_search_20250305'/);
+  assert.match(runtime,/endpoint:'https:\/\/opencode\.ai\/zen\/go\/v1\/messages'/);
   assert.match(runtime,/name:'tavily_search'/);
   assert.doesNotMatch(runtime,/name:'load_search_skill'/);
   assert.match(runtime,/name:'research_search'/);
@@ -2794,8 +2860,10 @@ test("Canvas Agent internet search is configured in Settings and toggled beside 
   assert.match(runtime,/name:'duckduckgo_search'/);
   assert.match(runtime,/name:'stock_symbol_search'/);
   assert.match(runtime,/name:'stock_market_data'/);
+  assert.match(runtime,/export async function testCanvasSearchProviders/);
   assert.match(runtime,/include_answer:false, include_raw_content:false, include_images:false/);
   assert.match(css,/\.canvas-agent-composer \.canvas-agent-search\.active \{ color: #4f46e5; background: transparent; \}/);
   assert.match(css,/content: attr\(data-tooltip\)/);
-  for(const text of ["互联网搜索","Tavily API 密钥","内置搜索已就绪","减少一次模型往返","查询股票数据"]) assert.match(zh,new RegExp(text));
+  assert.match(css,/\.settings-search-test-results output\[data-state="available"\]/);
+  for(const text of ["互联网搜索","Flash 密钥来源","OpenCode Go","中国托管的 DeepSeek 模型","复制 Go API 密钥","Flash 搜索 API 密钥","Tavily API 密钥","DuckDuckGo 后备已就绪","当前搜索状态","测试搜索","尚未测试","未配置","可用 · 已返回结果","内置搜索已就绪","查询股票数据"]) assert.match(zh,new RegExp(text));
 });

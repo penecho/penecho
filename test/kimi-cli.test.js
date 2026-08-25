@@ -8,12 +8,15 @@ const { test } = require("node:test");
 
 const {
   buildKimiArgs,
+  callKimiCanvasAgentCli,
   callKimiCliSpawn,
+  extractKimiCanvasAgentJson,
   kimiAssistantText,
   kimiEventHasToolActivity,
   kimiEventToolName,
   kimiEventUsage,
   mapKimiEffort,
+  normalizeKimiTranscript,
   sanitizeKimiEnv,
 } = require("../src/providers/kimi-cli.js");
 
@@ -35,6 +38,21 @@ test("Kimi arguments use the non-interactive stream-json command and isolated ag
   assert.deepEqual(buildKimiArgs({ model:"kimi-code/k3", prompt:"draw", agentFile:"/tmp/penecho-agent.md" }), [
     "--prompt", "draw", "--output-format", "stream-json", "--agent-file", "/tmp/penecho-agent.md", "--model", "kimi-code/k3",
   ]);
+});
+
+test("Kimi text transcript removes only CLI block rendering", () => {
+  assert.deepEqual(buildKimiArgs({ prompt:"draw", outputFormat:"text" }).slice(0, 4), ["--prompt", "draw", "--output-format", "text"]);
+  assert.equal(normalizeKimiTranscript('• {"type":"final",\n  "text":"done"}\n\n'), '{"type":"final",\n"text":"done"}');
+  assert.equal(normalizeKimiTranscript("Progress: still working"), "Progress: still working");
+});
+
+test("Kimi Canvas Agent extracts a complete Harness JSON value from surrounding text", () => {
+  const decision='{"type":"tool_call","name":"canvas_capture","arguments":{"note":"literal } and \\\" quote"}}';
+  assert.equal(extractKimiCanvasAgentJson(`说明文字\n\`\`\`JSON\n${decision}\n\`\`\`\n完成`),decision);
+  assert.equal(extractKimiCanvasAgentJson(`progress {"percent":100}\n${decision}\ntrailing status`),decision);
+  assert.equal(extractKimiCanvasAgentJson(decision),decision);
+  const incomplete='progress {"type":"tool_call"';
+  assert.equal(extractKimiCanvasAgentJson(incomplete),incomplete);
 });
 
 test("Kimi stream-json extracts assistant content and detects tool activity", () => {
@@ -63,6 +81,47 @@ process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{t
   assert.equal(result, '{"intent":"none","commands":[]}');
   assert.ok(activityCount>0);
   assert.deepEqual(usage,{input_tokens:20,cache_read_tokens:70,output_tokens:8});
+});
+
+test("Canvas Agent Kimi uses the disposable no-tools CLI path instead of ACP", async () => {
+  const executable = fakeKimi(`
+const fs=require("fs"),args=process.argv.slice(2);
+if(args.includes("acp"))process.exit(8);
+const prompt=args[args.indexOf("--prompt")+1]||"",agentFile=args[args.indexOf("--agent-file")+1],agent=agentFile?fs.readFileSync(agentFile,"utf8"):"";
+if(args[args.indexOf("--output-format")+1]!=="text"||!prompt.includes("--- HARNESS REQUEST ---")||!agent.includes("tools: []")||!agent.includes("subagents: []"))process.exit(9);
+const fence=String.fromCharCode(96).repeat(3);
+process.stderr.write("private thinking delta");
+process.stdout.write('• 已完成，结果如下：\\n  '+fence+'json\\n  {"type":"final",\\n');
+setTimeout(()=>process.stdout.write('  "text":"isolated"}\\n  '+fence+'\\n  处理完成\\n\\n'),10);
+`);
+  const { callPenEchoCli } = await import("../src/server/canvas-agent/cli-adapter.mjs");
+  let activityCount=0;
+  const result = await callPenEchoCli({
+    connection:{ provider:"kimi-cli", cliPath:executable, cliModel:"kimi-code/k3", effort:"medium" },
+    systemPrompt:"Canvas Agent system",
+    prompt:'{"availableTools":[]}',
+    atlasImage:null,
+    onActivity:()=>activityCount++,
+  });
+  assert.equal(result, '{"type":"final",\n"text":"isolated"}');
+  assert.ok(activityCount >= 3);
+});
+
+test("Canvas Agent Kimi counts thinking as activity without exposing it in diagnostics", async () => {
+  const executable = fakeKimi(`
+process.stderr.write("PRIVATE_CHAIN_OF_THOUGHT");
+setInterval(()=>{},1000);
+`);
+  const controller = new AbortController();
+  let caught;
+  try {
+    await callKimiCanvasAgentCli({ executable, prompt:"test", signal:controller.signal, onActivity:()=>controller.abort() });
+  } catch (error) {
+    caught=error;
+  }
+  assert.equal(caught?.name, "AbortError");
+  assert.match(caught?.traceDiagnostic || "", /thinking[.]delta/);
+  assert.doesNotMatch(caught?.traceDiagnostic || "", /PRIVATE_CHAIN_OF_THOUGHT/);
 });
 
 test("Kimi child environment keeps runtime settings and drops API secrets", () => {

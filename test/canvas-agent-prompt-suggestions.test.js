@@ -120,13 +120,13 @@ test("Canvas Agent chooses three context-specific primary intents",()=>{
     blank:["file","architecture","handwriting"],image:["imageVisual","imageLayer","imagePublish"],spreadsheet:["spreadsheetVisual","spreadsheetLayer","spreadsheetPublish"],
     presentation:["presentationVisual","presentationLayer","presentationPublish"],document:["documentVisual","documentStudy","documentPublish"],code:["codeVisual","codeLayer","codePlan"],
     file:["file","fileLayer","filePublish"],project:["architecture","projectPlan","projectPublish"],selection:["selectionVisual","selectionLayer","selectionPublish"],
-    notes:["notesVisual","handwriting","notesPublish"],canvas:["canvasVisual","canvasLayer","canvasPublish"],
+    notes:["notesVisual","applyAnnotations","handwriting"],canvas:["canvasVisual","canvasLayer","canvasPublish"],
   };
   for(const [context,ids] of Object.entries(expected)){
     const set=vm.runInNewContext(`(()=>{${functionSource("canvasAgentPromptSuggestionSet")}return canvasAgentPromptSuggestionSet;})()`,{
       CANVAS_AGENT_PROMPT_LIBRARY:constants.library,CANVAS_AGENT_PROMPT_ADDITIONAL:constants.additional,CANVAS_AGENT_PROMPT_PRIMARY:constants.primary,canvasAgentPromptContext:()=>context,
     })();
-    assert.equal(set.key,context);assert.equal(set.suggestions.length,9);assert.deepEqual(Array.from(set.suggestions.slice(-3),item=>item.id),ids);
+    assert.equal(set.key,context);assert.equal(set.suggestions.length,context==="notes"?9:10);assert.deepEqual(Array.from(set.suggestions.slice(-3),item=>item.id),ids);
   }
 });
 
@@ -180,7 +180,7 @@ function interactiveScene(){
 
 test("Canvas Agent renders icons, bold focus words, and full clickable prompts",()=>{
   const scene=interactiveScene();scene.render(scene.set);
-  assert.equal(scene.additional.children.length,6);assert.equal(scene.primary.children.length,3);
+  assert.equal(scene.additional.children.length,7);assert.equal(scene.primary.children.length,3);
   const button=scene.primary.children.at(-1),icon=button.children[0],copy=button.children[1],focus=copy.children[0],detail=copy.children[1];
   assert.equal(icon.class,"canvas-agent-prompt-icon");assert.equal(icon.children.length>0,true);
   assert.equal(copy.className,"canvas-agent-prompt-copy");assert.equal(focus.tag,"strong");assert.equal(focus.textContent,"Enhance");assert.equal(detail.textContent,"Polished prompt");assert.equal(button.title,"Polished prompt");

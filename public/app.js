@@ -22,6 +22,11 @@
     canvasViewShareButton = document.querySelector("#canvasViewShareBtn"),
     canvasViewDownloadButton = document.querySelector("#canvasViewDownloadBtn"),
     canvasViewCloseButton = document.querySelector("#canvasViewCloseBtn"),
+    eraserToolControl = document.querySelector("#eraserToolControl"),
+    eraserToolButton = document.querySelector("#eraserToolBtn"),
+    eraserToolMenu = document.querySelector("#eraserToolMenu"),
+    eraserFreehandButton = document.querySelector("#eraserFreehandBtn"),
+    eraserAreaButton = document.querySelector("#eraserAreaBtn"),
     ctx = screen.getContext("2d"),
     animationLayer = document.querySelector("#animationLayer"),
     animationCtx = animationLayer.getContext("2d"),
@@ -143,8 +148,14 @@
     settingsFetchModelsLabel = settingsFetchModels?.querySelector("[data-i18n='settingsFetchModels']"),
     settingsApiKey = document.querySelector("#settingsApiKey"),
     settingsApiSaved = document.querySelector("#settingsApiSaved"),
+    settingsDeepSeekSearchProvider = document.querySelector("#settingsDeepSeekSearchProvider"),
+    settingsOpenCodeGoSearchSetup = document.querySelector("#settingsOpenCodeGoSearchSetup"),
+    settingsDeepSeekSearchApiKey = document.querySelector("#settingsDeepSeekSearchApiKey"),
+    settingsDeepSeekSearchSaved = document.querySelector("#settingsDeepSeekSearchSaved"),
     settingsTavilyApiKey = document.querySelector("#settingsTavilyApiKey"),
     settingsTavilySaved = document.querySelector("#settingsTavilySaved"),
+    settingsSearchTestResults = document.querySelector("#settingsSearchTestResults"),
+    settingsSearchTestFlashLabel = document.querySelector("#settingsSearchTestFlashLabel"),
     settingsEffort = document.querySelector("#settingsEffort"),
     settingsEffortCombobox = document.querySelector("#settingsEffortCombobox"),
     settingsEffortToggle = document.querySelector("#settingsEffortToggle"),
@@ -157,6 +168,7 @@
     settingsTraceLimit = document.querySelector("#settingsTraceLimit"),
     settingsSaveButton = document.querySelector("#settingsSave"),
     settingsTestConnection = document.querySelector("#settingsTestConnection"),
+    settingsTestSearch = document.querySelector("#settingsTestSearch"),
     settingsInstallCli = document.querySelector("#settingsInstallCli"),
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
@@ -288,6 +300,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       exitCanvasViewMode: "Exit view mode",
       canvasViewModeActions: "View mode actions",
       eraser: "Eraser",
+      eraserOptions: "Eraser options",
+      areaEraser: "Area erase",
       select: "Lasso select",
       text: "Text input",
       textMixedMode: "Preview Markdown + LaTeX formatting",
@@ -450,12 +464,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSystemEntryHelp: "Restart required after saving",
       settingsPluginsEntryHelp: "Manage AI capabilities",
       settingsSearchEntry: "Internet search",
-      settingsSearchReady: "Tavily + built-in backup ready",
-      settingsSearchNotConfigured: "Built-in search ready · Tavily optional",
+      settingsSearchDeepSeekReady: "Flash search + DuckDuckGo + built-in ready",
+      settingsSearchAllReady: "Flash search + Tavily + DuckDuckGo + built-in ready",
+      settingsSearchTavilyReady: "Tavily + DuckDuckGo + built-in ready",
+      settingsSearchNotConfigured: "DuckDuckGo + built-in search ready · Flash or Tavily optional",
       settingsApiDialogTitle: "API & CLI settings",
       settingsApiDialogSubtitle: "Connections are shared with every client. Your current choice is private to this device and applies immediately.",
       settingsSearchDialogTitle: "Internet search",
-      settingsSearchDialogSubtitle: "Built-in research, GitHub, stock, and backup web search are ready; Tavily is an optional primary provider.",
+      settingsSearchDialogSubtitle: "Choose DeepSeek official or OpenCode Go for native Flash search; Tavily, DuckDuckGo, research, GitHub, and stock search remain available as backups.",
       settingsConnectionEditor: "Connection details",
       settingsEffortToolbarHelp: "You can quickly change reasoning for any request from the Canvas toolbar.",
       settingsEffortSuggestions: "Reasoning suggestions",
@@ -505,12 +521,40 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiKey: "API key",
       settingsApiKeyHelp: "Stored only in the local PenEcho configuration file.",
       settingsSearchSection: "Internet search",
-      settingsSearchDescription: "Keep research, GitHub, stock, and public web search ready for faster answers when internet search is on.",
+      settingsSearchDescription: "On by default. DeepSeek Flash or Tavily can be added, while DuckDuckGo, research, GitHub, and stock search remain available as backups.",
+      settingsDeepSeekSearchProvider: "Flash key provider",
+      settingsDeepSeekSearchProviderOfficial: "DeepSeek official",
+      settingsDeepSeekSearchProviderOpenCodeGo: "OpenCode Go",
+      settingsDeepSeekSearchProviderHelp: "Choose where this key was issued. PenEcho automatically sends native Flash search to the matching endpoint.",
+      settingsOpenCodeGoSearchSetupTitle: "OpenCode Go setup",
+      settingsOpenCodeGoSearchSetupBody: "Open the Go page in your current OpenCode Workspace, enable China-hosted DeepSeek models, then copy the Go API key and paste it below.",
+      settingsOpenCodeGoSearchSetupLink: "Open OpenCode Go",
+      settingsDeepSeekSearchApiKey: "Flash search API key",
+      settingsDeepSeekSearchApiKeyHelp: "Preferred current-web provider. Each search uses a separate DeepSeek V4 Flash model turn with native web search; the key stays local until search is enabled and called.",
+      settingsSearchTestStatusTitle: "Current search status",
+      settingsTestSearch: "Test search",
+      settingsTestingSearch: "Testing search…",
+      settingsSearchTestFlashLabel: "Flash native search ({provider})",
+      settingsSearchTestNotTested: "Not tested",
+      settingsSearchTestNotConfigured: "Not configured",
+      settingsSearchTestTesting: "Testing…",
+      settingsSearchTestAvailable: "Available · result returned",
+      settingsSearchTestRegionAccessRequired: "Enable China-hosted model",
+      settingsSearchTestHttpError: "Unavailable · HTTP {status}",
+      settingsSearchTestNoResults: "No usable results",
+      settingsSearchTestRequestFailed: "Unavailable",
+      settingsSearchTestTimeout: "Timed out",
+      settingsSearchTestFailed: "Could not test search providers.",
+      settingsSearchTestComplete: "Search test finished.",
+      settingsDeepSeekSearchApiKeySavedPlaceholder: "Paste a new key or leave blank to keep the saved key",
+      settingsDeepSeekSearchSaved: "Flash key saved",
       settingsTavilyApiKey: "Tavily API key",
-      settingsTavilyApiKeyHelp: "Optional primary web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled.",
+      settingsTavilyApiKeyHelp: "Optional fallback web-search provider. Stored locally and sent only from the PenEcho service to Tavily when search is enabled and called.",
       settingsTavilyApiKeySavedPlaceholder: "Paste a new key or leave blank to keep the saved key",
+      settingsTavilySaved: "Tavily saved",
+      settingsDuckDuckGoReady: "DuckDuckGo fallback ready",
       settingsSaveSearch: "Save search",
-      settingsSearchSaved: "Search is ready. Turn it on with the globe beside the attachment button.",
+      settingsSearchSaved: "Search settings saved. Internet search is on by default and can be turned off with the globe button.",
       settingsSystemSection: "System",
       settingsSystemDescription: "Simple defaults for requests and canvas behavior.",
       settingsEffort: "Reasoning",
@@ -672,6 +716,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintTextAlt: "After confirming text near a widget, switch to Pen and tap AI Refine.",
       canvasHintEraser: "Eraser removes ink only; use Hand controls to delete canvas objects.",
       canvasHintEraserAlt: "Erase an instruction before AI runs without changing widgets beneath it.",
+      canvasHintAreaEraser: "Drag a rectangle to delete all ink inside it when you release.",
+      canvasHintAreaEraserAlt: "Area erase affects canvas ink only; widgets and other objects stay unchanged.",
       ready: "Ready",
       aiBusy: "AI is working. Please wait.",
       noInk: "Write something first",
@@ -719,6 +765,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selectionCancel: "Cancel",
       selectionTypesetting: "Typesetting selection...",
       selectionDeleted: "Selected region deleted",
+      areaEraseTooSmall: "Drag a larger area to erase",
+      areaEraseDeleted: "Ink in the selected area was deleted",
       pendingConfirm: "Confirm or discard the current AI draft first",
       merged: "AI merged",
       plugins: "Plugins",
@@ -766,7 +814,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Canvas Auto AI is paused.",
       canvasAgentProject: "Manage projects and files",
       canvasAgentProjectClose: "Close project manager",
-      canvasAgentProjectBoundary: "Folders and single files are read-only.",
+      canvasAgentProjectBoundary: "This version supports read access only. For file safety, modifying files is not supported.",
       canvasAgentWorkspace: "Workspace",
       canvasAgentProjectManager: "Project manager",
       canvasAgentProjectManagerDescription: "Projects are folders. Files are added from the Canvas Agent composer.",
@@ -852,6 +900,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptFocusVisual: "Visualize",
       canvasAgentPromptFocusSimplify: "Simplify",
       canvasAgentPromptFocusOrganize: "Organize",
+      canvasAgentPromptFocusRevise: "Revise",
       canvasAgentPromptFocusSlides: "Slides",
       canvasAgentPromptFocusAnalyze: "Analyze",
       canvasAgentPromptFocusLearn: "Learn",
@@ -870,6 +919,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptTransformer: "Explain Transformer with a layered diagram and pseudocode, including data flow and tensor shapes.",
       canvasAgentPromptUkTrip: "Create a 15-day UK travel map with daily routes, transport, stays, and highlights.",
       canvasAgentPromptOrganize: "Turn the current canvas into clear visual notes, with themes, hierarchy, and information gaps.",
+      canvasAgentPromptApplyAnnotations: "Apply my new Canvas annotations and sketches: add, remove, move, resize, or reconnect only clearly marked content, and ask about ambiguity first.",
       canvasAgentPromptImageVisual: "Explain the current image's subjects, structure, relationships, and important details visually.",
       canvasAgentPromptImageLayer: "Keep the image unchanged and add a transparent explanation layer with labels, links, graphics, or motion.",
       canvasAgentPromptImagePublish: "Extract the image's key information; publish visuals to Canvas and send the summary in chat.",
@@ -948,8 +998,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentToolPatchWidget: "Update widget",
       canvasAgentToolSetView: "Adjust canvas view",
       canvasAgentToolRevert: "Revert Agent change",
+      canvasAgentToolRunProjectCommand: "Run project command",
+      canvasAgentToolReadDocument: "Read document",
+      canvasAgentToolReadProjectFile: "Read project file",
+      canvasAgentToolReadBinary: "Inspect binary file",
+      canvasAgentToolReadProjectImage: "Inspect project image",
+      canvasAgentToolReadDatabase: "Query project database",
+      canvasAgentToolLoadDocumentReader: "Load document reader",
+      canvasAgentToolLoadDatabaseReader: "Load database reader",
+      canvasAgentToolFindProjectFiles: "Find project files",
+      canvasAgentToolSearchProjectFiles: "Search project contents",
+      canvasAgentToolListProjectFolder: "List project folder",
       canvasAgentToolSearch: "Search the web",
+      canvasAgentToolReadWeb: "Read web page",
       canvasAgentToolStock: "Look up stock data",
+      canvasAgentToolVisualMath2D: "Use Canvas Math 2D",
+      canvasAgentToolVisualPhysics2D: "Use Canvas Physics 2D",
+      canvasAgentToolVisualMath3D: "Use Canvas Math 3D",
+      canvasAgentToolGeneralHtml: "Use Canvas General HTML",
+      canvasAgentToolProfessionalDiagrams: "Use Canvas Professional Diagrams",
+      canvasAgentToolTargetViewport: "viewport",
+      canvasAgentToolTargetCanvas: "entire canvas",
+      canvasAgentToolTargetObject: "canvas object",
+      canvasAgentToolTargetSelection: "selection",
+      canvasAgentToolTargetRegion: "canvas region",
       canvasAgentToolUse: "Use canvas tool",
       canvasAgentToolRunning: "Working…",
       canvasAgentToolDone: "Done",
@@ -1202,6 +1274,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const tiles = new Map(),
     state = {
       mode: "pen",
+      eraserMode: "eraser",
       scale: 0.1,
       panX: 0,
       panY: 0,
@@ -1288,6 +1361,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiDraftReturnMode: null,
       pendingHistoryRestored: false,
       pointerPreview: null,
+      areaEraseGesture: null,
       copyGeneration: 0,
       selection: null,
       selectionGesture: null,
@@ -1974,7 +2048,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, hasTavilyApiKey:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, deepSeekSearchProvider:"deepseek-official", hasDeepSeekSearchApiKey:false, hasTavilyApiKey:false, searchTestResults:null, searchTestGeneration:0, searchTestBusy:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -2000,6 +2074,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasSettingsForm.dataset.editorHidden = String(mode === "api");
     settingsEditorCancel.hidden = mode !== "api";
     settingsTestConnection.hidden = mode !== "api";
+    settingsTestSearch.hidden = mode !== "search";
     settingsInstallCli.hidden = true;
     settingsSaveButton.textContent = t(mode === "api" ? "settingsSaveConnection" : mode === "search" ? "settingsSaveSearch" : "settingsSave");
     canvasSettingsForm.hidden = false;
@@ -2336,6 +2411,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function setConnectionTestBusy(busy) {
     settings.connectionActionBusy = busy;
     settingsTestConnection.disabled = busy;
+    if (settingsTestSearch) settingsTestSearch.disabled = busy;
     settingsSaveButton.disabled = busy;
     settingsInstallCli.disabled = busy;
     updateConnectionModelFetchState();
@@ -2430,15 +2506,94 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsTraceToggle.classList.toggle("on", settings.requestTrace);
     settingsTraceToggle.setAttribute("aria-checked", String(settings.requestTrace));
   }
-  function updateSearchSettingsState(configured = settings.hasTavilyApiKey) {
-    settings.hasTavilyApiKey = Boolean(configured);
+  function searchTestConfigured(provider) {
+    if (provider === "duckduckgo") return true;
+    if (provider === "flash") return Boolean(settingsDeepSeekSearchApiKey?.value.trim() || settings.hasDeepSeekSearchApiKey);
+    return Boolean(settingsTavilyApiKey?.value.trim() || settings.hasTavilyApiKey);
+  }
+  function searchTestStatusCopy(result) {
+    const state = result?.state || "request_failed", key = {
+      available:"settingsSearchTestAvailable",
+      not_configured:"settingsSearchTestNotConfigured",
+      region_access_required:"settingsSearchTestRegionAccessRequired",
+      http_error:"settingsSearchTestHttpError",
+      no_results:"settingsSearchTestNoResults",
+      request_failed:"settingsSearchTestRequestFailed",
+      timeout:"settingsSearchTestTimeout",
+      not_tested:"settingsSearchTestNotTested",
+      testing:"settingsSearchTestTesting",
+    }[state] || "settingsSearchTestRequestFailed";
+    return { state, key, text:t(key).replace("{status}", String(result?.httpStatus || "—")) };
+  }
+  function renderSearchTestStatuses(results = settings.searchTestResults, testing = false) {
+    if (!settingsSearchTestResults) return;
+    if (Array.isArray(results)) settings.searchTestResults = results;
+    const byProvider = new Map((Array.isArray(results) ? results : []).map(result => [result?.id, result]));
+    const provider = settingsDeepSeekSearchProvider?.value === "opencode-go" ? "opencode-go" : "deepseek-official",
+      providerLabel = t(provider === "opencode-go" ? "settingsDeepSeekSearchProviderOpenCodeGo" : "settingsDeepSeekSearchProviderOfficial");
+    if (settingsSearchTestFlashLabel) settingsSearchTestFlashLabel.textContent = t("settingsSearchTestFlashLabel").replace("{provider}", providerLabel);
+    for (const row of settingsSearchTestResults.querySelectorAll("[data-search-test-provider]")) {
+      const id=row.dataset.searchTestProvider, configured=searchTestConfigured(id), result=byProvider.get(id), status=result || { state:configured ? testing ? "testing" : "not_tested" : "not_configured" }, copy=searchTestStatusCopy(status), output=row.querySelector("output");
+      if (!output) continue;
+      output.dataset.state = copy.state;
+      output.dataset.i18n = copy.key;
+      output.textContent = copy.text;
+    }
+  }
+  function resetSearchTestStatuses() {
+    settings.searchTestGeneration += 1;
+    settings.searchTestResults = null;
+    renderSearchTestStatuses();
+  }
+  function setSearchTestBusy(busy) {
+    settings.searchTestBusy = busy;
+    setConnectionTestBusy(busy);
+    settingsSearchTestResults?.setAttribute("aria-busy", String(busy));
+    if (settingsTestSearch) settingsTestSearch.textContent = t(busy ? "settingsTestingSearch" : "settingsTestSearch");
+  }
+  async function testCanvasSearch() {
+    if (!settingsTestSearch || settings.searchTestBusy) return;
+    const generation=++settings.searchTestGeneration;
+    setSearchTestBusy(true);
+    renderSearchTestStatuses(null, true);
+    setSettingsStatus(t("settingsTestingSearch"));
+    try {
+      const response=await fetch("/api/settings/search/test",{
+        method:"POST",headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+        body:JSON.stringify({ deepSeekSearchProvider:settingsDeepSeekSearchProvider.value, deepseekSearchApiKey:settingsDeepSeekSearchApiKey.value, tavilyApiKey:settingsTavilyApiKey.value }),
+      });
+      let body=null;
+      try { body=await response.json(); } catch {}
+      if (!response.ok || !Array.isArray(body?.results)) throw new Error(body?.error || t("settingsSearchTestFailed"));
+      if (generation !== settings.searchTestGeneration) return;
+      renderSearchTestStatuses(body.results);
+      setSettingsStatus(t("settingsSearchTestComplete"), "success");
+    } catch(error) {
+      if (generation !== settings.searchTestGeneration) return;
+      const failed=["flash","tavily","duckduckgo"].map(id=>({ id, state:searchTestConfigured(id)?"request_failed":"not_configured" }));
+      renderSearchTestStatuses(failed);
+      setSettingsStatus(error?.message || t("settingsSearchTestFailed"), "error");
+    } finally { setSearchTestBusy(false); }
+  }
+  function updateSearchSettingsState({ provider=settings.deepSeekSearchProvider, deepseek=settings.hasDeepSeekSearchApiKey, tavily=settings.hasTavilyApiKey } = {}) {
+    settings.deepSeekSearchProvider = ["deepseek-official", "opencode-go"].includes(provider) ? provider : "deepseek-official";
+    settings.hasDeepSeekSearchApiKey = Boolean(deepseek);
+    settings.hasTavilyApiKey = Boolean(tavily);
+    if (settingsDeepSeekSearchProvider) settingsDeepSeekSearchProvider.value = settings.deepSeekSearchProvider;
+    updateDeepSeekSearchProviderNotice();
+    if (settingsDeepSeekSearchSaved) settingsDeepSeekSearchSaved.hidden = !settings.hasDeepSeekSearchApiKey;
+    if (settingsDeepSeekSearchApiKey) settingsDeepSeekSearchApiKey.placeholder = t(settings.hasDeepSeekSearchApiKey ? "settingsDeepSeekSearchApiKeySavedPlaceholder" : "settingsDeepSeekSearchApiKey");
     if (settingsTavilySaved) settingsTavilySaved.hidden = !settings.hasTavilyApiKey;
     if (settingsTavilyApiKey) settingsTavilyApiKey.placeholder = t(settings.hasTavilyApiKey ? "settingsTavilyApiKeySavedPlaceholder" : "settingsTavilyApiKey");
     if (settingsSearchEntryStatus) {
-      const key = settings.hasTavilyApiKey ? "settingsSearchReady" : "settingsSearchNotConfigured";
+      const key = settings.hasDeepSeekSearchApiKey && settings.hasTavilyApiKey ? "settingsSearchAllReady" : settings.hasDeepSeekSearchApiKey ? "settingsSearchDeepSeekReady" : settings.hasTavilyApiKey ? "settingsSearchTavilyReady" : "settingsSearchNotConfigured";
       settingsSearchEntryStatus.dataset.i18n = key;
       settingsSearchEntryStatus.textContent = t(key);
     }
+    resetSearchTestStatuses();
+  }
+  function updateDeepSeekSearchProviderNotice() {
+    if (settingsOpenCodeGoSearchSetup) settingsOpenCodeGoSearchSetup.hidden = settingsDeepSeekSearchProvider?.value !== "opencode-go";
   }
   async function loadCanvasSettings() {
     if (!canvasSettingsForm) return;
@@ -2454,8 +2609,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       fillApiEditor({ apiPreset:body.apiPreset, apiFormat:body.apiFormat, apiUrl:body.apiUrl, apiModel:body.apiModel });
       settingsApiKey.value = "";
       settingsApiSaved.dataset.saved = String(body.hasApiKey);
+      settingsDeepSeekSearchApiKey.value = "";
       settingsTavilyApiKey.value = "";
-      updateSearchSettingsState(body.hasTavilyApiKey === true);
+      updateSearchSettingsState({ provider:body.deepSeekSearchProvider, deepseek:body.hasDeepSeekSearchApiKey === true, tavily:body.hasTavilyApiKey === true });
       canvasAgentSetSearchConfigured(body.webSearchAvailable === true);
       settings.cli = {
         "kimi-cli":{ model:body.kimiCliModel, path:body.kimiCliPath },
@@ -2483,10 +2639,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     setSettingsStatus(t("settingsSaving"));
     try {
       const provider = settingsProvider.value, scope = settings.configurationMode, connectionPayload = connectionEditorPayload(), apiPreset = provider === "api" ? selectedApiPreset() : null,
+        deepseekProviderChanged = scope === "search" && settingsDeepSeekSearchProvider.value !== settings.deepSeekSearchProvider,
+        deepseekKeyChanged = scope === "search" && Boolean(settingsDeepSeekSearchApiKey.value.trim()),
         tavilyKeyChanged = scope === "search" && Boolean(settingsTavilyApiKey.value.trim()),
-        searchNeedsNewSession = tavilyKeyChanged && !settings.hasTavilyApiKey;
+        searchNeedsNewSession = deepseekProviderChanged || (deepseekKeyChanged && !settings.hasDeepSeekSearchApiKey) || (tavilyKeyChanged && !settings.hasTavilyApiKey);
       const endpoint = scope === "api" ? "/api/settings/connections" : "/api/settings", payload = scope === "api" ? { action:"save", id:settings.editingConnectionId, connection:connectionPayload } : scope === "search" ? {
-        scope, tavilyApiKey:settingsTavilyApiKey.value,
+        scope, deepSeekSearchProvider:settingsDeepSeekSearchProvider.value, deepseekSearchApiKey:settingsDeepSeekSearchApiKey.value, tavilyApiKey:settingsTavilyApiKey.value,
       } : {
         scope, provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
         apiKey:settingsApiKey.value, effort:settingsEffort.value, maxTokens:Number(settingsMaxTokens.value), timeoutSeconds:Number(settingsTimeout.value),
@@ -2512,8 +2670,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         hideConnectionEditor();
         setConnectionStatus(t("settingsConnectionSaved"), "success");
       } else if (scope === "search") {
+        settingsDeepSeekSearchApiKey.value = "";
         settingsTavilyApiKey.value = "";
-        updateSearchSettingsState(body.hasTavilyApiKey === true);
+        updateSearchSettingsState({ provider:body.deepSeekSearchProvider, deepseek:body.hasDeepSeekSearchApiKey === true, tavily:body.hasTavilyApiKey === true });
         canvasAgentSearchConfigurationDidChange(body.webSearchAvailable === true, searchNeedsNewSession);
         setSettingsStatus(t("settingsSearchSaved"), "success");
       } else setSettingsStatus(t("settingsSystemSaved"), "success");
@@ -3537,6 +3696,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateHistorySaveFeedbackLanguage();
     renderSnapshotList();
     renderConnectionLists();
+    renderSearchTestStatuses();
+    if (settings.searchTestBusy && settingsTestSearch) settingsTestSearch.textContent = t("settingsTestingSearch");
     updateNewCanvasDialog();
     renderCanvasHint(false);
     if (state.aiProgressEvent) setStatus(aiProgressText(state.aiProgressEvent),AI_PROGRESS_STATUS_KEYS[state.aiProgressEvent.phase]);
@@ -7566,6 +7727,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.stroke();
     context.restore();
   }
+  function drawAreaEraseSelection(context) {
+    const box = areaEraseBox();
+    if (!box) return;
+    const unit = 1 / state.scale;
+    context.save();
+    context.fillStyle = "rgba(220, 38, 38, .1)";
+    context.strokeStyle = "rgba(220, 38, 38, .92)";
+    context.lineWidth = 1.5 * unit;
+    context.setLineDash([6 * unit, 4 * unit]);
+    context.fillRect(box.x, box.y, box.w, box.h);
+    context.strokeRect(box.x, box.y, box.w, box.h);
+    context.restore();
+  }
   function renderInteractionLayer() {
     const d = devicePixelRatio || 1,
       r = view.getBoundingClientRect();
@@ -7590,6 +7764,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (state.drawing?.preview) drawPreview(state.drawing.preview, interactionCtx);
     drawPointerPreview(interactionCtx);
+    drawAreaEraseSelection(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
     drawDirtyMaskDebugBounds(interactionCtx);
     drawWidgetRefineButtonHoverOutline(interactionCtx);
@@ -10654,6 +10829,121 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function dot(p, erase = false, size = state.pen, userChange = false) {
     stroke(p, { x: p.x + 0.01, y: p.y + 0.01 }, erase, size, userChange);
+  }
+  function areaEraseBox(gesture = state.areaEraseGesture) {
+    if (!gesture?.start || !gesture.current) return null;
+    const x = Math.min(gesture.start.x, gesture.current.x),
+      y = Math.min(gesture.start.y, gesture.current.y),
+      right = Math.max(gesture.start.x, gesture.current.x),
+      bottom = Math.max(gesture.start.y, gesture.current.y);
+    return { x, y, w:right - x, h:bottom - y };
+  }
+  function beginAreaEraseGesture(event, point) {
+    if (!valid(point)) return false;
+    supersedeActiveAI("user-input-started");
+    clearTimeout(state.timer);
+    state.timer = 0;
+    hideWidgetRefineHint();
+    clearWidgetRefineCandidate();
+    const clipped = SELECT.clipPoint(point, SIZE);
+    state.areaEraseGesture = { id:event.pointerId, start:clipped, current:clipped };
+    resetCanvasCursor();
+    requestInteractionLayerRender();
+    return true;
+  }
+  function updateAreaEraseGesture(event) {
+    const gesture = state.areaEraseGesture;
+    if (!gesture || gesture.id !== event.pointerId) return false;
+    gesture.current = SELECT.clipPoint(clientPoint(event), SIZE);
+    requestInteractionLayerRender();
+    return true;
+  }
+  function cancelAreaEraseGesture() {
+    if (!state.areaEraseGesture) return false;
+    state.areaEraseGesture = null;
+    resetCanvasCursor();
+    requestInteractionLayerRender();
+    return true;
+  }
+  function clearDirtyInkRegion(box) {
+    const touchedTiles = new Set();
+    for (const [tileKey, canvas] of state.dirtyInkTiles) {
+      const [tx, ty] = tileKey.split(",").map(Number),
+        tileBox = { x:tx * TILE, y:ty * TILE, w:TILE, h:TILE },
+        part = intersection(tileBox, box);
+      if (!part) continue;
+      canvas.getContext("2d", { willReadFrequently:true }).clearRect(
+        (part.x - tileBox.x) * DIRTY_MASK_SCALE,
+        (part.y - tileBox.y) * DIRTY_MASK_SCALE,
+        part.w * DIRTY_MASK_SCALE,
+        part.h * DIRTY_MASK_SCALE,
+      );
+      state.dirtyInkBounds.delete(tileKey);
+      touchedTiles.add(tileKey);
+    }
+    return touchedTiles;
+  }
+  function eraseInkRegion(box) {
+    if (!box || box.w <= 0 || box.h <= 0) return false;
+    save();
+    invalidateSharpOverlays(box);
+    let changed = false;
+    forTiles(
+      box.x,
+      box.y,
+      box.w,
+      box.h,
+      (canvas, tx, ty) => {
+        const tileKey = key(tx, ty),
+          tileBox = { x:tx * TILE, y:ty * TILE, w:TILE, h:TILE },
+          part = intersection(tileBox, box);
+        if (!part) return;
+        let bounds = state.inkBounds.get(tileKey);
+        if (bounds === undefined) {
+          bounds = inkBox(canvas, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE));
+          state.inkBounds.set(tileKey, bounds);
+        }
+        const localPart = { x:part.x - tileBox.x, y:part.y - tileBox.y, w:part.w, h:part.h };
+        if (!bounds || !intersection(bounds, localPart)) return;
+        recordBefore(tx, ty);
+        canvas.getContext("2d").clearRect(localPart.x, localPart.y, localPart.w, localPart.h);
+        state.inkBounds.delete(tileKey);
+        changed = true;
+      },
+      false,
+    );
+    const touchedTiles = clearDirtyInkRegion(box);
+    if (!changed && !touchedTiles.size) {
+      setStatusKey("selectionEmpty");
+      requestInteractionLayerRender();
+      return false;
+    }
+    state.userRevision++;
+    if (state.pending) state.pending.latestUserRevision = state.userRevision;
+    recomputeDirtyBounds();
+    filterErasedDirtyHotspots(touchedTiles);
+    const refineCandidate = relatchWidgetRefineCandidateFromDirty();
+    save();
+    requestRender();
+    if (state.dirty && state.autoEligible && !refineCandidate) schedule();
+    setStatusKey(refineCandidate ? "widgetRefinePending" : state.pending?.items ? "batchDraftReady" : state.pending ? "draftReady" : "areaEraseDeleted");
+    return true;
+  }
+  function finishAreaEraseGesture(event) {
+    const gesture = state.areaEraseGesture;
+    if (!gesture || gesture.id !== event.pointerId) return false;
+    if (event.type !== "pointercancel") gesture.current = SELECT.clipPoint(clientPoint(event), SIZE);
+    const box = areaEraseBox(gesture);
+    state.areaEraseGesture = null;
+    resetCanvasCursor();
+    requestInteractionLayerRender();
+    if (event.type === "pointercancel") return true;
+    if (!box || box.w * state.scale < 4 || box.h * state.scale < 4) {
+      setStatusKey("areaEraseTooSmall");
+      return true;
+    }
+    eraseInkRegion(box);
+    return true;
   }
   function pressureWidth(e) {
     if (e.pointerType !== "pen" || !Number.isFinite(e.pressure) || e.pressure <= 0) return state.pen;
@@ -14218,6 +14508,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_HISTORY_LIMIT = 5,
     CANVAS_AGENT_HISTORY_ITEM_LIMIT = 120,
     CANVAS_AGENT_HISTORY_TEXT_LIMIT = 20000,
+    CANVAS_AGENT_CONTINUATION_TEXT_LIMIT = 80000,
     CANVAS_AGENT_ERROR_MESSAGE_LIMIT = 8000,
     CANVAS_AGENT_MARKDOWN_TEXT_LIMIT = 12000,
     CANVAS_AGENT_MARKDOWN_LINE_LIMIT = 240,
@@ -14246,6 +14537,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
       simpleDiagram:{prompt:"canvasAgentPromptSimpleDiagram",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
       organize:{prompt:"canvasAgentPromptOrganize",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
+      applyAnnotations:{prompt:"canvasAgentPromptApplyAnnotations",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       ppt:{prompt:"canvasAgentPromptPpt",focus:"canvasAgentPromptFocusSlides",icon:"slides"},
       excel:{prompt:"canvasAgentPromptExcel",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       transformer:{prompt:"canvasAgentPromptTransformer",focus:"canvasAgentPromptFocusLearn",icon:"study"},
@@ -14293,8 +14585,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
+      revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","m13.5-9 3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","organize","ppt","excel","transformer","ukTrip"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","organize","applyAnnotations","ppt","excel","transformer","ukTrip"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -14305,7 +14598,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       file:["file","fileLayer","filePublish"],
       project:["architecture","projectPlan","projectPublish"],
       selection:["selectionVisual","selectionLayer","selectionPublish"],
-      notes:["notesVisual","handwriting","notesPublish"],
+      notes:["notesVisual","applyAnnotations","handwriting"],
       canvas:["canvasVisual","canvasLayer","canvasPublish"],
     });
   const canvasAgent = {
@@ -14320,6 +14613,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     sessionReady:false,
     pendingHandshakeId:"",
     pendingProvider:"",
+    pendingConnectionChange:null,
     sessionProjectId:"",
     sessionAccessMode:"controlled",
     sessionProjectCapabilities:null,
@@ -14351,7 +14645,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     inkPresent:false,
     inkStroke:null,
     searchConfigured:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured),
-    searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) === "true",
+    searchEnabled:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured) && localStorage.getItem(CANVAS_AGENT_SEARCH_ENABLED_KEY) !== "false",
     sessionSearchConfigured:false,
     sessionSearchEnabled:false,
     projectId:localStorage.getItem(CANVAS_AGENT_PROJECT_KEY) || "",
@@ -14380,6 +14674,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     panelMotionProxy:null,
     currentConversation:null,
     viewingHistoryId:"",
+    pendingConversationHistory:[],
     historyPersistTimer:0,
     viewRevision:0,
     viewSignature:"",
@@ -15220,6 +15515,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const now=Date.now();
     return {id:canvasClientId(),createdAt:now,updatedAt:now,title:"",items:[]};
   }
+  function canvasAgentConversationHistory(conversation) {
+    const messages=(conversation?.items||[]).filter(item=>item?.type==="message"&&["user","assistant"].includes(item.role)&&item.final!==false&&String(item.text||"").trim()).slice(-CANVAS_AGENT_HISTORY_ITEM_LIMIT),retained=[];
+    let remaining=CANVAS_AGENT_CONTINUATION_TEXT_LIMIT;
+    for(let index=messages.length-1;index>=0&&remaining>0;index--){
+      const item=messages[index],text=String(item.text||"").slice(-remaining);
+      if(!text)continue;
+      retained.unshift({role:item.role,text});
+      remaining-=text.length;
+    }
+    return retained;
+  }
   function canvasAgentRenderEmpty() {
     const empty=document.createElement("div"), title=document.createElement("strong"), body=document.createElement("span");
     empty.className="canvas-agent-empty";
@@ -15253,7 +15559,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title.textContent=conversation.title||t("canvasAgentHistoryUntitled");
       meta.textContent=[canvasAgentHistoryTime(conversation.updatedAt),current?t("canvasAgentHistoryCurrent"):""].filter(Boolean).join(" · ");
       button.append(title,meta);
-      button.addEventListener("click",()=>current?canvasAgentReturnToCurrentConversation():canvasAgentViewStoredConversation(conversation.id));
+      button.addEventListener("click",()=>current?canvasAgentHideHistoryPopover():void canvasAgentViewStoredConversation(conversation.id));
       canvasAgentHistoryList.append(button);
     }
   }
@@ -15268,15 +15574,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
   }
-  function canvasAgentViewStoredConversation(id) {
+  async function canvasAgentViewStoredConversation(id) {
     canvasAgentPersistCurrentConversation();
     const conversation=canvasAgentHistoryForCanvas().find(item=>item.id===id);
     if (!conversation) return;
     canvasAgentHideHistoryPopover();
-    canvasAgentSetHistoryViewing(conversation.id);
+    canvasAgent.currentConversation=conversation;
+    canvasAgent.pendingConversationHistory=canvasAgentConversationHistory(conversation);
+    canvasAgent.lastTurnError=null;
+    canvasAgentSetHistoryViewing("");
+    canvasAgentDropSessionIdentity();
+    canvasAgentClearTranscript();
     canvasAgentRenderConversation(conversation,false);
-    canvasAgentSetStatus(t("canvasAgentHistoryViewing"),"history");
-    canvasAgentHistoryReturn.focus();
+    canvasAgentClearAttachments();
+    canvasAgentClearReferences();
+    canvasAgentClearInkDraft();
+    canvasAgentRenderHistoryList();
+    canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
+    try {
+      await canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,preserveConversation:true});
+      canvasAgentInput.focus();
+    } catch (error) { canvasAgentSetStatus(String(error?.message||error),"error"); }
   }
   function canvasAgentReturnToCurrentConversation() {
     canvasAgentHideHistoryPopover();
@@ -15286,19 +15604,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN&&canvasAgent.sessionReady?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
     canvasAgentInput.focus();
   }
-  function canvasAgentBeginLocalConversation({persistCurrent=true,submitExecution=null}={}) {
+  function canvasAgentBeginLocalConversation({persistCurrent=true,submitExecution=null,preserveDraft=false}={}) {
     if (submitExecution) canvasAgentAssertSubmitExecution(submitExecution);
     else canvasAgentInvalidateSubmitExecution();
     canvasAgentBeginSessionTransition();
     if (persistCurrent) canvasAgentPersistCurrentConversation();
     canvasAgent.currentConversation=canvasAgentNewConversationRecord();
+    canvasAgent.pendingConversationHistory=[];
     canvasAgent.lastTurnError=null;
     canvasAgentSetHistoryViewing("");
     canvasAgentHideHistoryPopover();
     canvasAgentClearTranscript({showEmpty:true});
-    canvasAgentClearAttachments();
-    canvasAgentClearReferences();
-    canvasAgentClearInkDraft();
+    if(!preserveDraft){
+      canvasAgentClearAttachments();
+      canvasAgentClearReferences();
+      canvasAgentClearInkDraft();
+    }
     canvasAgentRenderHistoryList();
   }
   function canvasAgentDropSessionIdentity() {
@@ -16498,6 +16819,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return target;
   }
   function canvasAgentToolIntent(name,args = {}) {
+    const compact=value=>{
+      const text=String(value||"").replace(/\s+/g," ").trim();
+      return text.length>100?`${text.slice(0,100)}…`:text;
+    },quoted=value=>{
+      const text=compact(value);
+      return text?`“${text}”`:"";
+    },visualSkillKey={
+      "math-2d":"canvasAgentToolVisualMath2D",
+      "physics-2d":"canvasAgentToolVisualPhysics2D",
+      "math-3d":"canvasAgentToolVisualMath3D",
+    }[String(args?.skill||"")],widgetContractKey={
+      "general-html":"canvasAgentToolGeneralHtml",
+      "professional-diagrams":"canvasAgentToolProfessionalDiagrams",
+    }[String(args?.route||"")],projectPluginKey={
+      documents:"canvasAgentToolLoadDocumentReader",
+      database:"canvasAgentToolLoadDatabaseReader",
+    }[String(args?.plugin||"")],canvasTargetKey={
+      viewport:"canvasAgentToolTargetViewport",
+      canvas:"canvasAgentToolTargetCanvas",
+      object:"canvasAgentToolTargetObject",
+      selection:"canvasAgentToolTargetSelection",
+      region:"canvasAgentToolTargetRegion",
+    };
+    if(name==="load_visual_skill"&&visualSkillKey)return t(visualSkillKey);
+    if(name==="load_widget_contract"&&widgetContractKey)return t(widgetContractKey);
+    if(name==="load_project_plugin"&&projectPluginKey)return t(projectPluginKey);
     const key = {
       canvas_inspect:"canvasAgentToolInspect",
       canvas_read:"canvasAgentToolRead",
@@ -16507,16 +16854,40 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvas_patch_widget:"canvasAgentToolPatchWidget",
       canvas_set_view:"canvasAgentToolSetView",
       canvas_revert:"canvasAgentToolRevert",
+      bash:"canvasAgentToolRunProjectCommand",
+      read_document:"canvasAgentToolReadDocument",
+      read:"canvasAgentToolReadProjectFile",
+      read_binary:"canvasAgentToolReadBinary",
+      read_image:"canvasAgentToolReadProjectImage",
+      read_database:"canvasAgentToolReadDatabase",
+      glob:"canvasAgentToolFindProjectFiles",
+      grep:"canvasAgentToolSearchProjectFiles",
+      list_directory:"canvasAgentToolListProjectFolder",
       tavily_search:"canvasAgentToolSearch",
+      deepseek_search:"canvasAgentToolSearch",
       research_search:"canvasAgentToolSearch",
       github_repository_search:"canvasAgentToolSearch",
       duckduckgo_search:"canvasAgentToolSearch",
+      web_read:"canvasAgentToolReadWeb",
       stock_symbol_search:"canvasAgentToolStock",
       stock_market_data:"canvasAgentToolStock",
     }[name] || "canvasAgentToolUse";
-    const intent = t(key), summary = ["canvas_create","canvas_edit"].includes(name) ? String(args?.summary || "").replace(/\s+/g," ").trim() : "";
-    if (!summary) return intent;
-    return `${intent} · ${summary.length > 100 ? `${summary.slice(0,100)}…` : summary}`;
+    const intent=t(key),search=["tavily_search","deepseek_search","research_search","github_repository_search","duckduckgo_search"].includes(name),fileReader=["read_document","read","read_binary","read_image"].includes(name),target=canvasTargetKey[String(args?.target||args?.scope||"")],patchPath=/^\+\+\+ b\/([^\n\r]+)/m.exec(String(args?.patch||""))?.[1],detail=
+      search||name==="stock_symbol_search"?quoted(args?.query):
+      name==="stock_market_data"?compact(args?.symbol):
+      name==="web_read"?compact(args?.url):
+      name==="bash"?quoted(args?.command):
+      ["glob","grep"].includes(name)?quoted(args?.pattern):
+      fileReader?compact(args?.file_path):
+      name==="read_database"?[compact(args?.file_path),quoted(args?.query)].filter(Boolean).join(" · "):
+      name==="list_directory"?compact(args?.path||"."):
+      ["canvas_create","canvas_edit"].includes(name)?compact(args?.summary):
+      name==="canvas_read"&&args?.resource&&args.resource!=="content"?compact(args.resource):
+      name==="canvas_patch_widget"?compact(patchPath):
+      ["canvas_inspect","canvas_capture","canvas_set_view"].includes(name)&&target?t(target):
+      key==="canvasAgentToolUse"?compact(name):"";
+    if(!detail)return intent;
+    return `${intent} · ${detail}`;
   }
   function canvasAgentRenderToolRow(target) {
     target.intent.textContent = canvasAgentToolIntent(target.name,target.arguments);
@@ -16651,6 +17022,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
       canvasAgentSyncState();
       canvasAgentPersistCurrentConversation();
+      const pendingConnectionChange=canvasAgent.pendingConnectionChange;
+      canvasAgent.pendingConnectionChange=null;
+      if(pendingConnectionChange)canvasAgentConnectionDidChange(pendingConnectionChange.force,pendingConnectionChange.provider);
     }
   }
   async function canvasAgentHandleMessage(message) {
@@ -16663,9 +17037,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const readyHandshake = envelope.type === "ready" && Boolean(canvasAgent.connectPromise) && Boolean(envelope.canvasSessionId)
       && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
     const currentSessionEnvelope = Boolean(canvasAgent.sessionReady) && Boolean(envelope.canvasSessionId) && envelope.canvasSessionId === canvasAgent.sessionId;
-    const pendingFatalError = envelope.type === "error" && envelope.payload?.fatal === true && Boolean(canvasAgent.connectPromise)
+    const pendingHandshakeError = envelope.type === "error" && Boolean(canvasAgent.connectPromise)
       && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
-    if (!readyHandshake && !currentSessionEnvelope && !pendingFatalError) return;
+    if (!readyHandshake && !currentSessionEnvelope && !pendingHandshakeError) return;
     canvasAgent.incomingSeq = envelope.seq;
     if (envelope.type === "ready") {
       canvasAgent.lastTurnError=null;
@@ -16683,6 +17057,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.pendingProvider = "";
       canvasAgent.sessionSearchConfigured = envelope.payload?.webSearchConfigured === true;
       canvasAgent.sessionSearchEnabled = envelope.payload?.webSearchEnabled === true;
+      canvasAgent.pendingConversationHistory=[];
       canvasAgentSetSearchConfigured(canvasAgent.sessionSearchConfigured);
       canvasAgentRenderProjects();
       try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,engine:canvasAgent.sessionEngine,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
@@ -16716,7 +17091,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentResumeAutomaticAI();
       canvasAgentErrorRow(error,{eventKey:`envelope:${envelope.seq}`});
       canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
-      if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+      if(pendingHandshakeError){
+        canvasAgent.sessionReady=Boolean(canvasAgent.sessionId);
+        canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+        canvasAgent.connectResolve=canvasAgent.connectReject=null;
+      }else if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
     }
   }
   function canvasAgentSocketUrl() {
@@ -16762,31 +17141,53 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!state.pluginCatalogLoaded) await loadPluginDocuments();
     return canvasAgentWidgetCapabilities();
   }
-  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true,submitExecution=null}={}) {
+  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true,submitExecution=null,preserveDraft=false,preserveConversation=false}={}) {
     connectionId=String(connectionId||"");
-    if (resetProjection) canvasAgentBeginLocalConversation({submitExecution});
+    if (resetProjection) canvasAgentBeginLocalConversation({submitExecution,preserveDraft});
     else if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
     if (canvasAgent.connectPromise) {
       await canvasAgent.connectPromise;
-      return canvasAgentStartNewConversation(connectionId,{resetProjection:false,submitExecution});
+      return canvasAgentStartNewConversation(connectionId,{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
     }
     if (canvasAgent.socket?.readyState !== WebSocket.OPEN) return canvasAgentConnect({submitExecution});
-    canvasAgent.currentConversation.items=[];
-    canvasAgentClearTranscript({showEmpty:true});
-    canvasAgentClearAttachments();
-    canvasAgentClearReferences();
-    canvasAgentClearInkDraft();
+    if(!preserveConversation){
+      canvasAgent.currentConversation.items=[];
+      canvasAgentClearTranscript({showEmpty:true});
+    }
+    if(!preserveDraft){
+      canvasAgentClearAttachments();
+      canvasAgentClearReferences();
+      canvasAgentClearInkDraft();
+    }
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
     canvasAgent.running = false;
     canvasAgentStop.hidden = true;
     canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
     const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
     if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
-    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
     canvasAgentBeginSessionTransition();
     const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
-    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}),{handshakeId,provider});
-    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
+    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode(),...(canvasAgent.pendingConversationHistory.length?{conversationHistory:canvasAgent.pendingConversationHistory}:{})}),{handshakeId,provider});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution,preserveDraft,preserveConversation});
+  }
+  async function canvasAgentChangeConnection(connectionId = selectedAiConnectionId(), {submitExecution=null}={}) {
+    connectionId=String(connectionId||"");
+    if(canvasAgent.connectPromise){
+      await canvasAgent.connectPromise;
+      return canvasAgentChangeConnection(connectionId,{submitExecution});
+    }
+    if(canvasAgent.socket?.readyState!==WebSocket.OPEN||!canvasAgent.sessionId||!canvasAgent.sessionReady)return canvasAgentConnect({submitExecution});
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    else canvasAgentInvalidateSubmitExecution();
+    const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentChangeConnection(selectedAiConnectionId(),{submitExecution});
+    canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
+    canvasAgentBeginSessionTransition();
+    const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
+    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("change_connection",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}),{handshakeId,provider});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentChangeConnection(selectedAiConnectionId(),{submitExecution});
   }
   async function canvasAgentConnect(options) {
     const {submitExecution=null}=options||{};
@@ -16795,6 +17196,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const connectionId = selectedAiConnectionId();
     if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId) {
       if (canvasAgent.sessionReady&&canvasAgent.connectionId === connectionId&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()) return;
+      if(canvasAgent.sessionReady&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()){
+        await canvasAgentChangeConnection(connectionId,{submitExecution});
+        return;
+      }
       await canvasAgentStartNewConversation(connectionId,{submitExecution});
       return canvasAgentConnect({submitExecution});
     }
@@ -16827,6 +17232,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           widgetCapabilities,
           projectId:canvasAgent.projectId,
           accessMode:canvasAgentEffectiveAccessMode(),
+          ...(canvasAgent.pendingConversationHistory.length?{conversationHistory:canvasAgent.pendingConversationHistory}:{}),
         });
       });
       socket.addEventListener("message",event=>void canvasAgentHandleMessage(event));
@@ -16867,15 +17273,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return canvasAgentConnectionProvider(selectedAiConnectionId());
   }
   function canvasAgentConnectionDidChange(force = false, nextProvider = canvasAgentSelectedConnectionProvider()) {
-    const provider=String(nextProvider||""),codexTransition=canvasAgent.sessionEngine==="codex-native"||canvasAgent.pendingProvider==="codex-cli"||provider==="codex-cli";
+    const provider=String(nextProvider||"");
     const connectionActive = canvasAgent.socket?.readyState === WebSocket.OPEN || Boolean(canvasAgent.connectPromise);
-    if (!connectionActive || !codexTransition && canvasAgentPanel.hidden || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
-    const action = force || codexTransition ? canvasAgentStartNewConversation(selectedAiConnectionId()) : canvasAgentConnect();
+    if (!connectionActive || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
+    if(canvasAgent.running||canvasAgent.requestPending){canvasAgent.pendingConnectionChange={force,provider};return;}
+    const action = canvasAgentChangeConnection(selectedAiConnectionId());
     void action.catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   }
   async function canvasAgentEnsureSearchSession(submitExecution=null) {
     if (canvasAgent.sessionSearchEnabled === canvasAgent.searchEnabled || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionReady || !canvasAgent.sessionId) return;
-    await canvasAgentStartNewConversation(selectedAiConnectionId(),{submitExecution});
+    await canvasAgentStartNewConversation(selectedAiConnectionId(),{submitExecution,preserveDraft:true});
   }
 
   function canvasAgentValidatedRegion(value) {
@@ -17863,6 +18270,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   canvasAgentRenderProjects();
   canvasAgentCanvasDidChange();
 // Pointer and control bindings, portable snapshots, and application startup.
+  const ERASER_TOOL_MENU_MS = 5000;
+  let eraserToolMenuTimer = 0;
   function updateCanvasPointerPreview(event) {
     const drawing = state.drawing,
       next = state.mode === "eraser"
@@ -17887,6 +18296,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.panGesture = null;
     state.textTap = null;
     state.pointerPreview = null;
+    cancelAreaEraseGesture();
+    hideEraserToolMenu();
     document.body.classList.toggle("canvas-view-mode", enabled);
     view.classList.toggle("view-mode", enabled);
     canvasViewButton.setAttribute("aria-pressed", String(enabled));
@@ -17969,6 +18380,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         return;
       }
       createTextEditor(point);
+      return;
+    }
+    if (state.mode === "area-eraser") {
+      if (!valid(point)) {
+        setStatusKey("outsideCanvas");
+        return;
+      }
+      beginAreaEraseGesture(e, point);
       return;
     }
     if (state.mode === "select" && e.pointerType !== "touch") {
@@ -18065,6 +18484,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         state.textTap = null;
+        cancelAreaEraseGesture();
         if (state.pendingGesture) state.pendingGesture = null;
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
         if (state.selectedWidgetId) acceptWidgetEdit();
@@ -18168,6 +18588,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (state.animationGesture?.id === e.pointerId) {
       updateAnimationGesture(e);
+      return;
+    }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      updateAreaEraseGesture(e);
+      const point = clientPoint(e);
+      coords.textContent = `x ${Math.round(point.x)} · y ${Math.round(point.y)} · ${Math.round(state.scale * 100)}%`;
       return;
     }
     if (state.selectionGesture?.id === e.pointerId) {
@@ -18284,6 +18710,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       finishAnimationGesture(e);
       return;
     }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      finishAreaEraseGesture(e);
+      if (e.pointerType === "touch") {
+        state.touchGesture = null;
+        state.panGesture = null;
+        if (!state.touches.size) setNavigating(false);
+      }
+      return;
+    }
     if (state.selectionGesture?.id === e.pointerId) {
       finishSelectionGesture(e);
       return;
@@ -18372,11 +18807,54 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preserveWidgetRefinement:true,
     });
   }
+  function updateEraserToolUI() {
+    if (!eraserToolButton) return;
+    const area = state.eraserMode === "area-eraser",
+      key = area ? "areaEraser" : "eraser";
+    eraserToolButton.dataset.i18nAria = key;
+    eraserToolButton.dataset.i18nTitle = key;
+    eraserToolButton.dataset.activeEraser = state.eraserMode;
+    eraserToolButton.setAttribute("aria-label", t(key));
+    eraserToolButton.setAttribute("title", t(key));
+    eraserFreehandButton?.setAttribute("aria-checked", String(!area));
+    eraserAreaButton?.setAttribute("aria-checked", String(area));
+  }
+  function showEraserToolMenu(focus = false) {
+    if (!eraserToolMenu || !eraserToolButton) return;
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenu.hidden = false;
+    eraserToolButton.setAttribute("aria-expanded", "true");
+    updateEraserToolUI();
+    if (focus) (state.eraserMode === "area-eraser" ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    eraserToolMenuTimer = setTimeout(() => hideEraserToolMenu(), ERASER_TOOL_MENU_MS);
+  }
+  function hideEraserToolMenu(options) {
+    options ||= {};
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenuTimer = 0;
+    if (!eraserToolMenu || eraserToolMenu.hidden) return;
+    const restoreFocus = options.restoreFocus || eraserToolMenu.contains(document.activeElement);
+    eraserToolMenu.hidden = true;
+    eraserToolButton?.setAttribute("aria-expanded", "false");
+    if (restoreFocus) eraserToolButton?.focus({ preventScroll:true });
+  }
+  function selectEraserMode(mode, options) {
+    options ||= {};
+    if (!["eraser", "area-eraser"].includes(mode)) return;
+    state.eraserMode = mode;
+    updateEraserToolUI();
+    setCanvasMode(mode, { showHint:true });
+    if (options.keepMenuOpen) showEraserToolMenu();
+  }
   function setCanvasMode(mode, options) {
     options ||= {};
-    const button = document.querySelector(`[data-mode="${mode}"]`);
+    const eraserMode = ["eraser", "area-eraser"].includes(mode),
+      button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    const finalizingPendingWidgetForEraser = mode === "eraser" && ["hand", "pen"].includes(state.mode)
+    if (eraserMode) state.eraserMode = mode;
+    if (state.areaEraseGesture) cancelAreaEraseGesture();
+    hideEraserToolMenu();
+    const finalizingPendingWidgetForEraser = eraserMode && ["hand", "pen"].includes(state.mode)
       && !options.skipDraftFinalize && Boolean(state.pendingWidget);
     if (finalizingPendingWidgetForEraser) {
       state.aiDraftReturnMode = null;
@@ -18440,6 +18918,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       item.classList.toggle("active", item === button);
       item.setAttribute("aria-pressed", String(item === button));
     });
+    updateEraserToolUI();
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
@@ -18452,6 +18931,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         select:["canvasHintLasso", "canvasHintLassoAlt"],
         text:["canvasHintText", "canvasHintTextAlt"],
         eraser:["canvasHintEraser", "canvasHintEraserAlt"],
+        "area-eraser":["canvasHintAreaEraser", "canvasHintAreaEraserAlt"],
       }[mode];
       if (hintKey) showCanvasHint(hintKey);
     }
@@ -18460,8 +18940,37 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
   }
   document.querySelectorAll("[data-mode]").forEach((button) => {
+    if (button === eraserToolButton) return;
     button.onclick = () => setCanvasMode(button.dataset.mode, { showHint:true });
   });
+  eraserToolButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  eraserToolButton?.addEventListener("click", () => selectEraserMode(state.eraserMode, { keepMenuOpen:true }));
+  eraserToolButton?.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    showEraserToolMenu(true);
+  });
+  for (const button of [eraserFreehandButton, eraserAreaButton].filter(Boolean)) {
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectEraserMode(button.dataset.eraserMode, { keepMenuOpen:true });
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideEraserToolMenu({ restoreFocus:true });
+        return;
+      }
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      (button === eraserFreehandButton ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    });
+  }
+  document.addEventListener("pointerdown", (event) => {
+    if (eraserToolMenu && !eraserToolMenu.hidden && !eraserToolControl?.contains(event.target)) hideEraserToolMenu();
+  });
+  updateEraserToolUI();
   canvasViewButton.onclick = () => setCanvasViewMode(true);
   canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
   canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
@@ -19093,6 +19602,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
   canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
   settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsTestSearch?.addEventListener("click", () => void testCanvasSearch());
   settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
   settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
@@ -19120,6 +19630,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateSettingsProviderFields();
     selectDefaultConnectionEffort();
   });
+  settingsDeepSeekSearchProvider?.addEventListener("change", () => {
+    updateDeepSeekSearchProviderNotice();
+    resetSearchTestStatuses();
+  });
+  settingsDeepSeekSearchApiKey?.addEventListener("input", resetSearchTestStatuses);
+  settingsTavilyApiKey?.addEventListener("input", resetSearchTestStatuses);
   settingsApiFormat?.addEventListener("change", () => {
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
@@ -19175,6 +19691,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   window.visualViewport?.addEventListener("scroll", scheduleFeatureTourPosition);
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && (document.querySelector("#newCanvasDialog").open || document.querySelector("#textHelpDialog").open)) return;
+    if (e.key === "Escape" && eraserToolMenu && !eraserToolMenu.hidden) {
+      hideEraserToolMenu({ restoreFocus:true });
+      return;
+    }
+    if (e.key === "Escape" && state.areaEraseGesture) {
+      cancelAreaEraseGesture();
+      setStatusKey("ready");
+      return;
+    }
     if (e.key === "Escape" && state.selection) {
       cancelSelection();
       return;

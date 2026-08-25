@@ -85,6 +85,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
             widgetCapabilities:envelope.payload?.widgetCapabilities,
             projectId:String(envelope.payload?.projectId || ""),
             accessMode:String(envelope.payload?.accessMode || "controlled"),
+            conversationHistory:envelope.payload?.conversationHistory,
             binding,
             send,
           });
@@ -115,6 +116,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
             widgetCapabilities:envelope.payload?.widgetCapabilities,
             projectId:String(envelope.payload?.projectId || ""),
             accessMode:String(envelope.payload?.accessMode || "controlled"),
+            conversationHistory:envelope.payload?.conversationHistory,
             binding,
             send,
           });
@@ -123,6 +125,40 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
             throw new Error("Canvas Agent session replacement is no longer current.");
           }
           state.session = replacement;
+          if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
+          return;
+        }
+        if (envelope.type === "change_connection") {
+          const previous = state.session, connectionId = String(envelope.payload?.connectionId || previous.connectionId),
+            handshakeId=normalizedHandshakeId(envelope.payload?.handshakeId);
+          if (!resolveConnection(connectionId)) throw new Error("The selected AI connection was not found.");
+          const generation = ++state.sessionGeneration;
+          state.pendingHandshakeId=handshakeId;
+          const send = sendForHandshake(generation,handshakeId);
+          let changed;
+          try {
+            changed = await runtime.changeConnection(previous, {
+              clientId:previous.clientId,
+              connectionId,
+              webSearchEnabled:envelope.payload?.webSearchEnabled === true,
+              widgetCapabilities:envelope.payload?.widgetCapabilities,
+              projectId:String(envelope.payload?.projectId || ""),
+              accessMode:String(envelope.payload?.accessMode || "controlled"),
+              binding,
+              send,
+            });
+          } catch (error) {
+            if(generation===state.sessionGeneration)state.sessionGeneration--;
+            state.pendingHandshakeId=handshakeId;
+            fail(error,false);
+            if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
+            return;
+          }
+          if (generation !== state.sessionGeneration) {
+            if (changed !== previous) await runtime.disposeSession(changed).catch(() => {});
+            throw new Error("Canvas Agent connection change is no longer current.");
+          }
+          state.session = changed;
           if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
           return;
         }

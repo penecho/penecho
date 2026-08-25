@@ -100,10 +100,11 @@ function sanitizeKimiEnv(env = process.env, effort = null) {
   return clean;
 }
 
-function buildKimiArgs({ model, prompt, agentFile = KIMI_AGENT_FILE }) {
+function buildKimiArgs({ model, prompt, agentFile = KIMI_AGENT_FILE, outputFormat = "stream-json" }) {
+  const format = outputFormat === "text" ? "text" : "stream-json";
   const args = [
     "--prompt", String(prompt || ""),
-    "--output-format", "stream-json",
+    "--output-format", format,
     "--agent-file", agentFile,
   ];
   if (model) args.push("--model", model);
@@ -182,16 +183,76 @@ function appendTail(current, value) {
   return buffer.length <= MAX_CAPTURE_BYTES ? combined : buffer.subarray(-MAX_CAPTURE_BYTES).toString("utf8");
 }
 
-function runProcess(launch, args, cwd, env, signal, onActivity = null, onUsage = null) {
+function normalizeKimiTranscript(value) {
+  const lines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+  const first = lines.findIndex(line => line.trim());
+  if (first < 0) return "";
+  const rendered = lines.slice(first);
+  if (rendered[0].startsWith("• ")) {
+    rendered[0] = rendered[0].slice(2);
+    for (let index = 1; index < rendered.length; index++) {
+      if (rendered[index].startsWith("  ")) rendered[index] = rendered[index].slice(2);
+    }
+  }
+  return rendered.join("\n").trim();
+}
+
+function isKimiHarnessDecision(value) {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(call => call && typeof call === "object" && !Array.isArray(call) && call.type === "tool_call");
+  }
+  return Boolean(value && typeof value === "object" && ["final", "tool_call", "tool_calls"].includes(value.type));
+}
+
+function extractKimiCanvasAgentJson(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try { JSON.parse(text); return text; } catch {}
+  let attempts = 0;
+  for (let start = 0; start < text.length && attempts < 256; start++) {
+    if (text[start] !== "{" && text[start] !== "[") continue;
+    attempts += 1;
+    const closers = [];
+    let inString = false, escaped = false;
+    for (let end = start; end < text.length; end++) {
+      const char = text[end];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') { inString = true; continue; }
+      if (char === "{") closers.push("}");
+      else if (char === "[") closers.push("]");
+      else if (char === "}" || char === "]") {
+        if (closers.pop() !== char) break;
+        if (closers.length === 0) {
+          const candidate = text.slice(start, end + 1);
+          try { if (isKimiHarnessDecision(JSON.parse(candidate))) return candidate; } catch {}
+          break;
+        }
+      }
+    }
+  }
+  return text;
+}
+
+function runProcess(launch, args, cwd, env, signal, onActivity = null, onUsage = null, outputFormat = "stream-json") {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
+    const streamJson = outputFormat !== "text";
     let child;
     try { child = spawn(launch.command, [...launch.prefixArgs, ...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: false, detached: process.platform !== "win32" }); }
     catch (error) { return reject(error); }
     let settled = false, lineBuffer = "", stderr = "", content = "", termination = null;
     const events = [];
     const terminate = () => termination ||= stopProcessTree(child);
-    const traceDiagnostic = () => JSON.stringify({ events, stderr:stderr.slice(-4000) });
+    const noteEvent = type => {
+      events.push({ type });
+      if (events.length > 64) events.shift();
+    };
+    const traceDiagnostic = () => JSON.stringify({ events, ...(streamJson && stderr ? { stderr:stderr.slice(-4000) } : {}) });
     const failEarly = error => {
       if (settled) return;
       settled = true;
@@ -234,24 +295,40 @@ function runProcess(launch, args, cwd, env, signal, onActivity = null, onUsage =
     child.stdout.on("data", chunk => {
       if (settled) return;
       try { onActivity?.(); } catch {}
+      if (!streamJson) {
+        noteEvent("assistant.delta");
+        content += chunk;
+        if (Buffer.byteLength(content, "utf8") > MAX_CAPTURE_BYTES) failEarly(new Error("Kimi Code CLI final response is too large."));
+        return;
+      }
       lineBuffer += chunk;
       let newline;
       while ((newline = lineBuffer.indexOf("\n")) >= 0 && !settled) { const line = lineBuffer.slice(0, newline); lineBuffer = lineBuffer.slice(newline + 1); handleLine(line); }
       if (!settled && Buffer.byteLength(lineBuffer, "utf8") > MAX_CAPTURE_BYTES) failEarly(new Error("Kimi Code CLI produced an oversized unterminated JSON event."));
     });
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", chunk => { if (!settled) stderr = appendTail(stderr, chunk); });
+    child.stderr.on("data", chunk => {
+      if (settled) return;
+      if (!streamJson) {
+        // Kimi text mode streams private thinking on stderr. It is genuine
+        // provider activity, but its content must never enter diagnostics.
+        noteEvent("thinking.delta");
+        try { onActivity?.(); } catch {}
+        return;
+      }
+      stderr = appendTail(stderr, chunk);
+    });
     const onAbort = () => failEarly(abortError());
     signal?.addEventListener("abort", onAbort, { once:true });
     child.once("error", error => { if (settled) return; settled = true; signal?.removeEventListener("abort", onAbort); error.traceDiagnostic ||= traceDiagnostic(); reject(error); });
     child.once("close", code => {
       if (settled) return;
-      if (lineBuffer.trim()) handleLine(lineBuffer);
+      if (streamJson && lineBuffer.trim()) handleLine(lineBuffer);
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
       if (signal?.aborted) return reject(abortError());
-      resolve({ code, content, stderr, traceDiagnostic:traceDiagnostic(), cleanupReady:Promise.resolve(), deferCleanup:false });
+      resolve({ code, content:streamJson ? content : normalizeKimiTranscript(content), stderr, traceDiagnostic:traceDiagnostic(), cleanupReady:Promise.resolve(), deferCleanup:false });
     });
   });
 }
@@ -263,7 +340,7 @@ function imageParts(atlasImage) {
   return matches.map(match => ({ mimeType:match[1].toLowerCase(), buffer:Buffer.from(match[2], "base64") }));
 }
 
-async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null, onUsage = null }) {
+async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null, onUsage = null, outputFormat = "stream-json" }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-kimi-"));
   let cleanupReady = Promise.resolve(), deferCleanup = false, caughtError = null;
   try {
@@ -278,11 +355,12 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
     }
     const imageHint = files.length ? `\n\nCanvas images are attached through ${files.map(file => `@${path.basename(file)}`).join(", ")}. Use the supplied visual content directly; never call ReadMediaFile or another CLI tool.` : "";
     const launch = resolveKimiLaunch(executable, env), basePrompt = `${String(prompt || "")}${imageHint}`, cleanEnv = sanitizeKimiEnv(env, effort);
+    if (outputFormat === "text") cleanEnv.NO_COLOR = "1";
     let activePrompt = basePrompt;
     for (let recoveries = 0;;) {
       let result;
       try {
-        result = await runProcess(launch, buildKimiArgs({ model, prompt:activePrompt, agentFile }), workDir, cleanEnv, signal, onActivity, onUsage);
+        result = await runProcess(launch, buildKimiArgs({ model, prompt:activePrompt, agentFile, outputFormat }), workDir, cleanEnv, signal, onActivity, onUsage, outputFormat);
       } catch (error) {
         cleanupReady = error.cleanupReady || cleanupReady;
         deferCleanup = deferCleanup || Boolean(error.deferCleanup);
@@ -311,6 +389,11 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
     if (deferCleanup) void cleanup().catch(() => {});
     else try { await cleanup(); } catch (cleanupError) { if (caughtError) caughtError.cleanupDiagnostic = cleanupError.message; else throw cleanupError; }
   }
+}
+
+async function callKimiCanvasAgentCli(options) {
+  const output = await callKimiCliSpawn({ ...options, outputFormat:"text" });
+  return extractKimiCanvasAgentJson(output);
 }
 
 function kimiAcpWorkDir() {
@@ -351,14 +434,17 @@ async function callKimiCli({ executable = "kimi", model = null, effort = null, p
 
 module.exports = {
   buildKimiArgs,
+  callKimiCanvasAgentCli,
   callKimiCli,
   callKimiCliSpawn,
+  extractKimiCanvasAgentJson,
   kimiAssistantText,
   kimiEventHasToolActivity,
   kimiEventToolName,
   kimiEventUsage,
   kimiToolRecoveryPrompt,
   mapKimiEffort,
+  normalizeKimiTranscript,
   normalizeKimiToolName,
   resolveKimiLaunch,
   sanitizeKimiEnv,

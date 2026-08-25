@@ -436,7 +436,7 @@ test("server uses applied global configuration and one timeout for every executo
 });
 
 test("Codex CLI mode starts with no extra access or model-provider settings", { timeout: 10000 }, async () => {
-  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0",TAVILY_API_KEY:""}));
+  const {child,origin}=await startServer(serverEnv({HOST:"0.0.0.0",DEEPSEEK_API_KEY:"",DEEPSEEK_SEARCH_API_KEY:"",TAVILY_API_KEY:""}));
   try {
     const localPage=await fetch(origin);
     assert.equal(localPage.status,200);
@@ -445,26 +445,36 @@ test("Codex CLI mode starts with no extra access or model-provider settings", { 
     assert.equal(config.aiEffort,"config");
     assert.equal(config.canvasAgentSearchConfigured,true);
     const settings=await fetch(`${origin}/api/settings`,{headers:{Origin:origin}}).then(response=>response.json());
+    assert.equal(settings.deepSeekSearchProvider,"deepseek-official");
+    assert.equal(settings.hasDeepSeekSearchApiKey,false);
     assert.equal(settings.hasTavilyApiKey,false);
     assert.equal(settings.webSearchAvailable,true);
   } finally { await stopServer(child); }
 });
 
 test("canvas settings expose no API secret and save validated configuration for restart", { timeout:10000 }, async () => {
-  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret", TAVILY_API_KEY:"saved-tavily-secret" }));
+  const { child, origin, stateDir } = await startServer(apiServerEnv("https://api.example.test", { AI_API_KEY:"saved-secret", DEEPSEEK_SEARCH_API_KEY:"saved-deepseek-secret", TAVILY_API_KEY:"saved-tavily-secret" }));
   try {
     const headers = { Origin:origin, "Content-Type":"application/json" };
     const currentResponse = await fetch(`${origin}/api/settings`, { headers:{ Origin:origin } }), current = await currentResponse.json();
     assert.equal(currentResponse.status, 200);
     assert.equal(current.hasApiKey, true);
+    assert.equal(current.deepSeekSearchProvider, "deepseek-official");
+    assert.equal(current.hasDeepSeekSearchApiKey, true);
     assert.equal(current.hasTavilyApiKey, true);
     assert.equal(current.webSearchAvailable, true);
     assert.equal(Object.hasOwn(current, "apiKey"), false);
+    assert.equal(Object.hasOwn(current, "deepseekSearchApiKey"), false);
     assert.equal(Object.hasOwn(current, "tavilyApiKey"), false);
     assert.equal(current.maxTokens, 20000);
-    const searchResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ scope:"search", tavilyApiKey:"tvly-next-secret" }) }), search = await searchResponse.json();
+    const invalidSearchTestResponse=await fetch(`${origin}/api/settings/search/test`,{method:"POST",headers,body:JSON.stringify({deepSeekSearchProvider:"opencode-go",deepseekSearchApiKey:"bad\nkey",tavilyApiKey:""})}),invalidSearchTest=await invalidSearchTestResponse.json();
+    assert.equal(invalidSearchTestResponse.status,400);
+    assert.doesNotMatch(JSON.stringify(invalidSearchTest),/saved-(?:deepseek|tavily)-secret/);
+    const searchResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ scope:"search", deepSeekSearchProvider:"opencode-go", deepseekSearchApiKey:"sk-deepseek-next-secret", tavilyApiKey:"tvly-next-secret" }) }), search = await searchResponse.json();
     assert.equal(searchResponse.status, 200, JSON.stringify(search));
     assert.equal(search.searchApplied, true);
+    assert.equal(search.deepSeekSearchProvider, "opencode-go");
+    assert.equal(search.hasDeepSeekSearchApiKey, true);
     assert.equal(search.hasTavilyApiKey, true);
     assert.equal(search.webSearchAvailable, true);
     assert.equal((await fetch(`${origin}/api/config`).then(response => response.json())).canvasAgentSearchConfigured, true);
@@ -480,6 +490,8 @@ test("canvas settings expose no API secret and save validated configuration for 
     assert.match(text, /^AI_API_URL=https:\/\/api\.example\.test\/anthropic$/m);
     assert.match(text, /^AI_API_MODEL=model-next$/m);
     assert.match(text, /^AI_API_KEY=saved-secret$/m);
+    assert.match(text, /^DEEPSEEK_SEARCH_API_KEY=sk-deepseek-next-secret$/m);
+    assert.match(text, /^DEEPSEEK_SEARCH_PROVIDER=opencode-go$/m);
     assert.match(text, /^TAVILY_API_KEY=tvly-next-secret$/m);
     assert.doesNotMatch(text, /^AUTO_AI_DELAY_SECONDS=/m);
     const switchedResponse = await fetch(`${origin}/api/settings`, { method:"POST", headers, body:JSON.stringify({ ...current, scope:"api", provider:"codex-cli", codexModel:"gpt-hot", codexPath:"codex-next", effort:"high", timeoutSeconds:120, autoDelaySeconds:5, imageFormat:"webp", requestTrace:false, requestTraceLimit:100 }) });

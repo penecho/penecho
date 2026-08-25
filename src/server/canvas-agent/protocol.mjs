@@ -8,6 +8,7 @@ const CLIENT_MESSAGE_TYPES = new Set([
   'steer',
   'cancel',
   'tool_result',
+  'change_connection',
   'new_conversation',
   'ping',
 ])

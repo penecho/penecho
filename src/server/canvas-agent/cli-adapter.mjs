@@ -4,7 +4,7 @@ import { CallId, LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/d
 import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutLimits, canvasAgentTimeoutSeconds, createCanvasAgentModelTimeout } from './model-timeout.mjs'
 
 const require = createRequire(import.meta.url)
-const { callKimiCli } = require('../../providers/kimi-cli.js')
+const { callKimiCanvasAgentCli } = require('../../providers/kimi-cli.js')
 const { callCodexCli } = require('../../providers/codex-cli.js')
 const { callClaudeCli } = require('../../providers/claude-cli.js')
 
@@ -248,7 +248,12 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
     onActivity,
   }
   if (connection.provider === 'kimi-cli') {
-    return callKimiCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}`, onUsage })
+    // Kimi ACP currently starts its default agent profile with built-in tools
+    // and exposes no ACP option for selecting PenEcho's tool-free profile.
+    // Canvas Agent therefore uses the disposable --agent-file path for every
+    // Harness step. Text mode exposes genuine assistant/thinking deltas so the
+    // idle timeout can refresh; direct Canvas AI keeps its separate Kimi path.
+    return callKimiCanvasAgentCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}`, onUsage })
   }
   if (connection.provider === 'codex-cli') {
     return callCodexCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}`, onUsage })

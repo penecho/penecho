@@ -1,4 +1,6 @@
 // Pointer and control bindings, portable snapshots, and application startup.
+  const ERASER_TOOL_MENU_MS = 5000;
+  let eraserToolMenuTimer = 0;
   function updateCanvasPointerPreview(event) {
     const drawing = state.drawing,
       next = state.mode === "eraser"
@@ -23,6 +25,8 @@
     state.panGesture = null;
     state.textTap = null;
     state.pointerPreview = null;
+    cancelAreaEraseGesture();
+    hideEraserToolMenu();
     document.body.classList.toggle("canvas-view-mode", enabled);
     view.classList.toggle("view-mode", enabled);
     canvasViewButton.setAttribute("aria-pressed", String(enabled));
@@ -105,6 +109,14 @@
         return;
       }
       createTextEditor(point);
+      return;
+    }
+    if (state.mode === "area-eraser") {
+      if (!valid(point)) {
+        setStatusKey("outsideCanvas");
+        return;
+      }
+      beginAreaEraseGesture(e, point);
       return;
     }
     if (state.mode === "select" && e.pointerType !== "touch") {
@@ -201,6 +213,7 @@
       if (state.mode === "hand" && state.handGestureIncludesWidget) return;
       if (state.touches.size >= 2) {
         state.textTap = null;
+        cancelAreaEraseGesture();
         if (state.pendingGesture) state.pendingGesture = null;
         if (state.widgetGesture) finishWidgetGesture({ pointerId:state.widgetGesture.id });
         if (state.selectedWidgetId) acceptWidgetEdit();
@@ -304,6 +317,12 @@
     }
     if (state.animationGesture?.id === e.pointerId) {
       updateAnimationGesture(e);
+      return;
+    }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      updateAreaEraseGesture(e);
+      const point = clientPoint(e);
+      coords.textContent = `x ${Math.round(point.x)} · y ${Math.round(point.y)} · ${Math.round(state.scale * 100)}%`;
       return;
     }
     if (state.selectionGesture?.id === e.pointerId) {
@@ -420,6 +439,15 @@
       finishAnimationGesture(e);
       return;
     }
+    if (state.areaEraseGesture?.id === e.pointerId) {
+      finishAreaEraseGesture(e);
+      if (e.pointerType === "touch") {
+        state.touchGesture = null;
+        state.panGesture = null;
+        if (!state.touches.size) setNavigating(false);
+      }
+      return;
+    }
     if (state.selectionGesture?.id === e.pointerId) {
       finishSelectionGesture(e);
       return;
@@ -508,11 +536,54 @@
       preserveWidgetRefinement:true,
     });
   }
+  function updateEraserToolUI() {
+    if (!eraserToolButton) return;
+    const area = state.eraserMode === "area-eraser",
+      key = area ? "areaEraser" : "eraser";
+    eraserToolButton.dataset.i18nAria = key;
+    eraserToolButton.dataset.i18nTitle = key;
+    eraserToolButton.dataset.activeEraser = state.eraserMode;
+    eraserToolButton.setAttribute("aria-label", t(key));
+    eraserToolButton.setAttribute("title", t(key));
+    eraserFreehandButton?.setAttribute("aria-checked", String(!area));
+    eraserAreaButton?.setAttribute("aria-checked", String(area));
+  }
+  function showEraserToolMenu(focus = false) {
+    if (!eraserToolMenu || !eraserToolButton) return;
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenu.hidden = false;
+    eraserToolButton.setAttribute("aria-expanded", "true");
+    updateEraserToolUI();
+    if (focus) (state.eraserMode === "area-eraser" ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    eraserToolMenuTimer = setTimeout(() => hideEraserToolMenu(), ERASER_TOOL_MENU_MS);
+  }
+  function hideEraserToolMenu(options) {
+    options ||= {};
+    clearTimeout(eraserToolMenuTimer);
+    eraserToolMenuTimer = 0;
+    if (!eraserToolMenu || eraserToolMenu.hidden) return;
+    const restoreFocus = options.restoreFocus || eraserToolMenu.contains(document.activeElement);
+    eraserToolMenu.hidden = true;
+    eraserToolButton?.setAttribute("aria-expanded", "false");
+    if (restoreFocus) eraserToolButton?.focus({ preventScroll:true });
+  }
+  function selectEraserMode(mode, options) {
+    options ||= {};
+    if (!["eraser", "area-eraser"].includes(mode)) return;
+    state.eraserMode = mode;
+    updateEraserToolUI();
+    setCanvasMode(mode, { showHint:true });
+    if (options.keepMenuOpen) showEraserToolMenu();
+  }
   function setCanvasMode(mode, options) {
     options ||= {};
-    const button = document.querySelector(`[data-mode="${mode}"]`);
+    const eraserMode = ["eraser", "area-eraser"].includes(mode),
+      button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return;
-    const finalizingPendingWidgetForEraser = mode === "eraser" && ["hand", "pen"].includes(state.mode)
+    if (eraserMode) state.eraserMode = mode;
+    if (state.areaEraseGesture) cancelAreaEraseGesture();
+    hideEraserToolMenu();
+    const finalizingPendingWidgetForEraser = eraserMode && ["hand", "pen"].includes(state.mode)
       && !options.skipDraftFinalize && Boolean(state.pendingWidget);
     if (finalizingPendingWidgetForEraser) {
       state.aiDraftReturnMode = null;
@@ -576,6 +647,7 @@
       item.classList.toggle("active", item === button);
       item.setAttribute("aria-pressed", String(item === button));
     });
+    updateEraserToolUI();
     resetCanvasCursor();
     requestInteractionLayerRender();
     if (mode === "hand") setNavigating(true);
@@ -588,6 +660,7 @@
         select:["canvasHintLasso", "canvasHintLassoAlt"],
         text:["canvasHintText", "canvasHintTextAlt"],
         eraser:["canvasHintEraser", "canvasHintEraserAlt"],
+        "area-eraser":["canvasHintAreaEraser", "canvasHintAreaEraserAlt"],
       }[mode];
       if (hintKey) showCanvasHint(hintKey);
     }
@@ -596,8 +669,37 @@
     });
   }
   document.querySelectorAll("[data-mode]").forEach((button) => {
+    if (button === eraserToolButton) return;
     button.onclick = () => setCanvasMode(button.dataset.mode, { showHint:true });
   });
+  eraserToolButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  eraserToolButton?.addEventListener("click", () => selectEraserMode(state.eraserMode, { keepMenuOpen:true }));
+  eraserToolButton?.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    showEraserToolMenu(true);
+  });
+  for (const button of [eraserFreehandButton, eraserAreaButton].filter(Boolean)) {
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectEraserMode(button.dataset.eraserMode, { keepMenuOpen:true });
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideEraserToolMenu({ restoreFocus:true });
+        return;
+      }
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      (button === eraserFreehandButton ? eraserAreaButton : eraserFreehandButton)?.focus({ preventScroll:true });
+    });
+  }
+  document.addEventListener("pointerdown", (event) => {
+    if (eraserToolMenu && !eraserToolMenu.hidden && !eraserToolControl?.contains(event.target)) hideEraserToolMenu();
+  });
+  updateEraserToolUI();
   canvasViewButton.onclick = () => setCanvasViewMode(true);
   canvasViewCloseButton.onclick = () => setCanvasViewMode(false);
   canvasViewShareButton.onclick = () => document.querySelector("#shareCanvasBtn")?.click();
@@ -1229,6 +1331,7 @@
   configurationPanel?.addEventListener("pointerdown", event => event.stopPropagation());
   canvasSettingsForm?.addEventListener("submit", saveCanvasSettings);
   settingsTestConnection?.addEventListener("click", () => void testCanvasConnection());
+  settingsTestSearch?.addEventListener("click", () => void testCanvasSearch());
   settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
   settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
@@ -1256,6 +1359,12 @@
     updateSettingsProviderFields();
     selectDefaultConnectionEffort();
   });
+  settingsDeepSeekSearchProvider?.addEventListener("change", () => {
+    updateDeepSeekSearchProviderNotice();
+    resetSearchTestStatuses();
+  });
+  settingsDeepSeekSearchApiKey?.addEventListener("input", resetSearchTestStatuses);
+  settingsTavilyApiKey?.addEventListener("input", resetSearchTestStatuses);
   settingsApiFormat?.addEventListener("change", () => {
     updateApiPresetFields(true, true);
     selectDefaultConnectionEffort();
@@ -1311,6 +1420,15 @@
   window.visualViewport?.addEventListener("scroll", scheduleFeatureTourPosition);
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && (document.querySelector("#newCanvasDialog").open || document.querySelector("#textHelpDialog").open)) return;
+    if (e.key === "Escape" && eraserToolMenu && !eraserToolMenu.hidden) {
+      hideEraserToolMenu({ restoreFocus:true });
+      return;
+    }
+    if (e.key === "Escape" && state.areaEraseGesture) {
+      cancelAreaEraseGesture();
+      setStatusKey("ready");
+      return;
+    }
     if (e.key === "Escape" && state.selection) {
       cancelSelection();
       return;

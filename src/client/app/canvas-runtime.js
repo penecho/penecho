@@ -3816,6 +3816,19 @@
     context.stroke();
     context.restore();
   }
+  function drawAreaEraseSelection(context) {
+    const box = areaEraseBox();
+    if (!box) return;
+    const unit = 1 / state.scale;
+    context.save();
+    context.fillStyle = "rgba(220, 38, 38, .1)";
+    context.strokeStyle = "rgba(220, 38, 38, .92)";
+    context.lineWidth = 1.5 * unit;
+    context.setLineDash([6 * unit, 4 * unit]);
+    context.fillRect(box.x, box.y, box.w, box.h);
+    context.strokeRect(box.x, box.y, box.w, box.h);
+    context.restore();
+  }
   function renderInteractionLayer() {
     const d = devicePixelRatio || 1,
       r = view.getBoundingClientRect();
@@ -3840,6 +3853,7 @@
     }
     if (state.drawing?.preview) drawPreview(state.drawing.preview, interactionCtx);
     drawPointerPreview(interactionCtx);
+    drawAreaEraseSelection(interactionCtx);
     if (state.selection) drawSelection(state.selection, interactionCtx);
     drawDirtyMaskDebugBounds(interactionCtx);
     drawWidgetRefineButtonHoverOutline(interactionCtx);

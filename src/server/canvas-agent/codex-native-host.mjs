@@ -16,6 +16,7 @@ import {
   createCanvasAgentNativeRuntime,
   createProjectRuntimeDirectory,
   createSelectedFileSnapshot,
+  freshCanvasAgentTurnBudget,
   freshVisualExplainerBudget,
   freshVisualExplorerBudget,
   loadCanvasAgentContract,
@@ -495,7 +496,7 @@ export class CodexNativeHost {
   async connect(options) {
     const {
       canvasSessionId = '', resumeToken = '', clientId = '', connectionId = 'default', webSearchEnabled = false,
-      widgetCapabilities = {}, projectId = '', accessMode = 'controlled', binding = null, send = null,
+      widgetCapabilities = {}, projectId = '', accessMode = 'controlled', binding = null, send = null, initialBacklog = [], continuity = '',
     } = options || {}
     if (String(canvasSessionId).length > 256 || String(resumeToken).length > 256 || String(clientId).length > 256 || String(connectionId).length > 256 || String(projectId).length > 128) {
       throw new Error('Canvas Agent connection identity is invalid.')
@@ -509,8 +510,8 @@ export class CodexNativeHost {
     if (connection.provider !== 'codex-cli') throw new Error('Codex Native Canvas Agent requires a Codex CLI connection.')
     const fingerprint = codexConnectionFingerprint(connection)
     const resolvedWebSearch = this.resolveWebSearch?.() || {}
-    const webSearchApiKey = String(resolvedWebSearch.apiKey || '')
-    const webSearchKeyHash = hash(webSearchApiKey)
+    const requestedDeepSeekSearchProvider=String(resolvedWebSearch.deepseekProvider||''), deepseekSearchProvider=['deepseek-official','opencode-go'].includes(requestedDeepSeekSearchProvider)?requestedDeepSeekSearchProvider:'deepseek-official', deepseekSearchApiKey=String(resolvedWebSearch.deepseekApiKey||''), tavilySearchApiKey=String(resolvedWebSearch.tavilyApiKey??resolvedWebSearch.apiKey??'')
+    const webSearchKeyHash=hash(`${deepseekSearchProvider}\0${deepseekSearchApiKey}\0${tavilySearchApiKey}`)
     const resolvedWidgetCapabilities = await this.resolveWidgetCapabilities(widgetCapabilities || {})
     const normalizedWidgetCapabilities = normalizeResolvedWidgetCapabilities(resolvedWidgetCapabilities)
     const professionalDiagramsContract = normalizedWidgetCapabilities.professionalEnabled
@@ -572,7 +573,7 @@ export class CodexNativeHost {
       send,
       binding,
       connected:true,
-      backlog:[],
+      backlog:Array.isArray(initialBacklog) ? initialBacklog.slice(-MAX_BACKLOG) : [],
       pending:new Map(),
       toolAborts:new Map(),
       toolQueue:Promise.resolve(),
@@ -583,8 +584,9 @@ export class CodexNativeHost {
       captureCache:new Map(),
       activeCaptureAttachmentId:null,
       canvasLayoutOverviewRevision:null,
-      canvasLayoutReviewRevision:null,
+      canvasLayoutReviewRequired:false,
       lastCanvasMutationRevision:null,
+      canvasTurnBudget:freshCanvasAgentTurnBudget(),
       visualExplainerBudget:freshVisualExplainerBudget(),
       visualExplorerBudget:freshVisualExplorerBudget(),
       visualSkillsLoaded:new Set(),
@@ -600,7 +602,7 @@ export class CodexNativeHost {
       tracePatchProtocol:null,
       traceDecisionProtocol:null,
       webSearchKeyHash,
-      webSearch:{ provider:'tavily', apiKey:webSearchApiKey, enabled:Boolean(webSearchEnabled) },
+      webSearch:{ provider:deepseekSearchApiKey?deepseekSearchProvider:tavilySearchApiKey?'tavily':'built-in', deepseekProvider:deepseekSearchProvider, deepseekApiKey:deepseekSearchApiKey, tavilyApiKey:tavilySearchApiKey, apiKey:tavilySearchApiKey, enabled:Boolean(webSearchEnabled) },
       publicFetch:this.publicFetch,
       resolveWebSearch:() => this.resolveWebSearch?.() || null,
       widgetCapabilities:normalizedWidgetCapabilities,
@@ -615,6 +617,7 @@ export class CodexNativeHost {
       projectSnapshotPath,
       model:configured(connection.cliModel),
       effort:configured(connection.effort),
+      continuity:boundedText(continuity,80_500),
       documentReaderLoaded:true,
       databaseReaderLoaded:true,
       threadId:null,
@@ -626,7 +629,7 @@ export class CodexNativeHost {
       active:null,
       disposed:false,
       disposePromise:null,
-      turnNumber:0,
+      turnNumber:Array.isArray(initialBacklog) ? initialBacklog.reduce((latest,event)=>Math.max(latest,Number.isSafeInteger(event?.turn)?event.turn:0),0) : 0,
     }
     session.emitPublicEvent = event => this.emitPublicEvent(session, event)
     session.traceAsset = this.conversationTrace ? asset => this.traceConversationAsset(session, asset) : null
@@ -738,6 +741,38 @@ export class CodexNativeHost {
     session.stateDigest = digest
   }
 
+  async setConnection(session, { connectionId, binding = session?.binding, send = session?.send } = {}) {
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    if (session.active || session.interruptPromise) throw new Error('Wait for the current Canvas Agent turn to finish before changing models.')
+    const connection = this.resolveConnection(String(connectionId || ''))
+    if (!connection || connection.provider !== 'codex-cli') throw new Error('The selected AI connection cannot use Codex Native Canvas Agent.')
+    session.connectionId=String(connection.id || connectionId)
+    session.connectionFingerprint=codexConnectionFingerprint(connection)
+    session.connection=connection
+    session.model=configured(connection.cliModel)
+    session.effort=configured(connection.effort)
+    session.requestTraceConnection={ ...requestTraceConnection(connection,session.model), executable:'codex' }
+    session.binding=binding
+    session.send=send
+    this.logConversation(session,'connection-change')
+    this.traceConversation(session,'connection-change')
+    this.send(session,'ready',{
+      connectionId:session.connectionId,
+      harnessSessionId:session.threadId || '',
+      webSearchConfigured:true,
+      webSearchEnabled:session.webSearch.enabled,
+      widgetCapabilities:publicWidgetCapabilities(session.widgetCapabilities),
+      project:publicSessionProject(session.project),
+      projectCapabilities:projectSessionCapabilities(session),
+      accessMode:session.accessMode,
+      resumed:false,
+      connectionChanged:true,
+      backlog:[],
+    })
+    this.send(session,'agent_status',{status:'idle'})
+    return session
+  }
+
   setWebSearchEnabled(session, enabled) {
     if (Boolean(enabled) !== session.webSearch.enabled) throw new Error('Internet Search changed. Start a new Canvas Agent conversation before submitting this turn.')
     return session.webSearch.enabled
@@ -779,6 +814,7 @@ export class CodexNativeHost {
   async modelInput(session, prompt, hostReferences, attachments, signal = new AbortController().signal) {
     const input = [
       { type:'text', text:prompt },
+      ...(session.continuity ? [{ type:'text', text:`\n${session.continuity}` }] : []),
       { type:'text', text:`\n<penecho_host_references>${JSON.stringify(hostReferences)}</penecho_host_references>` },
     ]
     for (const attachment of attachments) {
@@ -816,9 +852,10 @@ export class CodexNativeHost {
     const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
     if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
     const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
-    const previousVisualExplainerBudget = session.visualExplainerBudget, previousVisualExplorerBudget = session.visualExplorerBudget,
+    const previousCanvasTurnBudget = session.canvasTurnBudget, previousVisualExplainerBudget = session.visualExplainerBudget, previousVisualExplorerBudget = session.visualExplorerBudget,
       previousWidgetPatchAttempts = session.widgetPatchAttempts, previousTurnReferences = session.turnReferences
     session.turnReferences = hostReferences
+    session.canvasTurnBudget = freshCanvasAgentTurnBudget()
     session.visualExplainerBudget = freshVisualExplainerBudget()
     session.visualExplorerBudget = freshVisualExplorerBudget()
     if (initialCanvasState?.empty) session.visualExplorerBudget.authoritativeEmptyRevision = Number(initialCanvasState.reference?.digest?.revision)
@@ -838,6 +875,7 @@ export class CodexNativeHost {
       return { output:'', usage:active.usage, steered:true }
     } catch (error) {
       session.turnReferences = previousTurnReferences
+      session.canvasTurnBudget = previousCanvasTurnBudget
       session.visualExplainerBudget = previousVisualExplainerBudget
       session.visualExplorerBudget = previousVisualExplorerBudget
       session.widgetPatchAttempts = previousWidgetPatchAttempts
@@ -904,7 +942,7 @@ export class CodexNativeHost {
     this.emitPublicEvent(session, { kind:'turn_start', turn:session.turnNumber })
     this.send(session, 'agent_status', { status:'running' })
 
-    let previousVisualExplainerBudget, previousVisualExplorerBudget, previousWidgetPatchAttempts, budgetsChanged = false
+    let previousCanvasTurnBudget, previousVisualExplainerBudget, previousVisualExplorerBudget, previousWidgetPatchAttempts, budgetsChanged = false
     const assertActive = () => {
       if (session.disposed || session.active !== active || inputController.signal.aborted) {
         throw inputController.signal.reason instanceof Error
@@ -922,10 +960,12 @@ export class CodexNativeHost {
       assertActive()
       const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
       session.turnReferences = hostReferences
+      previousCanvasTurnBudget = session.canvasTurnBudget
       previousVisualExplainerBudget = session.visualExplainerBudget
       previousVisualExplorerBudget = session.visualExplorerBudget
       previousWidgetPatchAttempts = session.widgetPatchAttempts
       budgetsChanged = true
+      session.canvasTurnBudget = freshCanvasAgentTurnBudget()
       session.visualExplainerBudget = freshVisualExplainerBudget()
       session.visualExplorerBudget = freshVisualExplorerBudget()
       if (initialCanvasState?.empty) session.visualExplorerBudget.authoritativeEmptyRevision = Number(initialCanvasState.reference?.digest?.revision)
@@ -937,6 +977,7 @@ export class CodexNativeHost {
       const result = await session.process.request('turn/start', {
         threadId:session.threadId,
         input,
+        ...(session.model ? { model:session.model } : {}),
         ...(session.effort ? { effort:session.effort } : {}),
         additionalContext:this.additionalContextFor(session),
       })
@@ -945,10 +986,12 @@ export class CodexNativeHost {
       if (active.turnId && responseTurnId && responseTurnId !== active.turnId) throw new Error('Codex app-server returned a mismatched turn id.')
       active.turnId ||= responseTurnId
       if (!active.turnId) throw new Error('Codex app-server did not return a turn id.')
+      session.continuity=''
     } catch (error) {
       inputController.abort(error)
       if (active.settled) return turnPromise
       if (budgetsChanged) {
+        session.canvasTurnBudget = previousCanvasTurnBudget
         session.visualExplainerBudget = previousVisualExplainerBudget
         session.visualExplorerBudget = previousVisualExplorerBudget
         session.widgetPatchAttempts = previousWidgetPatchAttempts
@@ -1012,6 +1055,22 @@ export class CodexNativeHost {
       await this.invalidateSession(session, failure)
     } else if (active) active.fail(failure)
     this.send(session, 'agent_status', { status:'idle' })
+  }
+
+  concludeNativeTurnAfterTool(session, active, value) {
+    setImmediate(() => {
+      if (session.disposed || session.active !== active || active.settled || !active.turnId) return
+      const message=boundedText(String(value?.message||'Canvas Agent stopped the current turn.'),2_000), turnId=active.turnId
+      this.emitPublicEvent(session,{kind:'assistant_message',turn:session.turnNumber,text:redactPublicProjectValue(message,session)})
+      const interruptPromise=session.process?.alive
+        ? session.process.interrupt(session.threadId,turnId)
+        : Promise.resolve()
+      session.interruptPromise=interruptPromise
+      active.inputController.abort(new Error(message))
+      active.emitEnd('blocked')
+      interruptPromise.catch(error=>this.invalidateSession(session,new Error(`Codex app-server interrupt failed after a terminal Canvas tool result: ${safeError(error)}`)))
+        .finally(()=>{if(session.interruptPromise===interruptPromise)session.interruptPromise=null})
+    })
   }
 
   async invalidateSession(session, error) {
@@ -1315,6 +1374,7 @@ export class CodexNativeHost {
     active.timeout?.activity()
     const lifecycle = session.lifecycle
     const toolStillActive = () => !session.disposed && session.lifecycle === lifecycle && session.active === active && active.turnId === turnId
+    let concludesTurn=false
     const execution = session.toolQueue.then(async () => {
       if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
       const controller = new AbortController()
@@ -1324,7 +1384,7 @@ export class CodexNativeHost {
       this.emitPublicEvent(session, { kind:'tool_call', turn:session.turnNumber, callId, name, arguments:redactPublicProjectValue(args, session) })
       try {
         const value = await raceAbortableExecution(
-          Promise.resolve().then(() => tool.execute(args, { callId, signal:controller.signal })),
+          Promise.resolve().then(() => tool.execute(args, { callId, signal:controller.signal, concludeTurn:()=>{concludesTurn=true} })),
           controller.signal,
           `PenEcho tool ${name} timed out.`,
         )
@@ -1345,8 +1405,11 @@ export class CodexNativeHost {
         }
         if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
         if (!contentItems.length) contentItems.push({ type:'inputText', text:'PenEcho tool completed.' })
-        this.emitPublicEvent(session, { kind:'tool_result', turn:session.turnNumber, callId, text:'PenEcho tool completed.', error:null })
-        return { success:true, contentItems }
+        const resultText=value?.terminal===true?boundedText(String(value.message||'Canvas Agent stopped the current turn.'),2_000):'PenEcho tool completed.'
+        this.emitPublicEvent(session, { kind:'tool_result', turn:session.turnNumber, callId, text:resultText, error:null })
+        const response={ success:true, contentItems }
+        if(concludesTurn)this.concludeNativeTurnAfterTool(session,active,value)
+        return response
       } catch (error) {
         if (toolStillActive()) session.native.recordToolResult({ isError:true, error })
         const text = boundedText(redactPublicProjectValue(safeError(error, `PenEcho tool ${name} failed.`), session), 2_000)
