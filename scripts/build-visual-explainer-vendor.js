@@ -88,6 +88,12 @@ function expectedFiles() {
   }));
 }
 
+function expectedContent(file) {
+  const source = fs.readFileSync(file.sourcePath);
+  if (path.extname(file.target) === ".js") return source;
+  return Buffer.from(source.toString("utf8").replace(/\r\n?/g, "\n"));
+}
+
 function main(argv = process.argv.slice(2)) {
   const check = argv.includes("--check");
   for (const file of expectedFiles()) {
@@ -95,7 +101,7 @@ function main(argv = process.argv.slice(2)) {
       console.error(`${file.source} is missing. Run npm install before building Visual Explainer assets.`);
       return 1;
     }
-    const expected = fs.readFileSync(file.sourcePath),
+    const expected = expectedContent(file),
       current = fs.existsSync(file.targetPath) ? fs.readFileSync(file.targetPath) : null;
     if (check) {
       if (!current || !current.equals(expected)) {
