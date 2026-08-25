@@ -161,6 +161,7 @@
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    settingsCanvasAgentAutoOpenToggle = document.querySelector("#settingsCanvasAgentAutoOpenToggle"),
     settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
     summonToggle = document.querySelector("#summonToggle"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
@@ -527,6 +528,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
       settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
       settingsCanvasSection: "Canvas preferences",
+      settingsCanvasAgentAutoOpen: "Open Canvas Agent with each canvas",
       settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
@@ -762,13 +764,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvasAgentConversation: "New Canvas Agent conversation",
       canvasAgentAutoAIFocusPaused: "Canvas Agent has focus · Canvas Auto AI is paused.",
       canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Canvas Auto AI is paused.",
-      canvasAgentProject: "Choose project or file",
-      canvasAgentProjectClose: "Close project chooser",
+      canvasAgentProject: "Manage projects and files",
+      canvasAgentProjectClose: "Close project manager",
       canvasAgentProjectBoundary: "Folders and single files are read-only.",
-      canvasAgentNoProject: "Browser",
-      canvasAgentBrowserSpace: "Browser space",
-      canvasAgentBrowserSpaceDetail: "No local project tools",
-      canvasAgentAddProjectFile: "Add local file",
+      canvasAgentWorkspace: "Workspace",
+      canvasAgentProjectManager: "Project manager",
+      canvasAgentProjectManagerDescription: "Projects are folders. Files are added from the Canvas Agent composer.",
+      canvasAgentProjects: "Projects",
+      canvasAgentProjectsDescription: "A project is a folder the Agent can read while working.",
+      canvasAgentProjectFolders: "project folders",
+      canvasAgentNewProject: "New project",
+      canvasAgentCancelProjectCreate: "Cancel",
+      canvasAgentNoProjects: "No project folders yet. Create one by choosing a folder.",
+      canvasAgentFiles: "Files",
+      canvasAgentFilesDescription: "Files already used with Canvas Agent appear here.",
+      canvasAgentKnownFiles: "known files",
+      canvasAgentNoFiles: "No files yet. Add one from the chat composer.",
+      canvasAgentFilesAddHint: "Add a file from the chat composer, or paste it with Ctrl/Cmd+V.",
+      canvasAgentFolderProject: "Folder project",
+      canvasAgentUploadedFile: "Uploaded file",
+      canvasAgentLocalFile: "Local file",
+      canvasAgentCurrentResource: "Current",
+      canvasAgentNoProject: "No project",
+      canvasAgentBrowserSpace: "No project",
+      canvasAgentBrowserSpaceDetail: "Use the current canvas without a project or file",
       canvasAgentUploadEmpty: "Choose a non-empty file.",
       canvasAgentUploadTooLarge: "Uploads are limited to 32 MB.",
       canvasAgentFileReadFailed: "The selected file could not be read.",
@@ -780,8 +799,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentRemoveFolderConfirm: "Remove “{name}” from PenEcho? The folder and its .penecho conversation history will stay on disk.",
       canvasAgentRemoveNativeFileConfirm: "Remove “{name}” from PenEcho? The original file will stay on disk, but its saved project conversations will be deleted.",
       canvasAgentRemoveUploadConfirm: "Delete the uploaded copy “{name}” and its saved project conversations from PenEcho? This cannot be undone.",
-      canvasAgentServerFolders: "Create project from host folders",
-      canvasAgentServerFoldersDetail: "Choose a host folder to create a read-only project",
+      canvasAgentServerFolders: "Choose a project folder",
+      canvasAgentServerFoldersDetail: "Select a host folder to register it as a read-only project.",
       canvasAgentNoHostFolders: "No host folders are available",
       canvasAgentRootBack: "Back",
       canvasAgentRootSelect: "Use this folder",
@@ -828,26 +847,56 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentMessage: "Message Canvas Agent",
       canvasAgentPromptSuggestions: "Suggested prompts",
       canvasAgentPromptSuggestionsTitle: "Try asking",
-      canvasAgentPromptMore: "More",
-      canvasAgentPromptLess: "Collapse",
-      canvasAgentPromptFileLabel: "Explain current content",
-      canvasAgentPromptFile: "Read the current file and explain its purpose, overall structure, key relationships, and important details with clear text and visuals. If no readable file is available, explain the current canvas view instead. Preserve the original meaning and list no more than three points that need confirmation.",
-      canvasAgentPromptArchitectureLabel: "Project architecture",
-      canvasAgentPromptArchitecture: "Analyze the current project architecture. Use an intuitive architecture diagram to show the main modules, dependencies, and data flow, then walk through the key directories or files layer by layer.",
-      canvasAgentPromptSimpleDiagramLabel: "Simple visual diagram",
-      canvasAgentPromptSimpleDiagram: "Create a separate, simplified diagram based on the current content without changing the original. Keep only the core concepts, essential relationships, and necessary labels; use clear hierarchy, grouping, and arrows, and minimize text and decoration so someone without prior context can understand it at a glance.",
-      canvasAgentPromptPptLabel: "PPT-ready view",
-      canvasAgentPromptPpt: "Reorganize the current view into a clear layout that is ready to copy into a presentation. Improve the information hierarchy, alignment, and spacing; when finished, capture the final view and send the image in this conversation.",
-      canvasAgentPromptHandwritingLabel: "Enrich handwriting",
-      canvasAgentPromptHandwriting: "Keep the current handwriting unchanged: do not edit, erase, or move it. Add a transparent explanatory visual layer around it. You may overlap parts of the handwriting only if it remains clearly legible; add annotations, connectors, graphics, links, or motion in suitable places to provide context and make the notes more vivid and intuitive.",
-      canvasAgentPromptExcelLabel: "Analyze Excel",
-      canvasAgentPromptExcel: "Analyze the attached Excel file. First summarize its worksheets, fields, and data quality, then identify the key metrics, trends, anomalies, and conclusions and present them clearly on the canvas with suitable charts and concise explanations.",
-      canvasAgentPromptTransformerLabel: "Explain Transformer",
-      canvasAgentPromptTransformer: "Explain the Transformer architecture with an intuitive layered structure. Show the data flow through input representations, attention, residual connections, normalization, and output, label the key tensor shapes, and include corresponding pseudocode with a step-by-step explanation.",
-      canvasAgentPromptUkTripLabel: "15-day UK trip",
-      canvasAgentPromptUkTrip: "Create a map for a 15-day trip through the United Kingdom. Label each day's cities, route, transportation, suggested stay, and representative sights, with a clear legend and itinerary summary.",
-      canvasAgentPromptOrganizeLabel: "Organize this canvas",
-      canvasAgentPromptOrganize: "Review the current canvas, identify its themes and hierarchy, and organize it into clear visual notes. Preserve the original information and separately mark anything uncertain or needing more detail.",
+      canvasAgentPromptMore: "Show suggested prompts",
+      canvasAgentPromptLess: "Hide suggested prompts",
+      canvasAgentPromptFocusVisual: "Visualize",
+      canvasAgentPromptFocusSimplify: "Simplify",
+      canvasAgentPromptFocusOrganize: "Organize",
+      canvasAgentPromptFocusSlides: "Slides",
+      canvasAgentPromptFocusAnalyze: "Analyze",
+      canvasAgentPromptFocusLearn: "Learn",
+      canvasAgentPromptFocusPlan: "Plan",
+      canvasAgentPromptFocusExplain: "Explain",
+      canvasAgentPromptFocusArchitecture: "Architecture",
+      canvasAgentPromptFocusEnhance: "Enhance",
+      canvasAgentPromptFocusLayer: "Layer",
+      canvasAgentPromptFocusPublish: "Publish",
+      canvasAgentPromptFile: "Explain the current file's purpose, structure, key relationships, and details with visuals. If there is no file, explain the canvas instead.",
+      canvasAgentPromptArchitecture: "Map the current project's core modules, dependencies, data flow, and key directories.",
+      canvasAgentPromptSimpleDiagram: "Make a separate, simple diagram of the core concepts, relationships, and essential labels.",
+      canvasAgentPromptPpt: "Turn the current view into a presentation-ready layout and send the final image in chat.",
+      canvasAgentPromptHandwriting: "Keep the current handwriting completely unchanged—do not edit, erase, or move it. Add a transparent explanatory layer over it; overlap is acceptable only if the original strokes remain clearly visible, and use annotations, connectors, links, graphics, or motion where appropriate to make the notes more vivid and intuitive.",
+      canvasAgentPromptExcel: "Chart the attached spreadsheet's key metrics, trends, anomalies, and conclusions.",
+      canvasAgentPromptTransformer: "Explain Transformer with a layered diagram and pseudocode, including data flow and tensor shapes.",
+      canvasAgentPromptUkTrip: "Create a 15-day UK travel map with daily routes, transport, stays, and highlights.",
+      canvasAgentPromptOrganize: "Turn the current canvas into clear visual notes, with themes, hierarchy, and information gaps.",
+      canvasAgentPromptImageVisual: "Explain the current image's subjects, structure, relationships, and important details visually.",
+      canvasAgentPromptImageLayer: "Keep the image unchanged and add a transparent explanation layer with labels, links, graphics, or motion.",
+      canvasAgentPromptImagePublish: "Extract the image's key information; publish visuals to Canvas and send the summary in chat.",
+      canvasAgentPromptSpreadsheetVisual: "Chart the spreadsheet's metrics, trends, anomalies, field relationships, and data quality.",
+      canvasAgentPromptSpreadsheetLayer: "Keep the source data and add a Canvas dashboard with metric cards, charts, and explanations.",
+      canvasAgentPromptSpreadsheetPublish: "Organize conclusions, risks, and next steps; put charts on Canvas and the summary in chat.",
+      canvasAgentPromptPresentationVisual: "Explain the presentation and connect its structure and conclusions in one overview diagram.",
+      canvasAgentPromptPresentationLayer: "Preserve the meaning, unify the deck, and add essential diagrams and explanation layers.",
+      canvasAgentPromptPresentationPublish: "Create a speaking outline, slide revision list, and summary; put visuals on Canvas.",
+      canvasAgentPromptDocumentVisual: "Explain the document or paper's topic, structure, arguments, concepts, and conclusions visually.",
+      canvasAgentPromptDocumentStudy: "Turn the document into study notes with terminology, examples, diagrams, and review points.",
+      canvasAgentPromptDocumentPublish: "Create a summary, action items, and open questions; publish useful diagrams to Canvas.",
+      canvasAgentPromptCodeVisual: "Explain the code's entry points, core logic, dependencies, data flow, and boundaries visually.",
+      canvasAgentPromptCodeLayer: "Keep behavior unchanged and add a module map, key flows, comment ideas, risks, and links.",
+      canvasAgentPromptCodePlan: "Create an implementation summary, risk list, and phased plan, with architecture on Canvas.",
+      canvasAgentPromptFileLayer: "Keep the file unchanged and add a transparent visual explanation in open Canvas space.",
+      canvasAgentPromptFilePublish: "Organize the file's structure, summary, conclusions, and actions; put diagrams on Canvas.",
+      canvasAgentPromptProjectPlan: "Plan the project by goals, milestones, dependencies, risks, and acceptance criteria.",
+      canvasAgentPromptProjectPublish: "Map project entry points, directories, dependencies, risks, and run steps, with a handoff summary.",
+      canvasAgentPromptSelectionVisual: "Visually explain only the selected content's purpose, structure, relationships, and details.",
+      canvasAgentPromptSelectionLayer: "Keep the selection unchanged and add a transparent explanation layer with labels and links nearby.",
+      canvasAgentPromptSelectionPublish: "Organize conclusions and next steps; put visuals on Canvas and the summary in chat.",
+      canvasAgentPromptNotesVisual: "Explain the handwritten notes' themes, hierarchy, relationships, and questions without changing them.",
+      canvasAgentPromptNotesPublish: "Turn the handwriting into a transcription, knowledge map, tasks, and review points.",
+      canvasAgentPromptCanvasVisual: "Explain the current canvas with one overview of its content, structure, relationships, and gaps.",
+      canvasAgentPromptCanvasLayer: "Keep the canvas meaning and objects, improve layout, and add transparent explanations in open space.",
+      canvasAgentPromptCanvasPublish: "Organize the canvas summary, conclusions, and actions, then send a copy-ready recap in chat.",
       canvasAgentType: "Type with keyboard",
       canvasAgentHandwrite: "Write by hand",
       canvasAgentClearInk: "Clear",
@@ -1087,6 +1136,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedCanvasAgentAutoOpen = localStorage.getItem("penecho-canvas-agent-auto-open"),
     storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
@@ -1099,11 +1149,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
     configuredAiTimeout = Number(window.PENECHO_CONFIG?.aiRequestTimeoutMs),
     configuredAiEffort = String(window.PENECHO_CONFIG?.aiEffort || "").trim().toLowerCase(),
+    configuredCanvasAgentAutoOpen = typeof window.PENECHO_CONFIG?.canvasAgentAutoOpen === "boolean" ? window.PENECHO_CONFIG.canvasAgentAutoOpen : null,
     configuredAccessSession = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || ""),
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialCanvasAgentAutoOpen = window.PENECHO_CONFIG?.desktopApp === true && configuredCanvasAgentAutoOpen !== null
+      ? configuredCanvasAgentAutoOpen
+      : storedCanvasAgentAutoOpen === null ? configuredCanvasAgentAutoOpen !== false : storedCanvasAgentAutoOpen === "true",
     initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
     // The public viewer shares the Cloud origin (and therefore localStorage)
     // with editable Cloud Canvases. Never inherit their last-selected Cloud
@@ -1240,6 +1294,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
+      canvasAgentAutoOpen: initialCanvasAgentAutoOpen,
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
@@ -2450,7 +2505,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         settings.connections = body.connections || settings.connections;
         syncLocalConnectionSelection();
         renderConnectionLists();
-        if (body.savedId === selectedAiConnectionId()) canvasAgentConnectionDidChange(true);
+        if (body.savedId === selectedAiConnectionId()) {
+          const selected=settings.connections.find(connection=>connection.id===body.savedId);
+          canvasAgentConnectionDidChange(true,selected?.provider || "");
+        }
         hideConnectionEditor();
         setConnectionStatus(t("settingsConnectionSaved"), "success");
       } else if (scope === "search") {
@@ -2470,7 +2528,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settings.connections = body.connections || [];
       syncLocalConnectionSelection();
       renderConnectionLists();
-      canvasAgentConnectionDidChange();
+      const nextId=selectedAiConnectionId(),nextConnection=settings.connections.find(connection=>connection.id===nextId);
+      canvasAgentConnectionDidChange(false,nextConnection?.provider || "");
       setConnectionStatus(t(action === "delete" ? "settingsConnectionDeleted" : "settingsConnectionActivated"), "success");
     } catch (error) { setConnectionStatus(error?.message || t("settingsLoadFailed"), "error"); }
   }
@@ -2484,7 +2543,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem(AI_CONNECTION_STORAGE_KEY, id);
       syncLocalConnectionSelection();
       renderConnectionLists();
-      canvasAgentConnectionDidChange();
+      canvasAgentConnectionDidChange(false,settings.connections.find(connection=>connection.id===id)?.provider || "");
       setConnectionStatus(t("settingsConnectionActivated"), "success");
       if (closeAfterActivation) closeSettings();
       return;
@@ -2498,6 +2557,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!settingsPanel) return;
     settingsAutoToggle.classList.toggle("on", state.auto);
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
@@ -2540,6 +2601,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
     updateSettingsPanel();
+  }
+  function setCanvasAgentAutoOpen(enabled) {
+    state.canvasAgentAutoOpen = Boolean(enabled);
+    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpen));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
   }
   function setWidgetShadowEnabled(enabled) {
     state.widgetShadowEnabled = Boolean(enabled);
@@ -4936,6 +5003,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const [requestId, pending] of widgetSnapshotRequests) {
       if (pending.widget !== widget) continue;
       clearTimeout(pending.timer);
+      pending.signal?.removeEventListener("abort",pending.abort);
       pending.reject(Error(t("widgetExportFailed")));
       widgetSnapshotRequests.delete(requestId);
     }
@@ -5042,11 +5110,29 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       image.src = dataUrl;
     });
   }
-  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true) {
+  function widgetSnapshotAbortError(signal) {
+    return signal?.reason instanceof Error ? signal.reason : Error("Widget snapshot request was cancelled");
+  }
+  function waitForWidgetSnapshot(promise,signal) {
+    if(!signal)return promise;
+    if(signal.aborted)return Promise.reject(widgetSnapshotAbortError(signal));
+    return new Promise((resolve,reject)=>{
+      const abort=()=>reject(widgetSnapshotAbortError(signal));
+      signal.addEventListener("abort",abort,{once:true});
+      if(signal.aborted)abort();
+      Promise.resolve(promise).then(
+        value=>{signal.removeEventListener("abort",abort);resolve(value);},
+        error=>{signal.removeEventListener("abort",abort);reject(error);},
+      );
+    });
+  }
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true, signal = null) {
+    if(signal?.aborted)throw widgetSnapshotAbortError(signal);
     if (widget.snapshotPromise) {
       const inFlight = widget.snapshotPromise;
-      if (!requireFresh) return inFlight;
-      try { await inFlight; } catch {}
+      if (!requireFresh) return waitForWidgetSnapshot(inFlight,signal);
+      try { await waitForWidgetSnapshot(inFlight,signal); } catch (error) { if(signal?.aborted)throw error; }
+      if(signal?.aborted)throw widgetSnapshotAbortError(signal);
       if (widget.snapshotImage && widget.snapshotVersion >= widget.contentVersion) return widget.snapshotImage;
     }
     timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
@@ -5067,14 +5153,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         widget.shell?.classList.remove("widget-offscreen");
         if (!widget.initialized) sendWidgetInit(widget);
         if (!widget.hostReady || !widget.initialized) throw Error(t("widgetExportFailed"));
+        if(signal?.aborted)throw widgetSnapshotAbortError(signal);
         sendWidgetHostState(widget, undefined, undefined, true);
         const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
         return await new Promise((resolve, reject) => {
+          let pending;
           const timer = setTimeout(() => {
             widgetSnapshotRequests.delete(requestId);
+            if(signal&&pending?.abort)signal.removeEventListener("abort",pending.abort);
             reject(Error(t("widgetExportFailed")));
           }, remaining());
-          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer, contentVersion:widget.contentVersion });
+          const abort=()=>{
+            if(widgetSnapshotRequests.get(requestId)!==pending)return;
+            widgetSnapshotRequests.delete(requestId);
+            clearTimeout(timer);
+            reject(widgetSnapshotAbortError(signal));
+          };
+          pending={ widget, resolve, reject, timer, contentVersion:widget.contentVersion, signal, abort };
+          widgetSnapshotRequests.set(requestId,pending);
+          signal?.addEventListener("abort",abort,{once:true});
+          if(signal?.aborted){abort();return;}
           widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs:remaining() }, widget.hostOrigin || location.origin);
         });
       } finally {
@@ -5149,6 +5247,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!pending || pending.widget !== widget) return;
     widgetSnapshotRequests.delete(message.requestId);
     clearTimeout(pending.timer);
+    pending.signal?.removeEventListener("abort",pending.abort);
     if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")
       || !Number.isFinite(message.width) || message.width <= 0 || !Number.isFinite(message.height) || message.height <= 0) {
       if (message.type === "penecho-widget-snapshot-error") console.warn("PenEcho widget snapshot failed:", String(message.error || "unknown error").slice(0, 300));
@@ -5156,7 +5255,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return;
     }
     try {
-      widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
+      const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
+      if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
+      if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      widget.snapshotImage = snapshotImage;
       widget.snapshotDataUrl = message.dataUrl;
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
@@ -5642,19 +5744,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
+          if(signal?.aborted)throw widgetSnapshotAbortError(signal);
+          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
           ]);
           else await request;
         } catch (error) {
+          if(signal?.aborted)throw error;
           debug("widget-snapshot-degraded", { widgetId:widget.id, error:String(error?.message || error).slice(0, 300) });
         }
         return Boolean(widget.snapshotImage);
@@ -5662,6 +5766,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         capturedCount = captured.filter(Boolean).length;
       return { total:widgets.length, captured:capturedCount, missing:widgets.length - capturedCount };
     } catch (error) {
+      if(signal?.aborted)throw error;
       debug("widget-snapshot-preparation-failed", { error:String(error?.message || error).slice(0, 300) });
       const captured = widgets.filter((widget) => widget.snapshotImage).length;
       return { total:widgets.length, captured, missing:widgets.length - captured };
@@ -9875,7 +9980,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
       state.snapshotSavedRevision = state.userRevision;
-      canvasAgentCanvasDidChange({ id:item.id, location });
+      canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true});
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       closeHistoryPanel();
@@ -10006,7 +10111,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.currentSnapshotBundleExtensions = {};
     state.currentSnapshotManifestExtensions = {};
     state.currentSnapshotPreservedAssets = [];
-    canvasAgentCanvasDidChange();
+    canvasAgentCanvasDidChange(null,{clearProject:true});
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -14041,8 +14146,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectPopover = document.querySelector("#canvasAgentProjectPopover"),
     canvasAgentProjectClose = document.querySelector("#canvasAgentProjectClose"),
     canvasAgentProjectList = document.querySelector("#canvasAgentProjectList"),
-    canvasAgentProjectActions = document.querySelector("#canvasAgentProjectActions"),
-    canvasAgentProjectAddFile = document.querySelector("#canvasAgentProjectAddFile"),
+    canvasAgentProjectCreate = document.querySelector("#canvasAgentProjectCreate"),
+    canvasAgentProjectCount = document.querySelector("#canvasAgentProjectCount"),
+    canvasAgentFileList = document.querySelector("#canvasAgentFileList"),
+    canvasAgentFileCount = document.querySelector("#canvasAgentFileCount"),
     canvasAgentProjectRoots = document.querySelector("#canvasAgentProjectRoots"),
     canvasAgentProjectRootBack = document.querySelector("#canvasAgentProjectRootBack"),
     canvasAgentProjectRootPath = document.querySelector("#canvasAgentProjectRootPath"),
@@ -14073,8 +14180,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentInputHint = document.querySelector("#canvasAgentInputHint"),
     canvasAgentPromptSuggestions = document.querySelector("#canvasAgentPromptSuggestions"),
     canvasAgentPromptToggle = document.querySelector("#canvasAgentPromptToggle"),
-    canvasAgentPromptToggleLabel = document.querySelector("#canvasAgentPromptToggleLabel"),
-    canvasAgentPromptList = document.querySelector("#canvasAgentPromptList"),
+    canvasAgentAdditionalPromptList = document.querySelector("#canvasAgentAdditionalPromptList"),
+    canvasAgentPrimaryPromptList = document.querySelector("#canvasAgentPrimaryPromptList"),
     canvasAgentInput = document.querySelector("#canvasAgentInput"),
     canvasAgentInkInput = document.querySelector("#canvasAgentInkInput"),
     canvasAgentInkCanvas = document.querySelector("#canvasAgentInkCanvas"),
@@ -14136,17 +14243,71 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused"]),
     CANVAS_AGENT_LAYOUT_CAPTURE_POLICY = Object.freeze({id:"canvas-layout-v1",maxLongEdge:1024,maxPixels:520000,quality:.72,maxBytes:700*1024}),
     CANVAS_AGENT_DETAIL_CAPTURE_POLICY = Object.freeze({id:"canvas-detail-v1",maxLongEdge:1440,maxPixels:1800000,quality:.88,maxBytes:1200*1024}),
-    CANVAS_AGENT_PROMPT_SUGGESTIONS = Object.freeze([
-      {label:"canvasAgentPromptFileLabel",prompt:"canvasAgentPromptFile"},
-      {label:"canvasAgentPromptArchitectureLabel",prompt:"canvasAgentPromptArchitecture"},
-      {label:"canvasAgentPromptSimpleDiagramLabel",prompt:"canvasAgentPromptSimpleDiagram"},
-      {label:"canvasAgentPromptOrganizeLabel",prompt:"canvasAgentPromptOrganize"},
-      {label:"canvasAgentPromptHandwritingLabel",prompt:"canvasAgentPromptHandwriting"},
-      {label:"canvasAgentPromptPptLabel",prompt:"canvasAgentPromptPpt"},
-      {label:"canvasAgentPromptExcelLabel",prompt:"canvasAgentPromptExcel"},
-      {label:"canvasAgentPromptTransformerLabel",prompt:"canvasAgentPromptTransformer"},
-      {label:"canvasAgentPromptUkTripLabel",prompt:"canvasAgentPromptUkTrip"},
-    ]);
+    CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
+      simpleDiagram:{prompt:"canvasAgentPromptSimpleDiagram",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
+      organize:{prompt:"canvasAgentPromptOrganize",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
+      ppt:{prompt:"canvasAgentPromptPpt",focus:"canvasAgentPromptFocusSlides",icon:"slides"},
+      excel:{prompt:"canvasAgentPromptExcel",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
+      transformer:{prompt:"canvasAgentPromptTransformer",focus:"canvasAgentPromptFocusLearn",icon:"study"},
+      ukTrip:{prompt:"canvasAgentPromptUkTrip",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      file:{prompt:"canvasAgentPromptFile",focus:"canvasAgentPromptFocusExplain",icon:"file"},
+      architecture:{prompt:"canvasAgentPromptArchitecture",focus:"canvasAgentPromptFocusArchitecture",icon:"architecture"},
+      handwriting:{prompt:"canvasAgentPromptHandwriting",focus:"canvasAgentPromptFocusEnhance",icon:"handwriting"},
+      imageVisual:{prompt:"canvasAgentPromptImageVisual",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
+      imageLayer:{prompt:"canvasAgentPromptImageLayer",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
+      imagePublish:{prompt:"canvasAgentPromptImagePublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      spreadsheetVisual:{prompt:"canvasAgentPromptSpreadsheetVisual",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
+      spreadsheetLayer:{prompt:"canvasAgentPromptSpreadsheetLayer",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
+      spreadsheetPublish:{prompt:"canvasAgentPromptSpreadsheetPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      presentationVisual:{prompt:"canvasAgentPromptPresentationVisual",focus:"canvasAgentPromptFocusVisual",icon:"slides"},
+      presentationLayer:{prompt:"canvasAgentPromptPresentationLayer",focus:"canvasAgentPromptFocusEnhance",icon:"layer"},
+      presentationPublish:{prompt:"canvasAgentPromptPresentationPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      documentVisual:{prompt:"canvasAgentPromptDocumentVisual",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
+      documentStudy:{prompt:"canvasAgentPromptDocumentStudy",focus:"canvasAgentPromptFocusLearn",icon:"study"},
+      documentPublish:{prompt:"canvasAgentPromptDocumentPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      codeVisual:{prompt:"canvasAgentPromptCodeVisual",focus:"canvasAgentPromptFocusVisual",icon:"architecture"},
+      codeLayer:{prompt:"canvasAgentPromptCodeLayer",focus:"canvasAgentPromptFocusExplain",icon:"layer"},
+      codePlan:{prompt:"canvasAgentPromptCodePlan",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      fileLayer:{prompt:"canvasAgentPromptFileLayer",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
+      filePublish:{prompt:"canvasAgentPromptFilePublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      projectPlan:{prompt:"canvasAgentPromptProjectPlan",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      projectPublish:{prompt:"canvasAgentPromptProjectPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      selectionVisual:{prompt:"canvasAgentPromptSelectionVisual",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
+      selectionLayer:{prompt:"canvasAgentPromptSelectionLayer",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
+      selectionPublish:{prompt:"canvasAgentPromptSelectionPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      notesVisual:{prompt:"canvasAgentPromptNotesVisual",focus:"canvasAgentPromptFocusVisual",icon:"study"},
+      notesPublish:{prompt:"canvasAgentPromptNotesPublish",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
+      canvasVisual:{prompt:"canvasAgentPromptCanvasVisual",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
+      canvasLayer:{prompt:"canvasAgentPromptCanvasLayer",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
+      canvasPublish:{prompt:"canvasAgentPromptCanvasPublish",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+    }),
+    CANVAS_AGENT_PROMPT_ICON_PATHS = Object.freeze({
+      visual:["M3.5 12s3.1-5 8.5-5 8.5 5 8.5 5-3.1 5-8.5 5-8.5-5-8.5-5Z","M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"],
+      organize:["M5 6h14M5 12h14M5 18h14","M8 4v4M15 10v4M11 16v4"],
+      slides:["M4 5h16v11H4z","M8 20l4-4 4 4M8 9h8M8 12h5"],
+      data:["M5 19V9M12 19V5M19 19v-7M3 19h18"],
+      study:["M4 5.5c3.2-.8 5.8-.3 8 1.5v12c-2.2-1.8-4.8-2.3-8-1.5z","M20 5.5c-3.2-.8-5.8-.3-8 1.5v12c2.2-1.8 4.8-2.3 8-1.5z"],
+      plan:["M6 4h12v16H6z","m9 2 3 3M9 10h6M9 14h6M9 18h4"],
+      file:["M6 3h8l4 4v14H6z","M14 3v5h5M9 12h6M9 16h6"],
+      architecture:["M12 4v5M6 20v-5h12v5M6 15v-3h12v3","M9 4h6v5H9zM3 20h6v-5H3zM15 20h6v-5h-6z"],
+      handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
+      layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
+      publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
+    }),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","organize","ppt","excel","transformer","ukTrip"]),
+    CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
+      blank:["file","architecture","handwriting"],
+      image:["imageVisual","imageLayer","imagePublish"],
+      spreadsheet:["spreadsheetVisual","spreadsheetLayer","spreadsheetPublish"],
+      presentation:["presentationVisual","presentationLayer","presentationPublish"],
+      document:["documentVisual","documentStudy","documentPublish"],
+      code:["codeVisual","codeLayer","codePlan"],
+      file:["file","fileLayer","filePublish"],
+      project:["architecture","projectPlan","projectPublish"],
+      selection:["selectionVisual","selectionLayer","selectionPublish"],
+      notes:["notesVisual","handwriting","notesPublish"],
+      canvas:["canvasVisual","canvasLayer","canvasPublish"],
+    });
   const canvasAgent = {
     socket:null,
     connectPromise:null,
@@ -14155,6 +14316,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     sessionId:"",
     resumeToken:"",
     connectionId:"",
+    sessionEngine:"",
+    sessionReady:false,
+    pendingHandshakeId:"",
+    pendingProvider:"",
     sessionProjectId:"",
     sessionAccessMode:"controlled",
     sessionProjectCapabilities:null,
@@ -14168,6 +14333,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     assistantRows:new Map(),
     toolRows:new Map(),
     toolResultCache:new Map(),
+    toolControllers:new Map(),
+    activeToolExecution:null,
+    activeSubmitExecution:null,
+    sessionGeneration:0,
     attachments:[],
     attachmentBusy:false,
     references:[],
@@ -14175,6 +14344,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     referenceHoverId:"",
     inputMode:"text",
     promptSuggestionsExpanded:false,
+    promptSuggestionsManual:false,
+    promptSuggestionsCollapsedAll:false,
+    promptSuggestionContextKey:"",
+    promptSuggestions:[],
     inkPresent:false,
     inkStroke:null,
     searchConfigured:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured),
@@ -14189,6 +14362,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     projectRoots:[],
     projectRootsLoaded:false,
     projectRootView:null,
+    projectRootChooserOpen:false,
     projectRootBusy:false,
     projectUploadBusy:false,
     projectHistory:[],
@@ -14218,6 +14392,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.sessionId = saved.sessionId;
       canvasAgent.resumeToken = saved.resumeToken;
       canvasAgent.connectionId = String(saved.connectionId || "");
+      canvasAgent.sessionEngine = String(saved.engine || "");
       canvasAgent.sessionProjectId = String(saved.projectId || "");
       canvasAgent.sessionAccessMode = String(saved.accessMode || "controlled");
     }
@@ -14321,35 +14496,107 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     button.setAttribute("aria-label",label);
     button.setAttribute("title",label);
   }
-  function canvasAgentSetPromptSuggestionsExpanded(expanded) {
-    canvasAgent.promptSuggestionsExpanded=Boolean(expanded);
-    canvasAgentPromptSuggestions?.classList.toggle("expanded",canvasAgent.promptSuggestionsExpanded);
-    canvasAgentPromptToggle?.setAttribute("aria-expanded",String(canvasAgent.promptSuggestionsExpanded));
-    if(canvasAgentPromptToggleLabel)canvasAgentPromptToggleLabel.textContent=t(canvasAgent.promptSuggestionsExpanded?"canvasAgentPromptLess":"canvasAgentPromptMore");
+  function canvasAgentPromptFileContext(resource) {
+    if(resource?.kind==="image")return "image";
+    const name=String(resource?.name||"").toLowerCase(),mediaType=String(resource?.mediaType||"").toLowerCase(),dot=name.lastIndexOf("."),extension=dot>=0?name.slice(dot+1):"";
+    if(mediaType.startsWith("image/")||["png","jpg","jpeg","webp","gif","svg","heic","avif"].includes(extension))return "image";
+    if(["csv","tsv","xls","xlsx","xlsm","xlsb","ods","numbers"].includes(extension)||/(?:spreadsheet|excel|csv)/.test(mediaType))return "spreadsheet";
+    if(["ppt","pptx","pps","ppsx","odp","key"].includes(extension)||/(?:presentation|powerpoint)/.test(mediaType))return "presentation";
+    if(["doc","docx","odt","rtf","pdf","epub","tex","md","markdown","txt"].includes(extension)||/(?:pdf|wordprocessingml|msword|opendocument\.text|rtf|epub)/.test(mediaType))return "document";
+    if(["js","jsx","ts","tsx","mjs","cjs","py","java","kt","kts","go","rs","c","h","cc","cpp","cs","php","rb","swift","vue","svelte","html","css","scss","sql","sh","zsh","yaml","yml","toml","json","xml"].includes(extension)||/(?:javascript|typescript|json|xml|yaml|shellscript|sql)/.test(mediaType))return "code";
+    return "file";
   }
-  function canvasAgentRenderPromptSuggestions() {
-    if(!canvasAgentPromptList)return;
-    canvasAgentPromptList.replaceChildren();
-    for(const suggestion of CANVAS_AGENT_PROMPT_SUGGESTIONS){
-      const button=document.createElement("button"),label=t(suggestion.label),prompt=t(suggestion.prompt);
-      button.type="button";
-      button.dataset.promptKey=suggestion.prompt;
-      button.textContent=label;
-      button.setAttribute("aria-label",label);
-      button.setAttribute("title",prompt);
-      button.addEventListener("click",()=>canvasAgentChoosePromptSuggestion(suggestion.prompt));
-      canvasAgentPromptList.append(button);
+  function canvasAgentPromptContext() {
+    const attachment=canvasAgent.attachments.find(item=>item?.kind==="file")||canvasAgent.attachments.find(item=>item?.kind==="image")||null;
+    if(attachment)return canvasAgentPromptFileContext(attachment);
+    if(canvasAgentReferencedIds().length||state.selection?.box)return "selection";
+    const project=canvasAgentProjectById();
+    if(project?.kind==="file")return canvasAgentPromptFileContext(project);
+    if(project?.kind==="folder"||canvasAgent.projectId)return "project";
+    const full={x:0,y:0,w:SIZE,h:SIZE};
+    if(visibleInkBounds(full))return "notes";
+    const imageOnly=state.images.length&&!state.widgets.length&&!state.textBoxes.length&&!state.animations.length&&!state.preservedSnapshotAnimations.length;
+    if(imageOnly)return "image";
+    return canvasAgentContentBounds()?"canvas":"blank";
+  }
+  function canvasAgentPromptSuggestionSet() {
+    const context=canvasAgentPromptContext(),primaryIds=CANVAS_AGENT_PROMPT_PRIMARY[context]||CANVAS_AGENT_PROMPT_PRIMARY.blank,
+      ids=[...CANVAS_AGENT_PROMPT_ADDITIONAL.filter(id=>!primaryIds.includes(id)),...primaryIds],suggestions=ids.map(id=>({id,...CANVAS_AGENT_PROMPT_LIBRARY[id]})).filter(item=>item.prompt);
+    return {key:context,suggestions};
+  }
+  function canvasAgentPromptHasDraft() {
+    return Boolean(canvasAgentInput.value.trim()||canvasAgent.inkPresent||canvasAgent.attachments.length||canvasAgent.references.length);
+  }
+  function canvasAgentPromptNeedsManualExpansion() {
+    return canvasAgentPromptHasDraft()||Boolean(canvasAgent.currentConversation?.items?.length);
+  }
+  function canvasAgentPromptRowsVisible() {
+    return canvasAgent.promptSuggestionsExpanded||(!canvasAgent.promptSuggestionsCollapsedAll&&!canvasAgentPromptNeedsManualExpansion());
+  }
+  function canvasAgentSetPromptSuggestionsExpanded(expanded,{manual=canvasAgent.promptSuggestionsManual,collapseAll=canvasAgent.promptSuggestionsCollapsedAll}={}) {
+    canvasAgent.promptSuggestionsExpanded=Boolean(expanded);
+    canvasAgent.promptSuggestionsManual=canvasAgent.promptSuggestionsExpanded&&Boolean(manual);
+    canvasAgent.promptSuggestionsCollapsedAll=!canvasAgent.promptSuggestionsExpanded&&Boolean(collapseAll);
+    const rowsVisible=canvasAgentPromptRowsVisible();
+    canvasAgentPromptSuggestions?.classList.toggle("expanded",canvasAgent.promptSuggestionsExpanded);
+    canvasAgentPromptSuggestions?.classList.toggle("prompt-rows-visible",rowsVisible);
+    if(canvasAgentAdditionalPromptList)canvasAgentAdditionalPromptList.hidden=!canvasAgent.promptSuggestionsExpanded;
+    if(canvasAgentPrimaryPromptList)canvasAgentPrimaryPromptList.hidden=canvasAgent.promptSuggestionsCollapsedAll||(canvasAgentPromptNeedsManualExpansion()&&!canvasAgent.promptSuggestionsExpanded);
+    if(canvasAgentPromptToggle){
+      const key=rowsVisible?"canvasAgentPromptLess":"canvasAgentPromptMore",label=t(key);
+      canvasAgentPromptToggle.setAttribute("aria-expanded",String(rowsVisible));
+      canvasAgentPromptToggle.setAttribute("aria-label",label);
+      canvasAgentPromptToggle.setAttribute("title",label);
     }
+  }
+  function canvasAgentCreatePromptIcon(iconName) {
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("class","canvas-agent-prompt-icon");
+    svg.setAttribute("viewBox","0 0 24 24");
+    svg.setAttribute("aria-hidden","true");
+    for(const d of CANVAS_AGENT_PROMPT_ICON_PATHS[iconName]||CANVAS_AGENT_PROMPT_ICON_PATHS.visual){
+      const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+      path.setAttribute("d",d);
+      svg.append(path);
+    }
+    return svg;
+  }
+  function canvasAgentRenderPromptSuggestions(suggestionSet=canvasAgentPromptSuggestionSet()) {
+    if(!canvasAgentPrimaryPromptList)return;
+    const renderList=(list,suggestions)=>{
+      if(!list)return;
+      list.replaceChildren();
+      for(const suggestion of suggestions){
+        const button=document.createElement("button"),copy=document.createElement("span"),focus=document.createElement("strong"),detail=document.createElement("span"),prompt=t(suggestion.prompt),focusText=t(suggestion.focus);
+        button.type="button";
+        button.dataset.promptKey=suggestion.prompt;
+        copy.className="canvas-agent-prompt-copy";
+        focus.textContent=focusText;
+        detail.textContent=prompt;
+        copy.append(focus,detail);
+        button.append(canvasAgentCreatePromptIcon(suggestion.icon),copy);
+        button.setAttribute("title",prompt);
+        button.setAttribute("aria-label",`${focusText}: ${prompt}`);
+        button.addEventListener("click",()=>canvasAgentChoosePromptSuggestion(suggestion.prompt));
+        list.append(button);
+      }
+    };
+    const suggestions=suggestionSet.suggestions,primaryStart=Math.max(0,suggestions.length-3);
+    canvasAgent.promptSuggestionContextKey=suggestionSet.key;
+    canvasAgent.promptSuggestions=suggestions;
+    renderList(canvasAgentAdditionalPromptList,suggestions.slice(0,primaryStart));
+    renderList(canvasAgentPrimaryPromptList,suggestions.slice(primaryStart));
     canvasAgentPromptSuggestions.setAttribute("aria-label",t("canvasAgentPromptSuggestions"));
     canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
   }
-  function canvasAgentShouldShowPromptSuggestions() {
+  function canvasAgentPreventPromptSuggestionFocusLoss(event) {
+    if(event.target?.closest?.("button"))event.preventDefault();
+  }
+  function canvasAgentPromptSuggestionsAvailable() {
     return Boolean(canvasAgentPromptSuggestions
       && !canvasAgentPanel.hidden
-      && canvasAgentForm.contains(document.activeElement)
       && canvasAgent.inputMode==="text"
       && !canvasAgent.inkPresent
-      && !canvasAgentInput.value.trim()
       && !canvasAgent.requestPending
       && !canvasAgent.running
       && !canvasAgent.viewingHistoryId
@@ -14360,18 +14607,44 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       && canvasAgentReferencePicker.hidden
       && canvasAgentApproval.hidden);
   }
+  function canvasAgentShouldShowPromptSuggestions() {
+    return canvasAgentPromptSuggestionsAvailable()&&(canvasAgentPromptHasDraft()||canvasAgentForm.contains(document.activeElement));
+  }
   function canvasAgentSyncPromptSuggestions() {
     if(!canvasAgentPromptSuggestions)return;
+    const suggestionSet=canvasAgentPromptSuggestionSet();
+    if(suggestionSet.key!==canvasAgent.promptSuggestionContextKey)canvasAgentRenderPromptSuggestions(suggestionSet);
     const visible=canvasAgentShouldShowPromptSuggestions();
     canvasAgentPromptSuggestions.hidden=!visible;
-    if(visible)canvasAgentInputHint.hidden=true;
+    if(visible){
+      canvasAgentInputHint.hidden=true;
+      canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
+    }
     else{
-      if(canvasAgent.promptSuggestionsExpanded)canvasAgentSetPromptSuggestionsExpanded(false);
+      canvasAgentSetPromptSuggestionsExpanded(false,{collapseAll:false});
       canvasAgentSyncInputHint();
     }
   }
+  function canvasAgentExpandPromptSuggestionsOnPointerEnter() {
+    if(!canvasAgent.promptSuggestionsCollapsedAll&&!canvasAgentPromptNeedsManualExpansion())canvasAgentSetPromptSuggestionsExpanded(true,{manual:false});
+  }
+  function canvasAgentCollapsePromptSuggestionsOnPointerLeave() {
+    if(canvasAgent.promptSuggestionsManual)return;
+    if(canvasAgentPromptSuggestions?.contains(document.activeElement))return;
+    canvasAgentSetPromptSuggestionsExpanded(false);
+  }
+  function canvasAgentSyncPromptSuggestionsFocus() {
+    if(!canvasAgentPromptSuggestions)return;
+    if(!canvasAgentForm.contains(document.activeElement))canvasAgentSetPromptSuggestionsExpanded(false);
+    else if(!canvasAgentPromptSuggestions.contains(document.activeElement)&&!canvasAgent.promptSuggestionsManual)canvasAgentSetPromptSuggestionsExpanded(false);
+    canvasAgentSyncPromptSuggestions();
+  }
+  function canvasAgentTogglePromptSuggestions() {
+    if(canvasAgentPromptRowsVisible())canvasAgentSetPromptSuggestionsExpanded(false,{collapseAll:true});
+    else canvasAgentSetPromptSuggestionsExpanded(true,{manual:true,collapseAll:false});
+  }
   function canvasAgentChoosePromptSuggestion(promptKey) {
-    const suggestion=CANVAS_AGENT_PROMPT_SUGGESTIONS.find(item=>item.prompt===promptKey);
+    const suggestion=canvasAgent.promptSuggestions.find(item=>item.prompt===promptKey);
     if(!suggestion||canvasAgentInput.disabled)return false;
     canvasAgentInput.value=t(suggestion.prompt);
     canvasAgentSetPromptSuggestionsExpanded(false);
@@ -14413,9 +14686,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentAttachments.setAttribute("aria-label",t("canvasAgentAttachments"));
     canvasAgentProjectButton.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectButton.setAttribute("title",t("canvasAgentProject"));
-    canvasAgentProjectPopover.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectClose.setAttribute("aria-label",t("canvasAgentProjectClose"));
-    canvasAgentProjectAddFile.textContent=t("canvasAgentAddProjectFile");
     canvasAgentProjectRootBack.setAttribute("aria-label",t("canvasAgentRootBack"));
     canvasAgentProjectRootSelect.textContent=t("canvasAgentRootSelect");
     canvasAgentProjectRootTruncated.textContent=t("canvasAgentRootTruncated");
@@ -14508,10 +14779,43 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectButton.classList.toggle("has-file",project?.kind==="file");
     canvasAgentProjectButton.title=project?`${project.name} — ${canvasAgentProjectDisplayPath(project)}`:t("canvasAgentProject");
   }
+  function canvasAgentResourceIcon(kind) {
+    const wrapper=document.createElement("span"),svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),paths=kind==="folder"
+      ? ["M3.5 7.5h6l2-2h9v13h-17z","M3.5 9.5h17"]
+      : kind==="file"
+        ? ["M6 3h8l4 4v14H6z","M14 3v5h5"]
+        : ["M4 12a8 8 0 1 0 16 0 8 8 0 1 0-16 0Z","M4 12h16M12 4c2 2.2 3 4.8 3 8s-1 5.8-3 8M12 4c-2 2.2-3 4.8-3 8s1 5.8 3 8"];
+    wrapper.className=`canvas-agent-resource-icon ${kind}`;
+    svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("aria-hidden","true");
+    for(const data of paths){const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",data);svg.append(path);}
+    wrapper.append(svg);
+    return wrapper;
+  }
+  function canvasAgentProjectEmpty(message) {
+    const empty=document.createElement("p");
+    empty.className="canvas-agent-project-empty";empty.textContent=message;
+    return empty;
+  }
+  function canvasAgentProjectRow(project) {
+    const row=document.createElement("div"),choice=document.createElement("button"),copy=document.createElement("span"),title=document.createElement("strong"),detail=document.createElement("small"),remove=document.createElement("button"),selected=project.id===canvasAgent.projectId,
+      kindLabel=project.kind==="folder"?t("canvasAgentFolderProject"):project.source==="upload"?t("canvasAgentUploadedFile"):t("canvasAgentLocalFile");
+    row.className="canvas-agent-project-row";
+    choice.className="canvas-agent-project-choice";choice.type="button";choice.setAttribute("aria-pressed",String(selected));
+    copy.className="canvas-agent-project-choice-copy";title.textContent=project.name;detail.textContent=`${kindLabel} · ${t("canvasAgentFileReadOnly")} · ${canvasAgentProjectDisplayPath(project)}`;copy.append(title,detail);
+    choice.append(canvasAgentResourceIcon(project.kind),copy);
+    if(selected){const current=document.createElement("span");current.className="canvas-agent-project-current";current.textContent=t("canvasAgentCurrentResource");choice.append(current);}
+    choice.addEventListener("click",()=>void canvasAgentSelectProject(project.id));
+    remove.className="canvas-agent-project-remove";remove.type="button";remove.textContent="×";remove.setAttribute("aria-label",`${t("canvasAgentRemoveProject")}: ${project.name}`);remove.title=t("canvasAgentRemoveProject");
+    remove.addEventListener("click",event=>{event.stopPropagation();void canvasAgentRemoveProject(project.id);});
+    row.append(choice,remove);
+    return row;
+  }
   function canvasAgentRenderProjectRoots() {
-    const view=canvasAgent.projectRootView,available=canvasAgent.projectRootsLoaded||Boolean(view);
-    canvasAgentProjectRoots.hidden=!available;
-    if(!available)return;
+    const view=canvasAgent.projectRootView,open=canvasAgent.projectRootChooserOpen;
+    canvasAgentProjectRoots.hidden=!open;
+    canvasAgentProjectCreate.setAttribute("aria-expanded",String(open));
+    canvasAgentProjectCreate.lastElementChild.textContent=t(open?"canvasAgentCancelProjectCreate":"canvasAgentNewProject");
+    if(!open)return;
     canvasAgentProjectRootList.replaceChildren();
     canvasAgentProjectRootBack.hidden=!view;
     canvasAgentProjectRootPath.textContent=view?[view.rootName,view.relativePath].filter(Boolean).join("/"):t("canvasAgentServerFolders");
@@ -14539,42 +14843,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function canvasAgentRenderProjects() {
-    if(!canvasAgentProjectList)return;
-    canvasAgentProjectList.replaceChildren();
-    const browserRow=document.createElement("div"),browser=document.createElement("button"),browserTitle=document.createElement("strong"),browserDetail=document.createElement("small");
+    if(!canvasAgentProjectList||!canvasAgentFileList)return;
+    const folders=canvasAgent.projects.filter(project=>project.kind==="folder"),files=canvasAgent.projects.filter(project=>project.kind==="file");
+    canvasAgentProjectList.replaceChildren();canvasAgentFileList.replaceChildren();
+    canvasAgentProjectCount.textContent=String(folders.length);canvasAgentFileCount.textContent=String(files.length);
+    const browserRow=document.createElement("div"),browser=document.createElement("button"),browserCopy=document.createElement("span"),browserTitle=document.createElement("strong"),browserDetail=document.createElement("small"),browserSelected=!canvasAgent.projectId;
     browserRow.className="canvas-agent-project-row";
     browser.className="canvas-agent-project-choice";
     browser.type="button";
-    browser.setAttribute("aria-pressed",String(!canvasAgent.projectId));
+    browser.setAttribute("aria-pressed",String(browserSelected));
+    browserCopy.className="canvas-agent-project-choice-copy";
     browserTitle.textContent=t("canvasAgentBrowserSpace");
     browserDetail.textContent=t("canvasAgentBrowserSpaceDetail");
-    browser.append(browserTitle,browserDetail);
+    browserCopy.append(browserTitle,browserDetail);browser.append(canvasAgentResourceIcon("browser"),browserCopy);
+    if(browserSelected){const current=document.createElement("span");current.className="canvas-agent-project-current";current.textContent=t("canvasAgentCurrentResource");browser.append(current);}
     browser.addEventListener("click",()=>void canvasAgentSelectProject(""));
     browserRow.append(browser);
     canvasAgentProjectList.append(browserRow);
-    for(const project of canvasAgent.projects){
-      const row=document.createElement("div"),choice=document.createElement("button"),title=document.createElement("strong"),detail=document.createElement("small"),remove=document.createElement("button");
-      row.className="canvas-agent-project-row";
-      choice.className="canvas-agent-project-choice";
-      choice.type="button";
-      choice.setAttribute("aria-pressed",String(project.id===canvasAgent.projectId));
-      title.textContent=project.name;
-      detail.textContent=`${t("canvasAgentFileReadOnly")} · ${canvasAgentProjectDisplayPath(project)}`;
-      choice.append(title,detail);
-      choice.addEventListener("click",()=>void canvasAgentSelectProject(project.id));
-      remove.className="canvas-agent-project-remove";
-      remove.type="button";
-      remove.textContent="×";
-      remove.setAttribute("aria-label",`${t("canvasAgentRemoveProject")}: ${project.name}`);
-      remove.title=t("canvasAgentRemoveProject");
-      remove.addEventListener("click",event=>{event.stopPropagation();void canvasAgentRemoveProject(project.id);});
-      row.append(choice,remove);
-      canvasAgentProjectList.append(row);
-    }
-    const canPickFile=typeof window.penechoDesktop?.pickProjectFile==="function";
-    canvasAgentProjectActions.hidden=!canPickFile;
-    canvasAgentProjectAddFile.hidden=!canPickFile;
-    canvasAgentProjectAddFile.disabled=canvasAgent.projectUploadBusy;
+    for(const project of folders)canvasAgentProjectList.append(canvasAgentProjectRow(project));
+    if(!folders.length)canvasAgentProjectList.append(canvasAgentProjectEmpty(t("canvasAgentNoProjects")));
+    for(const project of files)canvasAgentFileList.append(canvasAgentProjectRow(project));
+    if(!files.length)canvasAgentFileList.append(canvasAgentProjectEmpty(t("canvasAgentNoFiles")));
     canvasAgentRenderProjectRoots();
     canvasAgentUpdateProjectButton();
   }
@@ -14621,15 +14910,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     await canvasAgentLoadProjectHistory(canvasAgent.projectId,canvasAgent.projectSelectionRevision);
     canvasAgentRenderProjects();
+    canvasAgentSyncPromptSuggestions();
     return true;
   }
   async function canvasAgentEnsureProjectRoots({refresh=false}={}) {
-    if(canvasAgent.projectRootsLoaded&&!refresh)return;
-    const body=await canvasAgentProjectRequest(canvasAgentProjectRootApi().roots);
-    canvasAgent.projectRoots=(Array.isArray(body?.roots)?body.roots:[]).filter(root=>root&&/^root-[0-9a-f]{24}$/.test(String(root.id||""))&&typeof root.name==="string").map(root=>({id:String(root.id),name:String(root.name).slice(0,120)}));
-    canvasAgent.projectRootsLoaded=true;
-    if(canvasAgent.projectRootView&&!canvasAgent.projectRoots.some(root=>root.id===canvasAgent.projectRootView.rootId))canvasAgent.projectRootView=null;
-    canvasAgentRenderProjectRoots();
+    if(canvasAgent.projectRootBusy||canvasAgent.projectRootsLoaded&&!refresh)return;
+    canvasAgent.projectRootBusy=true;canvasAgentRenderProjectRoots();
+    try{
+      const body=await canvasAgentProjectRequest(canvasAgentProjectRootApi().roots);
+      canvasAgent.projectRoots=(Array.isArray(body?.roots)?body.roots:[]).filter(root=>root&&/^root-[0-9a-f]{24}$/.test(String(root.id||""))&&typeof root.name==="string").map(root=>({id:String(root.id),name:String(root.name).slice(0,120)}));
+      canvasAgent.projectRootsLoaded=true;
+      if(canvasAgent.projectRootView&&!canvasAgent.projectRoots.some(root=>root.id===canvasAgent.projectRootView.rootId))canvasAgent.projectRootView=null;
+    }finally{canvasAgent.projectRootBusy=false;canvasAgentRenderProjectRoots();}
+  }
+  function canvasAgentToggleProjectRootChooser(force=null) {
+    const open=force===null?!canvasAgent.projectRootChooserOpen:Boolean(force);
+    canvasAgent.projectRootChooserOpen=open;
+    if(!open)canvasAgent.projectRootView=null;
+    canvasAgentSetProjectError();canvasAgentRenderProjectRoots();
+    if(open)void canvasAgentEnsureProjectRoots({refresh:true}).catch(error=>{canvasAgent.projectRoots=[];canvasAgent.projectRootsLoaded=true;canvasAgentRenderProjectRoots();canvasAgentSetProjectError(String(error?.message||error));});
   }
   async function canvasAgentBrowseProjectRoot(rootId,relativePath="") {
     if(canvasAgent.projectRootBusy||!/^root-[0-9a-f]{24}$/.test(String(rootId||"")))return;
@@ -14667,12 +14966,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const projectId=canvasAgent.projectId,payload={conversations};
     canvasAgent.projectHistoryWrite=canvasAgent.projectHistoryWrite.catch(()=>{}).then(()=>canvasAgentProjectRequest(`/api/canvas-agent/projects/${encodeURIComponent(projectId)}/history`,{method:"PUT",body:JSON.stringify(payload)})).catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   }
-  function canvasAgentHideProjectPopover() {
-    canvasAgentProjectPopover.hidden=true;
-    canvasAgentProjectButton.setAttribute("aria-expanded","false");
-    canvasAgentSetProjectError();
+  function canvasAgentProjectDialogOpen() {
+    return Boolean(canvasAgentProjectPopover.open);
   }
-  async function canvasAgentSelectProject(projectId,{expectedRevision=null}={}) {
+  function canvasAgentShowProjectPopover() {
+    if(!canvasAgentProjectDialogOpen()){
+      if(typeof canvasAgentProjectPopover.showModal==="function")canvasAgentProjectPopover.showModal();
+      else canvasAgentProjectPopover.setAttribute("open","");
+    }
+    canvasAgentProjectButton.setAttribute("aria-expanded","true");
+    canvasAgentProjectClose.focus();
+  }
+  function canvasAgentHideProjectPopover({restoreFocus=false}={}) {
+    if(canvasAgentProjectDialogOpen()){
+      if(typeof canvasAgentProjectPopover.close==="function")canvasAgentProjectPopover.close();
+      else canvasAgentProjectPopover.removeAttribute("open");
+    }
+    canvasAgentProjectButton.setAttribute("aria-expanded","false");
+    canvasAgent.projectRootChooserOpen=false;canvasAgent.projectRootView=null;canvasAgentRenderProjectRoots();
+    canvasAgentSetProjectError();
+    if(restoreFocus&&!canvasAgentPanel.hidden)canvasAgentProjectButton.focus();
+  }
+  async function canvasAgentSelectProject(projectId,{expectedRevision=null,submitExecution=null}={}) {
     if(expectedRevision!==null&&expectedRevision!==canvasAgent.projectSelectionRevision)return false;
     const next=String(projectId||"");
     const revision=++canvasAgent.projectSelectionRevision;
@@ -14684,14 +14999,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.projectHistoryLoaded=!next;
     canvasAgent.accessMode="controlled";
     if(next)localStorage.setItem(CANVAS_AGENT_PROJECT_KEY,next);else localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
-    canvasAgentBeginLocalConversation({persistCurrent:false});
+    canvasAgentBeginLocalConversation({persistCurrent:false,submitExecution});
     canvasAgentRenderProjects();
+    canvasAgentSyncPromptSuggestions();
     canvasAgentHideProjectPopover();
     try{
       if(next&&!await canvasAgentLoadProjectHistory(next,revision))return false;
       if(revision!==canvasAgent.projectSelectionRevision||next!==canvasAgent.projectId)return false;
       canvasAgentRenderHistoryList();
-      if(canvasAgent.socket?.readyState===WebSocket.OPEN||canvasAgent.connectPromise)await canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false});
+      if(canvasAgent.socket?.readyState===WebSocket.OPEN||canvasAgent.connectPromise)await canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
       else canvasAgentDropSessionIdentity();
       return true;
     }catch(error){
@@ -14708,18 +15024,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if(canvasAgent.projectId===projectId){await canvasAgentSelectProject("");await canvasAgent.projectHistoryWrite;}
       await canvasAgentProjectRequest(`/api/canvas-agent/projects/${encodeURIComponent(projectId)}`,{method:"DELETE"});
       await canvasAgentEnsureProjects({refresh:true});
-    }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
-  }
-  async function canvasAgentAddProjectFile() {
-    if(typeof window.penechoDesktop?.pickProjectFile!=="function")return;
-    const selectionRevision=canvasAgent.projectSelectionRevision;
-    try{
-      canvasAgentSetProjectError();
-      const picked=await window.penechoDesktop.pickProjectFile();
-      if(picked?.canceled||!picked?.path||!picked?.pickerToken)return;
-      const body=await canvasAgentProjectRequest("/api/canvas-agent/projects",{method:"POST",body:JSON.stringify({path:picked.path,kind:"file",pickerToken:picked.pickerToken})});
-      await canvasAgentEnsureProjects({refresh:true});
-      await canvasAgentSelectProject(body.project.id,{expectedRevision:selectionRevision});
     }catch(error){canvasAgentSetProjectError(String(error?.message||error));}
   }
   async function canvasAgentUploadProjectFile(file) {
@@ -14979,10 +15283,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentSetHistoryViewing("");
     canvasAgentRenderConversation(canvasAgent.currentConversation,true);
     if(!canvasAgent.running&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
-    else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
+    else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN&&canvasAgent.sessionReady?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
     canvasAgentInput.focus();
   }
-  function canvasAgentBeginLocalConversation({persistCurrent=true}={}) {
+  function canvasAgentBeginLocalConversation({persistCurrent=true,submitExecution=null}={}) {
+    if (submitExecution) canvasAgentAssertSubmitExecution(submitExecution);
+    else canvasAgentInvalidateSubmitExecution();
+    canvasAgentBeginSessionTransition();
     if (persistCurrent) canvasAgentPersistCurrentConversation();
     canvasAgent.currentConversation=canvasAgentNewConversationRecord();
     canvasAgent.lastTurnError=null;
@@ -14998,22 +15305,106 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.sessionId="";
     canvasAgent.resumeToken="";
     canvasAgent.connectionId="";
+    canvasAgent.sessionEngine="";
     canvasAgent.sessionProjectId="";
     canvasAgent.sessionAccessMode="controlled";
     canvasAgent.sessionProjectCapabilities=null;
+    canvasAgentBeginSessionTransition();
     try { sessionStorage.removeItem(CANVAS_AGENT_SESSION_KEY); } catch {}
+  }
+  function canvasAgentBeginSessionTransition() {
+    canvasAgent.sessionGeneration++;
+    canvasAgent.sessionReady = false;
+    canvasAgent.pendingHandshakeId = "";
+    canvasAgent.pendingProvider = "";
+    canvasAgentResolveApproval(false);
+    if (canvasAgent.connectReject) {
+      const reject=canvasAgent.connectReject;
+      canvasAgent.connectPromise=null;
+      canvasAgent.connectResolve=canvasAgent.connectReject=null;
+      reject(Error("Canvas Agent session changed."));
+    }
+    for (const controller of canvasAgent.toolControllers.values()) {
+      controller.abort(Error("Canvas Agent session changed."));
+    }
+    canvasAgent.toolControllers.clear();
+    canvasAgent.toolResultCache.clear();
+    canvasAgent.activeToolExecution=null;
+  }
+  function canvasAgentInvalidateSubmitExecution(reason=Error("Canvas Agent session changed.")) {
+    const execution=canvasAgent.activeSubmitExecution;
+    if (!execution) return;
+    canvasAgent.activeSubmitExecution=null;
+    execution.controller.abort(reason);
+    if(canvasAgent.requestPending)canvasAgentRequestDidNotSend();
+  }
+  function canvasAgentBeginSubmitExecution(connectionId) {
+    canvasAgentInvalidateSubmitExecution(Error("A newer Canvas Agent submission replaced this request."));
+    const execution={
+      connectionId:String(connectionId||""),
+      controller:new AbortController(),
+      socket:null,
+      sessionId:"",
+      generation:null,
+    };
+    canvasAgent.activeSubmitExecution=execution;
+    return execution;
+  }
+  function canvasAgentSubmitExecutionCurrent(execution) {
+    if (!execution || canvasAgent.activeSubmitExecution!==execution || execution.controller.signal.aborted
+      || selectedAiConnectionId()!==execution.connectionId) return false;
+    if (execution.generation===null) return true;
+    return execution.socket===canvasAgent.socket
+      && execution.socket?.readyState===WebSocket.OPEN
+      && canvasAgent.sessionReady
+      && execution.sessionId===canvasAgent.sessionId
+      && execution.generation===canvasAgent.sessionGeneration;
+  }
+  function canvasAgentAssertSubmitExecution(execution) {
+    if (!canvasAgentSubmitExecutionCurrent(execution)) throw Error("Canvas Agent session changed before the message could be sent.");
+  }
+  function canvasAgentBindSubmitExecution(execution) {
+    canvasAgentAssertSubmitExecution(execution);
+    if (!canvasAgent.sessionReady || !canvasAgent.sessionId || canvasAgent.socket?.readyState!==WebSocket.OPEN) throw Error("Canvas Agent is not connected.");
+    execution.socket=canvasAgent.socket;
+    execution.sessionId=canvasAgent.sessionId;
+    execution.generation=canvasAgent.sessionGeneration;
+    canvasAgentAssertSubmitExecution(execution);
+  }
+  function canvasAgentToolExecutionCurrent(execution=null) {
+    return Boolean(execution)
+      && execution.socket===canvasAgent.socket
+      && execution.socket?.readyState===WebSocket.OPEN
+      && execution.sessionId===canvasAgent.sessionId
+      && execution.generation===canvasAgent.sessionGeneration
+      && !execution.controller.signal.aborted;
+  }
+  function canvasAgentAssertToolExecution(execution) {
+    if (!canvasAgentToolExecutionCurrent(execution)) throw canvasAgentToolError("SESSION_EXPIRED","The Canvas Agent session changed before this tool could finish.");
   }
   function canvasAgentCanvasIdentity({id,location}={}) {
     return id&&location?`${location}:${id}`:`draft:${canvasClientId()}`;
   }
-  function canvasAgentCanvasDidChange(identity = null) {
+  function canvasAgentCanvasDidChange(identity = null,options = null) {
+    const clearProject=options?.clearProject===true;
     canvasAgentPersistCurrentConversation();
+    if(clearProject){
+      canvasAgent.projectSelectionRevision++;
+      canvasAgent.projectId="";
+      canvasAgent.projectHistory=[];
+      canvasAgent.projectHistoryLoaded=true;
+      canvasAgent.accessMode="controlled";
+      localStorage.removeItem(CANVAS_AGENT_PROJECT_KEY);
+      canvasAgentRenderProjects();
+      canvasAgentHideProjectPopover();
+    }
     state.canvasAgentCanvasKey=canvasAgentCanvasIdentity(identity||{});
     canvasAgentBeginLocalConversation({persistCurrent:false});
     if (canvasAgent.socket?.readyState===WebSocket.OPEN||canvasAgent.connectPromise) {
       void canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false}).catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
     } else canvasAgentDropSessionIdentity();
-    if (canvasAgentPanel.hidden) openCanvasAgent({focus:false});
+    canvasAgentSyncPromptSuggestions();
+    if (state.canvasAgentAutoOpen && canvasAgentPanel.hidden) openCanvasAgent({focus:false});
   }
   function canvasAgentCanvasDidPersist(location,id) {
     if (!location||!id) return;
@@ -15076,6 +15467,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentSelection.replaceChildren(...explicit.map(id=>canvasAgentCreateReferenceChip(id)),...selected.map(id=>canvasAgentCreateReferenceChip(id,{selected:true})));
     canvasAgentSelection.hidden = !explicit.length&&!selected.length;
     canvasAgentSyncInputHint();
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearReferences() {
     canvasAgent.references=[];
@@ -15516,6 +15908,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentAttachmentCount.textContent = String(canvasAgent.attachments.length);
     canvasAgentAttachmentCount.hidden = !canvasAgent.attachments.length;
     canvasAgentSyncInputHint();
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearAttachments() {
     canvasAgent.attachments = [];
@@ -15577,12 +15970,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function canvasAgentResizeInput() {
     if(!canvasAgentInput||canvasAgentInput.hidden)return;
-    canvasAgentInput.style.height="auto";
+    canvasAgentInput.dataset.rows="1";
     const styles=getComputedStyle(canvasAgentInput),lineHeight=Number.parseFloat(styles.lineHeight)||20,
       padding=(Number.parseFloat(styles.paddingTop)||0)+(Number.parseFloat(styles.paddingBottom)||0),
       minimum=Number.parseFloat(styles.minHeight)||lineHeight+padding,maxHeight=Math.max(minimum,lineHeight*CANVAS_AGENT_INPUT_MAX_LINES+padding),
-      contentHeight=canvasAgentInput.scrollHeight,nextHeight=Math.min(Math.max(contentHeight,minimum),maxHeight),overflowing=contentHeight>maxHeight+.5;
-    canvasAgentInput.style.height=`${Math.ceil(nextHeight)}px`;
+      contentHeight=canvasAgentInput.scrollHeight,rows=Math.max(1,Math.min(CANVAS_AGENT_INPUT_MAX_LINES,Math.ceil((contentHeight-padding)/lineHeight))),overflowing=contentHeight>maxHeight+.5;
+    canvasAgentInput.dataset.rows=String(rows);
     canvasAgentInput.classList.toggle("canvas-agent-input-overflowing",overflowing);
   }
   function canvasAgentSetInputMode(mode) {
@@ -15603,6 +15996,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.inkPresent=false;
     canvasAgent.inkStroke=null;
     canvasAgentSyncInputHint();
+    canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentInkPoint(event) {
     const rect=canvasAgentInkCanvas.getBoundingClientRect();
@@ -15757,7 +16151,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   function canvasAgentSyncState() {
-    if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId) {
+    if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionReady && canvasAgent.sessionId) {
       canvasAgentSendEnvelope("state_sync",{digest:canvasAgentDigest("objects")});
     }
     canvasAgentSyncSelection();
@@ -16263,22 +16657,35 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     let envelope;
     try { envelope = JSON.parse(message.data); } catch { return; }
     if (envelope?.version !== CANVAS_AGENT_PROTOCOL_VERSION || !Number.isSafeInteger(envelope.seq) || envelope.seq <= canvasAgent.incomingSeq) return;
+    const socket = message.target;
+    if (socket && socket !== canvasAgent.socket) return;
+    const handshakeId=String(envelope.payload?.handshakeId||"");
+    const readyHandshake = envelope.type === "ready" && Boolean(canvasAgent.connectPromise) && Boolean(envelope.canvasSessionId)
+      && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
+    const currentSessionEnvelope = Boolean(canvasAgent.sessionReady) && Boolean(envelope.canvasSessionId) && envelope.canvasSessionId === canvasAgent.sessionId;
+    const pendingFatalError = envelope.type === "error" && envelope.payload?.fatal === true && Boolean(canvasAgent.connectPromise)
+      && Boolean(canvasAgent.pendingHandshakeId) && handshakeId===canvasAgent.pendingHandshakeId;
+    if (!readyHandshake && !currentSessionEnvelope && !pendingFatalError) return;
     canvasAgent.incomingSeq = envelope.seq;
     if (envelope.type === "ready") {
       canvasAgent.lastTurnError=null;
       canvasAgent.sessionId = envelope.canvasSessionId;
       canvasAgent.resumeToken = String(envelope.payload?.resumeToken || canvasAgent.resumeToken || "");
       canvasAgent.connectionId = String(envelope.payload?.connectionId || "");
+      canvasAgent.sessionEngine = String(envelope.payload?.engine || "");
       canvasAgent.sessionProjectId = String(envelope.payload?.project?.id || "");
       canvasAgent.sessionAccessMode = String(envelope.payload?.accessMode || "controlled");
       const capabilities=envelope.payload?.projectCapabilities;
       canvasAgent.sessionProjectCapabilities=capabilities&&typeof capabilities.bash==="boolean"&&typeof capabilities.readOnly==="boolean"
         ? {bash:capabilities.bash,readOnly:capabilities.readOnly}:null;
+      canvasAgent.sessionReady = true;
+      canvasAgent.pendingHandshakeId = "";
+      canvasAgent.pendingProvider = "";
       canvasAgent.sessionSearchConfigured = envelope.payload?.webSearchConfigured === true;
       canvasAgent.sessionSearchEnabled = envelope.payload?.webSearchEnabled === true;
       canvasAgentSetSearchConfigured(canvasAgent.sessionSearchConfigured);
       canvasAgentRenderProjects();
-      try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
+      try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,engine:canvasAgent.sessionEngine,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
       canvasAgentSetStatus(t(envelope.payload?.resumed ? "canvasAgentResumed" : "canvasAgentReady"),"ready");
       if (envelope.payload?.resumed) {
         canvasAgent.currentConversation.items=[];
@@ -16293,7 +16700,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgent.connectResolve?.();
       canvasAgent.connectResolve = canvasAgent.connectReject = null;
       canvasAgentSyncState();
-    } else if (envelope.type === "session_event") canvasAgentHandleEvent(envelope.payload);
+    }
+    if (envelope.type === "session_event") canvasAgentHandleEvent(envelope.payload);
     else if (envelope.type === "agent_status") {
       canvasAgent.requestPending = false;
       canvasAgentSetRunning(envelope.payload?.status !== "idle");
@@ -16315,17 +16723,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const path=window.PENECHO_CONFIG?.runtime === "cloud" ? "/api/v1/remote-canvas/canvas-agent" : "/api/canvas-agent/socket";
     return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${path}`;
   }
-  function canvasAgentWaitForReady(start) {
+  function canvasAgentWaitForReady(start,{handshakeId,provider}={}) {
     if (canvasAgent.connectPromise) return canvasAgent.connectPromise;
+    const expectedHandshakeId=String(handshakeId||"");
+    if (!expectedHandshakeId) return Promise.reject(Error("Canvas Agent handshake identity is missing."));
+    canvasAgent.pendingHandshakeId=expectedHandshakeId;
+    canvasAgent.pendingProvider=String(provider||"");
     let wrapped;
     const pending = new Promise((resolve,reject)=>{
       canvasAgent.connectResolve = resolve;
       canvasAgent.connectReject = reject;
       try { start(); }
-      catch (error) { canvasAgent.connectResolve=canvasAgent.connectReject=null; reject(error); }
+      catch (error) {
+        canvasAgent.connectResolve=canvasAgent.connectReject=null;
+        if(canvasAgent.pendingHandshakeId===expectedHandshakeId){canvasAgent.pendingHandshakeId="";canvasAgent.pendingProvider="";}
+        reject(error);
+      }
     });
     wrapped = pending.finally(()=>{
-      if (canvasAgent.connectPromise === wrapped) canvasAgent.connectPromise = null;
+      if (canvasAgent.connectPromise === wrapped) {
+        canvasAgent.connectPromise = null;
+        if(canvasAgent.pendingHandshakeId===expectedHandshakeId){canvasAgent.pendingHandshakeId="";canvasAgent.pendingProvider="";}
+      }
     });
     canvasAgent.connectPromise = wrapped;
     return wrapped;
@@ -16343,13 +16762,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!state.pluginCatalogLoaded) await loadPluginDocuments();
     return canvasAgentWidgetCapabilities();
   }
-  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true}={}) {
-    if (resetProjection) canvasAgentBeginLocalConversation();
+  async function canvasAgentStartNewConversation(connectionId = selectedAiConnectionId(), {resetProjection=true,submitExecution=null}={}) {
+    connectionId=String(connectionId||"");
+    if (resetProjection) canvasAgentBeginLocalConversation({submitExecution});
+    else if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
     if (canvasAgent.connectPromise) {
       await canvasAgent.connectPromise;
-      return canvasAgentStartNewConversation(connectionId,{resetProjection:false});
+      return canvasAgentStartNewConversation(connectionId,{resetProjection:false,submitExecution});
     }
-    if (canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionId) return canvasAgentConnect();
+    if (canvasAgent.socket?.readyState !== WebSocket.OPEN) return canvasAgentConnect({submitExecution});
     canvasAgent.currentConversation.items=[];
     canvasAgentClearTranscript({showEmpty:true});
     canvasAgentClearAttachments();
@@ -16360,33 +16781,48 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentStop.hidden = true;
     canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
     const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
-    return canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}));
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
+    canvasAgentBeginSessionTransition();
+    const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
+    await canvasAgentWaitForReady(()=>canvasAgentSendEnvelope("new_conversation",{handshakeId,connectionId,webSearchEnabled:canvasAgent.searchEnabled,widgetCapabilities,projectId:canvasAgent.projectId,accessMode:canvasAgentEffectiveAccessMode()}),{handshakeId,provider});
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,submitExecution});
   }
-  async function canvasAgentConnect() {
+  async function canvasAgentConnect(options) {
+    const {submitExecution=null}=options||{};
     await canvasAgentEnsureProjects();
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
     const connectionId = selectedAiConnectionId();
     if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId) {
-      if (canvasAgent.connectionId === connectionId&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()) return;
-      await canvasAgentStartNewConversation(connectionId);
-      return canvasAgentConnect();
+      if (canvasAgent.sessionReady&&canvasAgent.connectionId === connectionId&&canvasAgent.sessionProjectId===canvasAgent.projectId&&canvasAgent.sessionAccessMode===canvasAgentEffectiveAccessMode()) return;
+      await canvasAgentStartNewConversation(connectionId,{submitExecution});
+      return canvasAgentConnect({submitExecution});
     }
     if (canvasAgent.connectPromise) {
       await canvasAgent.connectPromise;
-      return canvasAgentConnect();
+      return canvasAgentConnect({submitExecution});
     }
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
     const widgetCapabilities=await canvasAgentCurrentWidgetCapabilities();
+    if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
+    if(selectedAiConnectionId()!==connectionId)return canvasAgentConnect({submitExecution});
+    canvasAgentBeginSessionTransition();
+    const handshakeId=canvasClientId(),provider=canvasAgentConnectionProvider(connectionId);
     await canvasAgentWaitForReady(()=>{
+      const previousSocket=canvasAgent.socket;
       const socket = new WebSocket(canvasAgentSocketUrl());
       canvasAgent.socket = socket;
+      if(previousSocket&&previousSocket!==socket){try{previousSocket.close(1000,"Canvas Agent session replaced");}catch{}}
       socket.addEventListener("open",()=>{
+        if(socket!==canvasAgent.socket){socket.close();return;}
         canvasAgent.outgoingSeq = 0;
         canvasAgent.incomingSeq = 0;
         canvasAgentSendEnvelope("hello",{
+          handshakeId,
           canvasSessionId:canvasAgent.sessionId,
           resumeToken:canvasAgent.resumeToken,
           clientId:canvasAgent.clientId,
-          connectionId:selectedAiConnectionId(),
+          connectionId,
           webSearchEnabled:canvasAgent.searchEnabled,
           widgetCapabilities,
           projectId:canvasAgent.projectId,
@@ -16395,7 +16831,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       });
       socket.addEventListener("message",event=>void canvasAgentHandleMessage(event));
       socket.addEventListener("close",()=>{
+        if (socket !== canvasAgent.socket) return;
         const wasPending = Boolean(canvasAgent.connectReject),hadActiveTurn=canvasAgent.requestPending||canvasAgent.running;
+        canvasAgent.sessionEngine="";
+        canvasAgentInvalidateSubmitExecution(Error("Canvas Agent connection closed."));
+        canvasAgentBeginSessionTransition();
         canvasAgent.connectReject?.(Error("Canvas Agent connection closed."));
         canvasAgent.connectResolve = canvasAgent.connectReject = null;
         canvasAgent.connectPromise = null;
@@ -16415,18 +16855,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         }else if(canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
         else if (!wasPending) canvasAgentSetStatus(t("canvasAgentDisconnected"),"offline");
       });
-      socket.addEventListener("error",()=>canvasAgentSetStatus(t("canvasAgentErrorConnection"),"error"));
-    });
-    return canvasAgentConnect();
+      socket.addEventListener("error",()=>{ if(socket!==canvasAgent.socket)return; canvasAgentSetStatus(t("canvasAgentErrorConnection"),"error"); });
+    },{handshakeId,provider});
+    return canvasAgentConnect({submitExecution});
   }
-  function canvasAgentConnectionDidChange(force = false) {
-    if (canvasAgentPanel.hidden || canvasAgent.socket?.readyState !== WebSocket.OPEN || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
-    const action = force ? canvasAgentStartNewConversation(selectedAiConnectionId()) : canvasAgentConnect();
+  function canvasAgentConnectionProvider(connectionId) {
+    const connection=settings.connections.find(item=>item.id===String(connectionId||""));
+    return String(connection?.provider||"");
+  }
+  function canvasAgentSelectedConnectionProvider() {
+    return canvasAgentConnectionProvider(selectedAiConnectionId());
+  }
+  function canvasAgentConnectionDidChange(force = false, nextProvider = canvasAgentSelectedConnectionProvider()) {
+    const provider=String(nextProvider||""),codexTransition=canvasAgent.sessionEngine==="codex-native"||canvasAgent.pendingProvider==="codex-cli"||provider==="codex-cli";
+    const connectionActive = canvasAgent.socket?.readyState === WebSocket.OPEN || Boolean(canvasAgent.connectPromise);
+    if (!connectionActive || !codexTransition && canvasAgentPanel.hidden || !force && canvasAgent.connectionId === selectedAiConnectionId()) return;
+    const action = force || codexTransition ? canvasAgentStartNewConversation(selectedAiConnectionId()) : canvasAgentConnect();
     void action.catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   }
-  async function canvasAgentEnsureSearchSession() {
-    if (canvasAgent.sessionSearchEnabled === canvasAgent.searchEnabled || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionId) return;
-    await canvasAgentStartNewConversation(selectedAiConnectionId());
+  async function canvasAgentEnsureSearchSession(submitExecution=null) {
+    if (canvasAgent.sessionSearchEnabled === canvasAgent.searchEnabled || canvasAgent.socket?.readyState !== WebSocket.OPEN || !canvasAgent.sessionReady || !canvasAgent.sessionId) return;
+    await canvasAgentStartNewConversation(selectedAiConnectionId(),{submitExecution});
   }
 
   function canvasAgentValidatedRegion(value) {
@@ -16518,7 +16967,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     throw canvasAgentToolError("CAPTURE_TOO_LARGE","Canvas capture could not be compressed below the hard encoded-byte limit.",{maxBytes:policy.maxBytes});
   }
-  async function canvasAgentCapture(args) {
+  async function canvasAgentCapture(args,options) {
+    const {signal=null,assertCurrent=null}=options||{};
+    assertCurrent?.();
     const quality=args.quality === "detail" ? "detail" : "basic";
     if(quality === "detail"){
       if(args.target === "object"){
@@ -16534,7 +16985,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvas = document.createElement("canvas"), context = canvas.getContext("2d");
     canvas.width = width;
     canvas.height = height;
-    await prepareVisibleWidgetSnapshots(region,true);
+    await prepareVisibleWidgetSnapshots(region,true,signal);
+    assertCurrent?.();
     context.fillStyle = state.paint.paper;
     context.fillRect(0,0,width,height);
     context.save();
@@ -16548,10 +17000,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     drawSharpOverlays(context,region);
     context.restore();
     const coordinates=["metadata","none"].includes(args.coordinates) ? args.coordinates : "grid", gridStep=coordinates === "grid" ? canvasAgentDrawCoordinateGrid(context,region,width,height) : canvasAgentGridStep(Math.max(region.w,region.h)),
-      encoded=await canvasAgentCompressedCanvas(canvas,policy), finalWidth=encoded.canvas.width, finalHeight=encoded.canvas.height,
+      encoded=await canvasAgentCompressedCanvas(canvas,policy);
+    assertCurrent?.();
+    const dataUrl=await canvasAgentReadDataUrl(encoded.blob);
+    assertCurrent?.();
+    const finalWidth=encoded.canvas.width, finalHeight=encoded.canvas.height,
       scaleX=finalWidth/region.w, scaleY=finalHeight/region.h, viewFacts=canvasAgentViewFacts();
     return {
-      dataUrl:await canvasAgentReadDataUrl(encoded.blob), mediaType:encoded.blob.type || encoded.mediaType, encodedBytes:encoded.blob.size,
+      dataUrl, mediaType:encoded.blob.type || encoded.mediaType, encodedBytes:encoded.blob.size,
       width:finalWidth,height:finalHeight,quality,coordinates,revision:state.userRevision,viewRevision:viewFacts.viewRevision,
       logicalRegion:{x:region.x,y:region.y,width:region.w,height:region.h},
       mapping:{origin:{x:region.x,y:region.y},pixelsPerLogicalUnit:{x:scaleX,y:scaleY},logicalUnitsPerPixel:{x:1/scaleX,y:1/scaleY}},
@@ -16568,11 +17024,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const counts=digest?.counts||{};
     return Boolean(digest?.canvas?.contentBounds)||["inkTiles","widgets","textBoxes","images"].some(key=>Number(counts[key])>0);
   }
-  async function canvasAgentInitialTurnState() {
+  async function canvasAgentInitialTurnState(submitExecution=null) {
     for (let attempt=0;attempt<3;attempt++) {
+      if(submitExecution)canvasAgentAssertSubmitExecution(submitExecution);
       const before=canvasAgentDigest("objects");
       if(!canvasAgentDigestHasContent(before))return {digest:before,empty:true};
-      const capture=await canvasAgentCapture({target:"canvas",quality:"basic",coordinates:"none"}), digest=canvasAgentDigest("objects");
+      const capture=await canvasAgentCapture({target:"canvas",quality:"basic",coordinates:"none"},{
+        signal:submitExecution?.controller.signal,
+        assertCurrent:submitExecution?()=>canvasAgentAssertSubmitExecution(submitExecution):null,
+      }), digest=canvasAgentDigest("objects");
       if (before.revision!==digest.revision || before.viewRevision!==digest.viewRevision || capture.revision!==digest.revision
         || capture.viewRevision!==digest.viewRevision || !canvasAgentSameInitialRegion(capture,digest)) continue;
       const match=/^data:(image\/(?:png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(capture.dataUrl||""));
@@ -16615,6 +17075,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function canvasAgentLineNumberedResourceView(value,startLine=1) {
     return String(value??"").split(/\r\n|\r|\n/).map((line,index)=>`${String(startLine+index).padStart(6," ")}\t${line}`).join("\n");
   }
+  function canvasAgentTerminalBoundary(raw,lines,end) {
+    if (end !== lines.length || /(?:\r\n|\r|\n)$/.test(raw)) return null;
+    const lastLine=String(lines.at(-1)??""), characters=Array.from(lastLine), trailing=characters.slice(-8);
+    return {
+      line:lines.length,
+      characters:characters.length,
+      trailingCodePoints:trailing.map(character=>`U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4,"0")}`),
+      note:"trailingCodePoints are the exact final source characters before EOF; JSON quotes outside content are delimiters, not source characters.",
+    };
+  }
   async function canvasAgentRead(args) {
     const object = canvasAgentObject(String(args.objectId || ""));
     if (!object) throw canvasAgentToolError("OBJECT_NOT_FOUND","Canvas object was not found.",{objectId:args.objectId});
@@ -16644,7 +17114,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (resource !== "content") throw canvasAgentToolError("RESOURCE_NOT_FOUND",`${resource} is only available for widgets.`);
       value=object.kind === "text" ? item.text : JSON.stringify(base,null,2);
     }
-    const raw=String(value), lines=raw.split(/\r\n|\r|\n/), start=Math.max(1,Math.min(lines.length||1,Math.round(Number(args.startLine)||1))), end=Math.max(start,Math.min(lines.length,Math.round(Number(args.endLine)||start+199))), selected=lines.slice(start-1,end).join("\n"), numbered=canvasAgentLineNumberedResourceView(selected,start), maximum=200000, contentTruncated=numbered.length>maximum;
+    const raw=String(value), lines=raw.split(/\r\n|\r|\n/), start=Math.max(1,Math.min(lines.length||1,Math.round(Number(args.startLine)||1))), end=Math.max(start,Math.min(lines.length,Math.round(Number(args.endLine)||start+199))), selected=lines.slice(start-1,end).join("\n"), numbered=canvasAgentLineNumberedResourceView(selected,start), maximum=200000, contentTruncated=numbered.length>maximum, terminalBoundary=canvasAgentTerminalBoundary(raw,lines,end);
     return {
       revision:state.userRevision,
       object:base,
@@ -16655,9 +17125,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       contentFormat:"nl -ba -w6 -s TAB",
       numbering:"The six-column line number and first ASCII TAB are display metadata. Use the number only for diff coordinates; never include either in context, removed, or added lines.",
       originalEndsWithNewline:/(?:\r\n|\r|\n)$/.test(raw),
+      ...(terminalBoundary?{terminalBoundary}:{}),
     };
   }
-  function canvasAgentMutationIdle() {
+  function canvasAgentMutationIdle(execution) {
+    canvasAgentAssertToolExecution(execution);
     if (state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement || state.selection || state.selectionGesture
       || state.imageEdit || state.imageGesture || state.imageImporting || state.widgetEdit || state.widgetGesture || state.animationEdit || state.animationGesture || state.textEditors.size) {
       throw canvasAgentToolError("CANVAS_BUSY","Finish the active canvas edit or draft before Agent changes the canvas.");
@@ -16778,8 +17250,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     return prepared;
   }
-  async function canvasAgentCreate(args) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();const prepared=await canvasAgentPrepareCreateItems(args.items);canvasAgentAssertRevision(args.baseRevision);save();
+  async function canvasAgentCreate(args,execution) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareCreateItems(args.items);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);save();
     const kinds=new Set(prepared.map(item=>item.kind));if(kinds.has("widget"))state.widgetHistoryBefore=serializedWidgets();if(kinds.has("text"))state.textBoxHistoryBefore=textBoxHistoryState();if(kinds.has("image"))state.imageHistoryBefore=imageHistoryState();
     const receipts=[];
     for(const item of prepared){
@@ -16793,23 +17265,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(!viewResult){requestRender();canvasAgentSyncState();}
     return{ok:true,previousRevision:args.baseRevision,revision:state.userRevision,changeId,receipts,...(viewResult?{viewport:viewResult.viewport}:{}),summary:String(args.summary||"")};
   }
-  async function canvasAgentVisualExplainerCreate(args) {
+  async function canvasAgentVisualExplainerCreate(args,execution) {
     const item=visualExplainerWidgetItem(args.plan,{title:args.title,width:args.width,height:args.height,placement:args.placement}),
-      result=await canvasAgentCreate({baseRevision:args.baseRevision,items:[item],summary:args.summary,_changeId:args._changeId}),
+      result=await canvasAgentCreate({baseRevision:args.baseRevision,items:[item],summary:args.summary,_changeId:args._changeId},execution),
       objectId=result.receipts?.[0]?.objectId,object=objectId?canvasAgentObject(objectId):null,
       diagnostics=object?.kind === "widget"?await visualExplainerWaitForDiagnostics(object.item):null;
+    canvasAgentAssertToolExecution(execution);
     return {...result,visualExplainer:{objectId,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,diagnostics}};
   }
-  async function canvasAgentVisualExplainerUpdate(args) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();
+  async function canvasAgentVisualExplainerUpdate(args,execution) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);
     const object=canvasAgentObject(String(args.objectId||""));
     if(!object||object.kind!=="widget")throw canvasAgentToolError("OBJECT_NOT_FOUND","Visual Explainer Widget was not found.",{objectId:args.objectId});
     if(object.item.widgetType!=="html_widget"||object.item.pluginId!=="general"||object.item.sourceFormat!==VISUAL_EXPLAINER_SOURCE_FORMAT)throw canvasAgentToolError("KIND_MISMATCH","The target is not a PenEcho Visual Explainer Widget.",{objectId:args.objectId});
     const previousDiagnostics=object.item.visualDiagnostics?structuredClone(object.item.visualDiagnostics):await visualExplainerWaitForDiagnostics(object.item,1200),
       generated=visualExplainerWidgetItem(args.plan,{title:args.title||object.item.title}),currentEdit=widgetEditContext(object.item,"agent"),expectedHash=await canvasAgentHash(currentEdit),
       command={tool:"html_widget",widgetType:"html_widget",pluginId:"general",title:generated.title,refreshSeconds:0,html:generated.html,sourceFormat:generated.sourceFormat,frameworkVersion:generated.frameworkVersion,copyText:generated.copyText,copyLabel:generated.copyLabel,x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h};
-    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash,changeId:args._changeId,command}),updated=canvasAgentObject(object.item.id),
+    canvasAgentAssertToolExecution(execution);
+    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash,changeId:args._changeId,command},execution),updated=canvasAgentObject(object.item.id),
       diagnostics=updated?.kind === "widget"?await visualExplainerWaitForDiagnostics(updated.item):null;
+    canvasAgentAssertToolExecution(execution);
     return {...result,summary:String(args.summary||""),visualExplainer:{objectId:object.item.id,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,previousDiagnostics,diagnostics}};
   }
   async function canvasAgentPrepareEditOperations(operations) {
@@ -16838,8 +17313,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     return prepared;
   }
-  async function canvasAgentEdit(args) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();const prepared=await canvasAgentPrepareEditOperations(args.operations);canvasAgentAssertRevision(args.baseRevision);save();
+  async function canvasAgentEdit(args,execution) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareEditOperations(args.operations);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);save();
     const objectKinds=new Set(prepared.flatMap(op=>op.kind === "arrange"?op.positions.map(item=>item.object.kind):[op.kind]));if(objectKinds.has("widget"))state.widgetHistoryBefore=serializedWidgets();if(objectKinds.has("text"))state.textBoxHistoryBefore=textBoxHistoryState();if(objectKinds.has("image"))state.imageHistoryBefore=imageHistoryState();
     const receipts=[];
     for(const op of prepared){
@@ -16869,10 +17344,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for(const byte of bytes){first=Math.imul(first^byte,0x01000193)>>>0;second=Math.imul(second^(byte+first),0x85ebca6b)>>>0;}
     return `fallback-${first.toString(16).padStart(8,"0")}${second.toString(16).padStart(8,"0")}-${bytes.length}`;
   }
-  async function canvasAgentInternalWidget(args) {
+  async function canvasAgentInternalWidget(args,execution) {
     const object = canvasAgentObject(String(args.objectId || ""));
     if (!object || object.kind !== "widget") throw Error("Widget was not found.");
     const parentWidgetEdit = widgetEditContext(object.item,"agent"),hash=await canvasAgentHash(parentWidgetEdit);
+    canvasAgentAssertToolExecution(execution);
     if(object.item.sourceFormat===VISUAL_EXPLAINER_SOURCE_FORMAT&&args.artifactId){
       let plan;try{plan=JSON.parse(object.item.copyText||"");}catch{throw Error("Visual Explainer source is invalid.");}
       const widgetEdit=visualExplainerArtifactWidgetEdit(plan,args.artifactId,{x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h});
@@ -16880,25 +17356,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     return { revision:state.userRevision, widgetEdit:parentWidgetEdit, hash, containerSourceFormat:object.item.sourceFormat||null };
   }
-  async function canvasAgentPatchVisualExplainer(args) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle();const object=canvasAgentObject(String(args.objectId||""));
+  async function canvasAgentPatchVisualExplainer(args,execution) {
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const object=canvasAgentObject(String(args.objectId||""));
     if(!object||object.kind!=="widget")throw Error("Visual Explainer Widget was not found.");
     if(object.item.sourceFormat!==VISUAL_EXPLAINER_SOURCE_FORMAT)throw Error("The target is not a Visual Explainer Widget.");
     const currentEdit=widgetEditContext(object.item,"agent");if(await canvasAgentHash(currentEdit)!==String(args.expectedHash||""))throw Error("Visual Explainer changed after it was read. Read it again before patching.");
+    canvasAgentAssertToolExecution(execution);
     let plan;
     if(args.artifactId){let currentPlan;try{currentPlan=JSON.parse(object.item.copyText||"");}catch{throw Error("Visual Explainer source is invalid.");}plan=visualExplainerReplaceArtifact(currentPlan,args.artifactId,args.command);}
     else plan=visualExplainerNormalizePlan(args.plan);
     const generated=visualExplainerWidgetItem(plan,{title:object.item.title}),command={tool:"html_widget",widgetType:"html_widget",pluginId:"general",title:generated.title,refreshSeconds:0,html:generated.html,sourceFormat:generated.sourceFormat,frameworkVersion:generated.frameworkVersion,copyText:generated.copyText,copyLabel:generated.copyLabel,x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h};
-    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash:args.expectedHash,changeId:args.changeId,command}),updated=canvasAgentObject(object.item.id),diagnostics=updated?.kind==="widget"?await visualExplainerWaitForDiagnostics(updated.item):null;
+    const result=await canvasAgentReplaceWidget({objectId:object.item.id,baseRevision:args.baseRevision,expectedHash:args.expectedHash,changeId:args.changeId,command},execution),updated=canvasAgentObject(object.item.id),diagnostics=updated?.kind==="widget"?await visualExplainerWaitForDiagnostics(updated.item):null;
+    canvasAgentAssertToolExecution(execution);
     return {...result,summary:String(args.summary||""),visualExplainer:{objectId:object.item.id,frameworkVersion:VISUAL_EXPLAINER_FRAMEWORK_VERSION,patchedArtifactId:args.artifactId||null,diagnostics}};
   }
-  async function canvasAgentReplaceWidget(args) {
+  async function canvasAgentReplaceWidget(args,execution) {
     canvasAgentAssertRevision(args.baseRevision);
-    canvasAgentMutationIdle();
+    canvasAgentMutationIdle(execution);
     const object = canvasAgentObject(String(args.objectId || ""));
     if (!object || object.kind !== "widget") throw Error("Widget was not found.");
     const currentEdit = widgetEditContext(object.item,"agent");
     if (await canvasAgentHash(currentEdit) !== String(args.expectedHash || "")) throw Error("Widget changed after it was read. Read it again before patching.");
+    canvasAgentAssertToolExecution(execution);
     const command = args.command;
     if (!command || command.pluginId !== object.item.pluginId || !["html_widget","diagram_source"].includes(command.tool)) throw Error("Patched widget command is invalid.");
     if(!canvasAgentWidgetPluginAllowed(command.pluginId,command.tool))throw Error("The Widget plugin is unavailable, disabled, or not available to Canvas Agent.");
@@ -16906,10 +17385,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!record) throw Error("Patched widget content was rejected by Canvas validation.");
     save();
     state.widgetHistoryBefore = serializedWidgets();
-    const index = state.widgets.indexOf(object.item);
-    unmountWidget(object.item);
-    state.widgets[index] = record;
-    mountWidget(record);
+    const contentFields = ["widgetType","pluginId","x","y","w","h","contentW","contentH","title","refreshSeconds","html","source","diagramKind","sourceFormat","frameworkVersion","copyText","copyLabel"];
+    for(const field of contentFields) object.item[field] = record[field];
+    object.item.snapshotImage = null;
+    object.item.snapshotDataUrl = "";
+    object.item.snapshotVersion = -1;
+    object.item.contentVersion = (object.item.contentVersion || 0) + 1;
+    object.item.runtimeDiagnostics = null;
+    object.item.visualDiagnostics = null;
+    if(!(object.item.visualDiagnosticWaiters instanceof Set)) object.item.visualDiagnosticWaiters = new Set();
+    object.item.initialized = false;
+    object.item.hostStateKey = null;
+    if(object.item.shell) object.item.shell.setAttribute("aria-label", `${object.item.title}. ${t("widgetRefineHint")}`);
+    if(object.item.frame) object.item.frame.title = object.item.title;
+    positionWidget(object.item);
+    sendWidgetInit(object.item);
+    sendWidgetHostState(object.item, undefined, undefined, true);
     state.userRevision++;
     const entry=save(),changeId=String(args.changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);
     requestRender();
@@ -16936,7 +17427,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
     const facts=canvasAgentViewFacts();canvasAgentSyncState();return{viewport:canvasAgentExternalRect(facts.viewport),viewRevision:facts.viewRevision};
   }
-  function canvasAgentSetView(args) {
+  function canvasAgentSetView(args,execution) {
+    canvasAgentAssertToolExecution(execution);
     let region;
     if (args.target === "canvas") region = canvasAgentContentBounds() || {x:0,y:0,w:SIZE,h:SIZE};
     else if (args.target === "region") region = canvasAgentValidatedRegion(args.region);
@@ -16947,7 +17439,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } else throw Error("Canvas view target is invalid.");
     const result=canvasAgentFrameRegion(region,args.padding);return { ok:true, viewport:result.viewport, revision:state.userRevision, viewRevision:result.viewRevision };
   }
-  function canvasAgentRevert(args) {
+  function canvasAgentRevert(args,execution) {
+    canvasAgentAssertToolExecution(execution);
     const latest=canvasAgent.latestChange;
     if(!latest||String(args.changeId||"")!==latest.changeId)throw canvasAgentToolError("REVERT_NOT_LATEST","Only the latest Canvas Agent change can be reverted.",{latestChangeId:latest?.changeId||null});
     if(state.userRevision!==latest.revision||state.history.at(-1)!==latest.historyEntry)throw canvasAgentToolError("REVERT_CONFLICT","Canvas changed after this Agent change, so it can no longer be reverted safely.",{changeRevision:latest.revision,currentRevision:state.userRevision});
@@ -16956,34 +17449,58 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function canvasAgentExecuteTool(payload) {
     const name = String(payload?.name || ""), args = payload?.arguments || {};
     const cacheKey=String(payload?.callId||"");let signature="";
+    const execution={
+      socket:canvasAgent.socket,
+      sessionId:canvasAgent.sessionId,
+      generation:canvasAgent.sessionGeneration,
+      controller:new AbortController(),
+    },requestId=String(payload?.requestId||"");
+    if(requestId)canvasAgent.toolControllers.set(requestId,execution.controller);
+    canvasAgent.activeToolExecution=execution;
+    const sendToolResult=envelope=>{
+      if(!canvasAgentToolExecutionCurrent(execution))return;
+      canvasAgentSendEnvelope("tool_result",{requestId,...envelope});
+    };
     try {
+      canvasAgentAssertToolExecution(execution);
       signature=await canvasAgentHash({name,args});
+      canvasAgentAssertToolExecution(execution);
       const cached=cacheKey?canvasAgent.toolResultCache.get(cacheKey):null;
       if(cached){
-        if(cached.signature!==signature){canvasAgentSendEnvelope("tool_result",{requestId:payload?.requestId,ok:false,error:{code:"CALL_ID_CONFLICT",message:"A Canvas tool callId was reused with different arguments.",details:null}});return;}
-        canvasAgentSendEnvelope("tool_result",{requestId:payload.requestId,...cached.envelope});return;
+        if(cached.signature!==signature){sendToolResult({ok:false,error:{code:"CALL_ID_CONFLICT",message:"A Canvas tool callId was reused with different arguments.",details:null}});return;}
+        sendToolResult(cached.envelope);return;
       }
       let result;
+      canvasAgentAssertToolExecution(execution);
       if (name === "project_approval") result = await canvasAgentRequestApproval(args);
       else {
         canvasAgentAssertToolKeys(name,args);
         if (name === "canvas_inspect") result = await canvasAgentInspect(args);
       else if (name === "canvas_read") result = await canvasAgentRead(args);
-      else if (name === "canvas_capture") result = await canvasAgentCapture(args);
-      else if (name === "canvas_create") result = await canvasAgentCreate({...args,_changeId:payload.callId});
-      else if (name === "canvas_visual_explainer_create") result = await canvasAgentVisualExplainerCreate({...args,_changeId:payload.callId});
-      else if (name === "canvas_visual_explainer_update") result = await canvasAgentVisualExplainerUpdate({...args,_changeId:payload.callId});
-      else if (name === "canvas_edit") result = await canvasAgentEdit({...args,_changeId:payload.callId});
-      else if (name === "canvas_set_view") result = canvasAgentSetView(args);
-      else if (name === "canvas_revert") result = canvasAgentRevert(args);
-      else if (name === "canvas_internal_widget") result = await canvasAgentInternalWidget(args);
-      else if (name === "canvas_internal_replace_widget") result = await canvasAgentReplaceWidget(args);
-      else if (name === "canvas_internal_patch_visual_explainer") result = await canvasAgentPatchVisualExplainer(args);
+      else if (name === "canvas_capture") result = await canvasAgentCapture(args,{signal:execution.controller.signal,assertCurrent:()=>canvasAgentAssertToolExecution(execution)});
+      else if (name === "canvas_create") result = await canvasAgentCreate({...args,_changeId:payload.callId},execution);
+      else if (name === "canvas_visual_explainer_create") result = await canvasAgentVisualExplainerCreate({...args,_changeId:payload.callId},execution);
+      else if (name === "canvas_visual_explainer_update") result = await canvasAgentVisualExplainerUpdate({...args,_changeId:payload.callId},execution);
+      else if (name === "canvas_edit") result = await canvasAgentEdit({...args,_changeId:payload.callId},execution);
+      else if (name === "canvas_set_view") result = canvasAgentSetView(args,execution);
+      else if (name === "canvas_revert") result = canvasAgentRevert(args,execution);
+      else if (name === "canvas_internal_widget") result = await canvasAgentInternalWidget(args,execution);
+      else if (name === "canvas_internal_replace_widget") result = await canvasAgentReplaceWidget(args,execution);
+      else if (name === "canvas_internal_patch_visual_explainer") result = await canvasAgentPatchVisualExplainer(args,execution);
       else throw Error(`Unknown Canvas Agent tool: ${name}.`);
       }
-      const envelope={ok:true,result};if(cacheKey&&signature){canvasAgent.toolResultCache.set(cacheKey,{signature,envelope});if(canvasAgent.toolResultCache.size>20)canvasAgent.toolResultCache.delete(canvasAgent.toolResultCache.keys().next().value);}canvasAgentSendEnvelope("tool_result",{requestId:payload.requestId,...envelope});
+      canvasAgentAssertToolExecution(execution);
+      const envelope={ok:true,result};
+      if(cacheKey&&signature&&canvasAgentToolExecutionCurrent(execution)){
+        canvasAgent.toolResultCache.set(cacheKey,{signature,envelope});
+        if(canvasAgent.toolResultCache.size>20)canvasAgent.toolResultCache.delete(canvasAgent.toolResultCache.keys().next().value);
+      }
+      sendToolResult(envelope);
     } catch (error) {
-      const envelope={ok:false,error:{code:String(error?.code||"CANVAS_TOOL_FAILED"),message:String(error?.message||error).slice(0,1600),details:error?.details||null}};if(cacheKey&&signature){canvasAgent.toolResultCache.set(cacheKey,{signature,envelope});if(canvasAgent.toolResultCache.size>20)canvasAgent.toolResultCache.delete(canvasAgent.toolResultCache.keys().next().value);}canvasAgentSendEnvelope("tool_result",{requestId:payload?.requestId,...envelope});
+      const envelope={ok:false,error:{code:String(error?.code||"CANVAS_TOOL_FAILED"),message:String(error?.message||error).slice(0,1600),details:error?.details||null}};if(cacheKey&&signature&&canvasAgentToolExecutionCurrent(execution)){canvasAgent.toolResultCache.set(cacheKey,{signature,envelope});if(canvasAgent.toolResultCache.size>20)canvasAgent.toolResultCache.delete(canvasAgent.toolResultCache.keys().next().value);}sendToolResult(envelope);
+    }finally{
+      if(requestId)canvasAgent.toolControllers.delete(requestId);
+      if(canvasAgent.activeToolExecution===execution)canvasAgent.activeToolExecution=null;
     }
   }
   function canvasAgentCancelPanelMotion() {
@@ -17086,18 +17603,22 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   canvasAgentToggle.addEventListener("click",()=>canvasAgentPanel.hidden ? openCanvasAgent() : closeCanvasAgent());
   canvasAgentClose.addEventListener("click",closeCanvasAgent);
   canvasAgentProjectButton.addEventListener("click",()=>{
-    if(!canvasAgentProjectPopover.hidden){canvasAgentHideProjectPopover();return;}
+    if(canvasAgentProjectDialogOpen()){canvasAgentHideProjectPopover({restoreFocus:true});return;}
     canvasAgentHideHistoryPopover();
-    canvasAgentProjectPopover.hidden=false;
-    canvasAgentProjectButton.setAttribute("aria-expanded","true");
     canvasAgentRenderProjects();
+    canvasAgentShowProjectPopover();
     void canvasAgentEnsureProjects({refresh:true}).catch(error=>canvasAgentSetProjectError(String(error?.message||error)));
-    void canvasAgentEnsureProjectRoots({refresh:true}).catch(error=>{canvasAgent.projectRoots=[];canvasAgent.projectRootsLoaded=true;canvasAgentRenderProjectRoots();canvasAgentSetProjectError(String(error?.message||error));});
   });
-  canvasAgentProjectClose.addEventListener("click",canvasAgentHideProjectPopover);
-  canvasAgentProjectAddFile.addEventListener("click",()=>void canvasAgentAddProjectFile());
+  canvasAgentProjectClose.addEventListener("click",()=>canvasAgentHideProjectPopover({restoreFocus:true}));
+  canvasAgentProjectCreate.addEventListener("click",()=>canvasAgentToggleProjectRootChooser());
   canvasAgentProjectRootBack.addEventListener("click",()=>void canvasAgentNavigateProjectRootBack());
   canvasAgentProjectRootSelect.addEventListener("click",()=>void canvasAgentSelectProjectRoot());
+  canvasAgentProjectPopover.addEventListener("cancel",event=>{event.preventDefault();canvasAgentHideProjectPopover({restoreFocus:true});});
+  canvasAgentProjectPopover.addEventListener("click",event=>{
+    if(event.target!==canvasAgentProjectPopover)return;
+    const bounds=canvasAgentProjectPopover.getBoundingClientRect();
+    if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)canvasAgentHideProjectPopover({restoreFocus:true});
+  });
   canvasAgentApprovalReject.addEventListener("click",()=>canvasAgentResolveApproval(false));
   canvasAgentApprovalAllow.addEventListener("click",()=>canvasAgentResolveApproval(true));
   canvasAgentHistory.addEventListener("click",()=>{
@@ -17124,10 +17645,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentHistory.focus();
       return;
     }
-    if (!canvasAgentProjectPopover.hidden) {
+    if (canvasAgentProjectDialogOpen()) {
       event.preventDefault();
-      canvasAgentHideProjectPopover();
-      canvasAgentProjectButton.focus();
+      canvasAgentHideProjectPopover({restoreFocus:true});
       return;
     }
     event.preventDefault();
@@ -17135,8 +17655,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   });
   document.addEventListener("pointerdown",event=>{
     if (!canvasAgentHistoryPopover.hidden&&!canvasAgentHistoryPopover.contains(event.target)&&!canvasAgentHistory.contains(event.target)) canvasAgentHideHistoryPopover();
-    if (!canvasAgentProjectPopover.hidden&&!canvasAgentProjectPopover.contains(event.target)&&!canvasAgentProjectButton.contains(event.target)) canvasAgentHideProjectPopover();
+    if (canvasAgentProjectDialogOpen()&&!canvasAgentProjectPopover.contains(event.target)&&!canvasAgentProjectButton.contains(event.target)) canvasAgentHideProjectPopover();
     if (!canvasAgentReferencePicker.hidden&&!canvasAgentReferencePicker.contains(event.target)&&!canvasAgentReference.contains(event.target)) canvasAgentToggleReferencePicker(false);
+    if (canvasAgent.promptSuggestionsExpanded&&!canvasAgentForm.contains(event.target)) canvasAgentSetPromptSuggestionsExpanded(false);
   });
   canvasAgentStop.addEventListener("click",()=>{
     canvasAgentResolveApproval(false);
@@ -17187,7 +17708,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   },{passive:false});
   canvasAgentTextMode.addEventListener("click",()=>canvasAgentSetInputMode("text"));
   canvasAgentInkMode.addEventListener("click",()=>canvasAgentSetInputMode("ink"));
-  canvasAgentPromptToggle.addEventListener("click",()=>canvasAgentSetPromptSuggestionsExpanded(!canvasAgent.promptSuggestionsExpanded));
+  canvasAgentPromptSuggestions?.addEventListener("pointerdown",canvasAgentPreventPromptSuggestionFocusLoss);
+  canvasAgentPromptSuggestions?.addEventListener("pointerenter",canvasAgentExpandPromptSuggestionsOnPointerEnter);
+  canvasAgentPromptSuggestions?.addEventListener("pointerleave",canvasAgentCollapsePromptSuggestionsOnPointerLeave);
+  canvasAgentPromptSuggestions?.addEventListener("focusin",canvasAgentExpandPromptSuggestionsOnPointerEnter);
+  canvasAgentPromptSuggestions?.addEventListener("focusout",()=>queueMicrotask(canvasAgentSyncPromptSuggestionsFocus));
+  canvasAgentPromptToggle?.addEventListener("click",canvasAgentTogglePromptSuggestions);
   canvasAgentClearInkButton.addEventListener("click",()=>canvasAgentClearInkDraft());
   canvasAgentInkCanvas.addEventListener("pointerdown",canvasAgentInkPointerDown);
   canvasAgentInkCanvas.addEventListener("pointermove",canvasAgentInkPointerMove);
@@ -17229,37 +17755,50 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentSend.disabled = true;
     canvasAgentAttach.disabled = true;
     canvasAgentReference.disabled = true;
+    const submitExecution=canvasAgentBeginSubmitExecution(selectedAiConnectionId());
     try {
-      if(projectAttachment&&!await canvasAgentSelectProject(projectAttachment.projectId))throw Error(t("canvasAgentFileReadFailed"));
+      if(projectAttachment&&!await canvasAgentSelectProject(projectAttachment.projectId,{submitExecution}))throw Error(t("canvasAgentFileReadFailed"));
+      canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentBeginRequest();
       const inkAttachment=hasInk?await canvasAgentPrepareInkAttachment():null, outgoingAttachments=inkAttachment?[...imageAttachments,inkAttachment]:imageAttachments,displayAttachments=projectAttachment?[projectAttachment]:outgoingAttachments;
+      canvasAgentAssertSubmitExecution(submitExecution);
       const prompt=inkAttachment
         ? [text,t("canvasAgentInkPrompt")].filter(Boolean).join("\n\n")
         : text||t("canvasAgentImagePrompt"), displayText=displayTextOverride===null?(text||(inkAttachment?t("canvasAgentInkOnly"):t("canvasAgentImageOnly"))):String(displayTextOverride);
-      await canvasAgentConnect();
-      await canvasAgentEnsureSearchSession();
+      await canvasAgentConnect({submitExecution});
+      canvasAgentAssertSubmitExecution(submitExecution);
+      await canvasAgentEnsureSearchSession(submitExecution);
+      canvasAgentBindSubmitExecution(submitExecution);
       canvasAgentSetStatus(t("canvasAgentInitialStatePreparing"),"connecting");
-      const initialState=await canvasAgentInitialTurnState();
+      const initialState=await canvasAgentInitialTurnState(submitExecution);
+      canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentSyncState();
+      canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentRow("user",displayText,displayAttachments);
+      canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),initialState,webSearchEnabled:canvasAgent.searchEnabled});
       requestSent = true;
       if(clearInput){canvasAgentInput.value = "";canvasAgentResizeInput();}
       if(includeDraftMedia){canvasAgentClearAttachments();canvasAgentClearInkDraft();canvasAgentClearReferences();}
       return true;
     } catch (error) {
-      if (!requestSent) canvasAgentRequestDidNotSend();
-      if(projectAttachment&&!canvasAgent.attachments.some(attachment=>attachment.id===projectAttachment.id)){canvasAgent.attachments=[projectAttachment];canvasAgentRenderAttachments();}
-      canvasAgentSetStatus(String(error?.message||error),"error");
+      const current=canvasAgentSubmitExecutionCurrent(submitExecution);
+      if (!requestSent&&current) canvasAgentRequestDidNotSend();
+      if(current&&projectAttachment&&!canvasAgent.attachments.some(attachment=>attachment.id===projectAttachment.id)){canvasAgent.attachments=[projectAttachment];canvasAgentRenderAttachments();}
+      if(current)canvasAgentSetStatus(String(error?.message||error),"error");
       return false;
     }
     finally {
-      canvasAgentInput.disabled=false;
-      canvasAgentInkCanvas.removeAttribute("aria-disabled");
-      canvasAgentSend.disabled=false;
-      canvasAgentAttach.disabled=false;
-      canvasAgentReference.disabled=false;
-      (canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();
+      const ownsComposer=canvasAgent.activeSubmitExecution===submitExecution||!canvasAgent.activeSubmitExecution;
+      if(canvasAgent.activeSubmitExecution===submitExecution)canvasAgent.activeSubmitExecution=null;
+      if(ownsComposer){
+        canvasAgentInput.disabled=false;
+        canvasAgentInkCanvas.removeAttribute("aria-disabled");
+        canvasAgentSend.disabled=false;
+        canvasAgentAttach.disabled=false;
+        canvasAgentReference.disabled=false;
+        (canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();
+      }
     }
   }
   canvasAgentForm.addEventListener("submit",event=>{
@@ -17267,7 +17806,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if(canvasAgent.projectUploadBusy){canvasAgentSetStatus(t("canvasAgentFilePreparing"),"connecting");return;}
     void canvasAgentSubmitMessage();
   });
-  canvasAgentInput.addEventListener("input",()=>{canvasAgentResizeInput();canvasAgentSyncInputHint();canvasAgentSyncPromptSuggestions();});
+  canvasAgentInput.addEventListener("input",()=>{canvasAgentResizeInput();canvasAgentSyncInputHint();if(canvasAgentPromptHasDraft())canvasAgentSetPromptSuggestionsExpanded(false);canvasAgentSyncPromptSuggestions();});
   canvasAgentInput.addEventListener("keydown",event=>{
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -17296,7 +17835,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   });
   for (const type of ["pointerdown","pointermove","pointerup","pointercancel","wheel"]) canvasAgentPanel.addEventListener(type,event=>event.stopPropagation(),{passive:type === "wheel"});
   canvasAgentForm.addEventListener("focusin",canvasAgentSyncPromptSuggestions);
-  canvasAgentForm.addEventListener("focusout",()=>queueMicrotask(canvasAgentSyncPromptSuggestions));
+  canvasAgentForm.addEventListener("focusout",()=>queueMicrotask(canvasAgentSyncPromptSuggestionsFocus));
   canvasAgentPanel.addEventListener("focusin",canvasAgentPauseAutomaticAI);
   canvasAgentPanel.addEventListener("focusout",()=>queueMicrotask(canvasAgentResumeAutomaticAI));
   canvasAgentTranscript.addEventListener("scroll",canvasAgentSyncFollowLatest,{passive:true});
@@ -17304,7 +17843,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (event.deltaY < 0) canvasAgent.followLatest = false;
   },{passive:true});
   document.addEventListener("paste",event=>{
-    if (canvasAgentPanel.hidden) return;
+    if (canvasAgentPanel.hidden||canvasAgentProjectDialogOpen()) return;
     const target = event.target, outsideEditable = target instanceof Element && !canvasAgentPanel.contains(target) && (target.isContentEditable || Boolean(target.closest("input, textarea, select")));
     if (outsideEditable) return;
     const files=canvasAgentClipboardFiles(event.clipboardData);
@@ -18607,6 +19146,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateTraceToggle();
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpen));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {

@@ -473,6 +473,32 @@ test("widget shadows are an optional device display preference", () => {
   assert.doesNotMatch(mergeImage, /shadow(?:Color|Blur|Offset)|widgetShadowEnabled/);
 });
 
+test("Canvas Agent auto-open is a default-on canvas preference", () => {
+  const app = read("public/app.js"),
+    html = read("public/index.html"),
+    zh = read("public/locales/zh.js"),
+    agent = read("src/client/app/canvas-agent-runtime.js"),
+    setter = functionSource(app, "setCanvasAgentAutoOpen");
+  assert.match(html, /id="settingsCanvasAgentAutoOpenToggle" class="settings-switch on"[^>]*aria-checked="true"/);
+  assert.match(html, /id="settingsCanvasAgentAutoOpenLabel"[^>]*data-i18n="settingsCanvasAgentAutoOpen"/);
+  assert.match(app, /storedCanvasAgentAutoOpen = localStorage\.getItem\("penecho-canvas-agent-auto-open"\)/);
+  assert.match(app, /storedCanvasAgentAutoOpen === null \? configuredCanvasAgentAutoOpen !== false : storedCanvasAgentAutoOpen === "true"/);
+  assert.match(setter, /localStorage\.setItem\("penecho-canvas-agent-auto-open"[\s\S]*?aria-checked/);
+  assert.match(app, /settingsCanvasAgentAutoOpen: "Open Canvas Agent with each canvas"/);
+  assert.match(zh, /settingsCanvasAgentAutoOpen: "打开画布时自动打开 Canvas Agent"/);
+  let openCount = 0;
+  const context = {
+    canvasAgent:{ socket:null, connectPromise:null }, state:{ canvasAgentAutoOpen:false }, canvasAgentPanel:{ hidden:true }, WebSocket:{ OPEN:1 },
+    canvasAgentCanvasIdentity:() => "draft:test-client", canvasAgentPersistCurrentConversation:() => {}, canvasAgentBeginLocalConversation:() => {}, canvasAgentDropSessionIdentity:() => {}, canvasAgentSyncPromptSuggestions:() => {}, openCanvasAgent:() => { openCount++; },
+  };
+  vm.runInNewContext(functionSource(agent, "canvasAgentCanvasDidChange"), context);
+  context.canvasAgentCanvasDidChange();
+  assert.equal(openCount, 0);
+  context.state.canvasAgentAutoOpen = true;
+  context.canvasAgentCanvasDidChange();
+  assert.equal(openCount, 1);
+});
+
 test("pen ink stays above widgets and the eraser exposes a dashed footprint", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
@@ -1245,7 +1271,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     prepareSnapshots = functionSource(app, "prepareVisibleWidgetSnapshots"),
     capturableWidgets = functionSource(app, "capturableWidgets"),
     acceptPendingWidget = functionSource(app, "acceptPendingWidget");
-  assert.match(requestSnapshot, /timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS[\s\S]*?if \(widget\.snapshotPromise\)[\s\S]*?await inFlight[\s\S]*?widget\.snapshotVersion >= widget\.contentVersion[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
+  assert.match(requestSnapshot, /timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS[\s\S]*?if \(widget\.snapshotPromise\)[\s\S]*?await waitForWidgetSnapshot\(inFlight,signal\)[\s\S]*?widget\.snapshotVersion >= widget\.contentVersion[\s\S]*?widget\.snapshotPromise = snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
   assert.doesNotMatch(requestSnapshot, /waitForWidgetContent|readyPromise|contentReady|\bfetch\s*\(/);
   assert.match(requestSnapshot, /if \(!widget\.hostReady\)[\s\S]*?widget\.hostReadyPromise[\s\S]*?sendWidgetInit\(widget\)/);
   assert.match(messageHandler, /penecho-widget-updated[\s\S]*?widget\.contentVersion\+\+/);
@@ -1263,9 +1289,9 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.match(requestSnapshot, /widget\.snapshotPromise = snapshotPromise[\s\S]*?return await snapshotPromise[\s\S]*?widget\.snapshotPromise = null/);
   assert.match(messageHandler, /penecho-widget-capture-ready[\s\S]*?return/);
   assert.doesNotMatch(messageHandler, /penecho-widget-snapshot-ready/);
-  assert.match(messageHandler, /widget\.snapshotImage = await decodeWidgetSnapshot[\s\S]*?widget\.snapshotVersion = pending\.contentVersion[\s\S]*?pending\.resolve\(widget\.snapshotImage\)/);
+  assert.match(messageHandler, /const snapshotImage=await decodeWidgetSnapshot[\s\S]*?pending\.signal\?\.aborted[\s\S]*?widget\.contentVersion!==pending\.contentVersion[\s\S]*?widget\.snapshotImage = snapshotImage[\s\S]*?widget\.snapshotVersion = pending\.contentVersion[\s\S]*?pending\.resolve\(widget\.snapshotImage\)/);
   assert.match(capturableWidgets, /visibleWidgets\(region\)[\s\S]*?state\.pendingWidget[\s\S]*?pending\.shell[\s\S]*?return \[\.\.\.widgets, pending\]/);
-  assert.match(prepareSnapshots, /capturableWidgets\(region\)[\s\S]*?requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true\)[\s\S]*?Promise\.race\([\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS[\s\S]*?Boolean\(widget\.snapshotImage\)/);
+  assert.match(prepareSnapshots, /capturableWidgets\(region\)[\s\S]*?requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal\)[\s\S]*?Promise\.race\([\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS[\s\S]*?Boolean\(widget\.snapshotImage\)/);
   assert.match(prepareSnapshots, /bestEffort = true[\s\S]*?if \(bestEffort\) await Promise\.race[\s\S]*?else await request/);
   assert.match(functionSource(app, "widgetBounds"), /capturableWidgets\(region\)/);
   assert.match(functionSource(app, "drawWidgetsToContext"), /capturableWidgets\(region\)/);

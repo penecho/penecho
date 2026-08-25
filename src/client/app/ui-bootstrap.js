@@ -1282,6 +1282,7 @@
     updateTraceToggle();
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpen));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {

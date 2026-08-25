@@ -64,6 +64,21 @@ test("Canvas Agent request trace retains redacted CLI provider diagnostics",asyn
   assert.doesNotMatch(serialized,/provider-secret-token|oauth-secret-value/);
 });
 
+test("Canvas Agent request trace keeps complete large standard JSON tool bodies",t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-full-body-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),
+    tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),conversationId="full-body-conversation",
+    body=JSON.stringify({baseRevision:1,items:[{type:"widget",pluginId:"general",widgetType:"html_widget",title:"Full body",html:`<main>${"complete-body-segment-".repeat(6000)}</main>`}]});
+  t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
+  assert.ok(body.length>64_000);
+  tracer({phase:"start",conversationId,connectionId:"codex-native",connection:{provider:"codex-cli",model:"codex-model"}});
+  tracer({phase:"event",conversationId,connectionId:"codex-native",event:{kind:"turn_start",turn:1,step:1}});
+  tracer({phase:"diagnostic",conversationId,connectionId:"codex-native",diagnostic:{provider:"codex-cli",model:"codex-model",traceDiagnostic:JSON.stringify({kind:"native-response-boundary",toolCallCount:1,rawCalls:[{name:"exec",arguments:body}]})}});
+  tracer({phase:"event",conversationId,connectionId:"codex-native",event:{kind:"turn_end",turn:1,step:1,reason:{kind:"completed"}}});
+  const directory=fs.readdirSync(requestTraceDirectory,{withFileTypes:true}).find(entry=>entry.isDirectory()),trace=JSON.parse(fs.readFileSync(path.join(requestTraceDirectory,directory.name,"trace.json"),"utf8"));
+  assert.equal(trace.diagnostics[0].trace.value.rawCalls[0].arguments,body);
+  assert.equal(JSON.stringify(trace).includes("…[truncated]"),false);
+});
+
 test("Canvas Agent request trace records each widget patch protocol failure and retry independently",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-patch-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],calls=[],
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),

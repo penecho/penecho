@@ -6,7 +6,7 @@ export class CanvasAgentHostRouter {
     this.resolveConnection = resolveConnection
     this.harnessFactory = harnessFactory
     this.nativeFactory = nativeFactory
-    this.ownerPromises = { harness:null, native:null }
+    this.ownerPromises = { harness:null, 'codex-native':null }
     this.owners = new Set()
   }
 
@@ -20,6 +20,7 @@ export class CanvasAgentHostRouter {
 
   async owner(engine) {
     if (!this.ownerPromises[engine]) {
+      if (engine !== 'codex-native' && engine !== 'harness') throw new Error(`Canvas Agent engine ${engine} is invalid.`)
       const factory = engine === 'codex-native' ? this.nativeFactory : this.harnessFactory
       this.ownerPromises[engine] = Promise.resolve(factory()).then(async owner => {
         if (!owner) throw new Error(`Canvas Agent ${engine} host is unavailable.`)
@@ -82,7 +83,7 @@ export class CanvasAgentHostRouter {
   async dispose() {
     const owners = [...this.owners]
     this.owners.clear()
-    this.ownerPromises = { harness:null, native:null }
+    this.ownerPromises = { harness:null, 'codex-native':null }
     await Promise.allSettled(owners.map(owner => owner.dispose()))
   }
 }

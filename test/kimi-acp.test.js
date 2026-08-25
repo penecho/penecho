@@ -51,7 +51,7 @@ process.stdin.on("data",chunk=>{
       }
       send({jsonrpc:"2.0",method:"session/update",params:{sessionId:message.params.sessionId,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text:"Hel"}}}});
       send({jsonrpc:"2.0",method:"session/update",params:{sessionId:message.params.sessionId,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text:"lo"}}}});
-      send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
+      send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn",usage:{input_tokens:20,cache_read_tokens:70,output_tokens:8}}});
     }
   }
 });
@@ -71,9 +71,10 @@ test("Kimi ACP keeps one process while creating isolated sessions", async () => 
       logger:(event, data)=>events.push({ event, data }),
     });
   try {
-    let activityCount=0;
-    assert.equal(await client.request({ prompt:"first", model:"kimi-code/k3", effort:"medium", onActivity:()=>activityCount++ }), "Hello");
+    let activityCount=0,usage=null;
+    assert.equal(await client.request({ prompt:"first", model:"kimi-code/k3", effort:"medium", onActivity:()=>activityCount++, onUsage:value=>{usage=value;} }), "Hello");
     assert.ok(activityCount>0);
+    assert.deepEqual(usage,{input_tokens:20,cache_read_tokens:70,output_tokens:8});
     assert.equal(await client.request({ prompt:"second" }), "Hello");
     assert.equal(await client.request({ prompt:"two-images", images:[{mimeType:"image/png",data:"AA=="},{mimeType:"image/webp",data:"AQ=="}] }), "Hello");
     assert.equal(await client.request({ prompt:"tool-once", image:{mimeType:"image/webp",data:"Ag=="} }), "Recovered");

@@ -135,6 +135,11 @@ function kimiEventError(event) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function kimiEventUsage(event) {
+  const usage = event?.usage || event?.token_usage || event?.tokenUsage || event?.result?.usage || event?.result?.token_usage || event?.result?.tokenUsage;
+  return usage && typeof usage === "object" && !Array.isArray(usage) ? usage : null;
+}
+
 function kimiEventHasToolActivity(event) {
   if (!event || typeof event !== "object") return false;
   if (String(event.role || event.message?.role || "").toLowerCase() === "tool") return true;
@@ -177,7 +182,7 @@ function appendTail(current, value) {
   return buffer.length <= MAX_CAPTURE_BYTES ? combined : buffer.subarray(-MAX_CAPTURE_BYTES).toString("utf8");
 }
 
-function runProcess(launch, args, cwd, env, signal, onActivity = null) {
+function runProcess(launch, args, cwd, env, signal, onActivity = null, onUsage = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
     let child;
@@ -211,6 +216,8 @@ function runProcess(launch, args, cwd, env, signal, onActivity = null) {
       try { event = JSON.parse(line); } catch { events.push({ type:"invalid-json", preview:line.slice(0,200) }); return; }
       events.push({ type:String(event?.type || event?.kind || "unknown"), ...(kimiEventError(event) ? { error:kimiEventError(event).slice(0,500) } : {}) });
       if (events.length > 64) events.shift();
+      const usage = kimiEventUsage(event);
+      if (usage) try { onUsage?.(usage); } catch {}
       if (kimiEventHasToolActivity(event)) return failEarly(kimiToolViolationError(event));
       const detail = kimiEventError(event);
       if (["error", "failed", "turn.failed"].includes(String(event?.type || "").toLowerCase())) return failEarly(new Error(`Kimi Code CLI failed${detail ? `: ${detail}` : "."}`));
@@ -256,7 +263,7 @@ function imageParts(atlasImage) {
   return matches.map(match => ({ mimeType:match[1].toLowerCase(), buffer:Buffer.from(match[2], "base64") }));
 }
 
-async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
+async function callKimiCliSpawn({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null, onUsage = null }) {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "penecho-kimi-"));
   let cleanupReady = Promise.resolve(), deferCleanup = false, caughtError = null;
   try {
@@ -275,7 +282,7 @@ async function callKimiCliSpawn({ executable = "kimi", model = null, effort = nu
     for (let recoveries = 0;;) {
       let result;
       try {
-        result = await runProcess(launch, buildKimiArgs({ model, prompt:activePrompt, agentFile }), workDir, cleanEnv, signal, onActivity);
+        result = await runProcess(launch, buildKimiArgs({ model, prompt:activePrompt, agentFile }), workDir, cleanEnv, signal, onActivity, onUsage);
       } catch (error) {
         cleanupReady = error.cleanupReady || cleanupReady;
         deferCleanup = deferCleanup || Boolean(error.deferCleanup);
@@ -315,7 +322,7 @@ function kimiHomeFromEnv(env) {
   return String(env.KIMI_CODE_HOME || "").trim() || path.join(os.homedir(), ".kimi-code");
 }
 
-async function callKimiCli({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null }) {
+async function callKimiCli({ executable = "kimi", model = null, effort = null, prompt, atlasImage = null, signal, env = process.env, onActivity = null, onUsage = null }) {
   const images = imageParts(atlasImage);
   try {
     const launch = resolveKimiLaunch(executable, env);
@@ -334,10 +341,11 @@ async function callKimiCli({ executable = "kimi", model = null, effort = null, p
       images:images.map(image => ({ mimeType:image.mimeType, data:image.buffer.toString("base64") })),
       signal,
       onActivity,
+      onUsage,
     });
   } catch (error) {
     if (!error.acpInfraFailure) throw error;
-    return callKimiCliSpawn({ executable, model, effort, prompt, atlasImage, signal, env, onActivity });
+    return callKimiCliSpawn({ executable, model, effort, prompt, atlasImage, signal, env, onActivity, onUsage });
   }
 }
 
@@ -348,6 +356,7 @@ module.exports = {
   kimiAssistantText,
   kimiEventHasToolActivity,
   kimiEventToolName,
+  kimiEventUsage,
   kimiToolRecoveryPrompt,
   mapKimiEffort,
   normalizeKimiToolName,

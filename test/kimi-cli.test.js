@@ -12,6 +12,7 @@ const {
   kimiAssistantText,
   kimiEventHasToolActivity,
   kimiEventToolName,
+  kimiEventUsage,
   mapKimiEffort,
   sanitizeKimiEnv,
 } = require("../src/providers/kimi-cli.js");
@@ -44,6 +45,7 @@ test("Kimi stream-json extracts assistant content and detects tool activity", ()
   assert.equal(kimiEventHasToolActivity({ role:"assistant", content:[{ type:"tool_use", name:"Read" }] }), true);
   assert.equal(kimiEventToolName({ role:"assistant", tool_calls:[{ function:{ name:"Bash" } }] }), "Bash");
   assert.equal(kimiEventToolName({ role:"assistant", content:[{ type:"tool_use", name:"ReadMediaFile" }] }), "ReadMediaFile");
+  assert.deepEqual(kimiEventUsage({ type:"result", usage:{ input_tokens:20, cache_read_tokens:70, output_tokens:8 } }), { input_tokens:20, cache_read_tokens:70, output_tokens:8 });
 });
 
 test("Kimi CLI receives a temporary canvas reference and returns assistant JSON", async () => {
@@ -54,12 +56,13 @@ if(images.length!==2||images.some(image=>!fs.existsSync(image))||!agentFile||!fs
   process.stderr.write(JSON.stringify({images,cwd:process.cwd(),exists:images.map(image=>fs.existsSync(image)),agentFile,agentExists:Boolean(agentFile&&fs.existsSync(agentFile))}));
   process.exit(3);
 }
-process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"none","commands":[]}'}]})+"\\n");
+process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{type:"text",text:'{"intent":"none","commands":[]}'}],usage:{input_tokens:20,cache_read_tokens:70,output_tokens:8}})+"\\n");
 `);
-  let activityCount=0;
-  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:[PNG,PNG], onActivity:()=>activityCount++ });
+  let activityCount=0,usage=null;
+  const result = await callKimiCliSpawn({ executable, model:"kimi-code/k3", prompt:"Return JSON.", atlasImage:[PNG,PNG], onActivity:()=>activityCount++, onUsage:value=>{usage=value;} });
   assert.equal(result, '{"intent":"none","commands":[]}');
   assert.ok(activityCount>0);
+  assert.deepEqual(usage,{input_tokens:20,cache_read_tokens:70,output_tokens:8});
 });
 
 test("Kimi child environment keeps runtime settings and drops API secrets", () => {

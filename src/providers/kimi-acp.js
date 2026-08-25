@@ -175,6 +175,8 @@ class KimiAcpClient {
     if (!active || params.sessionId !== active.sessionId) return;
     try { active.onActivity?.(); } catch {}
     const kind = update.sessionUpdate;
+    const usage = update.usage || update.tokenUsage || update.token_usage;
+    if (usage && typeof usage === "object" && !Array.isArray(usage)) try { active.onUsage?.(usage); } catch {}
     if (kind === "agent_message_chunk") {
       if (active.toolViolation) return;
       const contentText = update.content?.text;
@@ -215,7 +217,7 @@ class KimiAcpClient {
     });
   }
 
-  async _request({ model, effort, prompt, image, images, signal, onActivity }) {
+  async _request({ model, effort, prompt, image, images, signal, onActivity, onUsage }) {
     if (this.closed) throw acpInfraError("Kimi ACP client is closed.");
     if (signal?.aborted) throw abortError();
     const requestKeepAlive = setInterval(() => {}, 60_000);
@@ -239,7 +241,7 @@ class KimiAcpClient {
       stage = "prompted";
       let activePrompt = prompt, activeImage = image, activeImages = images;
       for (let recoveries = 0;;) {
-        const result = await this._prompt({ sessionId, prompt:activePrompt, image:activeImage, images:activeImages, signal, onActivity });
+        const result = await this._prompt({ sessionId, prompt:activePrompt, image:activeImage, images:activeImages, signal, onActivity, onUsage });
         if (!result.toolViolation) return result.text;
         if (recoveries >= MAX_KIMI_TOOL_RECOVERIES) throw new Error(`${TOOL_ERROR} Last rejected tool: ${result.toolViolation}.`);
         recoveries += 1;
@@ -256,7 +258,7 @@ class KimiAcpClient {
     }
   }
 
-  _prompt({ sessionId, prompt, image, images, signal, onActivity }) {
+  _prompt({ sessionId, prompt, image, images, signal, onActivity, onUsage }) {
     return new Promise((resolve, reject) => {
       const blocks = [];
       const activeImages = (Array.isArray(images) ? images : image ? [image] : []).filter(Boolean).slice(0, 5);
@@ -267,6 +269,7 @@ class KimiAcpClient {
         text:"",
         toolViolation:null,
         onActivity,
+        onUsage,
         settled:false,
         fail:error => { if (state.settled) return; state.settled = true; cleanup(); reject(error); },
         succeed:() => { if (state.settled) return; state.settled = true; cleanup(); resolve({ text:state.text.trim(), toolViolation:null }); },
@@ -294,6 +297,8 @@ class KimiAcpClient {
         if (state.toolViolation) return state.recover();
         if (message.error) return state.fail(new Error(`Kimi Code CLI failed: ${message.error.message}`));
         if (signal?.aborted) return state.fail(abortError());
+        const usage = message.result?.usage || message.result?.tokenUsage || message.result?.token_usage || message.usage;
+        if (usage && typeof usage === "object" && !Array.isArray(usage)) try { onUsage?.(usage); } catch {}
         if (!state.text.trim()) return state.fail(new Error("Kimi Code CLI returned no assistant response."));
         state.succeed();
       }, error => state.fail(error));

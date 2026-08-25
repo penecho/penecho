@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
 import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import PenEchoAttachmentStore from './image-attachments.mjs'
+import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutSeconds, createCanvasAgentModelTimeout } from './model-timeout.mjs'
 import {
   acquireProjectRoot,
   admitInitialCanvasState,
@@ -38,11 +39,12 @@ const MAX_PROTOCOL_BYTES = 1024 * 1024
 const MAX_STDERR_BYTES = 16 * 1024
 const SESSION_TTL_MS = 30_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+const INTERRUPT_REQUEST_TIMEOUT_MS = 5_000
 const MAX_BACKLOG = 500
 const MAX_AGENT_RESPONSE_CHARS = 400_000
 const CODEX_MODEL_IMAGE_REQUEST_POLICY = Object.freeze({ maxPixels:2048 * 2048, maxBytes:1024 * 1024 })
 const CODEX_DISABLED_FEATURES = Object.freeze([
-  'apps', 'auth_elicitation', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'code_mode', 'code_mode_host', 'computer_use',
+  'apps', 'auth_elicitation', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'code_mode', 'computer_use',
   'goals', 'hooks', 'image_generation', 'in_app_browser', 'memories', 'multi_agent', 'multi_agent_v2', 'network_proxy', 'plugins', 'plugin_sharing',
   'recommended_plugins', 'remote_plugin', 'skill_search',
   'request_permissions_tool', 'shell_snapshot', 'shell_tool', 'skill_mcp_dependency_install', 'tool_call_mcp_elicitation', 'tool_suggest', 'unified_exec', 'workspace_dependencies',
@@ -92,6 +94,24 @@ function safeError(error, fallback = 'Codex Native Canvas Agent failed.') {
     .slice(0, 2_000)
 }
 
+function nativeRawDecisionCall(item) {
+  const itemId=String(item?.id||''),callId=String(item?.call_id||item?.callId||''),aliases=[...new Set([itemId,callId].filter(value=>value&&value.length<=256))],
+    name=String(item?.name||''),argumentsValue=item?.arguments??item?.input??null,
+    underlyingToolNames=name==='exec'&&typeof argumentsValue==='string'
+      ? [...argumentsValue.matchAll(/\btools\.penecho__([A-Za-z0-9_]+)\s*\(/g)].map(match=>match[1])
+      : name?[name]:[]
+  return{
+    itemId:itemId&&itemId.length<=256?itemId:null,
+    callId:callId&&callId.length<=256?callId:null,
+    aliases,
+    name,
+    namespace:item?.namespace==null?null:String(item.namespace),
+    arguments:argumentsValue,
+    underlyingToolNames,
+    admitted:false,
+  }
+}
+
 function codexConnectionFingerprint(connection) {
   return hash(JSON.stringify({
     id:String(connection?.id || ''),
@@ -128,6 +148,33 @@ function compactUsage(value) {
     ...(breakdown(value.total) ? { total:breakdown(value.total) } : {}),
     ...(Number.isSafeInteger(Number(value.modelContextWindow)) && Number(value.modelContextWindow) >= 0 ? { modelContextWindow:Number(value.modelContextWindow) } : {}),
   }
+}
+
+function raceAbortableExecution(execution, signal, fallbackMessage) {
+  if (!signal) return Promise.resolve(execution)
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error, value) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', abort)
+      if (error) reject(error)
+      else resolve(value)
+    }
+    const abort = () => {
+      const reason = signal.reason instanceof Error ? signal.reason : new Error(fallbackMessage)
+      finish(reason)
+    }
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    signal.addEventListener('abort', abort, { once:true })
+    Promise.resolve(execution).then(
+      value => finish(null, value),
+      error => finish(error),
+    )
+  })
 }
 
 async function stopProcessTree(child) {
@@ -239,6 +286,7 @@ export class CodexNativeAppServerProcess {
         baseInstructions,
         developerInstructions:null,
         dynamicTools,
+        experimentalRawEvents:true,
         environments:[],
         runtimeWorkspaceRoots:[],
         ephemeral:true,
@@ -289,7 +337,7 @@ export class CodexNativeAppServerProcess {
 
   async interrupt(threadId, turnId) {
     if (!this.alive || !threadId || !turnId) return
-    await this.request('turn/interrupt', { threadId, turnId }, 1_000).catch(() => {})
+    await this.request('turn/interrupt', { threadId, turnId }, INTERRUPT_REQUEST_TIMEOUT_MS)
   }
 
   async close() {
@@ -366,7 +414,13 @@ export class CodexNativeAppServerProcess {
       return
     }
     if (message?.method !== undefined && message.id !== undefined) {
-      Promise.resolve().then(() => this.onRequest?.(message.id, message.method, message.params)).then(
+      const handler = this.onRequest
+      if (!handler) {
+        try { this.respondError(message.id, 'Codex app-server request handler is unavailable.') }
+        catch (error) { this.processGone(error) }
+        return
+      }
+      Promise.resolve().then(() => handler(message.id, message.method, message.params)).then(
         result => this.respond(message.id, result ?? {}),
         error => this.respondError(message.id, error),
       ).catch(() => {})
@@ -405,7 +459,7 @@ export class CodexNativeHost {
     resolveWebSearch = () => null,
     resolveWidgetCapabilities = () => ({ professionalEnabled:false, privatePlugins:[] }),
     resolveProject = async () => null,
-    modelTimeoutMs = () => 180_000,
+    modelTimeoutMs = () => DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS,
     logger = () => {},
     conversationLogger = null,
     conversationTrace = null,
@@ -480,7 +534,7 @@ export class CodexNativeHost {
       this.send(session, 'ready', {
         resumeToken,
         connectionId:session.connectionId,
-        harnessSessionId:session.threadId,
+        harnessSessionId:session.threadId || '',
         webSearchConfigured:true,
         webSearchEnabled:session.webSearch.enabled,
         widgetCapabilities:publicWidgetCapabilities(session.widgetCapabilities),
@@ -522,6 +576,8 @@ export class CodexNativeHost {
       pending:new Map(),
       toolAborts:new Map(),
       toolQueue:Promise.resolve(),
+      decisionFeedbackCalls:new Map(),
+      decisionFeedbackCallIds:new Set(),
       turnQueue:Promise.resolve(),
       attachmentRefs:new Map(),
       captureCache:new Map(),
@@ -542,6 +598,7 @@ export class CodexNativeHost {
       requestTraceConnection:{ ...requestTraceConnection(connection, configured(connection.cliModel)), executable:'codex' },
       traceAsset:null,
       tracePatchProtocol:null,
+      traceDecisionProtocol:null,
       webSearchKeyHash,
       webSearch:{ provider:'tavily', apiKey:webSearchApiKey, enabled:Boolean(webSearchEnabled) },
       publicFetch:this.publicFetch,
@@ -563,6 +620,7 @@ export class CodexNativeHost {
       threadId:null,
       process:null,
       startPromise:null,
+      interruptPromise:null,
       lifecycle:0,
       native:null,
       active:null,
@@ -573,6 +631,7 @@ export class CodexNativeHost {
     session.emitPublicEvent = event => this.emitPublicEvent(session, event)
     session.traceAsset = this.conversationTrace ? asset => this.traceConversationAsset(session, asset) : null
     session.tracePatchProtocol = this.conversationTrace ? record => this.tracePatchProtocol(session, record) : null
+    session.traceDecisionProtocol = this.conversationTrace ? record => this.traceDecisionProtocol(session, record) : null
     session.rpc = (name, args, callId, signal, timeoutMs) => this.callBrowserTool(session, name, args, callId, signal, timeoutMs)
     try {
       session.native = await createCanvasAgentNativeRuntime({ session, attachments:this.attachments })
@@ -589,7 +648,7 @@ export class CodexNativeHost {
     this.send(session, 'ready', {
       resumeToken:nextResumeToken,
       connectionId:session.connectionId,
-      harnessSessionId:session.threadId,
+      harnessSessionId:session.threadId || '',
       webSearchConfigured:true,
       webSearchEnabled:session.webSearch.enabled,
       widgetCapabilities:publicWidgetCapabilities(session.widgetCapabilities),
@@ -611,12 +670,16 @@ export class CodexNativeHost {
 
   async ensureStarted(session) {
     if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    const connection = this.resolveConnection(session.connectionId)
+    if (!connection) throw new Error('The Codex Native Canvas Agent connection is unavailable.')
+    if (codexConnectionFingerprint(connection) !== session.connectionFingerprint) {
+      throw new Error('The Codex Native Canvas Agent connection changed. Start a new conversation before submitting this turn.')
+    }
+    if (connection.provider !== 'codex-cli') throw new Error('The Codex Native Canvas Agent connection is unavailable.')
     if (session.process?.alive && session.threadId) return
     if (session.startPromise) return session.startPromise
     const lifecycle = session.lifecycle
     const startPromise = (async () => {
-      const connection = this.resolveConnection(session.connectionId)
-      if (!connection || connection.provider !== 'codex-cli') throw new Error('The Codex Native Canvas Agent connection is unavailable.')
       const process = this.createAppServer({
         connection,
         env:this.env,
@@ -654,15 +717,15 @@ export class CodexNativeHost {
 
   emitPublicEvent(session, event) {
     if (session.disposed) return
+    session.active?.timeout?.activity()
     session.backlog.push(event)
     if (session.backlog.length > MAX_BACKLOG) session.backlog.splice(0, session.backlog.length - MAX_BACKLOG)
-    if (event?.kind === 'assistant_delta') {
+    if (event?.kind === 'assistant_delta' || event?.kind === 'user_message') {
       this.send(session, 'session_event', event)
       return
     }
-    const restrictedEvent = event?.kind === 'tool_call' ? { ...event, arguments:{ redacted:true } } : event
-    this.logConversation(session, 'event', restrictedEvent)
-    this.traceConversation(session, 'event', restrictedEvent)
+    this.logConversation(session, 'event', event)
+    this.traceConversation(session, 'event', event)
     this.send(session, 'session_event', event)
   }
 
@@ -720,19 +783,22 @@ export class CodexNativeHost {
     ]
     for (const attachment of attachments) {
       const stored = await this.attachments.readImageRequest(attachment, CODEX_MODEL_IMAGE_REQUEST_POLICY, signal)
-      input.push({ type:'image', url:`data:${stored.ref.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
+      const mediaType = stored.ref?.mediaType || stored.mediaType
+      input.push({ type:'image', url:`data:${mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
     }
     return input
   }
 
   additionalContextFor(session) {
     return Object.fromEntries(session.native.turnAdditionalContext().map(context => [
-      context.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
+      context.key || context.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
       { kind:context.kind, value:context.value },
     ]))
   }
 
   async submit(session, text, steer = false, images = [], references = {}, initialState = null) {
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    if (session.interruptPromise) await session.interruptPromise
     if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
     const prompt = boundedText(text, 40_000).trim()
     if (!prompt) throw new Error('Enter a message for Canvas Agent.')
@@ -748,11 +814,21 @@ export class CodexNativeHost {
     if (!session.process?.alive || !session.threadId) throw new Error('Codex Native Canvas Agent thread is unavailable.')
     const imageAttachments = await this.admitUserImages(session, images)
     const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
+    if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
     const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
-    const input = await this.modelInput(session, prompt, hostReferences, [
-      ...(initialCanvasState?.attachment ? [initialCanvasState.attachment] : []), ...imageAttachments,
-    ])
+    const previousVisualExplainerBudget = session.visualExplainerBudget, previousVisualExplorerBudget = session.visualExplorerBudget,
+      previousWidgetPatchAttempts = session.widgetPatchAttempts, previousTurnReferences = session.turnReferences
+    session.turnReferences = hostReferences
+    session.visualExplainerBudget = freshVisualExplainerBudget()
+    session.visualExplorerBudget = freshVisualExplorerBudget()
+    if (initialCanvasState?.empty) session.visualExplorerBudget.authoritativeEmptyRevision = Number(initialCanvasState.reference?.digest?.revision)
+    session.widgetPatchAttempts = new Map()
     try {
+      const input = await this.modelInput(session, prompt, hostReferences, [
+        ...(initialCanvasState?.attachment ? [initialCanvasState.attachment] : []), ...imageAttachments,
+      ], active.inputController.signal)
+      if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
+      this.emitPublicEvent(session, { kind:'user_message', turn:session.turnNumber, text:redactPublicProjectValue(prompt, session) })
       await session.process.request('turn/steer', {
         threadId:session.threadId,
         expectedTurnId:active.turnId,
@@ -761,36 +837,31 @@ export class CodexNativeHost {
       })
       return { output:'', usage:active.usage, steered:true }
     } catch (error) {
-      await this.failTurn(session, error, { close:true }).catch(() => {})
+      session.turnReferences = previousTurnReferences
+      session.visualExplainerBudget = previousVisualExplainerBudget
+      session.visualExplorerBudget = previousVisualExplorerBudget
+      session.widgetPatchAttempts = previousWidgetPatchAttempts
       throw error
     }
   }
 
   async runSubmit(session, text, steer = false, images = [], references = {}, initialState = null) {
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
     const prompt = boundedText(text, 40_000).trim()
     if (!prompt) throw new Error('Enter a message for Canvas Agent.')
     if (session.active) throw new Error('A Codex Native Canvas Agent turn is already active.')
-    await this.ensureStarted(session)
-    if (!session.process?.alive || !session.threadId) throw new Error('Codex Native Canvas Agent thread is unavailable.')
-    const imageAttachments = await this.admitUserImages(session, images)
-    const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
-    const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
-    session.turnReferences = hostReferences
-    const previousVisualExplainerBudget = session.visualExplainerBudget, previousVisualExplorerBudget = session.visualExplorerBudget,
-      previousWidgetPatchAttempts = session.widgetPatchAttempts
-    session.visualExplainerBudget = freshVisualExplainerBudget()
-    session.visualExplorerBudget = freshVisualExplorerBudget()
-    if (initialCanvasState?.empty) session.visualExplorerBudget.authoritativeEmptyRevision = Number(initialCanvasState.reference?.digest?.revision)
-    session.widgetPatchAttempts = new Map()
-
+    const inputController = new AbortController()
     let active
     const turnPromise = new Promise((resolve, reject) => {
       active = {
         turnId:null, text:'', usage:null, settled:false, callIds:new Set(), compactionEmitted:false, inputController, resolve, reject,
+        rawDecisionCalls:[], rawDecisionBatches:new Map(), sealedDecisionBatches:[], rawBoundaryCount:0, pendingToolAdmissions:new Map(), responseTextStart:0,
+        completedResponseMessages:[],
         emitEnd:(reason, error = null) => {
           if (active.settled) return
           active.settled = true
-          clearTimeout(active.timer)
+          active.timeout?.clear()
+          this.rejectNativeToolAdmission(active, error || new Error('Codex Native Canvas Agent turn ended during tool admission.'))
           if (session.active === active) session.active = null
           const event = error
             ? { kind:'turn_end', turn:session.turnNumber, reason:{ kind:reason, error:{ code:'CODEX_NATIVE_FAILED', message:safeError(error) } } }
@@ -813,34 +884,75 @@ export class CodexNativeHost {
     turnPromise.catch(() => {})
     session.active = active
     session.turnNumber += 1
-    const timeoutMs = Math.max(1_000, Number(this.modelTimeoutMs?.(session.connectionId)) || 180_000)
-    active.timer = setTimeout(() => {
-      this.failTurn(session, new Error('Codex Native Canvas Agent turn timed out.'), { close:true }).catch(() => {})
-    }, timeoutMs)
+    const timeoutController = new AbortController()
+    active.timeout = createCanvasAgentModelTimeout(
+      timeoutController,
+      Math.max(1_000, Number(this.modelTimeoutMs?.(session.connectionId)) || DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS),
+      {
+        reasonFor:(kind, limitMs) => Object.assign(new Error(kind === 'idle'
+          ? `Codex CLI Canvas Agent turn timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without activity.`
+          : `Codex CLI Canvas Agent turn timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
+      },
+    )
+    timeoutController.signal.addEventListener('abort', () => {
+      const error = timeoutController.signal.reason instanceof Error
+        ? timeoutController.signal.reason
+        : new Error('Codex CLI Canvas Agent turn timed out.')
+      this.failTurn(session, error, { close:true }).catch(() => {})
+    }, { once:true })
     this.emitPublicEvent(session, { kind:'user_message', turn:session.turnNumber, text:redactPublicProjectValue(prompt, session) })
     this.emitPublicEvent(session, { kind:'turn_start', turn:session.turnNumber })
     this.send(session, 'agent_status', { status:'running' })
 
-    const inputController = new AbortController()
+    let previousVisualExplainerBudget, previousVisualExplorerBudget, previousWidgetPatchAttempts, budgetsChanged = false
+    const assertActive = () => {
+      if (session.disposed || session.active !== active || inputController.signal.aborted) {
+        throw inputController.signal.reason instanceof Error
+          ? inputController.signal.reason
+          : new Error('Codex Native Canvas Agent turn is no longer active.')
+      }
+    }
     try {
+      await this.ensureStarted(session)
+      assertActive()
+      if (!session.process?.alive || !session.threadId) throw new Error('Codex Native Canvas Agent thread is unavailable.')
+      const imageAttachments = await this.admitUserImages(session, images)
+      assertActive()
+      const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
+      assertActive()
+      const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
+      session.turnReferences = hostReferences
+      previousVisualExplainerBudget = session.visualExplainerBudget
+      previousVisualExplorerBudget = session.visualExplorerBudget
+      previousWidgetPatchAttempts = session.widgetPatchAttempts
+      budgetsChanged = true
+      session.visualExplainerBudget = freshVisualExplainerBudget()
+      session.visualExplorerBudget = freshVisualExplorerBudget()
+      if (initialCanvasState?.empty) session.visualExplorerBudget.authoritativeEmptyRevision = Number(initialCanvasState.reference?.digest?.revision)
+      session.widgetPatchAttempts = new Map()
       const input = await this.modelInput(session, prompt, hostReferences, [
         ...(initialCanvasState?.attachment ? [initialCanvasState.attachment] : []), ...imageAttachments,
       ], inputController.signal)
+      assertActive()
       const result = await session.process.request('turn/start', {
         threadId:session.threadId,
         input,
         ...(session.effort ? { effort:session.effort } : {}),
         additionalContext:this.additionalContextFor(session),
       })
+      assertActive()
       const responseTurnId = String(result?.turn?.id || '')
       if (active.turnId && responseTurnId && responseTurnId !== active.turnId) throw new Error('Codex app-server returned a mismatched turn id.')
       active.turnId ||= responseTurnId
       if (!active.turnId) throw new Error('Codex app-server did not return a turn id.')
     } catch (error) {
       inputController.abort(error)
-      session.visualExplainerBudget = previousVisualExplainerBudget
-      session.visualExplorerBudget = previousVisualExplorerBudget
-      session.widgetPatchAttempts = previousWidgetPatchAttempts
+      if (active.settled) return turnPromise
+      if (budgetsChanged) {
+        session.visualExplainerBudget = previousVisualExplainerBudget
+        session.visualExplorerBudget = previousVisualExplorerBudget
+        session.widgetPatchAttempts = previousWidgetPatchAttempts
+      }
       await this.failTurn(session, error, { close:true })
       return turnPromise
     }
@@ -854,6 +966,7 @@ export class CodexNativeHost {
   }
 
   async abortToolWork(session, error) {
+    this.rejectNativeToolAdmission(session.active, error)
     for (const [requestId, pending] of session.pending) {
       session.pending.delete(requestId)
       pending.reject(error)
@@ -874,15 +987,26 @@ export class CodexNativeHost {
       await this.invalidateSession(session, error)
       return
     }
-    if (session.process?.alive) await session.process.interrupt(session.threadId, active.turnId).catch(() => {})
-    await this.abortToolWork(session, error)
-    active.fail(error, 'cancelled')
-    this.send(session, 'agent_status', { status:'idle' })
+    if (!session.process?.alive) {
+      await this.invalidateSession(session, error)
+      return
+    }
+    active.inputController.abort(error)
+    active.emitEnd('cancelled')
+    const interruptPromise=session.process.interrupt(session.threadId, active.turnId)
+    session.interruptPromise=interruptPromise
+    try {
+      await Promise.all([interruptPromise,this.abortToolWork(session, error)])
+      this.send(session, 'agent_status', { status:'idle' })
+    } catch (interruptError) {
+      await this.invalidateSession(session, new Error(`Codex app-server interrupt failed: ${safeError(interruptError)}`))
+    } finally {
+      if(session.interruptPromise===interruptPromise)session.interruptPromise=null
+    }
   }
 
   async failTurn(session, error, { close = false } = {}) {
     const active = session.active
-    if (active?.turnId && session.process?.alive) await session.process.interrupt(session.threadId, active.turnId)
     const failure = new Error(safeError(error))
     if (close) {
       await this.invalidateSession(session, failure)
@@ -892,10 +1016,97 @@ export class CodexNativeHost {
 
   async invalidateSession(session, error) {
     const active = session?.active
-    if (active?.turnId && session.process?.alive) await session.process.interrupt(session.threadId, active.turnId)
+    const process=session?.process,threadId=session?.threadId,turnId=active?.turnId
     if (active) active.fail(error)
-    await this.disposeSession(session)
+    const disposal=this.disposeSession(session)
+    const interruption=turnId&&process?.alive ? process.interrupt(threadId,turnId).catch(() => {}) : null
+    await Promise.all([disposal,...(interruption?[interruption]:[])])
     if (active) this.send(session, 'agent_status', { status:'idle' })
+  }
+
+  appendNativeAssistantMessage(active, text) {
+    const value=String(text||'')
+    if(!value)return
+    const start=Math.min(active.responseTextStart,active.text.length),prefix=active.text.slice(0,start),responseText=active.text.slice(start)
+    if(!responseText)active.text+=value
+    else if(value.startsWith(responseText))active.text=`${prefix}${value}`
+    else if(!responseText.endsWith(value))active.text+=value
+    active.completedResponseMessages.push(value)
+  }
+
+  sealNativeAssistantResponse(session, active) {
+    const start=Math.min(active.responseTextStart,active.text.length),responseText=active.text.slice(start),messages=active.completedResponseMessages.splice(0)
+    active.responseTextStart=active.text.length
+    if(!responseText)return
+    this.emitPublicEvent(session,{kind:'assistant_delta',turn:session.turnNumber,text:redactPublicProjectValue(responseText,session)})
+    for(const message of messages)this.emitPublicEvent(session,{kind:'assistant_message',turn:session.turnNumber,text:redactPublicProjectValue(message,session)})
+  }
+
+  nativeToolMatch(batch, request, includeSettled = false) {
+    const callId=String(request?.params?.callId||''),name=String(request?.params?.tool||request?.params?.name||'')
+    return batch?.underlyingCalls?.find(candidate=>(includeSettled||candidate.state==='open')&&(
+      candidate.rawCall.aliases.includes(callId)
+      || candidate.rawCall.name==='exec'&&candidate.name===name
+    ))||null
+  }
+
+  settleNativeToolAdmission(session, entry, batch, underlyingCall) {
+    underlyingCall.state='reserved'
+    Promise.resolve().then(()=>this.admitNativeToolRequest(session,entry.request,batch,underlyingCall)).then(entry.resolve,entry.reject)
+  }
+
+  settlePendingNativeToolAdmissions(session, active, batch) {
+    for(const [callId,entries] of [...active.pendingToolAdmissions]){
+      for(const entry of entries){
+        const match=this.nativeToolMatch(batch,entry.request)
+        if(match)this.settleNativeToolAdmission(session,entry,batch,match)
+        else{
+          const settled=this.nativeToolMatch(batch,entry.request,true),duplicate=settled&&settled.rawCall.aliases.includes(String(entry.request?.params?.callId||'')),
+            message=duplicate?'Codex dynamic tool call attempted to reuse an already admitted raw model response item.':'Codex dynamic tool call does not match the tool encoded by its raw model response boundary.'
+          session.traceDecisionProtocol?.({kind:'decision-rejected',code:duplicate?'CODEX_NATIVE_RAW_RESPONSE_ITEM_ALREADY_ADMITTED':'CODEX_NATIVE_TOOL_RESPONSE_BOUNDARY_MISMATCH',message,details:{dynamicRequest:entry.request.params,responseId:batch.responseId,underlyingToolNames:batch.underlyingCalls.map(call=>call.name)}})
+          entry.reject(new Error(message))
+        }
+      }
+      active.pendingToolAdmissions.delete(callId)
+    }
+  }
+
+  expireUncalledNativeToolBoundaries(session, active) {
+    for(const batch of active.sealedDecisionBatches){
+      const expired=batch.underlyingCalls.filter(call=>call.state==='open')
+      if(!expired.length)continue
+      for(const call of expired)call.state='expired'
+      for(const alias of batch.aliases)if(active.rawDecisionBatches.get(alias)===batch)active.rawDecisionBatches.delete(alias)
+      session.traceDecisionProtocol?.({kind:'native-response-boundary-expired',responseId:boundedText(batch.responseId,256)||null,uncalledToolNames:expired.map(call=>call.name)})
+    }
+  }
+
+  sealNativeToolDecision(session, active, params) {
+    const rawCalls=active.rawDecisionCalls.splice(0),calls=rawCalls,
+      underlyingCalls=calls.flatMap(rawCall=>rawCall.underlyingToolNames.map((name,index)=>({rawCall,name,index,state:'open'}))),
+      aliases=new Set(calls.flatMap(call=>call.aliases)),batch={
+      turnId:active.turnId,
+      responseId:String(params?.responseId||''),
+      count:underlyingCalls.length,
+      wrapperCount:calls.length,
+      calls,
+      underlyingCalls,
+      aliases,
+      rejectionTraced:false,
+    }
+    active.rawBoundaryCount++
+    active.sealedDecisionBatches.push(batch)
+    session.traceDecisionProtocol?.({
+      kind:'native-response-boundary',
+      responseId:boundedText(batch.responseId,256)||null,
+      toolCallCount:batch.count,
+      wrapperCallCount:batch.wrapperCount,
+      recognizedCallIdCount:calls.filter(call=>call.aliases.length).length,
+      recognizedAliasCount:aliases.size,
+      rawCalls:rawCalls.map(call=>({itemId:call.itemId,callId:call.callId,name:call.name,namespace:call.namespace,arguments:call.arguments,aliases:call.aliases,underlyingToolNames:call.underlyingToolNames})),
+    })
+    for(const alias of aliases)active.rawDecisionBatches.set(alias,batch)
+    this.settlePendingNativeToolAdmissions(session,active,batch)
   }
 
   handleNotification(session, method, params) {
@@ -905,44 +1116,106 @@ export class CodexNativeHost {
       return
     }
     const active = session.active
-    if (method === 'thread/tokenUsage/updated') {
-      const usage = compactUsage(params.tokenUsage)
-      if (active) active.usage = usage
-      this.emitPublicEvent(session, { kind:'token_usage', turn:active ? session.turnNumber : null, tokenUsage:usage })
+    if (method === 'error') {
+      const turnId = String(params?.turnId || '')
+      if (params?.willRetry === false) {
+        if (turnId && (!active?.turnId || turnId !== active.turnId)) {
+          this.invalidateSession(session, new Error('Codex app-server reported a fatal error for another turn.')).catch(() => {})
+          return
+        }
+        const message = String(params?.error?.message || params?.message || params?.error || 'Codex app-server reported a fatal error.')
+        this.invalidateSession(session, new Error(safeError(message))).catch(() => {})
+      }
       return
     }
-    if ((method === 'thread/compacted' || (method === 'item/completed' && String(params.item?.type || '') === 'contextCompaction')) && active && !active.compactionEmitted) {
-      active.compactionEmitted = true
-      this.emitPublicEvent(session, { kind:'compaction', mode:'native', turn:session.turnNumber })
+    if (method === 'thread/closed') {
+      this.invalidateSession(session, new Error('Codex app-server closed the Canvas Agent thread.')).catch(() => {})
+      return
+    }
+    if (method === 'thread/tokenUsage/updated') {
+      const turnId = String(params?.turnId || '')
+      if (!active) return
+      if (!active.turnId || !turnId || turnId !== active.turnId) {
+        this.invalidateSession(session, new Error('Codex app-server emitted token usage for another turn.')).catch(() => {})
+        return
+      }
+      const usage = compactUsage(params.tokenUsage)
+      active.usage = usage
+      this.emitPublicEvent(session, { kind:'token_usage', turn:session.turnNumber, tokenUsage:usage })
+      return
+    }
+    if (method === 'thread/compacted' || (method === 'item/completed' && String(params.item?.type || '') === 'contextCompaction')) {
+      const turnId = String(params.turnId || '')
+      if (!active || !turnId || turnId !== active.turnId) {
+        this.invalidateSession(session, new Error('Codex app-server emitted compaction for another turn.')).catch(() => {})
+        return
+      }
+      if (!active.compactionEmitted) {
+        active.compactionEmitted = true
+        this.emitPublicEvent(session, { kind:'compaction', mode:'native', turn:session.turnNumber })
+      }
+      return
+    }
+    if (method === 'turn/started') {
+      const startedTurnId = String(params.turn?.id || '')
+      if (!active || !startedTurnId || (active.turnId && active.turnId !== startedTurnId)) {
+        this.invalidateSession(session, new Error('Codex app-server emitted a mismatched turn id.')).catch(() => {})
+        return
+      }
+      active.turnId = startedTurnId
+      active.timeout?.activity()
       return
     }
     if (!active) return
-    if (method === 'turn/started') {
-      const startedTurnId = String(params.turn?.id || params.turnId || '')
-      if (!startedTurnId) return
-      if (!active.turnId) active.turnId = startedTurnId
+    if (!active.turnId) return
+    if ((method === 'rawResponseItem/completed' || method === 'rawResponse/completed')
+      && (!params?.turnId || String(params.turnId) !== active.turnId)) {
+      this.invalidateSession(session, new Error('Codex app-server emitted a raw response event for another turn.')).catch(() => {})
       return
     }
-    if (!active.turnId) return
-    if (params?.turnId !== undefined && String(params.turnId) !== active.turnId) return
+    if (method === 'rawResponseItem/completed') {
+      const item=params?.item,type=String(item?.type||'')
+      if(type==='function_call'||type==='custom_tool_call'){
+        if(!active.rawDecisionCalls.length)this.expireUncalledNativeToolBoundaries(session,active)
+        active.rawDecisionCalls.push(nativeRawDecisionCall(item))
+      }
+      return
+    }
+    if (method === 'rawResponse/completed') {
+      active.timeout?.activity()
+      if(!active.rawDecisionCalls.length)this.expireUncalledNativeToolBoundaries(session,active)
+      this.sealNativeAssistantResponse(session,active)
+      this.sealNativeToolDecision(session,active,params)
+      return
+    }
+    if (method.startsWith('item/') && (!params?.turnId || String(params.turnId) !== active.turnId)) {
+      this.invalidateSession(session, new Error('Codex app-server emitted an item for another turn.')).catch(() => {})
+      return
+    }
     if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') {
+      active.timeout?.activity()
       active.text += params.delta
       if (active.text.length > MAX_AGENT_RESPONSE_CHARS) {
         this.failTurn(session, new Error('Codex app-server response is too large.'), { close:true }).catch(() => {})
         return
       }
-      this.emitPublicEvent(session, { kind:'assistant_delta', turn:session.turnNumber, text:redactPublicProjectValue(params.delta, session) })
       return
     }
     if (method === 'item/completed') {
+      active.timeout?.activity()
       const text = agentMessageText(params.item)
-      if (text) active.text = active.text || text
-      if (text) this.emitPublicEvent(session, { kind:'assistant_message', turn:session.turnNumber, text:redactPublicProjectValue(text, session) })
+      this.appendNativeAssistantMessage(active,text)
+      if(active.text.length>MAX_AGENT_RESPONSE_CHARS){
+        this.failTurn(session,new Error('Codex app-server response is too large.'),{close:true}).catch(()=>{})
+      }
       return
     }
     if (method === 'turn/completed') {
       const turnId = String(params.turn?.id || '')
-      if (!turnId || turnId !== active.turnId) return
+      if (!turnId || turnId !== active.turnId) {
+        this.invalidateSession(session, new Error('Codex app-server completed another turn.')).catch(() => {})
+        return
+      }
       const status = String(params.turn?.status || '')
       if (status !== 'completed') {
         this.failTurn(session, new Error(`Codex app-server turn ${status || 'failed'}.`), { close:true }).catch(() => {})
@@ -950,8 +1223,9 @@ export class CodexNativeHost {
       }
       if (!active.text.trim()) {
         const text = (Array.isArray(params.turn?.items) ? params.turn.items.map(agentMessageText).filter(Boolean) : []).at(-1)
-        if (text) active.text = text
+        this.appendNativeAssistantMessage(active,text)
       }
+      this.sealNativeAssistantResponse(session,active)
       if (!active.text.trim()) {
         this.failTurn(session, new Error('Codex app-server returned no assistant response.'), { close:true }).catch(() => {})
         return
@@ -961,23 +1235,21 @@ export class CodexNativeHost {
     }
   }
 
-  async handleServerRequest(session, id, method, params) {
-    if (session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
-    if (method !== 'item/tool/call') {
-      this.invalidateSession(session, new Error(`PenEcho refused Codex app-server request ${method}.`)).catch(() => {})
-      throw new Error(`PenEcho refused Codex app-server request ${method}.`)
-    }
+  captureNativeToolRequest(session, params) {
     const active = session.active
     if (String(params?.threadId || '') !== String(session.threadId) || !active || !active.turnId
       || String(params.turnId || '') !== active.turnId) {
       throw new Error('Codex dynamic tool call does not match the active turn.')
     }
+    return { active, turnId:String(params.turnId), params }
+  }
+
+  parseNativeToolRequest(request) {
+    const { active, turnId, params }=request
     const namespace = params.namespace === undefined ? 'penecho' : String(params.namespace || '')
     const name = String(params.tool || params.name || '')
     if (!name || name.length > 200) throw new Error('Codex dynamic tool name is invalid.')
     if (namespace !== 'penecho') throw new Error('Codex dynamic tool namespace is unavailable.')
-    const tool = session.native.tool(name)
-    if (!tool) throw new Error(`Codex dynamic tool ${name || '(missing)'} is unavailable.`)
     let args = params.arguments
     if (typeof args === 'string') {
       if (!args.trim()) args = {}
@@ -990,9 +1262,59 @@ export class CodexNativeHost {
     const callId = String(params.callId || '')
     if (!callId || callId.length > 256) throw new Error('Codex dynamic tool call id is invalid.')
     if (active.callIds.has(callId)) throw new Error('Codex dynamic tool call id was already used.')
-    active.callIds.add(callId)
+    return { active, turnId, callId, name, args }
+  }
+
+  async admitNativeToolRequest(session, request, batch, underlyingCall = null) {
+    const {active}=request,callId=String(request.params?.callId||'')
+    if(session.disposed||session.active!==active||active.settled)throw new Error('Codex Native Canvas Agent turn changed during tool admission.')
+    const matched=underlyingCall||this.nativeToolMatch(batch,request),rawCall=matched?.rawCall
+    if(batch.turnId!==request.turnId||!rawCall){
+      const message='Codex dynamic tool call does not match its raw model response boundary.'
+      this.traceNativeDecisionRejection(session,batch,'CODEX_NATIVE_TOOL_RESPONSE_BOUNDARY_MISMATCH',message,{callMatched:false,dynamicRequest:request.params})
+      throw new Error(message)
+    }
+    if(matched.state==='admitted'){
+      const message='Codex dynamic tool call attempted to reuse an already admitted raw model response item.'
+      session.traceDecisionProtocol?.({
+        kind:'decision-rejected',code:'CODEX_NATIVE_RAW_RESPONSE_ITEM_ALREADY_ADMITTED',message,
+        details:{dynamicRequest:request.params,itemId:rawCall.itemId,callId:rawCall.callId,aliases:rawCall.aliases,underlyingToolName:matched.name},
+      })
+      throw new Error(message)
+    }
+    matched.state='admitted'
+    rawCall.admitted=true
+    if(batch.count>1){
+      if(callId&&callId.length<=256)active.callIds.add(callId)
+      const message=`Canvas Agent decision rejected: this model step returned ${batch.count} tool calls. Exactly one tool call is allowed per model step; the entire decision was rejected before execution and no Canvas tool ran. Return exactly one corrected tool call, or a final answer only when the task is complete or cannot proceed.`
+      this.traceNativeDecisionRejection(session,batch,'CANVAS_ONE_TOOL_PER_STEP',message)
+      return {success:false,contentItems:[{type:'inputText',text:message}]}
+    }
+    if(batch.count!==1){
+      const message='Codex dynamic tool call has no unique raw model response boundary.'
+      this.traceNativeDecisionRejection(session,batch,'CODEX_NATIVE_TOOL_CALL_NOT_UNIQUE',message)
+      throw new Error(message)
+    }
+    const parsed=this.parseNativeToolRequest(request)
+    active.callIds.add(parsed.callId)
+    return this.executeNativeToolRequest(session,parsed)
+  }
+
+  rejectNativeToolAdmission(active, error) {
+    if(!active)return
+    for(const entries of active.pendingToolAdmissions.values())for(const entry of entries)entry.reject(error)
+    active.pendingToolAdmissions.clear()
+    active.rawDecisionBatches.clear()
+    active.sealedDecisionBatches.length=0
+    active.rawDecisionCalls.length=0
+  }
+
+  async executeNativeToolRequest(session, request) {
+    const {active,turnId,callId,name,args}=request,tool=session.native.tool(name)
+    if (!tool) throw new Error(`Codex dynamic tool ${name || '(missing)'} is unavailable.`)
+    active.timeout?.activity()
     const lifecycle = session.lifecycle
-    const toolStillActive = () => !session.disposed && session.lifecycle === lifecycle && session.active === active && active.turnId === String(params.turnId)
+    const toolStillActive = () => !session.disposed && session.lifecycle === lifecycle && session.active === active && active.turnId === turnId
     const execution = session.toolQueue.then(async () => {
       if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
       const controller = new AbortController()
@@ -1001,7 +1323,11 @@ export class CodexNativeHost {
       session.toolAborts.set(callId, controller)
       this.emitPublicEvent(session, { kind:'tool_call', turn:session.turnNumber, callId, name, arguments:redactPublicProjectValue(args, session) })
       try {
-        const value = await tool.execute(args, { callId, signal:controller.signal })
+        const value = await raceAbortableExecution(
+          Promise.resolve().then(() => tool.execute(args, { callId, signal:controller.signal })),
+          controller.signal,
+          `PenEcho tool ${name} timed out.`,
+        )
         if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
         session.native.recordToolResult({ isError:false, value })
         const contentItems = []
@@ -1009,13 +1335,13 @@ export class CodexNativeHost {
           if (block?.type === 'text' && typeof block.text === 'string') contentItems.push({ type:'inputText', text:boundedText(block.text, 400_000) })
           else if (block?.type === 'image' && block.attachment?.attachmentId) {
             const stored = await this.attachments.readImageRequest(block.attachment, CODEX_MODEL_IMAGE_REQUEST_POLICY, controller.signal)
-            contentItems.push({ type:'inputImage', imageUrl:`data:${stored.ref.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
+            contentItems.push({ type:'inputImage', imageUrl:`data:${stored.ref?.mediaType || stored.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
           }
         }
         const directAttachment = value?.attachment?.attachmentId ? value.attachment : null
         if (directAttachment && !contentItems.some(item => item.type === 'inputImage')) {
           const stored = await this.attachments.readImageRequest(directAttachment, CODEX_MODEL_IMAGE_REQUEST_POLICY, controller.signal)
-          contentItems.push({ type:'inputImage', imageUrl:`data:${stored.ref.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
+          contentItems.push({ type:'inputImage', imageUrl:`data:${stored.ref?.mediaType || stored.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
         }
         if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
         if (!contentItems.length) contentItems.push({ type:'inputText', text:'PenEcho tool completed.' })
@@ -1033,6 +1359,65 @@ export class CodexNativeHost {
     })
     session.toolQueue = execution.catch(() => {})
     return execution
+  }
+
+  async handleServerRequest(session, id, method, params) {
+    if (session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    session.traceDecisionProtocol?.({kind:'native-server-request',requestId:id,method,params})
+    if (method !== 'item/tool/call') {
+      const message=`PenEcho refused Codex app-server request ${method}.`
+      session.traceDecisionProtocol?.({kind:'decision-rejected',code:'CODEX_NATIVE_SERVER_REQUEST_UNAVAILABLE',message,details:{method:boundedText(method,128)}})
+      this.invalidateSession(session, new Error(message)).catch(() => {})
+      throw new Error(message)
+    }
+    let request
+    try{request=this.captureNativeToolRequest(session,params)}catch(error){
+      session.traceDecisionProtocol?.({
+        kind:'decision-rejected',code:'CODEX_NATIVE_TOOL_REQUEST_INVALID',message:safeError(error),
+        details:{method:'item/tool/call',hasCallId:Boolean(params?.callId)},
+      })
+      throw error
+    }
+    const active=request.active,callId=String(params?.callId||'')
+    if(!callId||callId.length>256)throw new Error('Codex dynamic tool call id is invalid.')
+    const sealed=active.rawDecisionBatches.get(callId)
+    if(sealed){
+      const match=this.nativeToolMatch(sealed,request),settled=this.nativeToolMatch(sealed,request,true)
+      if(match)return this.admitNativeToolRequest(session,request,sealed,match)
+      if(settled)throw new Error('Codex dynamic tool call attempted to reuse an already admitted raw model response item.')
+    }
+    for(const batch of active.sealedDecisionBatches){
+      const match=this.nativeToolMatch(batch,request)
+      if(match)return this.admitNativeToolRequest(session,request,batch,match)
+    }
+    const dynamicName=String(params?.tool||params?.name||''),pendingRawMatch=active.rawDecisionCalls.some(call=>
+      call.aliases.includes(callId)||call.name==='exec'&&call.underlyingToolNames.includes(dynamicName)
+    )
+    if(!pendingRawMatch&&active.rawBoundaryCount>0){
+      const message='Codex dynamic tool call arrived without a matching raw model response item.'
+      session.traceDecisionProtocol?.({
+        kind:'decision-rejected',code:'CODEX_NATIVE_RAW_RESPONSE_ITEM_MISSING',message,
+        details:{
+          pendingRawToolCallCount:active.rawDecisionCalls.length,
+          dynamicRequest:params,
+          rawCalls:active.rawDecisionCalls.map(call=>({
+            itemId:call.itemId,
+            callId:call.callId,
+            name:call.name,
+            namespace:call.namespace,
+            arguments:call.arguments,
+            aliases:call.aliases,
+            underlyingToolNames:call.underlyingToolNames,
+          })),
+        },
+      })
+      throw new Error(message)
+    }
+    return new Promise((resolve,reject)=>{
+      const entries=active.pendingToolAdmissions.get(callId)||[]
+      entries.push({request,resolve,reject})
+      active.pendingToolAdmissions.set(callId,entries)
+    })
   }
 
   callBrowserTool(session, name, args, callId, signal, timeoutMs = 45_000) {
@@ -1074,14 +1459,12 @@ export class CodexNativeHost {
     session.connected = false
     session.send = null
     const disconnectError = new Error('Canvas browser disconnected during tool execution.')
-    await this.abortToolWork(session, disconnectError)
     const active = session.active
     if (active) {
-      if (active.turnId && session.process?.alive) await session.process.interrupt(session.threadId, active.turnId).catch(() => {})
-      active.fail(new Error('Codex Native Canvas Agent turn interrupted by browser disconnect.'))
-      await this.disposeSession(session)
+      await this.invalidateSession(session, new Error('Codex Native Canvas Agent turn interrupted by browser disconnect.'))
       return true
     }
+    await this.abortToolWork(session, disconnectError)
     clearTimeout(session.expiryTimer)
     session.expiryTimer = setTimeout(() => { this.disposeSession(session).catch(() => {}) }, this.sessionTtlMs)
     session.expiryTimer.unref?.()
@@ -1098,9 +1481,14 @@ export class CodexNativeHost {
     session.disposePromise = (async () => {
       clearTimeout(session.expiryTimer)
       const active = session.active
-      if (active?.turnId && session.process?.alive) await session.process.interrupt(session.threadId, active.turnId).catch(() => {})
+      const interruption=active?.turnId&&session.process?.alive
+        ? session.process.interrupt(session.threadId,active.turnId).catch(() => {})
+        : null
       if (active) active.fail(new Error('Codex Native Canvas Agent session closed.'))
       await this.abortToolWork(session, new Error('Codex Native Canvas Agent session closed.'))
+      if(interruption)await interruption
+      session.decisionFeedbackCalls.clear()
+      session.decisionFeedbackCallIds.clear()
       this.logConversation(session, 'end')
       this.traceConversation(session, 'end')
       try { await session.process?.close() } catch (error) { this.logger({ type:'codex-native-close-error', error:safeError(error) }) }
@@ -1161,6 +1549,45 @@ export class CodexNativeHost {
     if (!this.conversationTrace) return
     try {
       this.conversationTrace({ conversationId:session.conversationLogId, connectionId:session.connectionId, connection:session.requestTraceConnection, phase:'patch-protocol', record })
+    } catch (error) { this.logger({ type:'canvas-agent-request-trace-error', error:safeError(error) }) }
+  }
+
+  traceNativeDecisionRejection(session, batch, code, message, details = null) {
+    if(batch?.rejectionTraced)return
+    if(batch)batch.rejectionTraced=true
+    session.traceDecisionProtocol?.({
+      kind:'decision-rejected',
+      code,
+      message,
+      details:{
+        responseId:boundedText(batch?.responseId,256)||null,
+        toolCallCount:Number.isSafeInteger(batch?.count)?batch.count:null,
+        recognizedCallIdCount:Array.isArray(batch?.calls)?batch.calls.filter(call=>call.aliases.length).length:null,
+        recognizedAliasCount:batch?.aliases instanceof Set?batch.aliases.size:null,
+        ...(details||{}),
+      },
+    })
+  }
+
+  traceDecisionProtocol(session, record) {
+    if (!this.conversationTrace) return
+    try {
+      this.conversationTrace({
+        conversationId:session.conversationLogId,
+        connectionId:session.connectionId,
+        connection:session.requestTraceConnection,
+        phase:'diagnostic',
+        diagnostic:{
+          provider:'codex-native',
+          model:session.model,
+          error:record?.kind==='decision-rejected'?{
+            name:'CanvasDecisionProtocolError',
+            message:String(record.message||''),
+            code:String(record.code||'CANVAS_DECISION_REJECTED'),
+          }:null,
+          traceDiagnostic:JSON.stringify({kind:'canvas-decision-protocol',...record}),
+        },
+      })
     } catch (error) { this.logger({ type:'canvas-agent-request-trace-error', error:safeError(error) }) }
   }
 }

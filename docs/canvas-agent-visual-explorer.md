@@ -38,13 +38,13 @@ Every newly authored Visual Explorer uses exactly these markers:
 
 1. Use the host-supplied authoritative initial Canvas state. On a nonempty Canvas, capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` before requesting placement if that overview was not already supplied.
 2. If the host-supplied initial state explicitly declares an empty Canvas at the current revision, skip the unchanged inspect/capture and create directly with finite dimensions and `placement.mode:"auto"`. Otherwise call `canvas_inspect` with `plannedWidget.sourceFormat:"penecho-visual-explorer+html"`, the intended dimensions, and source typography. Treat its width, height, and absolute `createPlacement` as authoritative.
-3. Call `canvas_create` once with exactly one `general/html_widget`, the complete HTML, both exact markers, and either the empty-Canvas auto placement or the exact nonempty-Canvas proposal.
+3. Call `canvas_create` once with exactly one `general/html_widget`, both exact markers, and either the empty-Canvas auto placement or the exact nonempty-Canvas proposal. When the complete source is likely to exceed about 3,000 output tokens or delay visible progress for close to a minute, use progressive delivery: create a useful runnable scaffold immediately, then fill coherent sections through bounded `widget.html` patches, aiming for a useful visible increment about once per minute. The scaffold reserves the final dimensions, region geometry, hierarchy, and scale; progressive patches populate the plan without layout drift, so the finished result matches the planned one-shot composition.
 4. Capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` to verify scale, placement, and overlap.
 5. Capture the created Widget with `target:"object"`, `quality:"detail"`, and `coordinates:"none"` to review hierarchy, typography, clipping, connectors, density, and visual-grammar fidelity.
-6. If one concrete defect remains, read `widget.json` and only the needed lines of `widget.html`, then make one bounded, minimal `canvas_patch_widget` unified diff that changes only `widget.html`.
-7. After a patch, take one final clean object-detail capture and stop. If no patch is needed, stop after the first detail capture.
+6. For an ordinary completed Widget, patch only a concrete remaining defect. For a planned progressive Widget, read only the needed `widget.html` ranges and fill one coherent section per bounded patch, keeping every intermediate version runnable and useful.
+7. Stop when the request is satisfied, consecutive versions no longer make material progress, or remaining gains are marginal. Use clean captures when they add evidence; do not capture unchanged content repeatedly.
 
-The server enforces one newly created Visual Explorer, at most one successful automatic `widget.html` patch, and at most two successful clean detail captures per actual user message. A failed or rejected operation does not justify additional polishing.
+The server enforces one newly created Visual Explorer, at most 20 same-target patch attempts as a runaway guard, and at most two successful clean detail captures per actual user message. Progressive construction patches are not treated as failed refinement, and the model should normally stop far before the hard guard.
 
 ## Legacy compatibility
 
@@ -66,7 +66,7 @@ Every scientific artifact is explanation-first. Its initial static HTML/SVG is c
 
 ### Two-stage lazy loading
 
-Scientific instructions and code are absent from the initial Canvas Agent prompt. The always-visible `load_visual_skill` router selects one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading appends the full contract to a durable, prefix-stable session system-prompt section; the ordinary tool result contains only its id, hash, and load state. Repeating the call reports `alreadyLoaded` without duplicating the contract.
+Scientific instructions and code are absent from the initial Canvas Agent prompt. The always-visible `load_visual_skill` router selects one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading appends the full contract to durable provider-owned conversation context without placing it in ordinary tool-result history: Harness stores it as an append-only session system section, while native Codex supplies it as application `additionalContext` on subsequent turns of the same App Server thread. The stable initial instruction prefix is not rebuilt. Repeating the call reports `alreadyLoaded` without duplicating the contract.
 
 Authored scientific HTML declares exactly one matching marker:
 

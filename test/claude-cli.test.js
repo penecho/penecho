@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { buildClaudeArgs, callClaudeCli, claudeInput, claudeResult, sanitizeClaudeEnv } = require("../src/providers/claude-cli.js");
+const { buildClaudeArgs, callClaudeCli, claudeEventUsage, claudeInput, claudeResult, sanitizeClaudeEnv } = require("../src/providers/claude-cli.js");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const WEBP = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAAAcQEf0PRET/Aw==";
@@ -108,6 +108,14 @@ test("Claude CLI JSON result parsing accepts text and structured output", () => 
   assert.equal(claudeResult(JSON.stringify({ type:"result", subtype:"success", structured_output:{ commands:[] } })), '{"commands":[]}');
   assert.throws(() => claudeResult("not-json"), /invalid JSON/);
   assert.throws(() => claudeResult(JSON.stringify({ type:"result", subtype:"error" })), /did not complete/);
+  assert.throws(() => claudeResult(JSON.stringify({ type:"result", subtype:"success", result:"Failed to authenticate. API Error: 403 insufficient balance" })), error => error?.code === "UPSTREAM_ERROR" && /403 insufficient balance/.test(error.message));
+});
+
+test("Claude CLI exposes direct and per-model token usage", () => {
+  assert.deepEqual(claudeEventUsage({ usage:{ input_tokens:12, cache_read_input_tokens:80, output_tokens:7 } }), { input_tokens:12, cache_read_input_tokens:80, output_tokens:7 });
+  assert.deepEqual(claudeEventUsage({ modelUsage:{ opus:{ inputTokens:10, cacheReadInputTokens:40, cacheCreationInputTokens:5, outputTokens:3 }, haiku:{ inputTokens:2, cacheReadInputTokens:8, outputTokens:1 } } }), {
+    input_tokens:12, cache_read_input_tokens:48, cache_creation_input_tokens:5, output_tokens:4,
+  });
 });
 
 test("Claude CLI adapter sends the image, system prompt, model, and no API key", async () => {
@@ -148,9 +156,11 @@ test("Claude CLI none keeps the current thinking-disabled runtime", async () => 
 
 test("Claude CLI returns on the final result event without waiting for process exit", { timeout:10000 }, async () => {
   const directory = temporaryDirectory(), fakeCli = path.join(directory, "fake-claude.js"), marker = path.join(directory, "started.txt");
-  fs.writeFileSync(fakeCli, `"use strict";const fs=require("node:fs");fs.writeFileSync(${JSON.stringify(marker)},process.cwd());const result={intent:"answer",observedText:"image",message:"early",commands:[]};process.stdout.write(JSON.stringify({type:"system",subtype:"init",tools:[],mcp_servers:[],model:"sonnet"})+"\\n");process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:JSON.stringify(result)})+"\\n");setInterval(()=>{},1000);\n`);
-  const started = Date.now(), content = await callClaudeCli({ executable:fakeCli, model:"sonnet", systemPrompt:"system", prompt:"request", atlasImage:PNG });
+  fs.writeFileSync(fakeCli, `"use strict";const fs=require("node:fs");fs.writeFileSync(${JSON.stringify(marker)},process.cwd());const result={intent:"answer",observedText:"image",message:"early",commands:[]};process.stdout.write(JSON.stringify({type:"system",subtype:"init",tools:[],mcp_servers:[],model:"sonnet"})+"\\n");process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:JSON.stringify(result),usage:{input_tokens:12,cache_read_input_tokens:80,output_tokens:7}})+"\\n");setInterval(()=>{},1000);\n`);
+  let usage = null;
+  const started = Date.now(), content = await callClaudeCli({ executable:fakeCli, model:"sonnet", systemPrompt:"system", prompt:"request", atlasImage:PNG, onUsage:value=>{ usage=value; } });
   assert.equal(JSON.parse(content).message, "early");
+  assert.deepEqual(usage, { input_tokens:12, cache_read_input_tokens:80, output_tokens:7 });
   assert.ok(Date.now() - started < 3000);
   const workDir = fs.readFileSync(marker, "utf8");
   await waitForMissing(workDir);

@@ -235,6 +235,9 @@ let AI_EFFORT = String(process.env.AI_EFFORT || "").trim() || null,
 const autoDelayValue = process.env.AUTO_AI_DELAY_SECONDS?.trim();
 const configuredAutoDelay = autoDelayValue ? Number(autoDelayValue) : NaN;
 const AUTO_AI_DELAY_MS = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 && configuredAutoDelay <= 60 ? Math.round(configuredAutoDelay * 1000) : 5000;
+const canvasAgentAutoOpenText = process.env.PENECHO_CANVAS_AGENT_AUTO_OPEN?.trim();
+const canvasAgentAutoOpenValue = canvasAgentAutoOpenText ? optionalBoolean(canvasAgentAutoOpenText) : true;
+const CANVAS_AGENT_AUTO_OPEN = canvasAgentAutoOpenValue === true;
 const debugArtifactsValue = optionalBoolean(process.env.PENECHO_DEBUG_ARTIFACTS);
 const DEBUG_ARTIFACTS = debugArtifactsValue === true;
 const requestTraceValue = optionalBoolean(process.env.PENECHO_REQUEST_TRACE),
@@ -780,6 +783,7 @@ function providerConfigurationError(provider = activeProviderSnapshot()) {
   if (provider.provider === "api" && (!provider.api || !provider.model)) return "Server must configure a valid AI_API_URL base URL and AI_API_MODEL. AI_API_FORMAT, when set, must be openai or anthropic.";
   if (provider.provider === "api" && !provider.apiKey) return "Server is missing AI_API_KEY.";
   if (!AI_IMAGE_FORMAT) return "PENECHO_AI_IMAGE_FORMAT must be webp or png when set.";
+  if (canvasAgentAutoOpenValue === null) return "PENECHO_CANVAS_AGENT_AUTO_OPEN must be true or false when set.";
   if (AI_IMAGE_FORMAT === "webp" && !sharp) return "WebP image encoding is unavailable. Reinstall PenEcho so its Sharp dependency is present, or select PNG in Settings.";
   if (debugArtifactsValue === null) return "PENECHO_DEBUG_ARTIFACTS must be true or false when set.";
   if (requestTraceValue === null) return "PENECHO_REQUEST_TRACE must be true or false when set.";
@@ -3203,7 +3207,7 @@ const server = http.createServer(async (req, res) => {
       return send(res,status,{error:error.message||"PenEcho Cloud request failed.",code:error.code||"cloud_request_failed"});
     }
   }
-  if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort(), canvasAgentSearchConfigured:true });
+  if (req.method === "GET" && url.pathname === "/api/config") return send(res, 200, { autoAiDelayMs: AUTO_AI_DELAY_MS, aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS, aiProvider: AI_PROVIDER || "invalid", aiEffort:configuredUiEffort(), canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN, canvasAgentSearchConfigured:true });
   const canvasAgentProjectMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})$/.exec(url.pathname),
     canvasAgentProjectHistoryMatch = /^\/api\/canvas-agent\/projects\/((?:local|file)-[0-9a-f]{24})\/history$/.exec(url.pathname),
     canvasAgentRootEntriesMatch = /^\/api\/canvas-agent\/roots\/(root-[0-9a-f]{24})\/entries$/.exec(url.pathname),
@@ -3430,7 +3434,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config.js") {
-    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp:process.env.PENECHO_DESKTOP_APP==="true",canvasAgent:true,canvasAgentSearchConfigured:true};
+    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp:process.env.PENECHO_DESKTOP_APP==="true",canvasAgent:true,canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN,canvasAgentSearchConfigured:true};
     if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
     return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
   }

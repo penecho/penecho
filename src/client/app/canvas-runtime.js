@@ -1253,6 +1253,7 @@
     for (const [requestId, pending] of widgetSnapshotRequests) {
       if (pending.widget !== widget) continue;
       clearTimeout(pending.timer);
+      pending.signal?.removeEventListener("abort",pending.abort);
       pending.reject(Error(t("widgetExportFailed")));
       widgetSnapshotRequests.delete(requestId);
     }
@@ -1359,11 +1360,29 @@
       image.src = dataUrl;
     });
   }
-  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true) {
+  function widgetSnapshotAbortError(signal) {
+    return signal?.reason instanceof Error ? signal.reason : Error("Widget snapshot request was cancelled");
+  }
+  function waitForWidgetSnapshot(promise,signal) {
+    if(!signal)return promise;
+    if(signal.aborted)return Promise.reject(widgetSnapshotAbortError(signal));
+    return new Promise((resolve,reject)=>{
+      const abort=()=>reject(widgetSnapshotAbortError(signal));
+      signal.addEventListener("abort",abort,{once:true});
+      if(signal.aborted)abort();
+      Promise.resolve(promise).then(
+        value=>{signal.removeEventListener("abort",abort);resolve(value);},
+        error=>{signal.removeEventListener("abort",abort);reject(error);},
+      );
+    });
+  }
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true, signal = null) {
+    if(signal?.aborted)throw widgetSnapshotAbortError(signal);
     if (widget.snapshotPromise) {
       const inFlight = widget.snapshotPromise;
-      if (!requireFresh) return inFlight;
-      try { await inFlight; } catch {}
+      if (!requireFresh) return waitForWidgetSnapshot(inFlight,signal);
+      try { await waitForWidgetSnapshot(inFlight,signal); } catch (error) { if(signal?.aborted)throw error; }
+      if(signal?.aborted)throw widgetSnapshotAbortError(signal);
       if (widget.snapshotImage && widget.snapshotVersion >= widget.contentVersion) return widget.snapshotImage;
     }
     timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
@@ -1384,14 +1403,26 @@
         widget.shell?.classList.remove("widget-offscreen");
         if (!widget.initialized) sendWidgetInit(widget);
         if (!widget.hostReady || !widget.initialized) throw Error(t("widgetExportFailed"));
+        if(signal?.aborted)throw widgetSnapshotAbortError(signal);
         sendWidgetHostState(widget, undefined, undefined, true);
         const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
         return await new Promise((resolve, reject) => {
+          let pending;
           const timer = setTimeout(() => {
             widgetSnapshotRequests.delete(requestId);
+            if(signal&&pending?.abort)signal.removeEventListener("abort",pending.abort);
             reject(Error(t("widgetExportFailed")));
           }, remaining());
-          widgetSnapshotRequests.set(requestId, { widget, resolve, reject, timer, contentVersion:widget.contentVersion });
+          const abort=()=>{
+            if(widgetSnapshotRequests.get(requestId)!==pending)return;
+            widgetSnapshotRequests.delete(requestId);
+            clearTimeout(timer);
+            reject(widgetSnapshotAbortError(signal));
+          };
+          pending={ widget, resolve, reject, timer, contentVersion:widget.contentVersion, signal, abort };
+          widgetSnapshotRequests.set(requestId,pending);
+          signal?.addEventListener("abort",abort,{once:true});
+          if(signal?.aborted){abort();return;}
           widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs:remaining() }, widget.hostOrigin || location.origin);
         });
       } finally {
@@ -1466,6 +1497,7 @@
     if (!pending || pending.widget !== widget) return;
     widgetSnapshotRequests.delete(message.requestId);
     clearTimeout(pending.timer);
+    pending.signal?.removeEventListener("abort",pending.abort);
     if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")
       || !Number.isFinite(message.width) || message.width <= 0 || !Number.isFinite(message.height) || message.height <= 0) {
       if (message.type === "penecho-widget-snapshot-error") console.warn("PenEcho widget snapshot failed:", String(message.error || "unknown error").slice(0, 300));
@@ -1473,7 +1505,10 @@
       return;
     }
     try {
-      widget.snapshotImage = await decodeWidgetSnapshot(message.dataUrl);
+      const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
+      if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
+      if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      widget.snapshotImage = snapshotImage;
       widget.snapshotDataUrl = message.dataUrl;
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
@@ -1959,19 +1994,21 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
+          if(signal?.aborted)throw widgetSnapshotAbortError(signal);
+          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
           ]);
           else await request;
         } catch (error) {
+          if(signal?.aborted)throw error;
           debug("widget-snapshot-degraded", { widgetId:widget.id, error:String(error?.message || error).slice(0, 300) });
         }
         return Boolean(widget.snapshotImage);
@@ -1979,6 +2016,7 @@
         capturedCount = captured.filter(Boolean).length;
       return { total:widgets.length, captured:capturedCount, missing:widgets.length - capturedCount };
     } catch (error) {
+      if(signal?.aborted)throw error;
       debug("widget-snapshot-preparation-failed", { error:String(error?.message || error).slice(0, 300) });
       const captured = widgets.filter((widget) => widget.snapshotImage).length;
       return { total:widgets.length, captured, missing:widgets.length - captured };

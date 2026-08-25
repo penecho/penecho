@@ -270,9 +270,9 @@ Use the language explicitly requested by the user for all visible text. If no la
 
 ## Canvas Agent source and invocation
 
-Create one complete responsive HTML/CSS/SVG Widget. Native HTML, CSS, SVG, and minimal JavaScript are preferred; do not use photorealistic image generation for the composition. The visible result must be the explanation, not raw JSON, source code, or a `<pre>` dump.
+Create one responsive HTML/CSS/SVG Widget with minimal JavaScript. It must explain the subject rather than display raw JSON, source, or a `<pre>` dump; do not use photorealistic image generation.
 
-For a mathematics or physics Visual Explorer, call `load_visual_skill` with the closest available skill before authoring. Follow the returned contract and its required markers. Manim-Web is the default explanatory rendering/motion language when it can faithfully, legibly, accessibly, or efficiently improve the explanation, and the settled result must remain at least as clear as a static alternative. Do not call the scientific loader for unrelated subjects.
+For mathematics or physics, call `load_visual_skill` with the closest available skill before authoring and follow its markers. Manim-Web is the default explanatory rendering/motion language when it improves fidelity, legibility, accessibility, or efficiency; the settled result must remain at least as clear as a static alternative. Do not load scientific skills for unrelated subjects.
 
 Before creating the Widget:
 
@@ -285,12 +285,13 @@ Call `canvas_create` with exactly one item:
 * `type:"widget"`
 * `pluginId:"general"`
 * `widgetType:"html_widget"`
+* required concise `title`, separate from the document's `<title>`
 * complete, readable, non-minified `html`
 * `sourceFormat:"penecho-visual-explorer+html"`
 * `frameworkVersion:"penecho-visual-explorer/1"`
 * `refreshSeconds:0`
 * no `copyText` or `copyLabel`
-* the exact planned dimensions and absolute placement
+* finite `width`/`height`; empty Canvas uses `placement:{"mode":"auto"}`, otherwise reuse inspected dimensions and absolute placement
 
 `widget.html` is the sole canonical reusable source for a new Visual Explorer. Never use the legacy VisualExplainerPlan create/update tools for new authoring.
 
@@ -298,11 +299,4 @@ Keep major HTML elements, CSS declarations, and JavaScript statements on stable 
 
 ## Bounded rendered review
 
-After creation:
-
-1. Capture the complete Canvas with `coordinates:"none"` to verify composition and placement.
-2. Capture the new Widget once with `target:"object"`, `quality:"detail"`, and `coordinates:"none"` to verify local legibility and rendering.
-3. If one concrete defect remains, read the exact `widget.html` lines and apply one minimal `canvas_patch_widget` unified diff using the canonical headers `--- a/widget.html` and `+++ b/widget.html`.
-4. Take one final object detail capture after that patch, then stop.
-
-Do not spend repeated model calls on cosmetic self-polishing. A complete-Canvas overview validates composition; judge typography from the focused view and tight detail capture.
+For >~3,000 output tokens or ~one minute, use `deliveryMode:"progressive"`: publish a useful runnable scaffold at final dimensions and regions, then coherent same-`widget.html` patches <=~3,000 tokens, about one visible update/minute. This changes transport only; the result must match the one-shot plan. Stop when complete, stalled, marginal, or told. Hard cap: 20 same-target patches.

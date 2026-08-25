@@ -1284,7 +1284,7 @@
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
       state.snapshotSavedRevision = state.userRevision;
-      canvasAgentCanvasDidChange({ id:item.id, location });
+      canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true});
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       closeHistoryPanel();
@@ -1415,7 +1415,7 @@
     state.currentSnapshotBundleExtensions = {};
     state.currentSnapshotManifestExtensions = {};
     state.currentSnapshotPreservedAssets = [];
-    canvasAgentCanvasDidChange();
+    canvasAgentCanvasDidChange(null,{clearProject:true});
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;

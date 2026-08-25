@@ -1009,8 +1009,11 @@
 
   function csp(allowNestedFrames = false, scienceMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
-    const manimSource = scienceMode ? ` ${visualExplorerManimWebUrl} ${visualExplorerManimMathJaxUrl}` : "";
-    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${rendererUrl} ${visualExplainerVendorUrl} ${visualExplainerRuntimeUrl}${manimSource}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
+      .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
+      .map(url => url.replace(/[?#].*$/, ""))
+      .join(" ");
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function visualExplainerAllowsNestedFrames(planElement) {

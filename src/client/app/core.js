@@ -160,6 +160,7 @@
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    settingsCanvasAgentAutoOpenToggle = document.querySelector("#settingsCanvasAgentAutoOpenToggle"),
     settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
     summonToggle = document.querySelector("#summonToggle"),
     settingsTourButton = document.querySelector("#settingsTourBtn"),
@@ -526,6 +527,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProviderApplied: "Saved and applied. New AI requests will use this connection immediately—no restart required.",
       settingsSystemSaved: "Saved. Restart PenEcho to apply these system changes.",
       settingsCanvasSection: "Canvas preferences",
+      settingsCanvasAgentAutoOpen: "Open Canvas Agent with each canvas",
       settingsWidgetShadow: "Widget & image shadows",
       settingsAISection: "AI",
       settingsSummonSection: "Thinking indicator",
@@ -761,13 +763,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       newCanvasAgentConversation: "New Canvas Agent conversation",
       canvasAgentAutoAIFocusPaused: "Canvas Agent has focus · Canvas Auto AI is paused.",
       canvasAgentAutoAIRequestPaused: "Canvas Agent is working · Canvas Auto AI is paused.",
-      canvasAgentProject: "Choose project or file",
-      canvasAgentProjectClose: "Close project chooser",
+      canvasAgentProject: "Manage projects and files",
+      canvasAgentProjectClose: "Close project manager",
       canvasAgentProjectBoundary: "Folders and single files are read-only.",
-      canvasAgentNoProject: "Browser",
-      canvasAgentBrowserSpace: "Browser space",
-      canvasAgentBrowserSpaceDetail: "No local project tools",
-      canvasAgentAddProjectFile: "Add local file",
+      canvasAgentWorkspace: "Workspace",
+      canvasAgentProjectManager: "Project manager",
+      canvasAgentProjectManagerDescription: "Projects are folders. Files are added from the Canvas Agent composer.",
+      canvasAgentProjects: "Projects",
+      canvasAgentProjectsDescription: "A project is a folder the Agent can read while working.",
+      canvasAgentProjectFolders: "project folders",
+      canvasAgentNewProject: "New project",
+      canvasAgentCancelProjectCreate: "Cancel",
+      canvasAgentNoProjects: "No project folders yet. Create one by choosing a folder.",
+      canvasAgentFiles: "Files",
+      canvasAgentFilesDescription: "Files already used with Canvas Agent appear here.",
+      canvasAgentKnownFiles: "known files",
+      canvasAgentNoFiles: "No files yet. Add one from the chat composer.",
+      canvasAgentFilesAddHint: "Add a file from the chat composer, or paste it with Ctrl/Cmd+V.",
+      canvasAgentFolderProject: "Folder project",
+      canvasAgentUploadedFile: "Uploaded file",
+      canvasAgentLocalFile: "Local file",
+      canvasAgentCurrentResource: "Current",
+      canvasAgentNoProject: "No project",
+      canvasAgentBrowserSpace: "No project",
+      canvasAgentBrowserSpaceDetail: "Use the current canvas without a project or file",
       canvasAgentUploadEmpty: "Choose a non-empty file.",
       canvasAgentUploadTooLarge: "Uploads are limited to 32 MB.",
       canvasAgentFileReadFailed: "The selected file could not be read.",
@@ -779,8 +798,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentRemoveFolderConfirm: "Remove “{name}” from PenEcho? The folder and its .penecho conversation history will stay on disk.",
       canvasAgentRemoveNativeFileConfirm: "Remove “{name}” from PenEcho? The original file will stay on disk, but its saved project conversations will be deleted.",
       canvasAgentRemoveUploadConfirm: "Delete the uploaded copy “{name}” and its saved project conversations from PenEcho? This cannot be undone.",
-      canvasAgentServerFolders: "Create project from host folders",
-      canvasAgentServerFoldersDetail: "Choose a host folder to create a read-only project",
+      canvasAgentServerFolders: "Choose a project folder",
+      canvasAgentServerFoldersDetail: "Select a host folder to register it as a read-only project.",
       canvasAgentNoHostFolders: "No host folders are available",
       canvasAgentRootBack: "Back",
       canvasAgentRootSelect: "Use this folder",
@@ -827,26 +846,56 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentMessage: "Message Canvas Agent",
       canvasAgentPromptSuggestions: "Suggested prompts",
       canvasAgentPromptSuggestionsTitle: "Try asking",
-      canvasAgentPromptMore: "More",
-      canvasAgentPromptLess: "Collapse",
-      canvasAgentPromptFileLabel: "Explain current content",
-      canvasAgentPromptFile: "Read the current file and explain its purpose, overall structure, key relationships, and important details with clear text and visuals. If no readable file is available, explain the current canvas view instead. Preserve the original meaning and list no more than three points that need confirmation.",
-      canvasAgentPromptArchitectureLabel: "Project architecture",
-      canvasAgentPromptArchitecture: "Analyze the current project architecture. Use an intuitive architecture diagram to show the main modules, dependencies, and data flow, then walk through the key directories or files layer by layer.",
-      canvasAgentPromptSimpleDiagramLabel: "Simple visual diagram",
-      canvasAgentPromptSimpleDiagram: "Create a separate, simplified diagram based on the current content without changing the original. Keep only the core concepts, essential relationships, and necessary labels; use clear hierarchy, grouping, and arrows, and minimize text and decoration so someone without prior context can understand it at a glance.",
-      canvasAgentPromptPptLabel: "PPT-ready view",
-      canvasAgentPromptPpt: "Reorganize the current view into a clear layout that is ready to copy into a presentation. Improve the information hierarchy, alignment, and spacing; when finished, capture the final view and send the image in this conversation.",
-      canvasAgentPromptHandwritingLabel: "Enrich handwriting",
-      canvasAgentPromptHandwriting: "Keep the current handwriting unchanged: do not edit, erase, or move it. Add a transparent explanatory visual layer around it. You may overlap parts of the handwriting only if it remains clearly legible; add annotations, connectors, graphics, links, or motion in suitable places to provide context and make the notes more vivid and intuitive.",
-      canvasAgentPromptExcelLabel: "Analyze Excel",
-      canvasAgentPromptExcel: "Analyze the attached Excel file. First summarize its worksheets, fields, and data quality, then identify the key metrics, trends, anomalies, and conclusions and present them clearly on the canvas with suitable charts and concise explanations.",
-      canvasAgentPromptTransformerLabel: "Explain Transformer",
-      canvasAgentPromptTransformer: "Explain the Transformer architecture with an intuitive layered structure. Show the data flow through input representations, attention, residual connections, normalization, and output, label the key tensor shapes, and include corresponding pseudocode with a step-by-step explanation.",
-      canvasAgentPromptUkTripLabel: "15-day UK trip",
-      canvasAgentPromptUkTrip: "Create a map for a 15-day trip through the United Kingdom. Label each day's cities, route, transportation, suggested stay, and representative sights, with a clear legend and itinerary summary.",
-      canvasAgentPromptOrganizeLabel: "Organize this canvas",
-      canvasAgentPromptOrganize: "Review the current canvas, identify its themes and hierarchy, and organize it into clear visual notes. Preserve the original information and separately mark anything uncertain or needing more detail.",
+      canvasAgentPromptMore: "Show suggested prompts",
+      canvasAgentPromptLess: "Hide suggested prompts",
+      canvasAgentPromptFocusVisual: "Visualize",
+      canvasAgentPromptFocusSimplify: "Simplify",
+      canvasAgentPromptFocusOrganize: "Organize",
+      canvasAgentPromptFocusSlides: "Slides",
+      canvasAgentPromptFocusAnalyze: "Analyze",
+      canvasAgentPromptFocusLearn: "Learn",
+      canvasAgentPromptFocusPlan: "Plan",
+      canvasAgentPromptFocusExplain: "Explain",
+      canvasAgentPromptFocusArchitecture: "Architecture",
+      canvasAgentPromptFocusEnhance: "Enhance",
+      canvasAgentPromptFocusLayer: "Layer",
+      canvasAgentPromptFocusPublish: "Publish",
+      canvasAgentPromptFile: "Explain the current file's purpose, structure, key relationships, and details with visuals. If there is no file, explain the canvas instead.",
+      canvasAgentPromptArchitecture: "Map the current project's core modules, dependencies, data flow, and key directories.",
+      canvasAgentPromptSimpleDiagram: "Make a separate, simple diagram of the core concepts, relationships, and essential labels.",
+      canvasAgentPromptPpt: "Turn the current view into a presentation-ready layout and send the final image in chat.",
+      canvasAgentPromptHandwriting: "Keep the current handwriting completely unchanged—do not edit, erase, or move it. Add a transparent explanatory layer over it; overlap is acceptable only if the original strokes remain clearly visible, and use annotations, connectors, links, graphics, or motion where appropriate to make the notes more vivid and intuitive.",
+      canvasAgentPromptExcel: "Chart the attached spreadsheet's key metrics, trends, anomalies, and conclusions.",
+      canvasAgentPromptTransformer: "Explain Transformer with a layered diagram and pseudocode, including data flow and tensor shapes.",
+      canvasAgentPromptUkTrip: "Create a 15-day UK travel map with daily routes, transport, stays, and highlights.",
+      canvasAgentPromptOrganize: "Turn the current canvas into clear visual notes, with themes, hierarchy, and information gaps.",
+      canvasAgentPromptImageVisual: "Explain the current image's subjects, structure, relationships, and important details visually.",
+      canvasAgentPromptImageLayer: "Keep the image unchanged and add a transparent explanation layer with labels, links, graphics, or motion.",
+      canvasAgentPromptImagePublish: "Extract the image's key information; publish visuals to Canvas and send the summary in chat.",
+      canvasAgentPromptSpreadsheetVisual: "Chart the spreadsheet's metrics, trends, anomalies, field relationships, and data quality.",
+      canvasAgentPromptSpreadsheetLayer: "Keep the source data and add a Canvas dashboard with metric cards, charts, and explanations.",
+      canvasAgentPromptSpreadsheetPublish: "Organize conclusions, risks, and next steps; put charts on Canvas and the summary in chat.",
+      canvasAgentPromptPresentationVisual: "Explain the presentation and connect its structure and conclusions in one overview diagram.",
+      canvasAgentPromptPresentationLayer: "Preserve the meaning, unify the deck, and add essential diagrams and explanation layers.",
+      canvasAgentPromptPresentationPublish: "Create a speaking outline, slide revision list, and summary; put visuals on Canvas.",
+      canvasAgentPromptDocumentVisual: "Explain the document or paper's topic, structure, arguments, concepts, and conclusions visually.",
+      canvasAgentPromptDocumentStudy: "Turn the document into study notes with terminology, examples, diagrams, and review points.",
+      canvasAgentPromptDocumentPublish: "Create a summary, action items, and open questions; publish useful diagrams to Canvas.",
+      canvasAgentPromptCodeVisual: "Explain the code's entry points, core logic, dependencies, data flow, and boundaries visually.",
+      canvasAgentPromptCodeLayer: "Keep behavior unchanged and add a module map, key flows, comment ideas, risks, and links.",
+      canvasAgentPromptCodePlan: "Create an implementation summary, risk list, and phased plan, with architecture on Canvas.",
+      canvasAgentPromptFileLayer: "Keep the file unchanged and add a transparent visual explanation in open Canvas space.",
+      canvasAgentPromptFilePublish: "Organize the file's structure, summary, conclusions, and actions; put diagrams on Canvas.",
+      canvasAgentPromptProjectPlan: "Plan the project by goals, milestones, dependencies, risks, and acceptance criteria.",
+      canvasAgentPromptProjectPublish: "Map project entry points, directories, dependencies, risks, and run steps, with a handoff summary.",
+      canvasAgentPromptSelectionVisual: "Visually explain only the selected content's purpose, structure, relationships, and details.",
+      canvasAgentPromptSelectionLayer: "Keep the selection unchanged and add a transparent explanation layer with labels and links nearby.",
+      canvasAgentPromptSelectionPublish: "Organize conclusions and next steps; put visuals on Canvas and the summary in chat.",
+      canvasAgentPromptNotesVisual: "Explain the handwritten notes' themes, hierarchy, relationships, and questions without changing them.",
+      canvasAgentPromptNotesPublish: "Turn the handwriting into a transcription, knowledge map, tasks, and review points.",
+      canvasAgentPromptCanvasVisual: "Explain the current canvas with one overview of its content, structure, relationships, and gaps.",
+      canvasAgentPromptCanvasLayer: "Keep the canvas meaning and objects, improve layout, and add transparent explanations in open space.",
+      canvasAgentPromptCanvasPublish: "Organize the canvas summary, conclusions, and actions, then send a copy-ready recap in chat.",
       canvasAgentType: "Type with keyboard",
       canvasAgentHandwrite: "Write by hand",
       canvasAgentClearInk: "Clear",
@@ -1086,6 +1135,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedCanvasAgentAutoOpen = localStorage.getItem("penecho-canvas-agent-auto-open"),
     storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedAiEffortText = String(localStorage.getItem("penecho-ai-effort") || "").trim().toLowerCase(),
@@ -1098,11 +1148,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
     configuredAiTimeout = Number(window.PENECHO_CONFIG?.aiRequestTimeoutMs),
     configuredAiEffort = String(window.PENECHO_CONFIG?.aiEffort || "").trim().toLowerCase(),
+    configuredCanvasAgentAutoOpen = typeof window.PENECHO_CONFIG?.canvasAgentAutoOpen === "boolean" ? window.PENECHO_CONFIG.canvasAgentAutoOpen : null,
     configuredAccessSession = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || ""),
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
     initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialCanvasAgentAutoOpen = window.PENECHO_CONFIG?.desktopApp === true && configuredCanvasAgentAutoOpen !== null
+      ? configuredCanvasAgentAutoOpen
+      : storedCanvasAgentAutoOpen === null ? configuredCanvasAgentAutoOpen !== false : storedCanvasAgentAutoOpen === "true",
     initialWidgetShadowEnabled = storedWidgetShadowEnabled === "true",
     // The public viewer shares the Cloud origin (and therefore localStorage)
     // with editable Cloud Canvases. Never inherit their last-selected Cloud
@@ -1239,6 +1293,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
+      canvasAgentAutoOpen: initialCanvasAgentAutoOpen,
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
@@ -2449,7 +2504,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         settings.connections = body.connections || settings.connections;
         syncLocalConnectionSelection();
         renderConnectionLists();
-        if (body.savedId === selectedAiConnectionId()) canvasAgentConnectionDidChange(true);
+        if (body.savedId === selectedAiConnectionId()) {
+          const selected=settings.connections.find(connection=>connection.id===body.savedId);
+          canvasAgentConnectionDidChange(true,selected?.provider || "");
+        }
         hideConnectionEditor();
         setConnectionStatus(t("settingsConnectionSaved"), "success");
       } else if (scope === "search") {
@@ -2469,7 +2527,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settings.connections = body.connections || [];
       syncLocalConnectionSelection();
       renderConnectionLists();
-      canvasAgentConnectionDidChange();
+      const nextId=selectedAiConnectionId(),nextConnection=settings.connections.find(connection=>connection.id===nextId);
+      canvasAgentConnectionDidChange(false,nextConnection?.provider || "");
       setConnectionStatus(t(action === "delete" ? "settingsConnectionDeleted" : "settingsConnectionActivated"), "success");
     } catch (error) { setConnectionStatus(error?.message || t("settingsLoadFailed"), "error"); }
   }
@@ -2483,7 +2542,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem(AI_CONNECTION_STORAGE_KEY, id);
       syncLocalConnectionSelection();
       renderConnectionLists();
-      canvasAgentConnectionDidChange();
+      canvasAgentConnectionDidChange(false,settings.connections.find(connection=>connection.id===id)?.provider || "");
       setConnectionStatus(t("settingsConnectionActivated"), "success");
       if (closeAfterActivation) closeSettings();
       return;
@@ -2497,6 +2556,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!settingsPanel) return;
     settingsAutoToggle.classList.toggle("on", state.auto);
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
@@ -2539,6 +2600,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     localStorage.setItem("penecho-summon-enabled", String(state.summonEnabled));
     if (!state.summonEnabled) hideSummon();
     updateSettingsPanel();
+  }
+  function setCanvasAgentAutoOpen(enabled) {
+    state.canvasAgentAutoOpen = Boolean(enabled);
+    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpen));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
   }
   function setWidgetShadowEnabled(enabled) {
     state.widgetShadowEnabled = Boolean(enabled);

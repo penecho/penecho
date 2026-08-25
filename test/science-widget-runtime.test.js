@@ -148,11 +148,14 @@ test("science CSP adds only the exact local Manim-Web source", () => {
     },
     csp = vm.runInNewContext(`(${functionSource(host, "csp")})`, urls),
     ordinary = csp(false, false),
-    science = csp(false, true);
-  assert.equal(ordinary, `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${urls.rendererUrl} ${urls.visualExplainerVendorUrl} ${urls.visualExplainerRuntimeUrl}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`);
-  assert.equal(science.replace(` ${urls.visualExplorerManimWebUrl} ${urls.visualExplorerManimMathJaxUrl};`, ";"), ordinary);
-  assert.equal((science.match(new RegExp(urls.visualExplorerManimWebUrl.replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
-  assert.equal((science.match(new RegExp(urls.visualExplorerManimMathJaxUrl.replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
+    science = csp(false, true),
+    sourceUrl = url => url.replace(/[?#].*$/, "");
+  assert.equal(ordinary, `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${sourceUrl(urls.rendererUrl)} ${sourceUrl(urls.visualExplainerVendorUrl)} ${sourceUrl(urls.visualExplainerRuntimeUrl)}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`);
+  assert.equal(science.replace(` ${sourceUrl(urls.visualExplorerManimWebUrl)} ${sourceUrl(urls.visualExplorerManimMathJaxUrl)};`, ";"), ordinary);
+  assert.equal((science.match(new RegExp(sourceUrl(urls.visualExplorerManimWebUrl).replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
+  assert.equal((science.match(new RegExp(sourceUrl(urls.visualExplorerManimMathJaxUrl).replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
+  assert.doesNotMatch(ordinary, /script-src[^;]*[?#]/);
+  assert.doesNotMatch(science, /script-src[^;]*[?#]/);
 });
 
 test("science readiness waits for authored ready, the DOM renderer, and two presented frames", () => {

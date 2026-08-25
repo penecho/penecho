@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const MAX_TRACE_STRING_CHARS = 500_000;
-const MAX_TRACE_DIAGNOSTIC_CHARS = 64_000;
+const MAX_TRACE_DIAGNOSTIC_CHARS = MAX_TRACE_STRING_CHARS;
 const MAX_TRACE_DIAGNOSTICS = 32;
 const TRACE_SECRET_KEY = /(?:^|[-_])(?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret)(?:$|[-_])/i;
 const TRACE_SECRET_TEXT = /((?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret|claude_code_oauth_token)\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi;
@@ -77,9 +77,24 @@ function assistantText(message) {
     : "";
 }
 
+function nativeTraceEvent(event,connection) {
+  if (!event?.kind || event.type) return event;
+  const turn=Number.isSafeInteger(event.turn)?event.turn:null,step=Number.isSafeInteger(event.step)?event.step:1,
+    nativeData={turn,step,engine:"codex-native"},provider=connection?.provider||"codex-cli",model=connection?.model||null;
+  if (event.kind === "turn_start") return {type:"turn/start",data:nativeData};
+  if (event.kind === "user_message") return {type:"user/message",data:{...nativeData,source:{kind:"user"},role:"user",content:[{type:"text",text:String(event.text||"")}]}};
+  if (event.kind === "assistant_message") return {type:"assistant/message",data:{...nativeData,message:{role:"assistant",source:{provider,model},content:[{type:"text",text:String(event.text||"")}]},interrupted:Boolean(event.interrupted),usage:event.usage||null}};
+  if (event.kind === "tool_call") return {type:"tool/call",data:{...nativeData,callId:event.callId||null,name:event.name||null,arguments:typeof event.arguments==="string"?event.arguments:JSON.stringify(event.arguments||{})}};
+  if (event.kind === "tool_result") return {type:"tool/result",data:{...nativeData,message:{role:"tool",source:{callId:event.callId||null},content:[{type:"text",text:String(event.text||"")}]},error:event.error||null}};
+  if (event.kind === "token_usage") return {type:"request/usage",data:{...nativeData,usage:event.tokenUsage||null}};
+  if (event.kind === "compaction") return {type:"compaction/summary",data:{...nativeData,mode:event.mode||"native"}};
+  if (event.kind === "turn_end") return {type:"turn/end",data:{...nativeData,reason:event.reason||{kind:"unknown"}}};
+  return {type:`codex-native/${String(event.kind)}`,data:{...nativeData,event}};
+}
+
 function turnStatus(reason) {
-  if (reason?.kind === "aborted") return "cancelled";
-  if (reason?.kind === "error") return "failed";
+  if (reason?.kind === "aborted" || reason?.kind === "cancelled") return "cancelled";
+  if (reason?.kind === "error" || reason?.kind === "failed" || reason?.kind === "timeout") return "failed";
   return "completed";
 }
 
@@ -163,7 +178,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       patchProtocol:[],
       final:null,
       error:null,
-      note:"DeepSeek Harness server trace; sessionId is a non-resumable debug correlation ID.",
+      note:"Canvas Agent server trace; sessionId is a non-resumable debug correlation ID.",
     } };
     state.active = trace;
     for (const asset of state.pendingAssets.splice(0)) persistAsset(state,trace,asset);
@@ -202,7 +217,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
   function stateFor(entry) {
     let state = conversations.get(entry.conversationId);
     if (!state) {
-      state = { connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[] };
+      state = { connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null };
       conversations.set(entry.conversationId,state);
     }
     return state;
@@ -211,7 +226,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
   function record(entry) {
     if (!entry?.conversationId) return;
     if (entry.phase === "start") {
-      conversations.set(entry.conversationId,{ connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[] });
+      conversations.set(entry.conversationId,{ connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null });
       return;
     }
     const state = stateFor(entry);
@@ -258,15 +273,28 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       conversations.delete(entry.conversationId);
       return;
     }
-    if (entry.phase !== "event" || !entry.event || entry.event.type === "assistant/chunk") return;
-    const event = safeValue(entry.event);
+    if (entry.phase !== "event" || !entry.event) return;
+    const event = safeValue(nativeTraceEvent(entry.event,state.connection));
+    if (!event?.type || event.type === "assistant/chunk") return;
+    if (!state.active && event.type === "user/message" && event.data?.engine === "codex-native") {
+      state.pendingEvents.push(event);
+      if (state.pendingEvents.length > 10) state.pendingEvents.splice(0,state.pendingEvents.length-10);
+      return;
+    }
     if (event.type === "turn/start") {
       if (state.active) complete(state.active,"abandoned",{ kind:"superseded-turn" });
       state.unassignedVision.length = 0;
+      state.engine = event.data?.engine || null;
+      state.usage = null;
       begin(entry,event,state);
     }
     const trace = state.active;
     if (!trace) return;
+    if (event.type === "turn/start") {
+      const turn=event.data?.turn;
+      trace.data.events.push(...state.pendingEvents.splice(0).filter(item=>item.data?.turn===turn));
+      if (state.engine === "codex-native") stepFor(trace,{...event,data:{...event.data,step:event.data?.step??1}},state,true);
+    }
     trace.data.events.push(event);
     if (event.type === "request/header") {
       state.header = event.data?.header || null;
@@ -274,19 +302,26 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       if (pendingStep) Object.assign(pendingStep,tracedEffort(state));
     } else if (event.type === "request/context") {
       state.context = event.data || null;
+    } else if (event.type === "request/usage") {
+      state.usage = event.data?.usage || null;
+      const step = stepFor(trace,event,state,false);
+      if (step?.response) step.response.usage = safeValue(state.usage);
     } else if (event.type === "step/start") {
       stepFor(trace,event,state,true);
     } else if (event.type === "assistant/message") {
       const step = stepFor(trace,event,state,true), message = event.data?.message || null;
       step.completedAt = isoTime(event.time);
       step.status = "completed";
-      step.payload = { messages:safeValue(entry.messages || []) };
+      const messages=state.engine === "codex-native"
+        ? trace.data.events.flatMap(item=>item.type === "user/message" ? [{role:"user",content:item.data?.content||[]}] : item.type === "tool/result" ? [item.data?.message].filter(Boolean) : [])
+        : safeValue(entry.messages || []);
+      step.payload = { messages:safeValue(messages) };
       step.outbound = {
         connection:safeValue(state.connection),
         config:safeValue(state.header?.config || state.context),
         system:safeValue(state.header?.system || null),
         tools:safeValue(state.header?.tools || []),
-        messages:safeValue(entry.messages || []),
+        messages:safeValue(messages),
         visionFiles:step.visionAssets.map(image=>image.file),
       };
       step.response = {
@@ -295,7 +330,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
         model:state.connection?.model || message?.source?.model || state.context?.model || null,
         status:200,
         upstream:null,
-        usage:safeValue(event.data?.usage || null),
+        usage:safeValue(event.data?.usage || state.usage || null),
         rawContent:assistantText(message),
         parsed:safeValue(message),
         interrupted:Boolean(event.data?.interrupted),
@@ -311,6 +346,8 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       }
       complete(trace,status,reason,status === "failed" ? reason.error || reason : null);
       state.active = null;
+      state.engine = null;
+      state.usage = null;
       state.unassignedVision.length = 0;
       return;
     }

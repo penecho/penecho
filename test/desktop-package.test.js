@@ -52,7 +52,11 @@ test("desktop settings support CLI providers without exposing API secrets", () =
   assert.equal(JSON.stringify(visible).includes("never-return-this"), false);
   assert.equal(publicSettings({ env:{} }).host, "0.0.0.0");
   assert.equal(publicSettings({ env:{} }).autoDelay, "5");
+  assert.equal(publicSettings({ env:{} }).canvasAgentAutoOpen, true);
+  assert.equal(publicSettings({ env:{ PENECHO_CANVAS_AGENT_AUTO_OPEN:"false" } }).canvasAgentAutoOpen, false);
   assert.equal(normalizeSettings(base({ autoDelay:undefined })).updates.AUTO_AI_DELAY_SECONDS, "5");
+  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:false })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "false");
+  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:undefined })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "true");
   const visibleKimi = publicSettings({ provider:"kimi-cli", env:{ KIMI_CLI_PATH:"kimi", KIMI_CLI_MODEL:"kimi-code/k3" } });
   assert.equal(visibleKimi.provider, "kimi-cli");
   assert.equal(visibleKimi.kimiCliPath, "kimi");
@@ -294,7 +298,10 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(settings, /activeProvider = settings\.provider;[\s\S]*?repairKimiPreset\(\);[\s\S]*?captureApiDraft\(activeProvider\)/);
   assert.match(settings, /provider\(\) === "kimi" && value\("kimiProduct"\) === "platform"/);
   assert.match(settings, /anthropicOption\.disabled = kimiPlatform/);
-  assert.match(forge, /node_modules\/\{sharp,@img\}/);
+  assert.match(html, /name="canvasAgentAutoOpen"[^>]*checked/);
+  assert.match(settings, /canvasAgentAutoOpen:form\.elements\.canvasAgentAutoOpen\.checked/);
+  assert.match(serverMain, /canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN/);
+  assert.match(forge, /node_modules\/\{sharp,@img,@vscode\}/);
   assert.match(forge, /readPackageJson/);
   assert.match(forge, /\^\\\/tools/);
   assert.match(forge, /maker-dmg/);

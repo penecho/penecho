@@ -89,6 +89,8 @@ function normalizeSettings(input, options = {}) {
   const port = number(input.port ?? 3888, "Port", 0, 65535, true);
   const timeout = number(input.timeout ?? 180, "Model timeout", 10, 600, true);
   const autoDelay = number(input.autoDelay ?? 5, "Auto AI delay", 0, 10);
+  const canvasAgentAutoOpen = input.canvasAgentAutoOpen === undefined ? true : input.canvasAgentAutoOpen;
+  if (typeof canvasAgentAutoOpen !== "boolean") throw new Error("Canvas Agent auto-open must be true or false.");
   const traceLimit = number(input.traceLimit ?? 100, "Request record limit", 1, 1000, true);
   const updates = {
     AI_PROVIDER:provider === "kimi" ? "api" : provider,
@@ -97,6 +99,7 @@ function normalizeSettings(input, options = {}) {
     AI_TIMEOUT_SECONDS:String(timeout),
     PENECHO_AI_IMAGE_FORMAT:imageFormat,
     AUTO_AI_DELAY_SECONDS:String(autoDelay),
+    PENECHO_CANVAS_AGENT_AUTO_OPEN:String(canvasAgentAutoOpen),
     HOST:host,
     PORT:String(port),
     PENECHO_REQUEST_TRACE:input.requestTrace === true ? "true" : "false",
@@ -181,6 +184,7 @@ function publicSettings(configuration, options = {}) {
     timeout:String(env.AI_TIMEOUT_SECONDS || "180"),
     imageFormat:String(env.PENECHO_AI_IMAGE_FORMAT || "webp"),
     autoDelay:String(env.AUTO_AI_DELAY_SECONDS || "5"),
+    canvasAgentAutoOpen:!/^(?:0|false|no|off)$/i.test(String(env.PENECHO_CANVAS_AGENT_AUTO_OPEN || "true")),
     host:String(env.HOST || "0.0.0.0"),
     port:String(env.PORT || "3888"),
     requestTrace:/^(?:1|true|yes|on)$/i.test(String(env.PENECHO_REQUEST_TRACE || "false")),

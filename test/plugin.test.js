@@ -563,7 +563,8 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(scopeInlineScript("function parent() {}"), /^\(\(\) => \{/);
   assert.match(host, /setAttribute\("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox"\)/);
   assert.doesNotMatch(host, /allow-same-origin/);
-  assert.match(host, /script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: \$\{rendererUrl\}/);
+  assert.match(host, /\.map\(url => url\.replace\(\/\[\?#\]\.\*\$\/, ""\)\)/);
+  assert.match(host, /script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: \$\{scriptSources\}/);
   assert.match(host, /connect-src https:/);
   assert.match(host, /img-src data: blob: https:/);
   assert.match(host, /querySelectorAll\("script\[src\]"\)[\s\S]*?safeHttpsResource/);
