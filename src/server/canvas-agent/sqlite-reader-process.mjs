@@ -37,9 +37,9 @@ function run(input) {
   const database = new DatabaseSync(input.path, { readOnly:true, allowExtension:false })
   try {
     database.enableLoadExtension(false)
-    database.enableDefensive(true)
+    if (typeof database.enableDefensive === 'function') database.enableDefensive(true)
     database.exec('PRAGMA hard_heap_limit = 33554432; PRAGMA cache_size = -4096; PRAGMA temp_store = MEMORY; PRAGMA query_only = ON; PRAGMA trusted_schema = OFF; PRAGMA busy_timeout = 1000;')
-    database.setAuthorizer(authorizer)
+    if (typeof database.setAuthorizer === 'function') database.setAuthorizer(authorizer)
     const limit = Math.max(1, Math.min(200, Number(input.limit) || 100))
     const boundedQuery = /^(?:select|with)\b/i.test(input.query) ? `SELECT * FROM (${input.query}) AS penecho_read LIMIT ${limit}` : input.query
     const rows = []

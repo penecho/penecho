@@ -54,12 +54,10 @@ function createIdleAndTotalTimeout(controller, idleTimeoutMs, totalTimeoutMs, op
       if (nextRemaining > 0) return scheduleIdle();
       abort("idle", idleLimitMs);
     }, remaining);
-    idleTimer?.unref?.();
   };
 
   scheduleIdle();
   totalTimer = scheduleTimer(() => abort("total", totalLimitMs), totalLimitMs);
-  totalTimer?.unref?.();
 
   return {
     activity() {
