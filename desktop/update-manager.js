@@ -217,7 +217,7 @@ function createUpdateManager(options) {
     onStateChange = typeof options.onStateChange === "function" ? options.onStateChange : () => {},
     platform = options.platform || process.platform,
     arch = options.arch || process.arch,
-    currentVersion = String(app.getVersion()),
+    currentVersion = String(options.currentVersion || app.getVersion()),
     supported = Boolean(expectedAssetName(platform, arch, currentVersion)),
     updateDirectory = options.updateDirectory || path.join(app.getPath?.("temp") || os.tmpdir(), "penecho-updates");
   let checkingMetadata = false,

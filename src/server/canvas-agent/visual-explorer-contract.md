@@ -299,4 +299,4 @@ Keep major HTML elements, CSS declarations, and JavaScript statements on stable 
 
 ## Bounded rendered review
 
-For >~3,000 output tokens or ~one minute, use `deliveryMode:"progressive"`: publish a useful runnable scaffold at final dimensions and regions, then coherent same-`widget.html` patches <=~3,000 tokens, about one visible update/minute. This changes transport only; the result must match the one-shot plan. Stop when complete, stalled, marginal, or told. Hard cap: 20 same-target patches.
+For >~3,000 output tokens or ~one minute, set `items[0].deliveryMode:"progressive"`; top-level `deliveryMode` is invalid. Publish a useful runnable scaffold at final dimensions and regions, then coherent same-`widget.html` patches <=~3,000 tokens, about one visible update/minute. This changes transport only; the result must match the one-shot plan. Stop when complete, stalled, marginal, or told. Hard cap: 20 same-target patches.

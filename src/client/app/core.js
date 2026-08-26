@@ -138,6 +138,12 @@
     settingsKimiCliRecommendation = document.querySelector("#settingsKimiCliRecommendation"),
     settingsCliModel = document.querySelector("#settingsCliModel"),
     settingsCliPath = document.querySelector("#settingsCliPath"),
+    settingsCliStatus = document.querySelector("#settingsCliStatus"),
+    settingsCliStatusTitle = document.querySelector("#settingsCliStatusTitle"),
+    settingsCliStatusDetail = document.querySelector("#settingsCliStatusDetail"),
+    settingsCliCommandRow = document.querySelector("#settingsCliCommandRow"),
+    settingsCliCommand = document.querySelector("#settingsCliCommand"),
+    settingsCliCopyCommand = document.querySelector("#settingsCliCopyCommand"),
     settingsApiFormat = document.querySelector("#settingsApiFormat"),
     settingsApiUrl = document.querySelector("#settingsApiUrl"),
     settingsApiModel = document.querySelector("#settingsApiModel"),
@@ -194,6 +200,10 @@
     "minimax-china-api":Object.freeze({ family:"minimax", region:"china", service:"api", format:"openai", url:"https://api.minimaxi.com/v1", model:"MiniMax-M3" }),
     "minimax-global-coding":Object.freeze({ family:"minimax", region:"global", service:"coding", format:"anthropic", url:"https://api.minimax.io/anthropic", model:"MiniMax-M3" }),
     "minimax-china-coding":Object.freeze({ family:"minimax", region:"china", service:"coding", format:"anthropic", url:"https://api.minimaxi.com/anthropic", model:"MiniMax-M3" }),
+  });
+  const API_DEFAULTS = Object.freeze({
+    openai:Object.freeze({ format:"openai", url:"https://api.openai.com/v1", model:"gpt-5.6-sol" }),
+    anthropic:Object.freeze({ format:"anthropic", url:"https://api.anthropic.com", model:"claude-opus-4-8" }),
   });
   const API_MODELS = Object.freeze({
     openai:Object.freeze(["gpt-5.6-sol"]),
@@ -410,6 +420,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourBack: "Back",
       tourNext: "Next",
       tourDone: "Finish",
+      tourCanvasAgentLauncherTitle: "Open the full Canvas Agent",
+      tourCanvasAgentLauncherBody: "Use the Canvas Agent button below the canvas for multi-step work. It can research, analyze folders and files, search the web, use the current canvas as context, and turn the result into a structured Visual Explorer or edit the canvas directly.",
+      tourCanvasAgentPanelTitle: "Work from the panel at the lower right",
+      tourCanvasAgentPanelBody: "Canvas Agent opens at the lower right. Type or handwrite a request; add files or a read-only folder project, reference a Widget, and enable web search when available. Drag the header to move it, or drag an edge to resize it.",
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
       tourHandTitle: "Move objects with the Hand tool",
@@ -439,9 +453,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Local-first Cloud and Echoes",
-      changelogLocalCloud: "Open Cloud and favorite Canvases locally; add favorite Widgets to your current Canvas.",
-      changelogEchoes: "Publish to Echoes, Echo shared work, and share Widgets or Canvases as images.",
+      changelogTitle: "Visual productivity with Canvas Agent",
+      changelogCanvasAgentResearch: "Turn folders, files, web research, and canvas context into structured visual work from the Canvas Agent below the canvas.",
+      changelogCanvasAgentWorkspace: "Visual Explorer brings research, analysis, planning, and editable on-canvas delivery into one workflow—with less tool switching and rework.",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsApiSection: "AI connection",
@@ -449,7 +463,24 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsProvider: "AI provider",
       settingsCliModel: "Model (optional)",
       settingsCliPath: "Command or path",
-      settingsCliHelp: "Uses the CLI's existing local login. Test the connection for installation and sign-in guidance.",
+      settingsCliHelp: "PenEcho detects the CLI automatically. If one-click installation fails, copy the official command and install it in a terminal.",
+      settingsCliChecking: "Checking CLI…",
+      settingsCliCheckingDetail: "Looking for a PenEcho-managed or system installation.",
+      settingsCliReady: "{provider} is ready",
+      settingsCliReadyDetail: "{source} installation{version} passed the local check.",
+      settingsCliKimiAuthDeferred: "Authentication will be confirmed by the first Kimi request.",
+      settingsCliAuthRequired: "{provider} needs login",
+      settingsCliAuthRequiredDetail: "Run the login command in a terminal, then test the connection again.",
+      settingsCliMissing: "{provider} is not installed",
+      settingsCliMissingDetail: "Use one-click install, or run the official command below yourself.",
+      settingsCliRepairRequired: "{provider} needs repair",
+      settingsCliRepairRequiredDetail: "The CLI was found but could not start. Rerun the official installer below.",
+      settingsCliManaged: "PenEcho-managed",
+      settingsCliSystem: "System",
+      settingsCliCopyCommand: "Copy command",
+      settingsCliCommandCopied: "Command copied.",
+      settingsCliInspectionFailed: "CLI check failed",
+      settingsCliManualFallback: "The official manual installation command remains available above.",
       settingsKimiCodingRecommendationTitle: "Recommended: connect with the Kimi Coding API",
       settingsKimiCodingRecommendationBody: "Create and copy an API key in the Kimi Code Console, then add an API connection using the OpenAI-compatible format and this Base URL.",
       settingsKimiCodingConsole: "Open Kimi Code Console",
@@ -484,6 +515,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsConnectionTestPassed: "Connection ready. The model accepted the image and responded successfully.",
       settingsConnectionTestFailed: "Connection test failed.",
       settingsInstallCli: "Install CLI",
+      settingsRepairCli: "Repair CLI",
       settingsInstallingCli: "Downloading, verifying, and installing the official CLI…",
       settingsCliInstalled: "CLI installed. Testing the connection again…",
       settingsCliInstallFailed: "Automatic CLI installation failed.",
@@ -833,6 +865,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentLocalFile: "Local file",
       canvasAgentCurrentResource: "Current",
       canvasAgentNoProject: "No project",
+      canvasAgentClearResource: "Clear selected resource: {name}",
       canvasAgentBrowserSpace: "No project",
       canvasAgentBrowserSpaceDetail: "Use the current canvas without a project or file",
       canvasAgentUploadEmpty: "Choose a non-empty file.",
@@ -853,12 +886,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentRootSelect: "Use this folder",
       canvasAgentRootTruncated: "Some folders are not shown.",
       canvasAgentRootLoading: "Loading folders…",
+      canvasAgentRootApprovalRequired: "Approval required",
+      canvasAgentRootApprovalTitle: "Approve private folder access?",
+      canvasAgentRootApprovalDetail: "Allow PenEcho to browse “{name}” for this folder-selection session.",
+      canvasAgentRootApprovalReject: "Cancel",
+      canvasAgentRootApprovalAllow: "Allow once",
+      canvasAgentRootPermissionDenied: "The system denied access. Change the folder's system permissions to use it.",
       canvasAgentApproval: "Authorize project command",
       canvasAgentApprovalTitle: "Authorize critical command?",
       canvasAgentApprovalReject: "Reject",
       canvasAgentApprovalAllow: "Allow once",
       canvasAgentHistory: "Canvas Agent history",
-      canvasAgentResize: "Change Canvas Agent height",
       canvasAgentResizeTop: "Resize Canvas Agent from the top edge",
       canvasAgentResizeBottom: "Resize Canvas Agent from the bottom edge",
       canvasAgentResizeLeft: "Resize Canvas Agent from the left edge",
@@ -887,8 +925,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentErrorViewDetails: "View details",
       canvasAgentErrorCode: "Error code",
       canvasAgentErrorMessage: "Original message",
-      canvasAgentEmptyTitle: "Talk directly to your canvas.",
-      canvasAgentEmptyBody: "Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.",
+      canvasAgentEmptyTitle: "Research, analyze, and create—all in one place.",
+      canvasAgentEmptyBody: "Analyze folders and files—including Excel, PowerPoint, PDF, and Word—and search the web. Use your current canvas as context for rich visual analyses and plans, or update it directly.",
       canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
       canvasAgentPlaceholder: "Ask Canvas Agent…",
       canvasAgentMessage: "Message Canvas Agent",
@@ -906,12 +944,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptFocusPlan: "Plan",
       canvasAgentPromptFocusExplain: "Explain",
       canvasAgentPromptFocusArchitecture: "Architecture",
+      canvasAgentPromptFocusSequence: "Sequence",
       canvasAgentPromptFocusEnhance: "Enhance",
       canvasAgentPromptFocusLayer: "Layer",
       canvasAgentPromptFocusPublish: "Publish",
       canvasAgentPromptFile: "Explain the current file's purpose, structure, key relationships, and details with visuals. If there is no file, explain the canvas instead.",
       canvasAgentPromptArchitecture: "Map the current project's core modules, dependencies, data flow, and key directories.",
       canvasAgentPromptSimpleDiagram: "Make a separate, simple diagram of the core concepts, relationships, and essential labels.",
+      canvasAgentPromptSequenceDiagramSource: "Convert the current diagram into a sequence diagram and return editable diagram source code, such as Mermaid or PlantUML—not HTML.",
       canvasAgentPromptPpt: "Turn the current view into a presentation-ready layout and send the final image in chat.",
       canvasAgentPromptHandwriting: "Keep the current handwriting completely unchanged—do not edit, erase, or move it. Add a transparent explanatory layer over it; overlap is acceptable only if the original strokes remain clearly visible, and use annotations, connectors, links, graphics, or motion where appropriate to make the notes more vivid and intuitive.",
       canvasAgentPromptExcel: "Chart the attached spreadsheet's key metrics, trends, anomalies, and conclusions.",
@@ -1438,7 +1478,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "1.0.0";
+  const CHANGELOG_VERSION = "1.1.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -1451,6 +1491,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     { id: "core-fullscreen-v1", targets: ["#fullscreenBtn"], titleKey: "tourFullscreenTitle", bodyKey: "tourFullscreenBody", placement: "bottom", radius: 7 },
     { id: "cloud-share-canvas-v1", targets: ["#shareCanvasBtn"], titleKey: "tourShareCanvasTitle", bodyKey: "tourShareCanvasBody", placement: "bottom", radius: 7 },
     { id: "cloud-workspace-v1", targets: ["#cloudAccountBtn"], titleKey: "tourCloudTitle", bodyKey: "tourCloudBody", placement: "bottom", radius: 8 },
+    { id: "canvas-agent-launcher-v1", targets: ["#canvasAgentControl"], titleKey: "tourCanvasAgentLauncherTitle", bodyKey: "tourCanvasAgentLauncherBody", placement: "top", radius: 9, padding: 4 },
+    { id: "canvas-agent-panel-v1", targets: ["#canvasAgentPanel"], titleKey: "tourCanvasAgentPanelTitle", bodyKey: "tourCanvasAgentPanelBody", placement: "left", radius: 18, padding: 4, preview: "canvas-agent-panel" },
     { id: "core-manual-ai-v1", targets: ["#aiOrb"], titleKey: "tourManualAITitle", bodyKey: "tourManualAIBody", placement: "left", radius: 50 },
     { id: "core-status-v1", targets: ["#aiStatusArea"], titleKey: "tourStatusTitle", bodyKey: "tourStatusBody", placement: "bottom", radius: 999 },
     { id: "core-navigation-v1", targets: ["#viewport"], titleKey: "tourCanvasTitle", bodyKey: "tourCanvasBody", placement: "center", radius: 10, padding: 5 },
@@ -1473,6 +1515,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     targets: [],
     shownIds: new Set(),
     autoChecked: false,
+    canvasAgentOpenedForTour: false,
   };
   const changelog = {
     active: false,
@@ -1701,8 +1744,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function featureTourTargetRect(step, elements = featureTourElements(step)) {
     return TOUR.unionRects(elements.map((element) => element.getBoundingClientRect()));
   }
+  function featureTourStepAvailable(step) {
+    if (step?.preview === "canvas-agent-panel") {
+      const panel = document.querySelector("#canvasAgentPanel"),
+        toggle = document.querySelector("#canvasAgentToggle");
+      return Boolean(panel?.isConnected && featureTourTargetRect({ targets:["#canvasAgentToggle"] }, toggle ? [toggle] : []));
+    }
+    return Boolean(featureTourTargetRect(step));
+  }
   function availableFeatureTourSteps(steps) {
-    return (Array.isArray(steps) ? steps : []).filter((step) => featureTourTargetRect(step));
+    return (Array.isArray(steps) ? steps : []).filter(featureTourStepAvailable);
+  }
+  function syncFeatureTourPreview(step) {
+    const showCanvasAgent = step?.preview === "canvas-agent-panel";
+    if (showCanvasAgent && canvasAgentPanel.hidden) {
+      featureTour.canvasAgentOpenedForTour = true;
+      openCanvasAgent({ focus:false, connect:false, animate:false });
+    } else if (!showCanvasAgent && featureTour.canvasAgentOpenedForTour) {
+      featureTour.canvasAgentOpenedForTour = false;
+      if (!canvasAgentPanel.hidden) closeCanvasAgent({ focus:false, animate:false });
+    }
   }
   function featureTourTargetNeedsScroll(rect) {
     const viewport = featureTourViewport(),
@@ -1817,6 +1878,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     let nextIndex = index,
       elements = [];
     while (nextIndex >= 0 && nextIndex < featureTour.steps.length) {
+      syncFeatureTourPreview(featureTour.steps[nextIndex]);
       elements = featureTourElements(featureTour.steps[nextIndex]);
       if (featureTourTargetRect(featureTour.steps[nextIndex], elements)) break;
       nextIndex += direction;
@@ -1882,6 +1944,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     featureTour.targets = [];
     tourLayer.hidden = true;
     tourLayer.setAttribute("aria-hidden", "true");
+    syncFeatureTourPreview(null);
     tourMain.inert = false;
     document.body.classList.remove("tour-open");
     runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
@@ -2047,7 +2110,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
-  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, deepSeekSearchProvider:"deepseek-official", hasDeepSeekSearchApiKey:false, hasTavilyApiKey:false, searchTestResults:null, searchTestGeneration:0, searchTestBusy:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
+  const settings = { open:false, restoreFocus:null, requestTrace:false, cli:{}, cliStatuses:{}, cliInspectionGeneration:0, currentProvider:"api", configurationMode:"", configurationRestoreFocus:null, connections:[], activeConnectionId:"default", connectionLimit:10, editingConnectionId:null, deepSeekSearchProvider:"deepseek-official", hasDeepSeekSearchApiKey:false, hasTavilyApiKey:false, searchTestResults:null, searchTestGeneration:0, searchTestBusy:false, fetchedApiModels:[], fetchingApiModels:false, connectionActionBusy:false };
   function syncLocalConnectionSelection() {
     const selected = selectedAiConnectionId(), activeId = settings.connections.some(connection => connection.id === selected) ? selected : "default";
     if (activeId !== selected) localStorage.setItem(AI_CONNECTION_STORAGE_KEY, activeId);
@@ -2113,6 +2176,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const values = settings.cli[provider] || {};
       settingsCliModel.value = values.model || "";
       settingsCliPath.value = values.path || ({ "kimi-cli":"kimi", "codex-cli":"codex", "claude-cli":"claude" }[provider] || "");
+      void inspectCanvasCli(provider);
+    } else if (settingsCliStatus) {
+      settingsCliStatus.hidden = true;
     }
     updateApiPresetFields(false);
   }
@@ -2267,10 +2333,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
     if (resetModel) clearFetchedApiModels();
     updateApiModelChoices();
-    const preset = selectedApiPreset();
-    if (!applyDefaults || !preset) return;
-    settingsApiUrl.value = preset.url;
-    if (resetModel || !settingsApiModel.value.trim()) settingsApiModel.value = preset.model;
+    const defaults = selectedApiPreset() || API_DEFAULTS[family];
+    if (!applyDefaults || !defaults) return;
+    settingsApiUrl.value = defaults.url;
+    if (resetModel || !settingsApiModel.value.trim()) settingsApiModel.value = defaults.model;
   }
   function fillApiEditor(connection = {}) {
     const matched = apiPresetForConnection(connection), preset = matched?.[1] || null;
@@ -2280,7 +2346,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsApiRegion.value = preset?.region || "global";
     settingsApiService.value = preset?.service || "api";
     updateApiPresetFields(false);
-    settingsApiUrl.value = connection.apiUrl || (connection.apiFormat === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1");
+    settingsApiUrl.value = connection.apiUrl || API_DEFAULTS[connection.apiFormat === "anthropic" ? "anthropic" : "openai"].url;
     settingsApiModel.value = connection.apiModel || "";
   }
   function connectionProviderLabel(connection) {
@@ -2360,7 +2426,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const provider = connection?.provider || "api";
     settingsProvider.value = provider;
     settings.currentProvider = provider;
-    fillApiEditor(connection || { apiFormat:"openai", apiUrl:"https://api.openai.com/v1", apiModel:"gpt-5.6-sol" });
+    fillApiEditor(connection || { apiFormat:API_DEFAULTS.openai.format, apiUrl:API_DEFAULTS.openai.url, apiModel:API_DEFAULTS.openai.model });
     settingsApiKey.value = "";
     settingsApiSaved.dataset.saved = String(connection?.hasApiKey === true);
     settings.cli[provider] = { model:connection?.cliModel || "", path:connection?.cliPath || provider.replace("-cli", "") };
@@ -2413,11 +2479,85 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (settingsTestSearch) settingsTestSearch.disabled = busy;
     settingsSaveButton.disabled = busy;
     settingsInstallCli.disabled = busy;
+    if (settingsCliCopyCommand) settingsCliCopyCommand.disabled = busy;
     updateConnectionModelFetchState();
   }
-  function showCliInstaller(provider, visible) {
+  function showCliInstaller(provider, visible, repair = false) {
     settingsInstallCli.hidden = !visible || !window.penechoDesktop?.installCli || !["kimi-cli", "codex-cli", "claude-cli"].includes(provider);
     settingsInstallCli.dataset.provider = settingsInstallCli.hidden ? "" : provider;
+    settingsInstallCli.textContent = t(repair ? "settingsRepairCli" : "settingsInstallCli");
+  }
+  function cliStatusLabel(status) {
+    return status?.label || ({ "kimi-cli":"Kimi Code", "codex-cli":"Codex CLI", "claude-cli":"Claude Code" }[status?.provider] || "CLI");
+  }
+  function showCliCommand(command) {
+    settingsCliCommand.textContent = command || "";
+    settingsCliCommandRow.hidden = !command;
+  }
+  function renderCanvasCliStatus(status) {
+    if (!settingsCliStatus || !status?.provider || settingsProvider.value !== status.provider) return;
+    const label = cliStatusLabel(status), version = status.version ? ` · ${status.version}` : "";
+    settings.cliStatuses[status.provider] = status;
+    settingsCliStatus.hidden = false;
+    settingsCliStatus.dataset.state = status.state || "repair_required";
+    if (status.executable) {
+      settingsCliPath.value = status.executable;
+      settings.cli[status.provider] = { model:settingsCliModel.value, path:status.executable };
+    }
+    if (status.state === "ready") {
+      settingsCliStatusTitle.textContent = t("settingsCliReady").replace("{provider}", label);
+      settingsCliStatusDetail.textContent = t("settingsCliReadyDetail")
+        .replace("{source}", t(status.source === "managed" ? "settingsCliManaged" : "settingsCliSystem"))
+        .replace("{version}", version);
+      if (status.authenticationDeferred) settingsCliStatusDetail.textContent += ` ${t("settingsCliKimiAuthDeferred")}`;
+      showCliCommand("");
+      showCliInstaller("", false);
+    } else if (status.state === "auth_required") {
+      settingsCliStatusTitle.textContent = t("settingsCliAuthRequired").replace("{provider}", label);
+      settingsCliStatusDetail.textContent = t("settingsCliAuthRequiredDetail");
+      showCliCommand(status.loginCommand);
+      showCliInstaller("", false);
+    } else if (status.state === "missing") {
+      settingsCliStatusTitle.textContent = t("settingsCliMissing").replace("{provider}", label);
+      settingsCliStatusDetail.textContent = t("settingsCliMissingDetail");
+      showCliCommand(status.installCommand);
+      showCliInstaller(status.provider, true);
+    } else if (status.state === "checking") {
+      settingsCliStatusTitle.textContent = t("settingsCliChecking");
+      settingsCliStatusDetail.textContent = t("settingsCliCheckingDetail");
+      showCliCommand("");
+      showCliInstaller("", false);
+    } else {
+      settingsCliStatusTitle.textContent = t("settingsCliRepairRequired").replace("{provider}", label);
+      settingsCliStatusDetail.textContent = t("settingsCliRepairRequiredDetail");
+      showCliCommand(status.installCommand);
+      showCliInstaller(status.provider, true, true);
+    }
+  }
+  async function inspectCanvasCli(provider) {
+    if (!provider?.endsWith("-cli")) return;
+    const generation = ++settings.cliInspectionGeneration;
+    renderCanvasCliStatus({ provider, state:"checking" });
+    try {
+      const response = await fetch("/api/settings/connections/inspect-cli", {
+        method:"POST", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }), body:JSON.stringify({ provider }),
+      }), body = await response.json();
+      if (!response.ok) throw new Error(body?.error || t("settingsCliInspectionFailed"));
+      if (generation !== settings.cliInspectionGeneration || settingsProvider.value !== provider) return;
+      renderCanvasCliStatus(body.status);
+    } catch (error) {
+      if (generation !== settings.cliInspectionGeneration || settingsProvider.value !== provider) return;
+      settingsCliStatus.dataset.state = "repair_required";
+      settingsCliStatusTitle.textContent = t("settingsCliInspectionFailed");
+      settingsCliStatusDetail.textContent = error?.message || t("settingsConnectionTestFailed");
+      showCliInstaller("", false);
+    }
+  }
+  async function copyCanvasCliCommand() {
+    const command = settingsCliCommand?.textContent || "";
+    if (!command) return;
+    const copied = await writeClipboardText(command);
+    setSettingsStatus(t(copied ? "settingsCliCommandCopied" : "copyFailed"), copied ? "success" : "error");
   }
   async function testCanvasConnection() {
     if (!canvasSettingsForm || !canvasSettingsForm.reportValidity()) return;
@@ -2430,7 +2570,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         body:JSON.stringify({ id:settings.editingConnectionId, connection }),
       }), body = await response.json();
       if (!response.ok) {
-        showCliInstaller(body?.provider || connection.provider, body?.installable === true);
+        const failedProvider = body?.provider || connection.provider;
+        if (["missing", "auth_required"].includes(body?.cliState) && failedProvider?.endsWith("-cli")) {
+          const previous = settings.cliStatuses[failedProvider] || {}, status = { ...previous, provider:failedProvider, state:body.cliState, loginCommand:body.loginCommand || previous.loginCommand };
+          if (body.cliState === "missing" && !status.installCommand) void inspectCanvasCli(failedProvider);
+          else renderCanvasCliStatus(status);
+        } else showCliInstaller(failedProvider, body?.installable === true);
         throw new Error([body?.error, body?.guidance].filter(Boolean).join(" ") || t("settingsConnectionTestFailed"));
       }
       setSettingsStatus(body?.message || t("settingsConnectionTestPassed"), "success");
@@ -2490,10 +2635,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (!result?.ok) throw new Error(result?.error || t("settingsCliInstallFailed"));
       settingsCliPath.value = result.executable;
       settings.cli[provider] = { model:settingsCliModel.value, path:result.executable };
-      showCliInstaller("", false);
+      if (result.status) renderCanvasCliStatus(result.status);
+      else await inspectCanvasCli(provider);
+      if ((result.status || settings.cliStatuses[provider])?.state === "auth_required") {
+        setSettingsStatus(t("settingsCliAuthRequiredDetail"));
+        setConnectionTestBusy(false);
+        return;
+      }
       setSettingsStatus(t("settingsCliInstalled"), "success");
     } catch (error) {
-      setSettingsStatus(error?.message || t("settingsCliInstallFailed"), "error");
+      setSettingsStatus(`${error?.message || t("settingsCliInstallFailed")} ${t("settingsCliManualFallback")}`, "error");
       setConnectionTestBusy(false);
       return;
     }

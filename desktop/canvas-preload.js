@@ -38,17 +38,17 @@ function element(tag, className, value) {
   return node;
 }
 
-function installWindowsBanner() {
-  if (process.platform !== "win32" || !document.body) return;
+function installDesktopUpdatePrompt() {
+  if (!["darwin", "win32"].includes(process.platform) || !document.body) return;
   const link = element("link");
   link.rel = "stylesheet";
   link.href = "/desktop-update.css";
   document.head.append(link);
 
-  const banner = element("aside", "desktop-update-banner");
-  banner.setAttribute("role", "status");
-  banner.setAttribute("aria-live", "polite");
-  banner.hidden = true;
+  const prompt = element("aside", "desktop-update-prompt");
+  prompt.setAttribute("role", "status");
+  prompt.setAttribute("aria-live", "polite");
+  prompt.hidden = true;
 
   const row = element("div", "desktop-update-row"),
     copy = element("div", "desktop-update-copy"),
@@ -56,30 +56,69 @@ function installWindowsBanner() {
     detail = element("span", "desktop-update-detail"),
     progress = element("progress", "desktop-update-progress"),
     actions = element("div", "desktop-update-actions"),
-    notesButton = element("button", "desktop-update-secondary", "What's new"),
     primaryButton = element("button", "desktop-update-primary"),
-    closeButton = element("button", "desktop-update-close", "\u00d7"),
-    notes = element("div", "desktop-update-notes");
+    closeButton = element("button", "desktop-update-close", "\u00d7");
 
   progress.hidden = true;
-  notes.hidden = true;
-  notesButton.type = primaryButton.type = closeButton.type = "button";
-  notesButton.setAttribute("aria-expanded", "false");
-  closeButton.setAttribute("aria-label", "Dismiss update notification until next launch");
-  closeButton.title = "Dismiss until next launch";
+  primaryButton.type = closeButton.type = "button";
   copy.append(title, detail, progress);
-  actions.append(notesButton, primaryButton, closeButton);
+  actions.append(primaryButton, closeButton);
   row.append(copy, actions);
-  banner.append(row, notes);
-  document.body.prepend(banner);
+  prompt.append(row);
+  const footer = document.querySelector("main > footer");
+  (footer || document.body).append(prompt);
 
-  let currentState = null;
-  function toggleNotes(force) {
-    const expanded = force ?? notes.hidden;
-    notes.hidden = !expanded;
-    notesButton.setAttribute("aria-expanded", String(expanded));
+  let currentState = null, language = "en";
+  const translations = Object.freeze({
+    en:{
+      dismiss:"Dismiss update notification until next launch",
+      newVersion:version => `New${version} \u00b7 Upgrade`,
+      downloading:version => `Downloading PenEcho${version}...`,
+      keepWorking:"You can keep working.",
+      downloaded:progressValue => `${progressValue}% downloaded`,
+      ready:version => `PenEcho${version} is ready`,
+      readyDetail:"Install the update and restart PenEcho.",
+      install:"Install & restart",
+      installing:version => `Installing PenEcho${version}...`,
+      installingDetail:"PenEcho will restart when installation finishes.",
+      checking:"Checking for PenEcho updates...",
+      current:version => `PenEcho v${version} is up to date`,
+      failed:"PenEcho update failed",
+      tryLater:"Try again later.",
+      retryInstall:"Retry install",
+      retry:"Retry",
+    },
+    zh:{
+      dismiss:"本次启动不再提示更新",
+      newVersion:version => `新版本${version} \u00b7 升级`,
+      downloading:version => `正在下载 PenEcho${version}...`,
+      keepWorking:"下载期间可以继续使用。",
+      downloaded:progressValue => `已下载 ${progressValue}%`,
+      ready:version => `PenEcho${version} 已准备好`,
+      readyDetail:"安装更新并重启 PenEcho。",
+      install:"安装并重启",
+      installing:version => `正在安装 PenEcho${version}...`,
+      installingDetail:"安装完成后 PenEcho 将重新启动。",
+      checking:"正在检查 PenEcho 更新...",
+      current:version => `PenEcho v${version} 已是最新版本`,
+      failed:"PenEcho 更新失败",
+      tryLater:"请稍后重试。",
+      retryInstall:"重试安装",
+      retry:"重试",
+    },
+  });
+
+  function detectLanguage(event) {
+    const requested = event?.detail?.language || localStorage.getItem("penecho-language") || document.documentElement.lang;
+    return String(requested || "").toLowerCase().startsWith("zh") ? "zh" : "en";
   }
-  notesButton.addEventListener("click", () => toggleNotes());
+  function setLanguage(event) {
+    language = detectLanguage(event);
+    const words = translations[language];
+    closeButton.setAttribute("aria-label", words.dismiss);
+    closeButton.title = words.dismiss;
+    if (currentState) render(currentState);
+  }
   closeButton.addEventListener("click", () => void updateApi.dismiss());
   primaryButton.addEventListener("click", () => {
     if (currentState?.status === "available") void updateApi.download();
@@ -90,58 +129,54 @@ function installWindowsBanner() {
   function render(state) {
     currentState = state;
     const visible = Boolean(state?.visible);
-    banner.hidden = !visible;
-    document.body.classList.toggle("penecho-desktop-update-visible", visible);
+    prompt.hidden = !visible;
+    footer?.classList.toggle("penecho-desktop-update-visible", visible);
     if (!visible) return;
 
-    const version = state.version ? ` v${state.version}` : "";
-    notes.textContent = state.notes || "Bug fixes and improvements.";
-    notesButton.hidden = !state.notes || !["available", "ready"].includes(state.status);
+    const words = translations[language], version = state.version ? ` v${state.version}` : "";
+    prompt.classList.toggle("is-available", state.status === "available");
+    copy.hidden = state.status === "available";
     primaryButton.hidden = false;
     closeButton.hidden = state.status === "downloading";
     detail.textContent = "";
     progress.hidden = true;
 
     if (state.status === "available") {
-      title.textContent = `PenEcho${version} is available`;
-      detail.textContent = `Current version: v${state.currentVersion}`;
-      primaryButton.textContent = "Upgrade";
+      primaryButton.textContent = words.newVersion(version);
     } else if (state.status === "downloading") {
-      title.textContent = `Downloading PenEcho${version}...`;
-      detail.textContent = state.progress === null ? "You can keep working." : `${Math.round(state.progress)}% downloaded`;
+      title.textContent = words.downloading(version);
+      detail.textContent = state.progress === null ? words.keepWorking : words.downloaded(Math.round(state.progress));
       progress.hidden = false;
       if (state.progress === null) progress.removeAttribute("value");
       else progress.value = state.progress;
       progress.max = 100;
       primaryButton.hidden = true;
-      toggleNotes(false);
     } else if (state.status === "ready") {
-      title.textContent = `PenEcho${version} is ready`;
-      detail.textContent = "Install the downloaded update and restart PenEcho.";
-      primaryButton.textContent = "Install";
+      title.textContent = words.ready(version);
+      detail.textContent = words.readyDetail;
+      primaryButton.textContent = words.install;
     } else if (state.status === "installing") {
-      title.textContent = `Installing PenEcho${version}...`;
-      detail.textContent = "PenEcho will restart when installation finishes.";
+      title.textContent = words.installing(version);
+      detail.textContent = words.installingDetail;
       primaryButton.hidden = true;
       closeButton.hidden = true;
     } else if (state.status === "checking") {
-      title.textContent = "Checking for PenEcho updates...";
+      title.textContent = words.checking;
       primaryButton.hidden = true;
-      notesButton.hidden = true;
     } else if (state.status === "up-to-date") {
-      title.textContent = `PenEcho v${state.currentVersion} is up to date`;
+      title.textContent = words.current(state.currentVersion);
       primaryButton.hidden = true;
-      notesButton.hidden = true;
     } else {
-      title.textContent = "PenEcho update failed";
-      detail.textContent = state.error || "Try again later.";
-      primaryButton.textContent = state.ready ? "Retry install" : "Retry";
-      notesButton.hidden = true;
+      title.textContent = words.failed;
+      detail.textContent = state.error || words.tryLater;
+      primaryButton.textContent = state.ready ? words.retryInstall : words.retry;
     }
   }
 
+  setLanguage();
+  window.addEventListener("penecho:languagechange", setLanguage);
   updateApi.onStateChange(render);
   void updateApi.getState().then(render);
 }
 
-window.addEventListener("DOMContentLoaded", installWindowsBanner, { once:true });
+window.addEventListener("DOMContentLoaded", installDesktopUpdatePrompt, { once:true });

@@ -73,6 +73,23 @@ const CODEX_STRICT_CONFIG = Object.freeze([
   'feedback.enabled=false',
   'history.persistence="none"',
 ])
+const CODEX_NATIVE_TURN_ACTIVITY_NOTIFICATIONS = new Set([
+  'item/started',
+  'item/reasoning/summaryPartAdded',
+  'item/reasoning/summaryTextDelta',
+  'item/reasoning/textDelta',
+  'item/plan/delta',
+  'item/commandExecution/outputDelta',
+  'item/commandExecution/terminalInteraction',
+  'item/fileChange/outputDelta',
+  'item/fileChange/patchUpdated',
+  'item/mcpToolCall/progress',
+  'item/autoApprovalReview/started',
+  'item/autoApprovalReview/completed',
+  'autoApprovalReview/strictReviewRequired',
+  'turn/plan/updated',
+  'turn/diff/updated',
+])
 
 function hash(value) {
   return createHash('sha256').update(String(value)).digest('hex')
@@ -1194,7 +1211,7 @@ export class CodexNativeHost {
     if (method === 'thread/tokenUsage/updated') {
       const turnId = String(params?.turnId || '')
       if (!active) return
-      if (!active.turnId || !turnId || turnId !== active.turnId) {
+      if (!params?.threadId || String(params.threadId) !== String(session.threadId) || !active.turnId || !turnId || turnId !== active.turnId) {
         this.invalidateSession(session, new Error('Codex app-server emitted token usage for another turn.')).catch(() => {})
         return
       }
@@ -1205,7 +1222,7 @@ export class CodexNativeHost {
     }
     if (method === 'thread/compacted' || (method === 'item/completed' && String(params.item?.type || '') === 'contextCompaction')) {
       const turnId = String(params.turnId || '')
-      if (!active || !turnId || turnId !== active.turnId) {
+      if (!active || !params?.threadId || String(params.threadId) !== String(session.threadId) || !turnId || turnId !== active.turnId) {
         this.invalidateSession(session, new Error('Codex app-server emitted compaction for another turn.')).catch(() => {})
         return
       }
@@ -1217,7 +1234,7 @@ export class CodexNativeHost {
     }
     if (method === 'turn/started') {
       const startedTurnId = String(params.turn?.id || '')
-      if (!active || !startedTurnId || (active.turnId && active.turnId !== startedTurnId)) {
+      if (!active || !params?.threadId || String(params.threadId) !== String(session.threadId) || !startedTurnId || (active.turnId && active.turnId !== startedTurnId)) {
         this.invalidateSession(session, new Error('Codex app-server emitted a mismatched turn id.')).catch(() => {})
         return
       }
@@ -1228,11 +1245,12 @@ export class CodexNativeHost {
     if (!active) return
     if (!active.turnId) return
     if ((method === 'rawResponseItem/completed' || method === 'rawResponse/completed')
-      && (!params?.turnId || String(params.turnId) !== active.turnId)) {
+      && (!params?.threadId || String(params.threadId) !== String(session.threadId) || !params?.turnId || String(params.turnId) !== active.turnId)) {
       this.invalidateSession(session, new Error('Codex app-server emitted a raw response event for another turn.')).catch(() => {})
       return
     }
     if (method === 'rawResponseItem/completed') {
+      active.timeout?.activity()
       const item=params?.item,type=String(item?.type||'')
       if(type==='function_call'||type==='custom_tool_call'){
         if(!active.rawDecisionCalls.length)this.expireUncalledNativeToolBoundaries(session,active)
@@ -1247,8 +1265,16 @@ export class CodexNativeHost {
       this.sealNativeToolDecision(session,active,params)
       return
     }
-    if (method.startsWith('item/') && (!params?.turnId || String(params.turnId) !== active.turnId)) {
-      this.invalidateSession(session, new Error('Codex app-server emitted an item for another turn.')).catch(() => {})
+    const itemNotification = method.startsWith('item/'), turnActivity = CODEX_NATIVE_TURN_ACTIVITY_NOTIFICATIONS.has(method)
+    if ((itemNotification || turnActivity) && (!params?.threadId || String(params.threadId) !== String(session.threadId)
+      || !params?.turnId || String(params.turnId) !== active.turnId)) {
+      this.invalidateSession(session, new Error(itemNotification
+        ? 'Codex app-server emitted an item for another turn.'
+        : 'Codex app-server emitted progress for another turn.')).catch(() => {})
+      return
+    }
+    if (turnActivity) {
+      active.timeout?.activity()
       return
     }
     if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') {
@@ -1271,7 +1297,7 @@ export class CodexNativeHost {
     }
     if (method === 'turn/completed') {
       const turnId = String(params.turn?.id || '')
-      if (!turnId || turnId !== active.turnId) {
+      if (!params?.threadId || String(params.threadId) !== String(session.threadId) || !turnId || turnId !== active.turnId) {
         this.invalidateSession(session, new Error('Codex app-server completed another turn.')).catch(() => {})
         return
       }

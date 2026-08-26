@@ -18,6 +18,37 @@ async function waitFor(predicate, timeoutMs = 3000) {
   throw new Error("Timed out waiting for Canvas Agent diagnostic test state.");
 }
 
+test("Canvas Agent request trace records provider cache ratios for API usage",t=>{
+  const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-api-usage-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),
+    tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),conversationId="api-usage-conversation",
+    connection={provider:"api",format:"openai",model:"qwen-test",effort:"max"},event=(type,data,time)=>({type,data,time});
+  t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
+  tracer({phase:"start",conversationId,connectionId:"api-usage",connection});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("turn/start",{turn:1},"2026-08-26T00:00:00.000Z")});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("step/start",{turn:1,step:1},"2026-08-26T00:00:01.000Z")});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("assistant/message",{turn:1,step:1,usage:{inputTokens:25,outputTokens:9,cacheReadTokens:75},message:{role:"assistant",source:{provider:"penecho-api",model:"qwen-test"},content:[{type:"text",text:"First response"}]}},"2026-08-26T00:00:02.000Z"),messages:[]});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("step/end",{turn:1,step:1},"2026-08-26T00:00:03.000Z")});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("step/start",{turn:1,step:2},"2026-08-26T00:00:04.000Z")});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("assistant/message",{turn:1,step:2,usage:{inputTokens:10,outputTokens:2,cacheWriteTokens:5},message:{role:"assistant",source:{provider:"penecho-api",model:"qwen-test"},content:[{type:"text",text:"Second response"}]}},"2026-08-26T00:00:05.000Z"),messages:[]});
+  tracer({phase:"event",conversationId,connectionId:"api-usage",event:event("turn/end",{turn:1,reason:{kind:"completed"}},"2026-08-26T00:00:06.000Z")});
+  const directory=fs.readdirSync(requestTraceDirectory,{withFileTypes:true}).find(entry=>entry.isDirectory()),trace=JSON.parse(fs.readFileSync(path.join(requestTraceDirectory,directory.name,"trace.json"),"utf8"));
+  assert.deepEqual(trace.steps.map(step=>step.response.usage.cacheReadRatio),[.75,0]);
+  assert.deepEqual(trace.steps.map(step=>step.response.usage.promptTokens),[100,15]);
+  assert.deepEqual(trace.apiUsage,{
+    calls:2,
+    cacheHitCalls:1,
+    inputTokens:35,
+    cacheReadTokens:75,
+    cacheWriteTokens:5,
+    promptTokens:115,
+    outputTokens:11,
+    reasoningTokens:0,
+    cacheReadRatio:.652174,
+    cacheWriteRatio:.043478,
+    cacheHitRatio:.5,
+  });
+});
+
 test("Canvas Agent request trace retains redacted CLI provider diagnostics",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-cli-diagnostic-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),

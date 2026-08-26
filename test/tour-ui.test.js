@@ -4,9 +4,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const root = path.join(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
+const functionSource = (source, name) => {
+  const start = source.indexOf(`function ${name}(`), body = source.indexOf("{", start);
+  assert.notEqual(start, -1, `missing function ${name}`);
+  let depth = 0;
+  for (let index = body; index < source.length; index++) {
+    if (source[index] === "{") depth++;
+    else if (source[index] === "}" && --depth === 0) return source.slice(start, index + 1);
+  }
+  assert.fail(`unterminated function ${name}`);
+};
 
 test("feature tour exposes an accessible dialog and replay entry point", () => {
   const html = read("public/index.html"),
@@ -33,13 +44,42 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-fullscreen-v1",
       "cloud-share-canvas-v1",
       "cloud-workspace-v1",
+      "canvas-agent-launcher-v1",
+      "canvas-agent-panel-v1",
       "core-manual-ai-v1",
       "core-status-v1",
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#craftsButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#craftsButton", "#handToolBtn", "#theme", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentControl", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(app, /canvas-agent-panel-v1[^\n]*preview: "canvas-agent-panel"/);
+  assert.match(app, /openCanvasAgent\(\{ focus:false, connect:false, animate:false \}\)/);
+  assert.match(app, /closeCanvasAgent\(\{ focus:false, animate:false \}\)/);
+});
+
+test("Canvas Agent tour preview is connection-free and restores only tour-opened panels", () => {
+  const app = read("public/app.js"), panel = { hidden:true }, featureTour = { canvasAgentOpenedForTour:false }, calls = [],
+    sync = vm.runInNewContext(`(()=>{${functionSource(app, "syncFeatureTourPreview")}return syncFeatureTourPreview;})()`, {
+      featureTour,
+      canvasAgentPanel:panel,
+      openCanvasAgent(options) { calls.push(["open", options]); panel.hidden = false; },
+      closeCanvasAgent(options) { calls.push(["close", options]); panel.hidden = true; },
+    });
+  sync({ preview:"canvas-agent-panel" });
+  assert.equal(JSON.stringify(calls), JSON.stringify([["open", { focus:false, connect:false, animate:false }]]));
+  assert.equal(featureTour.canvasAgentOpenedForTour, true);
+  sync(null);
+  assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["close", { focus:false, animate:false }]));
+  assert.equal(featureTour.canvasAgentOpenedForTour, false);
+
+  calls.length = 0;
+  panel.hidden = false;
+  sync({ preview:"canvas-agent-panel" });
+  sync(null);
+  assert.deepEqual(calls, [], "a panel that was already open must remain open");
+  assert.equal(panel.hidden, false);
+  assert.match(app, /if\(connect\)\{[\s\S]*?canvasAgentSyncState\(\);[\s\S]*?canvasAgentConnect\(\)[\s\S]*?\}else canvasAgentSyncSelection\(\)/);
 });
 
 test("feature tour persists seen ids, supports replay, and repositions accessibly", () => {
@@ -84,7 +124,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("1.0.0 changelog is a concise one-page dialog shown once after the feature tour", () => {
+test("1.1.0 changelog introduces Canvas Agent visual productivity in a concise one-page dialog", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -95,10 +135,10 @@ test("1.0.0 changelog is a concise one-page dialog shown once after the feature 
   assert.doesNotMatch(layer, /aria-describedby=/);
   for (const id of ["changelogClose", "changelogTitle"]) assert.match(layer, new RegExp(`id="${id}"`));
   for (const id of ["changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.doesNotMatch(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />1\.0\.0</);
+  assert.match(layer, />1\.1\.0</);
   assert.doesNotMatch(layer, /class="changelog-demo"|class="changelog-release changelog-earlier"/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "1\.0\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "1\.1\.0"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer"\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
@@ -106,7 +146,7 @@ test("1.0.0 changelog is a concise one-page dialog shown once after the feature 
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(620px,[^}]*max-height:/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogLocalCloud", "changelogEchoes"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogCanvasAgentResearch", "changelogCanvasAgentWorkspace"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
@@ -115,10 +155,10 @@ test("1.0.0 changelog is a concise one-page dialog shown once after the feature 
     assert.doesNotMatch(zh, new RegExp(`${key}:`));
   }
   assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 2);
-  assert.match(app, /changelogLocalCloud:[^\n]*Open Cloud[^\n]*current Canvas/);
-  assert.match(app, /changelogEchoes:[^\n]*Publish to Echoes[^\n]*as images/);
-  assert.match(zh, /changelogLocalCloud:[^\n]*本地打开[^\n]*当前画布/);
-  assert.match(zh, /changelogEchoes:[^\n]*发布到 Echoes[^\n]*分享为图片/);
+  assert.match(app, /changelogCanvasAgentResearch:[^\n]*folders, files, web research[^\n]*structured visual work/);
+  assert.match(app, /changelogCanvasAgentWorkspace:[^\n]*Visual Explorer[^\n]*less tool switching and rework/);
+  assert.match(zh, /changelogCanvasAgentResearch:[^\n]*画布下方[^\n]*结构化视觉成果/);
+  assert.match(zh, /changelogCanvasAgentWorkspace:[^\n]*Visual Explorer[^\n]*减少工具切换与返工/);
 });
 
 test("feature tour copy is complete in English and Chinese", () => {
@@ -134,6 +174,10 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourBack",
       "tourNext",
       "tourDone",
+      "tourCanvasAgentLauncherTitle",
+      "tourCanvasAgentLauncherBody",
+      "tourCanvasAgentPanelTitle",
+      "tourCanvasAgentPanelBody",
       "tourEffortTitle",
       "tourEffortBody",
       "tourHandTitle",
@@ -183,4 +227,6 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);
   assert.match(zh, /双指.*缩放/);
+  assert.match(zh, /tourCanvasAgentLauncherBody:[^\n]*画布下方[^\n]*多步骤/);
+  assert.match(zh, /tourCanvasAgentPanelBody:[^\n]*右下角[^\n]*只读文件夹项目/);
 });

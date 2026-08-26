@@ -92,6 +92,58 @@ function nativeTraceEvent(event,connection) {
   return {type:`codex-native/${String(event.kind)}`,data:{...nativeData,event}};
 }
 
+function apiTraceTokenCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
+}
+
+function apiTraceRatio(numerator, denominator) {
+  return denominator > 0 ? Math.round((numerator / denominator) * 1_000_000) / 1_000_000 : 0;
+}
+
+function enrichApiUsage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value || null;
+  if (!Object.hasOwn(value,"inputTokens")) return value;
+  const inputTokens=apiTraceTokenCount(value.inputTokens),cacheReadTokens=apiTraceTokenCount(value.cacheReadTokens),
+    cacheWriteTokens=apiTraceTokenCount(value.cacheWriteTokens),promptTokens=inputTokens+cacheReadTokens+cacheWriteTokens;
+  return { ...value, promptTokens, cacheReadRatio:apiTraceRatio(cacheReadTokens,promptTokens), cacheWriteRatio:apiTraceRatio(cacheWriteTokens,promptTokens) };
+}
+
+function summarizeApiUsage(events) {
+  const calls=new Map();
+  events.forEach((event,index)=>{
+    const usage=event?.data?.usage;
+    if (!usage || typeof usage !== "object" || Array.isArray(usage) || !Object.hasOwn(usage,"inputTokens")) return;
+    const turn=event.data?.turn,step=event.data?.step,key=Number.isSafeInteger(turn)&&Number.isSafeInteger(step)?`${turn}:${step}`:`event:${index}`;
+    calls.set(key,usage);
+  });
+  if (!calls.size) return null;
+  let inputTokens=0,cacheReadTokens=0,cacheWriteTokens=0,promptTokens=0,outputTokens=0,reasoningTokens=0,cacheHitCalls=0;
+  for (const usage of calls.values()) {
+    const read=apiTraceTokenCount(usage.cacheReadTokens),write=apiTraceTokenCount(usage.cacheWriteTokens),input=apiTraceTokenCount(usage.inputTokens);
+    inputTokens+=input;
+    cacheReadTokens+=read;
+    cacheWriteTokens+=write;
+    promptTokens+=apiTraceTokenCount(usage.promptTokens) || input+read+write;
+    outputTokens+=apiTraceTokenCount(usage.outputTokens);
+    reasoningTokens+=apiTraceTokenCount(usage.reasoningTokens);
+    if (read>0) cacheHitCalls++;
+  }
+  return {
+    calls:calls.size,
+    cacheHitCalls,
+    inputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    promptTokens,
+    outputTokens,
+    reasoningTokens,
+    cacheReadRatio:apiTraceRatio(cacheReadTokens,promptTokens),
+    cacheWriteRatio:apiTraceRatio(cacheWriteTokens,promptTokens),
+    cacheHitRatio:apiTraceRatio(cacheHitCalls,calls.size),
+  };
+}
+
 function turnStatus(reason) {
   if (reason?.kind === "aborted" || reason?.kind === "cancelled") return "cancelled";
   if (reason?.kind === "error" || reason?.kind === "failed" || reason?.kind === "timeout") return "failed";
@@ -171,6 +223,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       client:{ sessionId:entry.conversationId, turnId:turn === null ? null : `turn-${turn}`, connectionId:entry.connectionId },
       connection:safeValue(state.connection),
       qualityReviewEnabled:null,
+      ...(state.connection?.provider === "api" ? { apiUsage:null } : {}),
       steps:[],
       screenshots:[],
       events:[],
@@ -276,6 +329,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     if (entry.phase !== "event" || !entry.event) return;
     const event = safeValue(nativeTraceEvent(entry.event,state.connection));
     if (!event?.type || event.type === "assistant/chunk") return;
+    if (state.connection?.provider === "api" && event.data?.usage) event.data.usage = enrichApiUsage(event.data.usage);
     if (!state.active && event.type === "user/message" && event.data?.engine === "codex-native") {
       state.pendingEvents.push(event);
       if (state.pendingEvents.length > 10) state.pendingEvents.splice(0,state.pendingEvents.length-10);
@@ -296,6 +350,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       if (state.engine === "codex-native") stepFor(trace,{...event,data:{...event.data,step:event.data?.step??1}},state,true);
     }
     trace.data.events.push(event);
+    if (state.connection?.provider === "api" && event.data?.usage) trace.data.apiUsage = summarizeApiUsage(trace.data.events);
     if (event.type === "request/header") {
       state.header = event.data?.header || null;
       const pendingStep = trace.data.steps.findLast(item=>item.status==="in-flight");

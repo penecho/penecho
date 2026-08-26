@@ -162,7 +162,7 @@ test("device credentials are stored separately and never returned by status", ()
     assert.equal(saved.deviceToken, "device-secret-token");
     assert.equal(saved.token, undefined);
     assert.equal(saved.AI_API_KEY, undefined);
-    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
     connector.disconnect({ forget: true });
     assert.equal(fs.existsSync(path.join(stateDir, "cloud-device.json")), false);
   } finally {
@@ -186,7 +186,7 @@ test("legacy device files migrate without exposing the credential", () => {
     assert.equal(connector.configuration.deviceToken, "legacy-device-secret");
     assert.equal("token" in connector.configuration, false);
     assert.doesNotMatch(JSON.stringify(connector.status()), /legacy-device-secret/);
-    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -687,7 +687,7 @@ test("browser account sign-in preserves the current LAN callback before storing 
     assert.equal(signedIn.browserSignIn.pending, false);
     const saved = JSON.parse(fs.readFileSync(path.join(stateDir, "cloud-device.json"), "utf8"));
     assert.equal(saved.accountToken, "browser-local-access-token");
-    assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(fs.statSync(path.join(stateDir, "cloud-device.json")).mode & 0o777, 0o600);
   } finally {
     global.fetch = originalFetch;
     fs.rmSync(stateDir, { recursive: true, force: true });

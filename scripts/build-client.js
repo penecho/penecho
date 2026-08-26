@@ -7,6 +7,7 @@ const path = require("node:path");
 const ROOT = path.resolve(__dirname, "..");
 const TARGET = path.join(ROOT, "public", "app.js");
 const SOURCES = [
+  "src/client/app/client-activity.js",
   "src/client/app/core.js",
   "src/client/app/canvas-runtime.js",
   "src/client/app/visual-explainer.js",

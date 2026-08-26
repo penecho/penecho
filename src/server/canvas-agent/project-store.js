@@ -86,6 +86,8 @@ function normalizedHistoryItem(item) {
     text:boundedString(item.text, PROJECT_HISTORY_TEXT_LIMIT),
     attachmentCount:Math.max(0, Math.min(5, Number(item.attachmentCount) || 0)),
     eventKey:boundedString(item.eventKey, 128),
+    ...(Number.isSafeInteger(item.turn) ? { turn:item.turn } : {}),
+    ...(Number.isSafeInteger(item.step) ? { step:item.step } : {}),
   };
   if (item.type === "error") return {
     id:boundedString(item.id, 128), type:"error",
@@ -96,6 +98,8 @@ function normalizedHistoryItem(item) {
     id:boundedString(item.id, 128), type:"tool", callId:boundedString(item.callId, 256),
     name:boundedString(item.name, 128), argumentsText:boundedString(item.argumentsText, 8_000),
     resultText:boundedString(item.resultText, 8_000),
+    ...(Number.isSafeInteger(item.turn) ? { turn:item.turn } : {}),
+    ...(Number.isSafeInteger(item.step) ? { step:item.step } : {}),
     state:["running", "done", "error"].includes(item.state) ? item.state : "done",
   };
   return null;
@@ -117,6 +121,11 @@ function normalizedHistory(value) {
 
 function isFilesystemRoot(candidate) {
   return candidate === path.parse(candidate).root;
+}
+
+function hostSegmentNeedsApproval(segment) {
+  const value = String(segment || "");
+  return value.startsWith(".") || HOST_ROOT_DENIED_SEGMENTS.has(value.toLowerCase());
 }
 
 function isContained(root, candidate) {
@@ -400,6 +409,7 @@ class CanvasAgentProjectStore {
     this.hostRoots = Array.isArray(hostRoots) ? [...hostRoots] : [];
     this.logger = typeof logger === "function" ? logger : null;
     this.rootIdSecretPromise = null;
+    this.rootCaches = new Map();
     this.queue = Promise.resolve();
   }
 
@@ -447,7 +457,7 @@ class CanvasAgentProjectStore {
     return pending;
   }
 
-  async canonicalDirectory(input) {
+  async canonicalDirectory(input, { allowFilesystemRoot = false } = {}) {
     const supplied = String(input || "").trim();
     if (!supplied || supplied.includes("\0")) throw projectError("Choose a local project folder.");
     let canonical;
@@ -455,31 +465,49 @@ class CanvasAgentProjectStore {
     catch { throw projectError("The selected project folder is unavailable.", 404, "project_unavailable"); }
     const info = await fs.stat(canonical).catch(() => null);
     if (!info?.isDirectory()) throw projectError("The selected project must be a local folder.");
-    if (isFilesystemRoot(canonical)) throw projectError("The filesystem root cannot be selected as a project.");
+    if (!allowFilesystemRoot && isFilesystemRoot(canonical)) throw projectError("The filesystem root cannot be selected as a project.");
     return canonical;
   }
 
   async resolvedRoots(configuredRoots) {
     if (!configuredRoots.length) return [];
-    const roots = [], rootIdSecret = await this.rootIdSecret();
-    for (const configured of configuredRoots) {
+    const rootIdSecret = await this.rootIdSecret(), candidates = await Promise.all(configuredRoots.map(async configured => {
       const configuredPath = typeof configured === "string" ? configured : configured?.path;
-      const canonical = await this.canonicalDirectory(configuredPath).catch(() => null);
-      if (!canonical || path.basename(canonical).toLowerCase() === ".penecho" || roots.some(root => root.path === canonical)) continue;
+      const canonical = await this.canonicalDirectory(configuredPath, { allowFilesystemRoot:true }).catch(() => null);
+      if (!canonical || path.basename(canonical).toLowerCase() === ".penecho") return null;
       const configuredName = typeof configured === "object" ? boundedString(configured?.name, 120).trim() : "";
-      const name = configuredName && !/[\0-\x1f\x7f/\\:]/.test(configuredName) && configuredName !== "." && configuredName !== ".."
+      const driveLabel = isFilesystemRoot(canonical) && /^[A-Za-z]:$/.test(configuredName),
+        name = configuredName && (driveLabel || !/[\0-\x1f\x7f/\\:]/.test(configuredName)) && configuredName !== "." && configuredName !== ".."
         ? safeDisplayLabel(configuredName, "Server folder") : safeDisplayLabel(path.basename(canonical), "Server folder");
-      roots.push({ id:privateOpaqueId("root", canonical, rootIdSecret), name, path:canonical });
+      return {
+        id:privateOpaqueId("root", canonical, rootIdSecret), name, path:canonical,
+        guardPrivate:Boolean(configured?.guardPrivate), requireChild:Boolean(configured?.requireChild),
+      };
+    })), roots = [];
+    for (const candidate of candidates) {
+      if (!candidate || roots.some(root => root.path === candidate.path)) continue;
+      roots.push(candidate);
     }
     return roots;
   }
 
+  cachedRoots(key, configuredRoots) {
+    const current = this.rootCaches.get(key), now = Date.now();
+    if (current && now - current.createdAt < 30_000) return current.promise;
+    const promise = this.resolvedRoots(configuredRoots).catch(error => {
+      if (this.rootCaches.get(key)?.promise === promise) this.rootCaches.delete(key);
+      throw error;
+    });
+    this.rootCaches.set(key, { createdAt:now, promise });
+    return promise;
+  }
+
   configuredRoots() {
-    return this.resolvedRoots(this.allowedRoots);
+    return this.cachedRoots("allowed", this.allowedRoots);
   }
 
   configuredHostRoots() {
-    return this.resolvedRoots(this.hostRoots);
+    return this.cachedRoots("host", this.hostRoots);
   }
 
   async listRoots() {
@@ -499,18 +527,26 @@ class CanvasAgentProjectStore {
 
   async resolveRootSelection(rootId, relativePath, options = {}) {
     const root = await this.rootById(rootId, options), normalized = normalizedRootRelative(relativePath);
-    if (options.host && (normalized.segments.some(segment => segment.startsWith(".")) || HOST_ROOT_DENIED_SEGMENTS.has(normalized.segments[0]?.toLowerCase()))) {
-      throw projectError("That private host folder is not available in the project browser.", 403, "project_root_path_invalid");
+    if (root.guardPrivate && normalized.segments.some(hostSegmentNeedsApproval) && options.approved !== true) {
+      throw projectError("Approve access to this private host folder before browsing it.", 403, "project_root_approval_required");
     }
     let cursor = root.path;
     for (const segment of normalized.segments) {
       cursor = path.join(cursor, segment);
-      const entry = await fs.lstat(cursor).catch(() => null);
+      let entry;
+      try { entry = await fs.lstat(cursor); }
+      catch (error) {
+        if (["EACCES", "EPERM"].includes(error?.code)) throw projectError("The system denied access to this folder.", 403, "project_root_unreadable");
+        throw projectError("The selected server folder is unavailable.", 404, "project_unavailable");
+      }
       if (!entry?.isDirectory() || entry.isSymbolicLink()) throw projectError("The selected server folder is unavailable.", 404, "project_unavailable");
     }
     let canonical;
     try { canonical = await fs.realpath(cursor); }
-    catch { throw projectError("The selected server folder is unavailable.", 404, "project_unavailable"); }
+    catch (error) {
+      if (["EACCES", "EPERM"].includes(error?.code)) throw projectError("The system denied access to this folder.", 403, "project_root_unreadable");
+      throw projectError("The selected server folder is unavailable.", 404, "project_unavailable");
+    }
     if (!isContained(root.path, canonical)) throw projectError("The selected server folder escaped its allowed root.", 403, "project_root_escape");
     return { root, canonical, relativePath:normalized.relativePath };
   }
@@ -519,40 +555,55 @@ class CanvasAgentProjectStore {
     const selected = await this.resolveRootSelection(rootId, relativePath, options), entries = [];
     let truncated = false, directory, scanned = 0;
     try { directory = await fs.opendir(selected.canonical); }
-    catch { throw projectError("The selected server folder cannot be browsed.", 403, "project_root_unreadable"); }
+    catch (error) {
+      if (["EACCES", "EPERM"].includes(error?.code)) {
+        const parentPath = selected.relativePath.includes("/") ? selected.relativePath.slice(0, selected.relativePath.lastIndexOf("/")) : selected.relativePath ? "" : null;
+        return {
+          root:{ id:selected.root.id, name:selected.root.name }, rootId:selected.root.id, rootName:selected.root.name,
+          path:selected.relativePath, relativePath:selected.relativePath, parentPath, entries:[], truncated:false,
+          selectable:false, permissionDenied:true,
+        };
+      }
+      throw projectError("The selected server folder cannot be browsed.", 403, "project_root_unreadable");
+    }
     try {
       for await (const entry of directory) {
         scanned += 1;
         if (scanned > PROJECT_ROOT_SCAN_LIMIT) { truncated = true; break; }
-        if (entry.name.toLowerCase() === ".penecho" || options.host && (entry.name.startsWith(".") || HOST_ROOT_DENIED_SEGMENTS.has(entry.name.toLowerCase()))
-          || /[\0-\x1f\x7f\u202a-\u202e\u2066-\u2069]/.test(entry.name) || entry.isSymbolicLink() || !entry.isDirectory()) continue;
+        if (entry.name.toLowerCase() === ".penecho" || /[\0-\x1f\x7f\u202a-\u202e\u2066-\u2069]/.test(entry.name) || entry.isSymbolicLink() || !entry.isDirectory()) continue;
         const candidate = path.join(selected.canonical, entry.name), details = await fs.lstat(candidate).catch(() => null);
-        if (!details?.isDirectory() || details.isSymbolicLink()) continue;
+        if (details?.isSymbolicLink() || details && !details.isDirectory()) continue;
         const canonical = await fs.realpath(candidate).catch(() => null);
-        if (!canonical || !isContained(selected.root.path, canonical)) continue;
+        if (canonical && !isContained(selected.root.path, canonical)) continue;
         if (entries.length >= PROJECT_ROOT_ENTRY_LIMIT) { truncated = true; break; }
         const childRelative = selected.relativePath ? `${selected.relativePath}/${entry.name}` : entry.name;
         if (childRelative.length > PROJECT_ROOT_PATH_LIMIT || childRelative.split("/").length > PROJECT_ROOT_DEPTH_LIMIT) continue;
-        entries.push({ name:safeDisplayLabel(entry.name, "Folder"), path:childRelative, relativePath:childRelative, kind:"folder" });
+        const permissionDenied = !details || !canonical;
+        entries.push({
+          name:safeDisplayLabel(entry.name, "Folder"), path:childRelative, relativePath:childRelative, kind:"folder",
+          ...(selected.root.guardPrivate && hostSegmentNeedsApproval(entry.name) && options.approved !== true ? { approvalRequired:true } : {}),
+          ...(permissionDenied ? { permissionDenied:true } : {}),
+        });
       }
     } finally {
       await directory.close().catch(error => { if (error?.code !== "ERR_DIR_CLOSED") throw error; });
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
-    const parentPath = selected.relativePath.includes("/") ? selected.relativePath.slice(0, selected.relativePath.lastIndexOf("/")) : selected.relativePath ? "" : null;
+    const parentPath = selected.relativePath.includes("/") ? selected.relativePath.slice(0, selected.relativePath.lastIndexOf("/")) : selected.relativePath ? "" : null,
+      rootRequiresChild = options.host || selected.root.requireChild;
     return {
       root:{ id:selected.root.id, name:selected.root.name }, rootId:selected.root.id, rootName:selected.root.name,
       path:selected.relativePath, relativePath:selected.relativePath, parentPath, entries, truncated,
-      selectable:!options.host || Boolean(selected.relativePath),
+      selectable:!isFilesystemRoot(selected.canonical) && (!rootRequiresChild || Boolean(selected.relativePath)),
     };
   }
 
-  browseRoot(rootId, relativePath = "") {
-    return this.browseResolvedRoot(rootId, relativePath);
+  browseRoot(rootId, relativePath = "", options = {}) {
+    return this.browseResolvedRoot(rootId, relativePath, options);
   }
 
-  browseHostRoot(rootId, relativePath = "") {
-    return this.browseResolvedRoot(rootId, relativePath, { host:true });
+  browseHostRoot(rootId, relativePath = "", options = {}) {
+    return this.browseResolvedRoot(rootId, relativePath, { ...options, host:true });
   }
 
   publicProject(project, { resolved = false } = {}) {
@@ -574,7 +625,7 @@ class CanvasAgentProjectStore {
   }
 
   async validateServerRecord(project) {
-    const selected = await this.resolveRootSelection(project.rootId, project.rootRelative || "");
+    const selected = await this.resolveRootSelection(project.rootId, project.rootRelative || "", { approved:true });
     if (selected.canonical !== project.path) throw projectError("The selected server folder changed identity.", 409, "project_changed");
     project.rootName = selected.root.name;
     project.rootRelative = selected.relativePath;
@@ -666,7 +717,7 @@ class CanvasAgentProjectStore {
     }
     if (source === "server") {
       if (kind !== "folder") throw projectError("Server roots can register project folders only.", 400, "project_root_kind_invalid");
-      root = await this.resolveRootSelection(options.rootId, options.rootRelative || "");
+      root = await this.resolveRootSelection(options.rootId, options.rootRelative || "", { approved:options.approved === true });
       if (root.canonical !== canonical) throw projectError("The selected folder does not match its allowed server root.", 403, "project_root_escape");
     }
     return this.mutate(async () => {
@@ -697,18 +748,21 @@ class CanvasAgentProjectStore {
     });
   }
 
-  async addFromRoot(rootId, relativePath = "") {
-    const selected = await this.resolveRootSelection(rootId, relativePath);
+  async addFromRoot(rootId, relativePath = "", options = {}) {
+    const selected = await this.resolveRootSelection(rootId, relativePath, options);
+    if (selected.root.requireChild && !selected.relativePath) {
+      throw projectError("Choose a folder inside the selected host root.", 400, "project_root_path_invalid");
+    }
     return this.add(selected.canonical, {
-      kind:"folder", origin:"server", rootId:selected.root.id, rootName:selected.root.name, rootRelative:selected.relativePath,
+      kind:"folder", origin:"server", rootId:selected.root.id, rootName:selected.root.name, rootRelative:selected.relativePath, approved:options.approved === true,
     });
   }
 
-  async addFromHostRoot(rootId, relativePath = "") {
+  async addFromHostRoot(rootId, relativePath = "", options = {}) {
     if (!normalizedRootRelative(relativePath).segments.length) {
-      throw projectError("Choose a folder inside the PenEcho host home.", 400, "project_root_path_invalid");
+      throw projectError("Choose a folder inside a PenEcho host root.", 400, "project_root_path_invalid");
     }
-    const selected = await this.resolveRootSelection(rootId, relativePath, { host:true });
+    const selected = await this.resolveRootSelection(rootId, relativePath, { ...options, host:true });
     return this.add(selected.canonical, { kind:"folder", origin:"native" });
   }
 

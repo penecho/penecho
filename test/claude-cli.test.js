@@ -170,15 +170,17 @@ test("Claude CLI returns on the final result event without waiting for process e
 test("Claude CLI reports receiving when partial model output starts", { timeout:10000 }, async () => {
   const directory = temporaryDirectory(), fakeCli = path.join(directory, "fake-claude-stream.js");
   fs.writeFileSync(fakeCli, `"use strict";process.stdout.write(JSON.stringify({type:"system",subtype:"init",tools:[],mcp_servers:[]})+"\\n");setTimeout(()=>process.stdout.write(JSON.stringify({type:"stream_event",event:{type:"message_start",message:{role:"assistant",content:[]}}})+"\\n"),50);setTimeout(()=>process.stdout.write(JSON.stringify({type:"result",subtype:"success",result:"streamed result"})+"\\n"),150);\n`);
-  let reportReceiving;
+  let reportReceiving, activityCount=0;
   const receiving = new Promise(resolve => { reportReceiving = resolve; }), request = callClaudeCli({
     executable:fakeCli,
     systemPrompt:"system",
     prompt:"request",
     onProgress:phase => { if (phase === "receiving") reportReceiving(); },
+    onActivity:()=>activityCount++,
   });
   assert.equal(await Promise.race([receiving.then(() => "receiving"), request.then(() => "resolved")]), "receiving");
   assert.equal(await request, "streamed result");
+  assert.ok(activityCount >= 3);
 });
 
 test("Claude CLI rejects and stops any tool-use event", { timeout:10000 }, async () => {

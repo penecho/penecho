@@ -14,6 +14,7 @@ const {
   PROJECT_UPLOAD_LIMIT,
   PROJECT_UPLOAD_IDLE_TTL_MS,
 } = require("../src/server/canvas-agent/project-store.js");
+const { macosRemoteRoots, windowsDriveRoots } = require("../src/server/canvas-agent/host-roots.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const runtimeSource = fsSync.readFileSync(path.join(ROOT, "src/server/canvas-agent/runtime.mjs"), "utf8");
@@ -45,6 +46,10 @@ async function assertMissing(target) {
 
 function permissionBits(info) {
   return info.mode & 0o777;
+}
+
+function assertPrivateMode(info, expected) {
+  if (process.platform !== "win32") assert.equal(permissionBits(info), expected);
 }
 
 function conversation(index) {
@@ -150,9 +155,9 @@ test("uploaded files require canonical base64, honor the 32 MiB boundary, use pr
   const canonicalStateDirectory = await fs.realpath(stateDirectory);
   assert.equal(path.basename(managedFile), "content.txt");
   assert.equal(managedFile.startsWith(`${canonicalStateDirectory}${path.sep}`), true);
-  assert.equal(permissionBits(await fs.stat(uploadRoot)), 0o700);
-  assert.equal(permissionBits(await fs.stat(managedDirectory)), 0o700);
-  assert.equal(permissionBits(await fs.stat(managedFile)), 0o600);
+  assertPrivateMode(await fs.stat(uploadRoot), 0o700);
+  assertPrivateMode(await fs.stat(managedDirectory), 0o700);
+  assertPrivateMode(await fs.stat(managedFile), 0o600);
   await fs.writeFile(path.join(managedDirectory, ".upload-12345678-1234-4123-8123-123456789abc.tmp"), "partial", { mode:0o600 });
 
   const stateSentinel = path.join(stateDirectory, "keep-this-state-file.txt");
@@ -324,13 +329,14 @@ test("allowed server roots expose opaque IDs and relative folders while rejectin
   t.after(() => fs.rm(directory, { recursive:true, force:true }));
   const stateDirectory = path.join(directory, "state"), allowedRoot = path.join(directory, "server-private-root"), outside = path.join(directory, "outside");
   await fs.mkdir(path.join(allowedRoot, "Projects", "Nested"), { recursive:true });
+  await fs.mkdir(path.join(allowedRoot, ".restricted", "ApprovedProject"), { recursive:true });
   await fs.mkdir(path.join(allowedRoot, ".penecho", "Hidden"), { recursive:true });
   await fs.mkdir(outside, { recursive:true });
   await fs.symlink(outside, path.join(allowedRoot, "Escape"), process.platform === "win32" ? "junction" : "dir");
   await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
   const store = new CanvasAgentProjectStore({
     stateDirectory,
-    allowedRoots:[{ path:allowedRoot, name:"Approved projects" }, path.join(allowedRoot, ".penecho")],
+    allowedRoots:[{ path:allowedRoot, name:"Approved projects", guardPrivate:true }, path.join(allowedRoot, ".penecho")],
   });
 
   const roots = await store.listRoots();
@@ -344,6 +350,7 @@ test("allowed server roots expose opaque IDs and relative folders while rejectin
   const rootListing = await store.browseRoot(roots[0].id, "");
   assert.equal(rootListing.path, "");
   assert.equal(rootListing.entries.some(entry => entry.name === "Projects" && entry.path === "Projects"), true);
+  assert.equal(rootListing.entries.find(entry => entry.name === ".restricted")?.approvalRequired, true);
   assert.equal(rootListing.entries.some(entry => entry.name === ".penecho" || entry.name === "Escape"), false);
   assert.equal(JSON.stringify(rootListing).includes(allowedRoot), false);
 
@@ -352,14 +359,18 @@ test("allowed server roots expose opaque IDs and relative folders while rejectin
   assert.equal(project.path, "Approved projects/Projects/Nested");
   assert.equal(project.path.includes(allowedRoot), false);
   assert.equal((await store.resolve(project.id)).path, await fs.realpath(path.join(allowedRoot, "Projects", "Nested")));
+  await expectProjectError(store.browseRoot(roots[0].id, ".restricted"), "project_root_approval_required");
+  const approvedProject = await store.addFromRoot(roots[0].id, ".restricted/ApprovedProject", { approved:true });
+  assert.equal((await store.list()).some(item => item.id === approvedProject.id), true, "an approved private root project remains registered");
 
   const restartedStore = new CanvasAgentProjectStore({
     stateDirectory,
-    allowedRoots:[{ path:allowedRoot, name:"Approved projects" }],
+    allowedRoots:[{ path:allowedRoot, name:"Approved projects", guardPrivate:true }],
   });
   assert.deepEqual(await restartedStore.listRoots(), roots, "opaque root ids remain stable across host restarts");
   assert.equal((await restartedStore.resolve(project.id)).id, project.id, "server-root projects remain registered after restart");
-  assert.equal(permissionBits(await fs.stat(path.join(stateDirectory, "canvas-agent-root-id.key"))), 0o600);
+  assert.equal((await restartedStore.resolve(approvedProject.id)).id, approvedProject.id, "approval is retained by the exact registered project");
+  assertPrivateMode(await fs.stat(path.join(stateDirectory, "canvas-agent-root-id.key")), 0o600);
 
   for (const unsafe of ["/etc", "../outside", "Projects/../outside", ".penecho", "C:\\Windows", "Projects/bad\nname", "Projects/\u202espoof"]) {
     await expectProjectError(store.browseRoot(roots[0].id, unsafe), "project_root_path_invalid");
@@ -368,19 +379,24 @@ test("allowed server roots expose opaque IDs and relative folders while rejectin
   await expectProjectError(store.browseRoot("root-000000000000000000000000", ""), "project_root_not_found");
 });
 
-test("local and LAN clients browse the PenEcho host home through the in-app root API without exposing it to Cloud roots", async t => {
+test("host-only roots stay separate from Cloud roots while local and LAN clients browse them in-app", async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-host-roots-"));
   t.after(() => fs.rm(directory, { recursive:true, force:true }));
   const stateDirectory = path.join(directory, "state"), hostRoot = path.join(directory, "host-home"), projectFolder = path.join(hostRoot, "Workspace", "ReadOnlyProject");
   await fs.mkdir(projectFolder, { recursive:true });
+  await fs.mkdir(path.join(hostRoot, ".ssh", "PrivateProject"), { recursive:true });
+  await fs.mkdir(path.join(hostRoot, "Library", "PrivateProject"), { recursive:true });
   await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
-  const store = new CanvasAgentProjectStore({ stateDirectory, allowedRoots:[], hostRoots:[{ path:hostRoot, name:"Home" }] });
+  const store = new CanvasAgentProjectStore({ stateDirectory, allowedRoots:[], hostRoots:[{ path:hostRoot, name:"Home", guardPrivate:true }] });
 
-  assert.deepEqual(await store.listRoots(), [], "Cloud has no implicit host-home root");
+  assert.deepEqual(await store.listRoots(), [], "a host-only root is not implicitly copied into the Cloud root set");
   const hostRoots = await store.listHostRoots();
   assert.equal(hostRoots.length, 1);
   assert.equal(hostRoots[0].name, "Home");
-  assert.equal((await store.browseHostRoot(hostRoots[0].id, "")).selectable, false);
+  const homeListing = await store.browseHostRoot(hostRoots[0].id, "");
+  assert.equal(homeListing.selectable, false);
+  assert.equal(homeListing.entries.find(entry => entry.name === ".ssh")?.approvalRequired, true);
+  assert.equal(homeListing.entries.find(entry => entry.name === "Library")?.approvalRequired, true);
   const listing = await store.browseHostRoot(hostRoots[0].id, "Workspace");
   assert.equal(listing.selectable, true);
   assert.equal(listing.entries.some(entry => entry.relativePath === "Workspace/ReadOnlyProject"), true);
@@ -389,9 +405,61 @@ test("local and LAN clients browse the PenEcho host home through the in-app root
   assert.equal(project.source, "native");
   assert.equal((await store.resolve(project.id)).path, await fs.realpath(projectFolder));
   await expectProjectError(store.addFromHostRoot(hostRoots[0].id, ""), "project_root_path_invalid");
-  await expectProjectError(store.browseHostRoot(hostRoots[0].id, ".ssh"), "project_root_path_invalid");
-  await expectProjectError(store.browseHostRoot(hostRoots[0].id, "Library"), "project_root_path_invalid");
+  await expectProjectError(store.browseHostRoot(hostRoots[0].id, ".ssh"), "project_root_approval_required");
+  await expectProjectError(store.browseHostRoot(hostRoots[0].id, "Library"), "project_root_approval_required");
+  assert.equal((await store.browseHostRoot(hostRoots[0].id, ".ssh", { approved:true })).selectable, true);
+  assert.equal((await store.addFromHostRoot(hostRoots[0].id, ".ssh/PrivateProject", { approved:true })).kind, "folder");
   await expectProjectError(store.browseRoot(hostRoots[0].id, ""), "project_root_not_found");
+});
+
+test("Windows host roots expose every drive letter through the built-in local and Cloud root model", () => {
+  assert.deepEqual(windowsDriveRoots("darwin"), []);
+  const roots = windowsDriveRoots("win32");
+  assert.equal(roots.length, 26);
+  assert.deepEqual(roots[0], { name:"A:", path:"A:\\", guardPrivate:true });
+  assert.deepEqual(roots.at(-1), { name:"Z:", path:"Z:\\", guardPrivate:true });
+});
+
+test("an OS-unreadable folder returns a visible non-selectable browser state instead of failing", {
+  skip:process.platform === "win32" || typeof process.getuid !== "function" || process.getuid() === 0,
+}, async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-denied-root-"));
+  const stateDirectory = path.join(directory, "state"), root = path.join(directory, "root"), blocked = path.join(root, "Blocked");
+  t.after(async () => { await fs.chmod(blocked, 0o700).catch(() => {}); await fs.rm(directory, { recursive:true, force:true }); });
+  await fs.mkdir(blocked, { recursive:true });
+  await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
+  const store = new CanvasAgentProjectStore({ stateDirectory, allowedRoots:[root] }), rootId = (await store.listRoots())[0].id;
+  await fs.chmod(blocked, 0o000);
+  const view = await store.browseRoot(rootId, "Blocked");
+  assert.equal(view.permissionDenied, true);
+  assert.equal(view.selectable, false);
+  assert.deepEqual(view.entries, []);
+});
+
+test("macOS exposes Home and mounted volumes to the linked-device root model without selecting their containers", async t => {
+  assert.deepEqual(macosRemoteRoots("/Users/example", "win32"), []);
+  assert.deepEqual(macosRemoteRoots("/Users/example", "darwin"), [
+    { name:"Home", path:"/Users/example", guardPrivate:true, requireChild:true },
+    { name:"External volumes", path:"/Volumes", guardPrivate:true, requireChild:true },
+  ]);
+
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "penecho-canvas-macos-roots-"));
+  t.after(() => fs.rm(directory, { recursive:true, force:true }));
+  const stateDirectory = path.join(directory, "state"), home = path.join(directory, "home"), projectFolder = path.join(home, "Workspace");
+  await fs.mkdir(projectFolder, { recursive:true });
+  await fs.mkdir(stateDirectory, { recursive:true, mode:0o700 });
+  const store = new CanvasAgentProjectStore({
+    stateDirectory,
+    allowedRoots:[{ name:"Home", path:home, guardPrivate:true, requireChild:true }],
+  });
+  const [root] = await store.listRoots();
+  assert.equal(root.name, "Home");
+  assert.equal((await store.browseRoot(root.id, "")).selectable, false);
+  assert.equal((await store.browseRoot(root.id, "Workspace")).selectable, true);
+  await expectProjectError(store.addFromRoot(root.id, ""), "project_root_path_invalid");
+  const project = await store.addFromRoot(root.id, "Workspace");
+  assert.equal(project.source, "server");
+  assert.equal((await store.resolve(project.id)).path, await fs.realpath(projectFolder));
 });
 
 test("single-file conversation history stays in private state storage, is bounded to five, and is safely removed with its registration", async t => {
@@ -403,18 +471,26 @@ test("single-file conversation history stays in private state storage, is bounde
   await fs.writeFile(sourceSibling, "sibling", { mode:0o600 });
   await fs.mkdir(sourceSubdirectory);
   const resource = await store.add(sourceFile, { kind:"file", origin:"native" });
-  const written = await store.writeHistory(resource.id, { conversations:Array.from({ length:7 }, (_, index) => conversation(index + 1)) });
+  const conversations=Array.from({ length:7 }, (_, index) => conversation(index + 1));
+  conversations.at(-1).items.push(
+    {id:"assistant-7",type:"message",role:"assistant",text:"Done",attachmentCount:0,eventKey:"7:2:final",turn:7,step:2},
+    {id:"tool-7",type:"tool",callId:"call-7",name:"canvas_read",argumentsText:"{}",resultText:"Done",state:"done",turn:7,step:1},
+  );
+  const written = await store.writeHistory(resource.id, { conversations });
   assert.equal(PROJECT_HISTORY_LIMIT, 5);
   assert.deepEqual(written.map(item => item.id), ["conversation-7", "conversation-6", "conversation-5", "conversation-4", "conversation-3"]);
   assert.deepEqual((await store.readHistory(resource.id)).map(item => item.id), written.map(item => item.id));
+  assert.deepEqual(written[0].items.slice(1).map(item=>({type:item.type,turn:item.turn,step:item.step})),[
+    {type:"message",turn:7,step:2},{type:"tool",turn:7,step:1},
+  ],"message ordering coordinates survive private history persistence");
 
   const historyDirectory = path.join(stateDirectory, "canvas-agent-file-history", resource.id);
   const historyFile = path.join(historyDirectory, "canvas-agent-history.json");
   const stored = JSON.parse(await fs.readFile(historyFile, "utf8"));
   assert.equal(stored.conversations.length, 5);
-  assert.equal(permissionBits(await fs.stat(path.dirname(historyDirectory))), 0o700);
-  assert.equal(permissionBits(await fs.stat(historyDirectory)), 0o700);
-  assert.equal(permissionBits(await fs.stat(historyFile)), 0o600);
+  assertPrivateMode(await fs.stat(path.dirname(historyDirectory)), 0o700);
+  assertPrivateMode(await fs.stat(historyDirectory), 0o700);
+  assertPrivateMode(await fs.stat(historyFile), 0o600);
   await assertMissing(path.join(sourceDirectory, ".penecho"));
 
   await store.remove(resource.id);
@@ -476,13 +552,14 @@ test("main resource routes separate native paths from roots and uploads and reco
   const routes = mainSource.slice(routeStart, routeEnd);
   assert.match(routes, /\(\?:local\|file\)-\[0-9a-f\]\{24\}/);
   assert.match(routes, /req\.method === "POST" && url\.pathname === "\/api\/canvas-agent\/projects"[\s\S]*add\(body\?\.path, \{ kind:body\?\.kind, origin:"native" \}\)/);
-  assert.match(routes, /"\/api\/canvas-agent\/projects\/from-root"[\s\S]*addFromRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
-  assert.match(routes, /"\/api\/canvas-agent\/projects\/from-host-root"[\s\S]*addFromHostRoot\(body\?\.rootId, body\?\.path \|\| ""\)/);
+  assert.match(routes, /"\/api\/canvas-agent\/projects\/from-root"[\s\S]*addFromRoot\(body\?\.rootId, body\?\.path \|\| "", \{ approved:body\?\.approved === true \}\)/);
+  assert.match(routes, /"\/api\/canvas-agent\/projects\/from-host-root"[\s\S]*addFromHostRoot\(body\?\.rootId, body\?\.path \|\| "", \{ approved:body\?\.approved === true \}\)/);
   assert.match(routes, /"\/api\/canvas-agent\/files"[\s\S]*canvasAgent\.activeProjectIds\(\)[\s\S]*CANVAS_AGENT_PROJECT_STORE\.upload\(body, \{ protectedProjectIds \}\)/);
   assert.match(routes, /"\/api\/canvas-agent\/roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listRoots\(\)/);
   assert.match(routes, /"\/api\/canvas-agent\/host-roots"[\s\S]*CANVAS_AGENT_PROJECT_STORE\.listHostRoots\(\)/);
-  assert.match(routes, /canvasAgentRootEntriesMatch[\s\S]*getAll\("path"\)\.length > 1[\s\S]*browseRoot\(canvasAgentRootEntriesMatch\[1\], url\.searchParams\.get\("path"\) \|\| ""\)/);
+  assert.match(routes, /canvasAgentRootEntriesMatch[\s\S]*getAll\("approved"\)[\s\S]*browseRoot\(canvasAgentRootEntriesMatch\[1\], url\.searchParams\.get\("path"\) \|\| "", \{ approved:url\.searchParams\.get\("approved"\) === "1" \}\)/);
   assert.match(mainSource, /PENECHO_CANVAS_AGENT_ALLOWED_ROOTS[\s\S]*path\.isAbsolute\(selectedPath\)/);
+  assert.match(mainSource, /macosRemoteRoots\(os\.homedir\(\)\)[\s\S]*windowsDriveRoots\(\)[\s\S]*CANVAS_AGENT_ALLOWED_ROOTS = \[\.\.\.CANVAS_AGENT_CONFIGURED_ROOTS, \.\.\.CANVAS_AGENT_MACOS_REMOTE_ROOTS, \.\.\.CANVAS_AGENT_WINDOWS_DRIVE_ROOTS\]/);
   assert.match(mainSource, /CANVAS_AGENT_PROJECT_STORE\.cleanupUploads\(\)[^\n]*;\s*server\.listen/, "startup cleanup must not gate server listening");
 
   const remoteLines = remoteCanvasHttpSource.split(/\r?\n/);

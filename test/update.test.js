@@ -43,7 +43,7 @@ test("npm latest-version lookup uses the registry latest endpoint and validates 
   assert.equal(latest, "0.6.0");
   assert.equal(calls[0].url, "https://registry.npmjs.org/penecho/latest");
   assert.equal(calls[0].options.redirect, "error");
-  assert.equal(calls[0].options.headers["User-Agent"], "penecho/1.0.1");
+  assert.equal(calls[0].options.headers["User-Agent"], "penecho/1.1.0");
   await assert.rejects(
     fetchLatestNpmVersion("penecho", { timeoutMs:1000, attempts:1, fetchImpl:async () => ({ ok:true, status:200, json:async () => ({ version:"invalid" }) }) }),
     /invalid PenEcho version/,

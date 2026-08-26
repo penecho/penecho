@@ -231,7 +231,7 @@ function widgetCapabilitiesContext(capabilities) {
   const privateRoutes=capabilities.privatePlugins.length
     ? ` Enabled user-owned private HTML routes are injected below and may be selected only by their exact plugin ids: ${capabilities.privatePlugins.map(plugin=>plugin.id).join(', ')}.`
     : ''
-  return `Widget routing: Visual Explorer is the default for understanding, learning, explanation, analysis, organization, substantial pasted text, equations, projects, and documents, even without an explicit request for an infographic. Do not choose it when the primary task is only to supplement or modify existing Canvas/page elements. Ordinary General HTML remains available for explicit HTML, interaction, simulation, live data, small browser tools, freeform overlays, or custom behavior; call load_widget_contract with route="general-html" before using that route.${capabilities.professionalEnabled?' Professional Diagrams is enabled for established notation, exact quantitative charts, domain-tool compatibility, or reusable professional source; load route="professional-diagrams" before using it.':''}${privateRoutes}`
+  return `Widget routing: Visual Explorer is the default for understanding, learning, explanation, analysis, organization, substantial pasted text, equations, projects, and documents, even without an explicit request for an infographic. Do not choose it when the primary task is only to supplement or modify existing Canvas/page elements. Ordinary General HTML remains available for explicit HTML, interaction, simulation, live data, small browser tools, freeform overlays, or custom behavior; call load_widget_contract with route="general-html" before using that route. Never create Professional Diagrams; new Widgets use Visual Explorer or enabled HTML.${capabilities.professionalEnabled?' For an existing Professional only, load route="professional-diagrams" to read and patch it.':''}${privateRoutes}`
 }
 
 export function publicWidgetCapabilities(capabilities) {
@@ -255,7 +255,7 @@ function loadWidgetContractTool(session, agentCtx) {
   if(session.widgetCapabilities.professionalEnabled)contracts.set('professional-diagrams',session.professionalDiagramsContract)
   return defineTool({
     name:'load_widget_contract',
-    description:'Load one currently enabled optional Widget authoring contract into the durable session system prompt. Visual Explorer and enabled private HTML contracts are already loaded.',
+    description:'Load one currently enabled optional Widget authoring or existing-Widget editing contract into the durable session system prompt. Visual Explorer and enabled private HTML contracts are already loaded.',
     parameters:{ route:{ type:'string', enum:[...contracts.keys()], required:true } },
     output:jsonOutput(),timeoutMs:TOOL_TIMEOUT_MS,
     execute(args){
@@ -1274,9 +1274,13 @@ function runProjectRipgrep(session, toolName, argv, signal) {
   })
 }
 
+function projectPathOrRoot(input) {
+  const requested = input == null ? '' : String(input)
+  return requested.trim() ? requested : '.'
+}
+
 async function projectSearchTarget(session, agentCtx, input, signal, directoryOnly) {
-  const requested = input === undefined ? '.' : String(input)
-  if (!requested.trim()) throw new Error('path must be a non-empty string when given.')
+  const requested = projectPathOrRoot(input)
   const target = await agentCtx.fs.resolve(requested, { cwd:session.project.path, signal }), localPath = agentCtx.fs.processPath(target)
   if (!projectPathInside(session.project.path, localPath)) throw new Error('That search path is outside the selected project.')
   const info = await statFile(localPath)
@@ -1394,7 +1398,7 @@ function projectDirectoryListTool(session, agentCtx) {
     parameters:{ path:{ type:'string', description:'Relative project directory. Defaults to the project root.' } },
     output:textOutput(),
     async execute(args, exec) {
-      const target = await agentCtx.fs.resolve(String(args.path || '.'), { cwd:session.project.path, signal:exec.signal }), localPath = agentCtx.fs.processPath(target)
+      const target = await agentCtx.fs.resolve(projectPathOrRoot(args.path), { cwd:session.project.path, signal:exec.signal }), localPath = agentCtx.fs.processPath(target)
       if (!projectPathInside(session.project.path, localPath)) throw new Error('That directory is outside the selected project.')
       const info = await statFile(localPath)
       if (!info.isDirectory()) throw new Error('list_directory requires a directory.')
@@ -2651,7 +2655,6 @@ const DRAWING_SCHEMA = Object.freeze({
 
 function createItemSchema(session) {
   const htmlPluginIds=['general',...session.widgetCapabilities.privatePlugins.map(plugin=>plugin.id)]
-  if(session.widgetCapabilities.professionalEnabled)htmlPluginIds.push('flowchart')
   const oneOf=[
     {
       type:'object', additionalProperties:false,
@@ -2675,18 +2678,10 @@ function createItemSchema(session) {
         type:{ type:'string', const:'widget', required:true }, pluginId:{ type:'string', enum:htmlPluginIds, required:true }, widgetType:{ type:'string', const:'html_widget', required:true }, title:{ type:'string', required:true },
         html:{ type:'string', required:true }, sourceFormat:{ type:'string' }, frameworkVersion:{ type:'string' },
         copyText:{ type:'string' }, copyLabel:{ type:'string' }, refreshSeconds:{ type:'integer' }, width:{ type:'number' }, height:{ type:'number' }, placement:PLACEMENT_SCHEMA,
-        deliveryMode:{ type:'string', enum:['progressive'], description:'Optional successive complete Visual Explorer versions; valid only for the exact Visual Explorer markers.' },
+        deliveryMode:{ type:'string', enum:['progressive'], description:'One Visual Explorer only. Use items[0].deliveryMode, never canvas_create.deliveryMode.' },
       },
     },
   ]
-  if(session.widgetCapabilities.professionalEnabled)oneOf.push({
-      type:'object', additionalProperties:false,
-      properties:{
-        type:{ type:'string', const:'widget', required:true }, pluginId:{ type:'string', const:'flowchart', required:true }, widgetType:{ type:'string', const:'diagram_source', required:true }, title:{ type:'string', required:true },
-        source:{ type:'string', required:true }, sourceFormat:{ type:'string', required:true }, diagramKind:{ type:'string' }, frameworkVersion:{ type:'string' },
-        copyText:{ type:'string' }, copyLabel:{ type:'string' }, refreshSeconds:{ type:'integer' }, width:{ type:'number' }, height:{ type:'number' }, placement:PLACEMENT_SCHEMA,
-      },
-    })
   oneOf.push({
       type:'object', additionalProperties:false,
       properties:{ type:{ type:'string', const:'image', required:true }, attachmentId:{ type:'string', required:true }, width:{ type:'number' }, height:{ type:'number' }, placement:PLACEMENT_SCHEMA },
@@ -2965,6 +2960,10 @@ function visualExplorerMarker(item) {
     sourceFormat===VISUAL_EXPLORER_SOURCE_FORMAT || frameworkVersion===VISUAL_EXPLORER_FRAMEWORK_VERSION
     || sourceFormat.startsWith('penecho-visual-explorer') || frameworkVersion.startsWith('penecho-visual-explorer')
   )
+}
+
+function professionalDiagramMarker(item) {
+  return String(item?.frameworkVersion||'').trim().startsWith('penecho-professional-diagrams')
 }
 
 function htmlAttribute(tag, name) {
@@ -3373,13 +3372,11 @@ function widgetContractLoaded(session, route, contract) {
 
 function assertWidgetAuthoringContract(session, item) {
   const pluginId=String(item?.pluginId||''),widgetType=String(item?.widgetType||'')
+  if(pluginId==='flowchart'||widgetType==='diagram_source'||professionalDiagramMarker(item))throw new Error('Canvas Agent may edit an existing Professional Diagram, but it cannot create a new Professional Diagram.')
   if(!canvasAgentWidgetPluginIds(session).has(pluginId))throw new Error(`Widget plugin ${pluginId||'(missing)'} is unavailable in this Canvas Agent session.`)
-  if(widgetType==='diagram_source'){
-    if(pluginId!=='flowchart'||!session.widgetCapabilities.professionalEnabled)throw new Error('Only the enabled Professional Diagrams plugin may create diagram_source Widgets.')
-  }else if(widgetType!=='html_widget')throw new Error(`Widget type ${widgetType||'(missing)'} is unavailable in this Canvas Agent session.`)
+  if(widgetType!=='html_widget')throw new Error(`Widget type ${widgetType||'(missing)'} is unavailable in this Canvas Agent session.`)
   if(visualExplorerMarker(item))return
   if(pluginId==='general'&&!widgetContractLoaded(session,'general-html',session.generalHtmlContract))throw new Error('Load the general-html Widget contract before creating ordinary General HTML.')
-  if(pluginId==='flowchart'&&!widgetContractLoaded(session,'professional-diagrams',session.professionalDiagramsContract))throw new Error('Load the professional-diagrams Widget contract before creating a Professional Diagram.')
 }
 
 function assertWidgetPatchContract(session, current) {
@@ -3428,7 +3425,7 @@ function createCanvasTools(session, attachments) {
   })
   const create = defineCanvasTool(session, {
     name:'canvas_create',
-    description:`Create Canvas items atomically. A new Visual Explorer is one General HTML item with complete html, sourceFormat=${VISUAL_EXPLORER_SOURCE_FORMAT}, frameworkVersion=${VISUAL_EXPLORER_FRAMEWORK_VERSION}; deliveryMode="progressive" optionally permits bounded successive complete versions. Empty initial Canvas: finite size plus placement.mode="auto"; otherwise exact planned geometry. Load optional Widget contracts; inspect/capture nonempty Canvas before placement.`,
+    description:`Atomically create Canvas items. Professional edit-only; Widgets use Visual Explorer or enabled HTML. Drawing: origin + parallel types/items, never strokes/points. Visual Explorer: one complete General HTML item with sourceFormat=${VISUAL_EXPLORER_SOURCE_FORMAT}, frameworkVersion=${VISUAL_EXPLORER_FRAMEWORK_VERSION}; progressive only at items[0].deliveryMode, never top-level. Empty Canvas: finite size and placement.mode="auto"; else exact geometry. Load Widget contracts; inspect/capture nonempty Canvas before placement.`,
     parameters:{
       baseRevision:{ type:'integer', required:true },
       items:{ type:'array', required:true, items:createItemSchema(session) },

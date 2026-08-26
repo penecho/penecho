@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { CLI_INSTALL_COMMANDS:INSTALL_COMMANDS, CLI_LOGIN_COMMANDS:LOGIN_COMMANDS, inspectCli } = require("../src/providers/cli-inspection.js");
 
 const MAX_INSTALLER_BYTES = 256 * 1024;
 const MAX_OUTPUT_BYTES = 256 * 1024;
@@ -192,8 +193,11 @@ async function installCli(provider, options = {}) {
 
 module.exports = {
   DEFINITIONS,
+  INSTALL_COMMANDS,
+  LOGIN_COMMANDS,
   definition,
   downloadInstaller,
+  inspectCli,
   installCli,
   installInvocation,
   managedCliPath,

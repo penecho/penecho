@@ -27,7 +27,7 @@ const REQUIRED_ASSETS = [
   "src/server/main.js", "src/server/typeset.js", "src/server/api-config.js",
   "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/runtime.mjs",
   "src/cli/update.js", "src/cli/configure-ui.js",
-  "src/providers/cli-discovery.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
+  "src/providers/cli-discovery.js", "src/providers/cli-inspection.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
   "public/index.html", "public/access.html", "public/access.css", "public/access.js", "public/app.js", "public/draw.js", "public/selection.js", "public/tour.js", "public/style.css",
 ];
 
@@ -504,6 +504,13 @@ function cliTestError(error) {
   return diagnostic ? `${message} ${diagnostic}`.slice(0, 800) : message.slice(0, 800);
 }
 
+function apiConnectionTestLabel(env, format) {
+  const preset = String(env.PENECHO_API_PRESET || "").trim().toLowerCase();
+  if (preset.startsWith("kimi-")) return "Kimi";
+  if (preset.startsWith("minimax-")) return "MiniMax";
+  return format === "openai" ? "OpenAI-compatible" : format;
+}
+
 async function testConfiguredProvider(configuration, options = {}) {
   const provider = configuration.provider;
   if (!["api", "kimi-cli", "codex-cli", "claude-cli"].includes(provider)) throw new Error(`AI_PROVIDER must be ${PROVIDER_OPTIONS}.`);
@@ -511,7 +518,7 @@ async function testConfiguredProvider(configuration, options = {}) {
     timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : configuredTimeoutSeconds(configuration.env) * 1000;
   if (provider === "api") {
     const result = await (options.apiTester || testApiConnection)(configuration.env, { fetchImpl:options.fetchImpl, timeoutMs });
-    return `${result.format} API responded with HTTP ${result.status}.`;
+    return `${apiConnectionTestLabel(configuration.env, result.format)} API responded with HTTP ${result.status}.`;
   }
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs), atlasImage = configuredTestImage(configuration.env);
   try {

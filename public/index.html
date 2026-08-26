@@ -410,7 +410,6 @@
             <span class="canvas-agent-mark" aria-hidden="true"></span>
             <div><strong data-i18n="canvasAgent">Canvas Agent</strong><small id="canvasAgentStatus" data-i18n="canvasAgentReadyConnect">Ready to connect</small></div>
             <button id="canvasAgentHistory" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="canvasAgentHistoryPopover" data-i18n-title="canvasAgentHistory" title="Canvas Agent history" data-i18n-aria="canvasAgentHistory" aria-label="Canvas Agent history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5M4 4v4.5h4.5"/><path d="M12 8v4l2.5 1.5"/></svg></button>
-            <button id="canvasAgentSize" class="canvas-agent-size" type="button" data-i18n-title="canvasAgentResize" title="Change Canvas Agent height" data-i18n-aria="canvasAgentResize" aria-label="Change Canvas Agent height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4M12 5v14M8 15l4 4 4-4"/></svg></button>
             <button id="canvasAgentNew" type="button" data-i18n-title="newCanvasAgentConversation" title="New Canvas Agent conversation" data-i18n-aria="newCanvasAgentConversation" aria-label="New Canvas Agent conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
             <button id="canvasAgentClose" type="button" data-i18n-title="closeCanvasAgent" title="Close Canvas Agent" data-i18n-aria="closeCanvasAgent" aria-label="Close Canvas Agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </header>
@@ -442,6 +441,11 @@
                   <header><button id="canvasAgentProjectRootBack" type="button" data-i18n-aria="canvasAgentRootBack" aria-label="Back" hidden>←</button><strong id="canvasAgentProjectRootPath" data-i18n="canvasAgentServerFolders">Choose a project folder</strong></header>
                   <small data-i18n="canvasAgentServerFoldersDetail">Select a host folder to register it as a read-only project.</small>
                   <div id="canvasAgentProjectRootList" class="canvas-agent-project-root-list"></div>
+                  <section id="canvasAgentProjectRootApproval" class="canvas-agent-project-root-approval" role="alertdialog" aria-modal="false" data-i18n-aria="canvasAgentRootApprovalTitle" aria-label="Approve private folder access" hidden>
+                    <strong data-i18n="canvasAgentRootApprovalTitle">Approve private folder access?</strong>
+                    <small id="canvasAgentProjectRootApprovalDetail"></small>
+                    <div><button id="canvasAgentProjectRootApprovalReject" type="button" data-i18n="canvasAgentRootApprovalReject">Cancel</button><button id="canvasAgentProjectRootApprovalAllow" type="button" data-i18n="canvasAgentRootApprovalAllow">Allow once</button></div>
+                  </section>
                   <button id="canvasAgentProjectRootSelect" class="canvas-agent-project-root-select" type="button" data-i18n="canvasAgentRootSelect" hidden>Use this folder</button>
                   <small id="canvasAgentProjectRootTruncated" class="canvas-agent-project-root-truncated" data-i18n="canvasAgentRootTruncated" hidden>Some folders are not shown.</small>
                 </section>
@@ -468,7 +472,7 @@
             <button id="canvasAgentHistoryReturn" type="button" data-i18n="canvasAgentHistoryReturn">Back to current conversation</button>
           </div>
           <div id="canvasAgentTranscript" class="canvas-agent-transcript" role="log" aria-live="polite" aria-relevant="additions text">
-            <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Talk directly to your canvas.</strong><span data-i18n="canvasAgentEmptyBody">Extract handwriting, inspect Widget source, organize the canvas, or create and edit objects.</span></div>
+            <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Research, analyze, and create—all in one place.</strong><span data-i18n="canvasAgentEmptyBody">Analyze folders and files—including Excel, PowerPoint, PDF, and Word—and search the web. Use your current canvas as context for rich visual analyses and plans, or update it directly.</span></div>
           </div>
           <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
           <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Attachments" hidden></div>
@@ -478,17 +482,19 @@
             <pre id="canvasAgentApprovalCommand"></pre>
             <div><button id="canvasAgentApprovalReject" type="button" data-i18n="canvasAgentApprovalReject">Reject</button><button id="canvasAgentApprovalAllow" type="button" data-i18n="canvasAgentApprovalAllow">Allow once</button></div>
           </section>
-          <form id="canvasAgentForm" class="canvas-agent-composer">
-            <p id="canvasAgentInputHint" class="canvas-agent-input-hint" data-i18n="canvasAgentInputHint">Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.</p>
-            <section id="canvasAgentPromptSuggestions" class="canvas-agent-prompt-suggestions" role="group" data-i18n-aria="canvasAgentPromptSuggestions" aria-label="Suggested prompts" hidden>
-              <header><span data-i18n="canvasAgentPromptSuggestionsTitle">Try asking</span><button id="canvasAgentPromptToggle" type="button" aria-expanded="false" aria-controls="canvasAgentAdditionalPromptList canvasAgentPrimaryPromptList" data-i18n-title="canvasAgentPromptMore" title="Show suggested prompts" data-i18n-aria="canvasAgentPromptMore" aria-label="Show suggested prompts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button></header>
+          <section id="canvasAgentPromptSuggestions" class="canvas-agent-prompt-suggestions" role="group" data-i18n-aria="canvasAgentPromptSuggestions" aria-label="Suggested prompts" hidden>
+            <header><button id="canvasAgentPromptToggle" type="button" aria-expanded="false" aria-controls="canvasAgentPromptPopup" data-i18n-title="canvasAgentPromptMore" title="Show suggested prompts" data-i18n-aria="canvasAgentPromptMore" aria-label="Show suggested prompts"><span data-i18n="canvasAgentPromptSuggestionsTitle">Try asking</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button></header>
+            <div id="canvasAgentPromptPopup" class="canvas-agent-prompt-popup" hidden>
               <div id="canvasAgentAdditionalPromptList" class="canvas-agent-prompt-list canvas-agent-prompt-additional" hidden></div>
               <div id="canvasAgentPrimaryPromptList" class="canvas-agent-prompt-list"></div>
-            </section>
+            </div>
+          </section>
+          <form id="canvasAgentForm" class="canvas-agent-composer">
+            <p id="canvasAgentInputHint" class="canvas-agent-input-hint" data-i18n="canvasAgentInputHint">Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.</p>
             <div class="canvas-agent-composer-surface">
               <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask Canvas Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message Canvas Agent" aria-describedby="canvasAgentInputHint"></textarea>
               <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
-                <canvas id="canvasAgentInkCanvas" width="1200" height="260" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a Canvas Agent message"></canvas>
+                <canvas id="canvasAgentInkCanvas" width="1200" height="1040" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a Canvas Agent message"></canvas>
                 <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk">Clear</button>
               </div>
               <section id="canvasAgentReferencePicker" class="canvas-agent-reference-picker" role="dialog" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" hidden>
@@ -503,12 +509,15 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>
                     <span id="canvasAgentAttachmentCount" class="canvas-agent-attachment-count" hidden>0</span>
                   </button>
-                  <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Manage projects and files" data-i18n-aria="canvasAgentProject" aria-label="Manage projects and files">
-                    <svg class="canvas-agent-project-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg>
-                    <svg class="canvas-agent-project-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
-                    <span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">No project</span>
-                    <svg class="canvas-agent-project-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 14 4-4 4 4"/></svg>
-                  </button>
+                  <div id="canvasAgentProjectControl" class="canvas-agent-project-control">
+                    <button id="canvasAgentProject" class="canvas-agent-project-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentProjectPopover" data-i18n-title="canvasAgentProject" title="Manage projects and files" data-i18n-aria="canvasAgentProject" aria-label="Manage projects and files">
+                      <svg class="canvas-agent-project-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17z"/><path d="M3.5 9.5h17"/></svg>
+                      <svg class="canvas-agent-project-file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+                      <span id="canvasAgentProjectLabel" data-i18n="canvasAgentNoProject">No project</span>
+                      <svg class="canvas-agent-project-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 14 4-4 4 4"/></svg>
+                    </button>
+                    <button id="canvasAgentProjectClear" class="canvas-agent-project-clear" type="button" aria-label="Clear selected resource" title="Clear selected resource" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
+                  </div>
                   <button id="canvasAgentReference" class="canvas-agent-reference" type="button" aria-expanded="false" aria-controls="canvasAgentReferencePicker" data-i18n-aria="canvasAgentReferenceWidget" aria-label="Reference a Widget" data-i18n-title="canvasAgentReferenceWidgetTitle" title="Pick a Widget to reference">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
                   </button>
@@ -710,11 +719,13 @@
             <datalist id="settingsApiModelPresets"></datalist>
             </div>
             <div id="settingsCliFields" hidden>
-              <div class="settings-fields two-column">
-                <label><span data-i18n="settingsCliModel">Model (optional)</span><input id="settingsCliModel" autocomplete="off" spellcheck="false" placeholder="Use CLI default"></label>
-                <label><span data-i18n="settingsCliPath">Command or path</span><input id="settingsCliPath" autocomplete="off" spellcheck="false" placeholder="codex"></label>
-              </div>
-              <p class="settings-note" data-i18n="settingsCliHelp">Uses the CLI's existing local login. PenEcho does not install or sign in from this dialog.</p>
+              <label class="settings-field"><span data-i18n="settingsCliModel">Model (optional)</span><input id="settingsCliModel" autocomplete="off" spellcheck="false" placeholder="Use CLI default"></label>
+              <input id="settingsCliPath" type="hidden">
+              <section id="settingsCliStatus" class="settings-cli-status" data-state="checking" role="status" aria-live="polite">
+                <span class="settings-cli-status-dot" aria-hidden="true"></span>
+                <div><strong id="settingsCliStatusTitle" data-i18n="settingsCliChecking">Checking CLI…</strong><small id="settingsCliStatusDetail" data-i18n="settingsCliCheckingDetail">Looking for a PenEcho-managed or system installation.</small><div id="settingsCliCommandRow" class="settings-cli-command" hidden><code id="settingsCliCommand"></code><button id="settingsCliCopyCommand" type="button" data-i18n="settingsCliCopyCommand">Copy command</button></div></div>
+              </section>
+              <p class="settings-note" data-i18n="settingsCliHelp">PenEcho detects the CLI automatically. If one-click installation fails, copy the official command and install it in a terminal.</p>
               <aside id="settingsKimiCliRecommendation" class="settings-provider-notice" role="note" hidden>
                 <strong data-i18n="settingsKimiCodingRecommendationTitle">Recommended: connect with the Kimi Coding API</strong>
                 <p data-i18n="settingsKimiCodingRecommendationBody">Create and copy an API key in the Kimi Code Console, then add an API connection using the OpenAI-compatible format and this Base URL.</p>
@@ -855,18 +866,18 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">1.0.0</span>
+          <span class="changelog-version">1.1.0</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </header>
       <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Local-first Cloud and Echoes</h2>
+        <h2 id="changelogTitle" data-i18n="changelogTitle">Visual productivity with Canvas Agent</h2>
         <section class="changelog-release">
           <ul>
-            <li data-i18n="changelogLocalCloud">Open Cloud and favorite Canvases locally; add favorite Widgets to your current Canvas.</li>
-            <li data-i18n="changelogEchoes">Publish to Echoes, Echo shared work, and share Widgets or Canvases as images.</li>
+            <li data-i18n="changelogCanvasAgentResearch">Turn folders, files, web research, and canvas context into structured visual work from the Canvas Agent below the canvas.</li>
+            <li data-i18n="changelogCanvasAgentWorkspace">Visual Explorer brings research, analysis, planning, and editable on-canvas delivery into one workflow—with less tool switching and rework.</li>
           </ul>
         </section>
       </div>

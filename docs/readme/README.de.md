@@ -73,6 +73,8 @@ npm start
 
 Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Stelle der Leinwand und halte kurz inne. PenEcho erkennt die Striche und ihre räumlichen Beziehungen und platziert die Antwort daneben.
 
+- **Canvas Agent: vom Ausgangsmaterial zum visuellen Ergebnis.** Füge schreibgeschützte Ordner und Dateien wie PDF, Word, PowerPoint, Excel, Bilder oder Code hinzu, verbinde sie mit Webrecherche und der aktuellen Leinwand und lasse denselben Agenten Analyse, Planung, Erstellung und Überarbeitung fortführen.
+- **Mehr Produktivität mit Visual Explorer.** Verdichte komplexe Informationen zu einem responsiven, editierbaren visuellen Arbeitsbereich mit Überblick, verknüpften Details und Belegen. Das verkürzt den Weg von der Recherche zum teilbaren Ergebnis und reduziert Kopieren, Werkzeugwechsel, manuelles Diagrammzeichnen und Nacharbeit.
 - Zeichne natürlich mit Stift oder Maus und navigiere auf einer `20.000 x 20.000` großen Leinwand.
 - Erhalte Antworten, Hinweise, Erklärungen, Formeln, Funktionsgraphen und Diagramme direkt auf der Leinwand.
 - Verschiebe oder skaliere KI-Entwürfe und bestätige oder verwirf sie einzeln, bevor sie Teil deiner Arbeit werden.
@@ -88,15 +90,17 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 
 In **Echoes** kannst du öffentliche Leinwände und Widgets in zwölf Kategorien entdecken, favorisieren und wiederverwenden. Eigene Crafts lassen sich veröffentlichen, in einem schreibgeschützten Web-Viewer öffnen und mit ihrer Versionsabstammung weiterentwickeln.
 
-## Neu in Version 1.0.0
+## Neu in Version 1.1.0
 
-- **PenEcho Cloud.** Private geräteübergreifende Projekte, synchronisierte Favoriten sowie Verwaltung von Konto, Speicher und Guthaben.
-- **Verknüpftes Gerät.** Kopple diesen Host mit einem einmaligen Schlüssel und greife über angemeldete Browser und Apps darauf zu; die Verbindung kann pausiert, fortgesetzt oder entfernt werden.
-- **Echoes und öffentliche Crafts.** Entdecke, teile und verwende öffentliche Leinwände und Widgets mit Kategorien, Favoriten und schreibgeschütztem Web-Viewer.
-- **Sicheres Speichern über Geräte hinweg.** Jede Speicherung erzeugt eine unveränderliche Revision; Änderungen von anderen Geräten werden nie still überschrieben.
+- **Canvas Agent.** Bearbeite lokale Dateien, schreibgeschützte Ordnerprojekte, Webrecherche, Leinwandkontext, visuelle Erstellung und direkte Änderungen in einem durchgängigen, mehrstufigen Ablauf.
+- **Visual Explorer.** Verwandle Recherche, Dokumente, Notizen und Pläne in ein responsives visuelles Ergebnis, das vom Überblick zu Details und Belegen führt.
+- **Weniger Wechsel und Nacharbeit.** Recherchieren, analysieren, strukturieren, visualisieren, prüfen und überarbeiten geschieht im selben Arbeitsbereich; das Ergebnis bleibt direkt auf der Leinwand editierbar.
+- **Progressive visuelle Lieferung.** Vollständige Visual-Explorer-Versionen erscheinen früh und können an Ort und Stelle weiter verfeinert werden, statt jedes Mal neu erzeugt zu werden.
+- **Mehr Arbeitskontext.** Nutze PDF, Word, PowerPoint, Excel, Bilder, Code, schreibgeschützte Ordner, vorhandene Widgets, Handschrift und – sofern verfügbar – Internetsuche.
 
 ## Frühere Höhepunkte
 
+- **1.0.0.** Führte PenEcho Cloud, private versionierte Projekte, verknüpfte Geräte, Echoes, öffentliche Crafts und synchronisierte Favoriten ein.
 - **0.9.0.** Ergänzte mehrere KI-Verbindungen, projektbasierte gemeinsame Leinwände, geführtes Refine direkt am Widget, inkrementelle Unified-Diff-Änderungen, SSE-Streaming sowie Fortschritt mit Abbruch.
 - **0.8.1.** Ergänzte öffentliche Live-Daten für General HTML sowie SVG als Standard für Animationen und komplexe Grafiken.
 - **0.8.0 und 0.7.2.** Ergänzten editierbare professionelle Diagramme, Server-Speicherung, Zwischenablage-Workflows, Webfotos mit Quellen sowie zuverlässigere Bearbeitung und Exporte.

@@ -12,13 +12,14 @@ const {
 } = require("../cli.js");
 const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("./settings-contract.js");
 const { readSecret, writeSecret } = require("./secret-store.js");
-const { installCli, managedCliPath } = require("./cli-installer.js");
+const { inspectCli, installCli, managedCliPath } = require("./cli-installer.js");
 const { createUpdateManager } = require("./update-manager.js");
 const { lanHosts, lanUrls } = require("./network-access.js");
 const { desktopConfigurationEnvironment } = require("./config-environment.js");
 const { issueNativePickerGrant } = require("../src/server/canvas-agent/native-picker-grants.js");
 const { CanvasAgentProjectStore } = require("../src/server/canvas-agent/project-store.js");
 const pkg = require("../package.json");
+const DESKTOP_VERSION = pkg.config?.desktopVersion || pkg.version;
 
 app.setName("PenEcho");
 
@@ -261,94 +262,17 @@ function startServer(configuration) {
   });
 }
 
-function updateNoteLines(notes) {
-  return String(notes || "").split(/\r?\n/)
-    .map(line => line
-      .replace(/^\s*(?:#{1,6}|\*|-|\+|\d+\.)\s*/, "")
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-      .replace(/[*_`~]/g, "")
-      .trim())
-    .filter(Boolean)
-    .slice(0, 5)
-    .map(line => line.length > 84 ? `${line.slice(0, 81)}...` : line);
-}
-
-function macUpdateMenu(state) {
-  if (process.platform !== "darwin" || !state?.visible) return [];
-  const version = state.version ? ` v${state.version}` : "",
-    noteItems = updateNoteLines(state.notes).map(label => ({ label, enabled:false }));
-  if (state.status === "available") {
-    return [{
-      label:`Update${version}`,
-      submenu:[
-        { label:`PenEcho${version} is available`, enabled:false },
-        ...noteItems,
-        ...(noteItems.length ? [{ type:"separator" }] : []),
-        { label:"Upgrade", click:() => void updateManager?.download() },
-        { label:"Dismiss until next launch", click:() => updateManager?.dismiss() },
-      ],
-    }];
-  }
-  if (state.status === "downloading") {
-    return [{
-      label:`Updating${version}...`,
-      submenu:[
-        { label:`Downloading PenEcho${version}...`, enabled:false },
-        { label:state.progress === null ? "Download in progress" : `${Math.round(state.progress)}% downloaded`, enabled:false },
-      ],
-    }];
-  }
-  if (state.status === "ready") {
-    return [{
-      label:"Install Update",
-      submenu:[
-        { label:`PenEcho${version} is ready`, enabled:false },
-        ...noteItems,
-        ...(noteItems.length ? [{ type:"separator" }] : []),
-        { label:"Install and restart", click:() => void updateManager?.install() },
-        { label:"Later", click:() => updateManager?.dismiss() },
-      ],
-    }];
-  }
-  if (state.status === "installing") return [{ label:`Installing${version}...`, enabled:false }];
-  if (state.status === "checking") return [{ label:"Checking for Updates...", enabled:false }];
-  if (state.status === "up-to-date") {
-    return [{
-      label:"PenEcho is up to date",
-      submenu:[
-        { label:`Current version: v${state.currentVersion}`, enabled:false },
-        { label:"Dismiss", click:() => updateManager?.dismiss() },
-      ],
-    }];
-  }
-  if (state.status === "error") {
-    return [{
-      label:"Update Failed",
-      submenu:[
-        { label:String(state.error || "Try again later.").slice(0, 100), enabled:false },
-        { type:"separator" },
-        { label:state.ready ? "Retry Install" : "Try Again", click:() => void (state.ready ? updateManager?.install() : updateManager?.check(true)) },
-        { label:"Dismiss", click:() => updateManager?.dismiss() },
-      ],
-    }];
-  }
-  return [];
-}
-
 function sendUpdateState(window) {
   if (!window || window.isDestroyed() || !updateManager) return;
   window.webContents.send("penecho:update-state", updateManager.getState());
 }
 
-function updateDesktopUpdateUi(state) {
+function updateDesktopUpdateUi() {
   sendUpdateState(mainWindow);
-  installMenu();
 }
 
 function installMenu() {
-  const updateState = updateManager?.getState(),
-    template = [
+  const template = [
     ...(process.platform === "darwin" ? [{
       label:"PenEcho",
       submenu:[
@@ -375,11 +299,9 @@ function installMenu() {
       ? currentLanUrls.map(url => ({ label:url, click:() => { clipboard.writeText(url); void shell.openExternal(url); } }))
       : [{ label:"Enable local network access in Settings", enabled:false }],
     },
-    ...macUpdateMenu(updateState),
     { label:"Help", submenu:[
       { label:"Getting started", click:() => void shell.openExternal(HELP_URL) },
       { type:"separator" },
-      ...(updateState?.ready ? [{ label:"Install Downloaded Update...", click:() => void updateManager?.install() }] : []),
       { label:"Check for Updates…", click:() => void updateManager?.check(true) },
     ] },
   ];
@@ -511,7 +433,7 @@ function registerIpc() {
   ipcMain.handle("penecho:update-install", event => fromCanvas(event) ? updateManager?.install() : false);
   ipcMain.handle("penecho:get-settings", () => {
     const loaded = loadConfiguration();
-    const settings = publicSettings(loaded.configuration, { version:pkg.version, hasSavedApiKey:Boolean(loaded.apiKey) }),
+    const settings = publicSettings(loaded.configuration, { version:DESKTOP_VERSION, hasSavedApiKey:Boolean(loaded.apiKey) }),
       options = { stateDir:loaded.paths.stateDir, home:app.getPath("home") },
       kimi = managedCliPath("kimi-cli", options),
       codex = managedCliPath("codex-cli", options),
@@ -539,7 +461,13 @@ function registerIpc() {
         home:app.getPath("home"),
         fetchImpl:(url, options) => net.fetch(url, options),
       });
-      return { ok:true, ...result };
+      const loaded = loadConfiguration(), status = await inspectCli(provider, {
+        stateDir:paths.stateDir,
+        home:app.getPath("home"),
+        env:loaded.configuration.env,
+        configuredPath:result.executable,
+      });
+      return { ok:true, ...result, status };
     } catch (error) {
       return { ok:false, error:error.message || "Automatic installation failed." };
     } finally { cliOperation = null; }
@@ -598,6 +526,7 @@ function registerIpc() {
 async function bootstrap() {
   updateManager = createUpdateManager({
     app,
+    currentVersion:DESKTOP_VERSION,
     fetchImpl:(url, options) => net.fetch(url, options),
     onStateChange:updateDesktopUpdateUi,
   });

@@ -1,39 +1,25 @@
-# Canvas Agent Professional Diagrams
+# Canvas Agent Existing Professional Diagram Editing
 
-This optional contract exists only when the Professional Diagrams plugin is enabled. Use it when established notation, faithful quantitative axes and scales, domain-tool compatibility, or reusable editable professional source defines the requested artifact. An explicit feasible professional format wins. Do not choose it merely because the request contains words such as diagram, chart, architecture, model, process, flow, or draw.
+This optional contract is edit-only and exists only when the Professional Diagrams plugin is enabled. It applies only to a Professional Diagram Widget that is already present on the current Canvas.
 
-Preserve user-supplied labels, arrows, containment, groups, lanes, order, terminology, and spatial relationships. Improve alignment, spacing, hierarchy, and routing without inventing content.
+Never create a new Professional Diagram. Do not call `canvas_create` with `pluginId:"flowchart"`, `widgetType:"diagram_source"`, `frameworkVersion:"penecho-professional-diagrams-v1"`, or a professional source format. A request for a new Widget must use Visual Explorer or an enabled HTML route instead.
 
-## Choose one output path
+## Identify and read the existing Widget
 
-### Locally rendered source
+Use the latest Canvas state to locate the target that the user selected or clearly identified. A Professional Diagram uses `pluginId:"flowchart"` and may be either a locally rendered `diagram_source` Widget or an older/direct `html_widget` with professional source.
 
-Prefer a `diagram_source` Widget when a built-in renderer faithfully fits:
+Call `canvas_read` for the authoritative virtual resource before changing content:
 
-* `mermaid` — flowcharts, decision trees, sequence, state, class, ER, mind map, Gantt, and timelines
-* `dot` — architecture, topology, dependencies, lineage, causal and directed graphs
-* `bpmn-xml` — complete BPMN 2.0 including diagram geometry
-* `vega-lite` — faithful statistical, scientific, financial, and comparative charts
-* `geojson` — complete WGS84 maps, routes, regions, and spatial topology
-* `smiles` — valid locally rendered 2D molecular structures
-* `cytoscape-json` — complete biological, clinical, causal, dependency, or other node-link networks
+* Locally rendered `diagram_source` Widgets keep reusable syntax in `widget.source`.
+* Direct professional HTML Widgets may use `widget.html` for the rendering and `widget.source` for distinct reusable source. Read every resource that the requested change must keep synchronized.
+* Preserve the existing `sourceFormat`, `diagramKind`, renderer, framework version, title, and untouched content unless the user explicitly asks to change them.
 
-Call `canvas_create` with one Widget item using `pluginId:"flowchart"`, `widgetType:"diagram_source"`, a concise title, the exact `sourceFormat`, and complete reusable `source`. Include `diagramKind` when useful and use `refreshSeconds:0`. The source must be real syntax, semantically complete, and under the tool limit—not pseudocode, HTML, SVG, or renderer code. PenEcho owns the HTML, renderer, Copy action, and refresh behavior.
+Common locally rendered formats are `mermaid`, `dot`, `bpmn-xml`, `vega-lite`, `geojson`, `smiles`, and `cytoscape-json`. Other existing professional Widgets may contain PlantUML, D2, Structurizr DSL, DBML or SQL DDL, draw.io XML, Excalidraw JSON, KiCad, SPICE, WaveDrom, or another established format. Treat the Widget's current format as authoritative; never relabel a substitute syntax.
 
-Do not return HTML alongside a supported local format. Keep the diagram background transparent unless a contained surface materially improves legibility.
+## Patch in place
 
-### Direct HTML with professional source
+Apply the smallest complete `canvas_patch_widget` diff to the existing object. Use canonical `--- a/<virtual-path>` and `+++ b/<virtual-path>` headers. Preserve user-supplied labels, arrows, containment, groups, lanes, order, terminology, directions, quantitative axes, scales, and spatial relationships outside the requested change.
 
-Use an `html_widget` with `pluginId:"flowchart"` when the requested professional source has no local renderer, the user names another valid domain format, or specialized symbols or interaction are required.
+For a direct professional HTML Widget with distinct reusable source, keep `widget.html` and `widget.source` semantically identical after the patch. The rendering must remain human-readable rather than becoming a source viewer. Retain a transparent outer background unless the existing diagram or user request requires a contained surface.
 
-The HTML must be a faithful human-readable rendering, not a source viewer. Put the complete reusable professional source in `copyText`, use a concise `copyLabel:"Copy <format>"`, set the real `sourceFormat`, `diagramKind` when useful, `frameworkVersion:"penecho-professional-diagrams-v1"`, and `refreshSeconds:0`. The HTML and `copyText` must describe identical nodes, labels, directions, groups, and relationships.
-
-Suitable source formats include PlantUML, D2, Structurizr DSL, DBML or SQL DDL, draw.io XML, Excalidraw JSON, KiCad, SPICE, WaveDrom, and other established professional formats. This is not a whitelist. Infer the domain and target tool, then use real documented syntax; never invent or relabel a substitute format.
-
-Use semantic HTML/SVG and keep the outer document transparent. A necessary fixed-version HTTPS renderer may be loaded, but never use `latest`, guessed paths, secrets, or private endpoints. Keep a semantic native fallback or a specific visible error so the stage is not blank. Notify the parent with `penecho-widget-updated` after stable rendering and meaningful changes.
-
-## Composition and refinement
-
-Group dense diagrams only where grouping clarifies the domain logic. Keep exceptions and return paths near the decision that creates them. Avoid long backward edges across the whole diagram when a clearly labeled local return/reference preserves the relationship more legibly.
-
-For an existing Professional Widget, preserve its source format, renderer, terminology, direction, grouping, and unaffected content. Read the authoritative virtual resource and apply the smallest complete `canvas_patch_widget` diff with canonical `a/` and `b/` headers.
+Do not replace the existing Professional Diagram with a newly created Widget merely to make editing easier. Patch the target in place and stop when the requested change is complete.

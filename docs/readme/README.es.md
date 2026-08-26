@@ -73,6 +73,8 @@ npm start
 
 Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar del lienzo y haz una pausa. PenEcho interpreta los trazos y sus relaciones espaciales y coloca la respuesta junto a ellos.
 
+- **Canvas Agent: de las fuentes al resultado visual.** Añade carpetas y archivos de solo lectura —PDF, Word, PowerPoint, Excel, imágenes o código—, combínalos con investigación web y el lienzo actual, y deja que el mismo agente continúe con el análisis, la planificación, la creación y la revisión.
+- **Productividad con Visual Explorer.** Convierte información densa en un espacio visual adaptable y editable, con una vista general clara, detalles conectados y evidencias. Acorta el camino desde la investigación hasta un resultado compartible y reduce copiar y pegar, cambiar de herramienta, dibujar diagramas manualmente y rehacer trabajo.
 - Dibuja con lápiz o ratón y desplázate por un lienzo de `20 000 x 20 000`.
 - Obtén respuestas, pistas, explicaciones, fórmulas, gráficas y diagramas directamente sobre el lienzo.
 - Mueve y redimensiona borradores de IA; acéptalos o descártalos antes de incorporarlos al trabajo.
@@ -88,15 +90,17 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 
 **Echoes** permite explorar, marcar como favoritos y reutilizar lienzos y widgets públicos en doce categorías. Puedes publicar tus propios Crafts, abrirlos en un visor web de solo lectura y conservar su linaje entre versiones.
 
-## Novedades de la versión 1.0.0
+## Novedades de la versión 1.1.0
 
-- **PenEcho Cloud.** Proyectos privados entre dispositivos, favoritos sincronizados y gestión de cuenta, almacenamiento y créditos.
-- **Dispositivo vinculado.** Empareja este host con una clave de un solo uso y accede a él desde tus navegadores y aplicaciones con sesión iniciada; la conexión se puede pausar, reanudar o eliminar.
-- **Echoes y Crafts públicos.** Explora, comparte y reutiliza lienzos y widgets públicos, con categorías, favoritos y visor web de solo lectura.
-- **Guardado seguro entre dispositivos.** Cada guardado crea una revisión inmutable; los cambios de otro dispositivo nunca se sobrescriben en silencio.
+- **Canvas Agent.** Trabaja con archivos locales, proyectos de carpetas de solo lectura, investigación web, contexto del lienzo, creación visual y edición directa en un único flujo de varios pasos.
+- **Visual Explorer.** Transforma investigación, documentos, notas y planes en un resultado visual adaptable que conecta la vista general con los detalles y las evidencias.
+- **Menos cambios de contexto y retrabajo.** Investiga, analiza, estructura, visualiza, revisa y corrige en el mismo espacio; el resultado permanece editable sobre el lienzo.
+- **Entrega visual progresiva.** Recibe antes versiones completas de Visual Explorer y refínalas en el mismo lugar, sin regenerarlas desde cero.
+- **Más contexto de trabajo.** Añade PDF, Word, PowerPoint, Excel, imágenes, código o carpetas de solo lectura; referencia widgets y escritura existentes y usa búsqueda web cuando esté disponible.
 
 ## Novedades anteriores
 
+- **1.0.0.** Incorporó PenEcho Cloud, proyectos privados con versiones, dispositivos vinculados, Echoes, Crafts públicos y favoritos sincronizados.
 - **0.9.0.** Añadió varias conexiones de IA, proyectos de lienzos compartidos, Refine guiado en el propio widget, cambios incrementales con unified diff, streaming SSE y progreso con cancelación.
 - **0.8.1.** Añadió datos públicos en vivo para General HTML y SVG como opción predeterminada para animaciones y gráficos complejos.
 - **0.8.0 y 0.7.2.** Añadieron diagramas profesionales editables, almacenamiento en servidor, flujos de portapapeles, fotos web con fuente y edición y exportación más fiables.

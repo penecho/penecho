@@ -1334,6 +1334,7 @@
   settingsTestSearch?.addEventListener("click", () => void testCanvasSearch());
   settingsFetchModels?.addEventListener("click", () => void fetchConnectionModels());
   settingsInstallCli?.addEventListener("click", () => void installCanvasCli());
+  settingsCliCopyCommand?.addEventListener("click", () => void copyCanvasCliCommand());
   settingsAddConnection?.addEventListener("click", () => fillConnectionEditor());
   settingsEditorCancel?.addEventListener("click", hideConnectionEditor);
   settingsConnectionList?.addEventListener("click", handleConnectionAction);

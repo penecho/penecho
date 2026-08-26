@@ -1,7 +1,11 @@
 {
   "name": "penecho",
-  "version": "1.0.1",
-  "description": "Think with AI on a shared canvas for handwriting, equations, and diagrams",
+  "version": "1.1.0",
+  "config": {
+    "desktopVersion": "1.1.0"
+  },
+  "description": "Turn research, files, and canvas context into editable visual work with AI",
+  "author": "PenEcho contributors",
   "productName": "PenEcho",
   "main": "desktop/main.js",
   "license": "AGPL-3.0-only",
@@ -10,7 +14,10 @@
     "handwriting",
     "ai",
     "whiteboard",
-    "math"
+    "math",
+    "visualization",
+    "productivity",
+    "agent"
   ],
   "bin": {
     "penecho": "cli.js"

@@ -12,8 +12,10 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 
 function validCanvasAgentEntriesQuery(searchParams) {
   const entries = [...searchParams.entries()];
-  if (entries.length !== 1 || entries[0][0] !== "path") return false;
-  const value = entries[0][1];
+  if (entries.length < 1 || entries.length > 2 || searchParams.getAll("path").length !== 1
+    || searchParams.getAll("approved").length > 1 || [...searchParams.keys()].some(key => !["path", "approved"].includes(key))
+    || searchParams.has("approved") && searchParams.get("approved") !== "1") return false;
+  const value = searchParams.get("path");
   if (Buffer.byteLength(value, "utf8") > 4096 || value.includes("\0") || value.includes("\\") || value.startsWith("/")) return false;
   return !value.split("/").some(part => part === "." || part === "..");
 }
@@ -21,7 +23,8 @@ function validCanvasAgentEntriesQuery(searchParams) {
 const ROUTES = [
   { pattern:/^\/api\/settings$/, methods:new Set(["GET"]) },
   { pattern:/^\/api\/settings\/search\/test$/, methods:new Set(["POST"]) },
-  { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/settings\/connections$/, methods:new Set(["GET", "POST"]) },
+  { pattern:/^\/api\/settings\/connections\/(?:test|inspect-cli|models)$/, methods:new Set(["POST"]) },
   { pattern:/^\/api\/widget-fetch$/, methods:new Set(["GET", "POST"]), query:true },
   { pattern:/^\/api\/canvas-projects$/, methods:new Set(["GET", "POST"]) },
   // Cloud may select a registered resource, upload one file, or choose a

@@ -156,7 +156,7 @@ async function createNativeHarness(overrides = {}) {
     rootDirectory:ROOT,
     resolveConnection:id => id === connection.id ? connection : null,
     resolveWebSearch:() => ({ apiKey:"" }),
-    resolveWidgetCapabilities:() => ({ professionalEnabled:false, privatePlugins:[] }),
+    resolveWidgetCapabilities:overrides.resolveWidgetCapabilities || (() => ({ professionalEnabled:false, privatePlugins:[] })),
     resolveProject:async () => null,
     modelTimeoutMs:() => overrides.timeoutMs || 5000,
     logger:event => logs.push(event),
@@ -928,6 +928,116 @@ test("Codex CLI direct bridge refreshes its idle timeout while the turn keeps ma
   assert.equal(harness.host.sessions.has(session.id), true);
 });
 
+test("Codex CLI direct bridge treats reasoning streams as activity before assistant text", async t => {
+  const harness = await createNativeHarness({ timeoutMs:1200 });
+  t.after(() => harness.cleanup());
+  const session = await harness.connect();
+  const process = harness.processes[0];
+  process.requestHandler = async method => {
+    if (method !== "turn/start") return {};
+    const turnId = "reasoning-stream-timeout-turn";
+    setImmediate(() => process.emitNotification("turn/started", { threadId:process.threadId, turn:{ id:turnId } }));
+    setTimeout(() => process.emitNotification("item/reasoning/summaryPartAdded", {
+      threadId:process.threadId, turnId, itemId:"reasoning-item", summaryIndex:0,
+    }), 650);
+    setTimeout(() => process.emitNotification("item/reasoning/summaryTextDelta", {
+      threadId:process.threadId, turnId, itemId:"reasoning-item", summaryIndex:0, delta:"Summary progress.",
+    }), 1300);
+    setTimeout(() => process.emitNotification("item/reasoning/textDelta", {
+      threadId:process.threadId, turnId, itemId:"reasoning-item", contentIndex:0, delta:"Reasoning progress.",
+    }), 1950);
+    setTimeout(() => process.emitNotification("item/agentMessage/delta", {
+      threadId:process.threadId, turnId, delta:"Finished after reasoning. ",
+    }), 2600);
+    setTimeout(() => process.emitNotification("turn/completed", {
+      threadId:process.threadId, turn:{ id:turnId, status:"completed", items:[] },
+    }), 2800);
+    return { turn:{ id:turnId } };
+  };
+  const result = await harness.host.submit(session, "long reasoning turn", false, [], {}, null);
+  assert.equal(result.output, "Finished after reasoning.");
+  assert.equal(process.closedCount, 0);
+  assert.equal(harness.host.sessions.has(session.id), true);
+});
+
+test("Codex CLI direct bridge treats terminal interaction and strict review as activity", async t => {
+  const harness = await createNativeHarness({ timeoutMs:1000 });
+  t.after(() => harness.cleanup());
+  const session = await harness.connect();
+  const process = harness.processes[0];
+  process.requestHandler = async method => {
+    if (method !== "turn/start") return {};
+    const turnId = "review-progress-timeout-turn";
+    setImmediate(() => process.emitNotification("turn/started", { threadId:process.threadId, turn:{ id:turnId } }));
+    setTimeout(() => process.emitNotification("item/commandExecution/terminalInteraction", {
+      threadId:process.threadId, turnId, itemId:"command-item", processId:"process-1", stdin:"",
+    }), 600);
+    setTimeout(() => process.emitNotification("autoApprovalReview/strictReviewRequired", {
+      threadId:process.threadId, turnId, itemId:"review-item", reason:"policy",
+    }), 1200);
+    setTimeout(() => process.emitNotification("item/agentMessage/delta", {
+      threadId:process.threadId, turnId, delta:"Finished after workflow progress. ",
+    }), 1800);
+    setTimeout(() => process.emitNotification("turn/completed", {
+      threadId:process.threadId, turn:{ id:turnId, status:"completed", items:[] },
+    }), 2000);
+    return { turn:{ id:turnId } };
+  };
+  const result = await harness.host.submit(session, "long workflow turn", false, [], {}, null);
+  assert.equal(result.output, "Finished after workflow progress.");
+  assert.equal(process.closedCount, 0);
+  assert.equal(harness.host.sessions.has(session.id), true);
+});
+
+test("Codex CLI direct bridge refreshes its idle timeout for non-public turn progress", async t => {
+  const harness = await createNativeHarness({ timeoutMs:1000 });
+  t.after(() => harness.cleanup());
+  const session = await harness.connect();
+  const process = harness.processes[0];
+  process.requestHandler = async method => {
+    if (method !== "turn/start") return {};
+    const turnId = "streaming-progress-timeout-turn";
+    const notifications = [
+      ["item/started", { item:{ id:"reasoning-item", type:"reasoning" }, startedAtMs:Date.now() }],
+      ["item/reasoning/summaryPartAdded", { itemId:"reasoning-item", summaryIndex:0 }],
+      ["item/reasoning/summaryTextDelta", { itemId:"reasoning-item", summaryIndex:0, delta:"Summary progress." }],
+      ["item/reasoning/textDelta", { itemId:"reasoning-item", contentIndex:0, delta:"Reasoning progress." }],
+      ["item/plan/delta", { itemId:"plan-item", delta:"Plan progress." }],
+      ["item/commandExecution/outputDelta", { itemId:"command-item", delta:"Command progress." }],
+      ["item/commandExecution/terminalInteraction", { itemId:"command-item", processId:"process-1", stdin:"" }],
+      ["item/fileChange/outputDelta", { itemId:"file-item", delta:"File progress." }],
+      ["item/fileChange/patchUpdated", { itemId:"file-item", patch:"*** Begin Patch\n*** End Patch" }],
+      ["item/mcpToolCall/progress", { itemId:"mcp-item", message:"MCP progress." }],
+      ["item/autoApprovalReview/started", { itemId:"approval-item" }],
+      ["item/autoApprovalReview/completed", { itemId:"approval-item", decision:"approved" }],
+      ["autoApprovalReview/strictReviewRequired", { itemId:"approval-item", reason:"policy" }],
+      ["turn/plan/updated", { explanation:null, plan:[] }],
+      ["turn/diff/updated", { diff:"" }],
+      ["rawResponseItem/completed", { item:{ id:"raw-reasoning-item", type:"reasoning" } }],
+    ];
+    const progressIntervalMs = 125;
+    setImmediate(() => process.emitNotification("turn/started", { threadId:process.threadId, turn:{ id:turnId } }));
+    notifications.forEach(([notification, params], index) => {
+      setTimeout(() => process.emitNotification(notification, { threadId:process.threadId, turnId, ...params }), progressIntervalMs * (index + 1));
+    });
+    const responseAt = progressIntervalMs * (notifications.length + 1);
+    setTimeout(() => process.emitNotification("item/agentMessage/delta", {
+      threadId:process.threadId,
+      turnId,
+      delta:"Finished after streamed progress. ",
+    }), responseAt);
+    setTimeout(() => process.emitNotification("turn/completed", {
+      threadId:process.threadId,
+      turn:{ id:turnId, status:"completed", items:[] },
+    }), responseAt + 150);
+    return { turn:{ id:turnId } };
+  };
+  const result = await harness.host.submit(session, "long turn with non-public progress", false, [], {}, null);
+  assert.equal(result.output, "Finished after streamed progress.");
+  assert.equal(process.closedCount, 0);
+  assert.equal(harness.host.sessions.has(session.id), true);
+});
+
 test("Codex Native known-turn cancel settles once and preserves the process and thread", async t => {
   const harness=await createNativeHarness();
   t.after(()=>harness.cleanup());
@@ -1113,6 +1223,39 @@ test("Codex Native rejects stale turn-scoped item notifications", async t => {
   assert.equal(harness.host.sessions.size,0);
 });
 
+test("Codex Native rejects current-turn activity without thread attribution", async t => {
+  const notifications = [
+    ["reasoning item", "item/reasoning/textDelta", { itemId:"reasoning-item", contentIndex:0, delta:"unscoped" }, /item for another turn/],
+    ["strict review", "autoApprovalReview/strictReviewRequired", { itemId:"review-item", reason:"policy" }, /progress for another turn/],
+    ["raw response item", "rawResponseItem/completed", { item:{ id:"raw-item", type:"reasoning" } }, /raw response event for another turn/],
+  ];
+  for (const [label, notification, params, expected] of notifications) await t.test(label, async subtest => {
+    const harness=await createNativeHarness();
+    subtest.after(()=>harness.cleanup());
+    const session=await harness.connect(),process=harness.processes[0],turnId=`unscoped-${label.replaceAll(" ","-")}`;
+    process.requestHandler=async method=>method==="turn/start"?{turn:{id:turnId}}:{};
+    const submitted=harness.host.submit(session,"reject unscoped activity",false,[],{},null);
+    await waitFor(()=>session.active?.turnId===turnId);
+    process.emitNotification(notification,{turnId,...params});
+    await assert.rejects(submitted,expected);
+    await waitFor(()=>process.closedCount>0);
+    assert.equal(harness.host.sessions.size,0);
+  });
+});
+
+test("Codex Native rejects turn completion without thread attribution", async t => {
+  const harness=await createNativeHarness();
+  t.after(()=>harness.cleanup());
+  const session=await harness.connect(),process=harness.processes[0],turnId="unscoped-completed-turn";
+  process.requestHandler=async method=>method==="turn/start"?{turn:{id:turnId}}:{};
+  const submitted=harness.host.submit(session,"reject unscoped completion",false,[],{},null);
+  await waitFor(()=>session.active?.turnId===turnId);
+  process.emitNotification("turn/completed",{turn:{id:turnId,status:"completed",items:[]}});
+  await assert.rejects(submitted,/completed another turn/);
+  await waitFor(()=>process.closedCount>0);
+  assert.equal(harness.host.sessions.size,0);
+});
+
 test("Codex Native nonretryable protocol errors fail closed for the active turn", async t => {
   const harness=await createNativeHarness();
   t.after(()=>harness.cleanup());
@@ -1202,7 +1345,7 @@ test("Codex Native app-server child uses strict wire initialization before ephem
   });
   const threadId=await process.start({ model:"codex-model", cwd:directory, baseInstructions:"stable instructions", dynamicTools:[] });
   assert.equal(threadId, "wire-thread");
-  assert.equal(fs.statSync(process.workDir).mode & 0o700, 0o700);
+  if (os.platform() !== "win32") assert.equal(fs.statSync(process.workDir).mode & 0o700, 0o700);
   assert.deepEqual(child.sent.map(message => message.method || `response:${message.id}`), ["initialize", "initialized", "thread/start"]);
   assert.equal(child.sent[0].params.clientInfo.name, "penecho-canvas-agent");
   assert.equal(child.sent[0].params.capabilities.experimentalApi, true);
@@ -1283,6 +1426,51 @@ test("Codex Native returns loaded optional contracts as tool content rather than
   const skill = await session.native.tool("load_visual_skill").execute({ skill:"math-2d" }, { callId:"skill-call", signal:new AbortController().signal });
   assert.equal(skill.skill, "math-2d");
   assert.match(skill.document, /scientific visualization|math/i);
+});
+
+test("Codex Native rejects new Professional Diagrams while preserving in-place Professional edits", async t => {
+  const harness=await createNativeHarness({
+    resolveWidgetCapabilities:() => ({ professionalEnabled:true, privatePlugins:[] }),
+  });
+  t.after(() => harness.cleanup());
+  const session=await harness.connect();
+  harness.host.updateState(session,{revision:1,canvas:{width:20000,height:20000},counts:{widgets:1},objects:[{id:"professional-1",kind:"widget"}]});
+  const loaded=await session.native.tool("load_widget_contract").execute({route:"professional-diagrams"},{callId:"load-professional-edit",signal:new AbortController().signal});
+  assert.match(loaded.document,/edit-only[\s\S]*Patch in place/);
+  assert.match(session.native.instructions(),/Never create Professional Diagrams[\s\S]*For an existing Professional only/);
+  await assert.rejects(
+    session.native.tool("canvas_create").execute({
+      baseRevision:1,
+      items:[{type:"widget",pluginId:"flowchart",widgetType:"diagram_source",title:"New diagram",source:"graph TD; A-->B",sourceFormat:"mermaid",width:1200,height:800,placement:{mode:"auto"}}],
+    },{callId:"reject-professional-create",signal:new AbortController().signal}),
+    /items\[0\][\s\S]*must match exactly one oneOf branch/,
+  );
+  session.canvasLayoutOverviewRevision=1;
+  await assert.rejects(
+    session.native.tool("canvas_create").execute({
+      baseRevision:1,
+      items:[{type:"widget",pluginId:"general",widgetType:"html_widget",title:"Disguised diagram",html:"<main>diagram</main>",sourceFormat:"mermaid",frameworkVersion:"penecho-professional-diagrams-v1",width:1200,height:800,placement:{mode:"auto"}}],
+    },{callId:"reject-professional-framework-marker",signal:new AbortController().signal}),
+    /cannot create a new Professional Diagram/,
+  );
+  const rpcCalls=[];
+  session.rpc=async(name,args)=>{
+    rpcCalls.push({name,args});
+    if(name==="canvas_internal_widget")return {
+      revision:1,hash:"professional-hash",containerSourceFormat:"mermaid",
+      widgetEdit:{widgetType:"diagram_source",pluginId:"flowchart",title:"Existing diagram",refreshSeconds:0,html:"",source:"graph TD\n  A-->B\n",sourceMirrorsHtml:false,sourceFormat:"mermaid",diagramKind:"flowchart",frameworkVersion:"penecho-professional-diagrams-v1",copyText:"",copyLabel:""},
+    };
+    if(name==="canvas_internal_replace_widget")return {ok:true,revision:2,changeId:"professional-edit"};
+    throw new Error(`Unexpected browser tool ${name}`);
+  };
+  const result=await session.native.tool("canvas_patch_widget").execute({
+    objectId:"professional-1",baseRevision:1,
+    patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,2 +1,2 @@\n graph TD\n-  A-->B\n+  A-->C\n",
+  },{callId:"patch-existing-professional",signal:new AbortController().signal});
+  assert.equal(result.revision,2);
+  assert.deepEqual(rpcCalls.map(call=>call.name),["canvas_internal_widget","canvas_internal_replace_widget"]);
+  assert.equal(rpcCalls[1].args.command.tool,"diagram_source");
+  assert.match(rpcCalls[1].args.command.source,/A-->C/);
 });
 
 test("Codex Native freezes base instructions and carries durable loaded and private context per turn", async t => {

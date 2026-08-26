@@ -60,7 +60,7 @@ Scientific Visual Explorer extends the same General HTML artifact without changi
 | Forces, motion, fields, or conservation explanations | Visual Explorer with `physics-2d` | Static-first boundary, vectors, trajectory, and state evidence plus Manim-Web explanatory rendering/motion by default when it is at least as clear |
 | 3-D surfaces, cameras, coordinate transforms, or morphs | Visual Explorer with `math-3d` | Static-first canonical 3-D evidence plus Manim-Web rendering/camera motion by default; bounded orbit/zoom interaction with visible instructions and Reset view when inspection helps |
 | Open-ended experiments whose controls continuously change data, simulation state, or the view | Custom HTML | Application-owned controls and simulation lifecycle |
-| One standalone precision chart | Professional Diagrams | Chart grammar and data encoding |
+| One standalone precision chart | Visual Explorer | Calibrated General HTML/SVG with explicit axes, scales, units, and data encoding |
 
 Every scientific artifact is explanation-first. Its initial static HTML/SVG is complete, deterministic, readable, and retained as fallback before JavaScript runs. Manim-Web is the default explanatory rendering/motion language whenever it can present the request at least as clearly as a static alternative; fall back only when it cannot faithfully, legibly, accessibly, or efficiently improve the presentation. It is not a computer algebra system, numerical solver, or substitute for visible assumptions and deterministic derivations.
 

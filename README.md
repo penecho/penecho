@@ -78,6 +78,8 @@ Using these links directly supports the project:
 
 ## ✨ Features
 
+- **Canvas Agent: from source material to finished visual work.** Bring in read-only folders and files—including PDF, Word, PowerPoint, Excel, images, and code—combine them with web research and the current canvas, then keep the same agent working through analysis, planning, creation, and revision.
+- **Visual Explorer for productivity.** Turn dense information into one responsive, editable visual workspace with a clear overview, connected detail, and supporting evidence. It shortens the path from research to a shareable result, reducing copy-paste, tool switching, manual diagramming, and repeated handoffs between chat, documents, and design tools.
 - **Think in space, not in chat.** Write a question, equation, diagram, or half-formed idea anywhere on a `20,000 x 20,000` canvas. PenEcho reads your marks and their spatial relationships, then answers beside them.
 - **Answers on the canvas.** Get hints, explanations, formulas, plots, and diagrams where you are working. Move, resize, and copy each AI draft, then accept or discard it before it becomes part of your ink.
 - **Natural input.** Draw with a stylus or mouse; lasso confirmed ink to move, resize, recolor, or delete it, or send just that selection to Typeset. Editing your own ink never triggers an AI request.
@@ -129,15 +131,15 @@ In the app, signing in adds:
 - **Linked device.** Pair this host with a one-time key from Cloud → Devices, and your signed-in browsers and apps can reach it from anywhere through Cloud relay. Remote access to your canvas host without exposing it to the internet; API credentials still live only on that device. Pause, resume, or remove the link at any time.
 - **Echoes: co-creation and knowledge sharing.** Browse public Canvases and Widgets across twelve categories, favorite them into a personal library that syncs through Cloud, and add community Widgets straight into your own Canvas. Publish a Canvas of your own with a share category so others can learn from it, build on it, and Echo it — with Craft lineage preserved between versions.
 
-## 🔔 What's new in 1.0.0
+## 🔔 What's new in 1.1.0
 
-- **[PenEcho Cloud](https://penecho.ai) is live.** Sign in with your browser for private cloud projects, synced favorites, and remote access — API keys stay on your device.
-- **Cloud projects.** Private, versioned Canvases organized into projects, with an immutable revision on every save and safe handling of concurrent edits from another device.
-- **Linked device.** Pair this host with a one-time key so your signed-in browsers and apps can reach it from anywhere; pause, resume, or remove the link at any time.
-- **Echoes and public Crafts.** Browse, favorite, and reuse public Canvases and Widgets across twelve categories, publish your own with a share category, and open any public Craft in a read-only web viewer.
-- **Personal favorites library.** Widget favorites become a personal library with cloud sync — stored locally while signed out, merged into Cloud when you sign in.
+- **Canvas Agent.** Start below the canvas and keep one multi-step workflow moving across local files, read-only folder projects, web research, canvas context, visual creation, and direct canvas edits.
+- **Visual Explorer.** Convert research, documents, notes, and plans into a responsive visual artifact organized from overview to detail and evidence—not a pile of generic cards or a transcript trapped in chat.
+- **A shorter path to useful output.** Research, analyze, structure, visualize, review, and revise in the same workspace. The result stays editable on the canvas, reducing context switching, copy-paste, manual diagramming, and rework.
+- **Progressive visual delivery.** Canvas Agent can place and review complete Visual Explorer revisions as it works, so useful visual results arrive sooner and can be refined in place instead of regenerated from scratch.
+- **Broader working context.** Add PDF, Word, PowerPoint, Excel, images, code, or a read-only folder project; reference existing Widgets and handwriting; and use Internet Search when available.
 
-0.9.0 added multiple AI connections with one-click switching, project-based shared canvases, guided in-place Refine, unified-diff incremental edits, SSE streaming, and request progress with cancellation. See [Releases](https://github.com/penecho/penecho/releases) for the full history.
+1.0.0 introduced [PenEcho Cloud](https://penecho.ai), private versioned projects, linked-device remote access, Echoes, public Crafts, and synced favorites. 0.9.0 added multiple AI connections with one-click switching, project-based shared canvases, guided in-place Refine, unified-diff incremental edits, SSE streaming, and request progress with cancellation. See [Releases](https://github.com/penecho/penecho/releases) for the full history.
 
 ## 📖 How it works
 

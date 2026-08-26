@@ -545,7 +545,7 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
 
     const missingCliTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"codex-cli", cliPath:path.join(stateDir, "missing-codex"), effort:"xhigh" } }) }), missingCliBody = await missingCliTest.json();
     assert.equal(missingCliTest.status, 400);
-    assert.equal(missingCliBody.installable, true);
+    assert.equal(missingCliBody.installable, true, JSON.stringify(missingCliBody));
     assert.equal(missingCliBody.provider, "codex-cli");
     assert.match(missingCliBody.guidance, /chatgpt\.com\/codex\/install\.sh/);
     assert.match(missingCliBody.guidance, /codex login/);
@@ -554,7 +554,7 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
 
     const missingKimiTest = await fetch(`${origin}/api/settings/connections/test`, { method:"POST", headers, body:JSON.stringify({ connection:{ provider:"kimi-cli", cliPath:path.join(stateDir, "missing-kimi"), effort:"high" } }) }), missingKimiBody = await missingKimiTest.json();
     assert.equal(missingKimiTest.status, 400);
-    assert.equal(missingKimiBody.installable, true);
+    assert.equal(missingKimiBody.installable, true, JSON.stringify(missingKimiBody));
     assert.equal(missingKimiBody.provider, "kimi-cli");
     assert.match(missingKimiBody.guidance, /code\.kimi\.com\/kimi-code\/install\.sh/);
     assert.match(missingKimiBody.guidance, /kimi login/);
@@ -567,6 +567,10 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
     assert.ok(codex?.removable);
     assert.equal(codex.name, "gpt-5.6-sol");
     assert.equal(created.connections.length, 2);
+
+    const edit = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", id:codex.id, connection:{ provider:"codex-cli", cliModel:"gpt-5.6-sol-edited", cliPath:"codex", effort:"high" } }) }), edited = await edit.json();
+    assert.equal(edit.status, 200, JSON.stringify(edited));
+    assert.equal(edited.connections.find(connection => connection.id === codex.id)?.name, "gpt-5.6-sol-edited");
 
     const activate = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"activate", id:codex.id }) }), activated = await activate.json();
     assert.equal(activate.status, 200, JSON.stringify(activated));
@@ -596,6 +600,27 @@ test("canvas shares ten persistent API and CLI connections without a server-wide
     assert.equal(Object.hasOwn(stored, "activeId"), false);
     const deleteDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"delete", id:"default" }) });
     assert.equal(deleteDefault.status, 400);
+    const editDefault = await fetch(`${origin}/api/settings/connections`, { method:"POST", headers, body:JSON.stringify({ action:"save", id:"default", connection:{ provider:"api", apiFormat:"openai", apiUrl:"https://changed.example.test/v1", apiModel:"changed", apiKey:"changed", effort:"medium" } }) }), editDefaultBody = await editDefault.json();
+    assert.equal(editDefault.status, 200, JSON.stringify(editDefaultBody));
+    assert.equal(editDefaultBody.savedId, "default");
+  } finally { await stopServer(child); }
+});
+
+test("connection manager CLI inspection returns the platform install fallback without running a model request", { timeout:10000 }, async () => {
+  const env = apiServerEnv("https://api.example.test", { PATH:"", KIMI_CLI_PATH:"kimi" });
+  env.HOME = path.join(env.PENECHO_STATE_DIR, "home");
+  env.USERPROFILE = env.HOME;
+  const { child, origin } = await startServer(env), headers = { Origin:origin, "Content-Type":"application/json" };
+  try {
+    const response = await fetch(`${origin}/api/settings/connections/inspect-cli`, { method:"POST", headers, body:JSON.stringify({ provider:"kimi-cli" }) }), body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.status.state, "missing");
+    assert.equal(body.status.executable, "");
+    assert.equal(body.status.loginCommand, "kimi login");
+    assert.match(body.status.installCommand, /code\.kimi\.com\/kimi-code\/install\.(?:sh|ps1)/);
+
+    const invalid = await fetch(`${origin}/api/settings/connections/inspect-cli`, { method:"POST", headers, body:JSON.stringify({ provider:"api" }) });
+    assert.equal(invalid.status, 400);
   } finally { await stopServer(child); }
 });
 

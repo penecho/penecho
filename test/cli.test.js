@@ -316,6 +316,18 @@ test("API validation and connection requests use the selected wire format", asyn
   assert.equal(Object.hasOwn(minimaxBody,"thinking"),false);
 });
 
+test("API connection success labels distinguish presets from wire formats", async () => {
+  const tested = async () => ({ format:"openai", status:200 });
+  const kimi = isolatedConfiguration(parseArgs(["--api"]), {
+    AI_PROVIDER:"api", AI_API_FORMAT:"openai", AI_API_URL:"https://api.kimi.com/coding/v1", AI_API_MODEL:"k3", AI_API_KEY:"key", PENECHO_API_PRESET:"kimi-global-coding",
+  });
+  const custom = isolatedConfiguration(parseArgs(["--api"]), {
+    AI_PROVIDER:"api", AI_API_FORMAT:"openai", AI_API_URL:"https://example.test/v1", AI_API_MODEL:"model", AI_API_KEY:"key",
+  });
+  assert.equal(await testConfiguredProvider(kimi, { apiTester:tested }), "Kimi API responded with HTTP 200.");
+  assert.equal(await testConfiguredProvider(custom, { apiTester:tested }), "OpenAI-compatible API responded with HTTP 200.");
+});
+
 test("API failure diagnostics redact the key", async () => {
   const key = "sk-never-print";
   await assert.rejects(

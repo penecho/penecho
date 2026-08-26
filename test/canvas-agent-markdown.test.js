@@ -34,7 +34,7 @@ function renderer(document){
 }
 
 function messageAppender(document,clipboardWrites){
-  const names=["canvasAgentFencedSegments","canvasAgentBlockLabel","canvasAgentMarkdownHref","canvasAgentAppendMarkdownStyled","canvasAgentAppendMarkdownLinks","canvasAgentAppendMarkdownInline","canvasAgentMarkdownSafe","canvasAgentAppendMarkdown","canvasAgentRenderMessageBody","canvasAgentSetAssistantCopyState","canvasAgentCopyAssistantMessage","canvasAgentSetAssistantCopyReady","canvasAgentAppendMessageElement"];
+  const names=["canvasAgentFencedSegments","canvasAgentBlockLabel","canvasAgentMarkdownHref","canvasAgentAppendMarkdownStyled","canvasAgentAppendMarkdownLinks","canvasAgentAppendMarkdownInline","canvasAgentMarkdownSafe","canvasAgentAppendMarkdown","canvasAgentRenderMessageBody","canvasAgentSetAssistantCopyState","canvasAgentCopyAssistantMessage","canvasAgentSetAssistantCopyReady","canvasAgentAssistantPosition","canvasAgentAppendMessageElement"];
   const translations={canvasAgentCodeBlock:"Code",canvasAgentTextBlock:"Text",canvasAgentCopyBlock:"Copy",canvasAgentBlockCopied:"Copied",canvasAgentBlockCopyFailed:"Copy failed",canvasAgentCopyResponse:"Copy response",canvasAgentResponseCopied:"Copied",canvasAgentResponseCopyFailed:"Copy failed",canvasAgentHistoryAttachments:"{count} attachments"};
   const canvasAgentTranscript=document.querySelector("#transcript");
   return vm.runInNewContext(`(()=>{${names.map(functionSource).join("\n")}return {append:canvasAgentAppendMessageElement,copy:canvasAgentCopyAssistantMessage};})()`,{
@@ -116,15 +116,34 @@ test("Canvas Agent live and persisted messages share one explicit display limit"
   assert.match(source,/target\.messageText = canvasAgentMessageText\(target\.messageText \+ \(event\.text \|\| ""\)\)/);
 });
 
-test("Canvas Agent final assistant_message is authoritative over streamed deltas",()=>{
+function assistantEventHarness(initialTargets=[]) {
+  let id=0;
+  const created=[],rendered=[],canvasAgent={assistantRows:new Map(),currentConversation:{items:[]},viewingHistoryId:""};
+  for(const target of initialTargets){
+    canvasAgent.assistantRows.set(target.historyItem.eventKey,target);
+    canvasAgent.currentConversation.items.push(target.historyItem);
+  }
+  const canvasAgentRow=(role,text,attachments,options)=>{
+    const item={id:`row-${++id}`,type:"message",role,text,eventKey:options.eventKey,turn:options.turn,step:options.step,final:options.final!==false,copyable:false},
+      target={messageText:text,body:{},historyItem:item,row:{classList:{add(){}}},turn:options.turn,step:options.step};
+    canvasAgent.currentConversation.items.push(item);created.push(target);return target;
+  },names=["canvasAgentAssistantPosition","canvasAgentPendingAssistantRow","canvasAgentCreateAssistantRow","canvasAgentHandleEvent"],
+    handleEvent=vm.runInNewContext(`(()=>{${names.map(functionSource).join("\n")}return canvasAgentHandleEvent;})()`,{
+      canvasAgent,canvasAgentRow,canvasClientId:()=>`event-${++id}`,canvasAgentMessageText:value=>String(value||""),
+      canvasAgentRenderMessageBody:(body,text,role,options)=>rendered.push({body,text,role,options}),canvasAgentScheduleHistoryPersist:()=>{},canvasAgentScrollToLatest:()=>{},
+    });
+  return {canvasAgent,created,rendered,handleEvent};
+}
+
+test("Canvas Agent final assistant_message is authoritative over its streamed deltas",()=>{
   const handle=functionSource("canvasAgentHandleEvent");
   assert.match(handle,/assistant_delta[\s\S]*?\{final:false\}/);
   assert.match(handle,/assistant_message[\s\S]*?if\(typeof event\.text==="string"\)target\.messageText=canvasAgentMessageText\(event\.text\)[\s\S]*?\{final:true\}[\s\S]*?historyItem\.text=target\.messageText/);
   assert.match(handle,/historyItem\.final=false[\s\S]*?historyItem\.final=true/);
   assert.doesNotMatch(handle,/event\.text && !target\.messageText/);
   assert.match(source,/canvasAgentAppendMessageElement\(item[\s\S]*?final:item\.role!=="assistant"\|\|item\.final!==false/);
-  const target={messageText:"streamed draft",body:{},historyItem:{text:"streamed draft",final:false},row:{classList:{add(){}}}},canvasAgent={assistantRows:new Map([["7:2",target]])},rendered=[];
-  const handleEvent=vm.runInNewContext(`(()=>{${handle}return canvasAgentHandleEvent;})()`,{canvasAgent,canvasAgentMessageText:value=>String(value||""),canvasAgentRenderMessageBody:(body,text,role,options)=>rendered.push({body,text,role,options}),canvasAgentScheduleHistoryPersist:()=>{}});
+  const target={messageText:"streamed draft",body:{},historyItem:{type:"message",role:"assistant",text:"streamed draft",eventKey:"7:2:existing",turn:7,step:2,final:false},row:{classList:{add(){}}}},
+    {rendered,handleEvent}=assistantEventHarness([target]);
   handleEvent({kind:"assistant_message",turn:7,step:2,text:""});
   assert.equal(target.messageText,"","an explicitly empty authoritative final clears stale streamed text");
   assert.equal(target.historyItem.text,"");
@@ -135,16 +154,46 @@ test("Canvas Agent final assistant_message is authoritative over streamed deltas
   assert.equal(rendered[0].options.final,true);
 });
 
+test("Canvas Agent keeps completed assistant messages distinct and appends the final summary",()=>{
+  const progress={messageText:"Progress: translating the widget",body:{},historyItem:{type:"message",role:"assistant",text:"Progress: translating the widget",eventKey:"1:0:progress",turn:1,step:0,final:true},row:{classList:{add(){}}}},
+    harness=assistantEventHarness([progress]);
+  harness.handleEvent({kind:"assistant_message",turn:1,text:"Translation completed."});
+  assert.equal(progress.messageText,"Progress: translating the widget");
+  assert.equal(harness.created.length,1);
+  assert.equal(harness.created[0].messageText,"Translation completed.");
+  assert.equal(harness.created[0].historyItem.final,true);
+  assert.equal(harness.canvasAgent.currentConversation.items.at(-1),harness.created[0].historyItem,"the final summary is appended after prior activity");
+
+  harness.handleEvent({kind:"assistant_message",turn:1,text:"A separate completed note."},{replay:true});
+  assert.equal(harness.created.length,2,"backlog replay also preserves separate completed messages");
+  assert.notEqual(harness.created[0].historyItem.eventKey,harness.created[1].historyItem.eventKey);
+});
+
+test("Canvas Agent starts a new streaming row after a completed assistant message",()=>{
+  const completed={messageText:"First completed message",body:{},historyItem:{type:"message",role:"assistant",text:"First completed message",eventKey:"5:3:complete",turn:5,step:3,final:true},row:{classList:{add(){}}}},
+    harness=assistantEventHarness([completed]);
+  harness.handleEvent({kind:"assistant_delta",turn:5,step:3,text:"New streamed draft"});
+  assert.equal(completed.messageText,"First completed message");
+  assert.equal(harness.created.length,1);
+  assert.equal(harness.created[0].messageText,"New streamed draft");
+  assert.equal(harness.created[0].historyItem.final,false);
+  harness.handleEvent({kind:"assistant_message",turn:5,step:3,text:"New authoritative final"});
+  assert.equal(harness.created.length,1,"the final still merges with its own pending stream");
+  assert.equal(harness.created[0].messageText,"New authoritative final");
+  assert.equal(harness.created[0].historyItem.final,true);
+});
+
 test("Canvas Agent enables response copy only for the last completed assistant step in a turn",()=>{
-  const intermediate={messageText:"Inspecting the canvas",historyItem:{final:true,copyable:false}},summary={messageText:"Final summary",historyItem:{final:true,copyable:false}},otherTurn={messageText:"Other turn",historyItem:{final:true,copyable:false}},marked=[];
-  const canvasAgent={assistantRows:new Map([["4:1",intermediate],["3:8",otherTurn],["4:3",summary]]),toolRows:new Map([["tool-4",{turn:4,step:2}]])};
-  const mark=vm.runInNewContext(`(()=>{${functionSource("canvasAgentMarkTurnSummaryCopyable")}return canvasAgentMarkTurnSummaryCopyable;})()`,{canvasAgent,canvasAgentSetAssistantCopyReady:(target,ready)=>{target.historyItem.copyable=ready;marked.push(target);}});
+  const intermediateItem={type:"message",role:"assistant",turn:4,step:1,final:true,copyable:false},toolItem={type:"tool",turn:4,step:2},summaryItem={type:"message",role:"assistant",turn:4,step:3,final:true,copyable:false},otherTurnItem={type:"message",role:"assistant",turn:3,step:8,final:true,copyable:false},
+    intermediate={messageText:"Inspecting the canvas",historyItem:intermediateItem},summary={messageText:"Final summary",historyItem:summaryItem},otherTurn={messageText:"Other turn",historyItem:otherTurnItem},marked=[],
+    canvasAgent={currentConversation:{items:[intermediateItem,toolItem,summaryItem,otherTurnItem]},assistantRows:new Map([["4:1:intermediate",intermediate],["3:8:other",otherTurn],["4:3:summary",summary]])};
+  const mark=vm.runInNewContext(`(()=>{${functionSource("canvasAgentAssistantPosition")}\n${functionSource("canvasAgentMarkTurnSummaryCopyable")}return canvasAgentMarkTurnSummaryCopyable;})()`,{canvasAgent,canvasAgentSetAssistantCopyReady:(target,ready)=>{target.historyItem.copyable=ready;marked.push(target);}});
   assert.equal(mark(4),true);
   assert.deepEqual(marked,[summary]);
   assert.equal(intermediate.historyItem.copyable,false);
   assert.equal(summary.historyItem.copyable,true);
   assert.equal(otherTurn.historyItem.copyable,false);
-  canvasAgent.assistantRows.delete("4:3");
+  canvasAgent.assistantRows.delete("4:3:summary");
   marked.length=0;
   assert.equal(mark(4),false,"an assistant preamble before the last tool is not treated as a final summary");
   assert.deepEqual(marked,[]);

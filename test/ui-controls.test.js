@@ -78,6 +78,9 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(html, /data-effort="config"[^>]*>[\s\S]*?Configured/);
   assert.match(html, /id="settingsTestConnection"[^>]*data-i18n="settingsTestConnection"/);
   assert.match(html, /id="settingsInstallCli"[^>]*hidden[^>]*data-i18n="settingsInstallCli"/);
+  assert.match(html, /id="settingsCliPath"[^>]*type="hidden"/);
+  assert.doesNotMatch(html, /<label><span data-i18n="settingsCliPath"/);
+  for (const id of ["settingsCliStatus", "settingsCliStatusTitle", "settingsCliStatusDetail", "settingsCliCommandRow", "settingsCliCommand", "settingsCliCopyCommand"]) assert.match(html, new RegExp(`id="${id}"`));
   for (const endpoint of [
     "https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1", "https://api.kimi.com/coding/v1",
     "https://api.minimax.io/v1", "https://api.minimax.io/anthropic", "https://api.minimaxi.com/v1", "https://api.minimaxi.com/anthropic",
@@ -92,10 +95,21 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(functionSource(app, "fillConnectionEditor"), /connection\?\.effort \|\| defaultConnectionEffort\(provider\)/);
   assert.match(functionSource(app, "testCanvasConnection"), /\/api\/settings\/connections\/test[\s\S]*?settings\.editingConnectionId[\s\S]*?body\?\.installable/);
   assert.match(functionSource(app, "installCanvasCli"), /penechoDesktop\.installCli\(provider\)[\s\S]*?settingsCliPath\.value = result\.executable[\s\S]*?testCanvasConnection\(\)/);
+  assert.match(functionSource(app, "updateSettingsProviderFields"), /inspectCanvasCli\(provider\)/);
+  assert.match(functionSource(app, "inspectCanvasCli"), /\/api\/settings\/connections\/inspect-cli[\s\S]*?renderCanvasCliStatus\(body\.status\)/);
+  assert.match(functionSource(app, "renderCanvasCliStatus"), /status\.state === "missing"[\s\S]*?showCliCommand\(status\.installCommand\)[\s\S]*?showCliInstaller\(status\.provider, true\)/);
+  assert.match(functionSource(app, "installCanvasCli"), /settingsCliManualFallback/);
+  assert.match(functionSource(app, "copyCanvasCliCommand"), /writeClipboardText\(command\)/);
   assert.match(html, /id="settingsKimiCliRecommendation"[^>]*role="note"[^>]*hidden/);
   assert.match(html, /https:\/\/api\.kimi\.com\/coding\/v1[\s\S]*?https:\/\/www\.kimi\.com\/code\/console/);
   assert.match(functionSource(app, "updateSettingsProviderFields"), /settingsKimiCliRecommendation\.hidden = provider !== "kimi-cli"/);
   assert.match(css, /\.settings-provider-notice\[hidden\]\s*\{\s*display:\s*none/);
+  assert.match(css, /\.settings-cli-status\[data-state="missing"\]/);
+  assert.match(css, /\.settings-cli-command code\s*\{/);
+  for (const key of ["settingsCliChecking", "settingsCliMissing", "settingsCliCopyCommand", "settingsCliManualFallback"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
   for (const key of ["settingsKimiCodingRecommendationTitle", "settingsKimiCodingRecommendationBody", "settingsKimiCodingConsole", "settingsKimiCodingRecommendationReason"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
@@ -131,6 +145,8 @@ test("API connection models can be fetched into an editable dropdown", () => {
   assert.match(functionSource(core, "fetchConnectionModels"), /requestSignature[\s\S]*?connectionModelDiscoverySignature\(\)[\s\S]*?setSettingsStatus\(\)[\s\S]*?return/);
   assert.match(functionSource(core, "normalizeFetchedApiModels"), /\.sort\(\(a, b\)/);
   assert.match(functionSource(core, "updateConnectionModelFetchState"), /aria-busy[\s\S]*settingsFetchingModels/);
+  assert.match(core, /API_DEFAULTS = Object\.freeze\(\{[\s\S]*?openai:[\s\S]*?https:\/\/api\.openai\.com\/v1[\s\S]*?anthropic:[\s\S]*?https:\/\/api\.anthropic\.com/);
+  assert.match(functionSource(core, "updateApiPresetFields"), /selectedApiPreset\(\) \|\| API_DEFAULTS\[family\][\s\S]*?settingsApiUrl\.value = defaults\.url/);
   assert.match(functionSource(core, "handleApiModelKeydown"), /Escape[\s\S]*ArrowDown/);
   assert.match(bootstrap, /settingsFetchModels\?\.addEventListener\("click"[^\n]*fetchConnectionModels/);
   assert.match(bootstrap, /settingsApiModelOptions\?\.addEventListener\("click"[\s\S]*?chooseApiModel/);

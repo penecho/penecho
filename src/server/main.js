@@ -24,6 +24,7 @@ const { callClaudeCli } = require("../providers/claude-cli.js");
 const { callKimiCli } = require("../providers/kimi-cli.js");
 const { DEFAULT_REASONING_EFFORT, apiReasoningParameters, normalizeReasoningEffort, reasoningEffortMapping, reasoningEffortTimeoutMultiplier } = require("../providers/reasoning-effort.js");
 const { testConfiguredProvider } = require("../cli/main.js");
+const { CLI_LOGIN_COMMANDS, inspectCli } = require("../providers/cli-inspection.js");
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const { resolveWidgetEditPatchCommands, widgetSourceMirrorsHtml, widgetPatchContract, widgetPatchFiles } = require("./widget-patch.js");
 const { CloudConnector, cloudAiConnectionHeaders } = require("./cloud-connector.js");
@@ -31,6 +32,7 @@ const { createRemoteCanvasHttpExecutor } = require("./remote-canvas-http.js");
 const { attachCanvasAgent } = require("./canvas-agent/http.js");
 const { createCanvasAgentRequestTracer } = require("./canvas-agent/request-trace.js");
 const { CanvasAgentProjectStore } = require("./canvas-agent/project-store.js");
+const { macosRemoteRoots, windowsDriveRoots } = require("./canvas-agent/host-roots.js");
 const { consumeNativePickerGrant } = require("./canvas-agent/native-picker-grants.js");
 const {
   PUBLIC_FETCH_MAX_URL_LENGTH,
@@ -41,6 +43,7 @@ const {
 } = require("./public-fetch.js");
 const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
+const APP_PACKAGE = require("../../package.json");
 let sharp = null;
 try { sharp = require("sharp"); } catch {}
 
@@ -73,7 +76,7 @@ const CANVAS_AGENT_PUBLIC_PROJECT_ERROR_CODES = new Set([
   "project_changed", "project_file_content_invalid", "project_file_name_invalid", "project_file_too_large",
   "project_file_type_invalid", "project_file_unreadable", "project_invalid", "project_limit", "project_metadata_invalid",
   "project_not_found", "project_root_escape", "project_root_invalid", "project_root_kind_invalid", "project_root_not_found",
-  "project_root_path_invalid", "project_root_unreadable", "project_unavailable", "project_upload_failed",
+  "project_root_approval_required", "project_root_path_invalid", "project_root_unreadable", "project_unavailable", "project_upload_failed",
   "project_upload_identity_invalid", "project_upload_invalid", "project_upload_too_large",
 ]);
 function canvasAgentResourceErrorExposesAbsolutePath(value) {
@@ -90,8 +93,11 @@ function publicCanvasAgentResourceError(error) {
       : "Unable to access the Canvas Agent resource.";
   return { status, body:{ error:safeMessage, code } };
 }
-const CANVAS_AGENT_ALLOWED_ROOTS = canvasAgentAllowedRoots(process.env.PENECHO_CANVAS_AGENT_ALLOWED_ROOTS);
-const CANVAS_AGENT_HOST_ROOTS = [{ name:"Home", path:os.homedir() }, ...CANVAS_AGENT_ALLOWED_ROOTS];
+const CANVAS_AGENT_CONFIGURED_ROOTS = canvasAgentAllowedRoots(process.env.PENECHO_CANVAS_AGENT_ALLOWED_ROOTS);
+const CANVAS_AGENT_MACOS_REMOTE_ROOTS = macosRemoteRoots(os.homedir());
+const CANVAS_AGENT_WINDOWS_DRIVE_ROOTS = windowsDriveRoots();
+const CANVAS_AGENT_ALLOWED_ROOTS = [...CANVAS_AGENT_CONFIGURED_ROOTS, ...CANVAS_AGENT_MACOS_REMOTE_ROOTS, ...CANVAS_AGENT_WINDOWS_DRIVE_ROOTS];
+const CANVAS_AGENT_HOST_ROOTS = [{ name:"Home", path:os.homedir(), guardPrivate:true }, ...CANVAS_AGENT_WINDOWS_DRIVE_ROOTS, ...CANVAS_AGENT_CONFIGURED_ROOTS];
 const CANVAS_AGENT_PROJECT_STORE = new CanvasAgentProjectStore({
   stateDirectory:STATE_DIRECTORY || CLOUD_STATE_DIRECTORY,
   allowedRoots:CANVAS_AGENT_ALLOWED_ROOTS,
@@ -100,6 +106,7 @@ const CANVAS_AGENT_PROJECT_STORE = new CanvasAgentProjectStore({
 });
 const PENECHO_CLOUD_ENV = String(process.env.PENECHO_CLOUD_ENV || "prod").trim().toLowerCase() === "uat" ? "uat" : "prod";
 const DEFAULT_CLOUD_ORIGIN = String(process.env.PENECHO_CLOUD_ORIGIN || (PENECHO_CLOUD_ENV === "uat" ? "https://internaltest.penecho.ai" : "https://penecho.ai")).replace(/\/$/, "");
+const CLOUD_ACTIVITY_IMAGE_SOURCE = new URL(DEFAULT_CLOUD_ORIGIN).origin;
 const PRIVATE_PLUGIN_DIRECTORY = process.env.PENECHO_PRIVATE_PLUGIN_DIR
   ? path.resolve(process.env.PENECHO_PRIVATE_PLUGIN_DIR)
   : STATE_DIRECTORY
@@ -891,10 +898,21 @@ function cliInstallationGuidance(provider) {
   return "";
 }
 
+async function inspectConnectionCli(provider, options = {}) {
+  return inspectCli(provider, { env:process.env, home:process.env.HOME || process.env.USERPROFILE || os.homedir(), stateDir:STATE_DIRECTORY || CLOUD_STATE_DIRECTORY, cwd:process.cwd(), ...options });
+}
+
 function connectionTestErrorMessage(error, provider) {
   const message = String(error?.message || "Connection test failed.").trim();
   if (provider !== "kimi-cli") return message;
   return message.split("Kimi Code CLI is not available.", 1)[0].trim() || "Kimi Code CLI connection test failed.";
+}
+
+function cliConnectionIssue(error) {
+  const message = String(error?.message || "");
+  if (/not found|not available|path is not a file|does not exist|no such file|executable.*(?:missing|not)|\bENOENT\b/i.test(message)) return "missing";
+  if (/unauthorized|unauthenticated|authentication|not logged|log in|login required|invalid api key|\b401\b/i.test(message)) return "auth_required";
+  return "request_failed";
 }
 
 function requestProviderSnapshot(req) {
@@ -3268,12 +3286,12 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/canvas-agent/projects/from-root") {
         if (!isJsonRequest(req)) return send(res, 415, { error:"Server project selection requires application/json." });
         const body = await readJson(req, 16 * 1024);
-        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromRoot(body?.rootId, body?.path || "") });
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromRoot(body?.rootId, body?.path || "", { approved:body?.approved === true }) });
       }
       if (req.method === "POST" && url.pathname === "/api/canvas-agent/projects/from-host-root") {
         if (!isJsonRequest(req)) return send(res, 415, { error:"Host project selection requires application/json." });
         const body = await readJson(req, 16 * 1024);
-        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromHostRoot(body?.rootId, body?.path || "") });
+        return send(res, 201, { project:await CANVAS_AGENT_PROJECT_STORE.addFromHostRoot(body?.rootId, body?.path || "", { approved:body?.approved === true }) });
       }
       if (req.method === "POST" && url.pathname === "/api/canvas-agent/files") {
         if (!isJsonRequest(req)) return send(res, 415, { error:"File upload requires application/json." });
@@ -3291,17 +3309,19 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "GET" && canvasAgentRootEntriesMatch) {
         const keys = [...url.searchParams.keys()];
-        if (keys.some(key => key !== "path") || url.searchParams.getAll("path").length > 1) {
+        if (keys.some(key => !["path", "approved"].includes(key)) || url.searchParams.getAll("path").length > 1
+          || url.searchParams.getAll("approved").length > 1 || url.searchParams.has("approved") && url.searchParams.get("approved") !== "1") {
           return send(res, 400, { error:"Server folder browsing accepts one relative path parameter." });
         }
-        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseRoot(canvasAgentRootEntriesMatch[1], url.searchParams.get("path") || ""));
+        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseRoot(canvasAgentRootEntriesMatch[1], url.searchParams.get("path") || "", { approved:url.searchParams.get("approved") === "1" }));
       }
       if (req.method === "GET" && canvasAgentHostRootEntriesMatch) {
         const keys = [...url.searchParams.keys()];
-        if (keys.some(key => key !== "path") || url.searchParams.getAll("path").length > 1) {
+        if (keys.some(key => !["path", "approved"].includes(key)) || url.searchParams.getAll("path").length > 1
+          || url.searchParams.getAll("approved").length > 1 || url.searchParams.has("approved") && url.searchParams.get("approved") !== "1") {
           return send(res, 400, { error:"Host folder browsing accepts one relative path parameter." });
         }
-        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseHostRoot(canvasAgentHostRootEntriesMatch[1], url.searchParams.get("path") || ""));
+        return send(res, 200, await CANVAS_AGENT_PROJECT_STORE.browseHostRoot(canvasAgentHostRootEntriesMatch[1], url.searchParams.get("path") || "", { approved:url.searchParams.get("approved") === "1" }));
       }
       if (req.method === "DELETE" && canvasAgentProjectMatch) {
         if (url.search) return send(res, 400, { error:"Project removal does not accept query parameters." });
@@ -3455,9 +3475,22 @@ const server = http.createServer(async (req, res) => {
       const message = await testConfiguredProvider(connectionTestConfiguration(connection));
       return send(res, 200, { ok:true, message });
     } catch (error) {
-      const guidance = cliInstallationGuidance(provider);
-      return send(res, 400, { error:connectionTestErrorMessage(error, provider), ...(guidance ? { guidance, installable:true, provider } : {}) });
+      const guidance = cliInstallationGuidance(provider), cliState = guidance ? cliConnectionIssue(error) : "";
+      return send(res, 400, { error:connectionTestErrorMessage(error, provider), ...(guidance ? {
+        guidance:cliState === "auth_required" ? `Run \`${CLI_LOGIN_COMMANDS[provider]}\` in a terminal, then test again.` : guidance,
+        installable:cliState === "missing", provider, cliState, loginCommand:CLI_LOGIN_COMMANDS[provider],
+      } : {}) });
     }
+  }
+  if (url.pathname === "/api/settings/connections/inspect-cli") {
+    const settingsError = browserRequestError(req);
+    if (settingsError) return send(res, 403, { error:settingsError });
+    if (req.method !== "POST") return send(res, 405, { error:"Method Not Allowed" });
+    if (!isJsonRequest(req)) return send(res, 415, { error:"Use application/json for this request." });
+    try {
+      const input = await readJson(req, 1024), provider = String(input?.provider || "").trim();
+      return send(res, 200, { ok:true, status:await inspectConnectionCli(provider) });
+    } catch (error) { return send(res, 400, { error:error?.message || "Could not inspect the CLI." }); }
   }
   if (url.pathname === "/api/settings/connections/models") {
     const settingsError = browserRequestError(req);
@@ -3473,7 +3506,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && url.pathname === "/api/config.js") {
-    const config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp:process.env.PENECHO_DESKTOP_APP==="true",canvasAgent:true,canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN,canvasAgentSearchConfigured:true};
+    const desktopApp=process.env.PENECHO_DESKTOP_APP==="true",config={autoAiDelayMs:AUTO_AI_DELAY_MS,aiRequestTimeoutMs:AI_REQUEST_TIMEOUT_MS,aiProvider:AI_PROVIDER||"invalid",aiEffort:configuredUiEffort(),cloudEnvironment:PENECHO_CLOUD_ENV,cloudOrigin:DEFAULT_CLOUD_ORIGIN,desktopApp,clientPlatform:process.platform,clientVersion:desktopApp?(APP_PACKAGE.config?.desktopVersion||APP_PACKAGE.version):APP_PACKAGE.version,canvasAgent:true,canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN,canvasAgentSearchConfigured:true};
     if(localAccessMode==="open"||hasAiSession(req))config.accessSessionToken=AI_SESSION_TOKEN;
     return send(res,200,`window.PENECHO_CONFIG=${JSON.stringify(config)};`,"application/javascript; charset=utf-8");
   }
@@ -3922,7 +3955,7 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
     loopbackFrameSources = isLoopbackHostname(host?.hostname) ? ` http://localhost:${host.port || "80"} http://127.0.0.1:${host.port || "80"}` : "",
     pageOrigin=canonicalRequestOrigin(req),
     sameOriginSocketSource=pageOrigin?` ${pageOrigin.protocol==="https:"?"wss":"ws"}://${pageOrigin.host}`:"",
-    headers = { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=' 'sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=' 'sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA='; img-src 'self' blob: data: https://github.com https://*.githubusercontent.com; connect-src 'self'${sameOriginSocketSource}; frame-src 'self'${loopbackFrameSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff", "Cross-Origin-Resource-Policy":"same-origin" };
+    headers = { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control":"no-store", "Content-Security-Policy":`default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'sha256-JLEjeN9e5dGsz5475WyRaoA4eQOdNPxDIeUhclnJDCE=' 'sha256-mQyxHEuwZJqpxCw3SLmc4YOySNKXunyu2Oiz1r3/wAE=' 'sha256-OCf+kv5Asiwp++8PIevKBYSgnNLNUZvxAp4a7wMLuKA='; img-src 'self' blob: data: ${CLOUD_ACTIVITY_IMAGE_SOURCE} https://github.com https://*.githubusercontent.com; connect-src 'self'${sameOriginSocketSource}; frame-src 'self'${loopbackFrameSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`, "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff", "Cross-Origin-Resource-Policy":"same-origin" };
   if (requested === "/index.html" && trustedLocalPage && (localAccessMode === "open" || hasAiSession(req))) headers["Set-Cookie"] = aiSessionCookie(req);
   res.writeHead(200, headers);
   if (req.method === "HEAD") return res.end();

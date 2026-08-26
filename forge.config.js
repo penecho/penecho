@@ -8,6 +8,7 @@ const ROOT = __dirname;
 const ICON = path.join(ROOT, "build", "icons", "penecho");
 const DESKTOP_TOOLS = path.join(ROOT, "tools", "electron");
 const ELECTRON_VERSION = desktopTools.devDependencies.electron;
+const DESKTOP_VERSION = pkg.config.desktopVersion;
 const desktopModule = name => {
   try {
     return require.resolve(name, { paths:[DESKTOP_TOOLS] });
@@ -61,6 +62,8 @@ module.exports = {
   packagerConfig: {
     name:"PenEcho",
     executableName:"PenEcho",
+    appVersion:DESKTOP_VERSION,
+    buildVersion:DESKTOP_VERSION,
     icon:ICON,
     asar:{ unpack:"**/node_modules/{sharp,@img,@vscode}/**/*" },
     prune:true,
@@ -80,14 +83,23 @@ module.exports = {
       windowsSign:windowsSigning,
     } : {}),
     ignore:[
-      /^\/\.git(?:\/|$)/,
-      /^\/\.github(?:\/|$)/,
+      /^\/\./,
+      /^\/build(?:\/|$)/,
+      /^\/docs(?:\/|$)/,
+      /^\/fixtures(?:\/|$)/,
+      /^\/logs(?:\/|$)/,
+      /^\/output(?:\/|$)/,
+      /^\/scripts(?:\/|$)/,
+      /^\/spec(?:\/|$)/,
+      /^\/test(?:\/|$)/,
+      /^\/testcase(?:\/|$)/,
       /^\/tools(?:\/|$)/,
       /^\/out(?:\/|$)/,
       /^\/release(?:\/|$)/,
       /^\/coverage(?:\/|$)/,
       /^\/test-results(?:\/|$)/,
       /^\/playwright-report(?:\/|$)/,
+      /^\/forge\.config\.js$/,
       /^\/public\/plugins\/private(?:\/|$)/,
     ],
   },
@@ -95,6 +107,7 @@ module.exports = {
   hooks:{
     readPackageJson:(_forgeConfig, packageJson) => ({
       ...packageJson,
+      version:DESKTOP_VERSION,
       devDependencies:{ ...packageJson.devDependencies, electron:ELECTRON_VERSION },
     }),
   },
@@ -103,7 +116,7 @@ module.exports = {
       name:desktopModule("@electron-forge/maker-dmg"),
       platforms:["darwin"],
       config:{
-        name:`PenEcho-${pkg.version}`,
+        name:`PenEcho-${DESKTOP_VERSION}`,
         title:"PenEcho",
         icon:`${ICON}.icns`,
         overwrite:true,
@@ -122,13 +135,13 @@ module.exports = {
         authors:"PenEcho contributors",
         description:pkg.description,
         exe:"PenEcho.exe",
-        setupExe:`PenEcho-Setup-${pkg.version}-win-x64.exe`,
+        setupExe:`PenEcho-Setup-${DESKTOP_VERSION}-win-x64.exe`,
         setupIcon:`${ICON}.ico`,
         loadingGif:path.join(ROOT, "build", "icons", "penecho-install.gif"),
         // Avoid invoking rcedit through Wine during cross-platform builds.
         // The installed app and Setup.exe still use the PenEcho icon.
         skipUpdateIcon:true,
-        iconUrl:`https://github.com/penecho/penecho/releases/download/v${pkg.version}/penecho.ico`,
+        iconUrl:`https://github.com/penecho/penecho/releases/download/v${DESKTOP_VERSION}/penecho.ico`,
         noMsi:true,
         ...(windowsSigning ? { windowsSign:windowsSigning } : {}),
       },

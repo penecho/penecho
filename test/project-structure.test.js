@@ -16,8 +16,9 @@ test("root JavaScript is limited to entry points and Electron Forge configuratio
   assert.deepEqual(rootScripts, ["cli.js", "forge.config.js", "server.js"]);
 });
 
-test("the browser application is maintained as seven ordered source sections", () => {
+test("the browser application is maintained as eight ordered source sections", () => {
   assert.deepEqual(SOURCES, [
+    "src/client/app/client-activity.js",
     "src/client/app/core.js",
     "src/client/app/canvas-runtime.js",
     "src/client/app/visual-explainer.js",

@@ -41,6 +41,31 @@ const waitFor=async(predicate,timeoutMs=2000)=>{
   throw new Error("Timed out waiting for Canvas Agent test state.");
 };
 
+test("Canvas Agent handwriting attachment uses the exact nontransparent stroke bounds",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),pixels=new Uint8ClampedArray(8*6*4),drawCalls=[];
+  pixels[(1*8+2)*4+3]=255;
+  pixels[(4*8+5)*4+3]=128;
+  const cropped={width:0,height:0,getContext:()=>({drawImage:(...args)=>drawCalls.push(args)})},inkCanvas={width:8,height:6};
+  class FakeFile { constructor(parts,name,options){this.parts=parts;this.name=name;this.type=options.type;} }
+  const prepareSource=functionSource(source,"canvasAgentPrepareInkAttachment").replace(/^function /,"async function ");
+  const prepare=vm.runInNewContext(`(()=>{${prepareSource}return canvasAgentPrepareInkAttachment;})()`,{
+    canvasAgent:{inkPresent:true},
+    canvasAgentInkContext:{getImageData:()=>({width:8,height:6,data:pixels})},
+    canvasAgentInkCanvas:inkCanvas,
+    document:{createElement:kind=>{assert.equal(kind,"canvas");return cropped;}},
+    canvasAgentCanvasBlob:async()=>({type:"image/png"}),
+    canvasAgentPrepareAttachment:file=>file,
+    File:FakeFile,
+    t:key=>key,
+  });
+  const file=await prepare();
+  assert.equal(cropped.width,4);
+  assert.equal(cropped.height,4);
+  assert.deepEqual(drawCalls,[[inkCanvas,2,1,4,4,0,0,4,4]]);
+  assert.equal(file.name,"canvas-agent-handwriting.png");
+  assert.equal(file.type,"image/png");
+});
+
 const DIRECT_HARNESS_DEPENDENCIES = [
   "@deepseek-ai/cordis",
   "@deepseek-ai/cordis-plugin-timer",
@@ -332,7 +357,7 @@ test("Canvas Agent sends Canvas-selected reasoning effort through Harness API ro
     const messages=[],session=await host.connect({clientId:`client-${connection.id}`,connectionId:connection.id,binding:{},send:(type,payload)=>messages.push({type,payload})});
     host.updateState(session,{revision:1,canvas:{width:2048,height:2048},objects:[]});
     await host.submit(session,"Reply OK.");
-    await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
+    await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"),5000);
   }
   assert.equal(requests.length,5);
   const qwenRequest=requests.find(request=>request.body.model==="qwen3.8"),
@@ -667,7 +692,9 @@ test("Canvas Agent CLI adapter turns isolated CLI decisions into Harness tool ca
     assert.equal(Object.hasOwn(tool?.parameters?.properties||{},"revision"),false,`${name} must not expose historical revision lookup`);
     assert.match(tool?.description||"",/latest/i);
   }
-  assert.match(toolDescriptions.canvas_create,/new Visual Explorer is one General HTML item[\s\S]*penecho-visual-explorer\+html[\s\S]*Empty initial Canvas[\s\S]*placement\.mode="auto"/i);
+  assert.match(toolDescriptions.canvas_create,/Visual Explorer: one complete General HTML item[\s\S]*penecho-visual-explorer\+html[\s\S]*Empty Canvas[\s\S]*placement\.mode="auto"/i);
+  assert.match(toolDescriptions.canvas_create,/progressive only at items\[0\]\.deliveryMode[\s\S]*never top-level/i);
+  assert.match(toolDescriptions.canvas_create,/Drawing:[\s\S]*origin[\s\S]*parallel types\/items[\s\S]*never strokes\/points/i);
   assert.match(toolDescriptions.canvas_read,/nl -ba -w6 -s TAB[\s\S]*line number and first TAB/);
   assert.match(toolDescriptions.canvas_patch_widget,/--- a\/<virtual-path>[\s\S]*\+\+\+ b\/<virtual-path>[\s\S]*--- a\/widget\.html[\s\S]*\+\+\+ b\/widget\.html[\s\S]*bare/);
   assert.equal("canvas_create_visual_explainer" in toolDescriptions,false);
@@ -684,7 +711,7 @@ test("Canvas Agent CLI adapter turns isolated CLI decisions into Harness tool ca
   assert.match(visualExplorerContract,/Use the language explicitly requested by the user[\s\S]*primary language of the user's request/);
   assert.doesNotMatch(visualExplorerContract,/All text in (?:the )?image should be in English/i);
   assert.match(visualExplorerContract,/`widget\.html` is the sole canonical reusable source/);
-  assert.match(visualExplorerContract,/>~3,000 output tokens or ~one minute[\s\S]*deliveryMode:"progressive"[\s\S]*useful runnable scaffold[\s\S]*same-`widget\.html` patches/);
+  assert.match(visualExplorerContract,/>~3,000 output tokens or ~one minute[\s\S]*items\[0\]\.deliveryMode:"progressive"[\s\S]*top-level `deliveryMode` is invalid[\s\S]*useful runnable scaffold[\s\S]*same-`widget\.html` patches/);
   assert.match(visualExplorerContract,/<=~3,000 tokens[\s\S]*one visible update\/minute[\s\S]*20 same-target patches/);
   assert.match(visualExplorerContract,/final dimensions and regions[\s\S]*changes transport only[\s\S]*match the one-shot plan/);
   assert.match(calls[0].systemPrompt,/over ~3,000 tokens or one minute[\s\S]*useful scaffold[\s\S]*one visible update\/minute[\s\S]*Hard cap: 20 same-target patches/);
@@ -706,7 +733,7 @@ test("Canvas Agent CLI adapter turns isolated CLI decisions into Harness tool ca
   assert.equal(JSON.stringify(conversationLogs).includes("resumeToken"),false);
 });
 
-test("Canvas Agent gates Professional and injects only enabled private HTML contracts",async t=>{
+test("Canvas Agent edits existing Professional Diagrams but never exposes Professional creation",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-widget-capabilities-"));
   t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
   const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),calls=[],messages=[],resolved=[],
@@ -780,13 +807,16 @@ The word html_widget here must not change the One-shot capability.`,
     htmlBranch=createBranches.find(branch=>branch.properties?.widgetType?.const==="html_widget"),diagramBranch=createBranches.find(branch=>branch.properties?.widgetType?.const==="diagram_source"),
     generalContract=read("src/server/canvas-agent/general-html-contract.md").trim(),professionalContract=read("src/server/canvas-agent/professional-diagrams-contract.md").trim();
   assert.deepEqual(firstTools.load_widget_contract.parameters.properties.route.enum,["general-html","professional-diagrams"]);
-  assert.deepEqual(htmlBranch.properties.pluginId.enum,["general","private-notes","flowchart"]);
-  assert.equal(diagramBranch.properties.pluginId.const,"flowchart");
+  assert.deepEqual(htmlBranch.properties.pluginId.enum,["general","private-notes"]);
+  assert.equal(diagramBranch,undefined,"Professional diagram_source creation must stay out of the Canvas Agent schema");
+  assert.match(firstTools.canvas_create.description,/Professional edit-only/);
   assert.equal(calls[0].systemPrompt.includes(privateDocument),true,"enabled private HTML must be injected from the host-validated contract");
-  assert.match(calls[0].systemPrompt,/Professional Diagrams is enabled[\s\S]*load route="professional-diagrams"/);
+  assert.match(calls[0].systemPrompt,/Never create Professional Diagrams[\s\S]*For an existing Professional only[\s\S]*load route="professional-diagrams"/);
   assert.equal(calls[0].systemPrompt.includes(generalContract),false);
   assert.equal(calls[0].systemPrompt.includes(professionalContract),false,"Professional must remain delayed until its loader runs");
   assert.equal(calls[1].systemPrompt.includes(professionalContract),true);
+  assert.match(professionalContract,/edit-only[\s\S]*Never create a new Professional Diagram[\s\S]*canvas_patch_widget/);
+  assert.doesNotMatch(professionalContract,/Call `canvas_create`/);
   assert.equal(calls[1].systemPrompt.startsWith(calls[0].systemPrompt),true,"loaded contracts must append without changing the stable prefix");
   const loaderResult=JSON.parse(second.conversation.at(-1).content[0].content[0].text);
   assert.deepEqual(loaderResult,{route:"professional-diagrams",sha256:createHash("sha256").update(professionalContract).digest("hex"),loaded:true,alreadyLoaded:false});
@@ -823,7 +853,7 @@ The word html_widget here must not change the One-shot capability.`,
   host.updateState(changed,{revision:2,canvas:{width:20000,height:20000},objects:[]});
   await host.submit(changed,"Confirm the disabled capability set.");
   await waitFor(()=>changedMessages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
-  assert.doesNotMatch(calls.at(-1).systemPrompt,/Private Notes|Professional Diagrams is enabled/);
+  assert.doesNotMatch(calls.at(-1).systemPrompt,/Private Notes|For an existing Professional only/);
   await assert.rejects(host.connect({clientId:"private-diagram-client",connectionId:connection.id,widgetCapabilities:{version:1,professionalEnabled:false,privatePluginIds:["private-diagram"]},binding:{},send:()=>{}}),/private HTML plugin contract is invalid/);
   await assert.rejects(host.connect({clientId:"too-many-private-client",connectionId:connection.id,widgetCapabilities:{version:1,professionalEnabled:false,privatePluginIds:["too-many"]},binding:{},send:()=>{}}),/private plugin capacity is exceeded/);
 });
@@ -2154,10 +2184,17 @@ test("Canvas Agent mounts the minimal project tools only for a host-resolved pro
   assert.match(globbed.content[0].text,/nested\/nested\.txt/);
   assert.doesNotMatch(globbed.content[0].text,/\.penecho|private project metadata/);
   assert.doesNotMatch(globbed.content[0].text,/outside\.txt/);
+  const globbedFromEmptyPath=await host.context.tools.execute({callId:"glob-project-empty-path",name:"glob",arguments:{pattern:"*.txt",path:""},agent:session.handle.agent,signal});
+  assert.equal(globbedFromEmptyPath.isError,false,JSON.stringify(globbedFromEmptyPath));
+  assert.match(globbedFromEmptyPath.content[0].text,/inside\.txt/);
+  assert.match(globbedFromEmptyPath.content[0].text,/nested\/nested\.txt/);
   const grepped=await host.context.tools.execute({callId:"grep-project",name:"grep",arguments:{pattern:"inside",include:"*.txt"},agent:session.handle.agent,signal});
   assert.equal(grepped.isError,false,JSON.stringify(grepped));
   assert.match(grepped.content[0].text,/Found 1 match[\s\S]*inside\.txt[\s\S]*Line 1: inside/);
   assert.doesNotMatch(grepped.content[0].text,/outside secret/);
+  const greppedFromBlankPath=await host.context.tools.execute({callId:"grep-project-blank-path",name:"grep",arguments:{pattern:"inside",include:"*.txt",path:"  "},agent:session.handle.agent,signal});
+  assert.equal(greppedFromBlankPath.isError,false,JSON.stringify(greppedFromBlankPath));
+  assert.match(greppedFromBlankPath.content[0].text,/Found 1 match[\s\S]*inside\.txt[\s\S]*Line 1: inside/);
   const globOutside=await host.context.tools.execute({callId:"glob-outside",name:"glob",arguments:{pattern:"*",path:".."},agent:session.handle.agent,signal});
   assert.equal(globOutside.isError,true);
   assert.doesNotMatch(globOutside.content[0].text,/outside secret/);
@@ -2392,7 +2429,7 @@ test("Canvas Agent maps provider failures to concise localized error categories"
 });
 
 test("Canvas Agent UI and browser Facade support local and Cloud runtimes and are revision guarded",()=>{
-  const html=read("public/index.html"), core=read("src/client/app/core.js"), zh=read("public/locales/zh.js"), persistence=read("src/client/app/persistence.js"), source=read("src/client/app/canvas-agent-runtime.js"), canvasRuntime=read("src/client/app/canvas-runtime.js"), server=read("src/server/main.js"), http=read("src/server/canvas-agent/http.js"), runtime=read("src/server/canvas-agent/runtime.mjs"), requestTrace=read("src/server/canvas-agent/request-trace.js"), css=read("public/style.css");
+  const html=read("public/index.html"), core=read("src/client/app/core.js"), zh=read("public/locales/zh.js"), persistence=read("src/client/app/persistence.js"), source=read("src/client/app/canvas-agent-runtime.js"), mainAi=read("src/client/app/ai-runtime.js"), canvasRuntime=read("src/client/app/canvas-runtime.js"), server=read("src/server/main.js"), http=read("src/server/canvas-agent/http.js"), runtime=read("src/server/canvas-agent/runtime.mjs"), requestTrace=read("src/server/canvas-agent/request-trace.js"), css=read("public/style.css");
   const changeConnectionStart=source.indexOf("async function canvasAgentChangeConnection("),changeConnectionSource=source.slice(changeConnectionStart,source.indexOf("async function canvasAgentConnect(",changeConnectionStart));
   const numberedResourceView=vm.runInNewContext(`(${functionSource(source,"canvasAgentLineNumberedResourceView")})`);
   assert.equal(numberedResourceView("<main>\n\t<p>Exact</p>",41),"    41\t<main>\n    42\t\t<p>Exact</p>");
@@ -2407,8 +2444,8 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.doesNotMatch(readSource,/Math\.min\(start\+199/);
   assert.match(readSource,/maximum=200000[\s\S]*contentFormat:"nl -ba -w6 -s TAB"[\s\S]*originalEndsWithNewline[\s\S]*terminalBoundary/);
   assert.match(runtime,/Results include revision, hash, newline, truncation, and exact EOF facts/);
-  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProject","canvasAgentProjectPopover","canvasAgentProjectTitle","canvasAgentProjectBoundary","canvasAgentProjectList","canvasAgentProjectCreate","canvasAgentProjectCount","canvasAgentFileList","canvasAgentFileCount","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentSize","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentFileInput","canvasAgentInput","canvasAgentInputHint","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
-  for(const removed of ["canvasAgentProjectAdd","canvasAgentProjectActions","canvasAgentProjectAddFile","canvasAgentProjectAccess","canvasAgentProjectControlled","canvasAgentProjectFull","canvasAgentProjectUpload","canvasAgentProjectUploadInput","canvasAgentImageInput"])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));
+  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProjectControl","canvasAgentProject","canvasAgentProjectClear","canvasAgentProjectPopover","canvasAgentProjectTitle","canvasAgentProjectBoundary","canvasAgentProjectList","canvasAgentProjectCreate","canvasAgentProjectCount","canvasAgentFileList","canvasAgentFileCount","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootApproval","canvasAgentProjectRootApprovalReject","canvasAgentProjectRootApprovalAllow","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentFileInput","canvasAgentInput","canvasAgentInputHint","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
+  for(const removed of ["canvasAgentSize","canvasAgentProjectAdd","canvasAgentProjectActions","canvasAgentProjectAddFile","canvasAgentProjectAccess","canvasAgentProjectControlled","canvasAgentProjectFull","canvasAgentProjectUpload","canvasAgentProjectUploadInput","canvasAgentImageInput"])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));
   assert.match(html,/<dialog id="canvasAgentProjectPopover"[^>]*aria-labelledby="canvasAgentProjectTitle"/);
   assert.match(html,/<dialog id="canvasAgentProjectPopover"[^>]*aria-describedby="canvasAgentProjectDescription canvasAgentProjectBoundary"/);
   const projectDialog=html.slice(html.indexOf('<dialog id="canvasAgentProjectPopover"'),html.indexOf("</dialog>",html.indexOf('<dialog id="canvasAgentProjectPopover"'))+9);
@@ -2437,6 +2474,8 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.doesNotMatch(functionSource(source,"canvasAgentUploadProjectFile"),/canvasAgentFileUnsupported|projectFileSupported/);
   assert.match(functionSource(source,"canvasAgentRenderProjects"),/project\.kind==="folder"[\s\S]*?project\.kind==="file"[\s\S]*?canvasAgentProjectList[\s\S]*?canvasAgentFileList/);
   assert.match(functionSource(source,"canvasAgentProjectRow"),/canvasAgentFolderProject[\s\S]*?canvasAgentUploadedFile[\s\S]*?canvasAgentFileReadOnly/);
+  assert.match(source,/canvasAgentProjectClear\.addEventListener\("click",event=>\{[\s\S]*?canvasAgentSelectProject\(""\)/);
+  assert.doesNotMatch(source,/canvasAgentProjectClear\.addEventListener\("click"[\s\S]{0,240}?method:"DELETE"/);
   assert.match(functionSource(source,"canvasAgentHandleFiles"),/canvasAgentFileFingerprint[\s\S]*?canvasAgentImageFile[\s\S]*?projectFiles\.length!==1\|\|images\.length[\s\S]*?canvasAgentAddProjectAttachment\(projectFiles\[0\]\)[\s\S]*?canvasAgentAddAttachments\(images\)/);
   assert.match(source,/addEventListener\("paste",event=>\{[\s\S]*?canvasAgentPanel\.hidden\|\|canvasAgentProjectDialogOpen\(\)/);
   assert.match(functionSource(source,"canvasAgentAddProjectAttachment"),/existingFile\?\.fingerprint===fingerprint[\s\S]*?canvasAgentUploadProjectFile\(file\)[\s\S]*?kind:"file"[\s\S]*?projectId:project\.id[\s\S]*?deleteOnRemove:project\.reused!==true/);
@@ -2462,9 +2501,13 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(functionSource(source,"canvasAgentProjectDisplayPath"),/project\?\.displayPath\|\|project\?\.name/);
   assert.doesNotMatch(functionSource(source,"canvasAgentUpdateProjectButton"),/project\.path/);
   assert.match(functionSource(source,"canvasAgentProjectRootApi"),/runtime==="cloud"[\s\S]*?\/api\/canvas-agent\/roots[\s\S]*?\/api\/canvas-agent\/host-roots[\s\S]*?from-host-root/);
-  assert.match(functionSource(source,"canvasAgentRenderProjectRoots"),/projectRootChooserOpen[\s\S]*?view\.selectable===false[\s\S]*?canvasAgentNoHostFolders/);
-  for(const dictionary of [core,zh])assert.match(dictionary,/canvasAgentNoHostFolders:/);
-  assert.match(functionSource(source,"canvasAgentSelectProjectRoot"),/JSON\.stringify\(\{rootId:view\.rootId,path:view\.relativePath\}\)/);
+  const projectRootRenderer=functionSource(source,"canvasAgentRenderProjectRoots");
+  assert.match(projectRootRenderer,/projectRootChooserOpen[\s\S]*?view\.selectable===false[\s\S]*?permissionDenied/);
+  assert.match(projectRootRenderer,/canvasAgentNoHostFolders/);
+  assert.match(projectRootRenderer,/approvalRequired[\s\S]*?canvasAgentRequestProjectRootApproval/);
+  for(const dictionary of [core,zh])for(const key of ["canvasAgentNoHostFolders","canvasAgentRootApprovalRequired","canvasAgentRootApprovalTitle","canvasAgentRootPermissionDenied"])assert.match(dictionary,new RegExp(`${key}:`));
+  assert.match(functionSource(source,"canvasAgentSelectProjectRoot"),/JSON\.stringify\(\{rootId:view\.rootId,path:view\.relativePath,approved:canvasAgentProjectRootApproved/);
+  assert.match(functionSource(source,"canvasAgentResolveProjectRootApproval"),/projectRootApprovals\.add[\s\S]*canvasAgentBrowseProjectRoot/);
   assert.match(functionSource(source,"canvasAgentSelectProjectRoot"),/selectionRevision=canvasAgent\.projectSelectionRevision[\s\S]*?expectedRevision:selectionRevision/);
   assert.match(functionSource(source,"canvasAgentLoadProjectHistory"),/selectedId=String\(projectId\|\|""\)[\s\S]*?projectSelectionRevision===revision[\s\S]*?if\(!stillSelected\(\)\)return false/);
   assert.match(source,/function canvasAgentEnsureProjects\(\{refresh=false\}=\{\}\)\s*\{[\s\S]*?requestRevision=\+\+canvasAgent\.projectListRequestRevision[\s\S]*?requestRevision!==canvasAgent\.projectListRequestRevision/);
@@ -2536,6 +2579,8 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.doesNotMatch(functionSource(source,"canvasAgentToolExecutionCurrent"),/activeToolExecution/);
   assert.match(functionSource(source,"canvasAgentMutationIdle"),/function canvasAgentMutationIdle\(execution\)[\s\S]*canvasAgentAssertToolExecution\(execution\)/);
   assert.match(functionSource(source,"canvasAgentCreate"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareCreateItems[\s\S]*canvasAgentAssertToolExecution\(execution\);save\(\)/);
+  assert.match(functionSource(source,"canvasAgentPrepareCreateItems"),/widgetType === "diagram_source"\|\|pluginId === "flowchart"\|\|frameworkVersion\.startsWith\("penecho-professional-diagrams"\)[\s\S]*cannot create a new Professional Diagram/);
+  assert.match(functionSource(mainAi,"validate"),/acceptedTools\.push\("diagram_source"\)[\s\S]*c\.tool === "diagram_source"/);
   assert.match(functionSource(source,"canvasAgentEdit"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareEditOperations[\s\S]*canvasAgentAssertToolExecution\(execution\);save\(\)/);
   assert.match(functionSource(source,"canvasAgentReplaceWidget"),/await canvasAgentHash\(currentEdit\)[\s\S]*canvasAgentAssertToolExecution\(execution\);[\s\S]*save\(\)/);
   assert.match(functionSource(source,"canvasAgentVisualExplainerCreate"),/canvasAgentCreate\(\{baseRevision:args\.baseRevision,items:\[item\],summary:args\.summary,_changeId:args\._changeId\},execution\)/);
@@ -2613,8 +2658,14 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(runtime,/initialCanvasState is authoritative[\s\S]*empty:true[\s\S]*no image[\s\S]*skip initial inspect\/capture/);
   assert.match(runtime,/async function admitInitialCanvasState[\s\S]*rememberCapture[\s\S]*markCanvasLayoutOverview/);
   assert.match(source,/canvasAgentTranscript\.addEventListener\("wheel"[\s\S]*?followLatest = false/);
-  assert.match(functionSource(source,"canvasAgentPrepareInkAttachment"),/getImageData[\s\S]*canvasAgentPrepareAttachment[\s\S]*canvas-agent-handwriting\.png/);
+  assert.match(html,/id="canvasAgentInkCanvas" width="1200" height="1040"/);
+  assert.match(functionSource(source,"canvasAgentSetInputMode"),/canvasAgentForm\.classList\.toggle\("canvas-agent-ink-expanded",ink\)/);
+  assert.match(functionSource(source,"canvasAgentPrepareInkAttachment"),/getImageData[\s\S]*const x=left,y=top,width=right-left\+1,height=bottom-top\+1[\s\S]*canvasAgentPrepareAttachment[\s\S]*canvas-agent-handwriting\.png/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentPrepareInkAttachment"),/padding/);
   assert.match(source,/canvasAgentInkCanvas\.addEventListener\("pointerdown",canvasAgentInkPointerDown\)/);
+  assert.match(functionSource(source,"canvasAgentInkPointerDown"),/Math\.max\(12,24\*pressure\)/);
+  assert.match(functionSource(source,"canvasAgentInkPointerMove"),/lineWidth=Math\.max\(24,48\*pressure\)/);
+  assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentClearInkDraft\(\)[\s\S]*canvasAgentSetInputMode\("text"\)/);
   assert.match(functionSource(source,"canvasAgentTurnReferences"),/canvasAgentReferencedIds\(\)/);
   assert.match(functionSource(source,"canvasAgentReferencedIds"),/canvasAgent\.references[\s\S]*canvasAgentSelectionIds\(\)/);
   assert.match(source,/canvasAgentReferenceSearch\.addEventListener\("input"[\s\S]*canvasAgentRenderReferencePicker/);
@@ -2630,7 +2681,7 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(source,/querySelectorAll\("\.canvas-agent-copy-block"\)[\s\S]*canvasAgentBlockCopied[\s\S]*canvasAgentBlockCopyFailed/);
   assert.match(functionSource(source,"canvasAgentCopyAssistantMessage"),/target\?\.messageText[\s\S]*?historyItem\.copyable!==true[\s\S]*?writeClipboardText\(text\)/);
   assert.match(functionSource(source,"canvasAgentAppendMessageElement"),/item\.role==="assistant"[\s\S]*?canvas-agent-message-copy[\s\S]*?item\.copyable===true/);
-  assert.match(functionSource(source,"canvasAgentMarkTurnSummaryCopyable"),/toolRows\.values[\s\S]*?assistantRows\.entries[\s\S]*?lastToolStep[\s\S]*?historyItem\?\.final!==false[\s\S]*?candidates\.at\(-1\)[\s\S]*?canvasAgentSetAssistantCopyReady\(target,true\)/);
+  assert.match(functionSource(source,"canvasAgentMarkTurnSummaryCopyable"),/currentConversation\?\.items[\s\S]*?lastToolIndex[\s\S]*?assistantRows\.values[\s\S]*?index>lastToolIndex[\s\S]*?historyItem\?\.final!==false[\s\S]*?candidates\.at\(-1\)[\s\S]*?canvasAgentSetAssistantCopyReady\(target,true\)/);
   assert.match(source,/function canvasAgentHandleEvent[\s\S]*?assistant_delta[\s\S]*?final:false[\s\S]*?assistant_message[\s\S]*?turn_end[\s\S]*?reason\?\.kind==="completed"[\s\S]*?canvasAgentMarkTurnSummaryCopyable\(event\.turn\)/);
   assert.match(source,/turn_end[\s\S]*?lastTurnError=event\.reason\?\.kind==="error"\?canvasAgentNormalizeError[\s\S]*?canvasAgentErrorRow\(canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
   assert.match(source,/agent_status[\s\S]*?status === "idle"&&canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
@@ -2658,7 +2709,7 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(core,/canvasAgentNoProject: "No project"/);
   assert.match(zh,/canvasAgentNoProject: "无项目"/);
   assert.match(source,/function openCanvasAgent\(\{focus=true\}=\{\}\)[\s\S]*canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput/);
-  assert.match(source,/canvasAgentSize\.addEventListener\("click",canvasAgentCyclePanelHeight\)/);
+  assert.doesNotMatch(source,/canvasAgentSize|canvasAgentCyclePanelHeight/);
   assert.match(source,/\[canvasAgentResizeTop,canvasAgentResizeBottom,canvasAgentResizeLeft,canvasAgentResizeRight\][\s\S]*?pointerdown[\s\S]*?canvasAgentBeginPanelResize[\s\S]*?keydown[\s\S]*?canvasAgentKeyboardPanelResize/);
   assert.match(functionSource(source,"canvasAgentMovePanelResize"),/\["top","left"\]\.includes\(resize\.edge\)\?-delta:delta/);
   assert.match(functionSource(source,"canvasAgentResizePanelTo"),/edge==="left"\?anchor\.right-rect\.width:anchor\.left/);
@@ -2669,7 +2720,7 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(css,/\.history-panel\s*\{[^}]*z-index: 73/);
   assert.match(css,/\.settings-layer\s*\{[^}]*z-index: 74/);
   assert.match(css,/\.canvas-agent-panel\s*\{[^}]*resize: none/s);
-  assert.match(css,/\.canvas-agent-panel\s*\{[^}]*height: clamp\(320px,[^}]*100%\)/s);
+  assert.match(css,/\.canvas-agent-panel\s*\{[^}]*height: clamp\(320px, var\(--canvas-agent-height, 66\.6667%\), 100%\)/s);
   assert.match(css,/\.canvas-agent-height-40\s*\{ --canvas-agent-height: 100%; \}/);
   assert.match(css,/\.canvas-agent-width-40\s*\{ --canvas-agent-width: 100%; \}/);
   assert.match(css,/\.canvas-agent-resize-edge\.top,[\s\S]*?height: 10px; cursor: ns-resize/);
@@ -2696,19 +2747,36 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(css,/\.canvas-agent-copy-block-button\s*\{[^}]*cursor: pointer/);
   assert.match(css,/\.canvas-agent-copy-block pre\s*\{[^}]*white-space: pre/);
   assert.match(css,/\.canvas-agent-ink-input canvas\s*\{[^}]*touch-action: none/);
+  assert.match(css,/\.canvas-agent-panel\s*\{[^}]*container-type:\s*size/);
+  assert.match(css,/\.canvas-agent-composer\.canvas-agent-ink-expanded \.canvas-agent-ink-input[\s\S]*height:\s*min\(352px, max\(48px, calc\(100cqh - 152px\)\)\)/);
+  assert.match(css,/height:\s*min\(384px, max\(48px, calc\(100cqh - 168px\)\)\)/);
   assert.match(css,/\.canvas-agent-reference-list\s*\{[^}]*overflow-y: auto/);
   assert.match(css,/\.canvas-agent-composer-surface\s*\{[^}]*border: 1px solid #dfe3ea;[^}]*border-radius: 18px;[^}]*box-shadow:/);
+  const composerFocusRule=css.match(/\.canvas-agent-composer-surface:focus-within\s*\{([^}]*)\}/)?.[1]||"";
+  assert.match(composerFocusRule,/border-color: #cbd5e1/);
+  assert.match(composerFocusRule,/box-shadow: 0 1px 2px rgba\(15,23,42,\.05\), 0 8px 24px rgba\(15,23,42,\.055\)/);
+  assert.doesNotMatch(composerFocusRule,/79,70,229|a5b4fc/,"composer focus must not add a purple ring");
   assert.match(css,/\.canvas-agent-composer textarea\s*\{[^}]*overflow-y: hidden;[^}]*border: 0;[^}]*resize: none/);
   assert.match(css,/\.canvas-agent-composer textarea\.canvas-agent-input-overflowing\s*\{[^}]*overflow-y: auto/);
   assert.match(css,/\.canvas-agent-composer \.canvas-agent-send,[\s\S]*?\.canvas-agent-composer \.canvas-agent-stop\s*\{[^}]*border-radius: 50%/);
   assert.match(css,/\.canvas-agent-composer-actions\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) auto;[^}]*align-items: end/);
-  assert.match(css,/\.canvas-agent-tool-actions\s*\{[^}]*min-width: 0;[^}]*flex-wrap: wrap/);
-  assert.match(css,/\.canvas-agent-primary-actions\s*\{[^}]*align-self: end/);
+  assert.match(css,/\.canvas-agent-tool-actions\s*\{[^}]*min-width: 0;[^}]*flex-wrap: nowrap/);
+  assert.match(css,/\.canvas-agent-primary-actions\s*\{[^}]*flex: 0 0 auto;[^}]*align-self: end/);
+  const compactComposerStart=css.indexOf("@container (max-width: 520px)"),compactComposerRule=css.slice(compactComposerStart,css.indexOf("@media (prefers-reduced-motion: reduce)",compactComposerStart));
+  assert.match(compactComposerRule,/--canvas-agent-action-size: clamp\(22px, calc\(14\.2857cqw - 21px\), 30px\)/);
+  assert.match(compactComposerRule,/\.canvas-agent-composer \.canvas-agent-stop\s*\{ width: var\(--canvas-agent-action-size\); min-width: var\(--canvas-agent-action-size\); height: var\(--canvas-agent-action-size\); \}/);
+  assert.match(compactComposerRule,/--canvas-agent-project-width: 112px/);
+  assert.match(compactComposerRule,/\.canvas-agent-project-control\.has-resource \.canvas-agent-project-button > span\s*\{[^}]*display: block;[^}]*width: 11em;[^}]*font-size: 9px/);
+  assert.match(css,/\.canvas-agent-composer \.canvas-agent-project-clear\s*\{[^}]*width: 16px;[^}]*opacity: 0;[^}]*pointer-events: none/);
+  for(const panelWidth of [304,320,360,422,522]){
+    const actionSize=Math.min(30,Math.max(22,(panelWidth-149)/7)),requiredWidth=actionSize*7+112+7,availableWidth=panelWidth-30;
+    assert.ok(requiredWidth<=availableWidth+.001,`compact composer actions must fit at ${panelWidth}px without wrapping or overlap`);
+  }
   assert.match(css,/\.canvas-agent-action-label\s*\{[^}]*width: 1px;[^}]*overflow: hidden/);
   assert.match(css,/\.canvas-agent-widget-picker-layer\s*\{[^}]*z-index: 41;[^}]*cursor: copy;[^}]*touch-action: none/);
   assert.match(css,/\.canvas-agent-composer \.canvas-agent-reference-list > button:hover,[\s\S]*?color: #1f2937;[^}]*background: #e2e8f0/);
   assert.match(css,/\.canvas-agent-head button \{ width: 44px; height: 44px; \}/);
-  assert.match(css,/height: min\(72dvh, 600px\)/);
+  assert.match(css,/@media \(max-width: 700px\)[\s\S]*?\.canvas-agent-panel\s*\{[^}]*height: 66\.6667%;[^}]*min-height: 0/s);
 });
 
 test("Canvas Agent focus and active turns suppress Auto AI while submitted turns cancel only automatic requests",()=>{

@@ -481,7 +481,7 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 - `formula`：渲染到 ink layer。
 - `plot`：渲染到 ink layer。
 - `drawing`：通过现有受限 DRAW renderer 渲染到 ink layer。
-- `widget`：`html_widget` 或 `diagram_source`；HTML 可承担动态/交互展示。
+- `widget`：Canvas Agent 新建时只能是 `html_widget`；HTML 可承担 Visual Explorer、动态/交互展示和其他通用输出。已有 `diagram_source` 仍可通过 `canvas_read` 与 `canvas_patch_widget` 原位修改。该限制只存在于 Canvas Agent 的工具与浏览器 RPC 路径，不改变 Main Canvas AI、普通 Canvas Professional Diagram 能力或旧画布内容。
 - `image`：只能引用当前 Canvas Agent session 拥有的 Harness `attachmentId`，提交时复制到 071 现有 image persistence。
 
 每个 item 可带 `placement`：`auto`、`absolute` 或相对一个对象的 `left/right/above/below`。默认 `auto` 在当前 viewport 中扫描不与已有/同批对象相撞且可读的空位；无空位时返回 `crowded: true`，不能静默声称无重叠。
@@ -565,7 +565,7 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 
 ### 7.7 固定 Widget 合同上下文
 
-Harness 在每个模型 step 自动注入 Canvas-Agent-only Visual Explorer contract 和当前 Widget 路由。普通 `general`（General HTML）contract 始终可通过 `load_widget_contract` 按需加入只追加的 session system section；`flowchart`（Professional Diagrams）只有浏览器确认插件已启用时才出现在路由、loader enum 和创建 schema 中，并在调用 loader 后注入。浏览器当前已启用且主机重新验证为 `builtIn:false` 的 private HTML contract 会按原插件 id 注入；未启用、未知、内置冲突或非 HTML private 插件会令该 capability handshake 失败。每个会话最多 12 个 private contract、合计 48 KiB。所有注入 contract 都不写入普通 tool-result 历史，因而不会被 compaction 摘要替代。共享 `public/plugins/*/plugin.md` 仍只服务原有 Canvas AI 插件链路，不被 Canvas Agent 改写。
+Harness 在每个模型 step 自动注入 Canvas-Agent-only Visual Explorer contract 和当前 Widget 路由。普通 `general`（General HTML）contract 始终可通过 `load_widget_contract` 按需加入只追加的 session system section；`flowchart`（Professional Diagrams）从不进入 Canvas Agent 创建 schema，只有浏览器确认插件已启用时才出现在 loader enum，并在调用 loader 后注入仅供修改当前 Canvas 已有 Professional Diagram 的合同。该 schema 限制不进入 Main Canvas AI 或普通 Canvas 执行路径。浏览器当前已启用且主机重新验证为 `builtIn:false` 的 private HTML contract 会按原插件 id 注入；未启用、未知、内置冲突或非 HTML private 插件会令该 capability handshake 失败。每个会话最多 12 个 private contract、合计 48 KiB。所有注入 contract 都不写入普通 tool-result 历史，因而不会被 compaction 摘要替代。共享 `public/plugins/*/plugin.md` 仍只服务原有 Canvas AI 插件链路，不被 Canvas Agent 改写。
 
 ### 7.8 `canvas_set_view`
 

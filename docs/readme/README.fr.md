@@ -73,6 +73,8 @@ npm start
 
 Écrivez une question, une équation, un schéma ou une idée inachevée n'importe où sur le canevas, puis marquez une pause. PenEcho interprète les traits et leurs relations spatiales avant de placer la réponse à proximité.
 
+- **Canvas Agent : des sources au résultat visuel.** Ajoutez des dossiers et fichiers en lecture seule — PDF, Word, PowerPoint, Excel, images ou code —, combinez-les à la recherche Web et au canevas actuel, puis laissez le même agent poursuivre l'analyse, la planification, la création et la révision.
+- **Productivité avec Visual Explorer.** Transformez des informations denses en un espace visuel adaptatif et modifiable, avec une vue d'ensemble claire, des détails reliés et des preuves. Le chemin de la recherche au résultat partageable raccourcit, avec moins de copier-coller, de changements d'outil, de schémas manuels et de reprises.
 - Dessinez naturellement au stylet ou à la souris et parcourez un canevas de `20 000 x 20 000`.
 - Obtenez des réponses, indices, explications, formules, graphiques et schémas directement sur le canevas.
 - Déplacez et redimensionnez les brouillons de l'IA, puis acceptez-les ou rejetez-les avant de les intégrer à votre travail.
@@ -88,15 +90,17 @@ npm start
 
 **Echoes** permet d'explorer, de mettre en favoris et de réutiliser des canevas et widgets publics dans douze catégories. Vous pouvez publier vos propres Crafts, les ouvrir dans un visualiseur Web en lecture seule et conserver leur filiation entre les versions.
 
-## Nouveautés de la version 1.0.0
+## Nouveautés de la version 1.1.0
 
-- **PenEcho Cloud.** Projets privés multi-appareils, favoris synchronisés et gestion du compte, du stockage et des crédits.
-- **Appareil lié.** Associez cet hôte avec une clé à usage unique et accédez-y depuis vos navigateurs et applications connectés ; la liaison peut être suspendue, reprise ou supprimée.
-- **Echoes et Crafts publics.** Explorez, partagez et réutilisez des canevas et widgets publics avec catégories, favoris et visualiseur Web en lecture seule.
-- **Enregistrement sécurisé entre appareils.** Chaque enregistrement crée une révision immuable ; les changements d'un autre appareil ne sont jamais écrasés silencieusement.
+- **Canvas Agent.** Enchaînez fichiers locaux, projets de dossiers en lecture seule, recherche Web, contexte du canevas, création visuelle et édition directe dans un seul flux en plusieurs étapes.
+- **Visual Explorer.** Transformez recherches, documents, notes et plans en un résultat visuel adaptatif qui relie vue d'ensemble, détails et preuves.
+- **Moins de changements de contexte et de reprises.** Recherchez, analysez, structurez, visualisez, vérifiez et révisez dans le même espace ; le résultat reste modifiable sur le canevas.
+- **Livraison visuelle progressive.** Obtenez plus tôt des versions complètes de Visual Explorer et affinez-les sur place au lieu de tout régénérer.
+- **Un contexte de travail plus riche.** Ajoutez PDF, Word, PowerPoint, Excel, images, code ou dossiers en lecture seule ; référencez widgets et écriture existants et utilisez la recherche Internet lorsqu'elle est disponible.
 
 ## Points forts précédents
 
+- **1.0.0.** Introduction de PenEcho Cloud, des projets privés versionnés, des appareils liés, d'Echoes, des Crafts publics et des favoris synchronisés.
 - **0.9.0.** Ajout de plusieurs connexions IA, des canevas partagés par projet, de Refine guidé sur place, des modifications incrémentales par unified diff, du streaming SSE et d'une progression annulable.
 - **0.8.1.** Ajout des données publiques en direct pour General HTML et de SVG par défaut pour les animations et graphismes complexes.
 - **0.8.0 et 0.7.2.** Ajout des diagrammes professionnels modifiables, du stockage serveur, des flux de presse-papiers, des photos Web sourcées et d'une édition et d'un export plus fiables.

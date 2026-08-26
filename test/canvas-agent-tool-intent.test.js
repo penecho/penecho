@@ -37,6 +37,7 @@ test("Canvas Agent tool hints name visual capabilities in one sentence",()=>{
   assert.equal(intent("load_visual_skill",{skill:"physics-2d"}),"Use Canvas Physics 2D");
   assert.equal(intent("load_visual_skill",{skill:"math-3d"}),"Use Canvas Math 3D");
   assert.equal(intent("load_widget_contract",{route:"general-html"}),"Use Canvas General HTML");
+  assert.equal(intent("load_widget_contract",{route:"professional-diagrams"}),"Use Canvas Professional Diagrams");
 });
 
 test("Canvas Agent search hints include compact search keywords in the same sentence",()=>{

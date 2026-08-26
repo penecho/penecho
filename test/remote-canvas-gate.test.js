@@ -281,6 +281,12 @@ test("Remote Canvas gate keeps the cloud fetch bridge and community take-further
   const bridged = run.fetchCalls.find((call) => call.url.startsWith("/api/v1/remote-canvas/http"));
   assert.ok(bridged, "expected the same-origin API request to be bridged to the remote host");
   assert.match(bridged.url, /path=%2Fapi%2Fcanvases%3Fx%3D1/);
+  const connectionBody = JSON.stringify({ action:"save", id:"default", connection:{ provider:"codex-cli", cliPath:"codex", effort:"medium" } });
+  await run.window.fetch("/api/settings/connections", { method:"POST", headers:{ "content-type":"application/json" }, body:connectionBody });
+  const connectionBridge = run.fetchCalls.at(-1);
+  assert.match(connectionBridge.url, /path=%2Fapi%2Fsettings%2Fconnections/);
+  assert.equal(connectionBridge.options.method, "POST");
+  assert.equal(connectionBridge.options.body, connectionBody);
   const direct = await run.window.fetch("/api/ai/command", { method:"POST" });
   assert.equal(direct.ok, true);
   assert.equal(run.fetchCalls.at(-1).url, "/api/ai/command");

@@ -36,16 +36,23 @@ PenEcho maps this common scale to the selected model's native controls: Kimi's t
 
 ## CLI prerequisites
 
-Installing the Codex desktop app alone does not guarantee that a `codex` executable is available on the shell `PATH`. Install and authenticate the CLI separately before selecting Codex:
+CLI executables are optional and are not bundled into the PenEcho installer. When Kimi CLI, Codex CLI, or Claude CLI is selected in the Canvas Connection Manager, PenEcho immediately runs a local executable/session preflight without making a model request. A ready PenEcho-managed installation is preferred, followed by a system installation. PenEcho never downloads or upgrades a CLI during startup.
+
+If the selected CLI is missing, the desktop app shows a one-click official installer and the Connection Manager always shows the matching manual command. The manual command remains visible if one-click installation fails, so it can be copied into Terminal or Windows PowerShell:
 
 ```bash
-npm install -g @openai/codex@latest
-hash -r
-codex --version
-codex login status
+# macOS
+curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Windows PowerShell
+irm https://code.kimi.com/kimi-code/install.ps1 | iex
+irm https://chatgpt.com/codex/install.ps1 | iex
+irm https://claude.ai/install.ps1 | iex
 ```
 
-If needed, run `codex login`. Claude CLI mode similarly requires an installed and authenticated Claude Code CLI, normally through `claude auth login`.
+Finish authentication with `kimi login`, `codex login`, or `claude auth login`. Codex and Claude authentication are included in the preflight. Kimi installation is checked immediately and its authentication is confirmed when Kimi handles the first request.
 
 PenEcho uses the selected CLI locally and does not need an API key for that source. Normal startup checks the executable and login without consuming model tokens. Codex `Test & Save` additionally verifies the selected model against the installed CLI's bundled catalog without making a model request; Claude `Test & Save` sends a small real request.
 
@@ -61,8 +68,9 @@ Direct Canvas AI requests through Claude use one isolated `claude -p` turn with 
 
 Canvas Agent can run without a resource, against one selected folder, or against one selected file. The selection belongs to the PenEcho host that executes the Agent, not necessarily the browser displaying the Canvas:
 
-- Local, LAN, and desktop Canvas pages choose project folders in PenEcho's built-in host-folder browser. The local browser starts at the PenEcho host user's Home, hides private dot directories and platform application-data folders, and requires choosing a child folder rather than the whole Home directory.
-- A Cloud Canvas can select an already registered resource or use the same built-in browser only within the allowed roots configured on its currently pinned PenEcho host. Cloud receives opaque root IDs, safe labels, and relative folder names; it cannot submit a raw absolute host path or access the implicit local Home root.
+- Local, LAN, and desktop Canvas pages choose project folders in PenEcho's built-in host-folder browser, so a remote browser never depends on a native dialog appearing on the host. The browser starts at the PenEcho host user's Home; on Windows it also lists every currently available drive letter. A filesystem root itself cannot be registered as a project, so choose one of its child folders.
+- A Cloud Canvas can select an already registered resource or use the same built-in browser on its currently pinned PenEcho host. On macOS it starts from the host user's Home and can also browse mounted external volumes; on Windows it lists the host's currently available drive letters. Configured allowed roots are added on both platforms. Cloud receives only opaque root IDs, safe labels, relative folder names, and access states, and it cannot submit a raw absolute host path. The entire macOS Home or `/Volumes` container cannot be registered as one project; choose a folder inside it.
+- Private dot directories and platform application-data folders remain visible but require an explicit one-session approval before PenEcho browses or registers them. If the host operating-system account itself cannot read a folder, the browser keeps that folder visible as unavailable instead of failing the surrounding listing; a PenEcho approval cannot bypass Windows ACLs or another operating-system permission boundary.
 - An iPad or other browser cannot expose its local filesystem path or run Bash locally. It can attach any non-empty file, up to 32 MiB, as a private PenEcho-managed copy. The file remains a removable composer attachment until the user adds instructions and sends; after sending, its safe file card remains in the conversation. Removing a pending attachment deletes only the managed copy without a confirmation dialog. In the PenEcho desktop app, double-clicking either file card asks the desktop host to revalidate the registered exact file and open it with the system default application; browser clients never receive the absolute path.
 
 Configure the folders that Cloud clients may browse with a JSON array in `~/.penecho/config.env`:
@@ -71,7 +79,7 @@ Configure the folders that Cloud clients may browse with a JSON array in `~/.pen
 PENECHO_CANVAS_AGENT_ALLOWED_ROOTS='[{"name":"Projects","path":"/srv/projects"},{"name":"Research","path":"/data/research"}]'
 ```
 
-Windows paths inside the JSON value need JSON escaping, for example `C:\\Users\\me\\Projects`. PenEcho resolves every configured root and every selected child again on the host, rejects symlink/junction escapes and `.penecho`, and never returns the canonical absolute path to Cloud. An empty or omitted array disables Cloud folder browsing without affecting the local built-in Home browser or native single-file selection.
+Windows paths inside the JSON value need JSON escaping, for example `C:\\Users\\me\\Projects`. PenEcho resolves every configured root and every selected child again on the host, rejects symlink/junction escapes and `.penecho`, and never returns the canonical absolute path to Cloud. An empty or omitted array disables additional configured Cloud roots; the automatic macOS Home and external-volume roots, Windows drive roots, the local built-in Home browser, and native single-file selection are unaffected.
 
 Folder resources are currently read-only. They expose bounded `glob`, `grep`, `list_directory`, `read`, and `read_image`, plus lazy document and SQLite readers. `glob` and `grep` use PenEcho's packaged ripgrep binary with fixed arguments, no shell layer, project-root path validation, and bounded output. PenEcho does not register `write`, `edit`, Bash, or command execution, and the former `Read & Write` and `Full Access` controls are hidden. Legacy clients that still send `full` are normalized to the same read-only session.
 

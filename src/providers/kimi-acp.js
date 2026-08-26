@@ -34,6 +34,24 @@ function abortError() { return Object.assign(new Error("Kimi Code CLI request ab
 function acpInfraError(message) { return Object.assign(new Error(message), { acpInfraFailure:true }); }
 function transportError(message) { return Object.assign(new Error(message), { acpTransport:true }); }
 
+async function stopChildProcess(child, timeoutMs = 2000) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise(resolve => {
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      child.removeListener("exit", finish);
+      child.removeListener("error", finish);
+      resolve();
+    };
+    child.once("exit", finish);
+    child.once("error", finish);
+    timer = setTimeout(finish, timeoutMs);
+    try { child.stdin.end(); } catch {}
+    try { child.kill(); } catch { finish(); }
+  });
+}
+
 class KimiAcpClient {
   constructor({ launch, env, workDir, kimiHome, logger = null }) {
     this.launch = launch;
@@ -320,10 +338,7 @@ class KimiAcpClient {
     for (const { reject } of this.pending.values()) reject(error);
     this.pending.clear();
     this.activeRequest?.fail(error);
-    if (child) {
-      try { child.stdin.end(); } catch {}
-      try { child.kill(); } catch {}
-    }
+    await stopChildProcess(child);
   }
 }
 

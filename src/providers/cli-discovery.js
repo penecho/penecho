@@ -33,7 +33,8 @@ function canonicalFile(file) {
 
 function pathExecutables(command, options = {}) {
   const env = options.env || process.env, platform = options.platform || process.platform, results = [];
-  for (const directory of String(env.PATH || env.Path || "").split(path.delimiter).filter(Boolean)) {
+  const delimiter = platform === "win32" ? ";" : path.delimiter;
+  for (const directory of String(env.PATH || env.Path || "").split(delimiter).filter(Boolean)) {
     const cleanDirectory = directory.replace(/^"|"$/g, "");
     for (const name of executableNames(command, platform, env)) {
       const candidate = path.join(cleanDirectory, name);
