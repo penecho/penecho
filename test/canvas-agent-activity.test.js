@@ -217,9 +217,11 @@ test("Canvas Agent activity is a removable user-only sibling outside capture and
   assert.match(baseRule,/visibility:\s*hidden/);
   assert.match(baseRule,/contain:\s*layout paint style/);
   assert.match(css,/radial-gradient\(ellipse 48% 46%[\s\S]*?transparent 82%\)/,"the activity wash fades before its paint boundary");
+  assert.doesNotMatch(source,/canvas-agent-activity-ring/,"the activity card has no rotating ellipse that can be paint-clipped");
+  assert.doesNotMatch(css,/canvas-agent-activity-ring|canvas-agent-activity-orbit-reverse|@keyframes canvas-agent-activity-orbit\b/);
   assert.match(css,/\.canvas-agent-activity-core\s*\{[\s\S]*?box-shadow:\s*0 8px 24px rgba\(15,23,42,\.08\)/,"the card shadow stays inside the contained activity box");
   assert.match(css,/visibility 0s linear \.72s/);
-  assert.match(css,/\.canvas-agent-activity:not\(\.is-visible\)[\s\S]*?animation-play-state:\s*paused/);
+  assert.match(css,/\.canvas-agent-activity:not\(\.is-visible\) \.canvas-agent-activity-kicker > i \{ animation-play-state:\s*paused/);
   assert.match(css,/\.canvas-agent-activity\.is-visible\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?visibility:\s*visible/);
   assert.equal(pkg.files.includes("public/canvas-agent-activity.js"),true);
   assert.equal(pkg.files.includes("public/canvas-agent-activity.css"),true);

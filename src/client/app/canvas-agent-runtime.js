@@ -100,6 +100,9 @@
     CANVAS_AGENT_SIZE_STEPS = 40,
     CANVAS_AGENT_RESIZE_KEY_STEP = 20,
     CANVAS_AGENT_INPUT_MAX_LINES = 10,
+    CANVAS_AGENT_INK_LINE_WIDTH = 8,
+    CANVAS_AGENT_INK_PADDING = 24,
+    CANVAS_AGENT_INK_OUTPUT_SCALE = 0.5,
     CANVAS_AGENT_MAX_REFERENCES = 20,
     CANVAS_AGENT_MAX_ATTACHMENTS = 5,
     CANVAS_AGENT_MAX_SOURCE_BYTES = 12 * 1024 * 1024,
@@ -166,7 +169,7 @@
       handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
-      revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","m13.5-9 3.5 3.5M4 5h6M4 9h5"],
+      revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
     }),
     CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","sequenceDiagramSource","organize","applyAnnotations","ppt","excel","transformer","ukTrip"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
@@ -1620,8 +1623,13 @@
     canvasAgentSyncResizeHandleValues();
     return vertical?rect.height:rect.width;
   }
+  function canvasAgentPanelPointerCanManipulate(event) {
+    if (event.pointerType==="touch") return false;
+    if (event.pointerType==="pen") return event.button===0||(Number(event.buttons)&1)===1;
+    return event.button===0;
+  }
   function canvasAgentBeginPanelResize(event) {
-    if (canvasAgentCompactPanel()||event.button!==0||event.pointerType==="touch") return;
+    if (canvasAgentCompactPanel()||!canvasAgentPanelPointerCanManipulate(event)) return;
     const edge=event.currentTarget.dataset.edge, vertical=edge==="top"||edge==="bottom", rect=canvasAgentPanel.getBoundingClientRect();
     canvasAgent.panelResize={pointerId:event.pointerId,edge,vertical,startCoordinate:vertical?event.clientY:event.clientX,startSize:vertical?rect.height:rect.width,anchor:canvasAgentResizeAnchor(),handle:event.currentTarget};
     canvasAgentPanel.classList.add("resizing",`resizing-${edge}`);
@@ -1706,7 +1714,7 @@
     try { localStorage.setItem(CANVAS_AGENT_POSITION_KEY,JSON.stringify(saved)); } catch {}
   }
   function canvasAgentBeginPanelDrag(event) {
-    if (canvasAgentCompactPanel() || event.button !== 0 || event.pointerType === "touch" || event.target.closest("button")) return;
+    if (canvasAgentCompactPanel() || !canvasAgentPanelPointerCanManipulate(event) || event.target.closest("button")) return;
     const panelRect = canvasAgentPanel.getBoundingClientRect(), viewRect = view.getBoundingClientRect();
     canvasAgentPositionPanel(panelRect.left-viewRect.left,panelRect.top-viewRect.top);
     canvasAgent.panelDrag = {
@@ -1783,7 +1791,7 @@
       width,
       height,
       dataUrl,
-      wire:{ mediaType, data:dataUrl.slice(comma+1), name:String(file.name || "pasted-image").slice(0,240) },
+      wire:{ mediaType, data:dataUrl.slice(comma+1), name:String(file.name || "pasted-image").slice(0,240), width, height },
     };
   }
   function canvasAgentFileFingerprint(file) {
@@ -1918,7 +1926,7 @@
   function canvasAgentSyncInputHint() {
     if (!canvasAgentInputHint) return;
     const hasConversation=Boolean(canvasAgent.currentConversation?.items?.length), hasDraft=Boolean(canvasAgentInput.value.trim()||canvasAgent.inkPresent||canvasAgent.attachments.length||canvasAgent.references.length);
-    canvasAgentInputHint.hidden=hasConversation||hasDraft||Boolean(canvasAgent.viewingHistoryId);
+    canvasAgentInputHint.hidden=canvasAgent.inputMode==="ink"||hasConversation||hasDraft||Boolean(canvasAgent.viewingHistoryId);
   }
   function canvasAgentResizeInput() {
     if(!canvasAgentInput||canvasAgentInput.hidden)return;
@@ -1930,7 +1938,7 @@
     canvasAgentInput.dataset.rows=String(rows);
     canvasAgentInput.classList.toggle("canvas-agent-input-overflowing",overflowing);
   }
-  function canvasAgentSetInputMode(mode) {
+  function canvasAgentSetInputMode(mode,focus=true) {
     canvasAgent.inputMode=mode==="ink"?"ink":"text";
     const ink=canvasAgent.inputMode==="ink";
     canvasAgentInput.hidden=ink;
@@ -1941,7 +1949,8 @@
     canvasAgentTextMode.setAttribute("aria-pressed",String(!ink));
     canvasAgentInkMode.setAttribute("aria-pressed",String(ink));
     if(!ink)canvasAgentResizeInput();
-    (ink?canvasAgentInkCanvas:canvasAgentInput).focus?.();
+    canvasAgentSyncInputHint();
+    if(focus)(ink?canvasAgentInkCanvas:canvasAgentInput).focus?.();
     canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearInkDraft() {
@@ -1957,13 +1966,13 @@
   }
   function canvasAgentInkPointerDown(event) {
     if (event.button!==0||canvasAgentInput.disabled) return;
-    const point=canvasAgentInkPoint(event), pressure=event.pressure||.5;
+    const point=canvasAgentInkPoint(event);
     canvasAgent.inkStroke={pointerId:event.pointerId,point};
     canvasAgentInkCanvas.setPointerCapture?.(event.pointerId);
     canvasAgentInkContext.save();
     canvasAgentInkContext.fillStyle=state.inkColor||"#1f2937";
     canvasAgentInkContext.beginPath();
-    canvasAgentInkContext.arc(point.x,point.y,Math.max(12,24*pressure),0,Math.PI*2);
+    canvasAgentInkContext.arc(point.x,point.y,CANVAS_AGENT_INK_LINE_WIDTH/2,0,Math.PI*2);
     canvasAgentInkContext.fill();
     canvasAgentInkContext.restore();
     canvasAgent.inkPresent=true;
@@ -1973,10 +1982,10 @@
   function canvasAgentInkPointerMove(event) {
     const stroke=canvasAgent.inkStroke;
     if (!stroke||stroke.pointerId!==event.pointerId) return;
-    const point=canvasAgentInkPoint(event), pressure=event.pressure||.5;
+    const point=canvasAgentInkPoint(event);
     canvasAgentInkContext.save();
     canvasAgentInkContext.strokeStyle=state.inkColor||"#1f2937";
-    canvasAgentInkContext.lineWidth=Math.max(24,48*pressure);
+    canvasAgentInkContext.lineWidth=CANVAS_AGENT_INK_LINE_WIDTH;
     canvasAgentInkContext.lineCap=canvasAgentInkContext.lineJoin="round";
     canvasAgentInkContext.beginPath();
     canvasAgentInkContext.moveTo(stroke.point.x,stroke.point.y);
@@ -2000,13 +2009,20 @@
       left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);
     }
     if (right<left||bottom<top) return null;
-    const x=left,y=top,width=right-left+1,height=bottom-top+1,cropped=document.createElement("canvas");
-    cropped.width=width;
-    cropped.height=height;
-    cropped.getContext("2d").drawImage(canvasAgentInkCanvas,x,y,width,height,0,0,width,height);
-    const blob=await canvasAgentCanvasBlob(cropped,"image/png");
+    const x=Math.max(0,left-CANVAS_AGENT_INK_PADDING),y=Math.max(0,top-CANVAS_AGENT_INK_PADDING),
+      sourceRight=Math.min(image.width-1,right+CANVAS_AGENT_INK_PADDING),sourceBottom=Math.min(image.height-1,bottom+CANVAS_AGENT_INK_PADDING),
+      width=sourceRight-x+1,height=sourceBottom-y+1,output=document.createElement("canvas");
+    output.width=Math.max(1,Math.ceil(width*CANVAS_AGENT_INK_OUTPUT_SCALE));
+    output.height=Math.max(1,Math.ceil(height*CANVAS_AGENT_INK_OUTPUT_SCALE));
+    const outputContext=output.getContext("2d");
+    outputContext.fillStyle="#fff";
+    outputContext.fillRect(0,0,output.width,output.height);
+    outputContext.imageSmoothingEnabled=true;
+    outputContext.imageSmoothingQuality="high";
+    outputContext.drawImage(canvasAgentInkCanvas,x,y,width,height,0,0,output.width,output.height);
+    const blob=await canvasAgentCanvasBlob(output,"image/png");
     if (!blob) throw Error(t("canvasAgentImageUnsupported"));
-    return canvasAgentPrepareAttachment(new File([blob],"canvas-agent-handwriting.png",{type:"image/png"}));
+    return canvasAgentPrepareAttachment(new File([blob],"canvas-agent-message.png",{type:"image/png"}));
   }
   function canvasAgentBox(object) {
     if (!object) return null;
@@ -2431,6 +2447,12 @@
         const image = document.createElement("img");
         image.src = attachment.dataUrl;
         image.alt = attachment.name;
+        if(attachment.name==="canvas-agent-message.png"){
+          images.classList.add("has-handwriting");
+          image.classList.add("canvas-agent-message-handwriting");
+          if(Number.isFinite(attachment.width)&&attachment.width>0)image.width=attachment.width;
+          if(Number.isFinite(attachment.height)&&attachment.height>0)image.height=attachment.height;
+        }
         if(attachment.kind==="canvas_capture"){
           const link=document.createElement("a");
           link.className="canvas-agent-capture-link";
@@ -3820,6 +3842,7 @@
       return false;
     }
     let requestSent = false;
+    let focusComposerAfterSubmit=true;
     canvasAgentInput.disabled = true;
     canvasAgentInkCanvas.setAttribute("aria-disabled","true");
     canvasAgentSend.disabled = true;
@@ -3848,9 +3871,10 @@
       canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),initialState,webSearchEnabled:canvasAgent.searchEnabled});
       requestSent = true;
+      focusComposerAfterSubmit=!hasInk;
       if(clearInput){canvasAgentInput.value = "";canvasAgentResizeInput();}
       if(includeDraftMedia){canvasAgentClearAttachments();canvasAgentClearInkDraft();canvasAgentClearReferences();}
-      canvasAgentSetInputMode("text");
+      canvasAgentSetInputMode("text",focusComposerAfterSubmit);
       return true;
     } catch (error) {
       const current=canvasAgentSubmitExecutionCurrent(submitExecution);
@@ -3868,7 +3892,7 @@
         canvasAgentSend.disabled=false;
         canvasAgentAttach.disabled=false;
         canvasAgentReference.disabled=false;
-        (canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();
+        if(focusComposerAfterSubmit)(canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();
       }
     }
   }

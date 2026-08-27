@@ -100,22 +100,27 @@ function waitForShared(promise, signal) {
 
 export class PenEchoAttachmentStore extends LocalAttachmentStore {
   pngFallbacks=new Map()
+  requestImageObserver=null
 
   async readImageRequest(ref, policy, signal) {
     const image=await super.readImageRequest(ref,policy,signal)
-    if (image.mediaType !== 'image/jpeg') return image
-    const key=String(image.variantId)
-    let promise=this.pngFallbacks.get(key)
-    if (!promise) {
-      promise=pngFallback(image,policy)
-      this.pngFallbacks.set(key,promise)
-      promise.catch(()=>{ if (this.pngFallbacks.get(key) === promise) this.pngFallbacks.delete(key) })
-      while (this.pngFallbacks.size > PNG_FALLBACK_CACHE_LIMIT) this.pngFallbacks.delete(this.pngFallbacks.keys().next().value)
-    } else {
-      this.pngFallbacks.delete(key)
-      this.pngFallbacks.set(key,promise)
+    let output=image
+    if (image.mediaType === 'image/jpeg') {
+      const key=String(image.variantId)
+      let promise=this.pngFallbacks.get(key)
+      if (!promise) {
+        promise=pngFallback(image,policy)
+        this.pngFallbacks.set(key,promise)
+        promise.catch(()=>{ if (this.pngFallbacks.get(key) === promise) this.pngFallbacks.delete(key) })
+        while (this.pngFallbacks.size > PNG_FALLBACK_CACHE_LIMIT) this.pngFallbacks.delete(this.pngFallbacks.keys().next().value)
+      } else {
+        this.pngFallbacks.delete(key)
+        this.pngFallbacks.set(key,promise)
+      }
+      output=await waitForShared(promise,signal)
     }
-    return waitForShared(promise,signal)
+    try { this.requestImageObserver?.({ ref, policy, image:output }) } catch {}
+    return output
   }
 }
 

@@ -41,29 +41,122 @@ const waitFor=async(predicate,timeoutMs=2000)=>{
   throw new Error("Timed out waiting for Canvas Agent test state.");
 };
 
-test("Canvas Agent handwriting attachment uses the exact nontransparent stroke bounds",async()=>{
-  const source=read("src/client/app/canvas-agent-runtime.js"),pixels=new Uint8ClampedArray(8*6*4),drawCalls=[];
-  pixels[(1*8+2)*4+3]=255;
-  pixels[(4*8+5)*4+3]=128;
-  const cropped={width:0,height:0,getContext:()=>({drawImage:(...args)=>drawCalls.push(args)})},inkCanvas={width:8,height:6};
+test("Canvas Agent image message keeps the complete ink draft on a half-size padded white background",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),pixels=new Uint8ClampedArray(80*60*4),paintCalls=[],outputContext={
+    fillStyle:"",fillRect(...args){paintCalls.push(["fillRect",this.fillStyle,...args]);},drawImage:(...args)=>paintCalls.push(["drawImage",...args]),
+  };
+  pixels[(20*80+30)*4+3]=255;
+  pixels[(30*80+40)*4+3]=128;
+  const output={width:0,height:0,getContext:()=>outputContext},inkCanvas={width:80,height:60};
   class FakeFile { constructor(parts,name,options){this.parts=parts;this.name=name;this.type=options.type;} }
   const prepareSource=functionSource(source,"canvasAgentPrepareInkAttachment").replace(/^function /,"async function ");
   const prepare=vm.runInNewContext(`(()=>{${prepareSource}return canvasAgentPrepareInkAttachment;})()`,{
     canvasAgent:{inkPresent:true},
-    canvasAgentInkContext:{getImageData:()=>({width:8,height:6,data:pixels})},
+    canvasAgentInkContext:{getImageData:()=>({width:80,height:60,data:pixels})},
     canvasAgentInkCanvas:inkCanvas,
-    document:{createElement:kind=>{assert.equal(kind,"canvas");return cropped;}},
+    CANVAS_AGENT_INK_PADDING:24,
+    CANVAS_AGENT_INK_OUTPUT_SCALE:0.5,
+    document:{createElement:kind=>{assert.equal(kind,"canvas");return output;}},
     canvasAgentCanvasBlob:async()=>({type:"image/png"}),
-    canvasAgentPrepareAttachment:file=>file,
+    canvasAgentPrepareAttachment:file=>({file}),
     File:FakeFile,
     t:key=>key,
   });
   const file=await prepare();
-  assert.equal(cropped.width,4);
-  assert.equal(cropped.height,4);
-  assert.deepEqual(drawCalls,[[inkCanvas,2,1,4,4,0,0,4,4]]);
-  assert.equal(file.name,"canvas-agent-handwriting.png");
-  assert.equal(file.type,"image/png");
+  assert.equal(output.width,30);
+  assert.equal(output.height,28);
+  assert.equal(outputContext.imageSmoothingEnabled,true);
+  assert.equal(outputContext.imageSmoothingQuality,"high");
+  assert.deepEqual(paintCalls,[["fillRect","#fff",0,0,30,28],["drawImage",inkCanvas,6,0,59,55,0,0,30,28]]);
+  assert.equal(file.file.name,"canvas-agent-message.png");
+  assert.equal(file.file.type,"image/png");
+});
+
+test("Canvas Agent treats ink as user-authored message text while ordinary images keep the generic prompt",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),core=read("src/client/app/core.js"),zh=read("public/locales/zh.js"),harness=read("src/server/canvas-agent/runtime.mjs"),native=read("src/server/canvas-agent/codex-native-host.mjs"),submit=functionSource(source,"canvasAgentSubmitMessage");
+  assert.match(submit,/outgoingAttachments=inkAttachment\?\[\.\.\.imageAttachments,inkAttachment\]:imageAttachments/);
+  assert.match(submit,/const prompt=inkAttachment[\s\S]*?\[text,t\("canvasAgentInkPrompt"\)\]\.filter\(Boolean\)\.join\("\\n\\n"\)[\s\S]*?: text\|\|t\("canvasAgentImagePrompt"\)/);
+  assert.match(core,/canvasAgentInkPrompt: "The image named canvas-agent-message\.png[\s\S]*?not an image-analysis request[\s\S]*?as if the user typed it[\s\S]*?Do not describe the handwriting image/);
+  assert.match(zh,/canvasAgentInkPrompt: "名为 canvas-agent-message\.png 的图片是用户补充手写的消息文字[\s\S]*?不是图片分析请求[\s\S]*?不要描述手写图片/);
+  assert.match(core,/canvasAgentImagePrompt: "Please inspect the attached image or images\."/);
+  assert.match(submit,/images:outgoingAttachments\.map\(attachment=>attachment\.wire\)/);
+  assert.match(harness,/\.\.\.imageAttachments\.map\(attachment => \(\{ type:'image', attachment \}\)\)/);
+  assert.match(native,/for \(const attachment of attachments\)[\s\S]*input\.push\(\{ type:'image', url:/);
+});
+
+test("Canvas Agent normalizes generated ink through the same client wire as added images",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),prepare=functionSource(source,"canvasAgentPrepareAttachment"),add=functionSource(source,"canvasAgentAddAttachments"),ink=functionSource(source,"canvasAgentPrepareInkAttachment");
+  assert.doesNotMatch(prepare,/preserveOriginal/);
+  assert.match(prepare,/wire = await canvasAgentWireImage\(file,image\)/);
+  assert.match(prepare,/canvasAgentReadDataUrl\(wire\)/);
+  assert.match(prepare,/bytes:wire\.size/);
+  assert.match(prepare,/wire:\{ mediaType, data:dataUrl\.slice\(comma\+1\), name:[\s\S]*width, height \}/);
+  assert.match(add,/await canvasAgentPrepareAttachment\(file\)/);
+  assert.match(ink,/return canvasAgentPrepareAttachment\(new File\(/);
+  assert.doesNotMatch(ink,/canvasAgentPrepareAttachment\([\s\S]*,true\)/);
+});
+
+test("Canvas Agent traces handwriting upload admission and final LLM image requests on both engines",()=>{
+  const store=read("src/server/canvas-agent/image-attachments.mjs"),runtime=read("src/server/canvas-agent/runtime.mjs"),native=read("src/server/canvas-agent/codex-native-host.mjs");
+  assert.match(store,/async readImageRequest\(ref, policy, signal\)[\s\S]*requestImageObserver\?\.\(\{ ref, policy, image:output \}\)/);
+  assert.match(runtime,/ctx\.attachments\.requestImageObserver = record => this\.traceModelRequestImage\(record\)/);
+  assert.match(functionSource(runtime,"canvasAgentHandwritingAdmissionDiagnostic"),/upload-admission[\s\S]*preservedOriginal[\s\S]*byteIdenticalToAdmitted[\s\S]*data:upload/);
+  assert.match(runtime,/traceModelRequestImage\(\{ ref, policy, image \}\)[\s\S]*canvas-agent-message\.png[\s\S]*stage:'llm-request'[\s\S]*byteIdenticalToAdmitted[\s\S]*transformedForModel[\s\S]*policy:[\s\S]*data:image\.data/);
+  assert.match(native,/this\.attachments\.requestImageObserver = record => this\.traceModelRequestImage\(record\)/);
+  assert.match(native,/async admitUserImages\(session, images\)[\s\S]*canvasAgentHandwritingAdmissionDiagnostic[\s\S]*traceImageDebug/);
+  assert.match(native,/traceModelRequestImage\(\{ ref, policy, image \}\)[\s\S]*canvas-agent-message\.png[\s\S]*stage:'llm-request'[\s\S]*byteIdenticalToAdmitted[\s\S]*transformedForModel[\s\S]*data:image\.data/);
+});
+
+test("Canvas Agent shows the complete model-bound handwriting image inside the user message",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),css=read("public/style.css"),render=functionSource(source,"canvasAgentAppendMessageElement");
+  assert.match(render,/image\.src = attachment\.dataUrl/);
+  assert.match(render,/attachment\.name==="canvas-agent-message\.png"[\s\S]*images\.classList\.add\("has-handwriting"\)[\s\S]*image\.classList\.add\("canvas-agent-message-handwriting"\)/);
+  assert.match(render,/image\.width=attachment\.width[\s\S]*image\.height=attachment\.height/);
+  assert.match(css,/\.canvas-agent-message-images\.has-handwriting\s*\{[^}]*flex-wrap: wrap;[^}]*overflow-x: hidden;/);
+  assert.match(css,/\.canvas-agent-message-images img\.canvas-agent-message-handwriting\s*\{[^}]*width: auto;[^}]*height: auto;[^}]*max-width: min\(100%, 360px\);[^}]*max-height: 220px;[^}]*object-fit: contain;/);
+});
+
+test("Canvas Agent hides its empty-state hint as soon as handwriting mode expands",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),classes=new Set(),makeModeButton=()=>({
+    classList:{toggle(name,enabled){if(enabled)classes.add(name);else classes.delete(name);}},
+    setAttribute(){},
+  }),canvasAgentInputHint={hidden:false},canvasAgentInput={hidden:false,value:"",focus(){}},canvasAgentInkInput={hidden:true},canvasAgentInkCanvas={focus(){}},canvasAgentForm={
+    classList:{toggle(name,enabled){if(enabled)classes.add(name);else classes.delete(name);}},
+  },canvasAgentTextMode=makeModeButton(),canvasAgentInkMode=makeModeButton(),canvasAgent={
+    inputMode:"text",currentConversation:null,inkPresent:false,attachments:[],references:[],viewingHistoryId:"",
+  };
+  const syncSource=functionSource(source,"canvasAgentSyncInputHint"),setModeSource=functionSource(source,"canvasAgentSetInputMode"),setMode=vm.runInNewContext(`(()=>{${syncSource}\n${setModeSource}\nreturn canvasAgentSetInputMode;})()`,{
+    canvasAgent,canvasAgentInputHint,canvasAgentInput,canvasAgentInkInput,canvasAgentInkCanvas,canvasAgentForm,canvasAgentTextMode,canvasAgentInkMode,
+    canvasAgentResizeInput(){},canvasAgentSyncPromptSuggestions(){},
+  });
+  setMode("ink");
+  assert.equal(canvasAgentInputHint.hidden,true);
+  assert.equal(canvasAgentInkInput.hidden,false);
+  assert.equal(classes.has("canvas-agent-ink-expanded"),true);
+  setMode("text");
+  assert.equal(canvasAgentInputHint.hidden,false);
+});
+
+test("Canvas Agent does not reopen the virtual keyboard after a successful handwriting send",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),setMode=functionSource(source,"canvasAgentSetInputMode"),submit=functionSource(source,"canvasAgentSubmitMessage");
+  assert.match(setMode,/canvasAgentSetInputMode\(mode,focus=true\)/);
+  assert.match(setMode,/if\(focus\)\(ink\?canvasAgentInkCanvas:canvasAgentInput\)\.focus\?\.\(\)/);
+  assert.match(submit,/requestSent = true;\s*focusComposerAfterSubmit=!hasInk;/);
+  assert.match(submit,/canvasAgentSetInputMode\("text",focusComposerAfterSubmit\)/);
+  assert.match(submit,/if\(focusComposerAfterSubmit\)\(canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput\)\.focus\(\)/);
+});
+
+test("Canvas Agent panel movement and edge resizing accept a pen tip",()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),css=read("public/style.css"),pointerCanManipulate=vm.runInNewContext(`(()=>{${functionSource(source,"canvasAgentPanelPointerCanManipulate")}return canvasAgentPanelPointerCanManipulate;})()`);
+  assert.equal(pointerCanManipulate({pointerType:"pen",button:0,buttons:1}),true);
+  assert.equal(pointerCanManipulate({pointerType:"pen",button:-1,buttons:1}),true);
+  assert.equal(pointerCanManipulate({pointerType:"pen",button:2,buttons:2}),false);
+  assert.equal(pointerCanManipulate({pointerType:"mouse",button:0,buttons:1}),true);
+  assert.equal(pointerCanManipulate({pointerType:"mouse",button:2,buttons:2}),false);
+  assert.equal(pointerCanManipulate({pointerType:"touch",button:0,buttons:1}),false);
+  assert.match(functionSource(source,"canvasAgentBeginPanelResize"),/canvasAgentPanelPointerCanManipulate\(event\)/);
+  assert.match(functionSource(source,"canvasAgentBeginPanelDrag"),/canvasAgentPanelPointerCanManipulate\(event\)/);
+  assert.match(css,/@media \(min-width: 701px\) and \(pointer: coarse\) and \(any-pointer: fine\)\s*\{\s*\.canvas-agent-resize-edge \{ display: block; \}\s*\}/);
 });
 
 const DIRECT_HARNESS_DEPENDENCIES = [
@@ -2660,12 +2753,17 @@ test("Canvas Agent UI and browser Facade support local and Cloud runtimes and ar
   assert.match(source,/canvasAgentTranscript\.addEventListener\("wheel"[\s\S]*?followLatest = false/);
   assert.match(html,/id="canvasAgentInkCanvas" width="1200" height="1040"/);
   assert.match(functionSource(source,"canvasAgentSetInputMode"),/canvasAgentForm\.classList\.toggle\("canvas-agent-ink-expanded",ink\)/);
-  assert.match(functionSource(source,"canvasAgentPrepareInkAttachment"),/getImageData[\s\S]*const x=left,y=top,width=right-left\+1,height=bottom-top\+1[\s\S]*canvasAgentPrepareAttachment[\s\S]*canvas-agent-handwriting\.png/);
-  assert.doesNotMatch(functionSource(source,"canvasAgentPrepareInkAttachment"),/padding/);
+  assert.match(functionSource(source,"canvasAgentPrepareInkAttachment"),/getImageData[\s\S]*CANVAS_AGENT_INK_PADDING[\s\S]*fillStyle="#fff"[\s\S]*canvasAgentPrepareAttachment[\s\S]*canvas-agent-message\.png/);
   assert.match(source,/canvasAgentInkCanvas\.addEventListener\("pointerdown",canvasAgentInkPointerDown\)/);
-  assert.match(functionSource(source,"canvasAgentInkPointerDown"),/Math\.max\(12,24\*pressure\)/);
-  assert.match(functionSource(source,"canvasAgentInkPointerMove"),/lineWidth=Math\.max\(24,48\*pressure\)/);
-  assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentClearInkDraft\(\)[\s\S]*canvasAgentSetInputMode\("text"\)/);
+  assert.match(functionSource(source,"canvasAgentSyncInputHint"),/inputMode==="ink"/);
+  assert.match(functionSource(source,"canvasAgentSetInputMode"),/canvas-agent-ink-expanded[\s\S]*canvasAgentSyncInputHint\(\)[\s\S]*canvasAgentInkCanvas:canvasAgentInput/);
+  assert.match(source,/CANVAS_AGENT_INK_LINE_WIDTH = 8/);
+  assert.match(source,/CANVAS_AGENT_INK_OUTPUT_SCALE = 0\.5/);
+  assert.match(functionSource(source,"canvasAgentInkPointerDown"),/arc\(point\.x,point\.y,CANVAS_AGENT_INK_LINE_WIDTH\/2/);
+  assert.match(functionSource(source,"canvasAgentInkPointerMove"),/lineWidth=CANVAS_AGENT_INK_LINE_WIDTH/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentInkPointerDown"),/pressure|pointerType/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentInkPointerMove"),/pressure|pointerType/);
+  assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentClearInkDraft\(\)[\s\S]*canvasAgentSetInputMode\("text",focusComposerAfterSubmit\)/);
   assert.match(functionSource(source,"canvasAgentTurnReferences"),/canvasAgentReferencedIds\(\)/);
   assert.match(functionSource(source,"canvasAgentReferencedIds"),/canvasAgent\.references[\s\S]*canvasAgentSelectionIds\(\)/);
   assert.match(source,/canvasAgentReferenceSearch\.addEventListener\("input"[\s\S]*canvasAgentRenderReferencePicker/);

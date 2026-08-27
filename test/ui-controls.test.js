@@ -2328,7 +2328,7 @@ test("eraser strokes shrink retained dirty input without becoming new AI instruc
     pointerMoveEnd = app.indexOf("function end(e)", pointerMoveStart),
     pointerMove = app.slice(pointerMoveStart, pointerMoveEnd);
   assert.match(pointerMove, /if \(e\.pointerType !== "touch"\) updateWidgetRefinePointer\(clientPoint\(e\)\)/);
-  assert.match(pointerMove, /if \(!state\.drawing \|\| state\.drawing\.id !== e\.pointerId\) return[\s\S]*?stroke\(a, p, d\.erase, size, true\)/);
+  assert.match(pointerMove, /if \(!state\.drawing \|\| state\.drawing\.id !== e\.pointerId\) return[\s\S]*?for \(const sample of \(d\.erase \? \[e\] : drawingPointerSamples\(e\)\)\)[\s\S]*?stroke\(a, p, d\.erase, size, true\)/);
   assert.match(app, /const shouldRequest = !d\.erase/);
   assert.match(app, /if \(shouldRequest\) \{\s*for \(const point of d\.trail\) state\.hotspotTrail\.push\(point\)/);
   assert.match(app, /recomputeDirtyBounds\(\);\s*filterErasedDirtyHotspots\(d\.dirtyMaskTouched\);\s*refineCandidate = relatchWidgetRefineCandidateFromDirty\(\)/);
@@ -2340,6 +2340,19 @@ test("eraser strokes shrink retained dirty input without becoming new AI instruc
   assert.match(app, /dot\(p, erasing, size, true\)/);
   assert.match(app, /stroke\(a, p, d\.erase, size, true\)/);
   assert.match(functionSource(app, "trackDirtyStrokeSegment"), /globalCompositeOperation = erase \? "destination-out" : "source-over"[\s\S]*?state\.dirtyInkBounds\.delete\(k\)/);
+});
+
+test("canvas pen consumes coalesced pointer samples without duplicating the dispatched endpoint", () => {
+  const app = read("public/app.js"),
+    samples = vm.runInNewContext(`(${functionSource(app, "drawingPointerSamples")})`),
+    first = { clientX:10, clientY:12 },
+    endpoint = { clientX:20, clientY:24 },
+    dispatched = { clientX:20, clientY:24, getCoalescedEvents:() => [first, endpoint] };
+
+  assert.deepEqual(Array.from(samples(dispatched)), [first, endpoint]);
+  assert.deepEqual(Array.from(samples({ clientX:30, clientY:32 })), [{ clientX:30, clientY:32 }]);
+  const appended = samples({ clientX:40, clientY:44, getCoalescedEvents:() => [first] });
+  assert.deepEqual(Array.from(appended, ({ clientX, clientY }) => ({ clientX, clientY })), [first, { clientX:40, clientY:44 }]);
 });
 
 test("capture failure preserves dirty input and cannot block the AI request", () => {

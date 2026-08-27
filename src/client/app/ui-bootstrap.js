@@ -15,6 +15,16 @@
     state.pointerPreview = preview;
     requestInteractionLayerRender();
   }
+  function drawingPointerSamples(event) {
+    let samples = [];
+    if (typeof event.getCoalescedEvents === "function") {
+      try { samples = Array.from(event.getCoalescedEvents() || []); } catch {}
+    }
+    samples = samples.filter((sample) => Number.isFinite(sample.clientX) && Number.isFinite(sample.clientY));
+    const last = samples.at(-1);
+    if (!last || last.clientX !== event.clientX || last.clientY !== event.clientY) samples.push(event);
+    return samples;
+  }
   function setCanvasViewMode(enabled) {
     enabled = Boolean(enabled);
     if (state.viewMode === enabled) return;
@@ -361,27 +371,29 @@
       return;
     }
     if (!state.drawing || state.drawing.id !== e.pointerId) return;
-    const p = clientPoint(e),
-      a = state.drawing.last,
-      d = state.drawing,
-      cssSize = d.erase ? state.eraser : pressureWidth(e),
-      size = logicalWidth(cssSize);
+    const d = state.drawing;
     state.userRevision++;
-    stroke(a, p, d.erase, size, true);
-    d.last = p;
-    d.size = size;
+    for (const sample of (d.erase ? [e] : drawingPointerSamples(e))) {
+      const p = clientPoint(sample),
+        a = d.last,
+        cssSize = d.erase ? state.eraser : pressureWidth(sample),
+        size = logicalWidth(cssSize);
+      stroke(a, p, d.erase, size, true);
+      d.last = p;
+      d.size = size;
+      d.widthMin = Math.min(d.widthMin, cssSize);
+      d.widthMax = Math.max(d.widthMax, cssSize);
+      const x1 = Math.min(d.bbox.x, p.x),
+        y1 = Math.min(d.bbox.y, p.y),
+        x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
+        y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
+      d.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    }
     d.points++;
     d.screenDistance += old ? Math.hypot(e.clientX - old.x, e.clientY - old.y) : 0;
-    if (d.points % 8 === 0) d.trail.push(p);
-    d.widthMin = Math.min(d.widthMin, cssSize);
-    d.widthMax = Math.max(d.widthMax, cssSize);
-    const x1 = Math.min(d.bbox.x, p.x),
-      y1 = Math.min(d.bbox.y, p.y),
-      x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
-      y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
-    d.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    if (d.points % 8 === 0) d.trail.push(d.last);
     requestRender();
-    coords.textContent = `x ${Math.round(p.x)} · y ${Math.round(p.y)} · ${Math.round(state.scale * 100)}%`;
+    coords.textContent = `x ${Math.round(d.last.x)} · y ${Math.round(d.last.y)} · ${Math.round(state.scale * 100)}%`;
   });
   function end(e) {
     if (state.viewMode) {

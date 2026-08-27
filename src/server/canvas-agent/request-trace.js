@@ -7,6 +7,7 @@ const path = require("node:path");
 const MAX_TRACE_STRING_CHARS = 500_000;
 const MAX_TRACE_DIAGNOSTIC_CHARS = MAX_TRACE_STRING_CHARS;
 const MAX_TRACE_DIAGNOSTICS = 32;
+const MAX_TRACE_IMAGE_DIAGNOSTICS = 32;
 const TRACE_SECRET_KEY = /(?:^|[-_])(?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret)(?:$|[-_])/i;
 const TRACE_SECRET_TEXT = /((?:authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|resume[-_]?token|cookie|password|secret|claude_code_oauth_token)\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi;
 
@@ -208,6 +209,32 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     return metadata;
   }
 
+  function persistImageDiagnostic(trace, image) {
+    const data = Buffer.isBuffer(image?.data) ? image.data : image?.data instanceof Uint8Array ? Buffer.from(image.data) : null,
+      stage=bounded(image?.stage,64) || "unknown", attachmentId=bounded(image?.attachmentId,256) || null,
+      variantId=bounded(image?.variantId,256) || null, digest=data?.length ? crypto.createHash("sha256").update(data).digest("hex") : bounded(image?.sha256,64) || null,
+      existing=trace.data.imageDiagnostics.find(record=>record.stage===stage&&record.attachmentId===attachmentId&&record.variantId===variantId&&record.sha256===digest);
+    if (existing) {
+      existing.uses += 1;
+      existing.lastRecordedAt = isoTime(now());
+      return existing;
+    }
+    let file=null;
+    if (data?.length) {
+      const ordinal=trace.data.imageDiagnostics.length+1,extension=imageExtension(image.mediaType),token=safeFileToken(image.attachmentId || trace.data.requestId,trace.data.requestId);
+      file=`image-debug-${String(ordinal).padStart(2,"0")}-${safeFileToken(stage,"image")}-${token}-${digest.slice(0,12)}.${extension}`;
+      fs.writeFileSync(path.join(trace.directory,file),data,{mode:0o600});
+    }
+    const { data:_data, ...details }=image && typeof image === "object" ? image : {};
+    const safeDetails=safeValue(details),metadata={
+      ...(safeDetails && typeof safeDetails === "object" && !Array.isArray(safeDetails) ? safeDetails : {}),
+      file, sha256:digest, uses:1, recordedAt:isoTime(now()), lastRecordedAt:isoTime(now()),
+    };
+    trace.data.imageDiagnostics.push(metadata);
+    if (trace.data.imageDiagnostics.length > MAX_TRACE_IMAGE_DIAGNOSTICS) trace.data.imageDiagnostics.splice(0,trace.data.imageDiagnostics.length-MAX_TRACE_IMAGE_DIAGNOSTICS);
+    return metadata;
+  }
+
   function begin(entry, event, state) {
     const requestId = createRequestId(), timestamp = now(), name = `${String(timestamp).padStart(13,"0")}-${requestId}`, directory = traceChild(name);
     if (!directory) throw new Error("Invalid Canvas Agent request trace path.");
@@ -226,6 +253,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       ...(state.connection?.provider === "api" ? { apiUsage:null } : {}),
       steps:[],
       screenshots:[],
+      imageDiagnostics:[],
       events:[],
       diagnostics:[],
       patchProtocol:[],
@@ -235,6 +263,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     } };
     state.active = trace;
     for (const asset of state.pendingAssets.splice(0)) persistAsset(state,trace,asset);
+    for (const image of state.pendingImageDiagnostics.splice(0)) persistImageDiagnostic(trace,image);
     write(trace);
     prune();
     return trace;
@@ -270,7 +299,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
   function stateFor(entry) {
     let state = conversations.get(entry.conversationId);
     if (!state) {
-      state = { connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null };
+      state = { connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], pendingImageDiagnostics:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null };
       conversations.set(entry.conversationId,state);
     }
     return state;
@@ -279,7 +308,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
   function record(entry) {
     if (!entry?.conversationId) return;
     if (entry.phase === "start") {
-      conversations.set(entry.conversationId,{ connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null });
+      conversations.set(entry.conversationId,{ connection:safeValue(entry.connection), active:null, header:null, context:null, pendingAssets:[], pendingImageDiagnostics:[], unassignedVision:[], pendingEvents:[], engine:null, usage:null });
       return;
     }
     const state = stateFor(entry);
@@ -290,6 +319,14 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
     if (entry.phase === "asset") {
       if (state.active) { persistAsset(state,state.active,entry.asset); write(state.active); }
       else state.pendingAssets.push(entry.asset);
+      return;
+    }
+    if (entry.phase === "image-debug") {
+      if (state.active) { persistImageDiagnostic(state.active,entry.image); write(state.active); }
+      else {
+        state.pendingImageDiagnostics.push(entry.image);
+        if (state.pendingImageDiagnostics.length > MAX_TRACE_IMAGE_DIAGNOSTICS) state.pendingImageDiagnostics.splice(0,state.pendingImageDiagnostics.length-MAX_TRACE_IMAGE_DIAGNOSTICS);
+      }
       return;
     }
     if (entry.phase === "patch-protocol") {

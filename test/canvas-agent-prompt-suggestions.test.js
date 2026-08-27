@@ -44,6 +44,15 @@ function translation(source,key){
   return JSON.parse(`"${match[1]}"`);
 }
 
+test("Canvas Agent keeps the Revise pencil seam inside its icon viewBox",()=>{
+  const {iconPaths}=promptConstants();
+  assert.equal(iconPaths.revise[1],"M13.5 9l3.5 3.5M4 5h6M4 9h5");
+});
+
+test("Canvas Agent keeps its default introduction above the Try asking overlay",()=>{
+  assert.match(css,/\.canvas-agent-empty\s*\{[^}]*margin:\s*0 10px auto/);
+});
+
 test("Canvas Agent keeps a fixed Try asking row between attachments and the composer",()=>{
   const {document}=parseHTML(html),form=document.querySelector("#canvasAgentForm"),suggestions=document.querySelector("#canvasAgentPromptSuggestions"),attachments=document.querySelector("#canvasAgentAttachments"),approval=document.querySelector("#canvasAgentApproval"),
     popup=document.querySelector("#canvasAgentPromptPopup"),additional=document.querySelector("#canvasAgentAdditionalPromptList"),primary=document.querySelector("#canvasAgentPrimaryPromptList"),
@@ -63,6 +72,8 @@ test("Canvas Agent keeps a fixed Try asking row between attachments and the comp
   assert.match(css,/\.canvas-agent-prompt-suggestions\s*\{[^}]*position:\s*relative;[^}]*min-height:\s*34px;[^}]*flex:\s*0 0 auto;[^}]*overflow:\s*visible/);
   assert.match(css,/\.canvas-agent-prompt-suggestions\s*\{[^}]*border:\s*1px solid #dde4ee;[^}]*border-radius:\s*12px;[^}]*background:\s*linear-gradient\(145deg, #fcfdff, #f7f9fc\);[^}]*box-shadow:\s*0 4px 14px rgba\(15,23,42,\.055\)/,"Try asking keeps its original light card appearance");
   assert.match(css,/\.canvas-agent-prompt-suggestions > header > button\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*space-between;[^}]*border:\s*0/,"the relocated disclosure never exposes a browser-default black border");
+  assert.match(css,/\.canvas-agent-prompt-suggestions > header > button:hover,\s*\.canvas-agent-prompt-suggestions > header > button:active\s*\{[^}]*color:\s*#475569;[^}]*background:\s*transparent;[^}]*transform:\s*none/,"pointer interaction keeps the Try asking disclosure background neutral");
+  assert.match(css,/\.canvas-agent-prompt-suggestions > header > button:focus-visible\s*\{[^}]*color:\s*#475569;[^}]*background:\s*transparent;[^}]*outline:\s*2px solid #cbd5e1;[^}]*outline-offset:\s*1px/,"keyboard focus uses a neutral gray outline instead of purple highlighting");
   assert.match(css,/\.canvas-agent-prompt-suggestions:not\(\[hidden\]\) \+ \.canvas-agent-composer\s*\{[^}]*padding-top:\s*5px/,"the prompt card stays close to the composer");
   assert.match(css,/\.canvas-agent-prompt-popup\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*5;[^}]*bottom:\s*calc\(100% - 1px\);[^}]*max-height:\s*min\(390px, calc\(100cqh - 210px\)\);[^}]*overflow-y:\s*auto/);
   assert.match(css,/\.canvas-agent-prompt-popup\s*\{[^}]*border:\s*1px solid #dde4ee;[^}]*border-bottom:\s*0;[^}]*border-radius:\s*12px 12px 0 0;[^}]*background:\s*linear-gradient\(145deg, #fcfdff, #f7f9fc\);[^}]*box-shadow:\s*none/,"the floating rows extend the header card with the same light border and white background");

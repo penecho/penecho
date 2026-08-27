@@ -116,6 +116,11 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.match(css, /\.tour-card\s*\{[^}]*width:\s*min\(400px, calc\(var\(--tour-viewport-width, 100vw\) - 24px\)\)/);
   assert.match(css, /\.tour-card-scroll\s*\{[^}]*max-height:\s*calc\(var\(--tour-viewport-height, 100dvh\) - 26px\)[^}]*overflow:\s*auto;[^}]*touch-action:\s*pan-y pinch-zoom/);
   assert.match(css, /\.tour-highlight\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(css, /\.tour-actions button:not\(\.tour-primary\):hover:not\(:disabled\)/);
+  assert.match(css, /\.tour-actions \.tour-primary\s*\{[^}]*color:\s*#fff;/);
+  assert.match(css, /\.tour-actions \.tour-primary:hover\s*\{[^}]*color:\s*#fff;/);
+  assert.match(css, /body\[data-theme="studio"\] \.tour-actions button:not\(\.tour-primary\):hover:not\(:disabled\)/);
+  assert.doesNotMatch(css, /(?:^|\n)(?:body\[data-theme="studio"\] )?\.tour-actions button:hover:not\(:disabled\)/);
   assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?\.tour-card\s*\{[^}]*width:\s*calc\(var\(--tour-viewport-width, 100vw\) - 16px\)/);
   assert.match(css, /body\[data-theme="research"\] \.tour-actions \.tour-primary[^}]*color:\s*#fff8e9/);
   assert.match(css, /\.tour-card\.tour-compact \.tour-card-header\s*\{[^}]*flex-wrap:\s*wrap/);

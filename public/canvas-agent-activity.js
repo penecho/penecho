@@ -159,9 +159,7 @@
   root.dataset.html2canvasIgnore="true";
   root.setAttribute("aria-hidden","true");
   root.innerHTML=`
-    <div class="canvas-agent-activity-orbit" aria-hidden="true">
-      <i class="canvas-agent-activity-ring one"></i><i class="canvas-agent-activity-ring two"></i>
-    </div>
+    <div class="canvas-agent-activity-orbit" aria-hidden="true"></div>
     <div class="canvas-agent-activity-core">
       <span class="canvas-agent-activity-kicker"><i></i><span></span></span>
       <strong class="canvas-agent-activity-title"></strong>

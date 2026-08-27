@@ -313,6 +313,22 @@ function hash(value) {
   return createHash('sha256').update(String(value)).digest('hex')
 }
 
+export function canvasAgentHandwritingAdmissionDiagnostic(image, attachment) {
+  if (String(image?.name || '') !== 'canvas-agent-message.png' || !attachment?.attachmentId) return null
+  const upload=Buffer.from(String(image.data || ''),'base64'),uploadSha256=createHash('sha256').update(upload).digest('hex'),
+    originalDimensions=attachment.originalDimensions || { width:attachment.width, height:attachment.height }
+  return {
+    stage:'upload-admission', kind:'canvas-agent-handwriting', attachmentId:String(attachment.attachmentId),
+    name:'canvas-agent-message.png', mediaType:String(image.mediaType || ''), bytes:upload.length,
+    width:Number(originalDimensions.width) || null, height:Number(originalDimensions.height) || null,
+    sha256:uploadSha256, preservedOriginal:image.preservedOriginal === true,
+    clientReported:{ width:Number(image.width) || null, height:Number(image.height) || null },
+    admitted:{ mediaType:attachment.mediaType, bytes:Number(attachment.bytes) || null, width:Number(attachment.width) || null, height:Number(attachment.height) || null },
+    byteIdenticalToAdmitted:String(attachment.attachmentId) === `sha256:${uploadSha256}` && Number(attachment.bytes) === upload.length,
+    data:upload,
+  }
+}
+
 export function boundedText(value, limit = MAX_TOOL_RESULT_CHARS) {
   const text = String(value ?? '')
   return text.length > limit ? `${text.slice(0, limit)}\n…[truncated]` : text
@@ -4041,6 +4057,7 @@ export class CanvasHarnessHost {
       return connectionId ? this.resolveConnection(connectionId)?.apiKey : undefined
     }
     await mountRuntimePlugin(ctx, 'attachment-local', PenEchoAttachmentStore, { dshHome:join(this.stateDirectory, 'deepseek-harness') })
+    ctx.attachments.requestImageObserver = record => this.traceModelRequestImage(record)
     await mountRuntimePlugin(ctx, 'llm', LlmRuntime)
     await mountRuntimePlugin(ctx, 'session', SessionStore)
     await mountRuntimePlugin(ctx, 'system-prompt', SystemPrompt, { includeHarnessIdentity:true, includeRuntimeContext:true, persona:PERSONA })
@@ -4452,6 +4469,34 @@ export class CanvasHarnessHost {
     }
   }
 
+  traceImageDebug(session, image) {
+    if (!this.conversationTrace) return
+    try {
+      this.conversationTrace({
+        conversationId:session.conversationLogId,
+        connectionId:session.connectionId,
+        connection:session.requestTraceConnection,
+        phase:'image-debug',
+        image,
+      })
+    } catch (error) {
+      this.logger({ type:'canvas-agent-request-trace-error', error:String(error?.message || error) })
+    }
+  }
+
+  traceModelRequestImage({ ref, policy, image }) {
+    if (String(ref?.name || '') !== 'canvas-agent-message.png' || !image?.data) return
+    const attachmentId=String(ref.attachmentId || ''),sha256=createHash('sha256').update(image.data).digest('hex'),byteIdenticalToAdmitted=attachmentId === `sha256:${sha256}`
+    for (const session of this.sessions.values()) if (session.attachmentRefs.has(attachmentId)) this.traceImageDebug(session,{
+      stage:'llm-request', kind:'canvas-agent-handwriting', attachmentId, variantId:String(image.variantId || ''),
+      name:'canvas-agent-message.png', mediaType:image.mediaType, bytes:Number(image.bytes) || image.data.byteLength,
+      width:Number(image.width) || null, height:Number(image.height) || null,
+      sha256, byteIdenticalToAdmitted, transformedForModel:!byteIdenticalToAdmitted,
+      policy:{ maxPixels:Number(policy?.maxPixels) || null, maxBytes:Number(policy?.maxBytes) || null },
+      data:image.data,
+    })
+  }
+
   updateState(session, digest) {
     if (!digest || typeof digest !== 'object' || Array.isArray(digest)) throw new Error('Canvas state digest is invalid.')
     session.stateDigest = digest
@@ -4503,6 +4548,10 @@ export class CanvasHarnessHost {
     if (!prompt) throw new Error('Enter a message for Canvas Agent.')
     if (!Array.isArray(images) || images.length > 5) throw new Error('Canvas Agent accepts at most five images per message.')
     const imageAttachments = images.length ? await admitEncodedImages(this.context.attachments, images) : []
+    if (this.conversationTrace) images.forEach((image,index)=>{
+      const diagnostic=canvasAgentHandwritingAdmissionDiagnostic(image,imageAttachments[index])
+      if (diagnostic) this.traceImageDebug(session,diagnostic)
+    })
     const nextAttachmentRefs = new Map(session.attachmentRefs)
     for (const attachment of imageAttachments) nextAttachmentRefs.set(String(attachment.attachmentId), attachment)
     const attachmentBytes = [...nextAttachmentRefs.values()].reduce((total, attachment) => total + Number(attachment.bytes || 0), 0)

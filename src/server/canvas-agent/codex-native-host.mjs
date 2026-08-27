@@ -12,6 +12,7 @@ import {
   acquireProjectRoot,
   admitInitialCanvasState,
   boundedText,
+  canvasAgentHandwritingAdmissionDiagnostic,
   conversationLogEvent,
   createCanvasAgentNativeRuntime,
   createProjectRuntimeDirectory,
@@ -505,6 +506,7 @@ export class CodexNativeHost {
     this.resumeIndex = new Map()
     this.context = new Context()
     this.attachments = new PenEchoAttachmentStore(this.context, { dshHome:join(stateDirectory, 'codex-native') })
+    this.attachments.requestImageObserver = record => this.traceModelRequestImage(record)
     this.disposing = null
   }
 
@@ -798,6 +800,10 @@ export class CodexNativeHost {
   async admitUserImages(session, images) {
     if (!Array.isArray(images) || images.length > 5) throw new Error('Canvas Agent accepts at most five images per message.')
     const imageAttachments = images.length ? await admitEncodedImages(this.attachments, images) : []
+    if (this.conversationTrace) images.forEach((image,index)=>{
+      const diagnostic=canvasAgentHandwritingAdmissionDiagnostic(image,imageAttachments[index])
+      if (diagnostic) this.traceImageDebug(session,diagnostic)
+    })
     const nextAttachmentRefs = new Map(session.attachmentRefs)
     for (const attachment of imageAttachments) nextAttachmentRefs.set(String(attachment.attachmentId), attachment)
     const attachmentBytes = [...nextAttachmentRefs.values()].reduce((total, attachment) => total + Number(attachment.bytes || 0), 0)
@@ -1632,6 +1638,25 @@ export class CodexNativeHost {
     if (!this.conversationTrace) return
     try { await this.conversationTrace({ conversationId:session.conversationLogId, connectionId:session.connectionId, connection:session.requestTraceConnection, phase:'asset', asset }) }
     catch (error) { this.logger({ type:'canvas-agent-request-trace-error', error:safeError(error) }) }
+  }
+
+  traceImageDebug(session, image) {
+    if (!this.conversationTrace) return
+    try { this.conversationTrace({ conversationId:session.conversationLogId, connectionId:session.connectionId, connection:session.requestTraceConnection, phase:'image-debug', image }) }
+    catch (error) { this.logger({ type:'canvas-agent-request-trace-error', error:safeError(error) }) }
+  }
+
+  traceModelRequestImage({ ref, policy, image }) {
+    if (String(ref?.name || '') !== 'canvas-agent-message.png' || !image?.data) return
+    const attachmentId=String(ref.attachmentId || ''),sha256=createHash('sha256').update(image.data).digest('hex'),byteIdenticalToAdmitted=attachmentId === `sha256:${sha256}`
+    for (const session of this.sessions.values()) if (session.attachmentRefs.has(attachmentId)) this.traceImageDebug(session,{
+      stage:'llm-request', kind:'canvas-agent-handwriting', attachmentId, variantId:String(image.variantId || ''),
+      name:'canvas-agent-message.png', mediaType:image.mediaType, bytes:Number(image.bytes) || image.data.byteLength,
+      width:Number(image.width) || null, height:Number(image.height) || null,
+      sha256, byteIdenticalToAdmitted, transformedForModel:!byteIdenticalToAdmitted,
+      policy:{ maxPixels:Number(policy?.maxPixels) || null, maxBytes:Number(policy?.maxBytes) || null },
+      data:image.data,
+    })
   }
 
   tracePatchProtocol(session, record) {
