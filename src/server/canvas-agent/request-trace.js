@@ -237,7 +237,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
 
   function begin(entry, event, state) {
     const requestId = createRequestId(), timestamp = now(), name = `${String(timestamp).padStart(13,"0")}-${requestId}`, directory = traceChild(name);
-    if (!directory) throw new Error("Invalid Canvas Agent request trace path.");
+    if (!directory) throw new Error("Invalid PenEcho Agent request trace path.");
     fs.mkdirSync(directory,{recursive:true,mode:0o700});
     const startedAt = isoTime(event?.time,timestamp), turn = event?.data?.turn ?? null, trace = { directory, data:{
       version:2,
@@ -259,7 +259,7 @@ function createCanvasAgentRequestTracer({ requestTraceDirectory, logger = () => 
       patchProtocol:[],
       final:null,
       error:null,
-      note:"Canvas Agent server trace; sessionId is a non-resumable debug correlation ID.",
+      note:"PenEcho Agent server trace; sessionId is a non-resumable debug correlation ID.",
     } };
     state.active = trace;
     for (const asset of state.pendingAssets.splice(0)) persistAsset(state,trace,asset);

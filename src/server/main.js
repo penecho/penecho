@@ -64,10 +64,10 @@ function canvasAgentAllowedRoots(value) {
   return parsed.map((entry) => {
     const selectedPath = typeof entry === "string" ? entry : entry?.path, name = typeof entry === "object" ? entry?.name : "";
     if (typeof selectedPath !== "string" || !selectedPath || selectedPath.length > 4096 || selectedPath.includes("\0") || !path.isAbsolute(selectedPath)) {
-      throw new Error("Every Canvas Agent allowed root must use an absolute local path.");
+      throw new Error("Every PenEcho Agent allowed root must use an absolute local path.");
     }
     if (name !== undefined && (typeof name !== "string" || name.length > 120 || /[\0\r\n/\\]/.test(name))) {
-      throw new Error("Canvas Agent allowed root names must be short plain labels.");
+      throw new Error("PenEcho Agent allowed root names must be short plain labels.");
     }
     return typeof entry === "string" ? selectedPath : { path:selectedPath, ...(name ? { name } : {}) };
   });
@@ -90,7 +90,7 @@ function publicCanvasAgentResourceError(error) {
     status = known && Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : 500,
     safeMessage = known && typeof error?.message === "string" && !canvasAgentResourceErrorExposesAbsolutePath(error.message)
       ? error.message
-      : "Unable to access the Canvas Agent resource.";
+      : "Unable to access the PenEcho Agent resource.";
   return { status, body:{ error:safeMessage, code } };
 }
 const CANVAS_AGENT_CONFIGURED_ROOTS = canvasAgentAllowedRoots(process.env.PENECHO_CANVAS_AGENT_ALLOWED_ROOTS);
@@ -981,7 +981,7 @@ const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles appear in modelInput.enable
 
 Plugin styles are injected automatically after third-party styles and are not repeated in html. Reuse their classes, variables, palettes and density controls. Preserve an existing widget's visual language during refinement. For new widgets, follow the current uiTheme and nearby Canvas style when compatible, selecting the closest plugin palette and density rather than inventing unrelated chrome. Generated HTML may freely use inline JavaScript and may load arbitrary HTTPS third-party scripts, ES modules, styles, fonts, images or data endpoints when they materially improve syntax compatibility, layout or rendering; no library or professional source-format whitelist exists. For an HTML widget with semantic source, prefer rendering that source with an appropriate browser library loaded on demand inside that widget, following any matching plugin renderer contract first. Use mature, fixed, documented browser entries; never use latest tags, guess internal /lib or /dist paths, or invent library APIs. Prefer no dependency when native HTML/SVG/Canvas plus plugin CSS is sufficient. Resources load only with the widget that references them. Do not use frames, forms, cookies or storage. Never include secrets. Public HTTPS reference links are allowed, but must use target="_blank" and rel="noopener noreferrer" and must never navigate the widget itself. Use ordinary fetch with credentials:"omit" for public HTTPS data; the widget runtime automatically handles eligible CORS and direct-network failures through PenEcho, so no CORS workaround is needed. Use crossorigin="anonymous" for cross-origin assets where applicable. Reflow on resize and notify the snapshot bridge after the initial stable render and meaningful changes; wait for visible assets and library rendering before notifying, but never clear a successful render because a non-rendering follow-up fails. Network widgets own refresh timers and visible loading/error/last-update states.`;
 
-const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. Choose exactly one command path by the defining deliverable, not by trigger words, and never return speculative alternatives. Use native draw only for a very simple static sketch or annotation with about 10 or fewer basic primitives or line segments. This response mode does not expose the Canvas Agent Visual Explainer tool, so use General HTML as its explicit compatibility fallback for understanding-, organizing-, and planning-first visual compositions. Use General HTML directly when custom behavior is primary: interaction that changes the view or data, animation, simulation, live or refreshing data, a browser-native tool, freeform overlay, or custom illustration. Simple hover, responsive reflow, decorative motion, or wanting manual layout control is not enough to make behavior primary. Use a specialized professional capability when the required artifact needs established notation, a faithful quantitative chart with axes and scales, compatibility with a domain tool, or reusable editable professional source. Words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
+const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled. Choose exactly one command path by the defining deliverable, not by trigger words, and never return speculative alternatives. Use native draw only for a very simple static sketch or annotation with about 10 or fewer basic primitives or line segments. This response mode does not expose the PenEcho Agent Visual Explainer tool, so use General HTML as its explicit compatibility fallback for understanding-, organizing-, and planning-first visual compositions. Use General HTML directly when custom behavior is primary: interaction that changes the view or data, animation, simulation, live or refreshing data, a browser-native tool, freeform overlay, or custom illustration. Simple hover, responsive reflow, decorative motion, or wanting manual layout control is not enough to make behavior primary. Use a specialized professional capability when the required artifact needs established notation, a faithful quantitative chart with axes and scales, compatibility with a domain tool, or reusable editable professional source. Words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
 
 function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
   const sections = [ACTIVE_SYSTEM_PROMPT_BASE];
@@ -2999,20 +2999,20 @@ function resolveCanvasAgentWidgetCapabilities(value = {}) {
     requestedIds = Array.isArray(value?.privatePluginIds) ? value.privatePluginIds : [];
   if ((value?.version!==undefined&&value.version!==1)||(value?.professionalEnabled===true||requestedIds.length)&&value?.version!==1
     ||requestedIds.length>MAX_ENABLED_PLUGINS||requestedIds.some(id=>typeof id!=="string"||!PLUGIN_ID_PATTERN.test(id)||id.length>64)||new Set(requestedIds).size!==requestedIds.length) {
-    throw new Error("Canvas Agent private plugin capabilities are invalid.");
+    throw new Error("PenEcho Agent private plugin capabilities are invalid.");
   }
   const privateCatalog = new Map(catalog.filter(item=>item.builtIn===false&&!item.error).map(item=>[item.id,item])), privatePlugins=[];let totalBytes=0;
   for (const id of requestedIds) {
     const entry=privateCatalog.get(id);
-    if(!entry||BUILTIN_PLUGIN_IDS.has(id)||builtIns.has(id))throw new Error(`Canvas Agent private plugin ${id} is unavailable.`);
+    if(!entry||BUILTIN_PLUGIN_IDS.has(id)||builtIns.has(id))throw new Error(`PenEcho Agent private plugin ${id} is unavailable.`);
     const file=entry.legacy?path.join(PRIVATE_PLUGIN_DIRECTORY,`${id}.md`):path.join(PRIVATE_PLUGIN_DIRECTORY,id,"plugin.md");
     let stat,document;
     try { stat=fs.lstatSync(file);if(!stat.isFile()||stat.size>MAX_PLUGIN_DOCUMENT_BYTES)throw new Error();document=fs.readFileSync(file,"utf8"); }
-    catch { throw new Error(`Canvas Agent private plugin ${id} cannot be read.`); }
+    catch { throw new Error(`PenEcho Agent private plugin ${id} cannot be read.`); }
     let manifest;
-    try { manifest=PLUGIN_FORMAT.parse(document); } catch { throw new Error(`Canvas Agent private plugin ${id} is invalid.`); }
+    try { manifest=PLUGIN_FORMAT.parse(document); } catch { throw new Error(`PenEcho Agent private plugin ${id} is invalid.`); }
     totalBytes+=Buffer.byteLength(manifest.document,"utf8");
-    if(manifest.id!==id||!canvasAgentPrivateHtmlOneShot(manifest.document)||totalBytes>MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES)throw new Error(`Canvas Agent private HTML plugin ${id} is invalid or exceeds the session budget.`);
+    if(manifest.id!==id||!canvasAgentPrivateHtmlOneShot(manifest.document)||totalBytes>MAX_CANVAS_AGENT_PRIVATE_PLUGIN_TOTAL_BYTES)throw new Error(`PenEcho Agent private HTML plugin ${id} is invalid or exceeds the session budget.`);
     privatePlugins.push({
       id:manifest.id,name:manifest.name,version:manifest.version,connect:[...manifest.connect],
       recommendedRefreshSeconds:manifest.recommendedRefreshSeconds,document:manifest.document,

@@ -1,13 +1,13 @@
-# Canvas Agent 与 Visual Explorer 中文案例集
+# PenEcho Agent 与 Visual Explorer 中文案例集
 
 本文档面向产品演示、人工 UAT 和回归验收，依据当前 `codex/canvas-agent-dialog` 工作区实现编写。英文镜像使用相同 Case ID，见 `canvas-agent-visual-explorer-en.md`。
 
 ## 执行约定
 
-- 除非案例另有说明，每个案例从一个新的 Canvas Agent conversation 开始。
+- 除非案例另有说明，每个案例从一个新的 PenEcho Agent conversation 开始。
 - Visual Explorer 案例默认使用可接收图片的已配置模型；科学案例建议使用较高 reasoning effort。
-- “观察工具活动”指查看 Canvas Agent 内可见的工具卡和状态，不要求读取 chain-of-thought。
-- Local Web、Desktop owner 和 Cloud Linked Device 应分别记录运行环境；Cloud Viewer 与 Mobile 只读模式不应显示可用的 Canvas Agent。
+- “观察工具活动”指查看 PenEcho Agent 内可见的工具卡和状态，不要求读取 chain-of-thought。
+- Local Web、Desktop owner 和 Cloud Linked Device 应分别记录运行环境；Cloud Viewer 与 Mobile 只读模式不应显示可用的 PenEcho Agent。
 - 涉及外部网页、市场数据或模型列表的结果允许随时间变化，但路由、引用、错误处理和安全边界必须稳定。
 - 所有 Canvas 修改均应立即可见、形成标准 Undo 历史；失败的原子操作不得留下半完成对象。
 
@@ -67,9 +67,9 @@
 | VE-17 | **拥挤 Canvas 的空间规划与自检**。先在当前 viewport 铺满若干对象，但在 Canvas 远端留出空白，再输入：`在不遮挡现有内容的位置创建一张客户支持升级机制 Visual Explorer，并把视图聚焦到最终结果。` | 使用开场完整 Canvas 概览，不重复抓取相同初始概览；可在当前 viewport 外寻找最近空位；创建后完整 Canvas 复查无重叠，再进行对象细节检查。 |
 | VE-18 | **只补充现有 Canvas，不新建 Visual Explorer**。选中一个已有 Widget，输入：`只在这个 Widget 右侧补充三条风险说明，不要重做原内容。` | Agent 延续现有 Canvas 并创建/编辑最小必要对象；不因“说明”一词擅自重建一张 Visual Explorer。 |
 | VE-19 | **General HTML 路由**。`创建一个普通 General HTML 小工具：三个滑块可实时改变贷款本金、年利率和期限，并更新月供和总利息。` | 按需加载 General HTML contract；交互会改变数据/视图，因此不标记为 Visual Explorer；初始状态无需操作也可用。 |
-| VE-20 | **Professional 与 Private HTML 能力路由**。先分别测试：①启用 Professional Diagrams 后输入 `创建可复制源码的 Mermaid sequence diagram，展示登录、MFA、token 刷新和退出。`；②启用一个合规的个人 HTML plugin 后按其功能发起创建；随后禁用对应插件并开启新会话重试。 | 启用时加载正确 contract 并使用允许的 plugin/sourceFormat；禁用 Professional 或 private plugin 会开启新 Canvas Agent session，后续不得继续使用旧能力或伪造 plugin id。 |
+| VE-20 | **Professional 与 Private HTML 能力路由**。先分别测试：①启用 Professional Diagrams 后输入 `创建可复制源码的 Mermaid sequence diagram，展示登录、MFA、token 刷新和退出。`；②启用一个合规的个人 HTML plugin 后按其功能发起创建；随后禁用对应插件并开启新会话重试。 | 启用时加载正确 contract 并使用允许的 plugin/sourceFormat；禁用 Professional 或 private plugin 会开启新 PenEcho Agent session，后续不得继续使用旧能力或伪造 plugin id。 |
 
-## B. Canvas Agent 画布操作与交付
+## B. PenEcho Agent 画布操作与交付
 
 | ID | 操作 | 重点验收 |
 | --- | --- | --- |
@@ -79,8 +79,8 @@
 | CA-04 | 引用一个 General HTML Widget：`检查这个 Widget 的源代码，把主要按钮改成蓝色并修复溢出的标签，其他行为不变。` | 读取 `widget.html` 精确行段，以最小 unified diff patch；不替换整个 Widget、不修改无关源；最终渲染和交互正常。 |
 | CA-05 | 附加一张图片：`把这张图片作为 Canvas Image 放到现有内容右侧，并保持原始宽高比。` | 只使用本 session 的 attachment；创建后图片持久存在，清理临时附件不破坏 Canvas；完整 Canvas 复查位置。 |
 | CA-06 | `请把刚创建的 Widget 截图发给我下载，不要带坐标网格。` | 仅因用户明确要求才 `deliverToUser`；返回干净 WebP，必要时 PNG fallback；聊天中有下载链接，MIME、扩展名和实际字节一致。 |
-| CA-07 | 连续执行：`把视图聚焦到刚创建的 Widget。`，再输入 `撤销 Canvas Agent 刚才最新的内容修改。` | set-view 只改变视图、不污染内容 Undo；revert 只接受最新 Agent change，不能回退更早或用户手工修改。 |
-| DL-01 | 选中 Canvas Agent 创建的 Visual Explorer 或其他 Widget，在对象侧边操作栏点击 **下载 Widget 图片**。 | 显示准备中与完成/失败反馈；导出当前 Widget 的干净 PNG，不包含 Canvas chrome、选择框或 Agent 活动层；文件名安全且下载后 Widget 状态不变。 |
+| CA-07 | 连续执行：`把视图聚焦到刚创建的 Widget。`，再输入 `撤销 PenEcho Agent 刚才最新的内容修改。` | set-view 只改变视图、不污染内容 Undo；revert 只接受最新 Agent change，不能回退更早或用户手工修改。 |
+| DL-01 | 选中 PenEcho Agent 创建的 Visual Explorer 或其他 Widget，在对象侧边操作栏点击 **下载 Widget 图片**。 | 显示准备中与完成/失败反馈；导出当前 Widget 的干净 PNG，不包含 Canvas chrome、选择框或 Agent 活动层；文件名安全且下载后 Widget 状态不变。 |
 | CA-20 | 在空白 Canvas 输入：`创建一个“事件驱动订单系统”标题、订单服务/消息队列/库存服务三个节点，以及表示发布和消费方向的箭头；使用原生 Canvas 对象，不要创建 HTML。` | 一次原子 `canvas_create` 创建文本与 native drawing；箭头关系正确，未生成 Widget；一次 Undo 删除整个批次。 |
 | CA-21 | 引用一个 Widget：`保持字体视觉大小不变，只把这个 Widget 加宽 25%，让内容自然重排。` 随后另开一轮要求只增高。 | 每次只改变一个 Widget 轴，并同步匹配的 content viewport 以保持 typography scale；另一轴不被偷偷修改，不能保持比例时明确拒绝。 |
 
@@ -97,7 +97,7 @@
 | CA-14 | 拖动面板标题移动位置；拖动四条边改变宽高；用键盘在 resize separator 上调整；刷新页面。 | 桌面宽高/位置偏好恢复，焦点环和 ARIA 值正确；移动端保持固定自适应；面板不阻断 Canvas pan/zoom。 |
 | CA-15 | 开启 Canvas Auto AI，然后聚焦 Agent composer 并发起请求。 | 聚焦时显示 Auto AI 暂停原因；Agent 工作时不触发竞争的自动请求；失焦/结束后恢复之前状态，手动 Canvas 操作仍可用。 |
 | CA-16 | 让 Agent 返回一段解释和一个 fenced JSON/源码块，并完成一次工具调用。 | 流式用户/临时文本按字面显示；最终回复渲染安全 Markdown；源码块单独 Copy；只有该 turn 最终 authoritative assistant response 出现“复制回复”，不执行模型 HTML 或危险链接。 |
-| CA-17 | 在 Settings 新建 OpenAI-compatible 或 Anthropic API connection，点击 **Fetch models**，用键盘选择一个返回模型并保存；随后分别切换 API、Kimi CLI、Codex CLI、Claude CLI，并改变 reasoning effort。 | 模型列表有 loading/success/error，仍可手输模型；无效/过大/非 JSON 列表安全失败；右上角连接与 reasoning effort 是 Canvas Agent 唯一来源；连接、模型配置或相关 Widget capability 变化会建立新 conversation，旧模型不再收到请求。 |
+| CA-17 | 在 Settings 新建 OpenAI-compatible 或 Anthropic API connection，点击 **Fetch models**，用键盘选择一个返回模型并保存；随后分别切换 API、Kimi CLI、Codex CLI、Claude CLI，并改变 reasoning effort。 | 模型列表有 loading/success/error，仍可手输模型；无效/过大/非 JSON 列表安全失败；右上角连接与 reasoning effort 是 PenEcho Agent 唯一来源；连接、模型配置或相关 Widget capability 变化会建立新 conversation，旧模型不再收到请求。 |
 | CA-18 | 发起一个包含 inspect、capture 和 create 的请求，观察 Canvas 上的公开活动提示与 Agent 内工具卡；再让一个工具可控失败。 | 活动提示使用有界、无路径/ID 的用户可读文案，最多复用而不堆叠；工具卡依次显示 running/success/error/cancelled；活动层不进入 Canvas 对象、保存内容或截图，并在运行结束后消退。 |
 | CA-19 | 分别模拟 busy、timeout、rate limit、authentication、model unavailable 和 connection failure；另在运行中刷新页面，并测试 server 重启后的重新连接。 | 错误显示简洁本地化分类，可展开查看安全的原始 code/message，不泄漏 key 或绝对路径；宽限内刷新恢复同一会话且不重放 mutation；server 重启后明确显示 session reset，旧 transcript 只能作为只读历史。 |
 

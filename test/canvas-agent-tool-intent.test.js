@@ -33,22 +33,22 @@ const labels={
 };
 const intent=vm.runInNewContext(`(()=>{${functionSource("canvasAgentToolIntent")}return canvasAgentToolIntent;})()`,{t:key=>labels[key]||key});
 
-test("Canvas Agent tool hints name visual capabilities in one sentence",()=>{
+test("PenEcho Agent tool hints name visual capabilities in one sentence",()=>{
   assert.equal(intent("load_visual_skill",{skill:"physics-2d"}),"Use Canvas Physics 2D");
   assert.equal(intent("load_visual_skill",{skill:"math-3d"}),"Use Canvas Math 3D");
   assert.equal(intent("load_widget_contract",{route:"general-html"}),"Use Canvas General HTML");
   assert.equal(intent("load_widget_contract",{route:"professional-diagrams"}),"Use Canvas Professional Diagrams");
 });
 
-test("Canvas Agent search hints include compact search keywords in the same sentence",()=>{
+test("PenEcho Agent search hints include compact search keywords in the same sentence",()=>{
   assert.equal(intent("deepseek_search",{query:"WebGPU browser support 2026"}),"Search the web · “WebGPU browser support 2026”");
-  assert.equal(intent("duckduckgo_search",{query:"  PenEcho\nCanvas Agent  "}),"Search the web · “PenEcho Canvas Agent”");
+  assert.equal(intent("duckduckgo_search",{query:"  PenEcho\nAgent  "}),"Search the web · “PenEcho Agent”");
   assert.equal(intent("web_read",{url:"https://example.com/reference"}),"Read web page · https://example.com/reference");
   assert.doesNotMatch(intent("tavily_search",{query:"x".repeat(140)}),/[\r\n]/);
   assert.ok(intent("tavily_search",{query:"x".repeat(140)}).endsWith("…”"));
 });
 
-test("Canvas Agent gives every current host tool a specific one-sentence hint",()=>{
+test("PenEcho Agent gives every current host tool a specific one-sentence hint",()=>{
   const calls={
     canvas_inspect:{scope:"selection"},canvas_read:{resource:"widget.html"},canvas_capture:{target:"object"},canvas_create:{summary:"Create a force diagram"},canvas_edit:{summary:"Align the labels"},canvas_patch_widget:{patch:"--- a/widget.html\n+++ b/widget.html\n"},canvas_set_view:{target:"region"},canvas_revert:{changeId:"change-1"},
     bash:{command:"npm test"},read_document:{file_path:"brief.pdf"},read:{file_path:"src/app.js"},read_binary:{file_path:"sample.bin"},read_image:{file_path:"diagram.png"},read_database:{file_path:"data.sqlite",query:"SELECT name FROM items"},load_project_plugin:{plugin:"documents"},glob:{pattern:"**/*.test.js"},grep:{pattern:"canvasAgentToolIntent"},list_directory:{path:"src/client"},

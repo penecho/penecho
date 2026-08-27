@@ -1,6 +1,6 @@
-# Canvas Agent browser E2E — 2026-08-25
+# PenEcho Agent browser E2E — 2026-08-25
 
-Scope: Canvas Agent only. Legacy Canvas AI is explicitly excluded.
+Scope: PenEcho Agent only. Legacy Canvas AI is explicitly excluded.
 
 ## Completed baseline flows
 
@@ -43,10 +43,10 @@ Provider metrics have different denominators and must not be combined into one p
 - Fixed: `canvas_read` did not explicitly distinguish a non-newline EOF from the JSON delimiter.
 - Fixed: widget patch mismatches did not report the first exact differing character.
 - Current P0 policy: each model step contains at most one tool call, so returned HTML/patch data has one unambiguous result boundary. More than one is rejected as a whole, corrective feedback is returned, and the turn continues. A long Widget expected to exceed about 3,000 output tokens or delay visible progress for close to a minute should appear progressively as a useful scaffold followed by bounded same-file patches; same-target patching has only a 20-attempt runaway guard and should normally stop earlier when progress becomes marginal.
-- Fixed: Claude/Kimi usage callbacks were not wired through the Canvas Agent CLI adapter.
+- Fixed: Claude/Kimi usage callbacks were not wired through the PenEcho Agent CLI adapter.
 - Fixed: Anthropic-style cache read/write tokens are separate from new input tokens and must not be subtracted from `input_tokens`.
 - Fixed: a Claude CLI `API Error: 403` result was treated as malformed Harness JSON and triggered one wasteful repair call; it is now classified as `UPSTREAM_ERROR` immediately.
-- Fixed P0: provider activity/heartbeat could keep a Canvas Agent model step alive beyond its configured hard total limit. Harness now owns a host-level deadline, records one synthetic `TIMEOUT`, restores the UI to an input-ready state, cancels the underlying provider, and suppresses the later abort duplicate. A real DeepSeek image request with a 30-second total limit ended automatically in 29.031 seconds; trace `1787668664428-7f907c14-e8e0-4664-9b1f-10b17c93c5f2`.
+- Fixed P0: provider activity/heartbeat could keep a PenEcho Agent model step alive beyond its configured hard total limit. Harness now owns a host-level deadline, records one synthetic `TIMEOUT`, restores the UI to an input-ready state, cancels the underlying provider, and suppresses the later abort duplicate. A real DeepSeek image request with a 30-second total limit ended automatically in 29.031 seconds; trace `1787668664428-7f907c14-e8e0-4664-9b1f-10b17c93c5f2`.
 - Verified recovery: an intentionally unsupported detail capture returned `DETAIL_TARGET_REQUIRED`; the model continued and completed instead of ending the user turn.
 - Verified history continuity: Kimi produced corrected Markdown links in a later no-tool step from the existing Harness conversation and prior tool outputs.
 - External: Tavily returns HTTP 432 for the saved account/key; DuckDuckGo fallback works.

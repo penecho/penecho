@@ -1,4 +1,4 @@
-/* Standalone user-only Canvas Agent activity; see the companion JS removal seam. */
+/* Standalone user-only PenEcho Agent activity; see the companion JS removal seam. */
 .canvas-agent-activity {
   --canvas-agent-activity-accent: #6366f1;
   --canvas-agent-activity-accent-soft: rgba(99, 102, 241, .12);

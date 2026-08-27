@@ -277,11 +277,14 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(canvasPreload, /pickProjectFile:\(\) => ipcRenderer\.invoke\("penecho:pick-project-file"\)/);
   assert.match(canvasPreload, /hasClipboardFile:\(\) => ipcRenderer\.sendSync\("penecho:has-clipboard-file"\)/);
   assert.match(canvasPreload, /readClipboardFile:\(\) => ipcRenderer\.invoke\("penecho:read-clipboard-file"\)/);
+  assert.match(canvasPreload, /readClipboardFiles:\(\) => ipcRenderer\.invoke\("penecho:read-clipboard-files"\)/);
   assert.match(canvasPreload, /openProjectFile:projectId => ipcRenderer\.invoke\("penecho:open-project-file", projectId\)/);
   assert.match(main, /ipcMain\.on\("penecho:has-clipboard-file"[\s\S]*?fromCanvas\(event\)/);
   assert.match(main, /ipcMain\.handle\("penecho:read-clipboard-file"[\s\S]*?fromCanvas\(event\)/);
+  assert.match(main, /ipcMain\.handle\("penecho:read-clipboard-files"[\s\S]*?fromCanvas\(event\)/);
   assert.match(main, /public\.file-url[\s\S]*?text\/uri-list[\s\S]*?x-special\/gnome-copied-files/);
   assert.match(main, /CANVAS_AGENT_CLIPBOARD_FILE_LIMIT = 32 \* 1024 \* 1024/);
+  assert.match(main, /CANVAS_AGENT_CLIPBOARD_FILE_COUNT_LIMIT = 5/);
   assert.match(main, /ipcMain\.handle\("penecho:open-project-file"[\s\S]*?fromCanvas\(event\)[\s\S]*?canvasAgentDesktopProjectStore\(\)\.resolve[\s\S]*?shell\.openPath\(project\.path\)/);
   assert.doesNotMatch(main, /penecho:pick-project-directory|properties:\["openDirectory"/);
   assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);

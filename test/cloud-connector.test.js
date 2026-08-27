@@ -1154,12 +1154,12 @@ test("relay reports only a bounded non-sensitive model capability after authenti
   }
 });
 
-test("cloud relay routes Canvas Agent channel operations to the dedicated local executor", async () => {
+test("cloud relay routes PenEcho Agent channel operations to the dedicated local executor", async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cloud-canvas-agent-relay-test-"));
   try {
     const calls=[], connector = new CloudConnector({
       stateDir,
-      executeRequest:async () => { throw new Error("legacy AI executor must not receive Canvas Agent traffic"); },
+      executeRequest:async () => { throw new Error("legacy AI executor must not receive PenEcho Agent traffic"); },
       executeCanvasAgentRequest:async (payload, timeoutMs) => { calls.push({ payload, timeoutMs }); return { accepted:true }; },
     });
     let sent=null;

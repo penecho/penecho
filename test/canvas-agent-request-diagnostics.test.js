@@ -16,10 +16,10 @@ async function waitFor(predicate, timeoutMs = 3000) {
     if (predicate()) return;
     await new Promise(resolve=>setTimeout(resolve,10));
   }
-  throw new Error("Timed out waiting for Canvas Agent diagnostic test state.");
+  throw new Error("Timed out waiting for PenEcho Agent diagnostic test state.");
 }
 
-test("Canvas Agent request trace records provider cache ratios for API usage",t=>{
+test("PenEcho Agent request trace records provider cache ratios for API usage",t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-api-usage-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),conversationId="api-usage-conversation",
     connection={provider:"api",format:"openai",model:"qwen-test",effort:"max"},event=(type,data,time)=>({type,data,time});
@@ -50,11 +50,11 @@ test("Canvas Agent request trace records provider cache ratios for API usage",t=
   });
 });
 
-test("Canvas Agent request trace records the normalized ink-image upload and exact LLM request image",async t=>{
+test("PenEcho Agent request trace records the normalized ink-image upload and exact LLM request image",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-handwriting-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),
     connection={id:"handwriting-trace",provider:"claude-cli",name:"Handwriting trace",cliPath:"claude-test",cliModel:"claude-test",effort:"medium"},
-    png=await sharp({create:{width:48,height:32,channels:4,background:{r:255,g:255,b:255,alpha:1}}}).png().toBuffer(),
+    webp=await sharp({create:{width:48,height:32,channels:4,background:{r:255,g:255,b:255,alpha:1}}}).webp({lossless:true}).toBuffer(),
     {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),
     host=new CanvasHarnessHost({
       stateDirectory,
@@ -71,7 +71,7 @@ test("Canvas Agent request trace records the normalized ink-image upload and exa
   const session=await host.connect({clientId:"handwriting-trace-client",connectionId:connection.id,binding:{},send:(type,payload)=>messages.push({type,payload})});
   host.updateState(session,{revision:1,canvas:{width:20000,height:20000},objects:[]});
   await host.submit(session,"Read the image instruction.",false,[{
-    name:"canvas-agent-message.png",mediaType:"image/png",data:png.toString("base64"),width:48,height:32,
+    name:"canvas-agent-message.webp",mediaType:"image/webp",data:webp.toString("base64"),width:48,height:32,
   }]);
   await waitFor(()=>messages.some(message=>message.type==="session_event"&&message.payload.kind==="turn_end"));
   const directory=fs.readdirSync(requestTraceDirectory,{withFileTypes:true}).find(entry=>entry.isDirectory()),trace=JSON.parse(fs.readFileSync(path.join(requestTraceDirectory,directory.name,"trace.json"),"utf8")),records=trace.imageDiagnostics;
@@ -81,21 +81,30 @@ test("Canvas Agent request trace records the normalized ink-image upload and exa
   assert.equal(records[0].preservedOriginal,false);
   assert.equal(records[0].byteIdenticalToAdmitted,true);
   assert.deepEqual(records[0].clientReported,{width:48,height:32});
-  assert.deepEqual(records[0].admitted,{mediaType:"image/png",bytes:png.length,width:48,height:32});
+  assert.equal(records[0].name,"canvas-agent-message.webp");
+  assert.deepEqual(records[0].admitted,{mediaType:"image/webp",bytes:webp.length,width:48,height:32});
   assert.equal(records[1].kind,"canvas-agent-handwriting");
-  assert.equal(records[1].mediaType,"image/png");
-  assert.equal(records[1].bytes,png.length);
+  assert.equal(records[1].name,"canvas-agent-message.webp");
+  assert.equal(records[1].mediaType,"image/webp");
+  assert.equal(records[1].bytes,webp.length);
   assert.equal(records[1].width,48);
   assert.equal(records[1].height,32);
   assert.equal(records[1].byteIdenticalToAdmitted,true);
   assert.equal(records[1].transformedForModel,false);
   assert.deepEqual(records[1].policy,{maxPixels:2048*2048,maxBytes:1024*1024});
   assert.equal(records[0].sha256,records[1].sha256);
-  for(const record of records)assert.equal(fs.readFileSync(path.join(requestTraceDirectory,directory.name,record.file)).equals(png),true);
-  assert.equal(JSON.stringify(trace).includes(png.toString("base64")),false);
+  for(const record of records)assert.equal(fs.readFileSync(path.join(requestTraceDirectory,directory.name,record.file)).equals(webp),true);
+  assert.equal(JSON.stringify(trace).includes(webp.toString("base64")),false);
 });
 
-test("Canvas Agent request trace retains redacted CLI provider diagnostics",async t=>{
+test("PenEcho Agent handwriting diagnostics recognize WebP primary and PNG fallback filenames",async()=>{
+  const { isCanvasAgentHandwritingImageName }=await import("../src/server/canvas-agent/runtime.mjs");
+  assert.equal(isCanvasAgentHandwritingImageName("canvas-agent-message.webp"),true);
+  assert.equal(isCanvasAgentHandwritingImageName("canvas-agent-message.png"),true);
+  assert.equal(isCanvasAgentHandwritingImageName("canvas-agent-message.jpg"),false);
+});
+
+test("PenEcho Agent request trace retains redacted CLI provider diagnostics",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-cli-diagnostic-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),
     connection={id:"claude-diagnostic",provider:"claude-cli",name:"Claude diagnostic",cliPath:"claude-test",cliModel:"claude-opus-test",effort:"high"},
@@ -141,7 +150,7 @@ test("Canvas Agent request trace retains redacted CLI provider diagnostics",asyn
   assert.doesNotMatch(serialized,/provider-secret-token|oauth-secret-value/);
 });
 
-test("Canvas Agent request trace keeps complete large standard JSON tool bodies",t=>{
+test("PenEcho Agent request trace keeps complete large standard JSON tool bodies",t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-full-body-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),conversationId="full-body-conversation",
     body=JSON.stringify({baseRevision:1,items:[{type:"widget",pluginId:"general",widgetType:"html_widget",title:"Full body",html:`<main>${"complete-body-segment-".repeat(6000)}</main>`}]});
@@ -156,7 +165,7 @@ test("Canvas Agent request trace keeps complete large standard JSON tool bodies"
   assert.equal(JSON.stringify(trace).includes("…[truncated]"),false);
 });
 
-test("Canvas Agent request trace records each widget patch protocol failure and retry independently",async t=>{
+test("PenEcho Agent request trace records each widget patch protocol failure and retry independently",async t=>{
   const stateDirectory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-canvas-agent-patch-trace-")),requestTraceDirectory=path.join(stateDirectory,"logs","requests"),messages=[],calls=[],
     tracer=createCanvasAgentRequestTracer({requestTraceDirectory,prune:()=>{}}),
     connection={id:"patch-trace",provider:"codex-cli",name:"Patch trace",cliPath:"codex-test",cliModel:"gpt-test",effort:"medium"},

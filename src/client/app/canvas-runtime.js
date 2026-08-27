@@ -1058,6 +1058,9 @@
       copyLabel: widgetType === "diagram_source" ? runtime?.copyLabel(normalizedSourceFormat) || `Copy ${normalizedSourceFormat}` : allowCopy && typeof item.copyText === "string" ? String(item.copyLabel || (sourceFormat ? `Copy ${sourceFormat}` : "Copy source")).trim() : "",
       snapshotImage: null,
       snapshotDataUrl: "",
+      snapshotHighResolution: false,
+      snapshotPromise: null,
+      snapshotPromiseHighResolution: false,
       contentVersion: 0,
       snapshotVersion: -1,
       shell: null,
@@ -1376,14 +1379,15 @@
       );
     });
   }
-  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true, signal = null) {
+  async function requestWidgetSnapshot(widget, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS, requireFresh = true, signal = null, highResolution = false) {
     if(signal?.aborted)throw widgetSnapshotAbortError(signal);
+    highResolution = highResolution === true;
     if (widget.snapshotPromise) {
       const inFlight = widget.snapshotPromise;
-      if (!requireFresh) return waitForWidgetSnapshot(inFlight,signal);
+      if (!requireFresh && (!highResolution || widget.snapshotPromiseHighResolution)) return waitForWidgetSnapshot(inFlight,signal);
       try { await waitForWidgetSnapshot(inFlight,signal); } catch (error) { if(signal?.aborted)throw error; }
       if(signal?.aborted)throw widgetSnapshotAbortError(signal);
-      if (widget.snapshotImage && widget.snapshotVersion >= widget.contentVersion) return widget.snapshotImage;
+      if (widget.snapshotImage && widget.snapshotVersion >= widget.contentVersion && (!highResolution || widget.snapshotHighResolution)) return widget.snapshotImage;
     }
     timeoutMs = Math.max(1000, Math.min(WIDGET_SNAPSHOT_TIMEOUT_MS, Number(timeoutMs) || WIDGET_SNAPSHOT_TIMEOUT_MS));
     const snapshotPromise = (async () => {
@@ -1419,11 +1423,11 @@
             clearTimeout(timer);
             reject(widgetSnapshotAbortError(signal));
           };
-          pending={ widget, resolve, reject, timer, contentVersion:widget.contentVersion, signal, abort };
+          pending={ widget, resolve, reject, timer, contentVersion:widget.contentVersion, signal, abort, highResolution };
           widgetSnapshotRequests.set(requestId,pending);
           signal?.addEventListener("abort",abort,{once:true});
           if(signal?.aborted){abort();return;}
-          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs:remaining() }, widget.hostOrigin || location.origin);
+          widget.frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:widget.contentW, height:widget.contentH, timeoutMs:remaining(), highResolution }, widget.hostOrigin || location.origin);
         });
       } finally {
         if (previousActive === false) {
@@ -1434,10 +1438,14 @@
       }
     })();
     widget.snapshotPromise = snapshotPromise;
+    widget.snapshotPromiseHighResolution = highResolution;
     try {
       return await snapshotPromise;
     } finally {
-      if (widget.snapshotPromise === snapshotPromise) widget.snapshotPromise = null;
+      if (widget.snapshotPromise === snapshotPromise) {
+        widget.snapshotPromise = null;
+        widget.snapshotPromiseHighResolution = false;
+      }
     }
   }
   async function handleWidgetMessage(event) {
@@ -1510,6 +1518,7 @@
       if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
       widget.snapshotImage = snapshotImage;
       widget.snapshotDataUrl = message.dataUrl;
+      widget.snapshotHighResolution = pending.highResolution;
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
@@ -1994,14 +2003,14 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
           if(signal?.aborted)throw widgetSnapshotAbortError(signal);
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal);
+          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
@@ -2516,7 +2525,7 @@
       state.panY = topInset + (availableHeight - viewerBounds.h * nextScale) / 2 - viewerBounds.y * nextScale;
       state.viewInitialized = true;
     } else if (!state.viewInitialized && r.width > 0 && r.height > 0) {
-      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000 * INITIAL_VIEW_ZOOM));
+      state.scale = Math.max(0.03, Math.min(2, Math.max(r.width, r.height) / 10000 / INITIAL_VIEWPORT_EXTENT_SCALE));
       state.panX = (r.width - SIZE * state.scale) / 2;
       state.panY = (r.height - SIZE * state.scale) / 2;
       state.viewInitialized = true;
@@ -3181,7 +3190,7 @@
     syncObjectChrome();
     setStatusKey("widgetDownloading");
     try {
-      await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true);
+      await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, null, true);
       if (!widget.snapshotDataUrl?.startsWith("data:image/png;base64,")) throw Error(t("widgetExportFailed"));
       const link = document.createElement("a");
       link.href = widget.snapshotDataUrl;
@@ -3323,7 +3332,9 @@
         box,
         widget,
         widgetTool:true,
-        widgetToolPlacement:"right-middle",
+        widgetToolPlacement:options.widgetCoreMoveKey && options.widgetCoreAcceptKey ? "move-right-or-accept" : "right-middle",
+        widgetCoreMoveKey:options.widgetCoreMoveKey || "",
+        widgetCoreAcceptKey:options.widgetCoreAcceptKey || "",
         widgetToolGroup,
         groupRefineCandidate:options.refine || null,
         groupItemCount:items.length,
@@ -3342,7 +3353,7 @@
       horizontalOffset += item.baseWidth + gap;
     }
   }
-  function objectChromePosition(box, kind, ignoreKey = "", spec = null) {
+  function objectChromePosition(box, kind, ignoreKey = "", spec = null, knownPositions = null) {
     const baseWidth = spec?.baseWidth || (kind === "move" ? 34 : kind === "refine" ? 112 : 36),
       baseHeight = spec?.baseHeight || 34,
       controlScale = spec?.controlScale || 1,
@@ -3376,8 +3387,44 @@
         verticalWidth = spec.groupVerticalWidth * controlScale,
         verticalHeight = spec.groupVerticalHeight * controlScale,
         hintSpace = spec.groupRefineCandidate && widgetRefineHintVisible(spec.groupRefineCandidate) ? 88 : 0,
-        gap = chromeGap * controlScale,
-        positions = [
+        gap = chromeGap * controlScale;
+      if (spec.widgetCoreMoveKey && spec.widgetCoreAcceptKey) {
+        const movePosition = knownPositions?.get?.(spec.widgetCoreMoveKey),
+          acceptPosition = knownPositions?.get?.(spec.widgetCoreAcceptKey);
+        if (!movePosition || !acceptPosition) return null;
+        const moveWidth = movePosition.baseWidth * (movePosition.scale || 1),
+          acceptWidth = acceptPosition.baseWidth * (acceptPosition.scale || 1),
+          acceptHeight = acceptPosition.baseHeight * (acceptPosition.scale || 1),
+          preferred = {
+            side:"move",
+            layout:"horizontal",
+            x:movePosition.x + moveWidth + gap,
+            y:movePosition.y,
+            w:horizontalWidth,
+            h:height,
+          },
+          fitsBetweenCoreControls = Math.abs(movePosition.y - acceptPosition.y) <= 2
+            && preferred.x + preferred.w <= acceptPosition.x - gap
+            && fits(preferred, hintSpace),
+          belowAccept = {
+            side:"accept",
+            layout:"vertical",
+            x:acceptPosition.x + acceptWidth - verticalWidth,
+            y:acceptPosition.y + acceptHeight + gap,
+            w:verticalWidth,
+            h:verticalHeight,
+          },
+          groupPosition = fitsBetweenCoreControls ? preferred : fallbackPosition(belowAccept, hintSpace),
+          vertical = groupPosition.layout === "vertical";
+        return {
+          x:groupPosition.x + (vertical ? groupPosition.w - width : spec.groupHorizontalOffset * controlScale),
+          y:groupPosition.y + (vertical ? spec.groupVerticalOffset * controlScale : 0),
+          scale:controlScale,
+          baseWidth,
+          baseHeight,
+        };
+      }
+      const positions = [
           { side:"right", layout:"vertical", x:right + gap, y:screenBox.top + screenBox.height / 2 - verticalHeight / 2, w:verticalWidth, h:verticalHeight },
           { side:"right", layout:"vertical", x:right + gap, y:screenBox.top, w:verticalWidth, h:verticalHeight },
           { side:"right", layout:"vertical", x:right + gap, y:bottom - verticalHeight, w:verticalWidth, h:verticalHeight },
@@ -3708,34 +3755,52 @@
           specs.push({ key:`animation:${handTarget.id}:accept`, kind:"accept", box, activate:() => acceptAnimationEdit({ showHint:true }), ...shared, priority:3 });
         }
       } else if (record.kind === "widget") {
-        const box = widgetBox(handTarget);
-        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, widgetCore:true, ...shared, priority:2 });
+        const box = widgetBox(handTarget),
+          widgetToolGroup = `widget-${handTarget.id}-tools`;
+        specs.push({ key:`widget:${handTarget.id}:move`, kind:"move", box, target:"widget", object:handTarget, widgetCore:true, widgetToolGroup, ...shared, priority:2 });
         if (record.expanded && state.handToolbarActiveKey === key && state.widgetEdit?.id === handTarget.id && editWidget === handTarget) {
-          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
-          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
-          addWidgetToolSpecs(specs, handTarget, { copy:true, community:true, download:true, handToolbar:true, handToolbarKey:key, handToolbarHiding:Boolean(record.hiding) });
+          specs.push({ key:`widget:${handTarget.id}:cancel`, kind:"cancel", box, widgetCore:true, widgetToolGroup, activate:() => deleteWidget(handTarget), ...shared, priority:3 });
+          specs.push({ key:`widget:${handTarget.id}:accept`, kind:"accept", box, widgetCore:true, widgetToolGroup, activate:() => acceptWidgetEdit({ showHint:true }), ...shared, priority:3 });
+          addWidgetToolSpecs(specs, handTarget, {
+            copy:true,
+            community:true,
+            download:true,
+            handToolbar:true,
+            handToolbarKey:key,
+            handToolbarHiding:Boolean(record.hiding),
+            widgetCoreMoveKey:`widget:${handTarget.id}:move`,
+            widgetCoreAcceptKey:`widget:${handTarget.id}:accept`,
+          });
         }
       }
     }
     pendingChromeSpecs(specs, state.pending);
     if (state.pendingWidget) {
       const widget = state.pendingWidget,
-        box = widgetBox(widget);
-      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, widgetCore:true, priority:4 });
-      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, widgetCore:true, activate:rejectPendingWidget, priority:5 });
-      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, widgetCore:true, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
-      addWidgetToolSpecs(specs, widget, { copy:true, download:true });
+        box = widgetBox(widget),
+        widgetToolGroup = `widget-${widget.id}-tools`;
+      specs.push({ key:`pending-widget:${widget.id}:move`, kind:"move", box, target:"pending-widget", object:widget, widgetCore:true, widgetToolGroup, priority:4 });
+      specs.push({ key:`pending-widget:${widget.id}:cancel`, kind:"cancel", box, widgetCore:true, widgetToolGroup, activate:rejectPendingWidget, priority:5 });
+      specs.push({ key:`pending-widget:${widget.id}:accept`, kind:"accept", box, widgetCore:true, widgetToolGroup, activate:() => acceptPendingWidget({ showHint:true }), priority:5 });
+      addWidgetToolSpecs(specs, widget, {
+        copy:true,
+        download:true,
+        widgetCoreMoveKey:`pending-widget:${widget.id}:move`,
+        widgetCoreAcceptKey:`pending-widget:${widget.id}:accept`,
+      });
     }
     return specs;
   }
   function syncObjectChrome() {
     if (!objectChromeLayer) return;
     const active = new Set();
+    const knownPositions = new Map();
     let removedHoveredRefineButton = false;
     for (const spec of objectChromeSpecs()) {
       const button = objectChromeButtons.get(spec.key) || createObjectChromeButton(spec.key, spec.kind),
-        position = objectChromePosition(spec.box, spec.kind, spec.key, spec);
+        position = objectChromePosition(spec.box, spec.kind, spec.key, spec, knownPositions);
       if (!position) continue;
+      knownPositions.set(spec.key, position);
       active.add(spec.key);
       const label = objectChromeLabel(spec.kind, spec),
         declaration = (button.penechoStyleRule || ensureObjectChromeStyleRule(button))?.["style"];

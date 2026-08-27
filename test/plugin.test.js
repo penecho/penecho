@@ -582,8 +582,12 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(snapshot, /domSnapshotRenderer = globalThis\.html2canvas[\s\S]*?domSnapshotRenderer\(document\.documentElement/);
   assert.doesNotMatch(snapshot, /\bfetch\s*\(|proxyPublicFetch|PUBLIC_FETCH|notifyReady|penecho-widget-updated/);
   assert.match(host, /snapshotPrimarySvg\(requestedWidth, requestedHeight, scale\)/);
-  assert.match(snapshot, /scale = Math\.min\(1, MAX_SNAPSHOT_DIMENSION \/ requestedWidth, MAX_SNAPSHOT_DIMENSION \/ requestedHeight, Math\.sqrt\(MAX_SNAPSHOT_PIXELS \/ \(requestedWidth \* requestedHeight\)\)\)/);
-  assert.match(host, /scale = Math\.min\(1, MAX_SNAPSHOT_DIMENSION \/ request\.requestedWidth, MAX_SNAPSHOT_DIMENSION \/ request\.requestedHeight, Math\.sqrt\(MAX_SNAPSHOT_PIXELS \/ \(request\.requestedWidth \* request\.requestedHeight\)\)\)/);
+  assert.match(host, /HIGH_RESOLUTION_SNAPSHOT_SCALE = 1\.5,[\s\S]*?MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION = 3600,[\s\S]*?MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS = 10800000/);
+  assert.match(snapshot, /highResolution = message\.highResolution === true[\s\S]*?targetScale = highResolution \? HIGH_RESOLUTION_SNAPSHOT_SCALE : 1[\s\S]*?scale = Math\.min\(targetScale, maximumDimension \/ requestedWidth, maximumDimension \/ requestedHeight, Math\.sqrt\(maximumPixels \/ \(requestedWidth \* requestedHeight\)\)\)/);
+  assert.match(host, /highResolution:request\.highResolution/);
+  assert.match(host, /highResolution:message\.highResolution === true/);
+  assert.match(host, /targetScale = request\.highResolution \? HIGH_RESOLUTION_SNAPSHOT_SCALE : 1[\s\S]*?scale = Math\.min\(targetScale, maximumDimension \/ request\.requestedWidth, maximumDimension \/ request\.requestedHeight, Math\.sqrt\(maximumPixels \/ \(request\.requestedWidth \* request\.requestedHeight\)\)\)/);
+  assert.match(host, /MAX_HIGH_RESOLUTION_SNAPSHOT_DATA_URL_LENGTH = 64 \* 1024 \* 1024[\s\S]*?maximumDataUrlLength = request\.highResolution \? MAX_HIGH_RESOLUTION_SNAPSHOT_DATA_URL_LENGTH : MAX_SNAPSHOT_DATA_URL_LENGTH/);
   assert.doesNotMatch(host, /requestedScale|dataUrlLimit|scale:request\.requested/);
   assert.match(host, /new XMLSerializer\(\)\.serializeToString\(clone\)/);
   assert.match(host, /context\.drawImage\(image, 0, 0, canvas\.width, canvas\.height\)/);

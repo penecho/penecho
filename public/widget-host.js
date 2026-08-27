@@ -4,7 +4,11 @@
     MAX_PLUGIN_STYLES_LENGTH = 32000,
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
+    HIGH_RESOLUTION_SNAPSHOT_SCALE = 1.5,
+    MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION = 3600,
+    MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS = 10800000,
     MAX_SNAPSHOT_DATA_URL_LENGTH = 28 * 1024 * 1024,
+    MAX_HIGH_RESOLUTION_SNAPSHOT_DATA_URL_LENGTH = 64 * 1024 * 1024,
     SNAPSHOT_REQUEST_TIMEOUT_MS = 18000,
     UPDATE_FORWARD_INTERVAL_MS = 2000,
     PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024,
@@ -60,6 +64,9 @@
       CONTROL_RADIUS_PX = 26,
       MAX_SNAPSHOT_DIMENSION = 2400,
       MAX_SNAPSHOT_PIXELS = 4800000,
+      HIGH_RESOLUTION_SNAPSHOT_SCALE = 1.5,
+      MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION = 3600,
+      MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS = 10800000,
       SNAPSHOT_GENERATED_PSEUDOS = [
         { selector:"::before", placement:"prepend" },
         { selector:"::after", placement:"append" },
@@ -857,7 +864,11 @@
       try {
         const requestedWidth = Math.max(1, Number(message.width) || document.documentElement.clientWidth || 1),
           requestedHeight = Math.max(1, Number(message.height) || document.documentElement.clientHeight || 1),
-          scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / requestedWidth, MAX_SNAPSHOT_DIMENSION / requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (requestedWidth * requestedHeight))),
+          highResolution = message.highResolution === true,
+          targetScale = highResolution ? HIGH_RESOLUTION_SNAPSHOT_SCALE : 1,
+          maximumDimension = highResolution ? MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION : MAX_SNAPSHOT_DIMENSION,
+          maximumPixels = highResolution ? MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS : MAX_SNAPSHOT_PIXELS,
+          scale = Math.min(targetScale, maximumDimension / requestedWidth, maximumDimension / requestedHeight, Math.sqrt(maximumPixels / (requestedWidth * requestedHeight))),
           timeoutMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
         // Read the presented widget without pausing its live runtime. Cancelling
         // animation frames here can blank maps and canvases for the whole save.
@@ -975,6 +986,7 @@
       width:request.requestedWidth,
       height:request.requestedHeight,
       timeoutMs:Math.max(500, request.timeoutMs - 250),
+      highResolution:request.highResolution,
     }, "*");
   }
 
@@ -1494,7 +1506,7 @@
           return;
         }
         const timer = setTimeout(() => snapshotError(message.requestId, "Widget snapshot timed out"), timeoutMs);
-        const request = { requestedWidth, requestedHeight, timeoutMs, timer, forwarded:false };
+        const request = { requestedWidth, requestedHeight, timeoutMs, timer, forwarded:false, highResolution:message.highResolution === true };
         pendingSnapshots.set(message.requestId, request);
         forwardSnapshotRequest(message.requestId, request);
       }
@@ -1520,10 +1532,14 @@
       parent.postMessage({ type: "penecho-widget-updated" }, parentOrigin);
     } else if (message.type === "penecho-widget-snapshot" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) {
       const request = pendingSnapshots.get(message.requestId),
-        scale = Math.min(1, MAX_SNAPSHOT_DIMENSION / request.requestedWidth, MAX_SNAPSHOT_DIMENSION / request.requestedHeight, Math.sqrt(MAX_SNAPSHOT_PIXELS / (request.requestedWidth * request.requestedHeight))),
+        targetScale = request.highResolution ? HIGH_RESOLUTION_SNAPSHOT_SCALE : 1,
+        maximumDimension = request.highResolution ? MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION : MAX_SNAPSHOT_DIMENSION,
+        maximumPixels = request.highResolution ? MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS : MAX_SNAPSHOT_PIXELS,
+        maximumDataUrlLength = request.highResolution ? MAX_HIGH_RESOLUTION_SNAPSHOT_DATA_URL_LENGTH : MAX_SNAPSHOT_DATA_URL_LENGTH,
+        scale = Math.min(targetScale, maximumDimension / request.requestedWidth, maximumDimension / request.requestedHeight, Math.sqrt(maximumPixels / (request.requestedWidth * request.requestedHeight))),
         expectedWidth = Math.max(1, Math.floor(request.requestedWidth * scale)),
         expectedHeight = Math.max(1, Math.floor(request.requestedHeight * scale));
-      if (typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > MAX_SNAPSHOT_DATA_URL_LENGTH || message.width !== expectedWidth || message.height !== expectedHeight) snapshotError(message.requestId, "Widget snapshot output is invalid");
+      if (typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > maximumDataUrlLength || message.width !== expectedWidth || message.height !== expectedHeight) snapshotError(message.requestId, "Widget snapshot output is invalid");
       else {
         clearTimeout(request.timer);
         pendingSnapshots.delete(message.requestId);

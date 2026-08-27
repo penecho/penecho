@@ -18,25 +18,25 @@ export function parseClientEnvelope(raw) {
   try {
     value = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf8'))
   } catch {
-    throw new Error('Canvas Agent messages must be valid JSON.')
+    throw new Error('PenEcho Agent messages must be valid JSON.')
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Canvas Agent message envelope is invalid.')
+    throw new Error('PenEcho Agent message envelope is invalid.')
   }
   if (value.version !== CANVAS_AGENT_PROTOCOL_VERSION || !CLIENT_MESSAGE_TYPES.has(value.type)) {
-    throw new Error('Canvas Agent protocol version or message type is unsupported.')
+    throw new Error('PenEcho Agent protocol version or message type is unsupported.')
   }
   if (!Number.isSafeInteger(value.seq) || value.seq < 1 || value.seq > Number.MAX_SAFE_INTEGER) {
-    throw new Error('Canvas Agent message sequence is invalid.')
+    throw new Error('PenEcho Agent message sequence is invalid.')
   }
   if (value.canvasSessionId !== undefined && (typeof value.canvasSessionId !== 'string' || value.canvasSessionId.length > 256 || /[\r\n\0]/.test(value.canvasSessionId))) {
-    throw new Error('Canvas Agent session id is invalid.')
+    throw new Error('PenEcho Agent session id is invalid.')
   }
   if (value.clientId !== undefined && (typeof value.clientId !== 'string' || value.clientId.length > 256 || /[\r\n\0]/.test(value.clientId))) {
-    throw new Error('Canvas Agent client id is invalid.')
+    throw new Error('PenEcho Agent client id is invalid.')
   }
   if (value.payload !== undefined && (!value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload))) {
-    throw new Error('Canvas Agent message payload is invalid.')
+    throw new Error('PenEcho Agent message payload is invalid.')
   }
   return value
 }

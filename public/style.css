@@ -1343,7 +1343,7 @@ body[data-theme="studio"] footer, body[data-theme="studio"] #coords { color: #66
 
 .toolbar .crafts-trigger { padding: 3px 7px; }
 
-/* Harness-backed Canvas Agent */
+/* Harness-backed PenEcho Agent */
 .canvas-agent-control { position: relative; z-index: 1; display: inline-flex; height: 34px; min-height: 34px; align-items: center; overflow: hidden; color: var(--ink); border: 1px solid color-mix(in srgb, var(--line) 78%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--panel-raised) 88%, transparent); box-shadow: 0 7px 22px rgba(15, 23, 42, .18), inset 0 1px rgba(255,255,255,.08); justify-self: center; }
 .canvas-agent-trigger { display: inline-flex; height: 32px; min-height: 32px; align-items: center; gap: 6px; padding: 3px 11px; color: var(--ink); border: 0; background: transparent; font: 650 12px/1.1 Inter, system-ui, sans-serif; cursor: pointer; touch-action: manipulation; }
 .canvas-agent-trigger svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

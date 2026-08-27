@@ -1,4 +1,4 @@
-# Canvas Agent Existing Professional Diagram Editing
+# PenEcho Agent Existing Professional Diagram Editing
 
 This optional contract is edit-only and exists only when the Professional Diagrams plugin is enabled. It applies only to a Professional Diagram Widget that is already present on the current Canvas.
 

@@ -45,7 +45,7 @@ function messageAppender(document,clipboardWrites){
   });
 }
 
-test("Canvas Agent final messages render safe compact Markdown while user and streaming text stay literal",()=>{
+test("PenEcho Agent final messages render safe compact Markdown while user and streaming text stay literal",()=>{
   const {document}=parseHTML("<!doctype html><html><body><div id=body></div></body></html>"),body=document.querySelector("#body"),render=renderer(document);
   render(body,"# 总结\n\n- **已完成** 画布布局\n- 查看 [参考资料](https://example.com/source)\n\n> 可见结果已核对\n\n行内 `canvas` 代码","assistant");
   assert.equal(body.classList.contains("is-markdown"),true);
@@ -70,7 +70,7 @@ test("Canvas Agent final messages render safe compact Markdown while user and st
   assert.equal(body.querySelector("strong"),null);
 });
 
-test("Canvas Agent Markdown never executes model HTML or unsafe links and preserves fenced payloads",()=>{
+test("PenEcho Agent Markdown never executes model HTML or unsafe links and preserves fenced payloads",()=>{
   const {document}=parseHTML("<!doctype html><html><body><div id=body></div></body></html>"),body=document.querySelector("#body"),render=renderer(document);
   render(body,'<img src=x onerror="alert(1)"> [bad](javascript:alert(1)) [credentials](https://user:pass@example.com)',"assistant");
   assert.equal(body.querySelector("img"),null);
@@ -96,7 +96,7 @@ test("Canvas Agent Markdown never executes model HTML or unsafe links and preser
   assert.doesNotMatch(renderingSource,/\.innerHTML\s*=/);
 });
 
-test("Canvas Agent Markdown has a bounded fallback for pathological final text",()=>{
+test("PenEcho Agent Markdown has a bounded fallback for pathological final text",()=>{
   const {document}=parseHTML("<!doctype html><html><body><div id=body></div></body></html>"),body=document.querySelector("#body"),render=renderer(document),pathological=`**title** ${"\\".repeat(300)}`;
   render(body,pathological,"assistant");
   assert.equal(body.classList.contains("is-markdown"),false);
@@ -107,7 +107,7 @@ test("Canvas Agent Markdown has a bounded fallback for pathological final text",
   assert.equal(body.childNodes.length,1);
 });
 
-test("Canvas Agent live and persisted messages share one explicit display limit",()=>{
+test("PenEcho Agent live and persisted messages share one explicit display limit",()=>{
   const messageText=vm.runInNewContext(`(()=>{${functionSource("canvasAgentMessageText")}return canvasAgentMessageText;})()`,{CANVAS_AGENT_HISTORY_TEXT_LIMIT:20000}),bounded=messageText("x".repeat(25000)),emojiBoundary=messageText(`${"x".repeat(19998)}😀tail`);
   assert.equal(bounded.length,20000);
   assert.equal(bounded.endsWith("…"),true);
@@ -135,7 +135,7 @@ function assistantEventHarness(initialTargets=[]) {
   return {canvasAgent,created,rendered,handleEvent};
 }
 
-test("Canvas Agent final assistant_message is authoritative over its streamed deltas",()=>{
+test("PenEcho Agent final assistant_message is authoritative over its streamed deltas",()=>{
   const handle=functionSource("canvasAgentHandleEvent");
   assert.match(handle,/assistant_delta[\s\S]*?\{final:false\}/);
   assert.match(handle,/assistant_message[\s\S]*?if\(typeof event\.text==="string"\)target\.messageText=canvasAgentMessageText\(event\.text\)[\s\S]*?\{final:true\}[\s\S]*?historyItem\.text=target\.messageText/);
@@ -154,7 +154,7 @@ test("Canvas Agent final assistant_message is authoritative over its streamed de
   assert.equal(rendered[0].options.final,true);
 });
 
-test("Canvas Agent keeps completed assistant messages distinct and appends the final summary",()=>{
+test("PenEcho Agent keeps completed assistant messages distinct and appends the final summary",()=>{
   const progress={messageText:"Progress: translating the widget",body:{},historyItem:{type:"message",role:"assistant",text:"Progress: translating the widget",eventKey:"1:0:progress",turn:1,step:0,final:true},row:{classList:{add(){}}}},
     harness=assistantEventHarness([progress]);
   harness.handleEvent({kind:"assistant_message",turn:1,text:"Translation completed."});
@@ -169,7 +169,7 @@ test("Canvas Agent keeps completed assistant messages distinct and appends the f
   assert.notEqual(harness.created[0].historyItem.eventKey,harness.created[1].historyItem.eventKey);
 });
 
-test("Canvas Agent starts a new streaming row after a completed assistant message",()=>{
+test("PenEcho Agent starts a new streaming row after a completed assistant message",()=>{
   const completed={messageText:"First completed message",body:{},historyItem:{type:"message",role:"assistant",text:"First completed message",eventKey:"5:3:complete",turn:5,step:3,final:true},row:{classList:{add(){}}}},
     harness=assistantEventHarness([completed]);
   harness.handleEvent({kind:"assistant_delta",turn:5,step:3,text:"New streamed draft"});
@@ -183,7 +183,7 @@ test("Canvas Agent starts a new streaming row after a completed assistant messag
   assert.equal(harness.created[0].historyItem.final,true);
 });
 
-test("Canvas Agent enables response copy only for the last completed assistant step in a turn",()=>{
+test("PenEcho Agent enables response copy only for the last completed assistant step in a turn",()=>{
   const intermediateItem={type:"message",role:"assistant",turn:4,step:1,final:true,copyable:false},toolItem={type:"tool",turn:4,step:2},summaryItem={type:"message",role:"assistant",turn:4,step:3,final:true,copyable:false},otherTurnItem={type:"message",role:"assistant",turn:3,step:8,final:true,copyable:false},
     intermediate={messageText:"Inspecting the canvas",historyItem:intermediateItem},summary={messageText:"Final summary",historyItem:summaryItem},otherTurn={messageText:"Other turn",historyItem:otherTurnItem},marked=[],
     canvasAgent={currentConversation:{items:[intermediateItem,toolItem,summaryItem,otherTurnItem]},assistantRows:new Map([["4:1:intermediate",intermediate],["3:8:other",otherTurn],["4:3:summary",summary]])};
@@ -199,7 +199,7 @@ test("Canvas Agent enables response copy only for the last completed assistant s
   assert.deepEqual(marked,[]);
 });
 
-test("Canvas Agent restores copy only on final summaries from legacy history",()=>{
+test("PenEcho Agent restores copy only on final summaries from legacy history",()=>{
   const restore=vm.runInNewContext(`(()=>{${functionSource("canvasAgentRestoreLegacyCopyableSummaries")}return canvasAgentRestoreLegacyCopyableSummaries;})()`),items=[
     {type:"message",role:"user",text:"change the canvas"},
     {type:"message",role:"assistant",text:"I will inspect it",final:true},
@@ -214,7 +214,7 @@ test("Canvas Agent restores copy only on final summaries from legacy history",()
   assert.equal(items[5].copyable,false);
 });
 
-test("Canvas Agent copies only the authoritative final assistant response",async()=>{
+test("PenEcho Agent copies only the authoritative final assistant response",async()=>{
   const {document}=parseHTML("<!doctype html><html><body><div id=transcript><details>hidden tool execution and reasoning</details></div></body></html>"),clipboardWrites=[],renderer=messageAppender(document,clipboardWrites),append=renderer.append,transcript=document.querySelector("#transcript");
   const partial=append({role:"assistant",text:"temporary streamed draft",final:false},[],true);
   assert.equal(partial.copyActions.hasAttribute("hidden"),true,"streamed assistant deltas do not expose copy");

@@ -31,7 +31,7 @@ function hash(value) {
 
 function bounded(value, limit = MAX_CLI_PROMPT_CHARS) {
   const text = String(value ?? '')
-  if (text.length > limit) throw new Error('Canvas Agent CLI context exceeds the safe local CLI prompt limit. Start a new conversation or use a larger-context model.')
+  if (text.length > limit) throw new Error('PenEcho Agent CLI context exceeds the safe local CLI prompt limit. Start a new conversation or use a larger-context model.')
   return text
 }
 
@@ -47,7 +47,7 @@ function connectionSnapshot(connection) {
 }
 
 export function cliConnectionProfile(connection) {
-  if (!connection || !CLI_PROVIDERS.has(connection.provider)) throw new Error('Canvas Agent selected an unsupported CLI connection.')
+  if (!connection || !CLI_PROVIDERS.has(connection.provider)) throw new Error('PenEcho Agent selected an unsupported CLI connection.')
   const model = String(connection.cliModel || '').trim() || 'default'
   return {
     provider:`penecho-cli-${hash(connection.id).slice(0, 12)}`,
@@ -152,7 +152,7 @@ function parseJsonCandidate(candidate) {
 function jsonObject(text) {
   const trimmed = String(text || '').trim()
   try { return parseJsonCandidate(trimmed) }
-  catch { throw new Error('Canvas Agent CLI returned an invalid Harness decision. Expected the entire response to be one JSON value.') }
+  catch { throw new Error('PenEcho Agent CLI returned an invalid Harness decision. Expected the entire response to be one JSON value.') }
 }
 
 function invalidCliDecision(message) {
@@ -162,34 +162,34 @@ function invalidCliDecision(message) {
 export function parseCliDecision(output, toolNames = []) {
   let value
   try { value = jsonObject(output) }
-  catch (error) { throw invalidCliDecision(`Canvas Agent CLI returned an invalid Harness decision: ${error.message}`) }
+  catch (error) { throw invalidCliDecision(`PenEcho Agent CLI returned an invalid Harness decision: ${error.message}`) }
   const multiple=Array.isArray(value)?value:(value?.type==='tool_calls'&&Array.isArray(value.calls)?value.calls:null)
   if(multiple){
-    if(multiple.length<2)throw invalidCliDecision('Canvas Agent CLI tool_calls must contain more than one call so Harness can reject the whole decision.')
+    if(multiple.length<2)throw invalidCliDecision('PenEcho Agent CLI tool_calls must contain more than one call so Harness can reject the whole decision.')
     const calls=multiple.map((call,index)=>{
-      if(!call||typeof call!=='object'||Array.isArray(call)||!['tool_call',undefined].includes(call.type))throw invalidCliDecision(`Canvas Agent CLI tool_calls[${index}] is invalid.`)
+      if(!call||typeof call!=='object'||Array.isArray(call)||!['tool_call',undefined].includes(call.type))throw invalidCliDecision(`PenEcho Agent CLI tool_calls[${index}] is invalid.`)
       const name=String(call.name||'')
       let args
       try{args=typeof call.arguments==='string'?jsonObject(call.arguments):call.arguments}
-      catch(error){throw invalidCliDecision(`Canvas Agent CLI tool_calls[${index}] arguments are invalid JSON: ${error.message}`)}
-      if(!args||typeof args!=='object'||Array.isArray(args))throw invalidCliDecision(`Canvas Agent CLI tool_calls[${index}] arguments must be a JSON object.`)
+      catch(error){throw invalidCliDecision(`PenEcho Agent CLI tool_calls[${index}] arguments are invalid JSON: ${error.message}`)}
+      if(!args||typeof args!=='object'||Array.isArray(args))throw invalidCliDecision(`PenEcho Agent CLI tool_calls[${index}] arguments must be a JSON object.`)
       return {name,arguments:JSON.stringify(args)}
     })
     return {type:'tool_calls',calls}
   }
-  if (!value || typeof value !== 'object') throw invalidCliDecision('Canvas Agent CLI decision must be a JSON object.')
+  if (!value || typeof value !== 'object') throw invalidCliDecision('PenEcho Agent CLI decision must be a JSON object.')
   if (value.type === 'final') {
     const text = String(value.text || '').trim()
-    if (!text) throw invalidCliDecision('Canvas Agent CLI returned an empty final answer.')
+    if (!text) throw invalidCliDecision('PenEcho Agent CLI returned an empty final answer.')
     return { type:'final', text }
   }
-  if (value.type !== 'tool_call') throw invalidCliDecision('Canvas Agent CLI decision type must be final or tool_call.')
+  if (value.type !== 'tool_call') throw invalidCliDecision('PenEcho Agent CLI decision type must be final or tool_call.')
   const name = String(value.name || '')
-  if (!toolNames.includes(name)) throw invalidCliDecision(`Canvas Agent CLI requested unavailable tool: ${name || '(empty)'}.`)
+  if (!toolNames.includes(name)) throw invalidCliDecision(`PenEcho Agent CLI requested unavailable tool: ${name || '(empty)'}.`)
   let args
   try { args = typeof value.arguments === 'string' ? jsonObject(value.arguments) : value.arguments }
-  catch (error) { throw invalidCliDecision(`Canvas Agent CLI tool arguments are invalid JSON: ${error.message}`) }
-  if (!args || typeof args !== 'object' || Array.isArray(args)) throw invalidCliDecision('Canvas Agent CLI tool arguments must be a JSON object.')
+  catch (error) { throw invalidCliDecision(`PenEcho Agent CLI tool arguments are invalid JSON: ${error.message}`) }
+  if (!args || typeof args !== 'object' || Array.isArray(args)) throw invalidCliDecision('PenEcho Agent CLI tool arguments must be a JSON object.')
   return { type:'tool_call', name, arguments:JSON.stringify(args) }
 }
 
@@ -250,7 +250,7 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
   if (connection.provider === 'kimi-cli') {
     // Kimi ACP currently starts its default agent profile with built-in tools
     // and exposes no ACP option for selecting PenEcho's tool-free profile.
-    // Canvas Agent therefore uses the disposable --agent-file path for every
+    // PenEcho Agent therefore uses the disposable --agent-file path for every
     // Harness step. Text mode exposes genuine assistant/thinking deltas so the
     // idle timeout can refresh; direct Canvas AI keeps its separate Kimi path.
     return callKimiCanvasAgentCli({ ...request, prompt:`${systemPrompt}\n\n--- HARNESS REQUEST ---\n${prompt}`, onUsage })
@@ -261,7 +261,7 @@ export async function callPenEchoCli({ connection, systemPrompt, prompt, atlasIm
   if (connection.provider === 'claude-cli') {
     return callClaudeCli({ ...request, systemPrompt, prompt, onUsage })
   }
-  throw new Error(`Canvas Agent does not support CLI provider ${connection.provider}.`)
+  throw new Error(`PenEcho Agent does not support CLI provider ${connection.provider}.`)
 }
 
 export class PenEchoCliAdapter extends LlmAdapter {
@@ -287,7 +287,7 @@ export class PenEchoCliAdapter extends LlmAdapter {
 
   route(provider) {
     const route = this.routes.get(provider)
-    if (!route) throw new Error(`Canvas Agent CLI provider route is unavailable: ${provider}.`)
+    if (!route) throw new Error(`PenEcho Agent CLI provider route is unavailable: ${provider}.`)
     return route
   }
 
@@ -337,8 +337,8 @@ export class PenEchoCliAdapter extends LlmAdapter {
     const controller = new AbortController(),
       timeout = createCanvasAgentModelTimeout(controller, this.timeoutMs(connection.id), {
         reasonFor:(kind, limitMs)=>Object.assign(new Error(kind === 'idle'
-          ? `Canvas Agent CLI request timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without output activity.`
-          : `Canvas Agent CLI request timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
+          ? `PenEcho Agent CLI request timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without output activity.`
+          : `PenEcho Agent CLI request timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
       }),
       signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal
     try {
@@ -378,7 +378,7 @@ export class PenEchoCliAdapter extends LlmAdapter {
       }
       if (controller.signal.aborted && !options.signal?.aborted) throw controller.signal.reason instanceof Error
         ? controller.signal.reason
-        : Object.assign(new Error('Canvas Agent CLI request timed out.'), { name:'TimeoutError' })
+        : Object.assign(new Error('PenEcho Agent CLI request timed out.'), { name:'TimeoutError' })
       if (error?.code === 'UPSTREAM_ERROR') throw new LlmError(String(error.message || error), 'UPSTREAM_ERROR', { cause:error })
       throw error
     } finally {

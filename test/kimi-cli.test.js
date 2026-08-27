@@ -46,7 +46,7 @@ test("Kimi text transcript removes only CLI block rendering", () => {
   assert.equal(normalizeKimiTranscript("Progress: still working"), "Progress: still working");
 });
 
-test("Kimi Canvas Agent extracts a complete Harness JSON value from surrounding text", () => {
+test("Kimi PenEcho Agent extracts a complete Harness JSON value from surrounding text", () => {
   const decision='{"type":"tool_call","name":"canvas_capture","arguments":{"note":"literal } and \\\" quote"}}';
   assert.equal(extractKimiCanvasAgentJson(`说明文字\n\`\`\`JSON\n${decision}\n\`\`\`\n完成`),decision);
   assert.equal(extractKimiCanvasAgentJson(`progress {"percent":100}\n${decision}\ntrailing status`),decision);
@@ -83,7 +83,7 @@ process.stdout.write(JSON.stringify({type:"message",role:"assistant",content:[{t
   assert.deepEqual(usage,{input_tokens:20,cache_read_tokens:70,output_tokens:8});
 });
 
-test("Canvas Agent Kimi uses the disposable no-tools CLI path instead of ACP", async () => {
+test("PenEcho Agent Kimi uses the disposable no-tools CLI path instead of ACP", async () => {
   const executable = fakeKimi(`
 const fs=require("fs"),args=process.argv.slice(2);
 if(args.includes("acp"))process.exit(8);
@@ -98,7 +98,7 @@ setTimeout(()=>process.stdout.write('  "text":"isolated"}\\n  '+fence+'\\n  处�
   let activityCount=0;
   const result = await callPenEchoCli({
     connection:{ provider:"kimi-cli", cliPath:executable, cliModel:"kimi-code/k3", effort:"medium" },
-    systemPrompt:"Canvas Agent system",
+    systemPrompt:"PenEcho Agent system",
     prompt:'{"availableTools":[]}',
     atlasImage:null,
     onActivity:()=>activityCount++,
@@ -107,7 +107,7 @@ setTimeout(()=>process.stdout.write('  "text":"isolated"}\\n  '+fence+'\\n  处�
   assert.ok(activityCount >= 3);
 });
 
-test("Canvas Agent Kimi counts thinking as activity without exposing it in diagnostics", async () => {
+test("PenEcho Agent Kimi counts thinking as activity without exposing it in diagnostics", async () => {
   const executable = fakeKimi(`
 process.stderr.write("PRIVATE_CHAIN_OF_THOUGHT");
 setInterval(()=>{},1000);

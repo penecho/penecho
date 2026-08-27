@@ -36,7 +36,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
   function createPeer({ sendFrame, closeTransport = () => {} }) {
     const binding = {}, state = { session:null, sessionGeneration:0, incomingSeq:0, outgoingSeq:0, pendingHandshakeId:"", closed:false, receiveQueue:Promise.resolve() };
     const sendForGeneration = generation => {
-      if (!Number.isSafeInteger(generation)) throw new Error("Canvas Agent session generation is invalid.");
+      if (!Number.isSafeInteger(generation)) throw new Error("PenEcho Agent session generation is invalid.");
       return (type, payload, identity = state.session) => {
         if (state.closed || generation !== state.sessionGeneration) return;
         state.outgoingSeq += 1;
@@ -59,20 +59,20 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
       return (type,payload,identity)=>generationSend(type,["ready","error"].includes(type)?{...payload,handshakeId:expected}:payload,identity);
     };
     const fail = (error, fatal = false) => {
-      send("error", { message:String(error?.message || error || "Canvas Agent failed."), fatal, ...(state.pendingHandshakeId?{handshakeId:state.pendingHandshakeId}:{}) });
-      if (fatal) closeTransport(1008, "Canvas Agent protocol error");
+      send("error", { message:String(error?.message || error || "PenEcho Agent failed."), fatal, ...(state.pendingHandshakeId?{handshakeId:state.pendingHandshakeId}:{}) });
+      if (fatal) closeTransport(1008, "PenEcho Agent protocol error");
     };
     const processFrame = async raw => {
       if (state.closed) return;
       try {
-        if (Buffer.byteLength(raw) > MAX_AGENT_FRAME_BYTES) throw new Error("Canvas Agent message is too large.");
+        if (Buffer.byteLength(raw) > MAX_AGENT_FRAME_BYTES) throw new Error("PenEcho Agent message is too large.");
         const { parseClientEnvelope } = await import("./protocol.mjs");
         const envelope = parseClientEnvelope(raw);
-        if (envelope.seq <= state.incomingSeq) throw new Error("Canvas Agent message sequence must increase.");
+        if (envelope.seq <= state.incomingSeq) throw new Error("PenEcho Agent message sequence must increase.");
         state.incomingSeq = envelope.seq;
         const runtime = await host();
         if (envelope.type === "hello") {
-          if (state.session) throw new Error("Canvas Agent hello was already accepted.");
+          if (state.session) throw new Error("PenEcho Agent hello was already accepted.");
           const generation = ++state.sessionGeneration, handshakeId=normalizedHandshakeId(envelope.payload?.handshakeId);
           state.pendingHandshakeId=handshakeId;
           const send = sendForHandshake(generation,handshakeId);
@@ -91,14 +91,14 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
           });
           if (generation !== state.sessionGeneration) {
             await runtime.disposeSession(session).catch(() => {});
-            throw new Error("Canvas Agent session replacement is no longer current.");
+            throw new Error("PenEcho Agent session replacement is no longer current.");
           }
           state.session = session;
           if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
           return;
         }
-        if (state.session?.binding !== binding) throw new Error("Canvas Agent session moved to another connection.");
-        if (!state.session) throw new Error("Canvas Agent session is not established.");
+        if (state.session?.binding !== binding) throw new Error("PenEcho Agent session moved to another connection.");
+        if (!state.session) throw new Error("PenEcho Agent session is not established.");
         if (envelope.type === "new_conversation") {
           const previous = state.session, connectionId = String(envelope.payload?.connectionId || previous.connectionId),
             handshakeId=normalizedHandshakeId(envelope.payload?.handshakeId);
@@ -122,7 +122,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
           });
           if (generation !== state.sessionGeneration) {
             await runtime.disposeSession(replacement).catch(() => {});
-            throw new Error("Canvas Agent session replacement is no longer current.");
+            throw new Error("PenEcho Agent session replacement is no longer current.");
           }
           state.session = replacement;
           if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
@@ -156,7 +156,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
           }
           if (generation !== state.sessionGeneration) {
             if (changed !== previous) await runtime.disposeSession(changed).catch(() => {});
-            throw new Error("Canvas Agent connection change is no longer current.");
+            throw new Error("PenEcho Agent connection change is no longer current.");
           }
           state.session = changed;
           if(state.pendingHandshakeId===handshakeId)state.pendingHandshakeId="";
@@ -169,11 +169,11 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
           try {
             runtime.setWebSearchEnabled(session, envelope.payload?.webSearchEnabled === true);
           } catch (error) {
-            sendForGeneration(generation)("error", { message:String(error?.message || error || "Canvas Agent failed."), fatal:false }, session);
+            sendForGeneration(generation)("error", { message:String(error?.message || error || "PenEcho Agent failed."), fatal:false }, session);
             return;
           }
-          void runtime.submit(session, envelope.payload?.text, envelope.type === "steer", envelope.payload?.images, envelope.payload?.references, envelope.payload?.initialState).catch(error => {
-            sendForGeneration(generation)("error", { message:String(error?.message || error || "Canvas Agent failed."), fatal:false }, session);
+          void runtime.submit(session, envelope.payload?.text, envelope.type === "steer", envelope.payload?.images, envelope.payload?.references, envelope.payload?.initialState, envelope.payload?.fileIds).catch(error => {
+            sendForGeneration(generation)("error", { message:String(error?.message || error || "PenEcho Agent failed."), fatal:false }, session);
           });
         }
         else if (envelope.type === "cancel") await runtime.cancel(state.session);
@@ -233,7 +233,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
   async function executeRemote(input) {
     const operation = String(input?.operation || "");
     if (operation === "canvas.agent.open") {
-      if (remoteChannels.size >= MAX_REMOTE_AGENT_CHANNELS) throw Object.assign(new Error("Too many remote Canvas Agent sessions are open."), { code:"canvas_agent_limit" });
+      if (remoteChannels.size >= MAX_REMOTE_AGENT_CHANNELS) throw Object.assign(new Error("Too many remote PenEcho Agent sessions are open."), { code:"canvas_agent_limit" });
       const id = randomUUID(), channel = { id, frames:[], waiter:null, expiryTimer:null, closed:false, peer:null };
       channel.peer = createPeer({
         sendFrame:frame => { if (!channel.closed) { channel.frames.push(frame); touchRemoteChannel(channel); wakeRemoteChannel(channel); } },
@@ -244,17 +244,17 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
       return { channelId:id };
     }
     const channel = remoteChannels.get(String(input?.channelId || ""));
-    if (!channel) throw Object.assign(new Error("Remote Canvas Agent session was not found."), { code:"canvas_agent_session" });
+    if (!channel) throw Object.assign(new Error("Remote PenEcho Agent session was not found."), { code:"canvas_agent_session" });
     touchRemoteChannel(channel);
     if (operation === "canvas.agent.frame") {
       const frame = String(input?.frame || "");
-      if (!frame || Buffer.byteLength(frame) > MAX_AGENT_FRAME_BYTES) throw Object.assign(new Error("Remote Canvas Agent frame is invalid."), { code:"canvas_agent_frame" });
+      if (!frame || Buffer.byteLength(frame) > MAX_AGENT_FRAME_BYTES) throw Object.assign(new Error("Remote PenEcho Agent frame is invalid."), { code:"canvas_agent_frame" });
       await channel.peer.receive(frame);
       return { accepted:true };
     }
     if (operation === "canvas.agent.pull") {
       if (channel.frames.length || channel.closed) return drainRemoteChannel(channel);
-      if (channel.waiter) throw Object.assign(new Error("A Remote Canvas Agent poll is already pending."), { code:"canvas_agent_poll_conflict" });
+      if (channel.waiter) throw Object.assign(new Error("A Remote PenEcho Agent poll is already pending."), { code:"canvas_agent_poll_conflict" });
       return new Promise(resolve => {
         const timer = setTimeout(() => { if (channel.waiter?.timer !== timer) return; channel.waiter = null; resolve({ frames:[], closed:false }); }, REMOTE_AGENT_POLL_MS);
         timer.unref?.();
@@ -262,7 +262,7 @@ function attachCanvasAgent({ server, authorize, resolveConnection, listConnectio
       });
     }
     if (operation === "canvas.agent.close") return { closed:await closeRemoteChannel(channel.id) };
-    throw Object.assign(new Error("Remote Canvas Agent operation is invalid."), { code:"canvas_agent_operation" });
+    throw Object.assign(new Error("Remote PenEcho Agent operation is invalid."), { code:"canvas_agent_operation" });
   }
 
   const upgrade = (req, socket, head) => {

@@ -1,4 +1,4 @@
-# PenEcho Canvas Agent × DeepSeek Harness 集成规格
+# PenEcho Agent × DeepSeek Harness 集成规格
 
 > 状态：首版已实施（API + CLI）
 > 基线：`penecho_071_version`
@@ -6,15 +6,15 @@
 > Harness 研究快照：`deepseek-ai/deepseek-harness` `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`，版本 `0.1.1-rc.2`，2026-08-21
 > 最后更新：2026-08-25
 
-> Provider routing amendment（2026-08-25）：本文中 Harness-specific 的 session、context、loop、replay 和 compaction 规则适用于 API、Kimi CLI 与 Claude CLI。选中 `codex-cli` 时，只有 Canvas Agent 改走独立的 native Codex App Server 路径；共享的 Canvas 权威、WebSocket、工具校验、资源、UI 投影和安全规则仍适用于两个 engine。Main Canvas AI 与 direct one-shot CLI adapter 不变。
+> Provider routing amendment（2026-08-25）：本文中 Harness-specific 的 session、context、loop、replay 和 compaction 规则适用于 API、Kimi CLI 与 Claude CLI。选中 `codex-cli` 时，只有 PenEcho Agent 改走独立的 native Codex App Server 路径；共享的 Canvas 权威、WebSocket、工具校验、资源、UI 投影和安全规则仍适用于两个 engine。Main Canvas AI 与 direct one-shot CLI adapter 不变。
 
 ## 1. 结论
 
-在 071 中新增一个独立的 **Canvas Agent 模式**，并按 connection 选择两个彼此隔离的服务端 engine。API、Kimi CLI 与 Claude CLI 使用同进程 DeepSeek Harness；Codex CLI 绕过 Harness，使用 conversation-scoped native `codex app-server` process/thread。选中的 provider runtime 负责会话日志、上下文组装、工具循环、token 计量、上下文压缩、转向和取消。
+在 071 中新增一个独立的 **PenEcho Agent 模式**，并按 connection 选择两个彼此隔离的服务端 engine。API、Kimi CLI 与 Claude CLI 使用同进程 DeepSeek Harness；Codex CLI 绕过 Harness，使用 conversation-scoped native `codex app-server` process/thread。选中的 provider runtime 负责会话日志、上下文组装、工具循环、token 计量、上下文压缩、转向和取消。
 
 画布继续保留在浏览器端，仍是当前内容的唯一权威。两个 engine 都不直接读取浏览器内存，也不获得 shell、任意宿主文件、Git、GitHub、MCP、代码执行、技能、子代理或工作流能力；它们只能通过 PenEcho 定义并校验的 Canvas、选定资源和受控公共 Web 工具操作当前已认证能力。Codex 的无关 built-ins 全部关闭，只暴露这些 PenEcho dynamic tools。
 
-第一阶段支持本地 Web、Desktop，以及通过 Linked Device 打开的 Cloud 可编辑 Canvas。Canvas Agent 使用画布右上角当前选中的 connection：API、Kimi CLI 与 Claude CLI 映射到 Harness，Codex CLI 映射到独立 native host。Cloud 只转发受认证的 Canvas Agent 帧，provider runtime、模型连接和密钥仍在 Linked Device 本地主机执行；只读 Viewer 与 Mobile 不进入 Canvas Agent MVP。现有 `/api/ai/command` 和旧 AI 草稿/接受流程保持不变，作为并行的 legacy 能力保留。
+第一阶段支持本地 Web、Desktop，以及通过 Linked Device 打开的 Cloud 可编辑 Canvas。PenEcho Agent 使用画布右上角当前选中的 connection：API、Kimi CLI 与 Claude CLI 映射到 Harness，Codex CLI 映射到独立 native host。Cloud 只转发受认证的 PenEcho Agent 帧，provider runtime、模型连接和密钥仍在 Linked Device 本地主机执行；只读 Viewer 与 Mobile 不进入 PenEcho Agent MVP。现有 `/api/ai/command` 和旧 AI 草稿/接受流程保持不变，作为并行的 legacy 能力保留。
 
 ## 2. 目标与非目标
 
@@ -24,7 +24,7 @@
 2. 让模型能够检查、读取、截图和原子修改当前画布，并在一次对话中根据工具结果继续工作。
 3. 保留 071 的画布状态、撤销/重做、持久化和安全边界，不复制 `alwaysmain` 的自定义代理循环。
 4. 为长对话启用 provider-native compaction：Harness engine 使用 Harness basic compaction，Codex engine 使用 App Server automatic compaction。
-5. 提供可停止、可在运行中补充要求、可断线恢复 UI 投影的沉浸式 Canvas Agent 体验。
+5. 提供可停止、可在运行中补充要求、可断线恢复 UI 投影的沉浸式 PenEcho Agent 体验。
 6. 把所有 Harness 依赖隔离在一个窄适配层中，以承受 developer preview 阶段的 API 变化。
 
 ### 2.2 非目标
@@ -60,9 +60,9 @@ Harness 的核心扩展点均为 Cordis 插件。会话日志、系统提示词�
 
 ### 3.2 不采用官方 JSON-RPC SDK 作为主边界
 
-官方 SDK client 当前缺少 prompt 级结果、运行中 prompt cancel 和单 session close 等能力。关闭进程是唯一完整放弃方式，这与 Canvas Agent 的 Stop、运行中转向和一个 PenEcho 进程承载多个浏览器会话不匹配。
+官方 SDK client 当前缺少 prompt 级结果、运行中 prompt cancel 和单 session close 等能力。关闭进程是唯一完整放弃方式，这与 PenEcho Agent 的 Stop、运行中转向和一个 PenEcho 进程承载多个浏览器会话不匹配。
 
-结论：使用 **同进程直接 Agent API**。浏览器与 PenEcho 主机之间使用 PenEcho 自己的 WebSocket 协议；不能把官方 SDK 子进程当作 Canvas Agent 主链路。
+结论：使用 **同进程直接 Agent API**。浏览器与 PenEcho 主机之间使用 PenEcho 自己的 WebSocket 协议；不能把官方 SDK 子进程当作 PenEcho Agent 主链路。
 
 ### 3.3 运行时和依赖约束
 
@@ -77,9 +77,9 @@ Harness 的核心扩展点均为 Cordis 插件。会话日志、系统提示词�
 
 ```mermaid
 flowchart LR
-    U["用户"] --> UI["071 Canvas Agent UI"]
+    U["用户"] --> UI["071 PenEcho Agent UI"]
     UI <--> WS["认证 WebSocket Bridge"]
-    WS <--> H["PenEcho Canvas Agent Host"]
+    WS <--> H["PenEcho Agent Host"]
     H --> R["Provider Engine Router"]
     R <--> A["DeepSeek Harness Agent"]
     R <--> C["Native Codex App Server"]
@@ -103,7 +103,7 @@ flowchart LR
 | 对话与工具历史 | Harness session log 或 native Codex thread | 浏览器不得另组装模型历史 |
 | AI 连接与密钥 | 071 server connection store / secret store | Engine 只能通过受控 connection 解析；密钥不进入浏览器、settings 或日志 |
 | UI transcript | Provider-runtime 事件投影 | UI 可以缓存渲染数据，但不是模型上下文来源 |
-| 会话附件 | PenEcho 临时 Canvas Agent cache + provider refs | 不写入 Canvas 快照 |
+| 会话附件 | PenEcho 临时 PenEcho Agent cache + provider refs | 不写入 Canvas 快照 |
 
 ### 4.2 部署形态
 
@@ -117,7 +117,7 @@ src/server/main.js (CommonJS)
      -> PenEcho Canvas plugins
 ```
 
-禁止把 Harness 或 App Server bridge 放进浏览器 bundle。API、Kimi CLI 与 Claude CLI 使用 Harness engine。`codex-cli` 在进入 Harness 前被路由到隔离 native host：每个 Codex Canvas Agent conversation 惰性启动一个隔离 `codex app-server` process 和一个 ephemeral thread，并在正常 submit、steer、tool call 与 automatic `contextCompaction` 之间保持这组所有权。Codex 是该 conversation 历史、native tool loop、compaction 与 provider cache identity 的唯一权威；PenEcho 不向它 replay Harness history，也不建立平行模型上下文。PenEcho 只提供稳定初始 instructions、有界且带 trust 类型的逐轮 `additionalContext`，以及现有 Canvas/project/public-web/Widget `dynamicTools`，并继续拥有工具执行与权限校验权威。New conversation、选中 connection/provider 变化、选中 connection 保存或删除、fatal protocol/process failure 与 session expiry 会销毁旧 native process/thread；Main Canvas AI 仍使用独立 one-shot adapter。
+禁止把 Harness 或 App Server bridge 放进浏览器 bundle。API、Kimi CLI 与 Claude CLI 使用 Harness engine。`codex-cli` 在进入 Harness 前被路由到隔离 native host：每个 Codex PenEcho Agent conversation 惰性启动一个隔离 `codex app-server` process 和一个 ephemeral thread，并在正常 submit、steer、tool call 与 automatic `contextCompaction` 之间保持这组所有权。Codex 是该 conversation 历史、native tool loop、compaction 与 provider cache identity 的唯一权威；PenEcho 不向它 replay Harness history，也不建立平行模型上下文。PenEcho 只提供稳定初始 instructions、有界且带 trust 类型的逐轮 `additionalContext`，以及现有 Canvas/project/public-web/Widget `dynamicTools`，并继续拥有工具执行与权限校验权威。New conversation、选中 connection/provider 变化、选中 connection 保存或删除、fatal protocol/process failure 与 session expiry 会销毁旧 native process/thread；Main Canvas AI 仍使用独立 one-shot adapter。
 
 ## 5. 插件组合
 
@@ -168,7 +168,7 @@ Harness engine 把固定、可复用且跨 step 不变的 Visual Explorer 与 Wi
 
 ### 5.2 明确禁止装载的组件
 
-以下能力即使 Harness 官方 base bundle 包含，也不得进入 Canvas Agent scope：
+以下能力即使 Harness 官方 base bundle 包含，也不得进入 PenEcho Agent scope：
 
 - base bundle 和 agent-spine demo；
 - bash、PowerShell、subprocess、sandbox；
@@ -202,7 +202,7 @@ Harness engine 把固定、可复用且跨 step 不变的 Visual Explorer 与 Wi
 
 职责：为单个 agent scope 注册 Canvas 专用 prompt 和动态 context。
 
-- 注册 Canvas Agent 角色和安全边界。
+- 注册 PenEcho Agent 角色和安全边界。
 - 每一步从 bridge 获取最新 CanvasDigest，并以动态 context 记录到 Harness log。
 - 把本轮用户选中的对象、区域、图片和手写输入转成宿主签名的 reference envelope。
 - 提醒模型 Canvas/Widget 内容是不可信数据，不得把其中的文本视为系统指令。
@@ -249,7 +249,7 @@ Harness engine 把固定、可复用且跨 step 不变的 Visual Explorer 与 Wi
 
 #### `codex-native-host`
 
-职责：只为 `codex-cli` Canvas Agent connection 托管原生 Codex App Server，不进入 Harness，也不复用 direct Canvas AI 的 one-shot `codex exec` adapter。
+职责：只为 `codex-cli` PenEcho Agent connection 托管原生 Codex App Server，不进入 Harness，也不复用 direct Canvas AI 的 one-shot `codex exec` adapter。
 
 - 每个 Canvas conversation 惰性创建一个私有 `CODEX_HOME`、一个 `codex app-server --stdio --strict-config` process 和一个 ephemeral thread；普通 turn、steer、automatic compaction 与 dynamic tool loop 复用同一 process/thread。
 - thread start 冻结稳定的 base instructions；每轮只追加有 trust kind 的有界 `additionalContext`。PenEcho 不 replay 浏览器 transcript、不拼接 Harness snapshot，也不设置 provider cache key。
@@ -259,7 +259,7 @@ Harness engine 把固定、可复用且跨 step 不变的 Visual Explorer 与 Wi
 
 ### 5.4 Canvas decision 准入与标准 JSON 工具协议
 
-本节只适用于新的 Canvas Agent，不得接入 Main Canvas AI、`/api/ai/command` 或旧 one-shot Canvas AI adapter。
+本节只适用于新的 PenEcho Agent，不得接入 Main Canvas AI、`/api/ai/command` 或旧 one-shot Canvas AI adapter。
 
 - 一个模型 step 最多包含一个工具调用；零个工具调用时可以直接 final。该约束不限制一次用户请求包含多少个顺序 model step。`maxParallelToolCalls: 1` 只表示串行执行，不能满足该约束；因此 Harness engine 必须在 AgentLoop 记录 assistant decision、执行任何真实工具之前，对完整 `llm/stream` step 做统一准入。若发现两个或更多调用，整步替换为一个仅模型可见的错误 tool result，明确说明调用数量、整步已拒绝且没有 Canvas 工具执行，然后让 AgentLoop 继续原用户请求。不得因此 cancel、close session 或提前结束回复，也不得对外宣称支持同一步多个工具调用。
 - Codex-native 不经过 Harness。thread 必须开启 App Server `experimentalRawEvents`，以每个 `rawResponse/completed` 作为上游单次模型 response 的精确边界。Code Mode 的 raw item 是 `exec` wrapper；PenEcho 必须从 wrapper 中统计 `tools.penecho__*` 调用，并按工具名与 response 顺序匹配 App Server 后续发出的独立 `exec-*` dynamic call id，不能假设两套 id 相等。超过一个底层工具调用时，全部 dynamic request 返回失败结果且不发浏览器 RPC，App Server 在同一 thread 内继续。
@@ -481,8 +481,8 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 - `formula`：渲染到 ink layer。
 - `plot`：渲染到 ink layer。
 - `drawing`：通过现有受限 DRAW renderer 渲染到 ink layer。
-- `widget`：Canvas Agent 新建时只能是 `html_widget`；HTML 可承担 Visual Explorer、动态/交互展示和其他通用输出。已有 `diagram_source` 仍可通过 `canvas_read` 与 `canvas_patch_widget` 原位修改。该限制只存在于 Canvas Agent 的工具与浏览器 RPC 路径，不改变 Main Canvas AI、普通 Canvas Professional Diagram 能力或旧画布内容。
-- `image`：只能引用当前 Canvas Agent session 拥有的 Harness `attachmentId`，提交时复制到 071 现有 image persistence。
+- `widget`：PenEcho Agent 新建时只能是 `html_widget`；HTML 可承担 Visual Explorer、动态/交互展示和其他通用输出。已有 `diagram_source` 仍可通过 `canvas_read` 与 `canvas_patch_widget` 原位修改。该限制只存在于 PenEcho Agent 的工具与浏览器 RPC 路径，不改变 Main Canvas AI、普通 Canvas Professional Diagram 能力或旧画布内容。
+- `image`：只能引用当前 PenEcho Agent session 拥有的 Harness `attachmentId`，提交时复制到 071 现有 image persistence。
 
 每个 item 可带 `placement`：`auto`、`absolute` 或相对一个对象的 `left/right/above/below`。默认 `auto` 在当前 viewport 中扫描不与已有/同批对象相撞且可读的空位；无空位时返回 `crowded: true`，不能静默声称无重叠。
 
@@ -565,7 +565,7 @@ MVP 工具名必须保持扁平、稳定，且精确为以下八个：`canvas_in
 
 ### 7.7 固定 Widget 合同上下文
 
-Harness 在每个模型 step 自动注入 Canvas-Agent-only Visual Explorer contract 和当前 Widget 路由。普通 `general`（General HTML）contract 始终可通过 `load_widget_contract` 按需加入只追加的 session system section；`flowchart`（Professional Diagrams）从不进入 Canvas Agent 创建 schema，只有浏览器确认插件已启用时才出现在 loader enum，并在调用 loader 后注入仅供修改当前 Canvas 已有 Professional Diagram 的合同。该 schema 限制不进入 Main Canvas AI 或普通 Canvas 执行路径。浏览器当前已启用且主机重新验证为 `builtIn:false` 的 private HTML contract 会按原插件 id 注入；未启用、未知、内置冲突或非 HTML private 插件会令该 capability handshake 失败。每个会话最多 12 个 private contract、合计 48 KiB。所有注入 contract 都不写入普通 tool-result 历史，因而不会被 compaction 摘要替代。共享 `public/plugins/*/plugin.md` 仍只服务原有 Canvas AI 插件链路，不被 Canvas Agent 改写。
+Harness 在每个模型 step 自动注入 Canvas-Agent-only Visual Explorer contract 和当前 Widget 路由。普通 `general`（General HTML）contract 始终可通过 `load_widget_contract` 按需加入只追加的 session system section；`flowchart`（Professional Diagrams）从不进入 PenEcho Agent 创建 schema，只有浏览器确认插件已启用时才出现在 loader enum，并在调用 loader 后注入仅供修改当前 Canvas 已有 Professional Diagram 的合同。该 schema 限制不进入 Main Canvas AI 或普通 Canvas 执行路径。浏览器当前已启用且主机重新验证为 `builtIn:false` 的 private HTML contract 会按原插件 id 注入；未启用、未知、内置冲突或非 HTML private 插件会令该 capability handshake 失败。每个会话最多 12 个 private contract、合计 48 KiB。所有注入 contract 都不写入普通 tool-result 历史，因而不会被 compaction 摘要替代。共享 `public/plugins/*/plugin.md` 仍只服务原有 Canvas AI 插件链路，不被 PenEcho Agent 改写。
 
 ### 7.8 `canvas_set_view`
 
@@ -622,7 +622,7 @@ type CanvasToolError = {
 
 ## 8. 浏览器原子操作层
 
-071 当前 Canvas mutation 分散在多个函数中，且部分函数各自调用 history/revision/save。Canvas Agent 工具不能直接复用这些外部副作用不一致的入口。
+071 当前 Canvas mutation 分散在多个函数中，且部分函数各自调用 history/revision/save。PenEcho Agent 工具不能直接复用这些外部副作用不一致的入口。
 
 新增 `CanvasAgentFacade`，作为浏览器侧唯一 RPC 执行面：
 
@@ -720,21 +720,21 @@ type Envelope<T> = {
 
 MVP 使用 Harness 的内存 session backend，不装载 JSONL persistence：
 
-- 对话属于浏览器临时 Canvas Agent session。
-- 每次加载已有 Canvas 或创建新 Canvas 时，默认建立一段新的 Canvas Agent 对话；不同 Canvas 不共享对话入口。
+- 对话属于浏览器临时 PenEcho Agent session。
+- 每次加载已有 Canvas 或创建新 Canvas 时，默认建立一段新的 PenEcho Agent 对话；不同 Canvas 不共享对话入口。
 - 未选择资源时，浏览器按 Canvas 身份在 `localStorage` 中最多保留最近 5 段 UI transcript 投影；选择文件夹时写入该目录的 `.penecho`，选择单文件时写入 PenEcho 私有 state。三者都只保存文本消息与有界工具活动，不保存图片二进制、attachment refs、resume capability、Canvas session id 或 Harness session id。
 - 浏览器历史不是模型上下文来源，也不能伪装成可恢复的 Harness session；当前对话的模型历史仍只来自 Harness session log。
-- server 重启后 Harness 模型上下文消失，UI 显示“Canvas Agent 会话已重置”；保留的 transcript 仍只是只读历史，不能伪装成可恢复会话。
+- server 重启后 Harness 模型上下文消失，UI 显示“PenEcho Agent 会话已重置”；保留的 transcript 仍只是只读历史，不能伪装成可恢复会话。
 - New conversation 显式销毁当前 agent scope，把已有 UI 投影留在当前浏览器或资源的最近历史中，并创建新 session。
 - session id、resume capability 和 UI projection cache 不进入 Canvas snapshot。
 
-用户开启完整请求记录时，Canvas Agent 与 Harness 外的普通 AI 请求共用 server 端 `~/.penecho/logs/requests`：每个 turn 创建一个 `<timestamp>-<uuid>` 目录，`trace.json` 聚合该 turn 的模型 steps、用户与最终 assistant 消息、工具调用/结果、请求上下文、usage 与结束状态。用户附件和 `canvas_capture` 真正进入后续模型 step 的每份视觉输入都作为独立 `vision-*` 文件保存在同一目录，并由对应 step 引用；图片编码内容、credentials、resume capability、Canvas session id 和 Harness session id 不进入 JSON。开启 debug artifacts 时可以另外把用于 UI 的安全事件投影追加到轮转服务日志，且不重复记录流式 delta。这些调试记录都不是可恢复的模型历史，也不改变内存 session backend 的权威边界。
+用户开启完整请求记录时，PenEcho Agent 与 Harness 外的普通 AI 请求共用 server 端 `~/.penecho/logs/requests`：每个 turn 创建一个 `<timestamp>-<uuid>` 目录，`trace.json` 聚合该 turn 的模型 steps、用户与最终 assistant 消息、工具调用/结果、请求上下文、usage 与结束状态。用户附件和 `canvas_capture` 真正进入后续模型 step 的每份视觉输入都作为独立 `vision-*` 文件保存在同一目录，并由对应 step 引用；图片编码内容、credentials、resume capability、Canvas session id 和 Harness session id 不进入 JSON。开启 debug artifacts 时可以另外把用于 UI 的安全事件投影追加到轮转服务日志，且不重复记录流式 delta。这些调试记录都不是可恢复的模型历史，也不改变内存 session backend 的权威边界。
 
 这一选择与产品要求的“对话不写 Canvas”一致，也避免官方 JSONL backend 当前无删除/自动 GC 时产生不可见的永久聊天历史。以后若需要跨重启恢复，必须作为独立功能引入明确的保留时长、清除入口、迁移和隐私说明。
 
 ### 10.2 附件缓存
 
-Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Agent 为每个 server boot 使用明确的缓存目录：
+Harness attachment refs 要求二进制在 session log 外可寻址。PenEcho Agent 为每个 server boot 使用明确的缓存目录：
 
 ```text
 <PenEcho state directory>/cache/canvas-agent/<boot-id>/attachments/
@@ -758,14 +758,14 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 - folder scope 当前只在被选中的 canonical 根目录内挂载 `glob`、`grep`、`list_directory`、`read`、`read_image`，以及按需 document/SQLite reader；`glob` / `grep` 使用随应用打包的 ripgrep、固定 argv 和有界结果，不经过 shell；不注册 `write`、`edit`、`bash` 或命令执行工具。旧客户端传入的 `full` 也归一为相同只读 session。
 - file scope 使用 PenEcho 自己的 exact-file 插件，只注册与该文件类型匹配的一个 reader；任意其他格式使用有界十六进制/ASCII reader，且永不执行文件。不复用会同时注册 mutator 的通用 ToolFs，不暴露父目录、siblings、Bash、write 或 edit。
 - folder 的 PDF/DOCX/XLSX/CSV 与 SQLite 工具先通过 `load_project_plugin` 惰性注册；单个有效同类文件直接注册唯一匹配 reader。SQLite 在独立、可强制终止的低内存子进程内只读执行。
-- 本地、LAN 与桌面页面通过 PenEcho 内置目录浏览器选择 host Home 下的非私有子目录，不调用系统目录选择器。Cloud 资源属于实际执行 Harness 的 Linked PenEcho host；资源 HTTP 与 Canvas Agent WebSocket 必须固定同一 `deviceId`，Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接本地隐式 Home root 或 raw-path project POST。
+- 本地、LAN 与桌面页面通过 PenEcho 内置目录浏览器选择 host Home 下的非私有子目录，不调用系统目录选择器。Cloud 资源属于实际执行 Harness 的 Linked PenEcho host；资源 HTTP 与 PenEcho Agent WebSocket 必须固定同一 `deviceId`，Cloud 只能用 opaque root id 与相对路径浏览配置根，不能桥接本地隐式 Home root 或 raw-path project POST。
 - iPad/普通浏览器通过系统 file picker、拖放或粘贴添加最大 32 MiB 的受控副本；非图片文件先作为可移除的待发送附件显示，必须由用户补充要求后再随消息发送，不能在添加时自动发起分析。相同文件只显示一个附件项，待发送附件的移除不弹确认并直接删除 managed copy；发送后在聊天消息内保留仅含安全 project id、文件名和大小的文件卡片。已知格式使用专用验证和 reader，其他格式退回只读有界 binary reader；副本写入 owner-only state。桌面原生 file picker 可以登记原文件，桌面系统剪贴板文件则复制为 managed attachment；两者均使用 exact-file reader。桌面文件卡片双击时由主进程重新验证 project id 后调用系统默认应用，浏览器和历史记录都不得获得绝对路径。
 
 ## 11. AI 连接集成
 
 ### 11.1 MVP 支持矩阵
 
-| 071 连接类型 | Canvas Agent MVP | 处理 |
+| 071 连接类型 | PenEcho Agent MVP | 处理 |
 | --- | --- | --- |
 | OpenAI API / compatible API | 支持 | 映射到 `llm-pi-ai` custom provider/profile |
 | Anthropic API / compatible API | 支持 | 映射到 `llm-pi-ai` provider/profile |
@@ -776,23 +776,23 @@ Harness attachment refs 要求二进制在 session log 外可寻址。Canvas Age
 
 Kimi 与 Claude 由 `penecho-cli-llm` 使用窄 decision protocol：每个 step 返回覆盖完整响应的一个标准 `final` 或 `tool_call` JSON 对象，HTML/source/patch 直接位于 `arguments`；插件翻译成 Harness `StreamChunk` 后仍由统一准入层决定是否执行。其自带工具关闭，上游 conversation 只在 replay metadata 与 canonical Harness history 一致时续接。Codex 是例外：App Server 原生 tool-call stream、thread history 和 automatic compaction 直接拥有该 provider conversation，PenEcho 不在 Harness 内建立镜像或执行 snapshot replay。
 
-右上角 connection switch 是唯一模型选择来源。一个 Canvas Agent session 固定绑定一个 connection 和一个 engine，防止一轮内混用 provider；切换 connection、保存选中 connection 的配置或删除选中 connection 时，客户端先失效旧 generation、取消待决提交/工具并创建新的 provider conversation。即使面板隐藏，涉及进入或离开 `codex-cli` 的 transition 也必须销毁旧 native owner；Harness 到 Harness 的隐藏面板行为保持既有语义。`ready.connectionId`、`ready.engine` 和当前 handshake identity 必须共同匹配后才能接受新 session。
+右上角 connection switch 是唯一模型选择来源。一个 PenEcho Agent session 固定绑定一个 connection 和一个 engine，防止一轮内混用 provider；切换 connection、保存选中 connection 的配置或删除选中 connection 时，客户端先失效旧 generation、取消待决提交/工具并创建新的 provider conversation。即使面板隐藏，涉及进入或离开 `codex-cli` 的 transition 也必须销毁旧 native owner；Harness 到 Harness 的隐藏面板行为保持既有语义。`ready.connectionId`、`ready.engine` 和当前 handshake identity 必须共同匹配后才能接受新 session。
 
 ### 11.2 模型能力
 
-- connection profile 必须声明模型名称、provider route、160,000 token 的 PenEcho context 上限，以及 `text + image` 输入；Canvas Agent 不接纳纯文本模型。
+- connection profile 必须声明模型名称、provider route、160,000 token 的 PenEcho context 上限，以及 `text + image` 输入；PenEcho Agent 不接纳纯文本模型。
 - API 与 CLI bridge 都必须发送活跃图片；同消息用户附件最多 5 张，截图最多最新 1 张。
 - 只有 adapter 明确支持 reasoning 参数时，才传现有 071 reasoning effort；否则省略，不能伪造映射。
 - Harness engine 的 basic compaction 在 100,000 token（160,000 的 0.625）开始，保留最近 16% 的普通上下文并把 summary output 限制在 4,096 token。Codex engine 使用同一 App Server thread 的 automatic compaction；PenEcho 不维护第二份摘要、缓存提示或 provider cache 控制层，也不因压缩重启 process/thread。
 - `canvas_capture` 的 detail 只允许一个 Widget 或显式紧凑 region，输出最长边和单边都不超过 2,048px；结果必须返回逻辑区域、pixel/logical 双向映射和 pixels-per-logical-unit，让模型知道同尺寸下区域越紧，局部采样密度越高。
 
-## 12. Canvas Agent UI
+## 12. PenEcho Agent UI
 
 `alwaysmain` 只提供产品意图。071 的实现应新建隔离的状态机和组件，不复制其现有实现。
 
 ### 12.1 入口与布局
 
-- 只在本地 editable Canvas 和 Desktop owner 模式显示 Canvas Agent 入口。
+- 只在本地 editable Canvas 和 Desktop owner 模式显示 PenEcho Agent 入口。
 - 进入后保留当前 `state.mode`，临时隐藏与 Agent 冲突的 legacy chrome；退出时原样恢复。
 - 底部居中紧凑 composer；其上方是流式回答与工具活动卡片。
 - Canvas 始终可 pan/zoom；Agent 面板不覆盖主要工作区。
@@ -892,7 +892,7 @@ test/
 - `scripts/build-client.js` 把两个新 client source 插在 `ai-runtime.js` 之后、`ui-bootstrap.js` 之前。
 - `public/app.js` 仍由构建生成，不手工编辑。
 - `public/index.html`、`public/style.css` 和 locale 增加 UI 所需 DOM/styles/text。
-- `penecho_cloud/public/canvas` 只能通过 071 的发布流程生成；Cloud 中通过 Linked Device 打开的可编辑 Canvas 必须使用同一 Canvas Agent 功能，并通过受认证的远程会话桥连接到本地主机执行 Harness。
+- `penecho_cloud/public/canvas` 只能通过 071 的发布流程生成；Cloud 中通过 Linked Device 打开的可编辑 Canvas 必须使用同一 PenEcho Agent 功能，并通过受认证的远程会话桥连接到本地主机执行 Harness。
 - 不删除或改写现有 `/api/ai/command`。
 
 ## 15. 分阶段实施
@@ -901,11 +901,11 @@ test/
 
 071 的首版实现采用“依赖可安装、能力不挂载、客户端不打包”的三层边界：
 
-- Harness 只在本地 owner 浏览器第一次连接 `/api/canvas-agent/socket`，或 Cloud Linked Device 第一次创建远程 Canvas Agent logical channel 后动态导入；普通画布启动路径不加载 Harness ESM、模型 SDK 或附件处理器。
+- Harness 只在本地 owner 浏览器第一次连接 `/api/canvas-agent/socket`，或 Cloud Linked Device 第一次创建远程 PenEcho Agent logical channel 后动态导入；普通画布启动路径不加载 Harness ESM、模型 SDK 或附件处理器。
 - 进程级运行时只允许挂载 19 个插件：timer、PenEcho 内存 settings/credentials、local attachment、LLM/session/system-prompt/tools/agent、retry、tool timeout、token meter、tool-result pruner、basic compaction、pi-ai adapter、PenEcho CLI LLM adapter、project filesystem、filesystem observation policy 和 agent loop。
 - 无资源的 agent scope 只允许 `penecho-canvas` 插件注册八个核心工具：`canvas_inspect`、`canvas_read`、`canvas_capture`、`canvas_create`、`canvas_edit`、`canvas_patch_widget`、`canvas_set_view`、`canvas_revert`。选择资源后，额外能力严格来自 10.3 的 folder 或 exact-file 插件。
 - 不挂载通用 shell/sandbox bundle、GitHub、Web、MCP、skills、jobs、goals、delegation、persistence、command UI 或通用 base bundle。folder Bash 是 PenEcho 自己的窄工具并经过 OS 级能力探针和边界执行；浏览器 approval 只是该工具的逐次 RPC，不是 Harness 通用 approval 插件。
-- `llm-pi-ai` 保留是为了沿用 071 已有的 OpenAI-compatible 与 Anthropic-compatible API connections；`penecho-cli-llm` 的持久 session manager 位于 Canvas Agent ESM island，只复用 CLI 路径解析、环境净化等无状态安全 helper，不复用旧画布 AI 的一次性 request/session 实现。两者都不进入 `public/app.js`，也不在普通画布路径初始化。
+- `llm-pi-ai` 保留是为了沿用 071 已有的 OpenAI-compatible 与 Anthropic-compatible API connections；`penecho-cli-llm` 的持久 session manager 位于 PenEcho Agent ESM island，只复用 CLI 路径解析、环境净化等无状态安全 helper，不复用旧画布 AI 的一次性 request/session 实现。两者都不进入 `public/app.js`，也不在普通画布路径初始化。
 
 对应回归测试必须同时断言根依赖精确版本、运行时插件精确白名单和 agent 可见工具精确集合。任何新增 Harness 包、插件或工具都需要显式修改白名单并经过安全审查。
 
@@ -938,7 +938,7 @@ test/
 
 退出条件：PenEcho 不传历史消息，Harness 仍可完成长多步任务和上下文压缩。
 
-### Phase 3：071 Canvas Agent UI
+### Phase 3：071 PenEcho Agent UI
 
 - 实现隔离 mode、composer、reference chips、Stop、steer、tool cards、New conversation。
 - transcript 只来自 Harness session events。
@@ -949,7 +949,7 @@ test/
 
 ### Phase 4：Cloud Linked Device 双向桥
 
-- Cloud 提供同账户、same-origin 的 Canvas Agent WebSocket，选择并固定一个在线 Linked Device。
+- Cloud 提供同账户、same-origin 的 PenEcho Agent WebSocket，选择并固定一个在线 Linked Device。
 - Linked Device 仅声明有界 `canvasAgent:true` capability，Cloud 不获得 provider、model、密钥或 Harness session 内容。
 - 071 主机提供有上限、有 TTL 的 logical channel，并串行处理 browser frames；Cloud 只做 `open/frame/pull/close` 转发。
 - 071 客户端构建后通过 Cloud 的标准 Canvas mirror 生成器同步，不手工维护第二份客户端实现。
@@ -1018,12 +1018,12 @@ test/
 7. 连续长对话触发 compaction，Agent 仍能根据最新 digest 工作，用户不感知上下文突然丢失。
 8. 页面刷新并在宽限内恢复，transcript 从 Harness events 重建；重启 server 后 UI 清楚说明新会话。
 9. Canvas 中的恶意 widget 文本要求读取本机文件；Agent 没有相应工具，操作被边界自然阻止。
-10. 分别选择 Kimi/Codex/Claude CLI 连接进入 Canvas Agent，Agent 可 inspect 并修改画布；Kimi/Claude 没有 CLI 工具，Codex 只看到 PenEcho dynamic tools，三者都没有任意宿主文件、shell 或 MCP 能力。
-11. 在右上角从一个 API/CLI connection 切换到另一个，当前 Canvas Agent conversation 清空并绑定新模型，后续请求不再命中旧 connection。
+10. 分别选择 Kimi/Codex/Claude CLI 连接进入 PenEcho Agent，Agent 可 inspect 并修改画布；Kimi/Claude 没有 CLI 工具，Codex 只看到 PenEcho dynamic tools，三者都没有任意宿主文件、shell 或 MCP 能力。
+11. 在右上角从一个 API/CLI connection 切换到另一个，当前 PenEcho Agent conversation 清空并绑定新模型，后续请求不再命中旧 connection。
 
 ## 18. 发布门槛
 
-满足以下条件才允许默认开启本地 Canvas Agent：
+满足以下条件才允许默认开启本地 PenEcho Agent：
 
 - 八个核心工具的 schema、策略和 browser Facade 均有覆盖。
 - 证明没有额外模型可见工具。
@@ -1049,7 +1049,7 @@ test/
 - mutation 原子提交，一 call 一 Undo，使用 revision 乐观锁。
 - 对话临时且不进入 Canvas snapshot；MVP 不启用 JSONL session persistence。
 - MVP 支持 API 与 Kimi/Codex/Claude CLI connections；Kimi/Claude 只作为 Harness 的无工具 LLM transport，Codex 使用独立 native App Server engine，并只开放 PenEcho dynamic tools。
-- Cloud 的可编辑 Canvas 仅可通过 Linked Device 使用同一 Canvas Agent；只读 Viewer 与 Mobile 默认关闭。
+- Cloud 的可编辑 Canvas 仅可通过 Linked Device 使用同一 PenEcho Agent；只读 Viewer 与 Mobile 默认关闭。
 
 ### 实施阶段必须验证但不改变架构的事项
 

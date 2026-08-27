@@ -100,9 +100,12 @@
     CANVAS_AGENT_SIZE_STEPS = 40,
     CANVAS_AGENT_RESIZE_KEY_STEP = 20,
     CANVAS_AGENT_INPUT_MAX_LINES = 10,
-    CANVAS_AGENT_INK_LINE_WIDTH = 8,
-    CANVAS_AGENT_INK_PADDING = 24,
-    CANVAS_AGENT_INK_OUTPUT_SCALE = 0.5,
+    CANVAS_AGENT_INK_LINE_WIDTH = 12,
+    CANVAS_AGENT_INK_PADDING_RATIO = 0.6,
+    CANVAS_AGENT_INK_PADDING_MIN = 256,
+    CANVAS_AGENT_INK_PADDING_MAX = 512,
+    CANVAS_AGENT_INK_OUTPUT_SCALE = 1,
+    CANVAS_AGENT_INK_WEBP_QUALITY = 1,
     CANVAS_AGENT_MAX_REFERENCES = 20,
     CANVAS_AGENT_MAX_ATTACHMENTS = 5,
     CANVAS_AGENT_MAX_SOURCE_BYTES = 12 * 1024 * 1024,
@@ -122,6 +125,7 @@
       sequenceDiagramSource:{prompt:"canvasAgentPromptSequenceDiagramSource",focus:"canvasAgentPromptFocusSequence",icon:"architecture"},
       organize:{prompt:"canvasAgentPromptOrganize",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
       applyAnnotations:{prompt:"canvasAgentPromptApplyAnnotations",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
+      followCanvasCues:{prompt:"canvasAgentPromptFollowCanvasCues",focus:"canvasAgentPromptFocusFollowCanvasCues",icon:"revise"},
       ppt:{prompt:"canvasAgentPromptPpt",focus:"canvasAgentPromptFocusSlides",icon:"slides"},
       excel:{prompt:"canvasAgentPromptExcel",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       transformer:{prompt:"canvasAgentPromptTransformer",focus:"canvasAgentPromptFocusLearn",icon:"study"},
@@ -171,7 +175,7 @@
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
       revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","sequenceDiagramSource","organize","applyAnnotations","ppt","excel","transformer","ukTrip"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","sequenceDiagramSource","organize","applyAnnotations","followCanvasCues","ppt","excel","transformer","ukTrip"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -636,18 +640,23 @@
     if(direct.length)return direct;
     return [...(dataTransfer?.items||[])].filter(item=>item.kind==="file").map(item=>item.getAsFile()).filter(file=>file instanceof Blob);
   }
-  async function canvasAgentDesktopClipboardFile() {
-    if(typeof window.penechoDesktop?.readClipboardFile!=="function")return null;
-    const payload=await window.penechoDesktop.readClipboardFile();
-    if(!payload?.ok){if(payload?.code==="too_large")throw Error(t("canvasAgentUploadTooLarge"));if(payload?.code==="empty")throw Error(t("canvasAgentUploadEmpty"));return null;}
-    if(typeof payload.data!=="string"||!Number.isSafeInteger(payload.size)||payload.size<1||payload.size>CANVAS_AGENT_PROJECT_UPLOAD_LIMIT)return null;
-    let binary="";
-    try{binary=atob(payload.data);}catch{return null;}
-    if(binary.length!==payload.size)return null;
-    const bytes=new Uint8Array(binary.length);
-    for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
-    binary="";
-    return new File([bytes],String(payload.name||"copied-file").slice(0,240),{lastModified:Number(payload.lastModified)||Date.now()});
+  async function canvasAgentDesktopClipboardFiles() {
+    const desktop=window.penechoDesktop,plural=typeof desktop?.readClipboardFiles==="function";
+    if(!plural&&typeof desktop?.readClipboardFile!=="function")return [];
+    const payload=await (plural?desktop.readClipboardFiles():desktop.readClipboardFile());
+    if(!payload?.ok){if(payload?.code==="too_many")throw Error(t("canvasAgentAttachmentLimit"));if(payload?.code==="too_large")throw Error(t("canvasAgentUploadTooLarge"));if(payload?.code==="empty")throw Error(t("canvasAgentUploadEmpty"));return [];}
+    const values=Array.isArray(payload.files)?payload.files:[payload],files=[];
+    for(const value of values){
+      if(typeof value?.data!=="string"||!Number.isSafeInteger(value.size)||value.size<1||value.size>CANVAS_AGENT_PROJECT_UPLOAD_LIMIT)return [];
+      let binary="";
+      try{binary=atob(value.data);}catch{return [];}
+      if(binary.length!==value.size)return [];
+      const bytes=new Uint8Array(binary.length);
+      for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
+      binary="";
+      files.push(new File([bytes],String(value.name||"copied-file").slice(0,240),{lastModified:Number(value.lastModified)||Date.now()}));
+    }
+    return files;
   }
   function canvasAgentImageFile(file) {
     if(!(file instanceof Blob))return null;
@@ -997,7 +1006,7 @@
     const source=value&&typeof value==="object"?value:{message:value}, nested=source.error&&typeof source.error==="object"?source.error:null,
       code=canvasAgentHistoryText(source.code||source.name||nested?.code||nested?.name||"",128).replace(/[\0-\x1f\x7f]/g,"").trim(),
       fallback=typeof value==="string"?value:"",
-      message=canvasAgentHistoryText(source.message||nested?.message||fallback||"Canvas Agent failed.",CANVAS_AGENT_ERROR_MESSAGE_LIMIT).trim()||"Canvas Agent failed.";
+      message=canvasAgentHistoryText(source.message||nested?.message||fallback||"PenEcho Agent failed.",CANVAS_AGENT_ERROR_MESSAGE_LIMIT).trim()||"PenEcho Agent failed.";
     return {code,message};
   }
   function canvasAgentErrorKind(value) {
@@ -1039,7 +1048,7 @@
   function canvasAgentNormalizeHistoryItem(item) {
     if (!item || typeof item !== "object") return null;
     if (item.type === "message" && ["user","assistant"].includes(item.role)) {
-      const files=(Array.isArray(item.files)?item.files:[]).map(canvasAgentNormalizeHistoryFile).filter(Boolean).slice(0,1);
+      const files=(Array.isArray(item.files)?item.files:[]).map(canvasAgentNormalizeHistoryFile).filter(Boolean).slice(0,CANVAS_AGENT_MAX_ATTACHMENTS);
       return {
       id:canvasAgentHistoryText(item.id,128) || canvasClientId(),
       type:"message",
@@ -1283,16 +1292,16 @@
       const reject=canvasAgent.connectReject;
       canvasAgent.connectPromise=null;
       canvasAgent.connectResolve=canvasAgent.connectReject=null;
-      reject(Error("Canvas Agent session changed."));
+      reject(Error("PenEcho Agent session changed."));
     }
     for (const controller of canvasAgent.toolControllers.values()) {
-      controller.abort(Error("Canvas Agent session changed."));
+      controller.abort(Error("PenEcho Agent session changed."));
     }
     canvasAgent.toolControllers.clear();
     canvasAgent.toolResultCache.clear();
     canvasAgent.activeToolExecution=null;
   }
-  function canvasAgentInvalidateSubmitExecution(reason=Error("Canvas Agent session changed.")) {
+  function canvasAgentInvalidateSubmitExecution(reason=Error("PenEcho Agent session changed.")) {
     const execution=canvasAgent.activeSubmitExecution;
     if (!execution) return;
     canvasAgent.activeSubmitExecution=null;
@@ -1300,7 +1309,7 @@
     if(canvasAgent.requestPending)canvasAgentRequestDidNotSend();
   }
   function canvasAgentBeginSubmitExecution(connectionId) {
-    canvasAgentInvalidateSubmitExecution(Error("A newer Canvas Agent submission replaced this request."));
+    canvasAgentInvalidateSubmitExecution(Error("A newer PenEcho Agent submission replaced this request."));
     const execution={
       connectionId:String(connectionId||""),
       controller:new AbortController(),
@@ -1322,11 +1331,11 @@
       && execution.generation===canvasAgent.sessionGeneration;
   }
   function canvasAgentAssertSubmitExecution(execution) {
-    if (!canvasAgentSubmitExecutionCurrent(execution)) throw Error("Canvas Agent session changed before the message could be sent.");
+    if (!canvasAgentSubmitExecutionCurrent(execution)) throw Error("PenEcho Agent session changed before the message could be sent.");
   }
   function canvasAgentBindSubmitExecution(execution) {
     canvasAgentAssertSubmitExecution(execution);
-    if (!canvasAgent.sessionReady || !canvasAgent.sessionId || canvasAgent.socket?.readyState!==WebSocket.OPEN) throw Error("Canvas Agent is not connected.");
+    if (!canvasAgent.sessionReady || !canvasAgent.sessionId || canvasAgent.socket?.readyState!==WebSocket.OPEN) throw Error("PenEcho Agent is not connected.");
     execution.socket=canvasAgent.socket;
     execution.sessionId=canvasAgent.sessionId;
     execution.generation=canvasAgent.sessionGeneration;
@@ -1341,7 +1350,7 @@
       && !execution.controller.signal.aborted;
   }
   function canvasAgentAssertToolExecution(execution) {
-    if (!canvasAgentToolExecutionCurrent(execution)) throw canvasAgentToolError("SESSION_EXPIRED","The Canvas Agent session changed before this tool could finish.");
+    if (!canvasAgentToolExecutionCurrent(execution)) throw canvasAgentToolError("SESSION_EXPIRED","The PenEcho Agent session changed before this tool could finish.");
   }
   function canvasAgentCanvasIdentity({id,location}={}) {
     return id&&location?`${location}:${id}`:`draft:${canvasClientId()}`;
@@ -1381,7 +1390,7 @@
     canvasAgentRenderHistoryList();
   }
   function canvasAgentSendEnvelope(type, payload = {}) {
-    if (!canvasAgent.socket || canvasAgent.socket.readyState !== WebSocket.OPEN) throw Error("Canvas Agent is not connected.");
+    if (!canvasAgent.socket || canvasAgent.socket.readyState !== WebSocket.OPEN) throw Error("PenEcho Agent is not connected.");
     canvasAgent.outgoingSeq++;
     canvasAgent.socket.send(JSON.stringify({
       version:CANVAS_AGENT_PROTOCOL_VERSION,
@@ -1785,6 +1794,7 @@
     return {
       id:canvasClientId(),
       kind:"image",
+      fingerprint:canvasAgentFileFingerprint(file),
       name:String(file.name || "pasted-image").slice(0,240),
       mediaType,
       bytes:wire.size,
@@ -1880,20 +1890,21 @@
   }
   async function canvasAgentAddAttachments(files) {
     if (canvasAgent.attachmentBusy||canvasAgent.projectUploadBusy) return;
-    if(canvasAgent.attachments.some(attachment=>attachment.kind==="file")){canvasAgentSetStatus(t("canvasAgentFileSelectionLimit"),"error");canvasAgentFileInput.value="";return false;}
     canvasAgent.attachmentBusy = true;
     canvasAgentSyncAttachmentButton();
     canvasAgentSend.disabled = true;
     try {
       for (const file of files) {
-        if (canvasAgent.attachments.length >= CANVAS_AGENT_MAX_ATTACHMENTS) throw Error(t("canvasAgentImageLimit"));
-        const attachment = await canvasAgentPrepareAttachment(file), total = canvasAgent.attachments.reduce((sum,item)=>sum+item.bytes,0)+attachment.bytes;
+        if (canvasAgent.attachments.length >= CANVAS_AGENT_MAX_ATTACHMENTS) throw Error(t("canvasAgentAttachmentLimit"));
+        const attachment = await canvasAgentPrepareAttachment(file), total = canvasAgent.attachments.filter(item=>item.kind==="image").reduce((sum,item)=>sum+item.bytes,0)+attachment.bytes;
         if (total > CANVAS_AGENT_MAX_TOTAL_WIRE_BYTES) throw Error(t("canvasAgentImagesTooLarge"));
         canvasAgent.attachments.push(attachment);
         canvasAgentRenderAttachments();
       }
+      return true;
     } catch (error) {
       canvasAgentSetStatus(String(error?.message || error),"error");
+      return false;
     } finally {
       canvasAgent.attachmentBusy = false;
       canvasAgentSyncAttachmentButton();
@@ -1902,9 +1913,9 @@
     }
   }
   async function canvasAgentAddProjectAttachment(file) {
-    const fingerprint=canvasAgentFileFingerprint(file),existingFile=canvasAgent.attachments.find(attachment=>attachment.kind==="file");
-    if(existingFile?.fingerprint===fingerprint){canvasAgentFileInput.value="";return true;}
-    if(existingFile||canvasAgent.attachments.length){canvasAgentFileInput.value="";canvasAgentSetStatus(t("canvasAgentFileSelectionLimit"),"error");return false;}
+    const fingerprint=canvasAgentFileFingerprint(file),existingFile=canvasAgent.attachments.find(attachment=>attachment.fingerprint===fingerprint);
+    if(existingFile){canvasAgentFileInput.value="";return true;}
+    if(canvasAgent.attachments.length>=CANVAS_AGENT_MAX_ATTACHMENTS){canvasAgentFileInput.value="";canvasAgentSetStatus(t("canvasAgentAttachmentLimit"),"error");return false;}
     const project=await canvasAgentUploadProjectFile(file);
     if(!project)return false;
     canvasAgent.attachments.push({id:canvasClientId(),kind:"file",name:String(project.name||file.name||"File").slice(0,240),mediaType:String(project.mediaType||file.type||""),bytes:Number(project.bytes)||file.size,fingerprint,projectId:project.id,deleteOnRemove:project.reused!==true});
@@ -1913,14 +1924,17 @@
   }
   async function canvasAgentHandleFiles(files) {
     const selected=[...(files||[])].filter(file=>file instanceof Blob),unique=[];
-    for(const file of selected)if(!unique.some(item=>canvasAgentFileFingerprint(item)===canvasAgentFileFingerprint(file)))unique.push(file);
-    if(!unique.length)return false;
-    const classified=unique.map(file=>({file,image:canvasAgentImageFile(file)})),images=classified.filter(item=>item.image).map(item=>item.image),projectFiles=classified.filter(item=>!item.image).map(item=>item.file);
-    if(projectFiles.length){
-      if(projectFiles.length!==1||images.length){canvasAgentFileInput.value="";canvasAgentSetStatus(t("canvasAgentFileSelectionLimit"),"error");return false;}
-      return canvasAgentAddProjectAttachment(projectFiles[0]);
+    for(const original of selected){
+      const image=canvasAgentImageFile(original),file=image||original,fingerprint=canvasAgentFileFingerprint(file);
+      if(!unique.some(item=>item.fingerprint===fingerprint))unique.push({file,image:Boolean(image),fingerprint});
     }
-    await canvasAgentAddAttachments(images);
+    const pending=unique.filter(item=>!canvasAgent.attachments.some(attachment=>attachment.fingerprint===item.fingerprint));
+    if(!pending.length){canvasAgentFileInput.value="";return false;}
+    if(canvasAgent.attachments.length+pending.length>CANVAS_AGENT_MAX_ATTACHMENTS){canvasAgentFileInput.value="";canvasAgentSetStatus(t("canvasAgentAttachmentLimit"),"error");return false;}
+    for(const item of pending){
+      const added=item.image?await canvasAgentAddAttachments([item.file]):await canvasAgentAddProjectAttachment(item.file);
+      if(!added)return false;
+    }
     return true;
   }
   function canvasAgentSyncInputHint() {
@@ -2009,20 +2023,25 @@
       left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);
     }
     if (right<left||bottom<top) return null;
-    const x=Math.max(0,left-CANVAS_AGENT_INK_PADDING),y=Math.max(0,top-CANVAS_AGENT_INK_PADDING),
-      sourceRight=Math.min(image.width-1,right+CANVAS_AGENT_INK_PADDING),sourceBottom=Math.min(image.height-1,bottom+CANVAS_AGENT_INK_PADDING),
-      width=sourceRight-x+1,height=sourceBottom-y+1,output=document.createElement("canvas");
-    output.width=Math.max(1,Math.ceil(width*CANVAS_AGENT_INK_OUTPUT_SCALE));
-    output.height=Math.max(1,Math.ceil(height*CANVAS_AGENT_INK_OUTPUT_SCALE));
+    const width=right-left+1,height=bottom-top+1,
+      padding=Math.max(CANVAS_AGENT_INK_PADDING_MIN,Math.min(CANVAS_AGENT_INK_PADDING_MAX,Math.round(Math.max(width,height)*CANVAS_AGENT_INK_PADDING_RATIO))),
+      outputPadding=Math.ceil(padding*CANVAS_AGENT_INK_OUTPUT_SCALE),outputWidth=Math.max(1,Math.ceil(width*CANVAS_AGENT_INK_OUTPUT_SCALE)),outputHeight=Math.max(1,Math.ceil(height*CANVAS_AGENT_INK_OUTPUT_SCALE)),
+      output=document.createElement("canvas");
+    output.width=outputWidth+outputPadding*2;
+    output.height=outputHeight+outputPadding*2;
     const outputContext=output.getContext("2d");
     outputContext.fillStyle="#fff";
     outputContext.fillRect(0,0,output.width,output.height);
-    outputContext.imageSmoothingEnabled=true;
-    outputContext.imageSmoothingQuality="high";
-    outputContext.drawImage(canvasAgentInkCanvas,x,y,width,height,0,0,output.width,output.height);
-    const blob=await canvasAgentCanvasBlob(output,"image/png");
+    outputContext.drawImage(canvasAgentInkCanvas,left,top,width,height,outputPadding,outputPadding,outputWidth,outputHeight);
+    let mediaType="image/webp",name="canvas-agent-message.webp",blob=null;
+    try{blob=await canvasAgentCanvasBlob(output,mediaType,CANVAS_AGENT_INK_WEBP_QUALITY);}catch{}
+    if(!blob?.size||String(blob.type||"").toLowerCase()!==mediaType){
+      mediaType="image/png";
+      name="canvas-agent-message.png";
+      blob=await canvasAgentCanvasBlob(output,mediaType);
+    }
     if (!blob) throw Error(t("canvasAgentImageUnsupported"));
-    return canvasAgentPrepareAttachment(new File([blob],"canvas-agent-message.png",{type:"image/png"}));
+    return canvasAgentPrepareAttachment(new File([blob],name,{type:mediaType}));
   }
   function canvasAgentBox(object) {
     if (!object) return null;
@@ -2447,7 +2466,7 @@
         const image = document.createElement("img");
         image.src = attachment.dataUrl;
         image.alt = attachment.name;
-        if(attachment.name==="canvas-agent-message.png"){
+        if(/^canvas-agent-message\.(?:webp|png)$/.test(attachment.name)){
           images.classList.add("has-handwriting");
           image.classList.add("canvas-agent-message-handwriting");
           if(Number.isFinite(attachment.width)&&attachment.width>0)image.width=attachment.width;
@@ -2483,7 +2502,7 @@
     return target;
   }
   function canvasAgentRow(role, text = "", attachments = [], {eventKey="",final=true,turn=null,step=null}={}) {
-    const files=attachments.map(canvasAgentNormalizeHistoryFile).filter(Boolean).slice(0,1),item={id:canvasClientId(),type:"message",role,text:canvasAgentMessageText(text),attachmentCount:attachments.length,eventKey,...(Number.isSafeInteger(turn)?{turn}:{}),...(Number.isSafeInteger(step)?{step}:{}),...(files.length?{files}:{}),...(role==="assistant"?{final:final!==false,copyable:false}:{})};
+    const files=attachments.map(canvasAgentNormalizeHistoryFile).filter(Boolean).slice(0,CANVAS_AGENT_MAX_ATTACHMENTS),item={id:canvasClientId(),type:"message",role,text:canvasAgentMessageText(text),attachmentCount:attachments.length,eventKey,...(Number.isSafeInteger(turn)?{turn}:{}),...(Number.isSafeInteger(step)?{step}:{}),...(files.length?{files}:{}),...(role==="assistant"?{final:final!==false,copyable:false}:{})};
     if (!canvasAgent.currentConversation) canvasAgent.currentConversation=canvasAgentNewConversationRecord();
     canvasAgent.currentConversation.items.push(item);
     if (canvasAgent.currentConversation.items.length>CANVAS_AGENT_HISTORY_ITEM_LIMIT) canvasAgent.currentConversation.items.splice(0,canvasAgent.currentConversation.items.length-CANVAS_AGENT_HISTORY_ITEM_LIMIT);
@@ -2762,9 +2781,9 @@
       canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
       if(pendingHandshakeError){
         canvasAgent.sessionReady=Boolean(canvasAgent.sessionId);
-        canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+        canvasAgent.connectReject?.(Error(envelope.payload?.message || "PenEcho Agent failed"));
         canvasAgent.connectResolve=canvasAgent.connectReject=null;
-      }else if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "Canvas Agent failed"));
+      }else if (envelope.payload?.fatal) canvasAgent.connectReject?.(Error(envelope.payload?.message || "PenEcho Agent failed"));
     }
   }
   function canvasAgentSocketUrl() {
@@ -2774,7 +2793,7 @@
   function canvasAgentWaitForReady(start,{handshakeId,provider}={}) {
     if (canvasAgent.connectPromise) return canvasAgent.connectPromise;
     const expectedHandshakeId=String(handshakeId||"");
-    if (!expectedHandshakeId) return Promise.reject(Error("Canvas Agent handshake identity is missing."));
+    if (!expectedHandshakeId) return Promise.reject(Error("PenEcho Agent handshake identity is missing."));
     canvasAgent.pendingHandshakeId=expectedHandshakeId;
     canvasAgent.pendingProvider=String(provider||"");
     let wrapped;
@@ -2886,7 +2905,7 @@
       const previousSocket=canvasAgent.socket;
       const socket = new WebSocket(canvasAgentSocketUrl());
       canvasAgent.socket = socket;
-      if(previousSocket&&previousSocket!==socket){try{previousSocket.close(1000,"Canvas Agent session replaced");}catch{}}
+      if(previousSocket&&previousSocket!==socket){try{previousSocket.close(1000,"PenEcho Agent session replaced");}catch{}}
       socket.addEventListener("open",()=>{
         if(socket!==canvasAgent.socket){socket.close();return;}
         canvasAgent.outgoingSeq = 0;
@@ -2909,9 +2928,9 @@
         if (socket !== canvasAgent.socket) return;
         const wasPending = Boolean(canvasAgent.connectReject),hadActiveTurn=canvasAgent.requestPending||canvasAgent.running;
         canvasAgent.sessionEngine="";
-        canvasAgentInvalidateSubmitExecution(Error("Canvas Agent connection closed."));
+        canvasAgentInvalidateSubmitExecution(Error("PenEcho Agent connection closed."));
         canvasAgentBeginSessionTransition();
-        canvasAgent.connectReject?.(Error("Canvas Agent connection closed."));
+        canvasAgent.connectReject?.(Error("PenEcho Agent connection closed."));
         canvasAgent.connectResolve = canvasAgent.connectReject = null;
         canvasAgent.connectPromise = null;
         canvasAgent.socket = null;
@@ -2923,7 +2942,7 @@
         canvasAgentSyncTriggerState();
         canvasAgentResumeAutomaticAI();
         if(hadActiveTurn&&!canvasAgent.lastTurnError){
-          const error=canvasAgentNormalizeError({code:"CONNECTION_CLOSED",message:"Canvas Agent connection closed."});
+          const error=canvasAgentNormalizeError({code:"CONNECTION_CLOSED",message:"PenEcho Agent connection closed."});
           canvasAgent.lastTurnError=error;
           canvasAgentErrorRow(error,{eventKey:`connection:${Date.now()}`});
           canvasAgentSetStatus(canvasAgentErrorSummary(error),"error");
@@ -2978,7 +2997,7 @@
       canvas_internal_patch_visual_explainer:["objectId","artifactId","baseRevision","expectedHash","changeId","plan","command","summary"],
     }[name];
     const extras=Object.keys(args||{}).filter(key=>!allowed?.includes(key));
-    if(!allowed||extras.length)throw canvasAgentToolError("INVALID_ARGUMENT",extras.length?`Unexpected ${name} argument: ${extras[0]}.`:`Unknown Canvas Agent tool: ${name}.`);
+    if(!allowed||extras.length)throw canvasAgentToolError("INVALID_ARGUMENT",extras.length?`Unexpected ${name} argument: ${extras[0]}.`:`Unknown PenEcho Agent tool: ${name}.`);
   }
   function canvasAgentAssertRevision(baseRevision) {
     if (!Number.isSafeInteger(baseRevision) || baseRevision !== state.userRevision) {
@@ -3296,10 +3315,10 @@
         const placed=canvasAgentPlacementBox(record.w,record.h,raw.placement,reserved);record.x=Math.round(placed.x);record.y=Math.round(placed.y);reserved.push(canvasAgentBox({kind:"text",item:record}));prepared.push({type,kind:"text",record,placed});
       } else if (type === "widget") {
         const widgetType=String(raw.widgetType||"");
-        if(!["html_widget","diagram_source"].includes(widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Widget type ${widgetType||"(missing)"} is unavailable to Canvas Agent.`);
+        if(!["html_widget","diagram_source"].includes(widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Widget type ${widgetType||"(missing)"} is unavailable to PenEcho Agent.`);
         const pluginId=String(raw.pluginId || (widgetType === "diagram_source"?"flowchart":"general")),frameworkVersion=String(raw.frameworkVersion||"").trim();
-        if(widgetType === "diagram_source"||pluginId === "flowchart"||frameworkVersion.startsWith("penecho-professional-diagrams"))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE","Canvas Agent may edit an existing Professional Diagram, but it cannot create a new Professional Diagram.");
-        if(!canvasAgentWidgetPluginAllowed(pluginId,widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Plugin ${pluginId} is unavailable, disabled, or not available to Canvas Agent.`);
+        if(widgetType === "diagram_source"||pluginId === "flowchart"||frameworkVersion.startsWith("penecho-professional-diagrams"))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE","PenEcho Agent may edit an existing Professional Diagram, but it cannot create a new Professional Diagram.");
+        if(!canvasAgentWidgetPluginAllowed(pluginId,widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Plugin ${pluginId} is unavailable, disabled, or not available to PenEcho Agent.`);
         const width=Math.max(300,Math.min(SIZE,Number(raw.width)||Math.max(600,Math.min(1200,visible.w*.7)))),height=Math.max(200,Math.min(SIZE,Number(raw.height)||Math.max(400,Math.min(800,visible.h*.7)))),placed=canvasAgentPlacementBox(width,height,raw.placement,reserved),
           record=widgetRecord({tool:widgetType,widgetType,pluginId,x:placed.x,y:placed.y,w:width,h:height,contentW:width,contentH:height,title:String(raw.title||"Canvas widget"),refreshSeconds:Number.isFinite(Number(raw.refreshSeconds))?Number(raw.refreshSeconds):0,html:typeof raw.html === "string"?raw.html:"",source:typeof raw.source === "string"?raw.source:"",sourceFormat:raw.sourceFormat,diagramKind:raw.diagramKind,frameworkVersion:raw.frameworkVersion,copyText:raw.copyText,copyLabel:raw.copyLabel});
         if(!record)throw canvasAgentToolError("INVALID_WIDGET","Widget content or geometry was rejected. Read the plugin capability contract and retry.");
@@ -3456,7 +3475,7 @@
     canvasAgentAssertToolExecution(execution);
     const command = args.command;
     if (!command || command.pluginId !== object.item.pluginId || !["html_widget","diagram_source"].includes(command.tool)) throw Error("Patched widget command is invalid.");
-    if(!canvasAgentWidgetPluginAllowed(command.pluginId,command.tool))throw Error("The Widget plugin is unavailable, disabled, or not available to Canvas Agent.");
+    if(!canvasAgentWidgetPluginAllowed(command.pluginId,command.tool))throw Error("The Widget plugin is unavailable, disabled, or not available to PenEcho Agent.");
     const record = widgetRecord({...command,id:object.item.id,widgetType:command.tool,contentW:object.item.contentW,contentH:object.item.contentH});
     if (!record) throw Error("Patched widget content was rejected by Canvas validation.");
     save();
@@ -3518,7 +3537,7 @@
   function canvasAgentRevert(args,execution) {
     canvasAgentAssertToolExecution(execution);
     const latest=canvasAgent.latestChange;
-    if(!latest||String(args.changeId||"")!==latest.changeId)throw canvasAgentToolError("REVERT_NOT_LATEST","Only the latest Canvas Agent change can be reverted.",{latestChangeId:latest?.changeId||null});
+    if(!latest||String(args.changeId||"")!==latest.changeId)throw canvasAgentToolError("REVERT_NOT_LATEST","Only the latest PenEcho Agent change can be reverted.",{latestChangeId:latest?.changeId||null});
     if(state.userRevision!==latest.revision||state.history.at(-1)!==latest.historyEntry)throw canvasAgentToolError("REVERT_CONFLICT","Canvas changed after this Agent change, so it can no longer be reverted safely.",{changeRevision:latest.revision,currentRevision:state.userRevision});
     const previousRevision=state.userRevision;state.userRevision++;undo();canvasAgent.latestChange=null;requestRender();canvasAgentSyncState();return{ok:true,revertedChangeId:latest.changeId,previousRevision,revision:state.userRevision};
   }
@@ -3563,7 +3582,7 @@
       else if (name === "canvas_internal_widget") result = await canvasAgentInternalWidget(args,execution);
       else if (name === "canvas_internal_replace_widget") result = await canvasAgentReplaceWidget(args,execution);
       else if (name === "canvas_internal_patch_visual_explainer") result = await canvasAgentPatchVisualExplainer(args,execution);
-      else throw Error(`Unknown Canvas Agent tool: ${name}.`);
+      else throw Error(`Unknown PenEcho Agent tool: ${name}.`);
       }
       canvasAgentAssertToolExecution(execution);
       const envelope={ok:true,result};
@@ -3834,10 +3853,10 @@
       canvasAgentSetStatus(t("canvasAgentImagePreparing"),"connecting");
       return false;
     }
-    const text = textOverride===null?canvasAgentInput.value.trim():String(textOverride||"").trim(), attachments = includeDraftMedia?[...canvasAgent.attachments]:[], projectAttachment=attachments.find(attachment=>attachment.kind==="file")||null, imageAttachments=attachments.filter(attachment=>attachment.kind!=="file"), hasInk=includeDraftMedia&&canvasAgent.inkPresent;
+    const text = textOverride===null?canvasAgentInput.value.trim():String(textOverride||"").trim(), attachments = includeDraftMedia?[...canvasAgent.attachments]:[], fileAttachments=attachments.filter(attachment=>attachment.kind==="file"), imageAttachments=attachments.filter(attachment=>attachment.kind!=="file"), hasInk=includeDraftMedia&&canvasAgent.inkPresent;
     if (!text && !attachments.length&&!hasInk) return false;
-    if(projectAttachment&&!text){canvasAgentSetStatus(t("canvasAgentFileInstructionRequired"),"error");return false;}
-    if (hasInk&&imageAttachments.length>=CANVAS_AGENT_MAX_ATTACHMENTS) {
+    if(fileAttachments.length&&!text){canvasAgentSetStatus(t("canvasAgentFileInstructionRequired"),"error");return false;}
+    if (hasInk&&attachments.length>=CANVAS_AGENT_MAX_ATTACHMENTS) {
       canvasAgentSetStatus(t("canvasAgentInkImageLimit"),"error");
       return false;
     }
@@ -3850,10 +3869,8 @@
     canvasAgentReference.disabled = true;
     const submitExecution=canvasAgentBeginSubmitExecution(selectedAiConnectionId());
     try {
-      if(projectAttachment&&!await canvasAgentSelectProject(projectAttachment.projectId,{submitExecution}))throw Error(t("canvasAgentFileReadFailed"));
-      canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentBeginRequest();
-      const inkAttachment=hasInk?await canvasAgentPrepareInkAttachment():null, outgoingAttachments=inkAttachment?[...imageAttachments,inkAttachment]:imageAttachments,displayAttachments=projectAttachment?[projectAttachment]:outgoingAttachments;
+      const inkAttachment=hasInk?await canvasAgentPrepareInkAttachment():null, outgoingAttachments=inkAttachment?[...imageAttachments,inkAttachment]:imageAttachments,displayAttachments=inkAttachment?[...attachments,inkAttachment]:attachments;
       canvasAgentAssertSubmitExecution(submitExecution);
       const prompt=inkAttachment
         ? [text,t("canvasAgentInkPrompt")].filter(Boolean).join("\n\n")
@@ -3869,7 +3886,7 @@
       canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentRow("user",displayText,displayAttachments);
       canvasAgentAssertSubmitExecution(submitExecution);
-      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),initialState,webSearchEnabled:canvasAgent.searchEnabled});
+      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:prompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),fileIds:fileAttachments.map(attachment=>attachment.projectId),initialState,webSearchEnabled:canvasAgent.searchEnabled});
       requestSent = true;
       focusComposerAfterSubmit=!hasInk;
       if(clearInput){canvasAgentInput.value = "";canvasAgentResizeInput();}
@@ -3879,7 +3896,6 @@
     } catch (error) {
       const current=canvasAgentSubmitExecutionCurrent(submitExecution);
       if (!requestSent&&current) canvasAgentRequestDidNotSend();
-      if(current&&projectAttachment&&!canvasAgent.attachments.some(attachment=>attachment.id===projectAttachment.id)){canvasAgent.attachments=[projectAttachment];canvasAgentRenderAttachments();}
       if(current)canvasAgentSetStatus(String(error?.message||error),"error");
       return false;
     }
@@ -3949,7 +3965,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     if(files.length)void canvasAgentHandleFiles(files);
-    else void canvasAgentDesktopClipboardFile().then(file=>file?canvasAgentHandleFiles([file]):canvasAgentSetStatus(t("canvasAgentFileReadFailed"),"error")).catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
+    else void canvasAgentDesktopClipboardFiles().then(desktopFiles=>desktopFiles.length?canvasAgentHandleFiles(desktopFiles):canvasAgentSetStatus(t("canvasAgentFileReadFailed"),"error")).catch(error=>canvasAgentSetStatus(String(error?.message||error),"error"));
   },true);
   if (typeof ResizeObserver==="function") new ResizeObserver(()=>{canvasAgentSchedulePanelSizeSave();canvasAgentResizeInput();}).observe(canvasAgentPanel);
   canvasAgentResizeInput();

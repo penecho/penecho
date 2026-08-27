@@ -1,8 +1,8 @@
-# Canvas Agent Visual Explorer
+# PenEcho Agent Visual Explorer
 
-Canvas Agent Visual Explorer creates one responsive, source-authored General HTML Widget for understanding-, organizing-, or planning-first work. It is an isolated Canvas Agent extension: Main Canvas AI, Canvas Pen AI Refine, the shared General HTML contract, personal plugins, and existing General HTML behavior are unchanged.
+PenEcho Agent Visual Explorer creates one responsive, source-authored General HTML Widget for understanding-, organizing-, or planning-first work. It is an isolated PenEcho Agent extension: Main Canvas AI, Canvas Pen AI Refine, the shared General HTML contract, personal plugins, and existing General HTML behavior are unchanged.
 
-It is the Canvas Agent default for substantial pasted text and requests to explain, learn, analyze, or organize equations, projects, documents, and other material, even when the user does not explicitly ask for an infographic. It yields to direct edits or supplements to existing Canvas/page elements and to requests whose defining result is interaction, simulation, live data, a small ordinary HTML tool, or another enabled artifact.
+It is the PenEcho Agent default for substantial pasted text and requests to explain, learn, analyze, or organize equations, projects, documents, and other material, even when the user does not explicitly ask for an infographic. It yields to direct edits or supplements to existing Canvas/page elements and to requests whose defining result is interaction, simulation, live data, a small ordinary HTML tool, or another enabled artifact.
 
 ## Output contract
 
@@ -34,7 +34,7 @@ Every newly authored Visual Explorer uses exactly these markers:
 
 `copyText` and `copyLabel` are omitted, and `widget.source` remains empty.
 
-## Canvas Agent workflow
+## PenEcho Agent workflow
 
 1. Use the host-supplied authoritative initial Canvas state. On a nonempty Canvas, capture the complete Canvas with `target:"canvas"`, `quality:"basic"`, and `coordinates:"none"` before requesting placement if that overview was not already supplied.
 2. If the host-supplied initial state explicitly declares an empty Canvas at the current revision, skip the unchanged inspect/capture and create directly with finite dimensions and `placement.mode:"auto"`. Otherwise call `canvas_inspect` with `plannedWidget.sourceFormat:"penecho-visual-explorer+html"`, the intended dimensions, and source typography. Treat its width, height, and absolute `createPlacement` as authoritative.
@@ -48,7 +48,7 @@ The server enforces one newly created Visual Explorer, at most 20 same-target pa
 
 ## Legacy compatibility
 
-The legacy `VisualExplainerPlan` and AntV authoring tools are hidden from new Canvas Agent authoring. Their implementation remains in the codebase, and saved Canvas content keeps its existing read, render, patch, and compatibility paths. No legacy format or component is deleted by this integration.
+The legacy `VisualExplainerPlan` and AntV authoring tools are hidden from new PenEcho Agent authoring. Their implementation remains in the codebase, and saved Canvas content keeps its existing read, render, patch, and compatibility paths. No legacy format or component is deleted by this integration.
 
 ## Scientific Visual Explorer
 
@@ -66,7 +66,7 @@ Every scientific artifact is explanation-first. Its initial static HTML/SVG is c
 
 ### Two-stage lazy loading
 
-Scientific instructions and code are absent from the initial Canvas Agent prompt. The always-visible `load_visual_skill` router selects one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading appends the full contract to durable provider-owned conversation context without placing it in ordinary tool-result history: Harness stores it as an append-only session system section, while native Codex supplies it as application `additionalContext` on subsequent turns of the same App Server thread. The stable initial instruction prefix is not rebuilt. Repeating the call reports `alreadyLoaded` without duplicating the contract.
+Scientific instructions and code are absent from the initial PenEcho Agent prompt. The always-visible `load_visual_skill` router selects one bounded local contract: `math-2d`, `physics-2d`, or `math-3d`. Loading appends the full contract to durable provider-owned conversation context without placing it in ordinary tool-result history: Harness stores it as an append-only session system section, while native Codex supplies it as application `additionalContext` on subsequent turns of the same App Server thread. The stable initial instruction prefix is not rebuilt. Repeating the call reports `alreadyLoaded` without duplicating the contract.
 
 Authored scientific HTML declares exactly one matching marker:
 

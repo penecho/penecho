@@ -116,7 +116,7 @@ test("Visual Explainer assets use the single current plan, local AntV, fallback 
   assert.equal(read("public/vendor/antv-infographic.LICENSE"),read("node_modules/@antv/infographic/LICENSE"));
 });
 
-test("Canvas Agent frames a new Visual Explainer in the unobscured viewport beside its panel",()=>{
+test("PenEcho Agent frames a new Visual Explainer in the unobscured viewport beside its panel",()=>{
   const browser=read("src/client/app/canvas-agent-runtime.js"),frameSource=functionSource(browser,"canvasAgentFrameRegion"),framePlanSource=functionSource(browser,"canvasAgentFramePlan"),state={scale:.24,panX:0,panY:0},viewRect={left:0,top:0,width:1600,height:900},panelRect={left:1200,top:120,right:1580,bottom:880,width:380,height:760},calls={render:0,sync:0};
   const frame=vm.runInNewContext(`(() => { ${framePlanSource} return ${frameSource}; })()`,{
     SIZE:20000,state,

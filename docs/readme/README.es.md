@@ -73,7 +73,7 @@ npm start
 
 Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar del lienzo y haz una pausa. PenEcho interpreta los trazos y sus relaciones espaciales y coloca la respuesta junto a ellos.
 
-- **Canvas Agent: de las fuentes al resultado visual.** Añade carpetas y archivos de solo lectura —PDF, Word, PowerPoint, Excel, imágenes o código—, combínalos con investigación web y el lienzo actual, y deja que el mismo agente continúe con el análisis, la planificación, la creación y la revisión.
+- **PenEcho Agent: de las fuentes al resultado visual.** Añade carpetas y archivos de solo lectura —PDF, Word, PowerPoint, Excel, imágenes o código—, combínalos con investigación web y el lienzo actual, y deja que el mismo agente continúe con el análisis, la planificación, la creación y la revisión.
 - **Productividad con Visual Explorer.** Convierte información densa en un espacio visual adaptable y editable, con una vista general clara, detalles conectados y evidencias. Acorta el camino desde la investigación hasta un resultado compartible y reduce copiar y pegar, cambiar de herramienta, dibujar diagramas manualmente y rehacer trabajo.
 - Dibuja con lápiz o ratón y desplázate por un lienzo de `20 000 x 20 000`.
 - Obtén respuestas, pistas, explicaciones, fórmulas, gráficas y diagramas directamente sobre el lienzo.
@@ -92,7 +92,7 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 
 ## Novedades de la versión 1.1.0
 
-- **Canvas Agent.** Trabaja con archivos locales, proyectos de carpetas de solo lectura, investigación web, contexto del lienzo, creación visual y edición directa en un único flujo de varios pasos.
+- **PenEcho Agent.** Trabaja con archivos locales, proyectos de carpetas de solo lectura, investigación web, contexto del lienzo, creación visual y edición directa en un único flujo de varios pasos.
 - **Visual Explorer.** Transforma investigación, documentos, notas y planes en un resultado visual adaptable que conecta la vista general con los detalles y las evidencias.
 - **Menos cambios de contexto y retrabajo.** Investiga, analiza, estructura, visualiza, revisa y corrige en el mismo espacio; el resultado permanece editable sobre el lienzo.
 - **Entrega visual progresiva.** Recibe antes versiones completas de Visual Explorer y refínalas en el mismo lugar, sin regenerarlas desde cero.

@@ -309,6 +309,7 @@ function installMenu() {
 }
 
 const CANVAS_AGENT_CLIPBOARD_FILE_LIMIT = 32 * 1024 * 1024;
+const CANVAS_AGENT_CLIPBOARD_FILE_COUNT_LIMIT = 5;
 
 function clipboardUriPaths(value) {
   const paths=[];
@@ -375,10 +376,30 @@ async function readCanvasClipboardFile() {
   return {ok:false,code:failureCode||"unreadable"};
 }
 
+async function readCanvasClipboardFiles() {
+  const selectedPaths=clipboardFilePaths();
+  if(selectedPaths.length>CANVAS_AGENT_CLIPBOARD_FILE_COUNT_LIMIT)return {ok:false,code:"too_many",count:selectedPaths.length};
+  if(!selectedPaths.length)return {ok:false,code:"unreadable"};
+  const files=[];
+  for(const selectedPath of selectedPaths){
+    try{
+      const canonical=await fs.promises.realpath(selectedPath),before=await fs.promises.lstat(canonical);
+      if(!before.isFile()||before.isSymbolicLink())return {ok:false,code:"unreadable"};
+      if(before.size<1)return {ok:false,code:"empty"};
+      if(before.size>CANVAS_AGENT_CLIPBOARD_FILE_LIMIT)return {ok:false,code:"too_large"};
+      const data=await fs.promises.readFile(canonical),after=await fs.promises.lstat(canonical);
+      if(!after.isFile()||after.isSymbolicLink()||after.size!==before.size||after.mtimeMs!==before.mtimeMs||data.length!==before.size)return {ok:false,code:"unreadable"};
+      files.push({name:path.basename(canonical),size:data.length,lastModified:Math.trunc(after.mtimeMs),data:data.toString("base64")});
+    }catch{return {ok:false,code:"unreadable"};}
+  }
+  return {ok:true,files};
+}
+
 function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
   ipcMain.on("penecho:has-clipboard-file", event => { event.returnValue=fromCanvas(event)&&clipboardFilePaths().length>0; });
   ipcMain.handle("penecho:read-clipboard-file", event => fromCanvas(event)?readCanvasClipboardFile():{ok:false});
+  ipcMain.handle("penecho:read-clipboard-files", event => fromCanvas(event)?readCanvasClipboardFiles():{ok:false});
   ipcMain.handle("penecho:open-project-file", async (event,projectId) => {
     if(!fromCanvas(event))return {ok:false};
     try{

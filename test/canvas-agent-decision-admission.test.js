@@ -27,7 +27,7 @@ async function* modelBlocks(blocks,{finishKind='tool-calls',replayState=null}={}
   yield{type:'finish',reason:{kind:finishKind},...(replayState?{replayState}:{})}
 }
 
-test('Canvas Agent rejects a multi-tool step before execution and returns bounded corrective feedback',async()=>{
+test('PenEcho Agent rejects a multi-tool step before execution and returns bounded corrective feedback',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs'),session=decisionSession(),chunks=await collect(admission.admitCanvasAgentDecisionStream(modelBlocks([
     {type:'tool-call',id:'a',name:'canvas_inspect',arguments:'{"scope":"canvas"}'},
     {type:'tool-call',id:'b',name:'canvas_capture',arguments:'{"target":"canvas","quality":"basic"}'},
@@ -40,7 +40,7 @@ test('Canvas Agent rejects a multi-tool step before execution and returns bounde
   assert.match(feedback.content[0].text,/returned 2 tool calls[\s\S]*no Canvas tool ran[\s\S]*one corrected standard JSON tool call/)
 })
 
-test('Canvas Agent passes a large standard JSON tool call unchanged and preserves exact HTML after one parse',async()=>{
+test('PenEcho Agent passes a large standard JSON tool call unchanged and preserves exact HTML after one parse',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs'),session=decisionSession(),html=`<!doctype html>\n<style>.quote::after{content:'"\\\\';}</style>\n<script>const path="C:\\\\tmp\\\\widget";</script>\n<main>${'long-source-line\n'.repeat(500)}</main>`,
     args={baseRevision:0,items:[{type:'widget',pluginId:'general',widgetType:'html_widget',title:'Standard JSON',html,width:900,height:600,placement:{mode:'auto'}}]},block={type:'tool-call',id:'large-json',name:'canvas_create',arguments:JSON.stringify(args)},replayState={response:{id:'provider-response'}},
     chunks=await collect(admission.admitCanvasAgentDecisionStream(modelBlocks([block],{replayState}),{session,availableTools:['canvas_create']})),passed=chunks.find(chunk=>chunk.type==='block-end')?.block
@@ -51,7 +51,7 @@ test('Canvas Agent passes a large standard JSON tool call unchanged and preserve
   assert.equal(session.protocolRecords.length,0)
 })
 
-test('Canvas Agent rejects invalid or unavailable standard JSON tool calls without execution',async()=>{
+test('PenEcho Agent rejects invalid or unavailable standard JSON tool calls without execution',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs')
   for(const [block,code] of [
     [{type:'tool-call',id:'bad-json',name:'canvas_create',arguments:'{"items":[{"html":"<div class="broken">"}]}'},'CANVAS_TOOL_ARGUMENTS_INVALID'],
@@ -63,7 +63,7 @@ test('Canvas Agent rejects invalid or unavailable standard JSON tool calls witho
   }
 })
 
-test('Canvas Agent validates a multi-tool decision atomically before exposing any call',async()=>{
+test('PenEcho Agent validates a multi-tool decision atomically before exposing any call',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs'),session=decisionSession(),blocks=[
     {type:'tool-call',id:'valid-first',name:'canvas_inspect',arguments:'{"scope":"canvas"}'},
     {type:'tool-call',id:'invalid-second',name:'canvas_capture',arguments:'{"target":"canvas"'},
@@ -73,7 +73,7 @@ test('Canvas Agent validates a multi-tool decision atomically before exposing an
   assert.equal(session.protocolRecords[0].code,'CANVAS_ONE_TOOL_PER_STEP')
 })
 
-test('Canvas Agent leaves final text and one valid tool stream unchanged',async()=>{
+test('PenEcho Agent leaves final text and one valid tool stream unchanged',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs'),session=decisionSession(),finalReplay={response:{id:'final'}},finalChunks=await collect(admission.admitCanvasAgentDecisionStream(modelBlocks([{type:'text',text:'Finished.'}],{finishKind:'stop',replayState:finalReplay}),{session,availableTools:[]}))
   assert.equal(finalChunks.find(chunk=>chunk.type==='text-delta').text,'Finished.')
   assert.deepEqual(finalChunks.at(-1).replayState,finalReplay)
@@ -81,7 +81,7 @@ test('Canvas Agent leaves final text and one valid tool stream unchanged',async(
   assert.equal(toolChunks.find(chunk=>chunk.type==='block-end').block,tool)
 })
 
-test('Canvas Agent rejects a token-truncated tool decision and continues through feedback',async()=>{
+test('PenEcho Agent rejects a token-truncated tool decision and continues through feedback',async()=>{
   const admission=await import('../src/server/canvas-agent/decision-admission.mjs'),session=decisionSession(),chunks=await collect(admission.admitCanvasAgentDecisionStream(modelBlocks([
     {type:'tool-call',id:'truncated',name:'canvas_create',arguments:'{"baseRevision":0}'},
   ],{finishKind:'max-tokens'}),{session,availableTools:['canvas_create']})),call=chunks.filter(chunk=>chunk.type==='block-end'&&chunk.block?.type==='tool-call').at(-1)?.block

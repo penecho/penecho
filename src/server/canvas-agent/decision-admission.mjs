@@ -17,7 +17,7 @@ function isObject(value) {
 }
 
 function feedbackFrom(error, details = null) {
-  const code = String(error?.code || 'CANVAS_DECISION_REJECTED'), message = String(error?.message || error || 'Canvas Agent decision was rejected.')
+  const code = String(error?.code || 'CANVAS_DECISION_REJECTED'), message = String(error?.message || error || 'PenEcho Agent decision was rejected.')
   return Object.freeze({
     code,
     message:`${message} The entire tool decision was rejected before execution; no Canvas tool ran. Return exactly one corrected standard JSON tool call, or a final answer only when the task is complete or cannot proceed.`,
@@ -28,7 +28,7 @@ function feedbackFrom(error, details = null) {
 function stageFeedback(session, feedback) {
   const id = CallId(`penecho_decision_${randomUUID()}`), callId = String(id)
   if (!(session?.decisionFeedbackCalls instanceof Map) || !(session?.decisionFeedbackCallIds instanceof Set)) {
-    throw new Error('Canvas Agent decision feedback storage is unavailable.')
+    throw new Error('PenEcho Agent decision feedback storage is unavailable.')
   }
   session.decisionFeedbackCalls.set(callId, feedback)
   session.decisionFeedbackCallIds.add(callId)
@@ -38,7 +38,7 @@ function stageFeedback(session, feedback) {
 
 function validateToolCall(block, availableTools) {
   const name=String(block?.name||'')
-  if(!availableTools.has(name))throw decisionError('CANVAS_TOOL_UNAVAILABLE',`Canvas Agent requested an unavailable tool: ${name||'(empty)'}.`)
+  if(!availableTools.has(name))throw decisionError('CANVAS_TOOL_UNAVAILABLE',`PenEcho Agent requested an unavailable tool: ${name||'(empty)'}.`)
   let args
   try{args=JSON.parse(String(block?.arguments||'{}'))}
   catch(error){throw decisionError('CANVAS_TOOL_ARGUMENTS_INVALID',`${name} arguments are not valid complete JSON: ${error.message}`)}
@@ -50,7 +50,7 @@ export function admitCanvasDecision({ session, blocks, availableTools = [] }) {
   if(toolCalls.length>1){
     return{kind:'feedback',block:stageFeedback(session,feedbackFrom(decisionError(
       'CANVAS_ONE_TOOL_PER_STEP',
-      `Your previous step returned ${toolCalls.length} tool calls, but Canvas Agent allows at most one tool call per model step.`,
+      `Your previous step returned ${toolCalls.length} tool calls, but PenEcho Agent allows at most one tool call per model step.`,
       {toolCallCount:toolCalls.length},
     )))}
   }
@@ -122,7 +122,7 @@ export function canvasDecisionFeedbackResult(session, exec, next) {
   if (!feedback) return next()
   session.decisionFeedbackCalls.delete(callId)
   return Promise.resolve({
-    content:[{ type:'text', text:`Canvas Agent decision rejected: ${feedback.message}` }],
+    content:[{ type:'text', text:`PenEcho Agent decision rejected: ${feedback.message}` }],
     isError:true,
     error:{ message:feedback.message, info:{ name:'CanvasDecisionProtocolError', code:feedback.code } },
   })

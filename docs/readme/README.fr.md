@@ -73,7 +73,7 @@ npm start
 
 Écrivez une question, une équation, un schéma ou une idée inachevée n'importe où sur le canevas, puis marquez une pause. PenEcho interprète les traits et leurs relations spatiales avant de placer la réponse à proximité.
 
-- **Canvas Agent : des sources au résultat visuel.** Ajoutez des dossiers et fichiers en lecture seule — PDF, Word, PowerPoint, Excel, images ou code —, combinez-les à la recherche Web et au canevas actuel, puis laissez le même agent poursuivre l'analyse, la planification, la création et la révision.
+- **PenEcho Agent : des sources au résultat visuel.** Ajoutez des dossiers et fichiers en lecture seule — PDF, Word, PowerPoint, Excel, images ou code —, combinez-les à la recherche Web et au canevas actuel, puis laissez le même agent poursuivre l'analyse, la planification, la création et la révision.
 - **Productivité avec Visual Explorer.** Transformez des informations denses en un espace visuel adaptatif et modifiable, avec une vue d'ensemble claire, des détails reliés et des preuves. Le chemin de la recherche au résultat partageable raccourcit, avec moins de copier-coller, de changements d'outil, de schémas manuels et de reprises.
 - Dessinez naturellement au stylet ou à la souris et parcourez un canevas de `20 000 x 20 000`.
 - Obtenez des réponses, indices, explications, formules, graphiques et schémas directement sur le canevas.
@@ -92,7 +92,7 @@ npm start
 
 ## Nouveautés de la version 1.1.0
 
-- **Canvas Agent.** Enchaînez fichiers locaux, projets de dossiers en lecture seule, recherche Web, contexte du canevas, création visuelle et édition directe dans un seul flux en plusieurs étapes.
+- **PenEcho Agent.** Enchaînez fichiers locaux, projets de dossiers en lecture seule, recherche Web, contexte du canevas, création visuelle et édition directe dans un seul flux en plusieurs étapes.
 - **Visual Explorer.** Transformez recherches, documents, notes et plans en un résultat visuel adaptatif qui relie vue d'ensemble, détails et preuves.
 - **Moins de changements de contexte et de reprises.** Recherchez, analysez, structurez, visualisez, vérifiez et révisez dans le même espace ; le résultat reste modifiable sur le canevas.
 - **Livraison visuelle progressive.** Obtenez plus tôt des versions complètes de Visual Explorer et affinez-les sur place au lieu de tout régénérer.

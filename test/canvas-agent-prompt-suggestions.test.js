@@ -44,16 +44,16 @@ function translation(source,key){
   return JSON.parse(`"${match[1]}"`);
 }
 
-test("Canvas Agent keeps the Revise pencil seam inside its icon viewBox",()=>{
+test("PenEcho Agent keeps the Revise pencil seam inside its icon viewBox",()=>{
   const {iconPaths}=promptConstants();
   assert.equal(iconPaths.revise[1],"M13.5 9l3.5 3.5M4 5h6M4 9h5");
 });
 
-test("Canvas Agent keeps its default introduction above the Try asking overlay",()=>{
+test("PenEcho Agent keeps its default introduction above the Try asking overlay",()=>{
   assert.match(css,/\.canvas-agent-empty\s*\{[^}]*margin:\s*0 10px auto/);
 });
 
-test("Canvas Agent keeps a fixed Try asking row between attachments and the composer",()=>{
+test("PenEcho Agent keeps a fixed Try asking row between attachments and the composer",()=>{
   const {document}=parseHTML(html),form=document.querySelector("#canvasAgentForm"),suggestions=document.querySelector("#canvasAgentPromptSuggestions"),attachments=document.querySelector("#canvasAgentAttachments"),approval=document.querySelector("#canvasAgentApproval"),
     popup=document.querySelector("#canvasAgentPromptPopup"),additional=document.querySelector("#canvasAgentAdditionalPromptList"),primary=document.querySelector("#canvasAgentPrimaryPromptList"),
     children=[...suggestions.children],toggle=suggestions.querySelector("#canvasAgentPromptToggle"),additionalRule=css.match(/\.canvas-agent-prompt-additional\s*\{([^}]*)\}/)?.[1]||"";
@@ -78,8 +78,8 @@ test("Canvas Agent keeps a fixed Try asking row between attachments and the comp
   assert.match(css,/\.canvas-agent-prompt-popup\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*5;[^}]*bottom:\s*calc\(100% - 1px\);[^}]*max-height:\s*min\(390px, calc\(100cqh - 210px\)\);[^}]*overflow-y:\s*auto/);
   assert.match(css,/\.canvas-agent-prompt-popup\s*\{[^}]*border:\s*1px solid #dde4ee;[^}]*border-bottom:\s*0;[^}]*border-radius:\s*12px 12px 0 0;[^}]*background:\s*linear-gradient\(145deg, #fcfdff, #f7f9fc\);[^}]*box-shadow:\s*none/,"the floating rows extend the header card with the same light border and white background");
   assert.match(css,/\.canvas-agent-prompt-suggestions\.prompt-rows-visible\s*\{[^}]*border-top-color:\s*transparent;[^}]*border-radius:\s*0 0 12px 12px;[^}]*box-shadow:\s*none;[^}]*filter:\s*drop-shadow/,"expanded rows and the fixed header read as one continuous card with a single unified shadow");
-  assert.match(css,/\.canvas-agent-history-popover\s*\{[^}]*z-index:\s*6/,"Canvas Agent popovers remain above prompt options");
-  assert.match(css,/\.settings-layer\s*\{[^}]*z-index:\s*74/,"Settings remains above the Canvas Agent panel and prompt options");
+  assert.match(css,/\.canvas-agent-history-popover\s*\{[^}]*z-index:\s*6/,"PenEcho Agent popovers remain above prompt options");
+  assert.match(css,/\.settings-layer\s*\{[^}]*z-index:\s*74/,"Settings remains above the PenEcho Agent panel and prompt options");
   assert.match(css,/\.canvas-agent-prompt-list\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.doesNotMatch(additionalRule,/position:|bottom:|max-height:|overflow|overscroll|scrollbar|border:|background:|box-shadow:/,"the floating prompt card must have one wheel-scroll owner");
   assert.match(css,/\.canvas-agent-prompt-list > button\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*hidden/);
@@ -89,7 +89,7 @@ test("Canvas Agent keeps a fixed Try asking row between attachments and the comp
   assert.match(css,/\.canvas-agent-prompt-copy strong\s*\{[^}]*font-weight:/);
 });
 
-test("Canvas Agent keeps its fixed Try asking row whenever suggestions are available",()=>{
+test("PenEcho Agent keeps its fixed Try asking row whenever suggestions are available",()=>{
   const input={value:"",disabled:false},form={contains:node=>node===input},outside={},document={activeElement:input},panel={hidden:false},referencePicker={hidden:true},approval={hidden:true},suggestions={contains:()=>false},canvasAgent={
     inputMode:"text",inkPresent:false,attachments:[],references:[],requestPending:false,running:false,viewingHistoryId:"",pendingApproval:null,attachmentBusy:false,projectUploadBusy:false,
   },context={canvasAgentPromptSuggestions:suggestions,canvasAgentPanel:panel,canvasAgentForm:form,document,canvasAgent,canvasAgentInput:input,canvasAgentReferencePicker:referencePicker,canvasAgentApproval:approval};
@@ -110,13 +110,13 @@ test("Canvas Agent keeps its fixed Try asking row whenever suggestions are avail
   for(const [target,key,value] of blockers){const previous=target[key];target[key]=value;assert.equal(shouldShow(),false,`${key} should hide suggestions`);target[key]=previous;}
 });
 
-test("Canvas Agent floats only prompt options without CSP-sensitive inline sizing",()=>{
+test("PenEcho Agent floats only prompt options without CSP-sensitive inline sizing",()=>{
   assert.doesNotMatch(runtime,/style\.(?:set|remove)Property\([^)]*canvas-agent-prompt/);
   assert.doesNotMatch(css,/canvas-agent-prompt-height-|--canvas-agent-prompt-avoidance|\.canvas-agent-prompt-suggestions\s*\{[^}]*position:\s*absolute/);
   assert.match(css,/\.canvas-agent-prompt-popup\s*\{[^}]*position:\s*absolute/);
 });
 
-test("Canvas Agent classifies image, Office, document, code, and generic files",()=>{
+test("PenEcho Agent classifies image, Office, document, code, and generic files",()=>{
   const classify=vm.runInNewContext(`(()=>{${functionSource("canvasAgentPromptFileContext")}return canvasAgentPromptFileContext;})()`);
   assert.equal(classify({kind:"image",name:"photo.bin"}),"image");
   assert.equal(classify({name:"budget.xlsx",mediaType:"application/octet-stream"}),"spreadsheet");
@@ -126,7 +126,7 @@ test("Canvas Agent classifies image, Office, document, code, and generic files",
   assert.equal(classify({name:"archive.bin"}),"file");
 });
 
-test("Canvas Agent intent precedence follows explicit choices before inferred canvas content",()=>{
+test("PenEcho Agent intent precedence follows explicit choices before inferred canvas content",()=>{
   let selected=false,project=null,hasInk=false,hasContent=false;
   const canvasAgent={attachments:[],projectId:""},state={selection:null,images:[],widgets:[],textBoxes:[],animations:[],preservedSnapshotAnimations:[]},scope={
     canvasAgent,state,SIZE:100,canvasAgentReferencedIds:()=>selected?["selected"]:[],canvasAgentProjectById:()=>project,
@@ -145,7 +145,7 @@ test("Canvas Agent intent precedence follows explicit choices before inferred ca
   canvasAgent.attachments=[];selected=false;project={kind:"file",name:"paper.pdf"};assert.equal(context(),"document");
 });
 
-test("Canvas Agent chooses three context-specific primary intents",()=>{
+test("PenEcho Agent chooses three context-specific primary intents",()=>{
   const constants=promptConstants(),expected={
     blank:["file","architecture","handwriting"],image:["imageVisual","imageLayer","imagePublish"],spreadsheet:["spreadsheetVisual","spreadsheetLayer","spreadsheetPublish"],
     presentation:["presentationVisual","presentationLayer","presentationPublish"],document:["documentVisual","documentStudy","documentPublish"],code:["codeVisual","codeLayer","codePlan"],
@@ -156,7 +156,7 @@ test("Canvas Agent chooses three context-specific primary intents",()=>{
     const set=vm.runInNewContext(`(()=>{${functionSource("canvasAgentPromptSuggestionSet")}return canvasAgentPromptSuggestionSet;})()`,{
       CANVAS_AGENT_PROMPT_LIBRARY:constants.library,CANVAS_AGENT_PROMPT_ADDITIONAL:constants.additional,CANVAS_AGENT_PROMPT_PRIMARY:constants.primary,canvasAgentPromptContext:()=>context,
     })();
-    assert.equal(set.key,context);assert.equal(set.suggestions.length,context==="notes"?10:11);assert.deepEqual(Array.from(set.suggestions.slice(-3),item=>item.id),ids);
+    assert.equal(set.key,context);assert.equal(set.suggestions.length,context==="notes"?11:12);assert.deepEqual(Array.from(set.suggestions.slice(-3),item=>item.id),ids);
   }
 });
 
@@ -209,9 +209,9 @@ function interactiveScene(){
   return {set,input,active,outside,document,form,suggestions,popup,additional,primary,toggle,canvasAgent,render,setExpanded,shouldShow,sync,choose,preventFocusLoss,expandOnEnter,collapseOnLeave,syncFocus,toggleExpanded,collapseFromPanel};
 }
 
-test("Canvas Agent renders icons, bold focus words, and full clickable prompts",()=>{
+test("PenEcho Agent renders icons, bold focus words, and full clickable prompts",()=>{
   const scene=interactiveScene();scene.render(scene.set);
-  assert.equal(scene.additional.children.length,8);assert.equal(scene.primary.children.length,3);
+  assert.equal(scene.additional.children.length,9);assert.equal(scene.primary.children.length,3);
   const button=scene.primary.children.at(-1),icon=button.children[0],copy=button.children[1],focus=copy.children[0],detail=copy.children[1];
   assert.equal(icon.class,"canvas-agent-prompt-icon");assert.equal(icon.children.length>0,true);
   assert.equal(copy.className,"canvas-agent-prompt-copy");assert.equal(focus.tag,"strong");assert.equal(focus.textContent,"Enhance");assert.equal(detail.textContent,"Polished prompt");assert.equal(button.title,"Polished prompt");
@@ -240,7 +240,7 @@ test("The expanded arrow collapses every prompt row and keeps manual collapse st
   scene.toggleExpanded();assert.equal(scene.primary.hidden,true);assert.equal(scene.additional.hidden,true,"the same arrow collapses all rows from the fully expanded state");
 });
 
-test("Clicking the Canvas Agent panel collapses Try asking like its disclosure button",()=>{
+test("Clicking the PenEcho Agent panel collapses Try asking like its disclosure button",()=>{
   const scene=interactiveScene();scene.render(scene.set);scene.active.element=scene.input;scene.active.insideForm=true;scene.sync();
   assert.equal(scene.popup.hidden,false);assert.equal(scene.primary.hidden,false);
   scene.collapseFromPanel({target:scene.outside});
@@ -271,7 +271,7 @@ test("Existing conversations stay collapsed on focus until the arrow is clicked"
   scene.active.element=scene.outside;scene.active.insideForm=false;scene.syncFocus();assert.equal(scene.suggestions.hidden,false,"the fixed header remains after blur");assert.equal(scene.popup.hidden,true);
 });
 
-test("Canvas Agent suggestion pointer activation survives composer focusout",async()=>{
+test("PenEcho Agent suggestion pointer activation survives composer focusout",async()=>{
   const scene=interactiveScene();scene.render(scene.set);const button=scene.primary.children.at(-1);scene.active.element=scene.input;scene.active.insideForm=true;scene.sync();
   const pointerEvent={target:button,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;}};
   scene.preventFocusLoss(pointerEvent);if(!pointerEvent.defaultPrevented)scene.active.element=scene.outside;
@@ -279,7 +279,7 @@ test("Canvas Agent suggestion pointer activation survives composer focusout",asy
   button.click();assert.equal(scene.input.value,"Polished prompt");assert.equal(scene.suggestions.hidden,false);assert.equal(scene.primary.hidden,true);assert.equal(scene.form.submitted,false);
 });
 
-test("Canvas Agent ships concise localized prompts and focus words for every intent",()=>{
+test("PenEcho Agent ships concise localized prompts and focus words for every intent",()=>{
   const {library}=promptConstants(),items=Object.values(library),keys=[...new Set(items.map(item=>item.prompt))],focusKeys=[...new Set(items.map(item=>item.focus))];
   assert.equal(keys.length>=30,true);
   for(const key of keys){
@@ -296,13 +296,15 @@ test("Canvas Agent ships concise localized prompts and focus words for every int
   assert.equal(translation(chinese,"canvasAgentPromptHandwriting"),"请保持当前手写笔迹完全不变：不修改、擦除或移动它；在其上添加一层背景透明的解释层，解释层可以适度覆盖但必须让原笔迹清晰透出，并在合适位置用标注、连线、链接、图形或动效让内容更生动直观。");
   assert.equal(translation(english,"canvasAgentPromptSequenceDiagramSource"),"Convert the current diagram into a sequence diagram and return editable diagram source code, such as Mermaid or PlantUML—not HTML.");
   assert.equal(translation(chinese,"canvasAgentPromptSequenceDiagramSource"),"请将当前图表转换为时序图，并返回可编辑的时序图源代码（如 Mermaid 或 PlantUML），不要返回 HTML。");
+  assert.equal(translation(english,"canvasAgentPromptFollowCanvasCues"),"Follow my latest Canvas drawings, images, text boxes, and annotations. Continue and refine the work without changing unmarked content; ask if unclear.");
+  assert.equal(translation(chinese,"canvasAgentPromptFollowCanvasCues"),"请把我刚在 Canvas 上新增的笔迹、手绘图形、图片、文本框和批注作为指示，按这些线索继续完善当前内容；不要改动未标注处，不清楚时先问我。");
   for(const item of items){assert.ok(item.icon);assert.ok(item.focus);}
   assert.doesNotMatch(runtime,/canvasAgentPrompt[A-Za-z]+Label/);
   assert.doesNotMatch(english,/canvasAgentPrompt[A-Za-z]+Label:/);
   assert.doesNotMatch(chinese,/canvasAgentPrompt[A-Za-z]+Label:/);
 });
 
-test("Canvas Agent refreshes prompt intent when attachments, references, projects, or canvas state change",()=>{
+test("PenEcho Agent refreshes prompt intent when attachments, references, projects, or canvas state change",()=>{
   assert.match(functionSource("canvasAgentRenderAttachments"),/canvasAgentSyncPromptSuggestions\(\)/);
   assert.match(functionSource("canvasAgentSyncSelection"),/canvasAgentSyncPromptSuggestions\(\)/);
   assert.match(functionSource("canvasAgentSelectProject"),/canvasAgentSyncPromptSuggestions\(\)/);

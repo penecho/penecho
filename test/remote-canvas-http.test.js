@@ -70,7 +70,7 @@ test("Remote Canvas allows only reviewed local routes and methods", () => {
   assert.throws(() => remoteCanvasTarget("GET", "https://example.com/api/canvases"), /invalid/);
 });
 
-test("Remote Canvas client pins bridged HTTP and Canvas Agent WebSocket traffic to the status device", () => {
+test("Remote Canvas client pins bridged HTTP and PenEcho Agent WebSocket traffic to the status device", () => {
   assert.match(remoteCanvasClientSource, /deviceIdPattern/);
   assert.match(remoteCanvasClientSource, /bridgeDeviceId\s*=\s*deviceIdPattern\.test/);
   assert.match(remoteCanvasClientSource, /path=\$\{encodeURIComponent[\s\S]*&deviceId=\$\{encodeURIComponent\(bridgeDeviceId\)/);

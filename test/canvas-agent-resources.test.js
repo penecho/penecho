@@ -69,7 +69,7 @@ function conversation(index) {
   };
 }
 
-test("Canvas Agent resource projections hide canonical folder and file paths until resolve", async t => {
+test("PenEcho Agent resource projections hide canonical folder and file paths until resolve", async t => {
   const { directory, store } = await fixture(t);
   const folder = path.join(directory, "private-parent", "selected-folder");
   const file = path.join(directory, "private-file-parent", "selected-notes.txt");

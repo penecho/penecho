@@ -80,7 +80,7 @@ async function pngFallback(image, policy) {
       height:info.height,
       hasAlpha:false,
     }
-    if (width === 1 && height === 1) throw new Error('Canvas Agent PNG fallback exceeds the model request image limit.')
+    if (width === 1 && height === 1) throw new Error('PenEcho Agent PNG fallback exceeds the model request image limit.')
     const scale=Math.min(.9,Math.sqrt(policy.maxBytes/data.length)*.95)
     const nextWidth=Math.max(1,Math.floor(width*scale)),nextHeight=Math.max(1,Math.floor(height*scale))
     width=nextWidth === width && width > 1 ? width-1 : nextWidth
@@ -92,7 +92,7 @@ function waitForShared(promise, signal) {
   signal?.throwIfAborted()
   if (!signal) return promise
   return new Promise((resolve,reject)=>{
-    const abort=()=>reject(signal.reason instanceof Error ? signal.reason : new Error('Canvas Agent image request was cancelled.'))
+    const abort=()=>reject(signal.reason instanceof Error ? signal.reason : new Error('PenEcho Agent image request was cancelled.'))
     signal.addEventListener('abort',abort,{once:true})
     promise.then(value=>{ signal.removeEventListener('abort',abort);resolve(value) },error=>{ signal.removeEventListener('abort',abort);reject(error) })
   })

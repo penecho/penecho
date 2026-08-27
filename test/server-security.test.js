@@ -2203,7 +2203,7 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
   assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
   assert.match(source, /Choose exactly one command path by the defining deliverable[\s\S]*never return speculative alternatives/);
-  assert.match(source, /does not expose the Canvas Agent Visual Explainer tool[\s\S]*General HTML as its explicit compatibility fallback/);
+  assert.match(source, /does not expose the PenEcho Agent Visual Explainer tool[\s\S]*General HTML as its explicit compatibility fallback/);
   assert.match(source, /custom behavior is primary[\s\S]*faithful quantitative chart with axes and scales[\s\S]*diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
   assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);

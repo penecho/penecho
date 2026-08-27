@@ -15,7 +15,7 @@ const waitFor = async (predicate, timeoutMs = 2000) => {
     if (predicate()) return;
     await new Promise(resolve => setTimeout(resolve, 10));
   }
-  assert.fail("Timed out waiting for Codex Native Canvas Agent test state.");
+  assert.fail("Timed out waiting for Codex Native PenEcho Agent test state.");
 };
 
 let rawResponseNumber=0;
@@ -250,7 +250,7 @@ test("Codex Native connects lazily, starts one strict app-server thread, and reu
   assert.equal(threadOptions.sandbox,"read-only");
   assert.deepEqual(threadOptions.runtimeWorkspaceRoots,[]);
   assert.equal(session.threadId,"thread-1");
-  assert.ok(threadOptions.baseInstructions.includes("PenEcho Canvas Agent"));
+  assert.ok(threadOptions.baseInstructions.includes("PenEcho Agent"));
   assert.equal(threadOptions.dynamicTools.length,1);
   assert.equal(threadOptions.dynamicTools[0].type,"namespace");
   assert.equal(threadOptions.dynamicTools[0].name,"penecho");
@@ -350,7 +350,7 @@ test("Codex Native request recording adapts native events and finalizes complete
   assert.equal(entries.length,2);
   assert.ok(completed);
   assert.ok(cancelledTrace);
-  assert.equal(completed.note,"Canvas Agent server trace; sessionId is a non-resumable debug correlation ID.");
+  assert.equal(completed.note,"PenEcho Agent server trace; sessionId is a non-resumable debug correlation ID.");
   assert.equal(completed.steps.length,1);
   assert.equal(completed.steps[0].response.rawContent,"native answer");
   assert.equal(completed.steps[0].response.usage.last.cachedInputTokens,7);
@@ -450,7 +450,7 @@ test("Codex Native steering without a bound active turn fails clearly", async t 
   const harness=await createNativeHarness();
   t.after(()=>harness.cleanup());
   const session=await harness.connect();
-  await assert.rejects(harness.host.submit(session,"invalid steer",true,[],{},null),/No active Codex Native Canvas Agent turn/);
+  await assert.rejects(harness.host.submit(session,"invalid steer",true,[],{},null),/No active Codex Native PenEcho Agent turn/);
   assert.equal(harness.processes[0].requests.filter(request=>request.method==="turn/steer").length,0);
 });
 
@@ -1278,7 +1278,7 @@ test("Codex Native thread closure invalidates the session thread", async t => {
   const submitted=harness.host.submit(session,"thread close turn",false,[],{},null);
   await waitFor(()=>session.active?.turnId==="thread-close-turn");
   process.emitNotification("thread/closed",{threadId:process.threadId});
-  await assert.rejects(submitted,/closed the Canvas Agent thread/);
+  await assert.rejects(submitted,/closed the PenEcho Agent thread/);
   await waitFor(()=>process.closedCount>0);
   assert.equal(harness.host.sessions.size,0);
 });
@@ -1660,7 +1660,7 @@ test("Codex Native changes the next-turn model without replacing its thread or b
   assert.equal(turn.params.effort,"high");
 });
 
-test("Canvas Agent router fixes the session owner and switches providers atomically", async () => {
+test("PenEcho Agent router fixes the session owner and switches providers atomically", async () => {
   const { CanvasAgentHostRouter } = await import("../src/server/canvas-agent/host-router.mjs");
   const events=[],readyEngines=[];let nativeSessionId=0,harnessSessionId=0,harnessCount=0,nativeCount=0;
   const makeOwner=(engine,countRef)=>({
@@ -1714,7 +1714,7 @@ test("Canvas Agent router fixes the session owner and switches providers atomica
   assert.throws(() => router.submit(codexAgain), /owner is invalid/);
 });
 
-test("Canvas Agent router turns saved chat into bounded role-preserving continuation", async t => {
+test("PenEcho Agent router turns saved chat into bounded role-preserving continuation", async t => {
   const { CanvasAgentHostRouter }=await import("../src/server/canvas-agent/host-router.mjs");
   let connectedRequest;
   const owner={
@@ -1740,14 +1740,14 @@ test("Canvas Agent router turns saved chat into bounded role-preserving continua
   assert.equal(connectedRequest.continuity.match(/<\/penecho_previous_conversation>/g)?.length,1);
 });
 
-test("Codex Canvas Agent routing does not initialize the DeepSeek Harness runtime", async () => {
+test("Codex PenEcho Agent routing does not initialize the DeepSeek Harness runtime", async () => {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(), "penecho-codex-router-test-"));
   fs.rmSync(directory, { recursive:true, force:true });
   const { CanvasAgentHostRouter }=await import("../src/server/canvas-agent/host-router.mjs");
   let harnessFactoryCalls=0;
   const router=new CanvasAgentHostRouter({
     resolveConnection:id=>id==="codex-only"?{id,provider:"codex-cli"}:null,
-    harnessFactory:()=>{harnessFactoryCalls++;throw new Error("Harness must not be constructed for Codex Native Canvas Agent.")},
+    harnessFactory:()=>{harnessFactoryCalls++;throw new Error("Harness must not be constructed for Codex Native PenEcho Agent.")},
     nativeFactory:()=>({
       async connect(request){return{id:"codex-native-only",connectionId:request.connectionId}},
       disposeSession(){},activeProjectIds:()=>[],async dispose(){},

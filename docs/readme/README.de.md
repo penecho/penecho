@@ -73,7 +73,7 @@ npm start
 
 Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Stelle der Leinwand und halte kurz inne. PenEcho erkennt die Striche und ihre räumlichen Beziehungen und platziert die Antwort daneben.
 
-- **Canvas Agent: vom Ausgangsmaterial zum visuellen Ergebnis.** Füge schreibgeschützte Ordner und Dateien wie PDF, Word, PowerPoint, Excel, Bilder oder Code hinzu, verbinde sie mit Webrecherche und der aktuellen Leinwand und lasse denselben Agenten Analyse, Planung, Erstellung und Überarbeitung fortführen.
+- **PenEcho Agent: vom Ausgangsmaterial zum visuellen Ergebnis.** Füge schreibgeschützte Ordner und Dateien wie PDF, Word, PowerPoint, Excel, Bilder oder Code hinzu, verbinde sie mit Webrecherche und der aktuellen Leinwand und lasse denselben Agenten Analyse, Planung, Erstellung und Überarbeitung fortführen.
 - **Mehr Produktivität mit Visual Explorer.** Verdichte komplexe Informationen zu einem responsiven, editierbaren visuellen Arbeitsbereich mit Überblick, verknüpften Details und Belegen. Das verkürzt den Weg von der Recherche zum teilbaren Ergebnis und reduziert Kopieren, Werkzeugwechsel, manuelles Diagrammzeichnen und Nacharbeit.
 - Zeichne natürlich mit Stift oder Maus und navigiere auf einer `20.000 x 20.000` großen Leinwand.
 - Erhalte Antworten, Hinweise, Erklärungen, Formeln, Funktionsgraphen und Diagramme direkt auf der Leinwand.
@@ -92,7 +92,7 @@ In **Echoes** kannst du öffentliche Leinwände und Widgets in zwölf Kategorien
 
 ## Neu in Version 1.1.0
 
-- **Canvas Agent.** Bearbeite lokale Dateien, schreibgeschützte Ordnerprojekte, Webrecherche, Leinwandkontext, visuelle Erstellung und direkte Änderungen in einem durchgängigen, mehrstufigen Ablauf.
+- **PenEcho Agent.** Bearbeite lokale Dateien, schreibgeschützte Ordnerprojekte, Webrecherche, Leinwandkontext, visuelle Erstellung und direkte Änderungen in einem durchgängigen, mehrstufigen Ablauf.
 - **Visual Explorer.** Verwandle Recherche, Dokumente, Notizen und Pläne in ein responsives visuelles Ergebnis, das vom Überblick zu Details und Belegen führt.
 - **Weniger Wechsel und Nacharbeit.** Recherchieren, analysieren, strukturieren, visualisieren, prüfen und überarbeiten geschieht im selben Arbeitsbereich; das Ergebnis bleibt direkt auf der Leinwand editierbar.
 - **Progressive visuelle Lieferung.** Vollständige Visual-Explorer-Versionen erscheinen früh und können an Ort und Stelle weiter verfeinert werden, statt jedes Mal neu erzeugt zu werden.

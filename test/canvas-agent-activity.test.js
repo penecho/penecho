@@ -11,7 +11,7 @@ const activity = require("../public/canvas-agent-activity.js");
 const ROOT = path.resolve(__dirname,"..");
 const read = file => fs.readFileSync(path.join(ROOT,file),"utf8");
 
-test("Canvas Agent activity derives bounded public labels without exposing paths",()=>{
+test("PenEcho Agent activity derives bounded public labels without exposing paths",()=>{
   assert.equal(activity.activityPhaseFromIntent("Inspect canvas"),"inspect");
   assert.equal(activity.activityPhaseFromIntent("搜索互联网"),"search");
   assert.equal(activity.activityPhaseFromIntent("Update widget · private summary"),"edit");
@@ -31,7 +31,7 @@ test("Canvas Agent activity derives bounded public labels without exposing paths
   assert.ok(`Progress: ${activity.extractActivityCue(`Progress: ${"long ".repeat(30)}`)}`.length<=48);
 });
 
-test("Canvas Agent activity keeps cancellation visible until the authoritative stop",()=>{
+test("PenEcho Agent activity keeps cancellation visible until the authoritative stop",()=>{
   assert.equal(activity.activityShouldBeVisible("ready",true,true),true,"a submitted request is visible before turn_start");
   assert.equal(activity.activityShouldBeVisible("running",true),true);
   assert.equal(activity.activityShouldBeVisible("error",false),true,"an active Stop control means the turn has not ended");
@@ -42,7 +42,7 @@ test("Canvas Agent activity keeps cancellation visible until the authoritative s
   assert.equal(activity.activityPresentationVisible(true,false,false),false,"canvas focus suppresses the user-only overlay");
 });
 
-test("Canvas Agent activity appears on submit and fades only after the running state ends",async()=>{
+test("PenEcho Agent activity appears on submit and fades only after the running state ends",async()=>{
   const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
   const form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop"),panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),viewport=document.querySelector("#viewport"),picker=document.querySelector("#canvasAgentWidgetPickerLayer");
   form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});
@@ -99,7 +99,7 @@ test("Canvas Agent activity appears on submit and fades only after the running s
   assert.equal(root.parentElement,viewport);
 });
 
-test("Canvas Agent dialog adds one bounded local explanation per observable tool phase",async()=>{
+test("PenEcho Agent dialog adds one bounded local explanation per observable tool phase",async()=>{
   const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
   const panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop");
   form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});
@@ -142,7 +142,7 @@ test("Canvas Agent dialog adds one bounded local explanation per observable tool
   assert.equal(transcript.querySelectorAll(".canvas-agent-dialog-progress").length,4,"history-view tool rows never pollute the live activity timeline");
 });
 
-test("Canvas Agent dialog reuses a fresh public Progress cue instead of duplicating it",async()=>{
+test("PenEcho Agent dialog reuses a fresh public Progress cue instead of duplicating it",async()=>{
   const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
   const panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop");
   form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});window.PENECHO_CONFIG={};
@@ -186,7 +186,7 @@ test("Canvas Agent dialog reuses a fresh public Progress cue instead of duplicat
   assert.equal(oldCue.classList.contains("canvas-agent-public-progress"),false);
 });
 
-test("Canvas Agent activity chooses free Canvas space and compacts around a large panel",()=>{
+test("PenEcho Agent activity chooses free Canvas space and compacts around a large panel",()=>{
   const desktop=activity.activityPosition({left:0,top:0,width:1200,height:800},{left:900,top:160,right:1180,bottom:780},true);
   assert.equal(desktop.compact,false);
   assert.ok(desktop.x<700,"desktop activity should sit left of the Agent panel");
@@ -204,7 +204,7 @@ test("Canvas Agent activity chooses free Canvas space and compacts around a larg
   }
 });
 
-test("Canvas Agent activity is a removable user-only sibling outside capture and object state",()=>{
+test("PenEcho Agent activity is a removable user-only sibling outside capture and object state",()=>{
   const html=read("public/index.html"),css=read("public/canvas-agent-activity.css"),source=read("public/canvas-agent-activity.js"),runtime=read("src/client/app/canvas-agent-runtime.js"),serverRuntime=read("src/server/canvas-agent/runtime.mjs"),pkg=require("../package.json");
   assert.match(html,/<link rel="stylesheet" href="canvas-agent-activity\.css">/);
   assert.match(html,/<script src="app\.js"><\/script>[\s\S]*?<script src="canvas-agent-activity\.js"><\/script>/);

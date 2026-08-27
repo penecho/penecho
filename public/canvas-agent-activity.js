@@ -1,6 +1,6 @@
 "use strict";
 
-// User-only Canvas Agent activity. This module deliberately observes the public
+// User-only PenEcho Agent activity. This module deliberately observes the public
 // UI projection instead of joining Canvas state, capture, persistence, or tools.
 // It performs no network/model request and keeps all text work locally bounded.
 // Removal seam: delete this file, its CSS/index/package references, the isolated
@@ -20,7 +20,7 @@
   ];
   const COPY = {
     en:{
-      live:"Canvas Agent · live", started:"Task started", completed:"Completed", needsRetry:"Needs another try",
+      live:"PenEcho Agent · live", started:"Task started", completed:"Completed", needsRetry:"Needs another try",
       start:["Understanding your request","Following verified Canvas activity"],
       work:["Working across the canvas","Following visible actions without exposing private reasoning"],
       inspect:["Inspecting the canvas","Checking structure, selection, and object layout"],
@@ -45,7 +45,7 @@
       },
     },
     zh:{
-      live:"Canvas Agent · 实时", started:"任务已开始", completed:"已完成", needsRetry:"需要重试",
+      live:"PenEcho Agent · 实时", started:"任务已开始", completed:"已完成", needsRetry:"需要重试",
       start:["正在理解你的要求","只展示可验证的 Canvas 活动"],
       work:["正在处理画布任务","跟随可见动作，不展示内部推理"],
       inspect:["正在检查画布","确认结构、选择与对象布局"],

@@ -4,7 +4,7 @@ Visual Explainer creates one responsive Canvas Widget when a user will understan
 
 ## Capability routing
 
-Canvas Agent chooses exactly one primary Widget path before authoring. It does not create candidates in several paths and compare them. An explicit feasible request for Visual Explainer, HTML, or a named professional source format takes priority; otherwise the defining requirement determines the path.
+PenEcho Agent chooses exactly one primary Widget path before authoring. It does not create candidates in several paths and compare them. An explicit feasible request for Visual Explainer, HTML, or a named professional source format takes priority; otherwise the defining requirement determines the path.
 
 | Primary path | Use when | Do not use merely because | Examples |
 | --- | --- | --- | --- |
@@ -27,13 +27,13 @@ The model supplies the single current `VisualExplainerPlan` as a JSON object, no
 - optional isolated `embedded-html` artifacts when semantic renderers are insufficient;
 - explicit typography and theme settings.
 
-Semantic regions cannot contain CSS, SVG, JavaScript, AntV syntax, or template names. Custom source is permitted only inside an `embedded-html` artifact. PenEcho validates string lengths, collection limits, unique identifiers, layout bounds, parent references, ports, relations, artifacts, and a maximum of 64 total semantic items at both the Canvas Agent boundary and the browser boundary.
+Semantic regions cannot contain CSS, SVG, JavaScript, AntV syntax, or template names. Custom source is permitted only inside an `embedded-html` artifact. PenEcho validates string lengths, collection limits, unique identifiers, layout bounds, parent references, ports, relations, artifacts, and a maximum of 64 total semantic items at both the PenEcho Agent boundary and the browser boundary.
 
 ## Spatial planning and evidence
 
 Spatial Widget work uses separate evidence for composition and readability:
 
-- On a nonempty Canvas, Canvas Agent inspects exact object bounds and captures the complete content bounds before it creates, moves, resizes, deletes, or arranges a Widget.
+- On a nonempty Canvas, PenEcho Agent inspects exact object bounds and captures the complete content bounds before it creates, moves, resizes, deletes, or arranges a Widget.
 - `canvas_inspect.plannedWidget` accepts the intended width, height, source typography, and placement preference. It returns a collision-aware box, a pinned `createPlacement`, whether the box lies outside the current viewport, the unobscured screen stage beside the Agent panel, the focused scale, predicted screen typography, nearby objects, and a suggested region capture.
 - Auto placement searches the current viewport first. If no clear slot fits, it uses the nearest clear location elsewhere inside the 20000×20000 logical Canvas; the created Widget is then automatically framed for the user.
 - A complete-Canvas layout capture uses automatic bounded compression: a 1024px long edge, at most 520,000 pixels, initial WebP quality 0.72, and at most 700 KiB. Detail evidence is limited to a 1440px long edge, 1,800,000 pixels, and 1200 KiB. Encoding keeps reducing the raster until the byte cap is met or rejects the capture; the server independently verifies encoded bytes and decoded dimensions before exposing it to the model.
@@ -44,7 +44,7 @@ Meaningful body copy targets about 15 screen pixels in a focused view. Body copy
 
 ## Rendering pipeline
 
-1. Canvas Agent selects Visual Explainer when a rich visual composition materially improves comprehension.
+1. PenEcho Agent selects Visual Explainer when a rich visual composition materially improves comprehension.
 2. `canvas_create_visual_explainer` validates the semantic plan.
 3. PenEcho creates one General HTML Widget and stores the normalized plan as copyable JSON.
 4. The local renderer resolves exact presentation forms. AntV Infographic 0.2.20 renders sequence, hierarchy, and directional relationship regions; deterministic native components render schedules, tables, routes, matrices, notes, metrics, and fallback cards. Embedded HTML artifacts run in isolated nested frames.

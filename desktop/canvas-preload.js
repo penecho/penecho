@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
   pickProjectFile:() => ipcRenderer.invoke("penecho:pick-project-file"),
   hasClipboardFile:() => ipcRenderer.sendSync("penecho:has-clipboard-file"),
   readClipboardFile:() => ipcRenderer.invoke("penecho:read-clipboard-file"),
+  readClipboardFiles:() => ipcRenderer.invoke("penecho:read-clipboard-files"),
   openProjectFile:projectId => ipcRenderer.invoke("penecho:open-project-file", projectId),
 }));
 

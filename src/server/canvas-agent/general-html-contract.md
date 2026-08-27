@@ -1,4 +1,4 @@
-# Canvas Agent General HTML
+# PenEcho Agent General HTML
 
 This contract is for ordinary General HTML only. Use it when the user explicitly asks for ordinary HTML or when custom browser behavior is the defining result: interaction that changes data or views, animation, simulation, a live display, a small browser-native tool, a freeform overlay, or a custom illustration. Do not use this route for a new Visual Explorer; that always-on contract has its own source markers and review workflow.
 

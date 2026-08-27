@@ -9,21 +9,27 @@ import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import PenEchoAttachmentStore from './image-attachments.mjs'
 import { DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS, canvasAgentTimeoutSeconds, createCanvasAgentModelTimeout } from './model-timeout.mjs'
 import {
+  CANVAS_AGENT_MAX_TURN_ATTACHMENTS,
   acquireProjectRoot,
   admitInitialCanvasState,
   boundedText,
   canvasAgentHandwritingAdmissionDiagnostic,
+  clearCanvasAgentTurnFiles,
   conversationLogEvent,
   createCanvasAgentNativeRuntime,
   createProjectRuntimeDirectory,
   createSelectedFileSnapshot,
+  discardCanvasAgentTurnFiles,
   freshCanvasAgentTurnBudget,
   freshVisualExplainerBudget,
   freshVisualExplorerBudget,
+  isCanvasAgentHandwritingImageName,
   loadCanvasAgentContract,
   loadCanvasAgentVisualExplorerContract,
   loadCanvasAgentVisualSkills,
   normalizeResolvedWidgetCapabilities,
+  normalizeCanvasAgentTurnFileIds,
+  prepareCanvasAgentTurnFiles,
   projectSessionCapabilities,
   publicSessionProject,
   publicWidgetCapabilities,
@@ -105,7 +111,7 @@ function configured(value) {
   return text && text !== 'config' && text !== 'default' ? text : null
 }
 
-function safeError(error, fallback = 'Codex Native Canvas Agent failed.') {
+function safeError(error, fallback = 'Codex Native PenEcho Agent failed.') {
   return String(error?.message || error || fallback)
     .replace(/\/(?:[\w.-]+\/)+[\w.-]+/g, '<path>')
     .replace(/\b[A-Za-z]:\\(?:[^\\\s]+\\)+[^\\\s]+/g, '<path>')
@@ -293,7 +299,7 @@ export class CodexNativeAppServerProcess {
     })
 
       await this.request('initialize', {
-        clientInfo:{ name:'penecho-canvas-agent', title:'PenEcho Canvas Agent', version:'1' },
+        clientInfo:{ name:'penecho-canvas-agent', title:'PenEcho Agent', version:'1' },
         capabilities:{ experimentalApi:true },
       }, DEFAULT_REQUEST_TIMEOUT_MS)
       this.notify('initialized', {})
@@ -498,7 +504,7 @@ export class CodexNativeHost {
     this.conversationLogger = typeof conversationLogger === 'function' ? conversationLogger : null
     this.conversationTrace = typeof conversationTrace === 'function' ? conversationTrace : null
     this.env = env
-    if (typeof publicFetch !== 'function') throw new Error('Codex Native Canvas Agent public fetch is invalid.')
+    if (typeof publicFetch !== 'function') throw new Error('Codex Native PenEcho Agent public fetch is invalid.')
     this.publicFetch = publicFetch
     this.createAppServer = createAppServer || (options => new CodexNativeAppServerProcess(options))
     this.sessionTtlMs = Math.max(1_000, Number(sessionTtlMs) || SESSION_TTL_MS)
@@ -518,15 +524,15 @@ export class CodexNativeHost {
       widgetCapabilities = {}, projectId = '', accessMode = 'controlled', binding = null, send = null, initialBacklog = [], continuity = '',
     } = options || {}
     if (String(canvasSessionId).length > 256 || String(resumeToken).length > 256 || String(clientId).length > 256 || String(connectionId).length > 256 || String(projectId).length > 128) {
-      throw new Error('Canvas Agent connection identity is invalid.')
+      throw new Error('PenEcho Agent connection identity is invalid.')
     }
     const normalizedProjectId = String(projectId || ''), normalizedAccessMode = String(accessMode || 'controlled')
-    if (!['controlled', 'full'].includes(normalizedAccessMode)) throw new Error('Canvas Agent project access mode is invalid.')
+    if (!['controlled', 'full'].includes(normalizedAccessMode)) throw new Error('PenEcho Agent project access mode is invalid.')
     const project = normalizedProjectId ? await this.resolveProject(normalizedProjectId) : null
     if (normalizedProjectId && !project) throw new Error('The selected local project was not found on this PenEcho host.')
     const connection = this.resolveConnection(connectionId)
     if (!connection) throw new Error('The selected AI connection was not found.')
-    if (connection.provider !== 'codex-cli') throw new Error('Codex Native Canvas Agent requires a Codex CLI connection.')
+    if (connection.provider !== 'codex-cli') throw new Error('Codex Native PenEcho Agent requires a Codex CLI connection.')
     const fingerprint = codexConnectionFingerprint(connection)
     const resolvedWebSearch = this.resolveWebSearch?.() || {}
     const requestedDeepSeekSearchProvider=String(resolvedWebSearch.deepseekProvider||''), deepseekSearchProvider=['deepseek-official','opencode-go'].includes(requestedDeepSeekSearchProvider)?requestedDeepSeekSearchProvider:'deepseek-official', deepseekSearchApiKey=String(resolvedWebSearch.deepseekApiKey||''), tavilySearchApiKey=String(resolvedWebSearch.tavilyApiKey??resolvedWebSearch.apiKey??'')
@@ -600,6 +606,7 @@ export class CodexNativeHost {
       decisionFeedbackCallIds:new Set(),
       turnQueue:Promise.resolve(),
       attachmentRefs:new Map(),
+      turnFiles:[],
       captureCache:new Map(),
       activeCaptureAttachmentId:null,
       canvasLayoutOverviewRevision:null,
@@ -691,13 +698,13 @@ export class CodexNativeHost {
   }
 
   async ensureStarted(session) {
-    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     const connection = this.resolveConnection(session.connectionId)
-    if (!connection) throw new Error('The Codex Native Canvas Agent connection is unavailable.')
+    if (!connection) throw new Error('The Codex Native PenEcho Agent connection is unavailable.')
     if (codexConnectionFingerprint(connection) !== session.connectionFingerprint) {
-      throw new Error('The Codex Native Canvas Agent connection changed. Start a new conversation before submitting this turn.')
+      throw new Error('The Codex Native PenEcho Agent connection changed. Start a new conversation before submitting this turn.')
     }
-    if (connection.provider !== 'codex-cli') throw new Error('The Codex Native Canvas Agent connection is unavailable.')
+    if (connection.provider !== 'codex-cli') throw new Error('The Codex Native PenEcho Agent connection is unavailable.')
     if (session.process?.alive && session.threadId) return
     if (session.startPromise) return session.startPromise
     const lifecycle = session.lifecycle
@@ -720,7 +727,7 @@ export class CodexNativeHost {
         })
         if (session.disposed || session.lifecycle !== lifecycle) {
           await process.close().catch(() => {})
-          throw new Error('Codex Native Canvas Agent session was closed during startup.')
+          throw new Error('Codex Native PenEcho Agent session was closed during startup.')
         }
         session.threadId = threadId
         return threadId
@@ -752,7 +759,10 @@ export class CodexNativeHost {
   }
 
   activeProjectIds() {
-    return [...new Set([...this.sessions.values()].map(session => String(session.project?.id || '')).filter(Boolean))]
+    return [...new Set([...this.sessions.values()].flatMap(session=>[
+      String(session.project?.id || ''),
+      ...(Array.isArray(session.turnFiles) ? session.turnFiles.map(file=>String(file?.id || '')) : []),
+    ]).filter(Boolean))]
   }
 
   updateState(session, digest) {
@@ -761,10 +771,10 @@ export class CodexNativeHost {
   }
 
   async setConnection(session, { connectionId, binding = session?.binding, send = session?.send } = {}) {
-    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
-    if (session.active || session.interruptPromise) throw new Error('Wait for the current Canvas Agent turn to finish before changing models.')
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
+    if (session.active || session.interruptPromise) throw new Error('Wait for the current PenEcho Agent turn to finish before changing models.')
     const connection = this.resolveConnection(String(connectionId || ''))
-    if (!connection || connection.provider !== 'codex-cli') throw new Error('The selected AI connection cannot use Codex Native Canvas Agent.')
+    if (!connection || connection.provider !== 'codex-cli') throw new Error('The selected AI connection cannot use Codex Native PenEcho Agent.')
     session.connectionId=String(connection.id || connectionId)
     session.connectionFingerprint=codexConnectionFingerprint(connection)
     session.connection=connection
@@ -793,12 +803,12 @@ export class CodexNativeHost {
   }
 
   setWebSearchEnabled(session, enabled) {
-    if (Boolean(enabled) !== session.webSearch.enabled) throw new Error('Internet Search changed. Start a new Canvas Agent conversation before submitting this turn.')
+    if (Boolean(enabled) !== session.webSearch.enabled) throw new Error('Internet Search changed. Start a new PenEcho Agent conversation before submitting this turn.')
     return session.webSearch.enabled
   }
 
   async admitUserImages(session, images) {
-    if (!Array.isArray(images) || images.length > 5) throw new Error('Canvas Agent accepts at most five images per message.')
+    if (!Array.isArray(images) || images.length > 5) throw new Error('PenEcho Agent accepts at most five images per message.')
     const imageAttachments = images.length ? await admitEncodedImages(this.attachments, images) : []
     if (this.conversationTrace) images.forEach((image,index)=>{
       const diagnostic=canvasAgentHandwritingAdmissionDiagnostic(image,imageAttachments[index])
@@ -807,7 +817,7 @@ export class CodexNativeHost {
     const nextAttachmentRefs = new Map(session.attachmentRefs)
     for (const attachment of imageAttachments) nextAttachmentRefs.set(String(attachment.attachmentId), attachment)
     const attachmentBytes = [...nextAttachmentRefs.values()].reduce((total, attachment) => total + Number(attachment.bytes || 0), 0)
-    if (nextAttachmentRefs.size > 100 || attachmentBytes > 100 * 1024 * 1024) throw new Error('Canvas Agent attachment capacity is exhausted. Start a new conversation before attaching more images.')
+    if (nextAttachmentRefs.size > 100 || attachmentBytes > 100 * 1024 * 1024) throw new Error('PenEcho Agent attachment capacity is exhausted. Start a new conversation before attaching more images.')
     for (const attachment of imageAttachments) session.attachmentRefs.set(String(attachment.attachmentId), attachment)
     return imageAttachments
   }
@@ -855,25 +865,36 @@ export class CodexNativeHost {
     ]))
   }
 
-  async submit(session, text, steer = false, images = [], references = {}, initialState = null) {
-    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+  async submit(session, text, steer = false, images = [], references = {}, initialState = null, fileIds = []) {
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     if (session.interruptPromise) await session.interruptPromise
-    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     const prompt = boundedText(text, 40_000).trim()
-    if (!prompt) throw new Error('Enter a message for Canvas Agent.')
-    if (steer) return this.runSteer(session, prompt, images, references, initialState)
-    const operation = session.turnQueue.then(() => this.runSubmit(session, text, steer, images, references, initialState))
+    if (!prompt) throw new Error('Enter a message for PenEcho Agent.')
+    const normalizedFileIds=normalizeCanvasAgentTurnFileIds(fileIds,Array.isArray(images)?images.length:0)
+    if (steer) return this.runSteer(session, prompt, images, references, initialState, normalizedFileIds)
+    const operation = session.turnQueue.then(() => this.runSubmit(session, text, steer, images, references, initialState, normalizedFileIds))
     session.turnQueue = operation.catch(() => {})
     return operation
   }
 
-  async runSteer(session, prompt, images = [], references = {}, initialState = null) {
+  async runSteer(session, prompt, images = [], references = {}, initialState = null, fileIds = []) {
     const active = session.active
-    if (!active || !active.turnId) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
-    if (!session.process?.alive || !session.threadId) throw new Error('Codex Native Canvas Agent thread is unavailable.')
+    if (!active || !active.turnId) throw new Error('No active Codex Native PenEcho Agent turn is available to steer.')
+    if (!session.process?.alive || !session.threadId) throw new Error('Codex Native PenEcho Agent thread is unavailable.')
     const imageAttachments = await this.admitUserImages(session, images)
     const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
-    if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
+    const preparedTurnFiles=await prepareCanvasAgentTurnFiles(session,this.resolveProject,fileIds,images.length), previousTurnFiles=Array.isArray(session.turnFiles)?session.turnFiles:[],
+      addedTurnFiles=preparedTurnFiles.filter(file=>!previousTurnFiles.some(previous=>previous.id===file.id)), duplicateTurnFiles=preparedTurnFiles.filter(file=>previousTurnFiles.some(previous=>previous.id===file.id)),
+      nextTurnFiles=[...previousTurnFiles,...addedTurnFiles]
+    await discardCanvasAgentTurnFiles(duplicateTurnFiles)
+    if(nextTurnFiles.length+images.length>CANVAS_AGENT_MAX_TURN_ATTACHMENTS){await discardCanvasAgentTurnFiles(addedTurnFiles);throw new Error('PenEcho Agent accepts at most five files and images per active turn.')}
+    session.turnFiles=nextTurnFiles
+    if (session.active !== active || active.inputController.signal.aborted) {
+      session.turnFiles=previousTurnFiles
+      await discardCanvasAgentTurnFiles(addedTurnFiles)
+      throw new Error('No active Codex Native PenEcho Agent turn is available to steer.')
+    }
     const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
     const previousCanvasTurnBudget = session.canvasTurnBudget, previousVisualExplainerBudget = session.visualExplainerBudget, previousVisualExplorerBudget = session.visualExplorerBudget,
       previousWidgetPatchAttempts = session.widgetPatchAttempts, previousTurnReferences = session.turnReferences
@@ -887,7 +908,7 @@ export class CodexNativeHost {
       const input = await this.modelInput(session, prompt, hostReferences, [
         ...(initialCanvasState?.attachment ? [initialCanvasState.attachment] : []), ...imageAttachments,
       ], active.inputController.signal)
-      if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native Canvas Agent turn is available to steer.')
+      if (session.active !== active || active.inputController.signal.aborted) throw new Error('No active Codex Native PenEcho Agent turn is available to steer.')
       this.emitPublicEvent(session, { kind:'user_message', turn:session.turnNumber, text:redactPublicProjectValue(prompt, session) })
       await session.process.request('turn/steer', {
         threadId:session.threadId,
@@ -897,6 +918,8 @@ export class CodexNativeHost {
       })
       return { output:'', usage:active.usage, steered:true }
     } catch (error) {
+      session.turnFiles=previousTurnFiles
+      await discardCanvasAgentTurnFiles(addedTurnFiles)
       session.turnReferences = previousTurnReferences
       session.canvasTurnBudget = previousCanvasTurnBudget
       session.visualExplainerBudget = previousVisualExplainerBudget
@@ -906,11 +929,11 @@ export class CodexNativeHost {
     }
   }
 
-  async runSubmit(session, text, steer = false, images = [], references = {}, initialState = null) {
-    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+  async runSubmit(session, text, steer = false, images = [], references = {}, initialState = null, fileIds = []) {
+    if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     const prompt = boundedText(text, 40_000).trim()
-    if (!prompt) throw new Error('Enter a message for Canvas Agent.')
-    if (session.active) throw new Error('A Codex Native Canvas Agent turn is already active.')
+    if (!prompt) throw new Error('Enter a message for PenEcho Agent.')
+    if (session.active) throw new Error('A Codex Native PenEcho Agent turn is already active.')
     const inputController = new AbortController()
     let active
     const turnPromise = new Promise((resolve, reject) => {
@@ -922,7 +945,7 @@ export class CodexNativeHost {
           if (active.settled) return
           active.settled = true
           active.timeout?.clear()
-          this.rejectNativeToolAdmission(active, error || new Error('Codex Native Canvas Agent turn ended during tool admission.'))
+          this.rejectNativeToolAdmission(active, error || new Error('Codex Native PenEcho Agent turn ended during tool admission.'))
           if (session.active === active) session.active = null
           const event = error
             ? { kind:'turn_end', turn:session.turnNumber, reason:{ kind:reason, error:{ code:'CODEX_NATIVE_FAILED', message:safeError(error) } } }
@@ -951,36 +974,41 @@ export class CodexNativeHost {
       Math.max(1_000, Number(this.modelTimeoutMs?.(session.connectionId)) || DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS),
       {
         reasonFor:(kind, limitMs) => Object.assign(new Error(kind === 'idle'
-          ? `Codex CLI Canvas Agent turn timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without activity.`
-          : `Codex CLI Canvas Agent turn timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
+          ? `Codex CLI PenEcho Agent turn timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without activity.`
+          : `Codex CLI PenEcho Agent turn timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
       },
     )
     timeoutController.signal.addEventListener('abort', () => {
       const error = timeoutController.signal.reason instanceof Error
         ? timeoutController.signal.reason
-        : new Error('Codex CLI Canvas Agent turn timed out.')
+        : new Error('Codex CLI PenEcho Agent turn timed out.')
       this.failTurn(session, error, { close:true }).catch(() => {})
     }, { once:true })
     this.emitPublicEvent(session, { kind:'user_message', turn:session.turnNumber, text:redactPublicProjectValue(prompt, session) })
     this.emitPublicEvent(session, { kind:'turn_start', turn:session.turnNumber })
     this.send(session, 'agent_status', { status:'running' })
 
-    let previousCanvasTurnBudget, previousVisualExplainerBudget, previousVisualExplorerBudget, previousWidgetPatchAttempts, budgetsChanged = false
+    let previousCanvasTurnBudget, previousVisualExplainerBudget, previousVisualExplorerBudget, previousWidgetPatchAttempts, budgetsChanged = false, pendingTurnFiles=[]
     const assertActive = () => {
       if (session.disposed || session.active !== active || inputController.signal.aborted) {
         throw inputController.signal.reason instanceof Error
           ? inputController.signal.reason
-          : new Error('Codex Native Canvas Agent turn is no longer active.')
+          : new Error('Codex Native PenEcho Agent turn is no longer active.')
       }
     }
     try {
       await this.ensureStarted(session)
       assertActive()
-      if (!session.process?.alive || !session.threadId) throw new Error('Codex Native Canvas Agent thread is unavailable.')
+      if (!session.process?.alive || !session.threadId) throw new Error('Codex Native PenEcho Agent thread is unavailable.')
       const imageAttachments = await this.admitUserImages(session, images)
       assertActive()
       const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)
       assertActive()
+      pendingTurnFiles=await prepareCanvasAgentTurnFiles(session,this.resolveProject,fileIds,images.length)
+      assertActive()
+      await clearCanvasAgentTurnFiles(session)
+      session.turnFiles=pendingTurnFiles
+      pendingTurnFiles=[]
       const hostReferences = this.hostReferencesFor(session, imageAttachments, references, initialCanvasState)
       session.turnReferences = hostReferences
       previousCanvasTurnBudget = session.canvasTurnBudget
@@ -1012,6 +1040,8 @@ export class CodexNativeHost {
       session.continuity=''
     } catch (error) {
       inputController.abort(error)
+      await discardCanvasAgentTurnFiles(pendingTurnFiles)
+      await clearCanvasAgentTurnFiles(session)
       if (active.settled) return turnPromise
       if (budgetsChanged) {
         session.canvasTurnBudget = previousCanvasTurnBudget
@@ -1027,6 +1057,7 @@ export class CodexNativeHost {
       return await turnPromise
     } finally {
       session.turnReferences = null
+      await clearCanvasAgentTurnFiles(session)
       if (!session.disposed) this.send(session, 'agent_status', { status:'idle' })
     }
   }
@@ -1048,7 +1079,7 @@ export class CodexNativeHost {
   async cancel(session) {
     const active = session?.active
     if (!active) return
-    const error = new Error('Codex Native Canvas Agent turn cancelled.')
+    const error = new Error('Codex Native PenEcho Agent turn cancelled.')
     if (!active.turnId) {
       await this.invalidateSession(session, error)
       return
@@ -1083,7 +1114,7 @@ export class CodexNativeHost {
   concludeNativeTurnAfterTool(session, active, value) {
     setImmediate(() => {
       if (session.disposed || session.active !== active || active.settled || !active.turnId) return
-      const message=boundedText(String(value?.message||'Canvas Agent stopped the current turn.'),2_000), turnId=active.turnId
+      const message=boundedText(String(value?.message||'PenEcho Agent stopped the current turn.'),2_000), turnId=active.turnId
       this.emitPublicEvent(session,{kind:'assistant_message',turn:session.turnNumber,text:redactPublicProjectValue(message,session)})
       const interruptPromise=session.process?.alive
         ? session.process.interrupt(session.threadId,turnId)
@@ -1211,7 +1242,7 @@ export class CodexNativeHost {
       return
     }
     if (method === 'thread/closed') {
-      this.invalidateSession(session, new Error('Codex app-server closed the Canvas Agent thread.')).catch(() => {})
+      this.invalidateSession(session, new Error('Codex app-server closed the PenEcho Agent thread.')).catch(() => {})
       return
     }
     if (method === 'thread/tokenUsage/updated') {
@@ -1358,7 +1389,7 @@ export class CodexNativeHost {
 
   async admitNativeToolRequest(session, request, batch, underlyingCall = null) {
     const {active}=request,callId=String(request.params?.callId||'')
-    if(session.disposed||session.active!==active||active.settled)throw new Error('Codex Native Canvas Agent turn changed during tool admission.')
+    if(session.disposed||session.active!==active||active.settled)throw new Error('Codex Native PenEcho Agent turn changed during tool admission.')
     const matched=underlyingCall||this.nativeToolMatch(batch,request),rawCall=matched?.rawCall
     if(batch.turnId!==request.turnId||!rawCall){
       const message='Codex dynamic tool call does not match its raw model response boundary.'
@@ -1377,7 +1408,7 @@ export class CodexNativeHost {
     rawCall.admitted=true
     if(batch.count>1){
       if(callId&&callId.length<=256)active.callIds.add(callId)
-      const message=`Canvas Agent decision rejected: this model step returned ${batch.count} tool calls. Exactly one tool call is allowed per model step; the entire decision was rejected before execution and no Canvas tool ran. Return exactly one corrected tool call, or a final answer only when the task is complete or cannot proceed.`
+      const message=`PenEcho Agent decision rejected: this model step returned ${batch.count} tool calls. Exactly one tool call is allowed per model step; the entire decision was rejected before execution and no Canvas tool ran. Return exactly one corrected tool call, or a final answer only when the task is complete or cannot proceed.`
       this.traceNativeDecisionRejection(session,batch,'CANVAS_ONE_TOOL_PER_STEP',message)
       return {success:false,contentItems:[{type:'inputText',text:message}]}
     }
@@ -1408,7 +1439,7 @@ export class CodexNativeHost {
     const toolStillActive = () => !session.disposed && session.lifecycle === lifecycle && session.active === active && active.turnId === turnId
     let concludesTurn=false
     const execution = session.toolQueue.then(async () => {
-      if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
+      if (!toolStillActive()) throw new Error('Codex Native PenEcho Agent session or turn changed during tool execution.')
       const controller = new AbortController()
       const timeoutMs = Math.max(1_000, Number(tool.timeoutMs) || 45_000)
       const timer = setTimeout(() => controller.abort(new Error(`PenEcho tool ${name} timed out.`)), timeoutMs)
@@ -1420,7 +1451,7 @@ export class CodexNativeHost {
           controller.signal,
           `PenEcho tool ${name} timed out.`,
         )
-        if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
+        if (!toolStillActive()) throw new Error('Codex Native PenEcho Agent session or turn changed during tool execution.')
         session.native.recordToolResult({ isError:false, value })
         const contentItems = []
         for (const block of tool.output.render(args, value) || []) {
@@ -1435,9 +1466,9 @@ export class CodexNativeHost {
           const stored = await this.attachments.readImageRequest(directAttachment, CODEX_MODEL_IMAGE_REQUEST_POLICY, controller.signal)
           contentItems.push({ type:'inputImage', imageUrl:`data:${stored.ref?.mediaType || stored.mediaType};base64,${Buffer.from(stored.data).toString('base64')}` })
         }
-        if (!toolStillActive()) throw new Error('Codex Native Canvas Agent session or turn changed during tool execution.')
+        if (!toolStillActive()) throw new Error('Codex Native PenEcho Agent session or turn changed during tool execution.')
         if (!contentItems.length) contentItems.push({ type:'inputText', text:'PenEcho tool completed.' })
-        const resultText=value?.terminal===true?boundedText(String(value.message||'Canvas Agent stopped the current turn.'),2_000):'PenEcho tool completed.'
+        const resultText=value?.terminal===true?boundedText(String(value.message||'PenEcho Agent stopped the current turn.'),2_000):'PenEcho tool completed.'
         this.emitPublicEvent(session, { kind:'tool_result', turn:session.turnNumber, callId, text:resultText, error:null })
         const response={ success:true, contentItems }
         if(concludesTurn)this.concludeNativeTurnAfterTool(session,active,value)
@@ -1457,7 +1488,7 @@ export class CodexNativeHost {
   }
 
   async handleServerRequest(session, id, method, params) {
-    if (session.disposed) throw new Error('Codex Native Canvas Agent session is closed.')
+    if (session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     session.traceDecisionProtocol?.({kind:'native-server-request',requestId:id,method,params})
     if (method !== 'item/tool/call') {
       const message=`PenEcho refused Codex app-server request ${method}.`
@@ -1556,7 +1587,7 @@ export class CodexNativeHost {
     const disconnectError = new Error('Canvas browser disconnected during tool execution.')
     const active = session.active
     if (active) {
-      await this.invalidateSession(session, new Error('Codex Native Canvas Agent turn interrupted by browser disconnect.'))
+      await this.invalidateSession(session, new Error('Codex Native PenEcho Agent turn interrupted by browser disconnect.'))
       return true
     }
     await this.abortToolWork(session, disconnectError)
@@ -1579,8 +1610,8 @@ export class CodexNativeHost {
       const interruption=active?.turnId&&session.process?.alive
         ? session.process.interrupt(session.threadId,active.turnId).catch(() => {})
         : null
-      if (active) active.fail(new Error('Codex Native Canvas Agent session closed.'))
-      await this.abortToolWork(session, new Error('Codex Native Canvas Agent session closed.'))
+      if (active) active.fail(new Error('Codex Native PenEcho Agent session closed.'))
+      await this.abortToolWork(session, new Error('Codex Native PenEcho Agent session closed.'))
       if(interruption)await interruption
       session.decisionFeedbackCalls.clear()
       session.decisionFeedbackCallIds.clear()
@@ -1647,11 +1678,12 @@ export class CodexNativeHost {
   }
 
   traceModelRequestImage({ ref, policy, image }) {
-    if (String(ref?.name || '') !== 'canvas-agent-message.png' || !image?.data) return
+    const name=String(ref?.name || '')
+    if (!isCanvasAgentHandwritingImageName(name) || !image?.data) return
     const attachmentId=String(ref.attachmentId || ''),sha256=createHash('sha256').update(image.data).digest('hex'),byteIdenticalToAdmitted=attachmentId === `sha256:${sha256}`
     for (const session of this.sessions.values()) if (session.attachmentRefs.has(attachmentId)) this.traceImageDebug(session,{
       stage:'llm-request', kind:'canvas-agent-handwriting', attachmentId, variantId:String(image.variantId || ''),
-      name:'canvas-agent-message.png', mediaType:image.mediaType, bytes:Number(image.bytes) || image.data.byteLength,
+      name, mediaType:image.mediaType, bytes:Number(image.bytes) || image.data.byteLength,
       width:Number(image.width) || null, height:Number(image.height) || null,
       sha256, byteIdenticalToAdmitted, transformedForModel:!byteIdenticalToAdmitted,
       policy:{ maxPixels:Number(policy?.maxPixels) || null, maxBytes:Number(policy?.maxBytes) || null },

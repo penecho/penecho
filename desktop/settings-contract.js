@@ -90,7 +90,7 @@ function normalizeSettings(input, options = {}) {
   const timeout = number(input.timeout ?? 180, "Model timeout", 10, 600, true);
   const autoDelay = number(input.autoDelay ?? 5, "Auto AI delay", 0, 10);
   const canvasAgentAutoOpen = input.canvasAgentAutoOpen === undefined ? true : input.canvasAgentAutoOpen;
-  if (typeof canvasAgentAutoOpen !== "boolean") throw new Error("Canvas Agent auto-open must be true or false.");
+  if (typeof canvasAgentAutoOpen !== "boolean") throw new Error("PenEcho Agent auto-open must be true or false.");
   const traceLimit = number(input.traceLimit ?? 100, "Request record limit", 1, 1000, true);
   const updates = {
     AI_PROVIDER:provider === "kimi" ? "api" : provider,

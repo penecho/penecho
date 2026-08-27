@@ -1,8 +1,8 @@
 
 export class CanvasAgentHostRouter {
   constructor({ resolveConnection, harnessFactory, nativeFactory }) {
-    if (typeof resolveConnection !== 'function') throw new Error('Canvas Agent host router requires a connection resolver.')
-    if (typeof harnessFactory !== 'function' || typeof nativeFactory !== 'function') throw new Error('Canvas Agent host router requires lazy host factories.')
+    if (typeof resolveConnection !== 'function') throw new Error('PenEcho Agent host router requires a connection resolver.')
+    if (typeof harnessFactory !== 'function' || typeof nativeFactory !== 'function') throw new Error('PenEcho Agent host router requires lazy host factories.')
     this.resolveConnection = resolveConnection
     this.harnessFactory = harnessFactory
     this.nativeFactory = nativeFactory
@@ -20,10 +20,10 @@ export class CanvasAgentHostRouter {
 
   async owner(engine) {
     if (!this.ownerPromises[engine]) {
-      if (engine !== 'codex-native' && engine !== 'harness') throw new Error(`Canvas Agent engine ${engine} is invalid.`)
+      if (engine !== 'codex-native' && engine !== 'harness') throw new Error(`PenEcho Agent engine ${engine} is invalid.`)
       const factory = engine === 'codex-native' ? this.nativeFactory : this.harnessFactory
       this.ownerPromises[engine] = Promise.resolve(factory()).then(async owner => {
-        if (!owner) throw new Error(`Canvas Agent ${engine} host is unavailable.`)
+        if (!owner) throw new Error(`PenEcho Agent ${engine} host is unavailable.`)
         if (owner.initialize) await owner.initialize()
         this.owners.add(owner)
         return owner
@@ -36,7 +36,7 @@ export class CanvasAgentHostRouter {
   ownerForSession(session) {
     if (session?.engine === 'codex-native' && this.owners.has(session.engineOwner)) return session.engineOwner
     if (session?.engine === 'harness' && this.owners.has(session.engineOwner)) return session.engineOwner
-    throw new Error('Canvas Agent session owner is invalid.')
+    throw new Error('PenEcho Agent session owner is invalid.')
   }
 
   async initialize() { return this }
@@ -105,7 +105,7 @@ export class CanvasAgentHostRouter {
   }
 
   async changeConnection(previous, request) {
-    if (!previous) throw new Error('Canvas Agent session is not established.')
+    if (!previous) throw new Error('PenEcho Agent session is not established.')
     const originalOwner = this.ownerForSession(previous)
     const connectionId = String(request?.connectionId || previous.connectionId || 'default')
     const connection = this.resolveConnection(connectionId)

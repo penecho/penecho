@@ -532,11 +532,13 @@
   async function renderExportCanvas() {
     const region = exportRegion();
     if (!region) return null;
-    await prepareVisibleWidgetSnapshots(null, false);
-    const scale = Math.min(1, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
+    await prepareVisibleWidgetSnapshots(null, false, null, true);
+    const scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
       canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
     const captureTime = performance.now();
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
     context.fillStyle = state.paint.paper;
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.save();

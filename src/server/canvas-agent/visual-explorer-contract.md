@@ -1,6 +1,6 @@
-# Canvas Agent Visual Explorer
+# PenEcho Agent Visual Explorer
 
-This contract applies only to new Visual Explorer authoring in Canvas Agent. It does not redefine ordinary General HTML, any optional Widget plugin, Canvas Pen AI Refine, Main Canvas AI, or saved legacy `VisualExplainerPlan` content.
+This contract applies only to new Visual Explorer authoring in PenEcho Agent. It does not redefine ordinary General HTML, any optional Widget plugin, Canvas Pen AI Refine, Main Canvas AI, or saved legacy `VisualExplainerPlan` content.
 
 Visual Explorer is the default route for understanding-, learning-, explanation-, analysis-, and organization-first requests, even when the user does not explicitly ask for an infographic. This includes substantial pasted text, equations to explain, project explanations, document analysis, study material, structured summaries, and material that should become easier to understand at a glance. Do not select it when the primary task is merely to supplement or modify existing Canvas/page elements, or when interaction, simulation, live data, an ordinary small HTML tool, or another explicitly available artifact is the defining result.
 
@@ -268,7 +268,7 @@ The viewer should be able to understand:
 
 Use the language explicitly requested by the user for all visible text. If no language is specified, use the primary language of the user's request while preserving necessary source terminology and proper nouns.
 
-## Canvas Agent source and invocation
+## PenEcho Agent source and invocation
 
 Create one responsive HTML/CSS/SVG Widget with minimal JavaScript. It must explain the subject rather than display raw JSON, source, or a `<pre>` dump; do not use photorealistic image generation.
 

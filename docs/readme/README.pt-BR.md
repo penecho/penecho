@@ -73,7 +73,7 @@ npm start
 
 Escreva uma pergunta, equação, diagrama ou ideia incompleta em qualquer lugar da tela e faça uma pausa. O PenEcho interpreta os traços e suas relações espaciais e posiciona a resposta ao lado deles.
 
-- **Canvas Agent: das fontes ao resultado visual.** Adicione pastas e arquivos somente leitura — PDF, Word, PowerPoint, Excel, imagens ou código —, combine-os com pesquisa na Web e a tela atual e deixe o mesmo agente continuar pela análise, planejamento, criação e revisão.
+- **PenEcho Agent: das fontes ao resultado visual.** Adicione pastas e arquivos somente leitura — PDF, Word, PowerPoint, Excel, imagens ou código —, combine-os com pesquisa na Web e a tela atual e deixe o mesmo agente continuar pela análise, planejamento, criação e revisão.
 - **Produtividade com o Visual Explorer.** Transforme informações densas em um espaço visual responsivo e editável, com visão geral clara, detalhes conectados e evidências. Isso encurta o caminho da pesquisa ao resultado compartilhável e reduz copiar e colar, trocar de ferramenta, desenhar diagramas manualmente e refazer trabalho.
 - Desenhe naturalmente com caneta ou mouse e navegue por uma tela de `20.000 x 20.000`.
 - Receba respostas, dicas, explicações, fórmulas, gráficos e diagramas diretamente na tela.
@@ -92,7 +92,7 @@ O **Echoes** permite explorar, favoritar e reutilizar telas e widgets públicos 
 
 ## Novidades da versão 1.1.0
 
-- **Canvas Agent.** Trabalhe com arquivos locais, projetos de pastas somente leitura, pesquisa na Web, contexto da tela, criação visual e edição direta em um único fluxo de várias etapas.
+- **PenEcho Agent.** Trabalhe com arquivos locais, projetos de pastas somente leitura, pesquisa na Web, contexto da tela, criação visual e edição direta em um único fluxo de várias etapas.
 - **Visual Explorer.** Transforme pesquisas, documentos, notas e planos em um resultado visual responsivo que conecta visão geral, detalhes e evidências.
 - **Menos troca de contexto e retrabalho.** Pesquise, analise, estruture, visualize, revise e refine no mesmo espaço; o resultado continua editável na tela.
 - **Entrega visual progressiva.** Receba versões completas do Visual Explorer mais cedo e refine-as no próprio local, sem gerar tudo novamente do zero.

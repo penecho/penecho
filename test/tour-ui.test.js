@@ -58,7 +58,7 @@ test("feature tour follows the requested concise order with stable targets", () 
   assert.match(app, /closeCanvasAgent\(\{ focus:false, animate:false \}\)/);
 });
 
-test("Canvas Agent tour preview is connection-free and restores only tour-opened panels", () => {
+test("PenEcho Agent tour preview is connection-free and restores only tour-opened panels", () => {
   const app = read("public/app.js"), panel = { hidden:true }, featureTour = { canvasAgentOpenedForTour:false }, calls = [],
     sync = vm.runInNewContext(`(()=>{${functionSource(app, "syncFeatureTourPreview")}return syncFeatureTourPreview;})()`, {
       featureTour,
@@ -129,7 +129,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("1.1.0 changelog introduces Canvas Agent visual productivity in a concise one-page dialog", () => {
+test("1.1.0 changelog introduces PenEcho Agent visual productivity in a concise one-page dialog", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),

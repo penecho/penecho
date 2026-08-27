@@ -400,7 +400,7 @@ function normalizedRegistryProject(project) {
 
 class CanvasAgentProjectStore {
   constructor({ stateDirectory, allowedRoots = [], hostRoots = [], logger = null }) {
-    if (!stateDirectory) throw new Error("Canvas Agent project storage requires a state directory.");
+    if (!stateDirectory) throw new Error("PenEcho Agent project storage requires a state directory.");
     this.stateDirectory = path.resolve(stateDirectory);
     this.registryFile = path.join(this.stateDirectory, "canvas-agent-projects.json");
     this.uploadDirectory = path.join(this.stateDirectory, PROJECT_UPLOAD_DIRECTORY);
@@ -425,11 +425,11 @@ class CanvasAgentProjectStore {
           info = await fs.lstat(keyFile);
         }
         if (!info.isFile() || info.isSymbolicLink() || await fs.realpath(keyFile) !== keyFile || info.size !== 32) {
-          throw projectError("The Canvas Agent root identity key is unsafe.", 500, "project_metadata_invalid");
+          throw projectError("The PenEcho Agent root identity key is unsafe.", 500, "project_metadata_invalid");
         }
         await fs.chmod(keyFile, 0o600);
         const secret = await fs.readFile(keyFile);
-        if (secret.length !== 32) throw projectError("The Canvas Agent root identity key is invalid.", 500, "project_metadata_invalid");
+        if (secret.length !== 32) throw projectError("The PenEcho Agent root identity key is invalid.", 500, "project_metadata_invalid");
         return secret;
       })().catch(error => { this.rootIdSecretPromise = null; throw error; });
     }
