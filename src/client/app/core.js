@@ -913,6 +913,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentConnecting: "Connecting…",
       canvasAgentResumed: "Conversation resumed",
       canvasAgentWorking: "Agent is working…",
+      canvasAgentCheckingCodex: "Checking Codex setup…",
+      canvasAgentSettingUpCodex: "Setting up Codex for first use…",
+      canvasAgentRepairingCodex: "Repairing Codex setup…",
       canvasAgentInitialStatePreparing: "Preparing the initial Canvas state…",
       canvasAgentDisconnected: "Disconnected — send to reconnect",
       canvasAgentErrorBusy: "The AI service is busy, so processing stopped early. Continue shortly.",
@@ -1023,8 +1026,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentOpenFile: "Double-click to open {name} with the system app",
       canvasAgentOpenFileFailed: "The system could not open this file.",
       canvasAgentOpenFileUnavailable: "This file is no longer available.",
-      canvasAgentImageTooLarge: "This image is too large to attach.",
-      canvasAgentImagesTooLarge: "The attached images are too large to send together.",
+      canvasAgentImageSourceTooLarge: "The original image is larger than 12 MB. Choose a smaller image.",
+      canvasAgentImageCompressionTooLarge: "PenEcho could not resize and convert this image to a WebP below 5 MB. Choose a smaller image.",
+      canvasAgentImagesTooLarge: "Images in one message can total at most 25 MB.",
       canvasAgentImageUnsupported: "This image format is not supported.",
       canvasAgentImagePreparing: "Preparing attachments…",
       canvasAgentImagePrompt: "Please inspect the attached image or images.",
@@ -1480,7 +1484,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "1.1.0";
+  const CHANGELOG_VERSION = "1.1.4";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },

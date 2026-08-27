@@ -53,7 +53,7 @@ function desktopStateDirectory(home, platform, env) {
 function managedCliPaths(provider, options = {}) {
   const item = cliDefinition(provider), env = options.env || process.env, platform = options.platform || process.platform,
     home = path.resolve(options.home || env.HOME || env.USERPROFILE || "."), stateDir = options.stateDir ? path.resolve(options.stateDir) : "",
-    executable = executableNames(item.command, platform, env)[0], states = [stateDir, desktopStateDirectory(home, platform, env)].filter(Boolean), values = [];
+    executable = platform === "win32" ? `${item.command}.exe` : item.command, states = [stateDir, desktopStateDirectory(home, platform, env)].filter(Boolean), values = [];
   if (provider === "claude-cli") values.push(path.join(home, ".local", "bin", executable));
   else for (const directory of states) values.push(path.join(directory, "tools", item.command, "bin", executable));
   return [...new Set(values.map(value => path.resolve(value)))];

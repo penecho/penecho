@@ -129,7 +129,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("1.1.0 changelog introduces PenEcho Agent visual productivity in a concise one-page dialog", () => {
+test("1.1.4 changelog introduces PenEcho Agent visual productivity in a concise one-page dialog", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -140,10 +140,10 @@ test("1.1.0 changelog introduces PenEcho Agent visual productivity in a concise 
   assert.doesNotMatch(layer, /aria-describedby=/);
   for (const id of ["changelogClose", "changelogTitle"]) assert.match(layer, new RegExp(`id="${id}"`));
   for (const id of ["changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.doesNotMatch(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />1\.1\.0</);
+  assert.match(layer, />1\.1\.4</);
   assert.doesNotMatch(layer, /class="changelog-demo"|class="changelog-release changelog-earlier"/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "1\.1\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "1\.1\.4"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
   assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer"\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);

@@ -131,7 +131,7 @@ In the app, signing in adds:
 - **Linked device.** Pair this host with a one-time key from Cloud → Devices, and your signed-in browsers and apps can reach it from anywhere through Cloud relay. Remote access to your canvas host without exposing it to the internet; API credentials still live only on that device. Pause, resume, or remove the link at any time.
 - **Echoes: co-creation and knowledge sharing.** Browse public Canvases and Widgets across twelve categories, favorite them into a personal library that syncs through Cloud, and add community Widgets straight into your own Canvas. Publish a Canvas of your own with a share category so others can learn from it, build on it, and Echo it — with Craft lineage preserved between versions.
 
-## 🔔 What's new in 1.1.0
+## 🔔 What's new in 1.1.4
 
 - **PenEcho Agent.** Start below the canvas and keep one multi-step workflow moving across local files, read-only folder projects, web research, canvas context, visual creation, and direct canvas edits.
 - **Visual Explorer.** Convert research, documents, notes, and plans into a responsive visual artifact organized from overview to detail and evidence—not a pile of generic cards or a transcript trapped in chat.

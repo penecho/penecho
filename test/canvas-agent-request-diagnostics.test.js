@@ -91,7 +91,7 @@ test("PenEcho Agent request trace records the normalized ink-image upload and ex
   assert.equal(records[1].height,32);
   assert.equal(records[1].byteIdenticalToAdmitted,true);
   assert.equal(records[1].transformedForModel,false);
-  assert.deepEqual(records[1].policy,{maxPixels:2048*2048,maxBytes:1024*1024});
+  assert.deepEqual(records[1].policy,{maxPixels:2048*2048,maxBytes:5*1024*1024});
   assert.equal(records[0].sha256,records[1].sha256);
   for(const record of records)assert.equal(fs.readFileSync(path.join(requestTraceDirectory,directory.name,record.file)).equals(webp),true);
   assert.equal(JSON.stringify(trace).includes(webp.toString("base64")),false);

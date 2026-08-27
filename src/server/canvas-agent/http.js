@@ -3,13 +3,13 @@
 const { randomUUID } = require("crypto");
 const { WebSocketServer, WebSocket } = require("ws");
 
-const MAX_AGENT_FRAME_BYTES = 8 * 1024 * 1024;
+const MAX_AGENT_FRAME_BYTES = 48 * 1024 * 1024;
 const MAX_REMOTE_AGENT_CHANNELS = 8;
 const REMOTE_AGENT_CHANNEL_TTL_MS = 5 * 60_000;
 const REMOTE_AGENT_POLL_MS = 15_000;
 
 function attachCanvasAgent({ server, authorize, resolveConnection, listConnections, resolveWebSearch = () => null, resolveWidgetCapabilities = () => ({ professionalEnabled:false, privatePlugins:[] }), resolveProject = async () => null, stateDirectory, rootDirectory, modelTimeoutMs, logger = () => {}, conversationLogger = null, conversationTrace = null }) {
-  const wss = new WebSocketServer({ noServer:true, maxPayload:8 * 1024 * 1024, perMessageDeflate:false });
+  const wss = new WebSocketServer({ noServer:true, maxPayload:MAX_AGENT_FRAME_BYTES, perMessageDeflate:false });
   let hostPromise = null;
   const harnessFactory = async () => {
     const runtime = await import("./runtime.mjs");

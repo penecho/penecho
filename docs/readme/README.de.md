@@ -90,7 +90,7 @@ Schreibe eine Frage, Gleichung, Skizze oder unfertige Idee an eine beliebige Ste
 
 In **Echoes** kannst du öffentliche Leinwände und Widgets in zwölf Kategorien entdecken, favorisieren und wiederverwenden. Eigene Crafts lassen sich veröffentlichen, in einem schreibgeschützten Web-Viewer öffnen und mit ihrer Versionsabstammung weiterentwickeln.
 
-## Neu in Version 1.1.0
+## Neu in Version 1.1.4
 
 - **PenEcho Agent.** Bearbeite lokale Dateien, schreibgeschützte Ordnerprojekte, Webrecherche, Leinwandkontext, visuelle Erstellung und direkte Änderungen in einem durchgängigen, mehrstufigen Ablauf.
 - **Visual Explorer.** Verwandle Recherche, Dokumente, Notizen und Pläne in ein responsives visuelles Ergebnis, das vom Überblick zu Details und Belegen führt.

@@ -381,8 +381,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(otherGroup, /value="codex-cli"/);
   assert.match(otherGroup, /value="claude-cli"/);
   assert.ok(html.indexOf("kimi-provider-group") < html.indexOf("otherProviderGroupTitle"));
-  assert.equal(rootPackage.version, "1.1.0");
-  assert.equal(rootPackage.config.desktopVersion, "1.1.0");
+  assert.equal(rootPackage.version, "1.1.4");
+  assert.equal(rootPackage.config.desktopVersion, "1.1.4");
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
@@ -394,6 +394,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
     assert.ok(rootPackage.files.includes(asset), asset);
   }
   assert.ok(rootPackage.files.includes("public/desktop-update.css"));
+  assert.ok(rootPackage.files.includes("public/penecho-mark.png"));
+  assert.match(html, /<img src="\.\.\/\.\.\/public\/penecho-mark\.png" alt="" width="48" height="48">/);
   assert.match(html, /value="0\.0\.0\.0" selected/);
   assert.match(html, /platform\.kimi\.com\?aff=penecho/);
   assert.match(html, /platform\.kimi\.ai\?aff=penecho/);
@@ -705,6 +707,7 @@ test("desktop CLI setup uses official installers without requiring npm", () => {
   assert.equal(codex.command, "/bin/sh");
   assert.equal(codex.env.CODEX_NON_INTERACTIVE, "1");
   assert.equal(codex.env.CODEX_INSTALL_DIR, path.dirname(codexPath));
+  assert.equal(codex.env.CODEX_HOME, path.join(resolvedStateDir,"tools","codex","home"));
   assert.deepEqual(claude.args, ["/tmp/claude.sh", "stable"]);
 });
 
@@ -751,17 +754,22 @@ test("automatic CLI setup validates the official script and installed executable
         assert.equal(url, "https://chatgpt.com/codex/install.sh");
         return new Response("#!/bin/sh\n# CODEX_INSTALL_DIR\n", { status:200 });
       },
-      runner:async (command, args) => {
-        calls.push({ command, args });
+      runner:async (command, args, options) => {
+        calls.push({ command, args, env:options.env });
         if (args[0] === "--version") return { output:"codex-cli 1.2.3" };
-        fs.mkdirSync(path.dirname(expected), { recursive:true });
-        fs.writeFileSync(expected, "test");
+        const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
+        fs.mkdirSync(path.dirname(staged), { recursive:true });
+        fs.writeFileSync(staged, "test");
         return { output:"installed" };
       },
     });
     assert.equal(result.executable, expected);
     assert.equal(result.version, "codex-cli 1.2.3");
     assert.equal(calls.length, 2);
+    assert.equal(calls[0].env.CODEX_HOME,path.join(stateDir,"tools","codex","home"));
+    assert.notEqual(calls[0].env.CODEX_HOME,path.join(home,".codex"));
+    assert.ok(calls[0].env.CODEX_INSTALL_DIR.startsWith(path.join(stateDir,"installers")));
+    assert.equal(fs.readFileSync(expected,"utf8"),"test");
     assert.equal(fs.existsSync(path.join(stateDir, "installers", "codex-cli.sh")), false);
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });

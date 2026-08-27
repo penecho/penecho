@@ -1,7 +1,8 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { chmod, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
@@ -41,16 +42,19 @@ import {
 
 const require = createRequire(import.meta.url)
 const { prepareIsolatedRuntime, resolveCodexLaunch } = require('../../providers/codex-cli.js')
+const { canonicalFile, cliCandidates, managedCliPaths } = require('../../providers/cli-discovery.js')
+const { installCli, runProcess } = require('../../providers/cli-installer.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 
-const MAX_PROTOCOL_BYTES = 1024 * 1024
+const MAX_PROTOCOL_BYTES = 48 * 1024 * 1024
 const MAX_STDERR_BYTES = 16 * 1024
 const SESSION_TTL_MS = 30_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const INTERRUPT_REQUEST_TIMEOUT_MS = 5_000
 const MAX_BACKLOG = 500
 const MAX_AGENT_RESPONSE_CHARS = 400_000
-const CODEX_MODEL_IMAGE_REQUEST_POLICY = Object.freeze({ maxPixels:2048 * 2048, maxBytes:1024 * 1024 })
+const CODEX_CLI_RESOLUTION_CACHE_VERSION = 1
+const CODEX_MODEL_IMAGE_REQUEST_POLICY = Object.freeze({ maxPixels:2048 * 2048, maxBytes:5 * 1024 * 1024 })
 const CODEX_DISABLED_FEATURES = Object.freeze([
   'apps', 'auth_elicitation', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'code_mode', 'computer_use',
   'goals', 'hooks', 'image_generation', 'in_app_browser', 'memories', 'multi_agent', 'multi_agent_v2', 'network_proxy', 'plugins', 'plugin_sharing',
@@ -102,6 +106,37 @@ function hash(value) {
   return createHash('sha256').update(String(value)).digest('hex')
 }
 
+function codexCliResolutionKey(connection) {
+  return hash(JSON.stringify({
+    provider:String(connection?.provider || ''),
+    cliPath:String(connection?.cliPath || ''),
+  }))
+}
+
+function codexCliResolutionFile(stateDirectory) {
+  return join(stateDirectory, 'tools', 'codex', 'resolution.json')
+}
+
+function readCodexCliResolutions(stateDirectory) {
+  try {
+    const parsed=JSON.parse(readFileSync(codexCliResolutionFile(stateDirectory),'utf8'))
+    if(parsed?.version!==CODEX_CLI_RESOLUTION_CACHE_VERSION||!Array.isArray(parsed.entries))return new Map()
+    return new Map(parsed.entries.flatMap(entry=>{
+      const key=String(entry?.key||''),executable=String(entry?.executable||'').trim()
+      return /^[0-9a-f]{64}$/.test(key)&&executable&&executable.length<=4096?[[key,executable]]:[]
+    }))
+  } catch { return new Map() }
+}
+
+function writeCodexCliResolutions(stateDirectory, resolutions) {
+  const directory=join(stateDirectory,'tools','codex'),file=codexCliResolutionFile(stateDirectory),temporary=`${file}.${process.pid}.tmp`
+  mkdirSync(directory,{recursive:true,mode:0o700})
+  const entries=[...resolutions].sort(([left],[right])=>left.localeCompare(right)).map(([key,executable])=>({key,executable}))
+  writeFileSync(temporary,`${JSON.stringify({version:CODEX_CLI_RESOLUTION_CACHE_VERSION,entries},null,2)}\n`,{encoding:'utf8',mode:0o600})
+  renameSync(temporary,file)
+  try { chmodSync(file,0o600) } catch(error) { if(process.platform!=='win32')throw error }
+}
+
 function token(length = 32) {
   return randomBytes(length).toString('base64url')
 }
@@ -117,6 +152,14 @@ function safeError(error, fallback = 'Codex Native PenEcho Agent failed.') {
     .replace(/\b[A-Za-z]:\\(?:[^\\\s]+\\)+[^\\\s]+/g, '<path>')
     .replace(/\b(api[-_]?key|access[-_]?token|refresh[-_]?token|authorization|cookie|secret)\s*[:=]\s*[^\s,;}]+/gi, '$1=<redacted>')
     .slice(0, 2_000)
+}
+
+function codexFailureStderr(value) {
+  return String(value || '').split(/\r?\n/).filter(line => !/^WARNING: proceeding, even though we could not (?:create PATH aliases|update PATH):/i.test(line.trim())).join('\n').trim()
+}
+
+function codexProtocolLineTooLargeError() {
+  return new Error('Codex returned more attachment data than PenEcho can safely process in one message. Send fewer or smaller images and try again.')
 }
 
 function nativeRawDecisionCall(item) {
@@ -145,6 +188,73 @@ function codexConnectionFingerprint(connection) {
     cliModel:String(connection?.cliModel || ''),
     effort:String(connection?.effort || ''),
   }))
+}
+
+function installedCodexCandidates(connection, env, stateDirectory, platform = process.platform) {
+  const configuredPath=String(connection?.cliPath || 'codex').trim() || 'codex', candidates=cliCandidates('codex-cli', {
+    env,
+    platform,
+    stateDir:stateDirectory,
+    configuredPath,
+  }), privateExecutable=managedCliPaths('codex-cli',{env,platform,stateDir:stateDirectory})[0]
+  return candidates.map(candidate=>canonicalFile(candidate.executable)===canonicalFile(privateExecutable)
+    ? {...candidate,source:'penecho-managed',privateManaged:true}
+    : candidate)
+}
+
+function directCodexCandidate(connection, candidates) {
+  const configuredPath=String(connection?.cliPath || 'codex').trim() || 'codex', explicit=candidates.find(candidate=>candidate.source==='configured')
+  if (explicit) return explicit
+  if (!configuredPath.includes('/')&&!configuredPath.includes('\\')) return candidates.find(candidate=>candidate.source==='system') || null
+  return null
+}
+
+function codexVersionParts(value) {
+  const match=/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?:[-+\s]|$)/i.exec(String(value||''))
+  return match ? match.slice(1,4).map(Number) : [0,0,0]
+}
+
+function compareCodexVersions(left, right) {
+  const a=codexVersionParts(left),b=codexVersionParts(right)
+  for(let index=0;index<a.length;index+=1)if(a[index]!==b[index])return b[index]-a[index]
+  return 0
+}
+
+async function inspectCodexCandidateVersion(candidate, env, cwd) {
+  const launch=resolveCodexLaunch(candidate.executable,env),result=await runProcess(launch.command,[...launch.prefixArgs,'--version'],{
+    cwd,
+    env,
+    timeoutMs:15_000,
+  })
+  return String(result.output||result.diagnostic||'').slice(0,200)
+}
+
+async function orderedCodexFallbacks(candidates, direct, inspectVersion) {
+  const directCanonical=direct?canonicalFile(direct.executable):'',seen=new Set(),external=[],managed=[]
+  for(const candidate of candidates){
+    const canonical=canonicalFile(candidate.executable)
+    if(canonical===directCanonical||seen.has(canonical))continue
+    seen.add(canonical)
+    if(candidate.privateManaged)managed.push(candidate)
+    else external.push(candidate)
+  }
+  const inspected=await Promise.all(external.map(async(candidate,index)=>{
+    try{return{candidate,index,version:await inspectVersion(candidate)}}
+    catch{return{candidate,index,version:''}}
+  }))
+  inspected.sort((left,right)=>compareCodexVersions(left.version,right.version)||left.index-right.index)
+  return [...inspected.map(item=>({...item.candidate,detectedVersion:item.version})),...managed]
+}
+
+function codexCandidateFailure(failures) {
+  if (failures.length === 1) return failures[0].error
+  const messages=[...new Set(failures.map(failure=>safeError(failure.error)).filter(Boolean))], authentication=messages.find(message=>/authenticat|unauthori|not logged|login required|\b401\b/i.test(message)),
+    error=new Error(authentication
+      ? `Every installed Codex CLI candidate requires authentication or failed to start. ${authentication}`
+      : `No compatible installed Codex CLI could start PenEcho Agent.${messages.length ? ` ${messages.at(-1)}` : ''}`)
+  error.code=authentication ? 'CODEX_CLI_AUTHENTICATION_REQUIRED' : 'CODEX_CLI_INCOMPATIBLE'
+  error.diagnostic=JSON.stringify(failures.map(failure=>({source:failure.source,error:safeError(failure.error)})))
+  return error
 }
 
 function agentMessageText(item) {
@@ -239,12 +349,13 @@ function codexAppServerArgs() {
 }
 
 export class CodexNativeAppServerProcess {
-  constructor({ connection, env = process.env, logger = () => {}, spawnProcess = spawn, prepareRuntime = prepareIsolatedRuntime, onNotification = null, onRequest = null, onGone = null }) {
+  constructor({ connection, env = process.env, logger = () => {}, spawnProcess = spawn, prepareRuntime = prepareIsolatedRuntime, runtimeDirectory = null, onNotification = null, onRequest = null, onGone = null }) {
     this.connection = connection
     this.env = env
     this.logger = logger
     this.spawnProcess = spawnProcess
     this.prepareRuntime = prepareRuntime
+    this.runtimeDirectory = runtimeDirectory ? String(runtimeDirectory) : null
     this.child = null
     this.workDir = null
     this.launch = null
@@ -273,7 +384,12 @@ export class CodexNativeAppServerProcess {
   async start({ model, cwd, baseInstructions, dynamicTools }) {
     if (this.closed) throw new Error('Codex app-server process is closed.')
     if (this.child || this.workDir) throw new Error('Codex app-server process was already started.')
-    this.workDir = await mkdtemp(join(tmpdir(), 'penecho-canvas-codex-'))
+    const runtimeDirectory = this.runtimeDirectory || tmpdir()
+    if (this.runtimeDirectory) {
+      await mkdir(runtimeDirectory, { recursive:true, mode:0o700 })
+      await chmod(runtimeDirectory, 0o700).catch(() => {})
+    }
+    this.workDir = await mkdtemp(join(runtimeDirectory, 'penecho-canvas-codex-'))
     await chmod(this.workDir, 0o700).catch(() => {})
     try {
     this.launch = resolveCodexLaunch(this.connection.cliPath, this.env)
@@ -395,7 +511,7 @@ export class CodexNativeAppServerProcess {
   handleData(chunk) {
     this.buffer += String(chunk)
     if (Buffer.byteLength(this.buffer, 'utf8') > MAX_PROTOCOL_BYTES && !this.buffer.includes('\n')) {
-      this.processGone(new Error('Codex app-server emitted an oversized protocol line.'))
+      this.processGone(codexProtocolLineTooLargeError())
       return
     }
     let newline
@@ -404,7 +520,7 @@ export class CodexNativeAppServerProcess {
       this.buffer = this.buffer.slice(newline + 1)
       if (!line) continue
       if (Buffer.byteLength(line, 'utf8') > MAX_PROTOCOL_BYTES) {
-        this.processGone(new Error('Codex app-server emitted an oversized protocol line.'))
+        this.processGone(codexProtocolLineTooLargeError())
         return
       }
       let message
@@ -465,7 +581,7 @@ export class CodexNativeAppServerProcess {
     const child = this.child
     if (!child) return
     this.child = null
-    const failure = error
+    const stderr=safeError(codexFailureStderr(this.stderr),''),failure=stderr ? Object.assign(new Error(`${safeError(error)} ${stderr}`),{cause:error,traceDiagnostic:stderr}) : error
     for (const pending of this.pending.values()) {
       if (pending.timer) clearTimeout(pending.timer)
       pending.reject(failure)
@@ -490,6 +606,10 @@ export class CodexNativeHost {
     conversationTrace = null,
     env = process.env,
     createAppServer = null,
+    resolveCliCandidates = null,
+    inspectCliCandidate = null,
+    installManagedCli = null,
+    platform = process.platform,
     sessionTtlMs = SESSION_TTL_MS,
     publicFetch = fetchPublicResource,
   }) {
@@ -504,9 +624,23 @@ export class CodexNativeHost {
     this.conversationLogger = typeof conversationLogger === 'function' ? conversationLogger : null
     this.conversationTrace = typeof conversationTrace === 'function' ? conversationTrace : null
     this.env = env
+    this.platform = platform
     if (typeof publicFetch !== 'function') throw new Error('Codex Native PenEcho Agent public fetch is invalid.')
     this.publicFetch = publicFetch
     this.createAppServer = createAppServer || (options => new CodexNativeAppServerProcess(options))
+    this.resolveCliCandidates = resolveCliCandidates || (connection => installedCodexCandidates(connection,this.env,this.stateDirectory,this.platform))
+    this.inspectCliCandidate = inspectCliCandidate || (candidate => inspectCodexCandidateVersion(candidate,this.env,this.stateDirectory))
+    this.installManagedCli = installManagedCli || (() => installCli('codex-cli',{
+      platform:this.platform,
+      home:this.env.USERPROFILE||this.env.HOME||homedir(),
+      stateDir:this.stateDirectory,
+      env:this.env,
+    }))
+    this.managedCliInstallAttempted = false
+    this.managedCliInstallPromise = null
+    this.managedCliInstallResult = null
+    this.managedCliInstallError = null
+    this.preferredCliExecutables = readCodexCliResolutions(this.stateDirectory)
     this.sessionTtlMs = Math.max(1_000, Number(sessionTtlMs) || SESSION_TTL_MS)
     this.sessions = new Map()
     this.resumeIndex = new Map()
@@ -697,6 +831,91 @@ export class CodexNativeHost {
     session.send(type, payload, { id:session.id, clientId:session.clientId })
   }
 
+  persistPreferredCliExecutables() {
+    try { writeCodexCliResolutions(this.stateDirectory,this.preferredCliExecutables) }
+    catch(error) { this.logger({type:'codex-native-cli-resolution-cache-error',error:safeError(error)}) }
+  }
+
+  rememberPreferredCli(connection, executable) {
+    const key=codexCliResolutionKey(connection),selected=String(executable||'').trim(),current=this.preferredCliExecutables.get(key)
+    if(!selected||current&&canonicalFile(current)===canonicalFile(selected))return
+    this.preferredCliExecutables.set(key,selected)
+    this.persistPreferredCliExecutables()
+  }
+
+  forgetPreferredCli(connection, executable = '') {
+    const key=codexCliResolutionKey(connection),current=this.preferredCliExecutables.get(key),failed=String(executable||'').trim()
+    if(!current||failed&&canonicalFile(current)!==canonicalFile(failed))return
+    this.preferredCliExecutables.delete(key)
+    this.persistPreferredCliExecutables()
+  }
+
+  async startCandidate(session, connection, candidate, lifecycle, failures) {
+    if (session.disposed || session.lifecycle !== lifecycle) throw new Error('Codex Native PenEcho Agent session was closed during startup.')
+    const executable=String(candidate?.executable || '').trim()
+    if (!executable) return null
+    const source=String(candidate?.source || 'configured').slice(0,32),candidateConnection={...connection,cliPath:executable}
+    let starting=true,startupFailure=null
+    const process = this.createAppServer({
+      connection:candidateConnection,
+      env:this.env,
+      logger:this.logger,
+      runtimeDirectory:join(this.stateDirectory,'codex-native','runtime'),
+      onNotification:(method, params) => this.handleNotification(session, method, params),
+      onRequest:(id, method, params) => this.handleServerRequest(session, id, method, params),
+      onGone:error => {
+        if (starting) startupFailure ||= error
+        else if (session.process === process) this.invalidateSession(session, error).catch(() => {})
+      },
+    })
+    session.process = process
+    try {
+      const threadId = await process.start({
+        model:connection.cliModel,
+        cwd:session.project?.kind === 'folder' ? session.project.path : session.projectRuntimeDirectory,
+        baseInstructions:session.native.instructions(),
+        dynamicTools:session.native.dynamicTools(),
+      })
+      starting=false
+      if (startupFailure) throw startupFailure
+      if (session.disposed || session.lifecycle !== lifecycle) throw new Error('Codex Native PenEcho Agent session was closed during startup.')
+      session.threadId = threadId
+      session.cliSource = source
+      this.rememberPreferredCli(connection,executable)
+      this.logger({type:'codex-native-cli-selected',source,fallbackCount:failures.length})
+      session.traceDecisionProtocol?.({kind:'native-cli-selected',source,fallbackCount:failures.length})
+      return threadId
+    } catch (error) {
+      starting=false
+      if (session.process === process) session.process=null
+      session.threadId=null
+      await process.close().catch(() => {})
+      if (session.disposed || session.lifecycle !== lifecycle) throw new Error('Codex Native PenEcho Agent session was closed during startup.')
+      this.forgetPreferredCli(connection,executable)
+      failures.push({source,error})
+      this.logger({type:'codex-native-cli-candidate-failed',source,error:safeError(error)})
+      session.traceDecisionProtocol?.({kind:'native-cli-candidate-failed',source,error:safeError(error)})
+      return null
+    }
+  }
+
+  ensureManagedCliInstalled() {
+    if (!this.managedCliInstallAttempted) {
+      this.managedCliInstallAttempted=true
+      this.managedCliInstallPromise=Promise.resolve().then(()=>this.installManagedCli()).then(result=>{
+        const executable=String(result?.executable||'').trim()
+        if(!executable)throw new Error('PenEcho managed Codex CLI installation did not return an executable.')
+        this.managedCliInstallResult={...result,executable}
+        return this.managedCliInstallResult
+      },error=>{
+        this.managedCliInstallError=error instanceof Error?error:new Error(safeError(error))
+        throw this.managedCliInstallError
+      })
+      this.managedCliInstallPromise.catch(()=>{})
+    }
+    return this.managedCliInstallPromise
+  }
+
   async ensureStarted(session) {
     if (!this.sessions.has(session?.id) || session.disposed) throw new Error('Codex Native PenEcho Agent session is closed.')
     const connection = this.resolveConnection(session.connectionId)
@@ -705,36 +924,46 @@ export class CodexNativeHost {
       throw new Error('The Codex Native PenEcho Agent connection changed. Start a new conversation before submitting this turn.')
     }
     if (connection.provider !== 'codex-cli') throw new Error('The Codex Native PenEcho Agent connection is unavailable.')
-    if (session.process?.alive && session.threadId) return
+    if (session.process?.alive && session.threadId) return session.threadId
     if (session.startPromise) return session.startPromise
     const lifecycle = session.lifecycle
     const startPromise = (async () => {
-      const process = this.createAppServer({
-        connection,
-        env:this.env,
-        logger:this.logger,
-        onNotification:(method, params) => this.handleNotification(session, method, params),
-        onRequest:(id, method, params) => this.handleServerRequest(session, id, method, params),
-        onGone:error => { this.invalidateSession(session, error).catch(() => {}) },
-      })
-      session.process = process
-      try {
-        const threadId = await process.start({
-          model:connection.cliModel,
-          cwd:session.project?.kind === 'folder' ? session.project.path : session.projectRuntimeDirectory,
-          baseInstructions:session.native.instructions(),
-          dynamicTools:session.native.dynamicTools(),
-        })
-        if (session.disposed || session.lifecycle !== lifecycle) {
-          await process.close().catch(() => {})
-          throw new Error('Codex Native PenEcho Agent session was closed during startup.')
-        }
-        session.threadId = threadId
-        return threadId
-      } catch (error) {
-        if (session.process === process) await process.close().catch(() => {})
-        throw error
+      const candidates=await Promise.resolve(this.resolveCliCandidates(connection))
+      if (!Array.isArray(candidates)) throw new Error('Codex CLI discovery returned an invalid result.')
+      const resolutionKey=codexCliResolutionKey(connection),preferredExecutable=this.preferredCliExecutables.get(resolutionKey),preferred=preferredExecutable
+        ? candidates.find(candidate=>canonicalFile(candidate?.executable||'')===canonicalFile(preferredExecutable))||null
+        : null
+      const privateExecutable=managedCliPaths('codex-cli',{env:this.env,platform:this.platform,stateDir:this.stateDirectory})[0],hadPrivateManagedCli=candidates.some(candidate=>candidate?.privateManaged)
+        || Boolean(preferredExecutable&&canonicalFile(preferredExecutable)===canonicalFile(privateExecutable))
+      if(preferredExecutable&&!preferred)this.forgetPreferredCli(connection)
+      const failures=[],direct=preferred||directCodexCandidate(connection,candidates)
+      if (direct) {
+        const threadId=await this.startCandidate(session,connection,direct,lifecycle,failures)
+        if(threadId)return threadId
       }
+      this.send(session,'agent_status',{status:'preparing',phase:'discovering'})
+      session.active?.timeout?.activity()
+      const fallbacks=await orderedCodexFallbacks(candidates,direct,candidate=>this.inspectCliCandidate(candidate))
+      for(const candidate of fallbacks){
+        const threadId=await this.startCandidate(session,connection,candidate,lifecycle,failures)
+        if(threadId)return threadId
+      }
+      this.send(session,'agent_status',{status:'preparing',phase:hadPrivateManagedCli?'repairing':'installing'})
+      session.active?.timeout?.activity()
+      let installed
+      try {
+        installed=await this.ensureManagedCliInstalled()
+        this.logger({type:'codex-native-managed-cli-installed',version:String(installed.version||'').slice(0,64)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',version:String(installed.version||'').slice(0,64)})
+      } catch(error) {
+        failures.push({source:'penecho-install',error})
+        this.logger({type:'codex-native-managed-cli-install-failed',error:safeError(error)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',error:safeError(error)})
+        throw codexCandidateFailure(failures)
+      }
+      const threadId=await this.startCandidate(session,connection,{executable:installed.executable,source:'penecho-installed',privateManaged:true},lifecycle,failures)
+      if(threadId)return threadId
+      throw codexCandidateFailure(failures)
     })()
     session.startPromise = startPromise
     try {
@@ -968,22 +1197,6 @@ export class CodexNativeHost {
     turnPromise.catch(() => {})
     session.active = active
     session.turnNumber += 1
-    const timeoutController = new AbortController()
-    active.timeout = createCanvasAgentModelTimeout(
-      timeoutController,
-      Math.max(1_000, Number(this.modelTimeoutMs?.(session.connectionId)) || DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS),
-      {
-        reasonFor:(kind, limitMs) => Object.assign(new Error(kind === 'idle'
-          ? `Codex CLI PenEcho Agent turn timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without activity.`
-          : `Codex CLI PenEcho Agent turn timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
-      },
-    )
-    timeoutController.signal.addEventListener('abort', () => {
-      const error = timeoutController.signal.reason instanceof Error
-        ? timeoutController.signal.reason
-        : new Error('Codex CLI PenEcho Agent turn timed out.')
-      this.failTurn(session, error, { close:true }).catch(() => {})
-    }, { once:true })
     this.emitPublicEvent(session, { kind:'user_message', turn:session.turnNumber, text:redactPublicProjectValue(prompt, session) })
     this.emitPublicEvent(session, { kind:'turn_start', turn:session.turnNumber })
     this.send(session, 'agent_status', { status:'running' })
@@ -1000,6 +1213,22 @@ export class CodexNativeHost {
       await this.ensureStarted(session)
       assertActive()
       if (!session.process?.alive || !session.threadId) throw new Error('Codex Native PenEcho Agent thread is unavailable.')
+      const timeoutController = new AbortController()
+      active.timeout = createCanvasAgentModelTimeout(
+        timeoutController,
+        Math.max(1_000, Number(this.modelTimeoutMs?.(session.connectionId)) || DEFAULT_CANVAS_AGENT_IDLE_TIMEOUT_MS),
+        {
+          reasonFor:(kind, limitMs) => Object.assign(new Error(kind === 'idle'
+            ? `Codex CLI PenEcho Agent turn timed out after ${canvasAgentTimeoutSeconds(limitMs)} seconds without activity.`
+            : `Codex CLI PenEcho Agent turn timed out after reaching the ${canvasAgentTimeoutSeconds(limitMs)}-second total limit.`), { name:'TimeoutError' }),
+        },
+      )
+      timeoutController.signal.addEventListener('abort', () => {
+        const error = timeoutController.signal.reason instanceof Error
+          ? timeoutController.signal.reason
+          : new Error('Codex CLI PenEcho Agent turn timed out.')
+        this.failTurn(session, error, { close:true }).catch(() => {})
+      }, { once:true })
       const imageAttachments = await this.admitUserImages(session, images)
       assertActive()
       const initialCanvasState = await admitInitialCanvasState(session, this.attachments, initialState)

@@ -90,7 +90,7 @@ O [PenEcho Cloud](https://penecho.ai), lançado na versão 1.0.0, é totalmente 
 
 O **Echoes** permite explorar, favoritar e reutilizar telas e widgets públicos em doze categorias. Você pode publicar seus próprios Crafts, abri-los em um visualizador Web somente leitura e preservar a linhagem entre versões.
 
-## Novidades da versão 1.1.0
+## Novidades da versão 1.1.4
 
 - **PenEcho Agent.** Trabalhe com arquivos locais, projetos de pastas somente leitura, pesquisa na Web, contexto da tela, criação visual e edição direta em um único fluxo de várias etapas.
 - **Visual Explorer.** Transforme pesquisas, documentos, notas e planos em um resultado visual responsivo que conecta visão geral, detalhes e evidências.

@@ -109,10 +109,8 @@
     CANVAS_AGENT_MAX_REFERENCES = 20,
     CANVAS_AGENT_MAX_ATTACHMENTS = 5,
     CANVAS_AGENT_MAX_SOURCE_BYTES = 12 * 1024 * 1024,
-    CANVAS_AGENT_MAX_WIRE_BYTES = 900 * 1024,
+    CANVAS_AGENT_MAX_WIRE_BYTES = 5 * 1024 * 1024,
     CANVAS_AGENT_MAX_TOTAL_WIRE_BYTES = CANVAS_AGENT_MAX_ATTACHMENTS * CANVAS_AGENT_MAX_WIRE_BYTES,
-    CANVAS_AGENT_MAX_IMAGE_PIXELS = 64 * 1024 * 1024,
-    CANVAS_AGENT_MAX_IMAGE_DIMENSION = 16384,
     CANVAS_AGENT_WIRE_IMAGE_DIMENSION = 2048,
     CANVAS_AGENT_COMFORT_BODY_PX = 15,
     CANVAS_AGENT_PREFERRED_BODY_MIN_PX = 11,
@@ -1014,7 +1012,7 @@
     if(/CONCURRENC|CAPACITY|SERVER_BUSY/.test(code)||/concurrenc|too many simultaneous|server is busy|service is busy/.test(message))return "busy";
     if(/TIMEOUT|ETIMEDOUT/.test(code)||/timed? out|timeout/.test(message))return "timeout";
     if(/RATE_LIMIT|TOO_MANY_REQUESTS|RESOURCE_EXHAUSTED|QUOTA/.test(code)||code==="429"||/rate limit|too many requests|quota exceeded|\b(?:http )?429\b/.test(message))return "rate_limit";
-    if(/CONTEXT_LENGTH|REQUEST_TOO_LARGE|PAYLOAD_TOO_LARGE|TOKEN_LIMIT/.test(code)||/context (?:length|window)|too many tokens|request (?:is )?too large|maximum token/.test(message))return "request_too_large";
+    if(/CONTEXT_LENGTH|REQUEST_TOO_LARGE|PAYLOAD_TOO_LARGE|TOKEN_LIMIT/.test(code)||/context (?:length|window)|too many tokens|request (?:is )?too large|message is too large|more attachment data than penecho can safely process|maximum token/.test(message))return "request_too_large";
     if(/UNAUTHENTICATED|UNAUTHORIZED|AUTHENTICATION_FAILED|INVALID_API_KEY|API_KEY_INVALID|LOGIN_REQUIRED/.test(code)||code==="401"||/\bunauthorized\b|\bunauthenticated\b|authentication failed|invalid api key|please (?:log|sign) in|not logged in|\b(?:http )?401\b/.test(message))return "authentication";
     if(/MODEL_NOT_FOUND|MODEL_UNAVAILABLE|UNKNOWN_MODEL/.test(code)||/model .*?(?:not found|unavailable|does not exist|not supported)/.test(message))return "model_unavailable";
     if(/ECONN|ENOTFOUND|EAI_AGAIN|NETWORK|SOCKET|CONNECTION/.test(code)||/network error|fetch failed|connection (?:failed|closed|reset|refused)|socket hang up|could not connect/.test(message))return "connection";
@@ -1768,9 +1766,9 @@
     return new Promise(resolve=>canvas.toBlob(resolve,type,quality));
   }
   async function canvasAgentWireImage(file,image) {
-    const sourceType = String(file.type || "").toLowerCase();
-    if (file.size <= CANVAS_AGENT_MAX_WIRE_BYTES && new Set(["image/png","image/webp"]).has(sourceType)) return file;
-    let scale = Math.min(1,CANVAS_AGENT_WIRE_IMAGE_DIMENSION/Math.max(image.naturalWidth,image.naturalHeight));
+    const sourceType = String(file.type || "").toLowerCase(), sourceLongEdge=Math.max(image.naturalWidth,image.naturalHeight);
+    if (file.size <= CANVAS_AGENT_MAX_WIRE_BYTES && sourceLongEdge <= CANVAS_AGENT_WIRE_IMAGE_DIMENSION && new Set(["image/png","image/webp"]).has(sourceType)) return file;
+    let scale = Math.min(1,CANVAS_AGENT_WIRE_IMAGE_DIMENSION/sourceLongEdge);
     for (let pass=0;pass<8;pass++) {
       const width = Math.max(1,Math.round(image.naturalWidth*scale)), height = Math.max(1,Math.round(image.naturalHeight*scale)), canvas = document.createElement("canvas"), context = canvas.getContext("2d");
       canvas.width = width;
@@ -1782,13 +1780,13 @@
       }
       scale *= .8;
     }
-    throw Error(t("canvasAgentImageTooLarge"));
+    throw Error(t("canvasAgentImageCompressionTooLarge"));
   }
   async function canvasAgentPrepareAttachment(file) {
     if (!(file instanceof Blob) || !String(file.type || "").startsWith("image/") || file.size <= 0) throw Error(t("canvasAgentImageUnsupported"));
-    if (file.size > CANVAS_AGENT_MAX_SOURCE_BYTES) throw Error(t("canvasAgentImageTooLarge"));
+    if (file.size > CANVAS_AGENT_MAX_SOURCE_BYTES) throw Error(t("canvasAgentImageSourceTooLarge"));
     const image = await canvasAgentDecodeImage(file), width = image.naturalWidth || image.width, height = image.naturalHeight || image.height;
-    if (!width || !height || width > CANVAS_AGENT_MAX_IMAGE_DIMENSION || height > CANVAS_AGENT_MAX_IMAGE_DIMENSION || width*height > CANVAS_AGENT_MAX_IMAGE_PIXELS) throw Error(t("canvasAgentImageTooLarge"));
+    if (!width || !height) throw Error(t("canvasAgentImageUnsupported"));
     const wire = await canvasAgentWireImage(file,image), dataUrl = await canvasAgentReadDataUrl(wire), comma = dataUrl.indexOf(","), mediaType = String(wire.type || "").toLowerCase();
     if (comma < 0 || !new Set(["image/png","image/jpeg","image/webp","image/gif"]).has(mediaType)) throw Error(t("canvasAgentImageUnsupported"));
     return {
@@ -2766,9 +2764,15 @@
     }
     if (envelope.type === "session_event") canvasAgentHandleEvent(envelope.payload);
     else if (envelope.type === "agent_status") {
+      const status=String(envelope.payload?.status||"");
       canvasAgent.requestPending = false;
-      canvasAgentSetRunning(envelope.payload?.status !== "idle");
-      if(envelope.payload?.status === "idle"&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
+      canvasAgentSetRunning(status !== "idle");
+      if(status === "preparing"){
+        const phase=String(envelope.payload?.phase||"");
+        const key=phase==="installing"?"canvasAgentSettingUpCodex":phase==="repairing"?"canvasAgentRepairingCodex":"canvasAgentCheckingCodex";
+        canvasAgentSetStatus(t(key),"running");
+      }
+      else if(status === "idle"&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
     }
     else if (envelope.type === "tool_request") await canvasAgentExecuteTool(envelope.payload);
     else if (envelope.type === "error") {

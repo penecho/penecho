@@ -112,7 +112,7 @@ Never commit certificates or credentials.
 
 ## GitHub Releases
 
-Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v1.1.0`.
+Keep source, icon masters, Forge configuration and the workflow in the source branch. Do not commit DMG/EXE/ZIP files to Git. Release binaries belong in a version-specific GitHub Release such as `v1.1.4`.
 
 The workflow can be run manually for private testing. When triggered by a `v*` tag, it creates a **draft** GitHub Release and uploads the installers. Test every installer before publishing the draft.
 
@@ -129,13 +129,13 @@ These paths intentionally do not invoke Electron's native `autoUpdater`, because
 
 Recommended public assets:
 
-- `PenEcho-1.1.0-mac-arm64.dmg`
-- `PenEcho-1.1.0-mac-x64.dmg`
-- `PenEcho-1.1.0-mac-arm64.zip`
-- `PenEcho-1.1.0-mac-x64.zip`
-- `PenEcho-Setup-1.1.0-win-x64.exe`
+- `PenEcho-1.1.4-mac-arm64.dmg`
+- `PenEcho-1.1.4-mac-x64.dmg`
+- `PenEcho-1.1.4-mac-arm64.zip`
+- `PenEcho-1.1.4-mac-x64.zip`
+- `PenEcho-Setup-1.1.4-win-x64.exe`
 - `RELEASES`
-- `penecho-1.1.0-full.nupkg`
+- `penecho-1.1.4-full.nupkg`
 - `SHA256SUMS-<platform>-<arch>.txt`
 
 The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP and Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.

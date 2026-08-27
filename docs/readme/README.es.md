@@ -90,7 +90,7 @@ Escribe una pregunta, ecuación, diagrama o idea incompleta en cualquier lugar d
 
 **Echoes** permite explorar, marcar como favoritos y reutilizar lienzos y widgets públicos en doce categorías. Puedes publicar tus propios Crafts, abrirlos en un visor web de solo lectura y conservar su linaje entre versiones.
 
-## Novedades de la versión 1.1.0
+## Novedades de la versión 1.1.4
 
 - **PenEcho Agent.** Trabaja con archivos locales, proyectos de carpetas de solo lectura, investigación web, contexto del lienzo, creación visual y edición directa en un único flujo de varios pasos.
 - **Visual Explorer.** Transforma investigación, documentos, notas y planes en un resultado visual adaptable que conecta la vista general con los detalles y las evidencias.

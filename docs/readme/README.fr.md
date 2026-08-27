@@ -90,7 +90,7 @@ npm start
 
 **Echoes** permet d'explorer, de mettre en favoris et de réutiliser des canevas et widgets publics dans douze catégories. Vous pouvez publier vos propres Crafts, les ouvrir dans un visualiseur Web en lecture seule et conserver leur filiation entre les versions.
 
-## Nouveautés de la version 1.1.0
+## Nouveautés de la version 1.1.4
 
 - **PenEcho Agent.** Enchaînez fichiers locaux, projets de dossiers en lecture seule, recherche Web, contexte du canevas, création visuelle et édition directe dans un seul flux en plusieurs étapes.
 - **Visual Explorer.** Transformez recherches, documents, notes et plans en un résultat visuel adaptatif qui relie vue d'ensemble, détails et preuves.

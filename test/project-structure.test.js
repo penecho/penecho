@@ -38,7 +38,7 @@ test("server, provider, and CLI implementations live under src without unrelated
     "src/server/main.js", "src/server/cloud-connector.js", "src/server/activity-timeout.js", "src/server/api-config.js", "src/server/api-stream.js", "src/server/widget-patch.js", "src/server/typeset.js",
     "src/server/canvas-agent/http.js", "src/server/canvas-agent/protocol.mjs", "src/server/canvas-agent/cli-adapter.mjs", "src/server/canvas-agent/runtime.mjs",
     "src/providers/reasoning-effort.js", "src/providers/cli-discovery.js", "src/providers/kimi-cli.js", "src/providers/kimi-acp.js", "src/providers/codex-cli.js", "src/providers/claude-cli.js",
-    "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/update.js",
+    "src/cli/main.js", "src/cli/configure-ui.js", "src/cli/node-version.js", "src/cli/update.js",
     "public/access.html", "public/access.css", "public/access.js", "public/cloud-connect.css", "public/cloud-connect.js",
   ]) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
   for (const excluded of [

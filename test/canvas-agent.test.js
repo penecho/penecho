@@ -128,6 +128,26 @@ test("PenEcho Agent normalizes generated ink through the same client wire as add
   assert.doesNotMatch(ink,/canvasAgentPrepareAttachment\([\s\S]*,true\)/);
 });
 
+test("PenEcho Agent resizes oversized image dimensions before WebP admission",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),wireSource=functionSource(source,"canvasAgentWireImage").replace(/^function /,"async function "),canvases=[],
+    image={naturalWidth:20000,naturalHeight:10000},file={type:"image/webp",size:4*1024*1024},
+    wire=vm.runInNewContext(`(()=>{${wireSource}return canvasAgentWireImage;})()`,{
+      CANVAS_AGENT_MAX_WIRE_BYTES:5*1024*1024,
+      CANVAS_AGENT_WIRE_IMAGE_DIMENSION:2048,
+      document:{createElement:()=>{const canvas={width:0,height:0,getContext:()=>({drawImage(){}})};canvases.push(canvas);return canvas;}},
+      canvasAgentCanvasBlob:async(canvas,type,quality)=>({size:4*1024*1024,type,quality,width:canvas.width,height:canvas.height}),
+      t:key=>key,
+    });
+  const result=await wire(file,image);
+  assert.equal(result.type,"image/webp");
+  assert.equal(result.width,2048);
+  assert.equal(result.height,1024);
+  assert.deepEqual(canvases.map(canvas=>[canvas.width,canvas.height]),[[2048,1024]]);
+  const prepare=functionSource(source,"canvasAgentPrepareAttachment");
+  assert.doesNotMatch(prepare,/MAX_IMAGE_DIMENSION|MAX_IMAGE_PIXELS|ImageDimensionsTooLarge/);
+  assert.doesNotMatch(source,/CANVAS_AGENT_MAX_IMAGE_DIMENSION|CANVAS_AGENT_MAX_IMAGE_PIXELS/);
+});
+
 test("PenEcho Agent traces handwriting upload admission and final LLM image requests on both engines",()=>{
   const store=read("src/server/canvas-agent/image-attachments.mjs"),runtime=read("src/server/canvas-agent/runtime.mjs"),native=read("src/server/canvas-agent/codex-native-host.mjs");
   assert.match(store,/async readImageRequest\(ref, policy, signal\)[\s\S]*requestImageObserver\?\.\(\{ ref, policy, image:output \}\)/);
@@ -2015,8 +2035,8 @@ test("PenEcho Agent converts JPEG request projections to a bounded PNG fallback"
   assert.equal(calls.length,1);
   assert.match(calls[0].atlasImage,/^data:image\/png;base64,/);
   const png=Buffer.from(calls[0].atlasImage.split(",",2)[1],"base64"),metadata=await sharp(png).metadata();
-  assert.ok(png.length<=1024*1024);
-  assert.ok(metadata.width<width||metadata.height<height);
+  assert.ok(png.length<=5*1024*1024);
+  assert.ok(metadata.width<=width&&metadata.height<=height);
 });
 
 test("PenEcho Agent rejects captures outside hard raster and encoded-byte policies",async t=>{
@@ -2627,6 +2647,7 @@ test("PenEcho Agent maps provider failures to concise localized error categories
   assert.equal(context.canvasAgentErrorKind({code:"UNKNOWN",message:"PenEcho Agent CLI request timed out after 180 seconds."}),"timeout");
   assert.equal(context.canvasAgentErrorKind({code:"429",message:"Too many requests"}),"rate_limit");
   assert.equal(context.canvasAgentErrorKind({code:"CONTEXT_LENGTH_EXCEEDED",message:"Maximum context window reached"}),"request_too_large");
+  assert.equal(context.canvasAgentErrorKind({code:"CODEX_NATIVE_FAILED",message:"Codex returned more attachment data than PenEcho can safely process in one message."}),"request_too_large");
   assert.equal(context.canvasAgentErrorKind({code:"INVALID_API_KEY",message:"Authentication failed"}),"authentication");
   assert.equal(context.canvasAgentErrorKind({code:"MODEL_NOT_FOUND",message:"Model was not found"}),"model_unavailable");
   assert.equal(context.canvasAgentErrorKind({code:"ECONNREFUSED",message:"Connection refused"}),"connection");
@@ -2915,13 +2936,18 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(source,/function canvasAgentHandleEvent[\s\S]*?assistant_delta[\s\S]*?final:false[\s\S]*?assistant_message[\s\S]*?turn_end[\s\S]*?reason\?\.kind==="completed"[\s\S]*?canvasAgentMarkTurnSummaryCopyable\(event\.turn\)/);
   assert.match(source,/turn_end[\s\S]*?lastTurnError=event\.reason\?\.kind==="error"\?canvasAgentNormalizeError[\s\S]*?canvasAgentErrorRow\(canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
   assert.match(source,/agent_status[\s\S]*?status === "idle"&&canvasAgent\.lastTurnError[\s\S]*?canvasAgentErrorSummary\(canvasAgent\.lastTurnError\)/);
+  assert.match(source,/status === "preparing"[\s\S]*?phase==="installing"\?"canvasAgentSettingUpCodex":phase==="repairing"\?"canvasAgentRepairingCodex":"canvasAgentCheckingCodex"/);
   assert.match(source,/envelope\.type === "error"[\s\S]*?canvasAgentNormalizeError\(envelope\.payload\)[\s\S]*?canvasAgentErrorRow\(error/);
   assert.match(functionSource(source,"canvasAgentNormalizeHistoryItem"),/item\.type === "error"[\s\S]*?code:error\.code[\s\S]*?message:error\.message/);
   assert.match(functionSource(source,"canvasAgentAppendErrorElement"),/createElement\("details"\)[\s\S]*?createElement\("summary"\)[\s\S]*?canvas-agent-error-message/);
   assert.match(css,/\.canvas-agent-message-actions\[hidden\]\s*\{\s*display: none/);
   assert.match(css,/\.canvas-agent-error > summary\s*\{[^}]*min-height: 42px/);
   assert.match(css,/\.canvas-agent-error-message\s*\{[^}]*white-space: pre-wrap/);
-  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCopyResponse","canvasAgentResponseCopied","canvasAgentResponseCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock","canvasAgentErrorBusy","canvasAgentErrorTimeout","canvasAgentErrorRateLimit","canvasAgentErrorRequestTooLarge","canvasAgentErrorAuthentication","canvasAgentErrorModelUnavailable","canvasAgentErrorConnection","canvasAgentErrorGeneric","canvasAgentErrorViewDetails","canvasAgentErrorCode","canvasAgentErrorMessage"]) assert.match(dictionary,new RegExp(`${key}:`));
+  for(const dictionary of [core,zh]) for(const key of ["canvasAgentCopyBlock","canvasAgentBlockCopied","canvasAgentBlockCopyFailed","canvasAgentCopyResponse","canvasAgentResponseCopied","canvasAgentResponseCopyFailed","canvasAgentCodeBlock","canvasAgentTextBlock","canvasAgentCheckingCodex","canvasAgentSettingUpCodex","canvasAgentRepairingCodex","canvasAgentErrorBusy","canvasAgentErrorTimeout","canvasAgentErrorRateLimit","canvasAgentErrorRequestTooLarge","canvasAgentErrorAuthentication","canvasAgentErrorModelUnavailable","canvasAgentErrorConnection","canvasAgentErrorGeneric","canvasAgentErrorViewDetails","canvasAgentErrorCode","canvasAgentErrorMessage","canvasAgentImageSourceTooLarge","canvasAgentImageCompressionTooLarge","canvasAgentImagesTooLarge"]) assert.match(dictionary,new RegExp(`${key}:`));
+  assert.doesNotMatch(core,/canvasAgentImageDimensionsTooLarge|16,384 px|64 megapixels/);
+  assert.doesNotMatch(zh,/canvasAgentImageDimensionsTooLarge|16,384|6,400 万像素/);
+  assert.match(core,/canvasAgentImageCompressionTooLarge: "PenEcho could not resize and convert this image to a WebP below 5 MB/);
+  assert.match(zh,/canvasAgentImageCompressionTooLarge: "PenEcho 无法将这张图片缩小并转换为 5 MB 以内的 WebP/);
   assert.match(source,/canvasAgentToolInspect[\s\S]*?canvasAgentToolSetView/);
   assert.match(source,/CANVAS_AGENT_HISTORY_KEY = "penecho-canvas-agent-history-v1"/);
   assert.match(source,/CANVAS_AGENT_HISTORY_LIMIT = 5/);

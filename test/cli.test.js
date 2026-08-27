@@ -560,7 +560,7 @@ test("doctor is diagnostic-only and reports the unified timeout", async () => {
     runner:async (_launch, args) => ({ code:0, stdout:args[0] === "--version" ? "codex test\n" : "logged in\n", stderr:"" }),
   });
   assert.equal(ready, true);
-  assert.match(output.text(), /Node\.js .*22\.19\+ required/);
+  assert.match(output.text(), /Node\.js .*22\.19\.0\+ required/);
   assert.match(output.text(), /Unified model timeout is 180 seconds/);
   assert.match(output.text(), /Reasoning effort is medium \(PenEcho default\)/);
   assert.match(output.text(), /no model request was made/);
