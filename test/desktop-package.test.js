@@ -391,6 +391,12 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
+  assert.match(html, /name="apiModel" list="apiModelPresets"/);
+  assert.match(html, /value="moonshotai\/kimi-k3" label="1,048,576-token context; text, image, and video input; adaptive or disabled thinking\."/);
+  assert.match(html, /name="apiUrl" type="url" list="apiUrlPresets"/);
+  for (const endpoint of ["https://api.novita.ai/openai/v1", "https://api.novita.ai/anthropic"]) {
+    assert.match(html, new RegExp(`value="${endpoint.replaceAll(".", "\\.")}"`));
+  }
   assert.match(fs.readFileSync(path.join(ROOT, "desktop", "settings", "settings.css"), "utf8"), /\.inline-primary,\.inline-secondary\{[^}]*display:inline-flex[^}]*text-decoration:none/);
   assert.match(settings, /\["kimi-cli", "codex-cli", "claude-cli"\]\.includes\(selected\)/);
   assert.match(settings, /"kimi-cli":"kimiCliPath"/);

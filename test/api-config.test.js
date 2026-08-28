@@ -3,12 +3,29 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  NOVITA_ENDPOINTS,
+  NOVITA_MODELS,
   anthropicEffortParameters,
   anthropicResponseMaxTokens,
   configuredMaxTokens,
   normalizedApiEffort,
   resolveApiConfig,
 } = require("../src/server/api-config.js");
+
+test("Novita presets retain current endpoint and model metadata", () => {
+  assert.deepEqual(NOVITA_ENDPOINTS, {
+    openaiBaseUrl:"https://api.novita.ai/openai/v1",
+    anthropicBaseUrl:"https://api.novita.ai/anthropic",
+    docsRoot:"https://novita.ai/docs",
+  });
+  assert.deepEqual(NOVITA_MODELS["moonshotai/kimi-k3"], {
+    modelId:"moonshotai/kimi-k3",
+    contextWindow:1048576,
+    pricingUsdPerMillionTokens:{ input:3.0, output:15.0, cacheRead:0.3, cacheWrite:null },
+    inputModalities:["text", "image", "video"],
+    thinking:["adaptive", "disabled"],
+  });
+});
 
 test("API format selection builds the matching endpoint", () => {
   assert.deepEqual(resolveApiConfig("https://api.openai.com/v1", "openai"), {

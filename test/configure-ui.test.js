@@ -119,6 +119,32 @@ test("Anthropic API configuration offers none and defaults new selections to med
   assert.equal(effortPrompt.defaultValue, "medium");
 });
 
+test("Novita API presets expose the OpenAI and Anthropic endpoints and current model capabilities", async () => {
+  const directory = temporaryDirectory(), configuration = {
+    home:directory, stateDir:path.join(directory, ".penecho"), configFile:path.join(directory, "config.env"), env:{},
+  }, saved = [];
+  const ui = uiScript({
+    selections:["novita-anthropic", "moonshotai/kimi-k3", "none", "save"],
+    passwords:["test-key"],
+  });
+  await runConfigureMenu(configuration, {
+    ui, directProvider:"api", save:async values => saved.push(values), test:async () => "ok",
+  });
+  const typePrompt = ui.selects.find(item => item.message === "API type"),
+    modelPrompt = ui.selects.find(item => item.message === "Model"),
+    effortPrompt = ui.selects.find(item => item.message === "Reasoning effort"),
+    kimiK3 = modelPrompt.choices.find(choice => choice.value === "moonshotai/kimi-k3");
+  assert.ok(typePrompt.choices.some(choice => choice.value === "novita-openai"));
+  assert.ok(typePrompt.choices.some(choice => choice.value === "novita-anthropic"));
+  assert.match(kimiK3.description, /1,048,576-token context/);
+  assert.match(kimiK3.description, /text, image, and video input/);
+  assert.match(kimiK3.description, /adaptive or disabled thinking/);
+  assert.ok(effortPrompt.choices.some(choice => choice.value === "none"));
+  assert.equal(saved[0].AI_API_FORMAT, "anthropic");
+  assert.equal(saved[0].AI_API_URL, "https://api.novita.ai/anthropic");
+  assert.equal(saved[0].AI_API_MODEL, "moonshotai/kimi-k3");
+});
+
 test("configured CLI models are discovered when local settings expose them", () => {
   const home = temporaryDirectory();
   fs.mkdirSync(path.join(home, ".codex"), { recursive:true });

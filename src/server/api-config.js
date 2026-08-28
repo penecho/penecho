@@ -5,6 +5,22 @@ const { DEFAULT_REASONING_EFFORT, apiReasoningParameters } = require("../provide
 const DEFAULT_MAX_TOKENS = 20000;
 const MIN_MAX_TOKENS = 15000;
 
+const NOVITA_ENDPOINTS = Object.freeze({
+  openaiBaseUrl:"https://api.novita.ai/openai/v1",
+  anthropicBaseUrl:"https://api.novita.ai/anthropic",
+  docsRoot:"https://novita.ai/docs",
+});
+
+const NOVITA_MODELS = Object.freeze({
+  "moonshotai/kimi-k3":Object.freeze({
+    modelId:"moonshotai/kimi-k3",
+    contextWindow:1048576,
+    pricingUsdPerMillionTokens:Object.freeze({ input:3.0, output:15.0, cacheRead:0.3, cacheWrite:null }),
+    inputModalities:Object.freeze(["text", "image", "video"]),
+    thinking:Object.freeze(["adaptive", "disabled"]),
+  }),
+});
+
 function resolveApiConfig(value, formatOverride) {
   if (!value) return null;
   const requestedFormat = String(formatOverride || "").trim().toLowerCase();
@@ -57,6 +73,8 @@ function anthropicResponseMaxTokens(effort, maxTokens = DEFAULT_MAX_TOKENS) {
 module.exports = {
   DEFAULT_MAX_TOKENS,
   MIN_MAX_TOKENS,
+  NOVITA_ENDPOINTS,
+  NOVITA_MODELS,
   anthropicEffortParameters,
   anthropicResponseMaxTokens,
   configuredMaxTokens,
