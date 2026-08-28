@@ -52,6 +52,30 @@ function executableName(base, platform) {
   return platform === "win32" ? `${base}.exe` : base;
 }
 
+function codexHostName(platform = process.platform) {
+  return executableName("codex-code-mode-host", platform);
+}
+
+function executableFile(file) {
+  try { return fs.statSync(file).isFile(); }
+  catch { return false; }
+}
+
+function assertCodexCliBundle(executable, platform = process.platform) {
+  const resolved = path.resolve(String(executable || "")), expectedName = executableName("codex", platform), hostExecutable = path.join(path.dirname(resolved), codexHostName(platform));
+  if (path.basename(resolved).toLowerCase() !== expectedName.toLowerCase() || !executableFile(resolved)) {
+    const error = new Error(`Codex CLI bundle is incomplete: ${expectedName} was not found.`);
+    error.code = "CODEX_CLI_BUNDLE_INCOMPLETE";
+    throw error;
+  }
+  if (!executableFile(hostExecutable)) {
+    const error = new Error(`Codex CLI bundle is incomplete: ${codexHostName(platform)} was not found beside ${expectedName}.`);
+    error.code = "CODEX_CLI_BUNDLE_INCOMPLETE";
+    throw error;
+  }
+  return { executable:resolved, hostExecutable };
+}
+
 function managedCliPath(provider, options = {}) {
   const platform = options.platform || process.platform, homeValue=String(options.home||"").trim(), stateValue=String(options.stateDir||"").trim();
   if (!homeValue || !stateValue) throw new Error("Application paths are unavailable.");
@@ -88,7 +112,7 @@ function codexCliVersion(value) {
 
 function assertCodexCliVersion(value, expectedVersion = CODEX_CLI_PINNED_VERSION) {
   const expected = String(expectedVersion || "").trim(), actual = codexCliVersion(value);
-  if (expected && actual === expected) return actual;
+  if (actual && (expected === "latest" || actual === expected)) return actual;
   const error = new Error(actual
     ? `PenEcho Agent requires Codex CLI ${expected}, but found ${actual}.`
     : `PenEcho Agent requires Codex CLI ${expected}, but the candidate did not report a compatible version.`);
@@ -198,23 +222,24 @@ function installInvocation(provider, script, options = {}) {
   };
 }
 
-function replaceManagedExecutable(stagedExecutable, executable) {
-  fs.mkdirSync(path.dirname(executable), { recursive:true, mode:0o700 });
-  const replacement = path.join(path.dirname(executable), `.penecho-codex-${randomUUID()}`),
-    backup = path.join(path.dirname(executable), `.penecho-codex-backup-${randomUUID()}`),
-    hadExisting = fs.existsSync(executable);
-  fs.renameSync(stagedExecutable, replacement);
+function replaceManagedDirectory(stagedDirectory, destinationDirectory) {
+  const parent = path.dirname(destinationDirectory);
+  fs.mkdirSync(parent, { recursive:true, mode:0o700 });
+  const replacement = path.join(parent, `.penecho-codex-${randomUUID()}`),
+    backup = path.join(parent, `.penecho-codex-backup-${randomUUID()}`),
+    hadExisting = fs.existsSync(destinationDirectory);
+  fs.renameSync(stagedDirectory, replacement);
   try {
-    if (hadExisting) fs.renameSync(executable, backup);
-    fs.renameSync(replacement, executable);
-    if (hadExisting) fs.rmSync(backup, { force:true });
+    if (hadExisting) fs.renameSync(destinationDirectory, backup);
+    fs.renameSync(replacement, destinationDirectory);
   } catch (error) {
-    try { fs.rmSync(replacement, { force:true }); } catch {}
-    if (hadExisting && !fs.existsSync(executable) && fs.existsSync(backup)) {
-      try { fs.renameSync(backup, executable); } catch {}
+    try { fs.rmSync(replacement, { recursive:true, force:true }); } catch {}
+    if (hadExisting && !fs.existsSync(destinationDirectory) && fs.existsSync(backup)) {
+      try { fs.renameSync(backup, destinationDirectory); } catch {}
     }
     throw error;
   }
+  if (hadExisting) try { fs.rmSync(backup, { recursive:true, force:true }); } catch {}
 }
 
 async function installCli(provider, options = {}) {
@@ -229,16 +254,18 @@ async function installCli(provider, options = {}) {
     installDirectory = stagingRoot ? path.join(stagingRoot, "bin") : "";
   const item = await downloadInstaller(provider, script, { platform, fetchImpl:options.fetchImpl });
   try {
-    const invocation = installInvocation(provider, script, { platform, home, stateDir, env:options.env, ...(installDirectory ? { installDirectory } : {}) });
+    const requestedCodexVersion = String(options.codexVersion || CODEX_CLI_PINNED_VERSION),
+      invocation = installInvocation(provider, script, { platform, home, stateDir, env:options.env, codexVersion:requestedCodexVersion, ...(installDirectory ? { installDirectory } : {}) });
     await runner(invocation.command, invocation.args, { cwd:stateDir, env:invocation.env, timeoutMs:INSTALL_TIMEOUT_MS });
     const executable = managedCliPath(provider, { platform, home, stateDir }),
       installedExecutable = installDirectory ? path.join(installDirectory, executableName(item.executable, platform)) : executable;
     if (!fs.existsSync(installedExecutable)) throw new Error(`${item.label} finished installing, but its executable could not be found.`);
+    if (provider === "codex-cli") assertCodexCliBundle(installedExecutable, platform);
     const version = await runner(installedExecutable, ["--version"], { cwd:stateDir, env:invocation.env, timeoutMs:30000 });
     const versionText = cleanOutput(version.output || version.diagnostic).slice(0, 200);
-    if (provider === "codex-cli") assertCodexCliVersion(versionText, options.codexVersion || CODEX_CLI_PINNED_VERSION);
-    if (installDirectory) replaceManagedExecutable(installedExecutable, executable);
-    return { provider, executable, version:versionText, label:item.label };
+    if (provider === "codex-cli") assertCodexCliVersion(versionText, requestedCodexVersion);
+    if (installDirectory) replaceManagedDirectory(installDirectory, path.dirname(executable));
+    return { provider, executable, ...(provider === "codex-cli" ? { hostExecutable:path.join(path.dirname(executable),codexHostName(platform)) } : {}), version:versionText, label:item.label };
   } finally {
     try { fs.rmSync(script, { force:true }); } catch {}
     if (stagingRoot) try { fs.rmSync(stagingRoot, { recursive:true, force:true }); } catch {}
@@ -252,13 +279,15 @@ module.exports = {
   LOGIN_COMMANDS,
   definition,
   downloadInstaller,
+  assertCodexCliBundle,
   assertCodexCliVersion,
+  codexHostName,
   codexCliVersion,
   inspectCli,
   installCli,
   installInvocation,
   managedCliHome,
   managedCliPath,
-  replaceManagedExecutable,
+  replaceManagedDirectory,
   runProcess,
 };

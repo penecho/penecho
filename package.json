@@ -1,8 +1,8 @@
 {
   "name": "penecho",
-  "version": "1.1.5",
+  "version": "1.1.7",
   "config": {
-    "desktopVersion": "1.1.5"
+    "desktopVersion": "1.1.7"
   },
   "description": "Turn research, files, and canvas context into editable visual work with AI",
   "author": "PenEcho contributors",

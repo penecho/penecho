@@ -8,7 +8,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
 const { readSecret, writeSecret } = require("../desktop/secret-store.js");
-const { CODEX_CLI_PINNED_VERSION, inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
+const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, codexHostName, inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
 const { pathExecutables } = require("../src/providers/cli-discovery.js");
 const {
   RELEASE_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
@@ -386,8 +386,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(otherGroup, /value="codex-cli"/);
   assert.match(otherGroup, /value="claude-cli"/);
   assert.ok(html.indexOf("kimi-provider-group") < html.indexOf("otherProviderGroupTitle"));
-  assert.equal(rootPackage.version, "1.1.5");
-  assert.equal(rootPackage.config.desktopVersion, "1.1.5");
+  assert.equal(rootPackage.version, "1.1.7");
+  assert.equal(rootPackage.config.desktopVersion, "1.1.7");
   assert.match(html, /data-install-cli="kimi-cli"/);
   assert.match(html, /github\.com\/MoonshotAI\/kimi-code/);
   assert.match(html, /data-i18n="installGuide">Guide<\/a>/);
@@ -702,6 +702,7 @@ test("desktop CLI setup uses official installers without requiring npm", () => {
     claudePath = managedCliPath("claude-cli", options),
     kimi = installInvocation("kimi-cli", "/tmp/kimi.sh", options),
     codex = installInvocation("codex-cli", "/tmp/codex.sh", options),
+    latestCodex = installInvocation("codex-cli", "/tmp/codex.sh", { ...options, codexVersion:"latest" }),
     claude = installInvocation("claude-cli", "/tmp/claude.sh", options);
   assert.equal(kimiPath, path.join(resolvedStateDir, "tools", "kimi", "bin", "kimi"));
   assert.equal(codexPath, path.join(resolvedStateDir, "tools", "codex", "bin", "codex"));
@@ -712,6 +713,7 @@ test("desktop CLI setup uses official installers without requiring npm", () => {
   assert.equal(codex.command, "/bin/sh");
   assert.equal(codex.env.CODEX_NON_INTERACTIVE, "1");
   assert.equal(codex.env.CODEX_RELEASE, CODEX_CLI_PINNED_VERSION);
+  assert.equal(latestCodex.env.CODEX_RELEASE, "latest");
   assert.equal(codex.env.CODEX_INSTALL_DIR, path.dirname(codexPath));
   assert.equal(codex.env.CODEX_HOME, path.join(resolvedStateDir,"tools","codex","home"));
   assert.deepEqual(claude.args, ["/tmp/claude.sh", "stable"]);
@@ -766,6 +768,8 @@ test("automatic CLI setup validates the official script and installed executable
         const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
         fs.mkdirSync(path.dirname(staged), { recursive:true });
         fs.writeFileSync(staged, "test");
+        fs.writeFileSync(path.join(path.dirname(staged),codexHostName("darwin")),"host");
+        fs.writeFileSync(path.join(path.dirname(staged),"runtime-sidecar"),"sidecar");
         return { output:"installed" };
       },
     });
@@ -777,6 +781,8 @@ test("automatic CLI setup validates the official script and installed executable
     assert.notEqual(calls[0].env.CODEX_HOME,path.join(home,".codex"));
     assert.ok(calls[0].env.CODEX_INSTALL_DIR.startsWith(path.join(stateDir,"installers")));
     assert.equal(fs.readFileSync(expected,"utf8"),"test");
+    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"utf8"),"host");
+    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"runtime-sidecar"),"utf8"),"sidecar");
     assert.equal(fs.existsSync(path.join(stateDir, "installers", "codex-cli.sh")), false);
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
@@ -787,6 +793,7 @@ test("automatic Codex setup keeps the existing managed CLI when the downloaded v
   try {
     fs.mkdirSync(path.dirname(expected), { recursive:true });
     fs.writeFileSync(expected, "known-good");
+    fs.writeFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"known-good-host");
     await assert.rejects(()=>installCli("codex-cli", {
       platform:"darwin", home, stateDir,
       fetchImpl:async () => new Response("#!/bin/sh\n# CODEX_INSTALL_DIR\n", { status:200 }),
@@ -795,11 +802,67 @@ test("automatic Codex setup keeps the existing managed CLI when the downloaded v
         const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
         fs.mkdirSync(path.dirname(staged), { recursive:true });
         fs.writeFileSync(staged, "unapproved");
+        fs.writeFileSync(path.join(path.dirname(staged),"codex-code-mode-host"),"unapproved-host");
         return { output:"installed" };
       },
     }),/requires Codex CLI 0\.149\.1, but found 0\.150\.1/);
     assert.equal(fs.readFileSync(expected,"utf8"),"known-good");
+    assert.equal(fs.readFileSync(path.join(path.dirname(expected),"codex-code-mode-host"),"utf8"),"known-good-host");
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
+});
+
+test("Codex bundle validation requires the platform host beside the CLI", () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-codex-host-test-")),executable=path.join(directory,"codex.exe"),host=path.join(directory,"codex-code-mode-host.exe");
+  try {
+    fs.writeFileSync(executable,"codex");
+    assert.throws(()=>assertCodexCliBundle(executable,"win32"),/codex-code-mode-host\.exe was not found beside codex\.exe/);
+    fs.writeFileSync(host,"host");
+    assert.deepEqual(assertCodexCliBundle(executable,"win32"),{executable:path.resolve(executable),hostExecutable:host});
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test("automatic Windows Codex setup publishes the host and sidecars with codex.exe", async () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-win-codex-install-test-")),home=path.join(directory,"home"),stateDir=path.join(directory,"state"),
+    executable=managedCliPath("codex-cli",{platform:"win32",home,stateDir}),bin=path.dirname(executable);
+  try {
+    const result=await installCli("codex-cli",{
+      platform:"win32",home,stateDir,
+      fetchImpl:async()=>new Response("# CODEX_INSTALL_DIR\n",{status:200}),
+      runner:async(_command,args,options)=>{
+        if(args[0]==="--version")return{output:"codex-cli 0.149.1"};
+        fs.mkdirSync(options.env.CODEX_INSTALL_DIR,{recursive:true});
+        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex.exe"),"codex");
+        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex-code-mode-host.exe"),"host");
+        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex-command-runner.exe"),"sidecar");
+        return{output:"installed"};
+      },
+    });
+    assert.equal(result.executable,executable);
+    assert.equal(result.hostExecutable,path.join(bin,"codex-code-mode-host.exe"));
+    assert.equal(fs.readFileSync(path.join(bin,"codex-code-mode-host.exe"),"utf8"),"host");
+    assert.equal(fs.readFileSync(path.join(bin,"codex-command-runner.exe"),"utf8"),"sidecar");
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test("automatic Codex setup keeps the old bundle when the staged host is missing", async () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-codex-missing-host-install-test-")),home=path.join(directory,"home"),stateDir=path.join(directory,"state"),
+    executable=managedCliPath("codex-cli",{platform:"darwin",home,stateDir}),host=path.join(path.dirname(executable),"codex-code-mode-host");
+  try {
+    fs.mkdirSync(path.dirname(executable),{recursive:true});
+    fs.writeFileSync(executable,"old-codex");
+    fs.writeFileSync(host,"old-host");
+    await assert.rejects(()=>installCli("codex-cli",{
+      platform:"darwin",home,stateDir,
+      fetchImpl:async()=>new Response("# CODEX_INSTALL_DIR\n",{status:200}),
+      runner:async(_command,_args,options)=>{
+        fs.mkdirSync(options.env.CODEX_INSTALL_DIR,{recursive:true});
+        fs.writeFileSync(path.join(options.env.CODEX_INSTALL_DIR,"codex"),"new-codex");
+        return{output:"installed"};
+      },
+    }),/codex-code-mode-host was not found beside codex/);
+    assert.equal(fs.readFileSync(executable,"utf8"),"old-codex");
+    assert.equal(fs.readFileSync(host,"utf8"),"old-host");
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
 });
 
 test("automatic Kimi CLI setup validates the official installer and managed executable", async () => {

@@ -44,7 +44,7 @@ const require = createRequire(import.meta.url)
 const { prepareIsolatedRuntime, resolveCodexLaunch } = require('../../providers/codex-cli.js')
 const { canonicalFile, cliCandidates, managedCliPaths } = require('../../providers/cli-discovery.js')
 const { DEFAULT_CANVAS_AGENT_TURN_LIMIT, configuredCanvasAgentTurnLimit } = require('./turn-limit.js')
-const { CODEX_CLI_PINNED_VERSION, assertCodexCliVersion, installCli, runProcess } = require('../../providers/cli-installer.js')
+const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, assertCodexCliVersion, installCli, runProcess } = require('../../providers/cli-installer.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 
 const MAX_PROTOCOL_BYTES = 48 * 1024 * 1024
@@ -203,25 +203,8 @@ function installedCodexCandidates(connection, env, stateDirectory, platform = pr
     : candidate)
 }
 
-function directCodexCandidate(connection, candidates) {
-  const configuredPath=String(connection?.cliPath || 'codex').trim() || 'codex', explicit=candidates.find(candidate=>candidate.source==='configured')
-  if (explicit) return explicit
-  if (!configuredPath.includes('/')&&!configuredPath.includes('\\')) return candidates.find(candidate=>candidate.source==='system') || null
-  return null
-}
-
-function codexVersionParts(value) {
-  const match=/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?:[-+\s]|$)/i.exec(String(value||''))
-  return match ? match.slice(1,4).map(Number) : [0,0,0]
-}
-
-function compareCodexVersions(left, right) {
-  const a=codexVersionParts(left),b=codexVersionParts(right)
-  for(let index=0;index<a.length;index+=1)if(a[index]!==b[index])return b[index]-a[index]
-  return 0
-}
-
-async function inspectCodexCandidateVersion(candidate, env, cwd) {
+async function inspectCodexCandidateVersion(candidate, env, cwd, platform = process.platform) {
+  assertCodexCliBundle(candidate.executable,platform)
   const launch=resolveCodexLaunch(candidate.executable,env),result=await runProcess(launch.command,[...launch.prefixArgs,'--version'],{
     cwd,
     env,
@@ -230,21 +213,15 @@ async function inspectCodexCandidateVersion(candidate, env, cwd) {
   return String(result.output||result.diagnostic||'').slice(0,200)
 }
 
-async function orderedCodexFallbacks(candidates, direct, inspectVersion) {
-  const directCanonical=direct?canonicalFile(direct.executable):'',seen=new Set(),external=[],managed=[]
+function systemCodexFallbacks(candidates, preferred) {
+  const preferredCanonical=preferred?canonicalFile(preferred.executable):'',seen=new Set(),fallbacks=[]
   for(const candidate of candidates){
     const canonical=canonicalFile(candidate.executable)
-    if(canonical===directCanonical||seen.has(canonical))continue
+    if(candidate.privateManaged||canonical===preferredCanonical||seen.has(canonical))continue
     seen.add(canonical)
-    if(candidate.privateManaged)managed.push(candidate)
-    else external.push(candidate)
+    fallbacks.push(candidate)
   }
-  const inspected=await Promise.all(external.map(async(candidate,index)=>{
-    try{return{candidate,index,version:await inspectVersion(candidate)}}
-    catch{return{candidate,index,version:''}}
-  }))
-  inspected.sort((left,right)=>compareCodexVersions(left.version,right.version)||left.index-right.index)
-  return [...inspected.map(item=>({...item.candidate,detectedVersion:item.version})),...managed]
+  return fallbacks
 }
 
 function codexCandidateFailure(failures) {
@@ -632,17 +609,15 @@ export class CodexNativeHost {
     this.publicFetch = publicFetch
     this.createAppServer = createAppServer || (options => new CodexNativeAppServerProcess(options))
     this.resolveCliCandidates = resolveCliCandidates || (connection => installedCodexCandidates(connection,this.env,this.stateDirectory,this.platform))
-    this.inspectCliCandidate = inspectCliCandidate || (candidate => inspectCodexCandidateVersion(candidate,this.env,this.stateDirectory))
-    this.installManagedCli = installManagedCli || (() => installCli('codex-cli',{
+    this.inspectCliCandidate = inspectCliCandidate || (candidate => inspectCodexCandidateVersion(candidate,this.env,this.stateDirectory,this.platform))
+    this.installManagedCli = installManagedCli || (codexVersion => installCli('codex-cli',{
       platform:this.platform,
       home:this.env.USERPROFILE||this.env.HOME||homedir(),
       stateDir:this.stateDirectory,
       env:this.env,
+      codexVersion,
     }))
-    this.managedCliInstallAttempted = false
-    this.managedCliInstallPromise = null
-    this.managedCliInstallResult = null
-    this.managedCliInstallError = null
+    this.managedCliInstalls = new Map()
     this.preferredCliExecutables = readCodexCliResolutions(this.stateDirectory)
     this.sessionTtlMs = Math.max(1_000, Number(sessionTtlMs) || SESSION_TTL_MS)
     this.sessions = new Map()
@@ -913,7 +888,6 @@ export class CodexNativeHost {
     if(!executable)return null
     try{
       const version=String(candidate.detectedVersion||await this.inspectCliCandidate(candidate)).slice(0,200)
-      assertCodexCliVersion(version,CODEX_CLI_PINNED_VERSION)
       return{...candidate,detectedVersion:version}
     }catch(error){
       this.forgetPreferredCli(connection,executable)
@@ -924,22 +898,21 @@ export class CodexNativeHost {
     }
   }
 
-  ensureManagedCliInstalled() {
-    if (!this.managedCliInstallAttempted) {
-      this.managedCliInstallAttempted=true
-      this.managedCliInstallPromise=Promise.resolve().then(()=>this.installManagedCli()).then(result=>{
+  ensureManagedCliInstalled(codexVersion = CODEX_CLI_PINNED_VERSION) {
+    const requestedVersion=String(codexVersion||CODEX_CLI_PINNED_VERSION)
+    if (!this.managedCliInstalls.has(requestedVersion)) {
+      const promise=Promise.resolve().then(()=>this.installManagedCli(requestedVersion)).then(result=>{
         const executable=String(result?.executable||'').trim()
         if(!executable)throw new Error('PenEcho managed Codex CLI installation did not return an executable.')
-        assertCodexCliVersion(result?.version,CODEX_CLI_PINNED_VERSION)
-        this.managedCliInstallResult={...result,executable}
-        return this.managedCliInstallResult
+        assertCodexCliVersion(result?.version,requestedVersion)
+        return{...result,executable}
       },error=>{
-        this.managedCliInstallError=error instanceof Error?error:new Error(safeError(error))
-        throw this.managedCliInstallError
+        throw error instanceof Error?error:new Error(safeError(error))
       })
-      this.managedCliInstallPromise.catch(()=>{})
+      promise.catch(()=>{})
+      this.managedCliInstalls.set(requestedVersion,promise)
     }
-    return this.managedCliInstallPromise
+    return this.managedCliInstalls.get(requestedVersion)
   }
 
   async ensureStarted(session) {
@@ -962,38 +935,54 @@ export class CodexNativeHost {
       const privateExecutable=managedCliPaths('codex-cli',{env:this.env,platform:this.platform,stateDir:this.stateDirectory})[0],hadPrivateManagedCli=candidates.some(candidate=>candidate?.privateManaged)
         || Boolean(preferredExecutable&&canonicalFile(preferredExecutable)===canonicalFile(privateExecutable))
       if(preferredExecutable&&!preferred)this.forgetPreferredCli(connection)
-      const failures=[],direct=preferred||directCodexCandidate(connection,candidates)
-      if (direct) {
-        const compatible=await this.compatibleCandidate(session,connection,direct,failures)
+      const failures=[]
+      if (preferred) {
+        const compatible=await this.compatibleCandidate(session,connection,preferred,failures)
         if(compatible){
           const threadId=await this.startCandidate(session,connection,compatible,lifecycle,failures)
           if(threadId)return threadId
         }
       }
+      this.send(session,'agent_status',{status:'preparing',phase:hadPrivateManagedCli?'repairing':'installing'})
+      session.active?.timeout?.activity()
+      let installed=null
+      try {
+        installed=await this.ensureManagedCliInstalled(CODEX_CLI_PINNED_VERSION)
+        this.logger({type:'codex-native-managed-cli-installed',release:CODEX_CLI_PINNED_VERSION,version:String(installed.version||'').slice(0,64)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',release:CODEX_CLI_PINNED_VERSION,version:String(installed.version||'').slice(0,64)})
+      } catch(error) {
+        failures.push({source:'penecho-install-pinned',error})
+        this.logger({type:'codex-native-managed-cli-install-failed',release:CODEX_CLI_PINNED_VERSION,error:safeError(error)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',release:CODEX_CLI_PINNED_VERSION,error:safeError(error)})
+      }
+      if(installed){
+        const threadId=await this.startCandidate(session,connection,{executable:installed.executable,source:'penecho-installed',privateManaged:true},lifecycle,failures)
+        if(threadId)return threadId
+      }
       this.send(session,'agent_status',{status:'preparing',phase:'discovering'})
       session.active?.timeout?.activity()
-      const fallbacks=await orderedCodexFallbacks(candidates,direct,candidate=>this.inspectCliCandidate(candidate))
-      for(const candidate of fallbacks){
+      for(const candidate of systemCodexFallbacks(candidates,preferred)){
         const compatible=await this.compatibleCandidate(session,connection,candidate,failures)
         if(!compatible)continue
         const threadId=await this.startCandidate(session,connection,compatible,lifecycle,failures)
         if(threadId)return threadId
       }
-      this.send(session,'agent_status',{status:'preparing',phase:hadPrivateManagedCli?'repairing':'installing'})
+      this.send(session,'agent_status',{status:'preparing',phase:'installing'})
       session.active?.timeout?.activity()
-      let installed
-      try {
-        installed=await this.ensureManagedCliInstalled()
-        this.logger({type:'codex-native-managed-cli-installed',version:String(installed.version||'').slice(0,64)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',version:String(installed.version||'').slice(0,64)})
-      } catch(error) {
-        failures.push({source:'penecho-install',error})
-        this.logger({type:'codex-native-managed-cli-install-failed',error:safeError(error)})
-        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',error:safeError(error)})
-        throw codexCandidateFailure(failures)
+      let latest=null
+      try{
+        latest=await this.ensureManagedCliInstalled('latest')
+        this.logger({type:'codex-native-managed-cli-installed',release:'latest',version:String(latest.version||'').slice(0,64)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-installed',release:'latest',version:String(latest.version||'').slice(0,64)})
+      }catch(error){
+        failures.push({source:'penecho-install-latest',error})
+        this.logger({type:'codex-native-managed-cli-install-failed',release:'latest',error:safeError(error)})
+        session.traceDecisionProtocol?.({kind:'native-managed-cli-install-failed',release:'latest',error:safeError(error)})
       }
-      const threadId=await this.startCandidate(session,connection,{executable:installed.executable,source:'penecho-installed',privateManaged:true},lifecycle,failures)
-      if(threadId)return threadId
+      if(latest){
+        const threadId=await this.startCandidate(session,connection,{executable:latest.executable,source:'penecho-latest',privateManaged:true},lifecycle,failures)
+        if(threadId)return threadId
+      }
       throw codexCandidateFailure(failures)
     })()
     session.startPromise = startPromise
