@@ -9,6 +9,7 @@ const { CLI_INSTALL_COMMANDS:INSTALL_COMMANDS, CLI_LOGIN_COMMANDS:LOGIN_COMMANDS
 const MAX_INSTALLER_BYTES = 256 * 1024;
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
+const CODEX_CLI_PINNED_VERSION = "0.149.1";
 
 const DEFINITIONS = Object.freeze({
   "kimi-cli":Object.freeze({
@@ -78,6 +79,23 @@ function powershellExecutable(env) {
 
 function cleanOutput(value) {
   return String(value || "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\r\t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function codexCliVersion(value) {
+  const match = /(?:^|\s|v)(\d+\.\d+\.\d+)(?:[-+\s]|$)/i.exec(String(value || ""));
+  return match ? match[1] : "";
+}
+
+function assertCodexCliVersion(value, expectedVersion = CODEX_CLI_PINNED_VERSION) {
+  const expected = String(expectedVersion || "").trim(), actual = codexCliVersion(value);
+  if (expected && actual === expected) return actual;
+  const error = new Error(actual
+    ? `PenEcho Agent requires Codex CLI ${expected}, but found ${actual}.`
+    : `PenEcho Agent requires Codex CLI ${expected}, but the candidate did not report a compatible version.`);
+  error.code = "CODEX_CLI_VERSION_INCOMPATIBLE";
+  error.expectedVersion = expected;
+  error.actualVersion = actual;
+  throw error;
 }
 
 function runProcess(command, args, options = {}) {
@@ -156,6 +174,7 @@ function installInvocation(provider, script, options = {}) {
     item = definition(provider, platform);
   if (provider === "codex-cli") {
     env.CODEX_NON_INTERACTIVE = "1";
+    env.CODEX_RELEASE = String(options.codexVersion || CODEX_CLI_PINNED_VERSION);
     env.CODEX_HOME = path.resolve(options.managedHome || managedCliHome(provider, { stateDir }));
     env.CODEX_INSTALL_DIR = path.resolve(options.installDirectory || path.dirname(managedCliPath(provider, { platform, home, stateDir })));
   }
@@ -216,8 +235,10 @@ async function installCli(provider, options = {}) {
       installedExecutable = installDirectory ? path.join(installDirectory, executableName(item.executable, platform)) : executable;
     if (!fs.existsSync(installedExecutable)) throw new Error(`${item.label} finished installing, but its executable could not be found.`);
     const version = await runner(installedExecutable, ["--version"], { cwd:stateDir, env:invocation.env, timeoutMs:30000 });
+    const versionText = cleanOutput(version.output || version.diagnostic).slice(0, 200);
+    if (provider === "codex-cli") assertCodexCliVersion(versionText, options.codexVersion || CODEX_CLI_PINNED_VERSION);
     if (installDirectory) replaceManagedExecutable(installedExecutable, executable);
-    return { provider, executable, version:cleanOutput(version.output || version.diagnostic).slice(0, 200), label:item.label };
+    return { provider, executable, version:versionText, label:item.label };
   } finally {
     try { fs.rmSync(script, { force:true }); } catch {}
     if (stagingRoot) try { fs.rmSync(stagingRoot, { recursive:true, force:true }); } catch {}
@@ -225,11 +246,14 @@ async function installCli(provider, options = {}) {
 }
 
 module.exports = {
+  CODEX_CLI_PINNED_VERSION,
   DEFINITIONS,
   INSTALL_COMMANDS,
   LOGIN_COMMANDS,
   definition,
   downloadInstaller,
+  assertCodexCliVersion,
+  codexCliVersion,
   inspectCli,
   installCli,
   installInvocation,

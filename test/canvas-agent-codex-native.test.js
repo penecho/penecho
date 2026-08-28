@@ -170,7 +170,7 @@ async function createNativeHarness(overrides = {}) {
       return process;
     },
     resolveCliCandidates:overrides.resolveCliCandidates || (() => [{ executable:connection.cliPath, source:'configured' }]),
-    inspectCliCandidate:overrides.inspectCliCandidate || (async candidate => String(candidate?.detectedVersion||"codex-cli 1.0.0")),
+    inspectCliCandidate:overrides.inspectCliCandidate || (async candidate => String(candidate?.detectedVersion||"codex-cli 0.149.1")),
     installManagedCli:overrides.installManagedCli || (async () => { throw new Error("managed CLI installation is disabled in this test"); }),
     ...(overrides.sessionTtlMs ? { sessionTtlMs:overrides.sessionTtlMs } : {}),
     ...(overrides.publicFetch ? { publicFetch:overrides.publicFetch } : {}),
@@ -370,28 +370,25 @@ test("Codex Native falls back to the next installed same-provider CLI when the f
   assert.ok(harness.logs.some(event=>event.type==="codex-native-cli-selected"&&event.source==="system"&&event.fallbackCount===1));
 });
 
-test("Codex Native tries the newest existing system CLI before downloading a private copy", async t => {
-  const configured="C:\\configured\\codex.exe",older="C:\\system-old\\codex.exe",newer="C:\\system-new\\codex.exe",installCalls=[],
+test("Codex Native rejects unapproved CLI versions and uses the pinned compatible version", async t => {
+  const configured="C:\\configured\\codex.exe",compatible="C:\\system-compatible\\codex.exe",incompatible="C:\\system-incompatible\\codex.exe",installCalls=[],
     harness=await createNativeHarness({
-      connection:{id:"codex-newest",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
+      connection:{id:"codex-pinned",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
       resolveCliCandidates:()=>[
         {executable:configured,source:"configured"},
-        {executable:older,source:"system"},
-        {executable:newer,source:"system"},
+        {executable:incompatible,source:"system"},
+        {executable:compatible,source:"system"},
       ],
-      inspectCliCandidate:async candidate=>candidate.executable===newer?"codex-cli 0.150.0":"codex-cli 0.149.0",
+      inspectCliCandidate:async candidate=>candidate.executable===compatible?"codex-cli 0.149.1":"codex-cli 0.150.1",
       installManagedCli:async()=>{installCalls.push(true);throw new Error("must not install")},
-      createAppServer:(options,index)=>{
-        const process=new FakeCodexAppServer(options);
-        if(index===0)process.requestHandler=async method=>{if(method==="initialize")throw new Error("configured CLI incompatible");return{}};
-        return process;
-      },
     });
   t.after(()=>harness.cleanup());
   const session=await harness.connect();
-  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[configured,newer]);
+  assert.deepEqual(harness.processes.map(process=>process.options.connection.cliPath),[compatible]);
   assert.equal(session.cliSource,"system");
   assert.equal(installCalls.length,0);
+  assert.equal(harness.logs.filter(event=>event.type==="codex-native-cli-candidate-rejected").length,2);
+  assert.ok(harness.logs.some(event=>event.type==="codex-native-cli-candidate-rejected"&&/found 0\.150\.1/.test(event.error)));
 });
 
 test("Codex Native installs one PenEcho-private CLI only after every existing candidate fails", async t => {
@@ -400,7 +397,7 @@ test("Codex Native installs one PenEcho-private CLI only after every existing ca
   const harness=await createNativeHarness({
     connection:{id:"codex-private-install",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
     resolveCliCandidates:()=>[{executable:configured,source:"configured"}],
-    installManagedCli:async()=>{installCalls+=1;return{executable:managed,version:"codex-cli 0.150.0"}},
+    installManagedCli:async()=>{installCalls+=1;return{executable:managed,version:"codex-cli 0.149.1"}},
     createAppServer:(options,index)=>{
       const process=new FakeCodexAppServer(options);
       if(index===0)process.requestHandler=async method=>{if(method==="initialize")throw new Error("configured CLI incompatible");return{}};
@@ -414,7 +411,22 @@ test("Codex Native installs one PenEcho-private CLI only after every existing ca
   assert.equal(session.cliSource,"penecho-installed");
   assert.equal(installCalls,1);
   assert.ok(harness.messages.some(message=>message.type==="agent_status"&&message.payload.status==="preparing"&&message.payload.phase==="installing"));
-  assert.ok(harness.logs.some(event=>event.type==="codex-native-managed-cli-installed"&&event.version==="codex-cli 0.150.0"));
+  assert.ok(harness.logs.some(event=>event.type==="codex-native-managed-cli-installed"&&event.version==="codex-cli 0.149.1"));
+});
+
+test("Codex Native refuses an unapproved managed install before launching app-server", async t => {
+  const configured="C:\\configured\\codex.exe",managed="C:\\Users\\test\\.penecho\\tools\\codex\\bin\\codex.exe",
+    harness=await createNativeHarness({
+      connection:{id:"codex-private-version-mismatch",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
+      resolveCliCandidates:()=>[{executable:configured,source:"configured"}],
+      inspectCliCandidate:async()=>"codex-cli 0.150.1",
+      installManagedCli:async()=>({executable:managed,version:"codex-cli 0.150.1"}),
+    });
+  t.after(()=>harness.cleanup());
+  const session=await harness.connect(false);
+  await assert.rejects(()=>harness.host.ensureStarted(session),/requires Codex CLI 0\.149\.1, but found 0\.150\.1/);
+  assert.equal(harness.processes.length,0);
+  assert.ok(harness.logs.some(event=>event.type==="codex-native-managed-cli-install-failed"));
 });
 
 test("Codex Native labels replacement of an existing private CLI as repair instead of first use", async t => {
@@ -422,7 +434,7 @@ test("Codex Native labels replacement of an existing private CLI as repair inste
   const harness=await createNativeHarness({
     connection:{id:"codex-private-repair",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
     resolveCliCandidates:()=>[{executable:configured,source:"configured"},{executable:managed,source:"penecho-managed",privateManaged:true}],
-    installManagedCli:async()=>({executable:managed,version:"codex-cli 0.150.0"}),
+    installManagedCli:async()=>({executable:managed,version:"codex-cli 0.149.1"}),
     createAppServer:(options,index)=>{
       const process=new FakeCodexAppServer(options);
       if(index<2)process.requestHandler=async method=>{if(method==="initialize")throw new Error("installed candidate failed");return{}};
@@ -441,7 +453,7 @@ test("Codex Native CLI preparation does not consume the model response timeout",
       timeoutMs:20,
       connection:{id:"codex-slow-private-install",provider:"codex-cli",name:"Codex",cliPath:configured,cliModel:"gpt-test",effort:"medium"},
       resolveCliCandidates:()=>[{executable:configured,source:"configured"}],
-      installManagedCli:async()=>{await new Promise(resolve=>setTimeout(resolve,60));return{executable:managed,version:"codex-cli 0.150.0"}},
+      installManagedCli:async()=>{await new Promise(resolve=>setTimeout(resolve,60));return{executable:managed,version:"codex-cli 0.149.1"}},
       createAppServer:(options,index)=>{
         const process=new FakeCodexAppServer(options);
         if(index===0)process.requestHandler=async method=>{if(method==="initialize")throw new Error("configured CLI incompatible");return{}};

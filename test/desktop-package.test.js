@@ -8,7 +8,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
 const { readSecret, writeSecret } = require("../desktop/secret-store.js");
-const { inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
+const { CODEX_CLI_PINNED_VERSION, inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
 const { pathExecutables } = require("../src/providers/cli-discovery.js");
 const {
   RELEASE_API_URL, createUpdateManager, downloadReleaseAsset, expectedAssetName, installDownloadedUpdate, macBundlePath, releaseAsset,
@@ -711,6 +711,7 @@ test("desktop CLI setup uses official installers without requiring npm", () => {
   assert.equal(kimi.env.KIMI_NO_MODIFY_PATH, "1");
   assert.equal(codex.command, "/bin/sh");
   assert.equal(codex.env.CODEX_NON_INTERACTIVE, "1");
+  assert.equal(codex.env.CODEX_RELEASE, CODEX_CLI_PINNED_VERSION);
   assert.equal(codex.env.CODEX_INSTALL_DIR, path.dirname(codexPath));
   assert.equal(codex.env.CODEX_HOME, path.join(resolvedStateDir,"tools","codex","home"));
   assert.deepEqual(claude.args, ["/tmp/claude.sh", "stable"]);
@@ -761,7 +762,7 @@ test("automatic CLI setup validates the official script and installed executable
       },
       runner:async (command, args, options) => {
         calls.push({ command, args, env:options.env });
-        if (args[0] === "--version") return { output:"codex-cli 1.2.3" };
+        if (args[0] === "--version") return { output:`codex-cli ${CODEX_CLI_PINNED_VERSION}` };
         const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
         fs.mkdirSync(path.dirname(staged), { recursive:true });
         fs.writeFileSync(staged, "test");
@@ -769,13 +770,35 @@ test("automatic CLI setup validates the official script and installed executable
       },
     });
     assert.equal(result.executable, expected);
-    assert.equal(result.version, "codex-cli 1.2.3");
+    assert.equal(result.version, `codex-cli ${CODEX_CLI_PINNED_VERSION}`);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].env.CODEX_HOME,path.join(stateDir,"tools","codex","home"));
+    assert.equal(calls[0].env.CODEX_RELEASE,CODEX_CLI_PINNED_VERSION);
     assert.notEqual(calls[0].env.CODEX_HOME,path.join(home,".codex"));
     assert.ok(calls[0].env.CODEX_INSTALL_DIR.startsWith(path.join(stateDir,"installers")));
     assert.equal(fs.readFileSync(expected,"utf8"),"test");
     assert.equal(fs.existsSync(path.join(stateDir, "installers", "codex-cli.sh")), false);
+  } finally { fs.rmSync(directory, { recursive:true, force:true }); }
+});
+
+test("automatic Codex setup keeps the existing managed CLI when the downloaded version is not pinned", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-cli-version-test-")), home = path.join(directory, "home"), stateDir = path.join(directory, "state"),
+    expected = managedCliPath("codex-cli", { platform:"darwin", home, stateDir });
+  try {
+    fs.mkdirSync(path.dirname(expected), { recursive:true });
+    fs.writeFileSync(expected, "known-good");
+    await assert.rejects(()=>installCli("codex-cli", {
+      platform:"darwin", home, stateDir,
+      fetchImpl:async () => new Response("#!/bin/sh\n# CODEX_INSTALL_DIR\n", { status:200 }),
+      runner:async (_command, args, options) => {
+        if (args[0] === "--version") return { output:"codex-cli 0.150.1" };
+        const staged=path.join(options.env.CODEX_INSTALL_DIR,"codex");
+        fs.mkdirSync(path.dirname(staged), { recursive:true });
+        fs.writeFileSync(staged, "unapproved");
+        return { output:"installed" };
+      },
+    }),/requires Codex CLI 0\.149\.1, but found 0\.150\.1/);
+    assert.equal(fs.readFileSync(expected,"utf8"),"known-good");
   } finally { fs.rmSync(directory, { recursive:true, force:true }); }
 });
 

@@ -44,7 +44,7 @@ const require = createRequire(import.meta.url)
 const { prepareIsolatedRuntime, resolveCodexLaunch } = require('../../providers/codex-cli.js')
 const { canonicalFile, cliCandidates, managedCliPaths } = require('../../providers/cli-discovery.js')
 const { DEFAULT_CANVAS_AGENT_TURN_LIMIT, configuredCanvasAgentTurnLimit } = require('./turn-limit.js')
-const { installCli, runProcess } = require('../../providers/cli-installer.js')
+const { CODEX_CLI_PINNED_VERSION, assertCodexCliVersion, installCli, runProcess } = require('../../providers/cli-installer.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 
 const MAX_PROTOCOL_BYTES = 48 * 1024 * 1024
@@ -908,12 +908,29 @@ export class CodexNativeHost {
     }
   }
 
+  async compatibleCandidate(session, connection, candidate, failures) {
+    const executable=String(candidate?.executable||'').trim(),source=String(candidate?.source||'configured').slice(0,32)
+    if(!executable)return null
+    try{
+      const version=String(candidate.detectedVersion||await this.inspectCliCandidate(candidate)).slice(0,200)
+      assertCodexCliVersion(version,CODEX_CLI_PINNED_VERSION)
+      return{...candidate,detectedVersion:version}
+    }catch(error){
+      this.forgetPreferredCli(connection,executable)
+      failures.push({source,error})
+      this.logger({type:'codex-native-cli-candidate-rejected',source,error:safeError(error)})
+      session.traceDecisionProtocol?.({kind:'native-cli-candidate-rejected',source,error:safeError(error)})
+      return null
+    }
+  }
+
   ensureManagedCliInstalled() {
     if (!this.managedCliInstallAttempted) {
       this.managedCliInstallAttempted=true
       this.managedCliInstallPromise=Promise.resolve().then(()=>this.installManagedCli()).then(result=>{
         const executable=String(result?.executable||'').trim()
         if(!executable)throw new Error('PenEcho managed Codex CLI installation did not return an executable.')
+        assertCodexCliVersion(result?.version,CODEX_CLI_PINNED_VERSION)
         this.managedCliInstallResult={...result,executable}
         return this.managedCliInstallResult
       },error=>{
@@ -947,14 +964,19 @@ export class CodexNativeHost {
       if(preferredExecutable&&!preferred)this.forgetPreferredCli(connection)
       const failures=[],direct=preferred||directCodexCandidate(connection,candidates)
       if (direct) {
-        const threadId=await this.startCandidate(session,connection,direct,lifecycle,failures)
-        if(threadId)return threadId
+        const compatible=await this.compatibleCandidate(session,connection,direct,failures)
+        if(compatible){
+          const threadId=await this.startCandidate(session,connection,compatible,lifecycle,failures)
+          if(threadId)return threadId
+        }
       }
       this.send(session,'agent_status',{status:'preparing',phase:'discovering'})
       session.active?.timeout?.activity()
       const fallbacks=await orderedCodexFallbacks(candidates,direct,candidate=>this.inspectCliCandidate(candidate))
       for(const candidate of fallbacks){
-        const threadId=await this.startCandidate(session,connection,candidate,lifecycle,failures)
+        const compatible=await this.compatibleCandidate(session,connection,candidate,failures)
+        if(!compatible)continue
+        const threadId=await this.startCandidate(session,connection,compatible,lifecycle,failures)
         if(threadId)return threadId
       }
       this.send(session,'agent_status',{status:'preparing',phase:hadPrivateManagedCli?'repairing':'installing'})
