@@ -17,7 +17,7 @@
 <h1 align="center">AI와 함께 생각하는<br>공간형 작업 환경.</h1>
 <p align="center">내장 Agent 또는 MCP 호환 AI 어시스턴트로 그리고, 탐색하고, 만들어 보세요.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-087f83" alt="버전 1.3.0">
+  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="버전 1.3.1">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

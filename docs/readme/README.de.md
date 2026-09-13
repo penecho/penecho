@@ -17,7 +17,7 @@
 <h1 align="center">Ein räumlicher Arbeitsbereich,<br>um mit KI zu denken.</h1>
 <p align="center">Zeichnen, erkunden und entwickeln Sie mit dem integrierten Agenten oder Ihrem eigenen MCP-kompatiblen Assistenten.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-087f83" alt="Version 1.3.0">
+  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="Version 1.3.1">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

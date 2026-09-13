@@ -195,7 +195,6 @@ test("1.3.0 release notes include Canvas Agent and MCP in both languages", () =>
     app = read("public/app.js"),
     css = read("public/style.css"),
     zh = read("public/locales/zh.js"),
-    readme = read("README.md"),
     layer = html.match(/<div id="changelogLayer"[\s\S]*?<script src="remote-canvas\.js">/)?.[0] || "";
   assert.match(layer, /class="changelog-layer"[^>]*hidden[^>]*aria-hidden="true"/);
   assert.match(layer, /id="changelogDialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="changelogTitle"/);
@@ -231,7 +230,22 @@ test("1.3.0 release notes include Canvas Agent and MCP in both languages", () =>
   assert.match(zh, /changelogFrostedStudio:[^\n]*磨砂 Studio[^\n]*半透明材质[^\n]*画布始终清晰可见/);
   assert.match(zh, /changelogPerformance:[^\n]*书写、擦除、平移和缩放[^\n]*低延迟实时笔迹/);
   assert.match(zh, /changelogKeyboardShortcuts:[^\n]*自定义键盘快捷键[^\n]*撤销与重做/);
-  assert.match(readme, /alt="Version 1\.3\.0"/);
+});
+
+test("README version badges match the package version in every language", () => {
+  const version = JSON.parse(read("package.json")).version;
+  const readmePaths = [
+    "README.md",
+    ...fs.readdirSync(path.join(root, "docs/readme"))
+      .filter((name) => /^README\.[^.]+(?:-[^.]+)?\.md$/.test(name))
+      .map((name) => path.join("docs/readme", name)),
+  ];
+  for (const readmePath of readmePaths) {
+    assert.ok(
+      read(readmePath).includes(`/badge/version-${version}-`),
+      `${readmePath} version badge must match package.json`,
+    );
+  }
 });
 
 test("feature tour copy is complete in English and Chinese", () => {
