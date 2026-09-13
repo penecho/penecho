@@ -416,6 +416,11 @@ test("canvas photos and function plots use editable image records, unified top t
   assert.deepEqual({ ...resizeImage(resizeStart, { x:15100, y:0 }, "width") }, { ...resizeStart, w:15000 });
   assert.deepEqual({ ...resizeImage(resizeStart, { x:0, y:15200 }, "height") }, { ...resizeStart, h:15000 });
   assert.deepEqual({ ...resizeImage(resizeStart, { x:15100, y:10200 }, "resize") }, { ...resizeStart, w:15000, h:10000 });
+  assert.deepEqual({ ...resizeImage(resizeStart, { x:100, y:200 }, "resize") }, { ...resizeStart, w:120, h:80 }, "diagonal shrinking preserves aspect ratio and the minimum height");
+  const portraitStart = { x:100, y:200, w:800, h:1200 };
+  assert.deepEqual({ ...resizeImage(portraitStart, { x:100, y:200 }, "resize") }, { ...portraitStart, w:80, h:120 }, "portrait shrinking preserves aspect ratio and the minimum width");
+  const edgeStart = { x:18800, y:19200, w:600, h:400 };
+  assert.deepEqual({ ...resizeImage(edgeStart, { x:22000, y:22000 }, "resize") }, { ...edgeStart, w:1200, h:800 }, "diagonal enlargement stays inside the canvas");
   assert.doesNotMatch(resizeImageBox, /6000|MAX_IMAGE_PIXELS/);
   assert.doesNotMatch(imageRecord, /n\(item\.(?:w|h), 80, 6000\)|item\.w \* item\.h > MAX_IMAGE_PIXELS/);
   assert.match(imageRecord, /plotExpression = typeof item\.plotExpression === "string" \? item\.plotExpression\.trim\(\) : ""/);
@@ -1111,7 +1116,7 @@ test("Canvas chrome uses one drawing and navigation cooldown before restoring st
   assert.match(openNavigator, /if \(open\) restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.toggle\("studio-navigator-open"/);
   assert.match(css, /body\[data-theme="studio"\]:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.toolbar\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
   assert.match(css, /body\[data-theme="studio"\]:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.studio-navigator\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /studio-agent-docked:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.canvas-agent-panel\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-panel\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
+  assert.match(css, /studio-agent-docked:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.canvas-agent-panel\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
   assert.match(css, /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\)\s*\{[\s\S]*?body\[data-theme="studio"\] \.toolbar\s*\{[^}]*background:\s*var\(--studio-toolbar\) !important[^}]*backdrop-filter:\s*none !important[\s\S]*?studio-agent-docked \.canvas-agent-panel\s*\{[^}]*background:\s*var\(--studio-panel\) !important[^}]*backdrop-filter:\s*none !important/);
 
   let now = 100, timerId = 0;
@@ -1419,7 +1424,8 @@ test("plugin manager is a centered dynamic catalog with General HTML and bundled
   assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?#status\s*\{[^}]*width:\s*min\(210px, calc\(100vw - 20px\)\)[^}]*min-width:\s*min\(210px, calc\(100vw - 20px\)\)[^}]*max-width:\s*min\(210px, calc\(100vw - 20px\)\)/);
   assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?#status\[data-ai-progress="true"\]\s*\{[^}]*min-width:\s*min\(210px, calc\(100vw - 20px\)\)/);
   const handleConnectionAction = functionSource(app, "handleConnectionAction");
-  assert.match(handleConnectionAction, /localStorage\.setItem\(AI_CONNECTION_STORAGE_KEY, id\)/);
+  assert.match(handleConnectionAction, /storeAiConnectionSelection\(id\)/);
+  assert.match(functionSource(app, "storeAiConnectionSelection"), /key = aiConnectionStorageKey\(hosted\)[\s\S]*?if \(!key\) return false[\s\S]*?localStorage\.setItem\(key, id\)/);
   assert.match(handleConnectionAction, /closeAfterActivation = settingsConnectionQuickList\?\.contains\(button\) === true[\s\S]*?if \(closeAfterActivation\) closeSettings\(\)/);
   assert.doesNotMatch(handleConnectionAction, /updateConnection\("activate"/);
   assert.match(app, /fetch\("\/api\/plugins\/improve"[\s\S]*?headers:aiRequestHeaders/);
@@ -2962,7 +2968,7 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(enableSnapshotPlugins, /widgetType === "diagram_source"[\s\S]*?ensurePluginRuntime\("flowchart"\)/);
   assert.match(enableSnapshotPlugins, /persistPluginSettings\(\)[\s\S]*?syncWidgetRuntime\(\)[\s\S]*?updatePluginControl\(\)/);
   assert.ok(loadSnapshot.indexOf("await enableSnapshotWidgetPlugins(item.widgets)") < loadSnapshot.indexOf("restoreWidgets(item.widgets)"));
-  assert.match(functionSource(app, "serverSnapshotItems"), /fetch\("\/api\/canvases"/);
+  assert.match(functionSource(app, "serverSnapshotItems"), /fetch\("\/api\/canvases\?metadataOnly=1"/);
   assert.match(functionSource(app, "serverSnapshotItems"), /fetch\("\/api\/canvas-projects"/);
   assert.match(functionSource(app, "saveServerSnapshot"), /method:overwriteId \? "PUT" : "POST"/);
   assert.match(functionSource(app, "deleteServerSnapshot"), /method:"DELETE"/);
@@ -3001,7 +3007,7 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(css, /\.history-panel\[data-pe-surface="manager"\] \.snapshot-location\.history-sidebar-section legend,[\s\S]*?\.history-sidebar-heading\s*\{[^}]*font:\s*600 11px\/24px var\(--pe-font-ui\)[^}]*letter-spacing:\s*\.04em[^}]*text-transform:\s*uppercase/);
   assert.match(css, /:is\(#pe-button-contract, body\[data-theme="studio"\]\)[\s\S]*?\.history-panel\[data-pe-surface="manager"\][\s\S]*?\.history-project-nav-item\[data-pe-button="menu-item"\][\s\S]*?grid-template-columns:\s*15px minmax\(0, 1fr\) auto[^}]*gap:\s*8px[^}]*color:\s*var\(--pe-ink\)[^}]*font:\s*500 12\.5px\/var\(--pe-menu-item-h, 30px\) var\(--pe-font-ui\)/);
   assert.match(css, /:is\(#pe-button-contract, body\[data-theme="studio"\]\)[\s\S]*?:is\(\.history-location-count, \.history-project-nav-item > small\)\s*\{[^}]*min-width:\s*20px[^}]*height:\s*20px[^}]*border-radius:\s*999px[^}]*background:\s*var\(--pe-surface-raised\)[^}]*font:\s*600 10\.5px\/1 var\(--pe-font-ui\)/);
-  assert.match(css, /:is\(#pe-button-contract, body\[data-theme="studio"\]\)[\s\S]*?\.history-location-count\[hidden\]\s*\{[^}]*display:\s*none/);
+  assert.match(css, /:is\(#pe-button-contract, body\[data-theme="studio"\]\)[\s\S]*?:is\(\.history-location-count, \.history-project-nav-item > small\)\[hidden\]\s*\{[^}]*display:\s*none/);
   assert.match(css, /\.history-panel\[data-pe-surface="manager"\] \.history-library-main\s*\{[^}]*background:\s*var\(--penecho-workbench-content-surface\)/);
   assert.match(css, /\.history-panel\[data-pe-surface="manager"\] \.history-library-browser\s*\{[^}]*grid-template-columns:\s*var\(--penecho-workbench-navigation-w\) minmax\(0, 1fr\)/);
   assert.match(css, /History Grid follows the catalog card-action skeleton[\s\S]*?\.history-panel\[data-pe-surface="manager"\] \.history-list\.grid-view\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)[^}]*gap:\s*var\(--pe-s6, 12px\)/);
@@ -3467,8 +3473,8 @@ test("Studio uses glass workbench overlays, contextual pen properties, and a rig
   assert.match(css, /@media \(max-width: 820px\)\s*\{[\s\S]*?studio-navigator-open \.canvas-frame::after\s*\{[^}]*left:\s*min\(360px, calc\(100% - 16px\)\)/);
   assert.match(css, /body\[data-theme="studio"\]\[data-canvas-mode="pen"\] \.pen-tool-properties\s*\{[^}]*display:\s*inline-flex/);
   assert.match(css, /body\[data-theme="studio"\] main > footer\s*\{[^}]*min-height:\s*26px[^}]*border-top:/);
-  assert.match(css, /--studio-agent-glass:\s*var\(--studio-glass\)/);
-  assert.match(css, /@media \(min-width: 701px\)[\s\S]*?studio-agent-docked \.canvas-agent-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?inset:\s*var\(--studio-toolbar-height\) 0 0 auto[\s\S]*?flex:\s*none[\s\S]*?background:\s*var\(--studio-agent-glass\)[\s\S]*?box-shadow:\s*-4px 0 8px var\(--studio-chrome-shadow-color\)[\s\S]*?backdrop-filter:\s*saturate\(1\.15\) blur\(20px\)/);
+  assert.match(css, /--studio-agent-glass:\s*linear-gradient\(var\(--penecho-workbench-content-surface\), var\(--penecho-workbench-content-surface\)\), var\(--penecho-large-dialog-surface\)/);
+  assert.match(css, /@media \(min-width: 701px\)[\s\S]*?studio-agent-docked \.canvas-agent-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?inset:\s*var\(--studio-toolbar-height\) 0 0 auto[\s\S]*?flex:\s*none[\s\S]*?background:\s*var\(--studio-agent-glass\)[\s\S]*?box-shadow:\s*-4px 0 8px var\(--studio-chrome-shadow-color\)[\s\S]*?backdrop-filter:\s*var\(--penecho-large-dialog-surface-filter\)/);
   assert.match(css, /studio-agent-docked:not\(\.canvas-agent-open\) \.canvas-agent-panel\s*\{[^}]*pointer-events:\s*none[^}]*opacity:\s*0[^}]*translate3d\(100%, 0, 0\)/);
   assert.match(css, /studio-agent-docked \.canvas-agent-panel\s*\{[^}]*transition:\s*transform \.22s cubic-bezier\(\.2,\.72,\.2,1\), opacity \.16s ease/);
   assert.match(css, /studio-agent-docked:not\(\.canvas-agent-open\) \.canvas-agent-panel\s*\{[^}]*transition-delay:\s*0s, 0s, 0s, \.22s/);
@@ -3476,11 +3482,14 @@ test("Studio uses glass workbench overlays, contextual pen properties, and a rig
   assert.match(css, /studio-agent-docked\.canvas-agent-open \.canvas-frame\s*\{[^}]*--studio-agent-edge-shift:\s*calc\(var\(--studio-agent-width\) - 4px\)/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-control\s*\{[^}]*right:\s*calc\(max\(16px, env\(safe-area-inset-right\)\) \+ var\(--studio-agent-edge-shift\)\)[^}]*transition:\s*right \.22s/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-trigger\s*\{[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--studio-panel\)[^}]*box-shadow:\s*none[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /\.canvas-agent-control\) > #canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*margin-inline:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/);
-  assert.match(css, /\.canvas-agent-control:has\(> #canvasAgentToggle:hover\)\s*\{[^}]*background:\s*var\(--pe-hover\)/);
-  assert.match(css, /#canvasAgentToggle\[data-pe-button="toolbar"\]:is\(:hover, :active, :focus-visible\)\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*none/);
-  assert.match(css, /\.canvas-agent-control:has\(> #canvasAgentToggle:focus-visible\)\s*\{[^}]*border-color:\s*var\(--pe-accent\)[^}]*box-shadow:\s*0 0 0 2px var\(--pe-accent-focus\)/);
-  assert.match(css, /@media \(max-width: 700px\)\s*\{[\s\S]*?body\[data-theme="studio"\] \.canvas-agent-control\s*\{[^}]*height:\s*46px[^}]*min-height:\s*46px[^}]*border-radius:\s*10px/);
+  assert.match(css, /\.canvas-agent-control\) > #canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*margin-inline:\s*0[^}]*border:\s*1px solid[^}]*background:\s*transparent/);
+  assert.match(css, /body\[data-theme="studio"\] :is\(#pe-button-contract, \.canvas-agent-control\) > #canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*transparent[^}]*box-shadow:\s*none/);
+  for (const state of ["hover", "active"]) {
+    assert.ok(css.includes(`#canvasAgentToggle[data-pe-button="toolbar"]:${state} {\n  background: transparent;`));
+  }
+  assert.match(css, /#canvasAgentToggle\[data-pe-button="toolbar"\]:hover\s*\{[^}]*color:\s*var\(--studio-accent\)/);
+  assert.match(css, /#canvasAgentToggle\[data-pe-button="toolbar"\]:focus-visible\s*\{[^}]*border-color:\s*var\(--pe-accent\)[^}]*box-shadow:\s*0 0 0 2px var\(--pe-accent-focus\)/);
+  assert.match(css, /@media \(max-width: 700px\)\s*\{[\s\S]*?body\[data-theme="studio"\] :is\(#pe-button-contract, \.canvas-agent-control\) > #canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*height:\s*46px[^}]*min-height:\s*46px[^}]*border-radius:\s*10px/);
   assert.match(agent, /function openCanvasAgent\([\s\S]*?canvasAgentToggle\.setAttribute\("aria-expanded","true"\)/);
   assert.match(functionSource(agent, "canvasAgentPrepareOpenState"), /if\(canvasAgentWorkbenchNeedsSync\(\)\)syncStudioWorkbench\(\)/);
   assert.match(agent, /function openCanvasAgent\(\{focus=false\}=\{\}\)[\s\S]*?document\.body\.classList\.add\("canvas-agent-open"\)[\s\S]*?syncCanvasModePresentation\(\)/);

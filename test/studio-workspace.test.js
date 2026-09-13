@@ -61,10 +61,10 @@ test("background MCP activity does not highlight the visible Canvas",()=>{
   const runtimeSource=fs.readFileSync(path.join(root,"src/client/app/mcp-runtime.js"),"utf8");
   const ring={setAttribute(key,value){this[key]=value;}},button={},newButton={},notice={};
   const runtime={ready:true,socket:{readyState:1},sessions:new Map(),pendingView:new Map(),glowing:true,activeMutation:"AI",mutationDocumentId:"background"};
-  const context=vm.createContext({mcpRuntime:runtime,WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
+  const context=vm.createContext({mcpRuntime:runtime,window:{PENECHO_CONFIG:{runtime:"local"}},WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
     mcpEl:id=>({mcpCanvasRing:ring,mcpCanvasNotice:notice,mcpCanvasNoticeButton:button,mcpShowNewContent:newButton})[id],
   });
-  vm.runInContext(extract("mcpRenderCanvasStatus",runtimeSource),context);
+  vm.runInContext(extract("mcpAccessLabel",runtimeSource)+extract("mcpRenderCanvasStatus",runtimeSource),context);
   context.mcpRenderCanvasStatus();assert.equal(ring["data-state"],"open");assert.doesNotMatch(button.textContent,/canvasApplying/);
   runtime.mutationDocumentId="visible";context.mcpRenderCanvasStatus();assert.equal(ring["data-state"],"updating");
 });

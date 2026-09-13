@@ -756,7 +756,12 @@ test("two clients independently route requests through the shared connection lis
     }
 
     const deletedSelection = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":connection.id }, body:JSON.stringify(validPayload()) });
-    assert.equal(deletedSelection.status, 200, await deletedSelection.text());
+    assert.equal(deletedSelection.status, 409);
+    assert.equal((await deletedSelection.json()).errorCode, "CONNECTION_STALE");
+    assert.equal(openai.requests.length, 1, "stale selection must not fall back to another provider");
+    assert.equal(anthropic.requests.length, 2, "deleted selection must not run another request");
+    const explicitDefault = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json", "X-PenEcho-Connection":"default" }, body:JSON.stringify(validPayload()) });
+    assert.equal(explicitDefault.status, 200, await explicitDefault.text());
     assert.equal(openai.requests.length, 2);
 
     const legacyStore = JSON.parse(await fs.promises.readFile(path.join(stateDir, "connections.json"), "utf8"));
@@ -1348,10 +1353,20 @@ test("Canvas metadata-only lists validated document identity without content and
     const metadataResponse=await fetch(`${origin}/api/canvases?metadataOnly=1`),metadata=await metadataResponse.json();
     assert.equal(metadataResponse.status,200);
     const legacyEntry=metadata.canvases.find(item=>item.id===legacy.id),modernEntry=metadata.canvases.find(item=>item.id===base.id),invalidEntry=metadata.canvases.find(item=>item.id===invalidBase.id);
-    assert.deepEqual(Object.keys(legacyEntry).sort(),["createdAt","documentId","id","name","updatedAt"]);
+    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(legacyEntry.documentId,null,"legacy snapshots without document identity remain valid");
-    assert.deepEqual(Object.keys(modernEntry).sort(),["createdAt","documentId","id","name","updatedAt"]);
+    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(modernEntry.documentId,documentId);
+    for (const [entry, version, widgetCount] of [[legacyEntry,1,0],[modernEntry,2,1],[invalidEntry,2,1]]) {
+      assert.equal(entry.version,version);
+      assert.equal(entry.projectId,"uncategorized");
+      assert.equal(entry.theme,"studio");
+      assert.equal(entry.hasPreview,true);
+      assert.equal(entry.tileCount,1);
+      assert.equal(entry.widgetCount,widgetCount);
+      for (const key of ["animationCount","textBoxCount","imageCount"]) assert.equal(entry[key],0);
+      for (const key of ["preview","assets","tiles","widgets","manifest","extensions"]) assert.equal(Object.hasOwn(entry,key),false);
+    }
     assert.equal(invalidEntry.documentId,null,"unknown identity versions are not advertised");
     assert.equal(Object.hasOwn(modernEntry,"preview"),false);
     assert.equal(Object.hasOwn(modernEntry,"assets"),false);

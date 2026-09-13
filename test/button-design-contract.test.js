@@ -133,8 +133,8 @@ test("Studio navigator and view controls keep their location-owned button expres
   assert.equal(document.querySelector("#gridToggle").dataset.peButton, "toolbar");
   assert.match(css, /Studio navigator and Agent composer location corrections/);
   assert.match(css, /#canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*width: max-content;[^}]*min-width: max-content;[^}]*flex: 0 0 auto;[^}]*padding: 2px 10px;/s);
-  assert.match(css, /studio-toolbar-controls-compact[\s\S]*?#canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*height: 28px;[^}]*padding-inline: 7px;/);
-  assert.match(css, /@media \(max-width: 700px\)[\s\S]*?#canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*width: 44px;[^}]*min-width: 44px;[^}]*flex-basis: 44px;/);
+  assert.match(css, /studio-toolbar-controls-compact[\s\S]*?#canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*height: 32px;[^}]*min-height: 32px;[^}]*padding-inline: 4px;/);
+  assert.match(css, /@media \(max-width: 700px\)[\s\S]*?#canvasAgentToggle\[data-pe-button="toolbar"\]\s*\{[^}]*width: 46px;[^}]*min-width: 46px;[^}]*height: 46px;[^}]*min-height: 46px;[^}]*flex-basis: 46px;/);
   assert.match(css, /\.view-tools > :is\(#fullscreenBtn, #gridToggle\)\[data-pe-button\]/);
   assert.match(css, /#fullscreenBtn\[data-pe-button\] > \.fullscreen-exit \{ display: none; \}/);
   assert.match(css, /body\[data-theme="studio"\]\.is-fullscreen \.view-tools > #fullscreenBtn\[data-pe-button\] > \.fullscreen-enter \{ display: none; \}/);

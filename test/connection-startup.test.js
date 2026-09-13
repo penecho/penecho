@@ -48,15 +48,16 @@ test("startup and Agent share one in-flight configuration request",async()=>{
   assert.equal(context.settings.configurationLoad,null);
 });
 test("selection falls back to first saved connection and preserves explicit saved choice",()=>{
-  let selected="default";
-  const settings={connections:[{id:"first"},{id:"second"}]};
-  const context=vm.createContext({window:{PENECHO_CONFIG:{}},settings,AI_CONNECTION_STORAGE_KEY:"connection",selectedAiConnectionId:()=>selected,localStorage:{setItem:(_key,value)=>{selected=value;}}});
-  vm.runInContext(extract("syncLocalConnectionSelection"),context);
-  context.syncLocalConnectionSelection();assert.equal(selected,"first");assert.equal(settings.connections[0].active,true);
-  selected="second";context.syncLocalConnectionSelection();assert.equal(selected,"second");assert.equal(settings.connections[1].active,true);
+  const first="11111111-1111-4111-8111-111111111111",second="22222222-2222-4222-8222-222222222222";
+  const settings={connections:[{id:first},{id:second}]},storage=new Map();
+  const context=vm.createContext({window:{PENECHO_CONFIG:{}},location:{origin:"http://localhost:3888"},settings,AI_CONNECTION_STORAGE_KEY:"connection",localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)}});
+  vm.runInContext(["aiConnectionScope","aiConnectionStorageKey","selectedAiConnectionId","storeAiConnectionSelection","syncLocalConnectionSelection"].map(extract).join("\n"),context);
+  context.syncLocalConnectionSelection();assert.equal(context.selectedAiConnectionId(),first);assert.equal(settings.connections[0].active,true);
+  assert.equal(storage.get("connection:local:http://localhost:3888"),first);
+  context.storeAiConnectionSelection(second);context.syncLocalConnectionSelection();assert.equal(context.selectedAiConnectionId(),second);assert.equal(settings.connections[1].active,true);
   settings.connections=[];context.syncLocalConnectionSelection();assert.equal(settings.connections.length,0);
-  selected="second";Object.assign(context.window.PENECHO_CONFIG,{browserCanvasEditing:true,linkedDeviceOnline:false});
-  context.syncLocalConnectionSelection();assert.equal(selected,"second","offline must not silently select a different local model");
+  Object.assign(context.window.PENECHO_CONFIG,{browserCanvasEditing:true,linkedDeviceOnline:false});
+  context.syncLocalConnectionSelection();assert.equal(context.selectedAiConnectionId(),second,"offline must not silently select a different local model");
 });
 test("desktop Settings menu reveals the existing Canvas and sends the shared-page event",()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[];

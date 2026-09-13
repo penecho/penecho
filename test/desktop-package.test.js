@@ -7,6 +7,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const sharp = require("sharp");
+const vm = require("node:vm");
 const { kimiPresetUpdates, normalizeSettings, publicSettings } = require("../desktop/settings-contract.js");
 const { readSecret, writeSecret } = require("../desktop/secret-store.js");
 const { CODEX_CLI_PINNED_VERSION, assertCodexCliBundle, codexHostName, inspectCli, installCli, installInvocation, managedCliPath } = require("../desktop/cli-installer.js");
@@ -316,7 +317,21 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   for (const directory of ["build", "fixtures", "logs", "output", "scripts", "spec", "test", "testcase"]) {
     assert.match(forge,new RegExp(`\\^\\\\\\/${directory}`),directory);
   }
-  const packageIgnore = require("../forge.config.js").packagerConfig.ignore;
+  // Evaluate the real config without installing desktop-only maker packages in core CI.
+  const configModule = { exports:{} }, resolvedMakers = [];
+  const configRequire = name => {
+    assert.ok(["node:path", "./package.json", "./tools/electron/package.json"].includes(name), name);
+    return name.startsWith(".") ? require(path.join(ROOT, name)) : require(name);
+  };
+  configRequire.resolve = (name, options) => {
+    assert.deepEqual(options.paths, [path.join(ROOT, "tools", "electron")]);
+    assert.ok(["@electron-forge/maker-dmg", "@electron-forge/maker-zip", "@electron-forge/maker-squirrel"].includes(name), name);
+    resolvedMakers.push(name);
+    return path.join(ROOT, "tools", "electron", "node_modules", name, "index.js");
+  };
+  vm.runInThisContext("(function(require,module,__dirname,process){" + forge + "\n})", { filename:path.join(ROOT,"forge.config.js") })(configRequire, configModule, ROOT, { env:{} });
+  assert.deepEqual(resolvedMakers, ["@electron-forge/maker-dmg", "@electron-forge/maker-zip", "@electron-forge/maker-squirrel"]);
+  const packageIgnore = configModule.exports.packagerConfig.ignore;
   const ignoredByDesktopPackage = candidate => packageIgnore.some(pattern => {
     if (!(pattern instanceof RegExp)) return typeof pattern === "function" && pattern(candidate);
     pattern.lastIndex = 0;
@@ -376,8 +391,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /TimeStamperCertificate/);
   assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
   assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
-  assert.equal(rootPackage.version, "1.3.0");
-  assert.equal(rootPackage.config.desktopVersion, "1.3.0");
+  assert.equal(rootPackage.version, "1.3.1");
+  assert.equal(rootPackage.config.desktopVersion, "1.3.1");
   assert.ok(rootPackage.files.includes("src/"));
   for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
     assert.ok(rootPackage.files.includes(asset), asset);

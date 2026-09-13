@@ -37,9 +37,32 @@ test("the read-only viewer mode ships inert locally and activates only on /canva
   assert.match(css, /pointer-events: none !important/);
   assert.match(css, /viewer-topbar/);
   assert.match(core, /window\.PENECHO_CONFIG\?\.runtime === "viewer"[\s\S]*?\? "device"/);
-  assert.match(bootstrap, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\) refreshSnapshots\(\)\.catch/);
+  assert.match(bootstrap, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
   assert.match(built, /window\.PENECHO_CONFIG\?\.runtime === "viewer"[\s\S]*?\? "device"/);
-  assert.match(built, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\) refreshSnapshots\(\)\.catch/);
+  assert.match(built, /window\.PENECHO_CONFIG\?\.runtime !== "viewer"\s*&& !\(window\.PENECHO_CONFIG\?\.runtime === "cloud" && window\.PENECHO_CONFIG\?\.remoteCanvasNativeReads === true\)\) refreshSnapshots\(\)\.catch/);
+});
+
+test("startup history stays private in Viewer and defers native Cloud reads to Library", () => {
+  for (const file of ["src/client/app/ui-bootstrap.js", "public/app.js"]) {
+    const source = read(file);
+    const guard = source.match(/if \(window\.PENECHO_CONFIG\?\.runtime !== "viewer"[^;{}]*?refreshSnapshots\(\)\.catch\(\(\) => \{\}\);/)?.[0];
+    assert.ok(guard, `${file} exposes the guarded startup refresh`);
+    for (const [config, expected] of [
+      [{ runtime:"viewer" }, 0],
+      [{ runtime:"viewer", remoteCanvasNativeReads:true }, 0],
+      [{ runtime:"cloud", remoteCanvasNativeReads:true }, 0],
+      [{ runtime:"cloud", remoteCanvasNativeReads:false }, 1],
+      [{ runtime:"local" }, 1],
+      [undefined, 1],
+    ]) {
+      let refreshes = 0;
+      vm.runInNewContext(guard, {
+        window:{ PENECHO_CONFIG:config },
+        refreshSnapshots() { refreshes++; return Promise.resolve(); },
+      });
+      assert.equal(refreshes, expected, `${file}: ${JSON.stringify(config)}`);
+    }
+  }
 });
 
 test("the viewer localizes its actions and responsively frames Widgets and complete Canvases", () => {

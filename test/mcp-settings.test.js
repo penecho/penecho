@@ -6,9 +6,9 @@ function harness(fetchImpl) {
   for(const id of ["status","mcpReconnectCancel","mcpListenerStatus","mcpTroubleshoot","mcpTroubleshootStatus","mcpCopyTroubleshootPrompt","mcpSetupBlock","mcpSetupPrompt","mcpSetupPromptCode","mcpToolbarToggle","mcpManualSteps","mcpManual","mcpCanvasRing","mcpCanvasNotice","mcpCanvasNoticeButton","mcpEnabled","mcpConnectionStatus","mcpConfig","mcpConfigure","mcpCopyInstructions","mcpClients","mcpExamples","mcpExampleStatus","mcpRefresh","mcpConfigStatus","mcpConfigureStatus","mcpSetupStatus","settingsPageMcp","mcpLan","mcpResetCertificate","mcpCertificateNotice","mcpCertificateDialog","mcpCertificateTitle","mcpCertificateStatus","mcpCertificateConfirm","mcpCertificateCancel","mcpLanStatus","mcpLanClients","mcpLanPairDialog","mcpLanPairIdentity","mcpLanPairCode","mcpLanPairStatus","mcpLanApprove","mcpLanReject","mcpLanBlock"]){
     nodes.set(id,{hidden:id==="settingsPageMcp"||id==="mcpConfigStatus",value:"",textContent:"",disabled:false,dataset:{},listeners:{},classList:{toggle(){}},attributes:{},replaceChildren(...children){this.children=children;if(children[0])this.value=children[0].value;},showModal(){this.open=true;},close(){this.open=false;},setAttribute(key,value){this.attributes[key]=value;},addEventListener(type,listener){this.listeners[type]=listener;}});
   }
-  const ui={status:"",page:null},storage=new Map();
+  const ui={status:"",page:null,hints:[]},storage=new Map();
   const context=vm.createContext({document:{createElement:tag=>({tagName:tag,value:"",textContent:"",setAttribute(key,value){this[key]=value;}}),getElementById:id=>nodes.get(id)||null,querySelectorAll:selector=>selector==='input[name="mcpClient"]'?clientInputs:[]},state:{language:"en"},window:{PENECHO_CONFIG:{}},WebSocket:{OPEN:1,CONNECTING:0},URL,AbortSignal,AbortController,setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timer.unref();return timer;},clearTimeout,performance,addEventListener(){},
-    localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},setStatus:value=>{ui.status=value;},openSettings(){},selectSettingsPage:value=>{ui.page=value;},
+    localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},setStatus:value=>{ui.status=value;},showCanvasHint:key=>ui.hints.push(key),openSettings(){},selectSettingsPage:value=>{ui.page=value;},
     location:{protocol:"http:",host:"localhost:3921"},canvasClientId:()=>"canvas-test",
     authenticatedApiHeaders:headers=>({...headers,"X-PenEcho-Session":"test-page-session"}),
     fetch:async(url,options)=>{requests.push({url,options});return fetchImpl(url,options);},writeClipboardText:async text=>{clipboard.push(text);return true;},t:key=>key,
@@ -141,6 +141,7 @@ test("configured toolbar reports discoverability only after ready, and toggles o
   try{
     h.mcpToolbarClick();assert.match(h.ui.status,/Opening/);assert.equal(h.mcpRuntime.ready,false);
     const socket=h.mcpRuntime.socket;socket.readyState=1;socket.listeners.message({data:JSON.stringify({type:"ready"})});
+    assert.deepEqual(h.ui.hints,["canvasHintMcpConnected"]);
     assert.match(h.ui.status,/Discoverable/);assert.equal(h.nodes.get("mcpToolbarToggle").attributes["aria-pressed"],"true");
     h.mcpToolbarClick();assert.equal(h.mcpRuntime.socket,null);assert.equal(h.ui.status,"Not discoverable");
   }finally{h.mcpDisconnect();}

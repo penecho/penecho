@@ -497,10 +497,11 @@ test("configured Codex Test upgrades an old CLI and performs every remaining che
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
     AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-5.6-sol", AI_EFFORT:"xhigh", CODEX_CLI_PATH:"placeholder", PATH:"",
   }), oldExecutable = fixtureExecutable(path.join(configuration.stateDir, "fixtures", "codex-old")),
-    managedExecutable = managedCliPath("codex-cli", configuration), events = [];
+    managedExecutable = managedCliPath("codex-cli", { ...configuration, platform:"darwin" }), events = [];
   configuration.env.CODEX_CLI_PATH = oldExecutable;
   const originalEnv = { ...configuration.env };
   const result = await testConfiguredProvider(configuration, {
+    platform:"darwin",
     runner:async (launch, args) => {
       events.push(`run:${launch.command}:${args.join(" ")}`);
       if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.149.1" : CODEX_CLI_PINNED_VERSION}\n`, stderr:"" };
@@ -535,9 +536,10 @@ test("configured Codex Test reuses a compatible managed CLI instead of repeatedl
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
     AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-5.6-sol", CODEX_CLI_PATH:"placeholder", PATH:"",
   }), oldExecutable = fixtureExecutable(path.join(configuration.stateDir, "fixtures", "codex-old")),
-    managedExecutable = fixtureExecutable(managedCliPath("codex-cli", configuration)), calls = [];
+    managedExecutable = fixtureExecutable(managedCliPath("codex-cli", { ...configuration, platform:"darwin" })), calls = [];
   configuration.env.CODEX_CLI_PATH = oldExecutable;
   await testConfiguredProvider(configuration, {
+    platform:"darwin",
     runner:async (launch, args) => {
       calls.push([launch.command, ...args]);
       if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.149.1" : "0.154.0"}`, stderr:"" };
@@ -555,10 +557,11 @@ test("configured Codex Test does not reinstall a current managed CLI when its lo
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
     AI_PROVIDER:"codex-cli", CODEX_CLI_PATH:"placeholder", PATH:"",
   }), oldExecutable = fixtureExecutable(path.join(configuration.stateDir, "fixtures", "codex-old")),
-    managedExecutable = fixtureExecutable(managedCliPath("codex-cli", configuration));
+    managedExecutable = fixtureExecutable(managedCliPath("codex-cli", { ...configuration, platform:"darwin" }));
   configuration.env.CODEX_CLI_PATH = oldExecutable;
   let installs = 0;
   await assert.rejects(testConfiguredProvider(configuration, {
+    platform:"darwin",
     runner:async (launch, args) => {
       if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.149.1" : CODEX_CLI_PINNED_VERSION}`, stderr:"" };
       return launch.command === managedExecutable
@@ -590,10 +593,11 @@ test("a failed Codex Test upgrade does not call a model and can retry on the nex
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
     AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-5.6-sol", CODEX_CLI_PATH:"placeholder", PATH:"",
   }), oldExecutable = fixtureExecutable(path.join(configuration.stateDir, "fixtures", "codex-old")),
-    managedExecutable = managedCliPath("codex-cli", configuration), phases = [];
+    managedExecutable = managedCliPath("codex-cli", { ...configuration, platform:"darwin" }), phases = [];
   configuration.env.CODEX_CLI_PATH = oldExecutable;
   let attempts = 0, modelCalls = 0;
   const options = {
+    platform:"darwin",
     runner:async (launch, args) => {
       if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.149.1" : CODEX_CLI_PINNED_VERSION}`, stderr:"" };
       if (args[0] === "debug") return { code:0, stdout:JSON.stringify({ models:[{ slug:"gpt-5.6-sol" }] }), stderr:"" };
@@ -637,8 +641,9 @@ test("Codex upgrade waiting is outside the model timeout and the restarted timeo
     return configuration;
   };
   const run = async (configuration, codexCaller) => {
-    const managedExecutable = managedCliPath("codex-cli", configuration);
+    const managedExecutable = managedCliPath("codex-cli", { ...configuration, platform:"darwin" });
     return testConfiguredProvider(configuration, {
+      platform:"darwin",
       timeoutMs:20,
       runner:async (launch, args) => {
         if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === configuration.env.CODEX_CLI_PATH ? "0.149.1" : CODEX_CLI_PINNED_VERSION}`, stderr:"" };
@@ -983,4 +988,15 @@ test("help documents active options without obsolete setup or legacy stdio guida
   assert.match(help, /--kimi/);
   assert.match(help, /mcp discover/);
   assert.match(help, /hermes/);
+});
+
+test("Linux automatic CLI installation rejects before downloading or running an installer", async () => {
+  const configuration = isolatedConfiguration();
+  for (const provider of ["codex-cli", "kimi-cli", "claude-cli"]) {
+    await assert.rejects(installCli(provider, {
+      ...configuration, platform:"linux",
+      fetchImpl:async () => { assert.fail("unsupported platforms must not download installers"); },
+      runner:async () => { assert.fail("unsupported platforms must not execute installers"); },
+    }), /automatic installation is available on macOS and Windows/);
+  }
 });

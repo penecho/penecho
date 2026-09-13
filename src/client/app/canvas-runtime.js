@@ -959,7 +959,7 @@
       maximumHeight = SIZE - start.y;
     if (hit === "width") return { ...start, w:Math.max(minimumWidth, Math.min(maximumWidth, point.x - start.x)) };
     if (hit === "height") return { ...start, h:Math.max(minimumHeight, Math.min(maximumHeight, point.y - start.y)) };
-    const minimumScale = Math.max(minimumWidth / contentW, minimumHeight / contentH),
+    const minimumScale = Math.max(minimumWidth / start.w, minimumHeight / start.h),
       maximumScale = Math.min(maximumWidth / start.w, maximumHeight / start.h),
       requestedScale = Math.max((point.x - start.x) / start.w, (point.y - start.y) / start.h),
       scale = Math.max(minimumScale, Math.min(maximumScale, requestedScale));

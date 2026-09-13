@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const ROOT = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -43,11 +44,20 @@ function verifyDeferredLifecycle(source, helperName, releaseName, mapName) {
   const revoked = [], pending = fakeImage(false), complete = fakeImage(true),
     urls = new Map([["blob:pending", pending], ["blob:complete", complete]]),
     URL = { revokeObjectURL:(url) => revoked.push(url) },
-    helper = Function("URL", `return (${functionSource(source, helperName)});`)(URL),
-    release = Function(mapName, "queueMicrotask", helperName, `return (${functionSource(source, releaseName)});`)(urls, (callback) => callback(), helper);
+    controller = new AbortController(),
+    loader = { observer:{ disconnect(){ this.disconnected = true; } }, queue:["pending"], controllers:new Set([controller]) },
+    context = vm.createContext({ URL, [mapName]:urls, historyPreviewLoader:loader, queueMicrotask:callback=>callback() });
+  vm.runInContext(`${functionSource(source, helperName)}\n${functionSource(source, releaseName)}`, context);
+  const release = context[releaseName];
 
   release(urls);
   assert.equal(urls.size, 0);
+  if (releaseName === "releaseHistoryPreviewUrls") {
+    assert.equal(context.historyPreviewLoader, null);
+    assert.equal(loader.observer.disconnected, true);
+    assert.equal(loader.queue.length, 0);
+    assert.equal(controller.signal.aborted, true);
+  }
   assert.deepEqual(revoked, ["blob:complete"]);
   assert.equal(pending.listenerCount("load"), 1);
   assert.equal(pending.listenerCount("error"), 1);
