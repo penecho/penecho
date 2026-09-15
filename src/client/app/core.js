@@ -2681,8 +2681,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (!cloud && body.origin) window.PENECHO_CONFIG.cloudOrigin = body.origin;
       hostedSettings.signedIn = true;
       hostedSettings.models = (Array.isArray(body.models) ? body.models : []).filter(model => model.available === true && model.enabled !== false && !model.retiredAt && Number(model.multiplier) > 0).slice(0, 100);
-      const hostedKey = aiConnectionStorageKey(true), legacy = localStorage.getItem(AI_CONNECTION_STORAGE_KEY);
-      if (hostedKey && !localStorage.getItem(hostedKey) && legacy?.startsWith("hosted:") && hostedSettings.models.some(model => `hosted:${model.id}` === legacy)) storeAiConnectionSelection(legacy);
+      const hostedKey = aiConnectionStorageKey(true), localKey = aiConnectionStorageKey(), legacy = localStorage.getItem(AI_CONNECTION_STORAGE_KEY);
+      // Migrate history only before a scoped choice exists. A catalog arriving
+      // after the user selects a local connection must never select Cloud.
+      if (hostedKey && !localStorage.getItem(hostedKey) && localStorage.getItem(`${hostedKey}:selected`) === null
+        && !(localKey && localStorage.getItem(localKey)) && legacy?.startsWith("hosted:")
+        && hostedSettings.models.some(model => `hosted:${model.id}` === legacy)) storeAiConnectionSelection(legacy);
       if (body.credits) hostedSettings.credits = body.credits.availableCredits ?? body.credits.available ?? body.credits.balance ?? 0;
       else {
         const balance = await fetch("/api/v1/credits", { headers:authenticatedApiHeaders(), signal:AbortSignal.timeout(8_000) });

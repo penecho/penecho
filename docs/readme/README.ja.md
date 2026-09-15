@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@ MCP を通じて、AI は説明を図に、アイデアをインタラクティ�
 - **自分のエージェントを接続。** Codex、Claude Code などの MCP 対応クライアントで、明示的に有効化した Canvas を読み取り、編集できます。
 - **成果を保存・共有。** Canvas をプロジェクトに整理し、Cloud のリビジョンを保存、お気に入りを同期し、Echoes で公開できます。
 
-## 1.3.0 の新機能
+## 1.3.2 の新機能
 
 | 更新 | 追加された機能 |
 | --- | --- |

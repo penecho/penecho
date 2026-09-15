@@ -1,0 +1,40 @@
+[
+  {
+    "surface": "brand",
+    "width": 1180,
+    "height": 1000,
+    "scale": 1,
+    "horizontal": false,
+    "missingImages": []
+  },
+  {
+    "surface": "brand",
+    "width": 400,
+    "height": 800,
+    "scale": 1,
+    "horizontal": false,
+    "missingImages": []
+  },
+  {
+    "surface": "brand",
+    "width": 590,
+    "height": 500,
+    "scale": 2,
+    "horizontal": false,
+    "missingImages": []
+  },
+  {
+    "surface": "update",
+    "locale": "en-US",
+    "horizontal": false,
+    "vertical": false,
+    "missingImages": false
+  },
+  {
+    "surface": "update",
+    "locale": "zh-CN",
+    "horizontal": false,
+    "vertical": false,
+    "missingImages": false
+  }
+]

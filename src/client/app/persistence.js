@@ -1008,6 +1008,7 @@
       body:JSON.stringify({
         kind,
         preview,
+        reasoningEffort:state.reasoningEffort,
         language:document.documentElement.lang==="zh"?"zh":"en",
         current:{
           name:String(current.name||"").slice(0,160),
@@ -1019,7 +1020,7 @@
         context:kind==="widget"?{title:String(artifact?.widget?.title||"").slice(0,120),pluginId:String(artifact?.widget?.pluginId||"").slice(0,64)}:{title:String(artifact?.name||"").slice(0,160)},
       }),
     }),body=await response.json().catch(()=>({}));
-    if(!response.ok)throw Error(body.error||`AI auto-fill failed (HTTP ${response.status}).`);
+    if(!response.ok)throw Error(body.message||body.error||`AI auto-fill failed (HTTP ${response.status}).`);
     return body.metadata;
   }
   async function importCommunityCanvasArtifact(artifact, origin = null) {

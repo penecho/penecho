@@ -94,8 +94,8 @@ svg { display: block; }
   background: var(--studio-titlebar);
 }
 .access-brand { display: inline-flex; min-height: 36px; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
-.access-brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--pe-line); border-radius: 7px; background: var(--pe-surface); }
-.access-brand img { width: 24px; height: 24px; object-fit: contain; }
+.access-brand-mark { display: grid; width: 30px; height: 30px; place-items: center; }
+.access-brand img { display: block; width: 30px; height: 30px; object-fit: contain; }
 .access-brand > span:last-child { display: grid; gap: 1px; line-height: 1.05; }
 .access-brand strong { color: var(--pe-ink); font-size: 14px; font-weight: var(--pe-type-semibold); letter-spacing: normal; }
 .access-brand small { color: var(--pe-ink-2); font-size: var(--pe-type-meta); font-weight: var(--pe-type-medium); letter-spacing: normal; text-transform: none; }

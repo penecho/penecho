@@ -44,33 +44,12 @@ button { font: inherit; }
 }
 
 .update-mark {
-  position: relative;
-  width: 30px;
-  height: 30px;
+  display: block;
+  width: 56px;
+  height: 46px;
   flex: 0 0 auto;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
+  object-fit: contain;
 }
-
-.update-mark span {
-  position: absolute;
-  inset: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-body[data-state="checking"] .update-mark,
-body[data-state="downloading"] .update-mark,
-body[data-state="installing"] .update-mark {
-  border-color: var(--line);
-  border-top-color: var(--accent);
-  animation: update-spin 800ms linear infinite;
-}
-
-body[data-state="error"] .update-mark { border-color: var(--danger); }
-body[data-state="error"] .update-mark span { background: var(--danger); }
-
-@keyframes update-spin { to { transform: rotate(360deg); } }
 
 h1,
 h2,
@@ -138,14 +117,10 @@ h2 { font-size: 15px; font-weight: 650; line-height: 1.4; letter-spacing: -0.01e
 ::selection { color: #fff; background: var(--focus); }
 
 @media (prefers-reduced-motion: reduce) {
-  body[data-state="checking"] .update-mark,
-  body[data-state="downloading"] .update-mark,
-  body[data-state="installing"] .update-mark { animation-duration: 1800ms; }
   .progress-track span { transition: none; }
 }
 
 @media (forced-colors: active) {
-  .update-mark,
   .progress-track,
   .button { border: 1px solid ButtonText; }
   .progress-track span { background: Highlight; }

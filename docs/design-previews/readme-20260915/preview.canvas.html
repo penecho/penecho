@@ -1,0 +1,2114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PenEcho README · GitHub 排版预览</title>
+<style>
+/* github-markdown-css 5.8.1 · MIT · Sindre Sorhus */
+.markdown-body {
+  --base-size-4: 0.25rem;
+  --base-size-8: 0.5rem;
+  --base-size-16: 1rem;
+  --base-size-24: 1.5rem;
+  --base-size-40: 2.5rem;
+  --base-text-weight-normal: 400;
+  --base-text-weight-medium: 500;
+  --base-text-weight-semibold: 600;
+  --fontStack-monospace: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+  --fgColor-accent: Highlight;
+}
+@media all {
+  [data-theme="dark"] .markdown-body, [data-theme="dark"] {
+    /* dark */
+    color-scheme: dark;
+    --focus-outlineColor: #1f6feb;
+    --fgColor-default: #f0f6fc;
+    --fgColor-muted: #9198a1;
+    --fgColor-accent: #4493f8;
+    --fgColor-success: #3fb950;
+    --fgColor-attention: #d29922;
+    --fgColor-danger: #f85149;
+    --fgColor-done: #ab7df8;
+    --bgColor-default: #0d1117;
+    --bgColor-muted: #151b23;
+    --bgColor-neutral-muted: #656c7633;
+    --bgColor-attention-muted: #bb800926;
+    --borderColor-default: #3d444d;
+    --borderColor-muted: #3d444db3;
+    --borderColor-neutral-muted: #3d444db3;
+    --borderColor-accent-emphasis: #1f6feb;
+    --borderColor-success-emphasis: #238636;
+    --borderColor-attention-emphasis: #9e6a03;
+    --borderColor-danger-emphasis: #da3633;
+    --borderColor-done-emphasis: #8957e5;
+    --color-prettylights-syntax-comment: #9198a1;
+    --color-prettylights-syntax-constant: #79c0ff;
+    --color-prettylights-syntax-constant-other-reference-link: #a5d6ff;
+    --color-prettylights-syntax-entity: #d2a8ff;
+    --color-prettylights-syntax-storage-modifier-import: #f0f6fc;
+    --color-prettylights-syntax-entity-tag: #7ee787;
+    --color-prettylights-syntax-keyword: #ff7b72;
+    --color-prettylights-syntax-string: #a5d6ff;
+    --color-prettylights-syntax-variable: #ffa657;
+    --color-prettylights-syntax-brackethighlighter-unmatched: #f85149;
+    --color-prettylights-syntax-brackethighlighter-angle: #9198a1;
+    --color-prettylights-syntax-invalid-illegal-text: #f0f6fc;
+    --color-prettylights-syntax-invalid-illegal-bg: #8e1519;
+    --color-prettylights-syntax-carriage-return-text: #f0f6fc;
+    --color-prettylights-syntax-carriage-return-bg: #b62324;
+    --color-prettylights-syntax-string-regexp: #7ee787;
+    --color-prettylights-syntax-markup-list: #f2cc60;
+    --color-prettylights-syntax-markup-heading: #1f6feb;
+    --color-prettylights-syntax-markup-italic: #f0f6fc;
+    --color-prettylights-syntax-markup-bold: #f0f6fc;
+    --color-prettylights-syntax-markup-deleted-text: #ffdcd7;
+    --color-prettylights-syntax-markup-deleted-bg: #67060c;
+    --color-prettylights-syntax-markup-inserted-text: #aff5b4;
+    --color-prettylights-syntax-markup-inserted-bg: #033a16;
+    --color-prettylights-syntax-markup-changed-text: #ffdfb6;
+    --color-prettylights-syntax-markup-changed-bg: #5a1e02;
+    --color-prettylights-syntax-markup-ignored-text: #f0f6fc;
+    --color-prettylights-syntax-markup-ignored-bg: #1158c7;
+    --color-prettylights-syntax-meta-diff-range: #d2a8ff;
+    --color-prettylights-syntax-sublimelinter-gutter-mark: #3d444d;
+  }
+}
+@media all {
+  [data-theme="light"] .markdown-body, [data-theme="light"] {
+    /* light */
+    color-scheme: light;
+    --focus-outlineColor: #0969da;
+    --fgColor-default: #1f2328;
+    --fgColor-muted: #59636e;
+    --fgColor-accent: #0969da;
+    --fgColor-success: #1a7f37;
+    --fgColor-attention: #9a6700;
+    --fgColor-danger: #d1242f;
+    --fgColor-done: #8250df;
+    --bgColor-default: #ffffff;
+    --bgColor-muted: #f6f8fa;
+    --bgColor-neutral-muted: #818b981f;
+    --bgColor-attention-muted: #fff8c5;
+    --borderColor-default: #d1d9e0;
+    --borderColor-muted: #d1d9e0b3;
+    --borderColor-neutral-muted: #d1d9e0b3;
+    --borderColor-accent-emphasis: #0969da;
+    --borderColor-success-emphasis: #1a7f37;
+    --borderColor-attention-emphasis: #9a6700;
+    --borderColor-danger-emphasis: #cf222e;
+    --borderColor-done-emphasis: #8250df;
+    --color-prettylights-syntax-comment: #59636e;
+    --color-prettylights-syntax-constant: #0550ae;
+    --color-prettylights-syntax-constant-other-reference-link: #0a3069;
+    --color-prettylights-syntax-entity: #6639ba;
+    --color-prettylights-syntax-storage-modifier-import: #1f2328;
+    --color-prettylights-syntax-entity-tag: #0550ae;
+    --color-prettylights-syntax-keyword: #cf222e;
+    --color-prettylights-syntax-string: #0a3069;
+    --color-prettylights-syntax-variable: #953800;
+    --color-prettylights-syntax-brackethighlighter-unmatched: #82071e;
+    --color-prettylights-syntax-brackethighlighter-angle: #59636e;
+    --color-prettylights-syntax-invalid-illegal-text: #f6f8fa;
+    --color-prettylights-syntax-invalid-illegal-bg: #82071e;
+    --color-prettylights-syntax-carriage-return-text: #f6f8fa;
+    --color-prettylights-syntax-carriage-return-bg: #cf222e;
+    --color-prettylights-syntax-string-regexp: #116329;
+    --color-prettylights-syntax-markup-list: #3b2300;
+    --color-prettylights-syntax-markup-heading: #0550ae;
+    --color-prettylights-syntax-markup-italic: #1f2328;
+    --color-prettylights-syntax-markup-bold: #1f2328;
+    --color-prettylights-syntax-markup-deleted-text: #82071e;
+    --color-prettylights-syntax-markup-deleted-bg: #ffebe9;
+    --color-prettylights-syntax-markup-inserted-text: #116329;
+    --color-prettylights-syntax-markup-inserted-bg: #dafbe1;
+    --color-prettylights-syntax-markup-changed-text: #953800;
+    --color-prettylights-syntax-markup-changed-bg: #ffd8b5;
+    --color-prettylights-syntax-markup-ignored-text: #d1d9e0;
+    --color-prettylights-syntax-markup-ignored-bg: #0550ae;
+    --color-prettylights-syntax-meta-diff-range: #8250df;
+    --color-prettylights-syntax-sublimelinter-gutter-mark: #818b98;
+  }
+}
+
+.markdown-body {
+  -ms-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  margin: 0;
+  color: var(--fgColor-default);
+  background-color: var(--bgColor-default);
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.markdown-body .octicon {
+  display: inline-block;
+  fill: currentColor;
+  vertical-align: text-bottom;
+}
+
+.markdown-body h1:hover .anchor .octicon-link:before,
+.markdown-body h2:hover .anchor .octicon-link:before,
+.markdown-body h3:hover .anchor .octicon-link:before,
+.markdown-body h4:hover .anchor .octicon-link:before,
+.markdown-body h5:hover .anchor .octicon-link:before,
+.markdown-body h6:hover .anchor .octicon-link:before {
+  width: 16px;
+  height: 16px;
+  content: ' ';
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' version='1.1' aria-hidden='true'><path fill-rule='evenodd' d='M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z'></path></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' version='1.1' aria-hidden='true'><path fill-rule='evenodd' d='M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z'></path></svg>");
+}
+
+.markdown-body details,
+.markdown-body figcaption,
+.markdown-body figure {
+  display: block;
+}
+
+.markdown-body summary {
+  display: list-item;
+}
+
+.markdown-body [hidden] {
+  display: none !important;
+}
+
+.markdown-body a {
+  background-color: transparent;
+  color: var(--fgColor-accent);
+  text-decoration: none;
+}
+
+.markdown-body abbr[title] {
+  border-bottom: none;
+  -webkit-text-decoration: underline dotted;
+  text-decoration: underline dotted;
+}
+
+.markdown-body b,
+.markdown-body strong {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.markdown-body dfn {
+  font-style: italic;
+}
+
+.markdown-body h1 {
+  margin: .67em 0;
+  font-weight: var(--base-text-weight-semibold, 600);
+  padding-bottom: .3em;
+  font-size: 2em;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.markdown-body mark {
+  background-color: var(--bgColor-attention-muted);
+  color: var(--fgColor-default);
+}
+
+.markdown-body small {
+  font-size: 90%;
+}
+
+.markdown-body sub,
+.markdown-body sup {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.markdown-body sub {
+  bottom: -0.25em;
+}
+
+.markdown-body sup {
+  top: -0.5em;
+}
+
+.markdown-body img {
+  border-style: none;
+  max-width: 100%;
+  box-sizing: content-box;
+}
+
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body pre,
+.markdown-body samp {
+  font-family: monospace;
+  font-size: 1em;
+}
+
+.markdown-body figure {
+  margin: 1em var(--base-size-40);
+}
+
+.markdown-body hr {
+  box-sizing: content-box;
+  overflow: hidden;
+  background: transparent;
+  border-bottom: 1px solid var(--borderColor-muted);
+  height: .25em;
+  padding: 0;
+  margin: var(--base-size-24) 0;
+  background-color: var(--borderColor-default);
+  border: 0;
+}
+
+.markdown-body input {
+  font: inherit;
+  margin: 0;
+  overflow: visible;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-body [type=button],
+.markdown-body [type=reset],
+.markdown-body [type=submit] {
+  -webkit-appearance: button;
+  appearance: button;
+}
+
+.markdown-body [type=checkbox],
+.markdown-body [type=radio] {
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.markdown-body [type=number]::-webkit-inner-spin-button,
+.markdown-body [type=number]::-webkit-outer-spin-button {
+  height: auto;
+}
+
+.markdown-body [type=search]::-webkit-search-cancel-button,
+.markdown-body [type=search]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.markdown-body ::-webkit-input-placeholder {
+  color: inherit;
+  opacity: .54;
+}
+
+.markdown-body ::-webkit-file-upload-button {
+  -webkit-appearance: button;
+  appearance: button;
+  font: inherit;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body ::placeholder {
+  color: var(--fgColor-muted);
+  opacity: 1;
+}
+
+.markdown-body hr::before {
+  display: table;
+  content: "";
+}
+
+.markdown-body hr::after {
+  display: table;
+  clear: both;
+  content: "";
+}
+
+.markdown-body table {
+  border-spacing: 0;
+  border-collapse: collapse;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  font-variant: tabular-nums;
+}
+
+.markdown-body td,
+.markdown-body th {
+  padding: 0;
+}
+
+.markdown-body details summary {
+  cursor: pointer;
+}
+
+.markdown-body a:focus,
+.markdown-body [role=button]:focus,
+.markdown-body input[type=radio]:focus,
+.markdown-body input[type=checkbox]:focus {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.markdown-body a:focus:not(:focus-visible),
+.markdown-body [role=button]:focus:not(:focus-visible),
+.markdown-body input[type=radio]:focus:not(:focus-visible),
+.markdown-body input[type=checkbox]:focus:not(:focus-visible) {
+  outline: solid 1px transparent;
+}
+
+.markdown-body a:focus-visible,
+.markdown-body [role=button]:focus-visible,
+.markdown-body input[type=radio]:focus-visible,
+.markdown-body input[type=checkbox]:focus-visible {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.markdown-body a:not([class]):focus,
+.markdown-body a:not([class]):focus-visible,
+.markdown-body input[type=radio]:focus,
+.markdown-body input[type=radio]:focus-visible,
+.markdown-body input[type=checkbox]:focus,
+.markdown-body input[type=checkbox]:focus-visible {
+  outline-offset: 0;
+}
+
+.markdown-body kbd {
+  display: inline-block;
+  padding: var(--base-size-4);
+  font: 11px var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  line-height: 10px;
+  color: var(--fgColor-default);
+  vertical-align: middle;
+  background-color: var(--bgColor-muted);
+  border: solid 1px var(--borderColor-neutral-muted);
+  border-bottom-color: var(--borderColor-neutral-muted);
+  border-radius: 6px;
+  box-shadow: inset 0 -1px 0 var(--borderColor-neutral-muted);
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: var(--base-size-24);
+  margin-bottom: var(--base-size-16);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+}
+
+.markdown-body h2 {
+  font-weight: var(--base-text-weight-semibold, 600);
+  padding-bottom: .3em;
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.markdown-body h3 {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: 1em;
+}
+
+.markdown-body h5 {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: .875em;
+}
+
+.markdown-body h6 {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: .85em;
+  color: var(--fgColor-muted);
+}
+
+.markdown-body p {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.markdown-body blockquote {
+  margin: 0;
+  padding: 0 1em;
+  color: var(--fgColor-muted);
+  border-left: .25em solid var(--borderColor-default);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 2em;
+}
+
+.markdown-body ol ol,
+.markdown-body ul ol {
+  list-style-type: lower-roman;
+}
+
+.markdown-body ul ul ol,
+.markdown-body ul ol ol,
+.markdown-body ol ul ol,
+.markdown-body ol ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-body dd {
+  margin-left: 0;
+}
+
+.markdown-body tt,
+.markdown-body code,
+.markdown-body samp {
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-size: 12px;
+}
+
+.markdown-body pre {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-size: 12px;
+  word-wrap: normal;
+}
+
+.markdown-body .octicon {
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-body input::-webkit-outer-spin-button,
+.markdown-body input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.markdown-body .mr-2 {
+  margin-right: var(--base-size-8, 8px) !important;
+}
+
+.markdown-body::before {
+  display: table;
+  content: "";
+}
+
+.markdown-body::after {
+  display: table;
+  clear: both;
+  content: "";
+}
+
+.markdown-body>*:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-body>*:last-child {
+  margin-bottom: 0 !important;
+}
+
+.markdown-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body .absent {
+  color: var(--fgColor-danger);
+}
+
+.markdown-body .anchor {
+  float: left;
+  padding-right: var(--base-size-4);
+  margin-left: -20px;
+  line-height: 1;
+}
+
+.markdown-body .anchor:focus {
+  outline: none;
+}
+
+.markdown-body p,
+.markdown-body blockquote,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body dl,
+.markdown-body table,
+.markdown-body pre,
+.markdown-body details {
+  margin-top: 0;
+  margin-bottom: var(--base-size-16);
+}
+
+.markdown-body blockquote>:first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote>:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1 .octicon-link,
+.markdown-body h2 .octicon-link,
+.markdown-body h3 .octicon-link,
+.markdown-body h4 .octicon-link,
+.markdown-body h5 .octicon-link,
+.markdown-body h6 .octicon-link {
+  color: var(--fgColor-default);
+  vertical-align: middle;
+  visibility: hidden;
+}
+
+.markdown-body h1:hover .anchor,
+.markdown-body h2:hover .anchor,
+.markdown-body h3:hover .anchor,
+.markdown-body h4:hover .anchor,
+.markdown-body h5:hover .anchor,
+.markdown-body h6:hover .anchor {
+  text-decoration: none;
+}
+
+.markdown-body h1:hover .anchor .octicon-link,
+.markdown-body h2:hover .anchor .octicon-link,
+.markdown-body h3:hover .anchor .octicon-link,
+.markdown-body h4:hover .anchor .octicon-link,
+.markdown-body h5:hover .anchor .octicon-link,
+.markdown-body h6:hover .anchor .octicon-link {
+  visibility: visible;
+}
+
+.markdown-body h1 tt,
+.markdown-body h1 code,
+.markdown-body h2 tt,
+.markdown-body h2 code,
+.markdown-body h3 tt,
+.markdown-body h3 code,
+.markdown-body h4 tt,
+.markdown-body h4 code,
+.markdown-body h5 tt,
+.markdown-body h5 code,
+.markdown-body h6 tt,
+.markdown-body h6 code {
+  padding: 0 .2em;
+  font-size: inherit;
+}
+
+.markdown-body summary h1,
+.markdown-body summary h2,
+.markdown-body summary h3,
+.markdown-body summary h4,
+.markdown-body summary h5,
+.markdown-body summary h6 {
+  display: inline-block;
+}
+
+.markdown-body summary h1 .anchor,
+.markdown-body summary h2 .anchor,
+.markdown-body summary h3 .anchor,
+.markdown-body summary h4 .anchor,
+.markdown-body summary h5 .anchor,
+.markdown-body summary h6 .anchor {
+  margin-left: -40px;
+}
+
+.markdown-body summary h1,
+.markdown-body summary h2 {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.markdown-body ul.no-list,
+.markdown-body ol.no-list {
+  padding: 0;
+  list-style-type: none;
+}
+
+.markdown-body ol[type="a s"] {
+  list-style-type: lower-alpha;
+}
+
+.markdown-body ol[type="A s"] {
+  list-style-type: upper-alpha;
+}
+
+.markdown-body ol[type="i s"] {
+  list-style-type: lower-roman;
+}
+
+.markdown-body ol[type="I s"] {
+  list-style-type: upper-roman;
+}
+
+.markdown-body ol[type="1"] {
+  list-style-type: decimal;
+}
+
+.markdown-body div>ol:not([type]) {
+  list-style-type: decimal;
+}
+
+.markdown-body ul ul,
+.markdown-body ul ol,
+.markdown-body ol ol,
+.markdown-body ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.markdown-body li>p {
+  margin-top: var(--base-size-16);
+}
+
+.markdown-body li+li {
+  margin-top: .25em;
+}
+
+.markdown-body dl {
+  padding: 0;
+}
+
+.markdown-body dl dt {
+  padding: 0;
+  margin-top: var(--base-size-16);
+  font-size: 1em;
+  font-style: italic;
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.markdown-body dl dd {
+  padding: 0 var(--base-size-16);
+  margin-bottom: var(--base-size-16);
+}
+
+.markdown-body table th {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid var(--borderColor-default);
+}
+
+.markdown-body table td>:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body table tr {
+  background-color: var(--bgColor-default);
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: var(--bgColor-muted);
+}
+
+.markdown-body table img {
+  background-color: transparent;
+}
+
+.markdown-body img[align=right] {
+  padding-left: 20px;
+}
+
+.markdown-body img[align=left] {
+  padding-right: 20px;
+}
+
+.markdown-body .emoji {
+  max-width: none;
+  vertical-align: text-top;
+  background-color: transparent;
+}
+
+.markdown-body span.frame {
+  display: block;
+  overflow: hidden;
+}
+
+.markdown-body span.frame>span {
+  display: block;
+  float: left;
+  width: auto;
+  padding: 7px;
+  margin: 13px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--borderColor-default);
+}
+
+.markdown-body span.frame span img {
+  display: block;
+  float: left;
+}
+
+.markdown-body span.frame span span {
+  display: block;
+  padding: 5px 0 0;
+  clear: both;
+  color: var(--fgColor-default);
+}
+
+.markdown-body span.align-center {
+  display: block;
+  overflow: hidden;
+  clear: both;
+}
+
+.markdown-body span.align-center>span {
+  display: block;
+  margin: 13px auto 0;
+  overflow: hidden;
+  text-align: center;
+}
+
+.markdown-body span.align-center span img {
+  margin: 0 auto;
+  text-align: center;
+}
+
+.markdown-body span.align-right {
+  display: block;
+  overflow: hidden;
+  clear: both;
+}
+
+.markdown-body span.align-right>span {
+  display: block;
+  margin: 13px 0 0;
+  overflow: hidden;
+  text-align: right;
+}
+
+.markdown-body span.align-right span img {
+  margin: 0;
+  text-align: right;
+}
+
+.markdown-body span.float-left {
+  display: block;
+  float: left;
+  margin-right: 13px;
+  overflow: hidden;
+}
+
+.markdown-body span.float-left span {
+  margin: 13px 0 0;
+}
+
+.markdown-body span.float-right {
+  display: block;
+  float: right;
+  margin-left: 13px;
+  overflow: hidden;
+}
+
+.markdown-body span.float-right>span {
+  display: block;
+  margin: 13px auto 0;
+  overflow: hidden;
+  text-align: right;
+}
+
+.markdown-body code,
+.markdown-body tt {
+  padding: .2em .4em;
+  margin: 0;
+  font-size: 85%;
+  white-space: break-spaces;
+  background-color: var(--bgColor-neutral-muted);
+  border-radius: 6px;
+}
+
+.markdown-body code br,
+.markdown-body tt br {
+  display: none;
+}
+
+.markdown-body del code {
+  text-decoration: inherit;
+}
+
+.markdown-body samp {
+  font-size: 85%;
+}
+
+.markdown-body pre code {
+  font-size: 100%;
+}
+
+.markdown-body pre>code {
+  padding: 0;
+  margin: 0;
+  word-break: normal;
+  white-space: pre;
+  background: transparent;
+  border: 0;
+}
+
+.markdown-body .highlight {
+  margin-bottom: var(--base-size-16);
+}
+
+.markdown-body .highlight pre {
+  margin-bottom: 0;
+  word-break: normal;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+  padding: var(--base-size-16);
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  color: var(--fgColor-default);
+  background-color: var(--bgColor-muted);
+  border-radius: 6px;
+}
+
+.markdown-body pre code,
+.markdown-body pre tt {
+  display: inline;
+  max-width: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+}
+
+.markdown-body .csv-data td,
+.markdown-body .csv-data th {
+  padding: 5px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.markdown-body .csv-data .blob-num {
+  padding: 10px var(--base-size-8) 9px;
+  text-align: right;
+  background: var(--bgColor-default);
+  border: 0;
+}
+
+.markdown-body .csv-data tr {
+  border-top: 0;
+}
+
+.markdown-body .csv-data th {
+  font-weight: var(--base-text-weight-semibold, 600);
+  background: var(--bgColor-muted);
+  border-top: 0;
+}
+
+.markdown-body [data-footnote-ref]::before {
+  content: "[";
+}
+
+.markdown-body [data-footnote-ref]::after {
+  content: "]";
+}
+
+.markdown-body .footnotes {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+  border-top: 1px solid var(--borderColor-default);
+}
+
+.markdown-body .footnotes ol {
+  padding-left: var(--base-size-16);
+}
+
+.markdown-body .footnotes ol ul {
+  display: inline-block;
+  padding-left: var(--base-size-16);
+  margin-top: var(--base-size-16);
+}
+
+.markdown-body .footnotes li {
+  position: relative;
+}
+
+.markdown-body .footnotes li:target::before {
+  position: absolute;
+  top: calc(var(--base-size-8)*-1);
+  right: calc(var(--base-size-8)*-1);
+  bottom: calc(var(--base-size-8)*-1);
+  left: calc(var(--base-size-24)*-1);
+  pointer-events: none;
+  content: "";
+  border: 2px solid var(--borderColor-accent-emphasis);
+  border-radius: 6px;
+}
+
+.markdown-body .footnotes li:target {
+  color: var(--fgColor-default);
+}
+
+.markdown-body .footnotes .data-footnote-backref g-emoji {
+  font-family: monospace;
+}
+
+.markdown-body body:has(:modal) {
+  padding-right: var(--dialog-scrollgutter) !important;
+}
+
+.markdown-body .pl-c {
+  color: var(--color-prettylights-syntax-comment);
+}
+
+.markdown-body .pl-c1,
+.markdown-body .pl-s .pl-v {
+  color: var(--color-prettylights-syntax-constant);
+}
+
+.markdown-body .pl-e,
+.markdown-body .pl-en {
+  color: var(--color-prettylights-syntax-entity);
+}
+
+.markdown-body .pl-smi,
+.markdown-body .pl-s .pl-s1 {
+  color: var(--color-prettylights-syntax-storage-modifier-import);
+}
+
+.markdown-body .pl-ent {
+  color: var(--color-prettylights-syntax-entity-tag);
+}
+
+.markdown-body .pl-k {
+  color: var(--color-prettylights-syntax-keyword);
+}
+
+.markdown-body .pl-s,
+.markdown-body .pl-pds,
+.markdown-body .pl-s .pl-pse .pl-s1,
+.markdown-body .pl-sr,
+.markdown-body .pl-sr .pl-cce,
+.markdown-body .pl-sr .pl-sre,
+.markdown-body .pl-sr .pl-sra {
+  color: var(--color-prettylights-syntax-string);
+}
+
+.markdown-body .pl-v,
+.markdown-body .pl-smw {
+  color: var(--color-prettylights-syntax-variable);
+}
+
+.markdown-body .pl-bu {
+  color: var(--color-prettylights-syntax-brackethighlighter-unmatched);
+}
+
+.markdown-body .pl-ii {
+  color: var(--color-prettylights-syntax-invalid-illegal-text);
+  background-color: var(--color-prettylights-syntax-invalid-illegal-bg);
+}
+
+.markdown-body .pl-c2 {
+  color: var(--color-prettylights-syntax-carriage-return-text);
+  background-color: var(--color-prettylights-syntax-carriage-return-bg);
+}
+
+.markdown-body .pl-sr .pl-cce {
+  font-weight: bold;
+  color: var(--color-prettylights-syntax-string-regexp);
+}
+
+.markdown-body .pl-ml {
+  color: var(--color-prettylights-syntax-markup-list);
+}
+
+.markdown-body .pl-mh,
+.markdown-body .pl-mh .pl-en,
+.markdown-body .pl-ms {
+  font-weight: bold;
+  color: var(--color-prettylights-syntax-markup-heading);
+}
+
+.markdown-body .pl-mi {
+  font-style: italic;
+  color: var(--color-prettylights-syntax-markup-italic);
+}
+
+.markdown-body .pl-mb {
+  font-weight: bold;
+  color: var(--color-prettylights-syntax-markup-bold);
+}
+
+.markdown-body .pl-md {
+  color: var(--color-prettylights-syntax-markup-deleted-text);
+  background-color: var(--color-prettylights-syntax-markup-deleted-bg);
+}
+
+.markdown-body .pl-mi1 {
+  color: var(--color-prettylights-syntax-markup-inserted-text);
+  background-color: var(--color-prettylights-syntax-markup-inserted-bg);
+}
+
+.markdown-body .pl-mc {
+  color: var(--color-prettylights-syntax-markup-changed-text);
+  background-color: var(--color-prettylights-syntax-markup-changed-bg);
+}
+
+.markdown-body .pl-mi2 {
+  color: var(--color-prettylights-syntax-markup-ignored-text);
+  background-color: var(--color-prettylights-syntax-markup-ignored-bg);
+}
+
+.markdown-body .pl-mdr {
+  font-weight: bold;
+  color: var(--color-prettylights-syntax-meta-diff-range);
+}
+
+.markdown-body .pl-ba {
+  color: var(--color-prettylights-syntax-brackethighlighter-angle);
+}
+
+.markdown-body .pl-sg {
+  color: var(--color-prettylights-syntax-sublimelinter-gutter-mark);
+}
+
+.markdown-body .pl-corl {
+  text-decoration: underline;
+  color: var(--color-prettylights-syntax-constant-other-reference-link);
+}
+
+.markdown-body [role=button]:focus:not(:focus-visible),
+.markdown-body [role=tabpanel][tabindex="0"]:focus:not(:focus-visible),
+.markdown-body button:focus:not(:focus-visible),
+.markdown-body summary:focus:not(:focus-visible),
+.markdown-body a:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.markdown-body [tabindex="0"]:focus:not(:focus-visible),
+.markdown-body details-dialog:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.markdown-body g-emoji {
+  display: inline-block;
+  min-width: 1ch;
+  font-family: "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+  font-size: 1em;
+  font-style: normal !important;
+  font-weight: var(--base-text-weight-normal, 400);
+  line-height: 1;
+  vertical-align: -0.075em;
+}
+
+.markdown-body g-emoji img {
+  width: 1em;
+  height: 1em;
+}
+
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+
+.markdown-body .task-list-item label {
+  font-weight: var(--base-text-weight-normal, 400);
+}
+
+.markdown-body .task-list-item.enabled label {
+  cursor: pointer;
+}
+
+.markdown-body .task-list-item+.task-list-item {
+  margin-top: var(--base-size-4);
+}
+
+.markdown-body .task-list-item .handle {
+  display: none;
+}
+
+.markdown-body .task-list-item-checkbox {
+  margin: 0 .2em .25em -1.4em;
+  vertical-align: middle;
+}
+
+.markdown-body ul:dir(rtl) .task-list-item-checkbox {
+  margin: 0 -1.6em .25em .2em;
+}
+
+.markdown-body ol:dir(rtl) .task-list-item-checkbox {
+  margin: 0 -1.6em .25em .2em;
+}
+
+.markdown-body .contains-task-list:hover .task-list-item-convert-container,
+.markdown-body .contains-task-list:focus-within .task-list-item-convert-container {
+  display: block;
+  width: auto;
+  height: 24px;
+  overflow: visible;
+  clip: auto;
+}
+
+.markdown-body ::-webkit-calendar-picker-indicator {
+  filter: invert(50%);
+}
+
+.markdown-body .markdown-alert {
+  padding: var(--base-size-8) var(--base-size-16);
+  margin-bottom: var(--base-size-16);
+  color: inherit;
+  border-left: .25em solid var(--borderColor-default);
+}
+
+.markdown-body .markdown-alert>:first-child {
+  margin-top: 0;
+}
+
+.markdown-body .markdown-alert>:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body .markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: var(--base-text-weight-medium, 500);
+  align-items: center;
+  line-height: 1;
+}
+
+.markdown-body .markdown-alert.markdown-alert-note {
+  border-left-color: var(--borderColor-accent-emphasis);
+}
+
+.markdown-body .markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--fgColor-accent);
+}
+
+.markdown-body .markdown-alert.markdown-alert-important {
+  border-left-color: var(--borderColor-done-emphasis);
+}
+
+.markdown-body .markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--fgColor-done);
+}
+
+.markdown-body .markdown-alert.markdown-alert-warning {
+  border-left-color: var(--borderColor-attention-emphasis);
+}
+
+.markdown-body .markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--fgColor-attention);
+}
+
+.markdown-body .markdown-alert.markdown-alert-tip {
+  border-left-color: var(--borderColor-success-emphasis);
+}
+
+.markdown-body .markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--fgColor-success);
+}
+
+.markdown-body .markdown-alert.markdown-alert-caution {
+  border-left-color: var(--borderColor-danger-emphasis);
+}
+
+.markdown-body .markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--fgColor-danger);
+}
+
+.markdown-body>*:first-child>.heading-element:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-body .highlight pre:has(+.zeroclipboard-container) {
+  min-height: 52px;
+}
+
+
+
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; min-width: 0; height: 100%; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.preview { height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #1f2328; }
+.preview[data-theme="dark"] { background: #0d1117; color: #f0f6fc; color-scheme: dark; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 20px; border-bottom: 1px solid #d1d9e0; font-size: 13px; }
+.toolbar strong { font-weight: 500; margin-right: auto; }
+.control { display: inline-flex; align-items: center; gap: 4px; }
+.control button { font: inherit; cursor: pointer; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; padding: 2px 10px; min-height: 30px; line-height: 24px; }
+.control button[aria-pressed="true"] { border-color: #d1d9e0; background: #f6f8fa; }
+.control button:hover { border-color: #8c959f; }
+.control button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
+[data-theme="dark"] .toolbar { border-color: #3d444d; }
+[data-theme="dark"] .control button[aria-pressed="true"] { border-color: #3d444d; background: #151b23; }
+.reader { min-height: 0; flex: 1; overflow: auto; padding: 24px; }
+.file { width: 100%; max-width: 1012px; margin: 0 auto; border: 1px solid #d1d9e0; border-radius: 6px; }
+.file-name { padding: 13px 24px; border-bottom: 1px solid #d1d9e0; font-size: 14px; line-height: 20px; font-weight: 600; }
+[data-theme="dark"] .file, [data-theme="dark"] .file-name { border-color: #3d444d; }
+.markdown-body { padding: 32px; min-width: 0; }
+.markdown-body img { height: auto; }
+.markdown-body [align="center"] { text-align: center; }
+.markdown-body a { overflow-wrap: anywhere; }
+.markdown-body table { display: block; width: max-content; max-width: 100%; overflow: auto; }
+.markdown-body pre { overflow: auto; }
+.markdown-body [hidden] { display: none; }
+.preview-note { margin: 12px auto 0; max-width: 1012px; font-size: 12px; line-height: 1.8; color: #59636e; }
+[data-theme="dark"] .preview-note { color: #9198a1; }
+@media (max-width: 600px) {
+  .toolbar { padding: 10px 12px; gap: 8px; }
+  .toolbar strong { flex-basis: 100%; }
+  .reader { padding: 12px; }
+  .markdown-body { padding: 20px 16px; }
+  .file-name { padding: 12px 16px; }
+}
+
+</style>
+</head>
+<body>
+<div class="preview" data-theme="light">
+  <header class="toolbar" aria-label="预览控制（不属于 README）">
+    <strong>README · GitHub 排版预览</strong>
+    <div class="control" aria-label="版本">
+      <button type="button" data-version="proposed" aria-pressed="true">调整后</button>
+      <button type="button" data-version="original" aria-pressed="false">原版</button>
+    </div>
+    <div class="control" aria-label="GitHub 主题">
+      <button type="button" data-color="light" aria-pressed="true">浅色</button>
+      <button type="button" data-color="dark" aria-pressed="false">深色</button>
+    </div>
+  </header>
+  <main class="reader">
+    <section class="file" aria-label="README 文档">
+      <div class="file-name">README.md</div>
+      <article class="markdown-body" lang="en" id="readme"><p align="center">
+  <img src="penecho-asset:aa1ff420fad8113fa332dcb2f62d138c6b79e44eeb3185dc6283604fc492c76a" alt="PenEcho" width="160">
+</p>
+
+<h1 align="center">A spatial workspace<br>for thinking with AI.</h1>
+
+<p align="center">Draw, explore, and build with the built-in Agent or your own MCP-compatible assistant.</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.3.2-e84b60?style=flat&amp;labelColor=30363d" alt="Version 1.3.2">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-6e7781?style=flat&amp;labelColor=30363d" alt="AGPL-3.0-only"></a>
+</p>
+
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">Website</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest"><strong>Download</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP guide</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>
+</p>
+
+<p align="center">
+  <sub><strong>English</strong> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.zh-CN.md">简体中文</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ja.md">日本語</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ko.md">한국어</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ru.md">Русский</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.es.md">Español</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.pt-BR.md">Português (Brasil)</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.fr.md">Français</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.de.md">Deutsch</a></sub>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
+</p>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
+</p>
+
+<h2 id="a-spatial-extension-of-your-ai-conversation">A spatial extension of your AI conversation</h2>
+<p>Keep talking in <strong>Codex, Claude, Kimi, or other AI agents</strong>. Let PenEcho give the work a place to live.</p>
+<p>Through MCP, your AI can turn explanations into diagrams and ideas into interactive previews. Keep references, reasoning, and work side by side — then mark up the canvas and bring feedback into the next round.</p>
+<ol>
+<li><p><strong>Keep the conversation</strong><br>Work with the AI agent you already use.</p>
+</li>
+<li><p><strong>See the work take shape</strong><br>PenEcho&#39;s MCP server brings diagrams, documents, and interactive previews onto the Canvas.</p>
+</li>
+<li><p><strong>Bring feedback back</strong><br>Try the result, annotate it, and let your agent read your feedback for the next revision.</p>
+</li>
+</ol>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/assets/mcp-spatial-example.webp">
+    <img src="penecho-asset:e1034c7c211d94076c44d2fe357c06954b737876e199d6985f7d141143673423" alt="An architecture discussion with AI, with handwritten feedback alongside the proposed design on a PenEcho Canvas" width="760">
+  </a>
+</p>
+<p align="center"><em>An architecture discussion, annotated by hand on the Canvas.</em></p>
+
+<p><strong>See it before it’s finished.</strong> See the work take shape as you talk with AI. Try it, give feedback, and move your project forward together.</p>
+<p><a href="#connect-your-agent-with-mcp">Connect your agent with MCP →</a></p>
+<h2 id="what-you-can-do">What you can do</h2>
+<ul>
+<li><p><strong>Work visually.</strong> Combine handwriting, equations, text, images, diagrams, and interactive HTML Widgets on a spacious canvas.</p>
+</li>
+<li><p><strong>Create with AI.</strong> Use the built-in Agent to research, work with files, explain ideas, and create editable visual results.</p>
+</li>
+<li><p><strong>Bring your own agent.</strong> Connect Codex, Claude Code, or another MCP-compatible client to read and edit an explicitly enabled Canvas.</p>
+</li>
+<li><p><strong>Keep and share your work.</strong> Organize Canvases into projects, save Cloud revisions, sync favorites, and publish through Echoes.</p>
+</li>
+</ul>
+<h2 id="new-in-132">New in 1.3.2</h2>
+<table>
+<thead>
+<tr>
+<th>Update</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>MCP workspace</strong></td>
+<td>Canvas discovery, captures, object editing, interactive Widgets, virtual source files, and user feedback for external agents. Supports opted-in local, LAN, and linked-device Cloud browsers.</td>
+</tr>
+<tr>
+<td><strong>Cloud MCP</strong></td>
+<td>Connect external AI agents directly to your enabled PenEcho Cloud canvases to read content, create and edit results, and follow handwritten feedback. Cloud MCP and Local MCP are optional connection paths.</td>
+</tr>
+<tr>
+<td><strong>PenEcho Cloud Credits API</strong></td>
+<td>Use PenEcho-hosted models with account credits, alongside your own API and CLI connections. View available models, rates, and balance in Settings.</td>
+</tr>
+<tr>
+<td><strong>Connection management</strong></td>
+<td>Save multiple AI connections and choose the active connection for each client.</td>
+</tr>
+<tr>
+<td><strong>Canvas and workbench</strong></td>
+<td>More responsive drawing and navigation, refined Studio controls, an adaptive Agent panel, and customizable keyboard shortcuts.</td>
+</tr>
+</tbody></table>
+<h2 id="how-it-works">How it works</h2>
+<p align="center">
+  <img src="penecho-asset:84df5d8e4040927ebd8d173909f94e9ac69402e5154fbbcaae0920e1a94fa1f9" alt="PenEcho architecture: a browser connects to PenEcho Cloud or your local PC. Cloud includes hosted models and connects to your linked device. Your PC runs PenEcho CLI or App with your LLM API or agents. External AI agents can use Cloud MCP or Local MCP; both connections are optional." width="100%">
+</p>
+
+<p>Open PenEcho in a browser through PenEcho Cloud or your local PC running the CLI or desktop app. Cloud provides hosted models and can connect to your linked device; your PC can use your own model API or agents. External AI agents such as Codex and Claude can connect through Cloud MCP or Local MCP. Both MCP connections are optional.</p>
+<p>See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/architecture.md">architecture notes</a> for implementation details.</p>
+<h2 id="quick-start">Quick start</h2>
+<p><strong>Desktop:</strong> download the Windows or macOS app from <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest">GitHub Releases</a>.</p>
+<p><strong>npm:</strong> requires Node.js <strong>22.19 or newer</strong>.</p>
+<pre><code class="language-bash">npm install -g penecho
+penecho
+</code></pre>
+<p>Open <code>http://localhost:3888</code>. Add your own model API or an authenticated Codex, Claude Code, or Kimi CLI in <strong>Settings → Connections</strong>. Connections are saved in <code>~/.penecho/connections.json</code>; general settings remain in <code>~/.penecho/config.env</code>. For PenEcho-hosted models, sign in and select an available model in Settings.</p>
+<p>At startup, set a six-digit access code or explicitly enable open access on your trusted network. Startup also prints LAN addresses for other devices.</p>
+<details>
+<summary>Run from source</summary>
+
+<pre><code class="language-bash">git clone https://github.com/penecho/penecho.git
+cd penecho
+npm install
+npm start
+</code></pre>
+</details>
+
+<h2 id="connect-your-agent-with-mcp">Connect your agent with MCP</h2>
+<p>For <strong>Local MCP</strong>:</p>
+<ol>
+<li><p>Start PenEcho and enable the current Canvas in <strong>Settings → MCP service</strong>.</p>
+</li>
+<li><p>Use Settings to configure a supported local client or copy its generated launch configuration. For a global npm installation, clients that accept <code>mcpServers</code> JSON can use:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;penecho&quot;: { &quot;command&quot;: &quot;penecho&quot;, &quot;args&quot;: [&quot;mcp&quot;] }
+  }
+}
+</code></pre>
+</li>
+<li><p>Ask your agent: <strong>“Show the architecture we discussed on my PenEcho Canvas.”</strong></p>
+</li>
+</ol>
+<p>The agent can capture relevant content, edit objects, create visual results, patch document source files, and receive your feedback. Only enabled, connected Canvases are discoverable. With Local MCP, the MCP client runs on the PenEcho host; support for LAN and linked-device browsers does not expose the local MCP endpoint publicly. Cloud MCP is a separate authenticated HTTPS connection for your enabled PenEcho Cloud canvases.</p>
+<p>Desktop installations should use the generated configuration, which includes the correct bundled runtime. See <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP setup</a> and the optional <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/skills/penecho-mcp/SKILL.md">agent workflow skill</a>.</p>
+<h2 id="penecho-cloud-and-ai-connections">PenEcho Cloud and AI connections</h2>
+<p><a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">PenEcho Cloud</a> adds private versioned projects, synced favorites, public sharing through Echoes, and remote access to a linked computer.</p>
+<table>
+<thead>
+<tr>
+<th>Connection</th>
+<th>How it works</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>PenEcho models</strong></td>
+<td>Sign in, select an available hosted model, and use account credits. Settings shows current rates and balance.</td>
+</tr>
+<tr>
+<td><strong>Your model API</strong></td>
+<td>Configure an OpenAI- or Anthropic-compatible endpoint, model, and API key. Usage is handled by your provider.</td>
+</tr>
+<tr>
+<td><strong>Your CLI</strong></td>
+<td>Use a locally installed and authenticated Codex, Claude Code, or Kimi CLI. Availability and usage depend on that provider&#39;s plan.</td>
+</tr>
+</tbody></table>
+<p>Hosted models on your computer require a Cloud sign-in, without device pairing or a separate Credits API key. Cloud MCP can access enabled Cloud canvases directly. Accessing a Canvas hosted on your computer through Cloud requires the linked device to be online and the necessary relay support.</p>
+<p>Your own API and CLI connections do not spend PenEcho credits. A Cloud account is optional for local use with your own connection. AI features require access to the selected provider; running PenEcho locally does not make a remote model available offline.</p>
+<h2 id="recommended-model-configurations">Recommended model configurations</h2>
+<p>These recommendations balance answer quality against the latency of PenEcho&#39;s real canvas workload, based on current hands-on testing; actual response time varies with the provider, canvas complexity, and reasoning behavior.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Effort</th>
+<th>Notes</th>
+<th>Recommended use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>medium</code></td>
+<td>Strong quality with a better latency balance</td>
+<td>Everyday canvas work</td>
+</tr>
+<tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>high</code></td>
+<td>Higher reasoning quality, longer and more variable waits</td>
+<td>Complex handwriting, mathematics, diagrams, or layout</td>
+</tr>
+<tr>
+<td>Fable 5 (<code>claude-fable-5</code> or <code>fable</code>)</td>
+<td><code>medium</code></td>
+<td>Often around half the response time of <code>gpt-5.6-sol</code> at <code>xhigh</code></td>
+<td>Fast, high-quality general use</td>
+</tr>
+<tr>
+<td><a target="_blank" rel="noopener noreferrer" href="https://platform.kimi.ai?aff=penecho">Kimi K3</a> (<code>kimi-k3</code>)</td>
+<td><code>medium</code></td>
+<td>Very good quality; <code>medium</code> keeps the balance practical</td>
+<td>Recommended Kimi default</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-terra</code></td>
+<td><code>low</code> to <code>high</code></td>
+<td>Surprisingly strong and responsive</td>
+<td>Flexible quality and latency targets</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-luna</code></td>
+<td><code>xhigh</code></td>
+<td>Very good canvas results with strong speed</td>
+<td>Quality-first, still responsive</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>high</code></td>
+<td>Good enough for most requests, more responsive than <code>xhigh</code></td>
+<td>Default when responsiveness matters</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>xhigh</code></td>
+<td>Very good but slower and more variable</td>
+<td>Difficult canvas tasks</td>
+</tr>
+<tr>
+<td><code>deepseek-v4-flash-vision-exp</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Vision-capable work through the DeepSeek API</td>
+</tr>
+<tr>
+<td><code>glm-5.3-flash</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Fast work through the GLM Anthropic-compatible API</td>
+</tr>
+</tbody></table>
+<h2 id="community-and-license">Community and license</h2>
+<p>Read <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> to contribute; run <code>npm run check</code> before opening a pull request. Report bugs in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/issues">Issues</a>, discuss ideas in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/discussions">Discussions</a>, or join <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>.</p>
+<p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE">AGPL-3.0-only</a>. Alternative <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/COMMERCIAL-LICENSE.md">commercial licensing</a> is available. See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/TRADEMARKS.md">trademark policy</a> and <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTOR-LICENSE-AGREEMENT.md">contributor agreement</a>.</p>
+<br>
+
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://www.kimi.com/code?aff=penecho">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-dark.svg">
+      <img src="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
+    </picture>
+  </a>
+</p>
+
+</article>
+    </section>
+    <p class="preview-note">控制栏仅用于预览。正文使用 GitHub Markdown 样式；保留原文、链接与原图，仅调整排版和徽章颜色。</p>
+  </main>
+</div>
+<template id="proposed"><p align="center">
+  <img src="penecho-asset:aa1ff420fad8113fa332dcb2f62d138c6b79e44eeb3185dc6283604fc492c76a" alt="PenEcho" width="160">
+</p>
+
+<h1 align="center">A spatial workspace<br>for thinking with AI.</h1>
+
+<p align="center">Draw, explore, and build with the built-in Agent or your own MCP-compatible assistant.</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.3.2-e84b60?style=flat&amp;labelColor=30363d" alt="Version 1.3.2">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-6e7781?style=flat&amp;labelColor=30363d" alt="AGPL-3.0-only"></a>
+</p>
+
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">Website</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest"><strong>Download</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP guide</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>
+</p>
+
+<p align="center">
+  <sub><strong>English</strong> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.zh-CN.md">简体中文</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ja.md">日本語</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ko.md">한국어</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ru.md">Русский</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.es.md">Español</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.pt-BR.md">Português (Brasil)</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.fr.md">Français</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.de.md">Deutsch</a></sub>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
+</p>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
+</p>
+
+<h2 id="a-spatial-extension-of-your-ai-conversation">A spatial extension of your AI conversation</h2>
+<p>Keep talking in <strong>Codex, Claude, Kimi, or other AI agents</strong>. Let PenEcho give the work a place to live.</p>
+<p>Through MCP, your AI can turn explanations into diagrams and ideas into interactive previews. Keep references, reasoning, and work side by side — then mark up the canvas and bring feedback into the next round.</p>
+<ol>
+<li><p><strong>Keep the conversation</strong><br>Work with the AI agent you already use.</p>
+</li>
+<li><p><strong>See the work take shape</strong><br>PenEcho&#39;s MCP server brings diagrams, documents, and interactive previews onto the Canvas.</p>
+</li>
+<li><p><strong>Bring feedback back</strong><br>Try the result, annotate it, and let your agent read your feedback for the next revision.</p>
+</li>
+</ol>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/assets/mcp-spatial-example.webp">
+    <img src="penecho-asset:e1034c7c211d94076c44d2fe357c06954b737876e199d6985f7d141143673423" alt="An architecture discussion with AI, with handwritten feedback alongside the proposed design on a PenEcho Canvas" width="760">
+  </a>
+</p>
+<p align="center"><em>An architecture discussion, annotated by hand on the Canvas.</em></p>
+
+<p><strong>See it before it’s finished.</strong> See the work take shape as you talk with AI. Try it, give feedback, and move your project forward together.</p>
+<p><a href="#connect-your-agent-with-mcp">Connect your agent with MCP →</a></p>
+<h2 id="what-you-can-do">What you can do</h2>
+<ul>
+<li><p><strong>Work visually.</strong> Combine handwriting, equations, text, images, diagrams, and interactive HTML Widgets on a spacious canvas.</p>
+</li>
+<li><p><strong>Create with AI.</strong> Use the built-in Agent to research, work with files, explain ideas, and create editable visual results.</p>
+</li>
+<li><p><strong>Bring your own agent.</strong> Connect Codex, Claude Code, or another MCP-compatible client to read and edit an explicitly enabled Canvas.</p>
+</li>
+<li><p><strong>Keep and share your work.</strong> Organize Canvases into projects, save Cloud revisions, sync favorites, and publish through Echoes.</p>
+</li>
+</ul>
+<h2 id="new-in-132">New in 1.3.2</h2>
+<table>
+<thead>
+<tr>
+<th>Update</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>MCP workspace</strong></td>
+<td>Canvas discovery, captures, object editing, interactive Widgets, virtual source files, and user feedback for external agents. Supports opted-in local, LAN, and linked-device Cloud browsers.</td>
+</tr>
+<tr>
+<td><strong>Cloud MCP</strong></td>
+<td>Connect external AI agents directly to your enabled PenEcho Cloud canvases to read content, create and edit results, and follow handwritten feedback. Cloud MCP and Local MCP are optional connection paths.</td>
+</tr>
+<tr>
+<td><strong>PenEcho Cloud Credits API</strong></td>
+<td>Use PenEcho-hosted models with account credits, alongside your own API and CLI connections. View available models, rates, and balance in Settings.</td>
+</tr>
+<tr>
+<td><strong>Connection management</strong></td>
+<td>Save multiple AI connections and choose the active connection for each client.</td>
+</tr>
+<tr>
+<td><strong>Canvas and workbench</strong></td>
+<td>More responsive drawing and navigation, refined Studio controls, an adaptive Agent panel, and customizable keyboard shortcuts.</td>
+</tr>
+</tbody></table>
+<h2 id="how-it-works">How it works</h2>
+<p align="center">
+  <img src="penecho-asset:84df5d8e4040927ebd8d173909f94e9ac69402e5154fbbcaae0920e1a94fa1f9" alt="PenEcho architecture: a browser connects to PenEcho Cloud or your local PC. Cloud includes hosted models and connects to your linked device. Your PC runs PenEcho CLI or App with your LLM API or agents. External AI agents can use Cloud MCP or Local MCP; both connections are optional." width="100%">
+</p>
+
+<p>Open PenEcho in a browser through PenEcho Cloud or your local PC running the CLI or desktop app. Cloud provides hosted models and can connect to your linked device; your PC can use your own model API or agents. External AI agents such as Codex and Claude can connect through Cloud MCP or Local MCP. Both MCP connections are optional.</p>
+<p>See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/architecture.md">architecture notes</a> for implementation details.</p>
+<h2 id="quick-start">Quick start</h2>
+<p><strong>Desktop:</strong> download the Windows or macOS app from <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest">GitHub Releases</a>.</p>
+<p><strong>npm:</strong> requires Node.js <strong>22.19 or newer</strong>.</p>
+<pre><code class="language-bash">npm install -g penecho
+penecho
+</code></pre>
+<p>Open <code>http://localhost:3888</code>. Add your own model API or an authenticated Codex, Claude Code, or Kimi CLI in <strong>Settings → Connections</strong>. Connections are saved in <code>~/.penecho/connections.json</code>; general settings remain in <code>~/.penecho/config.env</code>. For PenEcho-hosted models, sign in and select an available model in Settings.</p>
+<p>At startup, set a six-digit access code or explicitly enable open access on your trusted network. Startup also prints LAN addresses for other devices.</p>
+<details>
+<summary>Run from source</summary>
+
+<pre><code class="language-bash">git clone https://github.com/penecho/penecho.git
+cd penecho
+npm install
+npm start
+</code></pre>
+</details>
+
+<h2 id="connect-your-agent-with-mcp">Connect your agent with MCP</h2>
+<p>For <strong>Local MCP</strong>:</p>
+<ol>
+<li><p>Start PenEcho and enable the current Canvas in <strong>Settings → MCP service</strong>.</p>
+</li>
+<li><p>Use Settings to configure a supported local client or copy its generated launch configuration. For a global npm installation, clients that accept <code>mcpServers</code> JSON can use:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;penecho&quot;: { &quot;command&quot;: &quot;penecho&quot;, &quot;args&quot;: [&quot;mcp&quot;] }
+  }
+}
+</code></pre>
+</li>
+<li><p>Ask your agent: <strong>“Show the architecture we discussed on my PenEcho Canvas.”</strong></p>
+</li>
+</ol>
+<p>The agent can capture relevant content, edit objects, create visual results, patch document source files, and receive your feedback. Only enabled, connected Canvases are discoverable. With Local MCP, the MCP client runs on the PenEcho host; support for LAN and linked-device browsers does not expose the local MCP endpoint publicly. Cloud MCP is a separate authenticated HTTPS connection for your enabled PenEcho Cloud canvases.</p>
+<p>Desktop installations should use the generated configuration, which includes the correct bundled runtime. See <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP setup</a> and the optional <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/skills/penecho-mcp/SKILL.md">agent workflow skill</a>.</p>
+<h2 id="penecho-cloud-and-ai-connections">PenEcho Cloud and AI connections</h2>
+<p><a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">PenEcho Cloud</a> adds private versioned projects, synced favorites, public sharing through Echoes, and remote access to a linked computer.</p>
+<table>
+<thead>
+<tr>
+<th>Connection</th>
+<th>How it works</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>PenEcho models</strong></td>
+<td>Sign in, select an available hosted model, and use account credits. Settings shows current rates and balance.</td>
+</tr>
+<tr>
+<td><strong>Your model API</strong></td>
+<td>Configure an OpenAI- or Anthropic-compatible endpoint, model, and API key. Usage is handled by your provider.</td>
+</tr>
+<tr>
+<td><strong>Your CLI</strong></td>
+<td>Use a locally installed and authenticated Codex, Claude Code, or Kimi CLI. Availability and usage depend on that provider&#39;s plan.</td>
+</tr>
+</tbody></table>
+<p>Hosted models on your computer require a Cloud sign-in, without device pairing or a separate Credits API key. Cloud MCP can access enabled Cloud canvases directly. Accessing a Canvas hosted on your computer through Cloud requires the linked device to be online and the necessary relay support.</p>
+<p>Your own API and CLI connections do not spend PenEcho credits. A Cloud account is optional for local use with your own connection. AI features require access to the selected provider; running PenEcho locally does not make a remote model available offline.</p>
+<h2 id="recommended-model-configurations">Recommended model configurations</h2>
+<p>These recommendations balance answer quality against the latency of PenEcho&#39;s real canvas workload, based on current hands-on testing; actual response time varies with the provider, canvas complexity, and reasoning behavior.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Effort</th>
+<th>Notes</th>
+<th>Recommended use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>medium</code></td>
+<td>Strong quality with a better latency balance</td>
+<td>Everyday canvas work</td>
+</tr>
+<tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>high</code></td>
+<td>Higher reasoning quality, longer and more variable waits</td>
+<td>Complex handwriting, mathematics, diagrams, or layout</td>
+</tr>
+<tr>
+<td>Fable 5 (<code>claude-fable-5</code> or <code>fable</code>)</td>
+<td><code>medium</code></td>
+<td>Often around half the response time of <code>gpt-5.6-sol</code> at <code>xhigh</code></td>
+<td>Fast, high-quality general use</td>
+</tr>
+<tr>
+<td><a target="_blank" rel="noopener noreferrer" href="https://platform.kimi.ai?aff=penecho">Kimi K3</a> (<code>kimi-k3</code>)</td>
+<td><code>medium</code></td>
+<td>Very good quality; <code>medium</code> keeps the balance practical</td>
+<td>Recommended Kimi default</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-terra</code></td>
+<td><code>low</code> to <code>high</code></td>
+<td>Surprisingly strong and responsive</td>
+<td>Flexible quality and latency targets</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-luna</code></td>
+<td><code>xhigh</code></td>
+<td>Very good canvas results with strong speed</td>
+<td>Quality-first, still responsive</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>high</code></td>
+<td>Good enough for most requests, more responsive than <code>xhigh</code></td>
+<td>Default when responsiveness matters</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>xhigh</code></td>
+<td>Very good but slower and more variable</td>
+<td>Difficult canvas tasks</td>
+</tr>
+<tr>
+<td><code>deepseek-v4-flash-vision-exp</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Vision-capable work through the DeepSeek API</td>
+</tr>
+<tr>
+<td><code>glm-5.3-flash</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Fast work through the GLM Anthropic-compatible API</td>
+</tr>
+</tbody></table>
+<h2 id="community-and-license">Community and license</h2>
+<p>Read <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> to contribute; run <code>npm run check</code> before opening a pull request. Report bugs in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/issues">Issues</a>, discuss ideas in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/discussions">Discussions</a>, or join <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>.</p>
+<p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE">AGPL-3.0-only</a>. Alternative <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/COMMERCIAL-LICENSE.md">commercial licensing</a> is available. See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/TRADEMARKS.md">trademark policy</a> and <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTOR-LICENSE-AGREEMENT.md">contributor agreement</a>.</p>
+<br>
+
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://www.kimi.com/code?aff=penecho">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-dark.svg">
+      <img src="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
+    </picture>
+  </a>
+</p>
+
+</template>
+<template id="original"><h1 align="center">
+  <img src="penecho-asset:aa1ff420fad8113fa332dcb2f62d138c6b79e44eeb3185dc6283604fc492c76a" alt="PenEcho" width="280">
+</h1>
+
+<p align="center">
+  <strong>English</strong> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.zh-CN.md">简体中文</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ja.md">日本語</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ko.md">한국어</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.ru.md">Русский</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.es.md">Español</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.pt-BR.md">Português (Brasil)</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.fr.md">Français</a> |
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/readme/README.de.md">Deutsch</a>
+</p>
+
+<h1 align="center">A spatial workspace<br>for thinking with AI.</h1>
+<p align="center">Draw, explore, and build with the built-in Agent or your own MCP-compatible assistant.</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
+</p>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">Website</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest">Download</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP guide</a> ·
+  <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>
+</p>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho full demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho professional diagrams demo" width="49%">
+</p>
+
+<p align="center">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho plugins demo" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho interactive canvas demo" width="49%">
+</p>
+
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://www.kimi.com/code?aff=penecho">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-dark.svg">
+      <img src="https://raw.githubusercontent.com/penecho/penecho/main/docs/assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
+    </picture>
+  </a>
+</p>
+
+<h2 id="a-spatial-extension-of-your-ai-conversation">A spatial extension of your AI conversation</h2>
+<p>Keep talking in <strong>Codex, Claude, Kimi, or other AI agents</strong>. Let PenEcho give the work a place to live.</p>
+<p>Through MCP, your AI can turn explanations into diagrams and ideas into interactive previews. Keep references, reasoning, and work side by side — then mark up the canvas and bring feedback into the next round.</p>
+<table>
+<thead>
+<tr>
+<th>Keep the conversation</th>
+<th>See the work take shape</th>
+<th>Bring feedback back</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Work with the AI agent you already use.</td>
+<td>PenEcho&#39;s MCP server brings diagrams, documents, and interactive previews onto the Canvas.</td>
+<td>Try the result, annotate it, and let your agent read your feedback for the next revision.</td>
+</tr>
+</tbody></table>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/assets/mcp-spatial-example.webp">
+    <img src="penecho-asset:e1034c7c211d94076c44d2fe357c06954b737876e199d6985f7d141143673423" alt="An architecture discussion with AI, with handwritten feedback alongside the proposed design on a PenEcho Canvas" width="760">
+  </a>
+</p>
+<p align="center"><em>An architecture discussion, annotated by hand on the Canvas.</em></p>
+
+<p><strong>See it before it’s finished.</strong> See the work take shape as you talk with AI. Try it, give feedback, and move your project forward together.</p>
+<p><a href="#connect-your-agent-with-mcp">Connect your agent with MCP →</a></p>
+<h2 id="what-you-can-do">What you can do</h2>
+<ul>
+<li><strong>Work visually.</strong> Combine handwriting, equations, text, images, diagrams, and interactive HTML Widgets on a spacious canvas.</li>
+<li><strong>Create with AI.</strong> Use the built-in Agent to research, work with files, explain ideas, and create editable visual results.</li>
+<li><strong>Bring your own agent.</strong> Connect Codex, Claude Code, or another MCP-compatible client to read and edit an explicitly enabled Canvas.</li>
+<li><strong>Keep and share your work.</strong> Organize Canvases into projects, save Cloud revisions, sync favorites, and publish through Echoes.</li>
+</ul>
+<h2 id="new-in-132">New in 1.3.2</h2>
+<table>
+<thead>
+<tr>
+<th>Update</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>MCP workspace</strong></td>
+<td>Canvas discovery, captures, object editing, interactive Widgets, virtual source files, and user feedback for external agents. Supports opted-in local, LAN, and linked-device Cloud browsers.</td>
+</tr>
+<tr>
+<td><strong>Cloud MCP</strong></td>
+<td>Connect external AI agents directly to your enabled PenEcho Cloud canvases to read content, create and edit results, and follow handwritten feedback. Cloud MCP and Local MCP are optional connection paths.</td>
+</tr>
+<tr>
+<td><strong>PenEcho Cloud Credits API</strong></td>
+<td>Use PenEcho-hosted models with account credits, alongside your own API and CLI connections. View available models, rates, and balance in Settings.</td>
+</tr>
+<tr>
+<td><strong>Connection management</strong></td>
+<td>Save multiple AI connections and choose the active connection for each client.</td>
+</tr>
+<tr>
+<td><strong>Canvas and workbench</strong></td>
+<td>More responsive drawing and navigation, refined Studio controls, an adaptive Agent panel, and customizable keyboard shortcuts.</td>
+</tr>
+</tbody></table>
+<h2 id="how-it-works">How it works</h2>
+<p align="center">
+  <img src="penecho-asset:84df5d8e4040927ebd8d173909f94e9ac69402e5154fbbcaae0920e1a94fa1f9" alt="PenEcho architecture: a browser connects to PenEcho Cloud or your local PC. Cloud includes hosted models and connects to your linked device. Your PC runs PenEcho CLI or App with your LLM API or agents. External AI agents can use Cloud MCP or Local MCP; both connections are optional." width="1483">
+</p>
+
+<p>Open PenEcho in a browser through PenEcho Cloud or your local PC running the CLI or desktop app. Cloud provides hosted models and can connect to your linked device; your PC can use your own model API or agents. External AI agents such as Codex and Claude can connect through Cloud MCP or Local MCP. Both MCP connections are optional.</p>
+<p>See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/architecture.md">architecture notes</a> for implementation details.</p>
+<h2 id="quick-start">Quick start</h2>
+<p><strong>Desktop:</strong> download the Windows or macOS app from <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/releases/latest">GitHub Releases</a>.</p>
+<p><strong>npm:</strong> requires Node.js <strong>22.19 or newer</strong>.</p>
+<pre><code class="language-bash">npm install -g penecho
+penecho
+</code></pre>
+<p>Open <code>http://localhost:3888</code>. Add your own model API or an authenticated Codex, Claude Code, or Kimi CLI in <strong>Settings → Connections</strong>. Connections are saved in <code>~/.penecho/connections.json</code>; general settings remain in <code>~/.penecho/config.env</code>. For PenEcho-hosted models, sign in and select an available model in Settings.</p>
+<p>At startup, set a six-digit access code or explicitly enable open access on your trusted network. Startup also prints LAN addresses for other devices.</p>
+<details>
+<summary>Run from source</summary>
+
+<pre><code class="language-bash">git clone https://github.com/penecho/penecho.git
+cd penecho
+npm install
+npm start
+</code></pre>
+</details>
+
+<h2 id="connect-your-agent-with-mcp">Connect your agent with MCP</h2>
+<p>For <strong>Local MCP</strong>:</p>
+<ol>
+<li><p>Start PenEcho and enable the current Canvas in <strong>Settings → MCP service</strong>.</p>
+</li>
+<li><p>Use Settings to configure a supported local client or copy its generated launch configuration. For a global npm installation, clients that accept <code>mcpServers</code> JSON can use:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;penecho&quot;: { &quot;command&quot;: &quot;penecho&quot;, &quot;args&quot;: [&quot;mcp&quot;] }
+  }
+}
+</code></pre>
+</li>
+<li><p>Ask your agent: <strong>“Show the architecture we discussed on my PenEcho Canvas.”</strong></p>
+</li>
+</ol>
+<p>The agent can capture relevant content, edit objects, create visual results, patch document source files, and receive your feedback. Only enabled, connected Canvases are discoverable. With Local MCP, the MCP client runs on the PenEcho host; support for LAN and linked-device browsers does not expose the local MCP endpoint publicly. Cloud MCP is a separate authenticated HTTPS connection for your enabled PenEcho Cloud canvases.</p>
+<p>Desktop installations should use the generated configuration, which includes the correct bundled runtime. See <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/docs/mcp-setup.md">MCP setup</a> and the optional <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/skills/penecho-mcp/SKILL.md">agent workflow skill</a>.</p>
+<h2 id="penecho-cloud-and-ai-connections">PenEcho Cloud and AI connections</h2>
+<p><a target="_blank" rel="noopener noreferrer" href="https://penecho.ai">PenEcho Cloud</a> adds private versioned projects, synced favorites, public sharing through Echoes, and remote access to a linked computer.</p>
+<table>
+<thead>
+<tr>
+<th>Connection</th>
+<th>How it works</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>PenEcho models</strong></td>
+<td>Sign in, select an available hosted model, and use account credits. Settings shows current rates and balance.</td>
+</tr>
+<tr>
+<td><strong>Your model API</strong></td>
+<td>Configure an OpenAI- or Anthropic-compatible endpoint, model, and API key. Usage is handled by your provider.</td>
+</tr>
+<tr>
+<td><strong>Your CLI</strong></td>
+<td>Use a locally installed and authenticated Codex, Claude Code, or Kimi CLI. Availability and usage depend on that provider&#39;s plan.</td>
+</tr>
+</tbody></table>
+<p>Hosted models on your computer require a Cloud sign-in, without device pairing or a separate Credits API key. Cloud MCP can access enabled Cloud canvases directly. Accessing a Canvas hosted on your computer through Cloud requires the linked device to be online and the necessary relay support.</p>
+<p>Your own API and CLI connections do not spend PenEcho credits. A Cloud account is optional for local use with your own connection. AI features require access to the selected provider; running PenEcho locally does not make a remote model available offline.</p>
+<h2 id="recommended-model-configurations">Recommended model configurations</h2>
+<p>These recommendations balance answer quality against the latency of PenEcho&#39;s real canvas workload, based on current hands-on testing; actual response time varies with the provider, canvas complexity, and reasoning behavior.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Effort</th>
+<th>Notes</th>
+<th>Recommended use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>medium</code></td>
+<td>Strong quality with a better latency balance</td>
+<td>Everyday canvas work</td>
+</tr>
+<tr>
+<td>Claude Opus 4.8 / 5.0 (<code>claude-opus-4-8</code> / <code>claude-opus-5-0</code>)</td>
+<td><code>high</code></td>
+<td>Higher reasoning quality, longer and more variable waits</td>
+<td>Complex handwriting, mathematics, diagrams, or layout</td>
+</tr>
+<tr>
+<td>Fable 5 (<code>claude-fable-5</code> or <code>fable</code>)</td>
+<td><code>medium</code></td>
+<td>Often around half the response time of <code>gpt-5.6-sol</code> at <code>xhigh</code></td>
+<td>Fast, high-quality general use</td>
+</tr>
+<tr>
+<td><a target="_blank" rel="noopener noreferrer" href="https://platform.kimi.ai?aff=penecho">Kimi K3</a> (<code>kimi-k3</code>)</td>
+<td><code>medium</code></td>
+<td>Very good quality; <code>medium</code> keeps the balance practical</td>
+<td>Recommended Kimi default</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-terra</code></td>
+<td><code>low</code> to <code>high</code></td>
+<td>Surprisingly strong and responsive</td>
+<td>Flexible quality and latency targets</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-luna</code></td>
+<td><code>xhigh</code></td>
+<td>Very good canvas results with strong speed</td>
+<td>Quality-first, still responsive</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>high</code></td>
+<td>Good enough for most requests, more responsive than <code>xhigh</code></td>
+<td>Default when responsiveness matters</td>
+</tr>
+<tr>
+<td><code>gpt-5.6-sol</code></td>
+<td><code>xhigh</code></td>
+<td>Very good but slower and more variable</td>
+<td>Difficult canvas tasks</td>
+</tr>
+<tr>
+<td><code>deepseek-v4-flash-vision-exp</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Vision-capable work through the DeepSeek API</td>
+</tr>
+<tr>
+<td><code>glm-5.3-flash</code></td>
+<td><code>medium</code></td>
+<td>Good</td>
+<td>Fast work through the GLM Anthropic-compatible API</td>
+</tr>
+</tbody></table>
+<h2 id="community-and-license">Community and license</h2>
+<p>Read <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> to contribute; run <code>npm run check</code> before opening a pull request. Report bugs in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/issues">Issues</a>, discuss ideas in <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/discussions">Discussions</a>, or join <a target="_blank" rel="noopener noreferrer" href="https://discord.gg/3jrPJ3mXdX">Discord</a>.</p>
+<p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/LICENSE">AGPL-3.0-only</a>. Alternative <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/COMMERCIAL-LICENSE.md">commercial licensing</a> is available. See the <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/TRADEMARKS.md">trademark policy</a> and <a target="_blank" rel="noopener noreferrer" href="https://github.com/penecho/penecho/blob/main/CONTRIBUTOR-LICENSE-AGREEMENT.md">contributor agreement</a>.</p>
+</template>
+<script>
+const preview = document.querySelector('.preview');
+const reader = document.querySelector('.reader');
+const article = document.querySelector('#readme');
+function notify() {
+  window.parent.postMessage({ type: 'penecho-widget-updated' }, '*');
+}
+function updateThemeImages() {
+  article.querySelectorAll('picture').forEach(picture => {
+    const image = picture.querySelector('img');
+    if (!image.dataset.light) image.dataset.light = image.src;
+    const dark = picture.querySelector('source');
+    if (dark) {
+      if (!dark.dataset.dark) dark.dataset.dark = dark.srcset;
+      dark.removeAttribute('srcset');
+      image.src = preview.dataset.theme === 'dark' ? dark.dataset.dark : image.dataset.light;
+    }
+  });
+}
+document.querySelectorAll('[data-version]').forEach(button => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('[data-version]').forEach(peer => peer.setAttribute('aria-pressed', String(peer === button)));
+    article.replaceChildren(document.querySelector('#' + button.dataset.version).content.cloneNode(true));
+    reader.scrollTop = 0;
+    updateThemeImages();
+    notify();
+  });
+});
+document.querySelectorAll('[data-color]').forEach(button => {
+  button.addEventListener('click', () => {
+    preview.dataset.theme = button.dataset.color;
+    document.querySelectorAll('[data-color]').forEach(peer => peer.setAttribute('aria-pressed', String(peer === button)));
+    updateThemeImages();
+    notify();
+  });
+});
+article.addEventListener('click', event => {
+  const link = event.target.closest('a[href^="#"]');
+  if (!link) return;
+  const target = article.querySelector(link.getAttribute('href'));
+  if (target) { event.preventDefault(); target.scrollIntoView({ block: 'start' }); }
+});
+updateThemeImages();
+notify();
+</script>
+</body>
+</html>

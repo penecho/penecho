@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@ MCP를 통해 AI는 설명을 다이어그램으로, 아이디어를 대화형 �
 - **자신의 에이전트를 연결하세요.** Codex, Claude Code 등 MCP 호환 클라이언트를 연결해 명시적으로 활성화한 Canvas를 읽고 편집합니다.
 - **작업을 보관하고 공유하세요.** Canvas를 프로젝트로 정리하고, Cloud 버전을 저장하고, 즐겨찾기를 동기화하고, Echoes로 게시합니다.
 
-## 1.3.0의 새로운 기능
+## 1.3.2의 새로운 기능
 
 | 업데이트 | 추가된 기능 |
 | --- | --- |

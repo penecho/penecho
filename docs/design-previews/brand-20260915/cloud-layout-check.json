@@ -1,0 +1,122 @@
+[
+  {
+    "file": "downloads.html",
+    "width": 1280,
+    "height": 900,
+    "scale": 1,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        76,
+        76
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  },
+  {
+    "file": "admin.html",
+    "width": 1280,
+    "height": 900,
+    "scale": 1,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        26,
+        26
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  },
+  {
+    "file": "downloads.html",
+    "width": 400,
+    "height": 800,
+    "scale": 1,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        60,
+        60
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  },
+  {
+    "file": "admin.html",
+    "width": 400,
+    "height": 800,
+    "scale": 1,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        26,
+        26
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  },
+  {
+    "file": "downloads.html",
+    "width": 640,
+    "height": 450,
+    "scale": 2,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        60,
+        60
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  },
+  {
+    "file": "admin.html",
+    "width": 640,
+    "height": 450,
+    "scale": 2,
+    "mode": "static source preview; no running server",
+    "icon": {
+      "width": 256,
+      "complete": true,
+      "display": [
+        26,
+        26
+      ],
+      "filter": "none",
+      "mixBlendMode": "normal",
+      "opacity": "1"
+    },
+    "favicon": "/media/brand-app-icon.png",
+    "horizontal": false
+  }
+]

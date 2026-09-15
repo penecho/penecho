@@ -1,0 +1,110 @@
+[
+  {
+    "language": "en",
+    "width": 1000,
+    "height": 800,
+    "zoom": 1,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      30,
+      30
+    ]
+  },
+  {
+    "language": "en",
+    "width": 400,
+    "height": 800,
+    "zoom": 1,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      30,
+      30
+    ]
+  },
+  {
+    "language": "en",
+    "width": 800,
+    "height": 800,
+    "zoom": 2,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      60,
+      60
+    ]
+  },
+  {
+    "language": "zh",
+    "width": 1000,
+    "height": 800,
+    "zoom": 1,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      30,
+      30
+    ]
+  },
+  {
+    "language": "zh",
+    "width": 400,
+    "height": 800,
+    "zoom": 1,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      30,
+      30
+    ]
+  },
+  {
+    "language": "zh",
+    "width": 800,
+    "height": 800,
+    "zoom": 2,
+    "image": "penecho-favicon.png",
+    "complete": true,
+    "naturalWidth": 256,
+    "favicon": "penecho-favicon.png",
+    "pinVisible": true,
+    "horizontal": false,
+    "headerOverflow": false,
+    "brandOutside": false,
+    "display": [
+      60,
+      60
+    ]
+  }
+]

@@ -54,7 +54,7 @@ Windows installers cannot be created reliably on this Mac without Wine/Mono and 
 
 ## Icons
 
-The icon master is the same `public/penecho-mark.png` used by the website. Generate all platform assets with:
+The latest owner-supplied transparent attachment is `build/brand/penecho-logo-original.png`; `scripts/prepare-brand-logo.js` validates its PNG alpha channel and copies it byte-for-byte to the desktop/README master `build/brand/penecho-logo.png`, with explicit full-logo and symbol-only crop bounds in `build/brand/penecho-logo.json`. Generate all derived assets with:
 
 ```bash
 npm run icons
@@ -62,12 +62,19 @@ npm run icons
 
 Generated production assets:
 
-- `build/icons/penecho-1024.png`
+- `public/penecho-readme-header.webp` and `public/penecho-readme-header-dark.webp` (transparent, lossless, 840 px wide; displayed at 280 px using automatic light/dark selection in every README)
+- `public/penecho-favicon.png` (256 px symbol on a white rounded tile with transparent outer corners for Canvas browser tabs)
+- `build/icons/penecho-desktop-1024.png`
 - `build/icons/penecho.png`
 - `build/icons/penecho.icns`
 - `build/icons/penecho.ico`
+- `build/icons/penecho-install.gif`
 
-The checked-in PenEcho mark supplies the application geometry and stays near-black on both desktop platforms. macOS packages place it on the white rounded app tile used by the Dock and DMG; Windows packages use the mark on a fully transparent background for the executable, taskbar and Setup icon. Squirrel's generic green install animation is replaced with the generated PenEcho-branded `penecho-install.gif`, so first install and update never show an unfamiliar third-party splash. Its wordmark is derived from checked-in brand artwork instead of build-host fonts, keeping the Windows splash deterministic in isolated cross-platform builds.
+Application icons use only the supplied rounded-square symbol, preserving its pink/orange/magenta gradient and black circular dot. macOS places it on the existing white rounded app tile used by the Dock and DMG; Windows uses a transparent background for the executable, taskbar and Setup icon. Squirrel's `penecho-install.gif` uses the complete stacked logo, including its original PenEcho lettering, and three loading dots. All lettering comes from the checked-in artwork rather than build-host fonts.
+
+Both desktop platforms open the Canvas directly, without a separate startup logo window. Windows retains the existing Squirrel first-run gate before showing the Canvas. The update window uses the same full-logo WebP.
+
+The source has intentionally been separated from web/mobile branding. `public/penecho-mark.png`, the old `public/penecho-readme-header.png`, and the mobile source `build/icons/penecho-1024.png` are retained as explicitly requested by the owner. `npm run icons` no longer overwrites that mobile source. See `docs/branding-audit.md` for the remaining surfaces.
 
 ## Signing and notarization
 
@@ -139,3 +146,7 @@ Recommended public assets:
 - `SHA256SUMS-<platform>-<arch>.txt`
 
 The DMG and Setup executable are the visible installers. PenEcho uses the macOS ZIP and Windows Setup executable for in-app updates, so those assets must remain attached when the draft is published. `RELEASES` and `.nupkg` remain useful Squirrel release artifacts but are not downloaded by PenEcho's unsigned update path.
+
+### Cloud browser branding
+
+After generating icons in 071, synchronize `index.html,penecho-favicon.png` through Cloud's official `tools/sync-public-canvas.mjs --source=/Users/heack/workspace/penecho_071_version --only=index.html,penecho-favicon.png`, then copy Cloud's `public/canvas/penecho-favicon.png` to `public/media/brand-app-icon.png`. Verify the selective sync with `--check`. The older `public/media/brand-icon.png` remains the image used by the existing activity/public-message routes. Text-built site wordmarks and all other residual branding remain unchanged.

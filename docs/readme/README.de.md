@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@ Sprechen Sie weiter mit **Codex, Claude, Kimi oder anderen KI-Agenten**. PenEcho
 - **Den eigenen Agenten nutzen.** Verbinden Sie Codex, Claude Code oder einen anderen MCP-kompatiblen Client, um einen ausdrücklich freigegebenen Canvas zu lesen und zu bearbeiten.
 - **Arbeit aufbewahren und teilen.** Organisieren Sie Canvases in Projekten, speichern Sie Cloud-Versionen, synchronisieren Sie Favoriten und veröffentlichen Sie über Echoes.
 
-## Neu in 1.3.0
+## Neu in 1.3.2
 
 | Neuerung | Nutzen |
 | --- | --- |

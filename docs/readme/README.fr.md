@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@ Grâce à MCP, votre IA peut transformer des explications en schémas et des id�
 - **Utilisez votre propre agent.** Connectez Codex, Claude Code ou un autre client compatible MCP pour lire et modifier un Canvas explicitement activé.
 - **Conservez et partagez votre travail.** Organisez les Canvas en projets, enregistrez des versions Cloud, synchronisez vos favoris et publiez via Echoes.
 
-## Nouveautés de la version 1.3.0
+## Nouveautés de la version 1.3.2
 
 | Mise à jour | Apports |
 | --- | --- |

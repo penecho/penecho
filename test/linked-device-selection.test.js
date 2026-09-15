@@ -25,6 +25,28 @@ test('legacy UUID migrates only after exact device catalog membership; deleted c
  c.settings.connections=[{id:B}];c.syncLocalConnectionSelection();assert.equal(c.selectedAiConnectionId(),A);assert.equal(c.settings.connections[0].active,false);
  c.window.PENECHO_CONFIG.linkedDeviceId='windows';c.syncLocalConnectionSelection();assert.equal(c.settings.connections.length,0);assert.equal(c.selectedAiConnectionId(),'default');
 });
+test('hosted catalog migration never replaces a local choice made before or during loading',async()=>{
+ for(const runtime of ['cloud','local'])for(const timing of ['before','during']){
+  const c=fixture();c.window.PENECHO_CONFIG.runtime=runtime;
+  Object.assign(c.hostedSettings,{generation:0,loading:false});c.renderHostedModels=()=>{};
+  c.data.set(c.AI_CONNECTION_STORAGE_KEY,`hosted:${B}`);
+  let release; c.fetch=()=>new Promise(resolve=>{release=()=>resolve({ok:true,status:200,json:async()=>({accountId:'account-a',models:[{id:B,available:true,multiplier:1}],credits:{available:10}})});});
+  vm.runInContext(fn(core,'loadHostedModelsOnce'),c);
+  if(timing==='before')c.storeAiConnectionSelection(A);
+  const pending=c.loadHostedModelsOnce();
+  if(timing==='during')c.storeAiConnectionSelection(A);
+  release();await pending;
+  assert.equal(c.selectedAiConnectionId(),A,`${runtime}, ${timing}: local selection must win over old hosted history`);
+  assert.equal(c.data.get(`${c.aiConnectionStorageKey(true)}:selected`),'false');
+ }
+});
+test('hosted legacy selection still migrates when no scoped choice exists',async()=>{
+ const c=fixture();Object.assign(c.hostedSettings,{generation:0,loading:false});c.renderHostedModels=()=>{};
+ c.data.set(c.AI_CONNECTION_STORAGE_KEY,`hosted:${B}`);
+ c.fetch=async()=>({ok:true,status:200,json:async()=>({accountId:'account-a',models:[{id:B,available:true,multiplier:1}],credits:{available:10}})});
+ vm.runInContext(fn(core,'loadHostedModelsOnce'),c);await c.loadHostedModelsOnce();
+ assert.equal(c.selectedAiConnectionId(),`hosted:${B}`);
+});
 test('late catalog from replaced device is discarded before selection or connection list changes',async()=>{
  const c=fixture();c.storeAiConnectionSelection(A);let release;
  c.fetch=async()=>{await new Promise(resolve=>release=resolve);return{ok:true,json:async()=>({connections:[{id:A}]})};};

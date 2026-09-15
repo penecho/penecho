@@ -93,7 +93,7 @@
     /^\/api\/widget-fetch$/,
     /^\/canvas\/plugins\/private\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:plugin\.md|styles\.css)|\.md)$/,
   ];
-  const nativeCloudPaths = new Set(["/api/ai/command", "/api/plugins/improve"]);
+  const nativeCloudPaths = new Set(["/api/ai/command", "/api/plugins/improve", "/api/community/metadata"]);
   function jsonResponse(payload, status = 200) {
     return new Response(JSON.stringify(payload), { status, headers:{ "content-type":"application/json" } });
   }
@@ -276,6 +276,9 @@
         : unavailableBridgeResponse(bridgeState, bridgeDeviceLinked ? "device_offline" : "linked_device_required"));
     }
     const hostedModel = /^hosted:([0-9a-f-]{36})$/i.exec(headers.get("x-penecho-connection") || "");
+    if (sourceUrl.pathname === "/api/community/metadata" && method === "POST" && hostedModel) {
+      return nativeFetch("/api/community/metadata", { ...options, method, headers, credentials:"same-origin" });
+    }
     const executionScope = () => window.PenEchoCloudProjects?.currentExecutionScope?.()
       || { canvasId:window.PenEchoCloudProjects?.currentCanvasId?.() || null, draft:false };
     if (sourceUrl.pathname === "/api/ai/command" && method === "POST" && hostedModel) {
@@ -305,9 +308,9 @@
       sourceUrl.pathname.startsWith("/api/cloud/")
       || sourceUrl.pathname === "/api/plugins"
     );
-    const localCommand = nativeCloudCanvasReadsEnabled && !hostedModel && nativeCloudPaths.has(sourceUrl.pathname);
+    const localCommand = !hostedModel && (nativeCloudCanvasReadsEnabled && nativeCloudPaths.has(sourceUrl.pathname) || sourceUrl.pathname === "/api/community/metadata");
     if (hostedModel && sourceUrl.pathname === "/api/plugins/improve" && bridgeDeviceId) headers.set("x-penecho-device", bridgeDeviceId);
-    if (localCommand && !headers.has("x-penecho-connection")) headers.set("x-penecho-connection", "default");
+    if (localCommand && sourceUrl.pathname !== "/api/community/metadata" && !headers.has("x-penecho-connection")) headers.set("x-penecho-connection", "default");
     const shouldBridge = !nativeCloudRequest && (localCommand || (!nativeCloudPaths.has(sourceUrl.pathname) && bridgedPaths.some((pattern) => pattern.test(sourceUrl.pathname))));
     const bridgePath = sourceUrl.pathname === "/canvas/api/widget-fetch"
       ? "/api/widget-fetch"

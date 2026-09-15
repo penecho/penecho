@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/penecho-readme-header-dark.webp">
+    <img src="public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@ Through MCP, your AI can turn explanations into diagrams and ideas into interact
 - **Bring your own agent.** Connect Codex, Claude Code, or another MCP-compatible client to read and edit an explicitly enabled Canvas.
 - **Keep and share your work.** Organize Canvases into projects, save Cloud revisions, sync favorites, and publish through Echoes.
 
-## New in 1.3.0
+## New in 1.3.2
 
 | Update | What it adds |
 | --- | --- |

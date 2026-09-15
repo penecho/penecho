@@ -11,12 +11,12 @@ const CANVAS_AGENT_ROOT_ID = "root-[0-9a-f]{24}";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const LOCAL_CONNECTION_ID_PATTERN = new RegExp(`^${UUID}$`, "i");
 
-const LOCAL_AI_ROUTES = new Set(["/api/ai/command", "/api/plugins/improve"]);
+const LOCAL_AI_ROUTES = new Set(["/api/ai/command", "/api/plugins/improve", "/api/community/metadata"]);
 
 function remoteCanvasConnectionId(target, value) {
-  if (!LOCAL_AI_ROUTES.has(target) && target !== "/api/community/metadata") return null;
+  if (!LOCAL_AI_ROUTES.has(target)) return null;
   const connectionId = typeof value === "string" ? value.trim() : "";
-  const valid = LOCAL_CONNECTION_ID_PATTERN.test(connectionId) || LOCAL_AI_ROUTES.has(target) && connectionId === "default";
+  const valid = LOCAL_CONNECTION_ID_PATTERN.test(connectionId) || connectionId === "default";
   if (LOCAL_AI_ROUTES.has(target) && !valid) throw Object.assign(new Error("Select a valid linked-device AI connection."), { code:"remote_canvas_connection", status:400 });
   return valid ? connectionId : null;
 }

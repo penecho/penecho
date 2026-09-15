@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="../../public/penecho-readme-header.png" alt="PenEcho" width="760">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+  </picture>
 </h1>
 
 <p align="center">
@@ -75,7 +78,7 @@
 - **Подключайте своего агента.** Codex, Claude Code и другие MCP-совместимые клиенты могут читать и редактировать Canvas, для которого вы явно разрешили доступ.
 - **Сохраняйте и делитесь.** Объединяйте Canvas в проекты, сохраняйте версии в Cloud, синхронизируйте избранное и публикуйте через Echoes.
 
-## Новое в 1.3.0
+## Новое в 1.3.2
 
 | Обновление | Что добавлено |
 | --- | --- |

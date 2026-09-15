@@ -133,6 +133,65 @@ async function flush(rounds = 8) {
   for (let index = 0; index < rounds; index++) await new Promise((resolve) => setImmediate(resolve));
 }
 
+test("share auto-fill uses the selected hosted model without waiting for any linked device", async () => {
+  for (const nativeReads of [false, true]) {
+    let finishStatus;
+    const pending = new Promise(resolve => { finishStatus = resolve; });
+    const metadata = { name:"Cloud Craft", description:"Cloud generated description", category:"education", tags:[] };
+    const run = boot({ nativeReads, respond:() => pending, fetchResponse:async () => new Response(JSON.stringify({ metadata })) });
+    for (const kind of ["widget", "canvas"]) {
+      const body = JSON.stringify({ kind, preview:{ contentType:"image/webp", dataBase64:"preview" }, reasoningEffort:"high" });
+      const response = await run.window.fetch("/api/community/metadata", { method:"POST", headers:{ "x-penecho-connection":`hosted:${HOSTED_MODEL_ID}` }, body });
+      const call = run.fetchCalls.at(-1);
+      assert.equal(call.url, "/api/community/metadata");
+      assert.equal(call.options.headers.get("x-penecho-connection"), `hosted:${HOSTED_MODEL_ID}`);
+      assert.equal(call.options.body, body);
+      assert.deepEqual((await response.json()).metadata, metadata);
+      assert.equal(run.fetchCalls.some(call => call.url.startsWith("/api/v1/remote-canvas/http")), false);
+    }
+    finishStatus({ device:null });
+    await flush();
+  }
+});
+
+test("share auto-fill preserves an explicit local connection and its pinned host in both Cloud modes", async () => {
+  for (const nativeReads of [false, true]) {
+    const run = boot({ nativeReads, respond:() => ({ device:{ id:SAVED_CANVAS_ID, online:true, ready:true, capabilities:{ canvasAgent:true } } }) });
+    await flush();
+    await run.window.fetch("/api/community/metadata", { method:"POST", headers:{ "x-penecho-connection":CURRENT_CANVAS_ID }, body:'{"kind":"canvas"}' });
+    const call = run.fetchCalls.at(-1), url = new URL(call.url, "https://cloud.penecho.test");
+    assert.equal(url.pathname, "/api/v1/remote-canvas/http");
+    assert.equal(url.searchParams.get("path"), "/api/community/metadata");
+    assert.equal(url.searchParams.get("deviceId"), SAVED_CANVAS_ID);
+    assert.equal(call.options.headers.get("x-penecho-connection"), CURRENT_CANVAS_ID);
+  }
+});
+
+test("local share auto-fill never switches to Cloud when its device is absent or offline", async () => {
+  for (const nativeReads of [false, true]) for (const device of [null, { id:SAVED_CANVAS_ID, online:false }]) {
+    const run = boot({ nativeReads, respond:() => ({ device }) });
+    await flush();
+    const response = await run.window.fetch("/api/community/metadata", { method:"POST", headers:{ "x-penecho-connection":CURRENT_CANVAS_ID }, body:'{"kind":"canvas"}' });
+    assert.equal(response.status, 409);
+    assert.equal(run.fetchCalls.some(call => call.url === "/api/community/metadata" || call.url.startsWith("/api/v1/hosted/")), false);
+  }
+});
+
+test("local share auto-fill preserves connection errors and never retries with a Cloud model", async () => {
+  for (const nativeReads of [false, true]) for (const status of [409, 502, 504]) {
+    const error = { error:"CONNECTION_STALE", message:"The selected local connection is unavailable." };
+    const run = boot({ nativeReads, respond:() => ({ device:{ id:SAVED_CANVAS_ID, online:true, ready:true, capabilities:{ canvasAgent:true } } }), fetchResponse:async () => new Response(JSON.stringify(error), { status }) });
+    await flush();
+    const response = await run.window.fetch("/api/community/metadata", { method:"POST", headers:{ "x-penecho-connection":CURRENT_CANVAS_ID }, body:'{"kind":"widget"}' });
+    assert.equal(response.status, status);
+    assert.deepEqual(await response.json(), error);
+    const calls = run.fetchCalls.filter(call => !call.url.startsWith("/api/v1/remote-canvas/status"));
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].url.startsWith("/api/v1/remote-canvas/http?"));
+    assert.equal(calls[0].options.headers.get("x-penecho-connection"), CURRENT_CANVAS_ID);
+  }
+});
+
 // The single action the gate can ever reveal, and the states that reveal it.
 const actionRevealStates = (action) => {
   const states = [];

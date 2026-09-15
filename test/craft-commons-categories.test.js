@@ -9,7 +9,7 @@ const { test } = require("node:test");
 const ROOT = path.resolve(__dirname, "..");
 const cloudConnect = fs.readFileSync(path.join(ROOT, "public", "cloud-connect.js"), "utf8");
 const remoteCanvas = fs.readFileSync(path.join(ROOT, "public", "remote-canvas.js"), "utf8");
-const serverMain = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8");
+const serverMain = fs.readFileSync(path.join(ROOT, "src", "server", "community-metadata.js"), "utf8");
 
 const ORIGINAL_CATEGORIES = ["education", "productivity", "data", "design", "developer", "science", "business", "lifestyle", "other"];
 const NEW_CATEGORIES = ["guidance", "collaboration", "learning"];
