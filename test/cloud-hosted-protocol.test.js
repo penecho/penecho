@@ -63,8 +63,21 @@ test('hosted Anthropic Harness profile adds Cloud bearer auth without changing c
   const { connectionProfile } = await import('../src/server/canvas-agent/runtime.mjs');
   const connection={id:`hosted:${id}`,provider:'api',apiFormat:'anthropic',apiUrl:'https://example.com/api/v1/hosted',apiModel:id,apiKey:'account-token'};
   const hosted=connectionProfile({...connection,hosted:true});
-  assert.deepEqual(hosted.config.headers,{Authorization:'Bearer account-token'});
+  assert.deepEqual(hosted.config.headers,{'x-penecho-request-kind':'agent',Authorization:'Bearer account-token'});
   assert.equal(hosted.config.baseURL,'https://example.com/api/v1/hosted');
   assert.equal(connectionProfile(connection).config.headers,undefined);
-  assert.equal(connectionProfile({...connection,hosted:true,apiFormat:'openai'}).config.headers,undefined);
+  assert.deepEqual(connectionProfile({...connection,hosted:true,apiFormat:'openai'}).config.headers,{'x-penecho-request-kind':'agent'});
+});
+
+test('hosted Agent inactivity stops without five repeats while other transient failures retain recovery',async()=>{
+  const {connectionProfile}=await import('../src/server/canvas-agent/runtime.mjs');
+  const {resolveRetryPolicy}=await import('@deepseek-ai/dsh-llm');
+  for(const apiFormat of ['anthropic','openai']) {
+    const connection={id:'hosted:test',hosted:true,apiFormat,apiUrl:'https://example.com/api/v1/hosted',apiModel:'model'};
+    const policy=resolveRetryPolicy(connectionProfile(connection).config.retryPolicy,'test');
+    assert.equal(policy.retryableCodes.includes('TIMEOUT'),false);
+    assert.equal(policy.maxRetries,5);
+    for(const code of ['RATE_LIMIT','SERVER','TRANSPORT'])assert.equal(policy.retryableCodes.includes(code),true);
+    assert.equal(connectionProfile({...connection,hosted:false}).config.retryPolicy,undefined);
+  }
 });

@@ -353,6 +353,14 @@ const validators = {
     if (output.create !== true && output.title !== undefined) invalid("title is valid only with create:true.");
     return output;
   },
+  penecho_rename_canvas(input) {
+    object(input, "arguments");
+    exactKeys(input, new Set(["instanceId", "canvasId", "documentId", "title", "requestId"]), "arguments");
+    // Reject controls before trimming so a trailing newline cannot disappear.
+    const title = string(input.title, "title", {max:48}).trim();
+    if (!title) invalid("title must not be blank.");
+    return {instanceId:string(input.instanceId,"instanceId"),canvasId:string(input.canvasId,"canvasId"),documentId:string(input.documentId,"documentId",{max:256}),title,requestId:string(input.requestId,"requestId")};
+  },
   penecho_find_canvases(input) {
     object(input, "arguments");
     exactKeys(input, new Set(["instanceId", "canvasId", "documentId"]), "arguments");
@@ -613,6 +621,7 @@ const TOOLS = [
     inputSchema:{ type:"object", additionalProperties:false, properties:{} },
   },
   { name:"penecho_open_canvas", description:"Open an exact saved document or create one. show:true changes the view only on user request. requestId is idempotent.", inputSchema:{type:"object",additionalProperties:false,required:["instanceId","canvasId","requestId"],properties:{instanceId:{type:"string",minLength:1,maxLength:128},canvasId:{type:"string",minLength:1,maxLength:128},documentId:{type:"string",minLength:1,maxLength:256},locator:{type:"object",additionalProperties:false,required:["location","id"],properties:{location:{type:"string",enum:[...STORAGE_LOCATIONS]},id:{type:"string",minLength:1,maxLength:512}}},create:{type:"boolean",default:false},title:{type:"string",minLength:1,maxLength:MAX_TITLE_CHARS},requestId:{type:"string",minLength:1,maxLength:128},show:{type:"boolean",default:false}},allOf:[{if:{properties:{create:{const:true}},required:["create"]},then:{properties:{documentId:false,locator:false}},else:{anyOf:[{required:["documentId"]},{required:["locator"]}],properties:{title:false}}}]} },
+  { name:"penecho_rename_canvas", description:"Rename an already open document by exact instanceId, canvasId and documentId. No session is created. title is trimmed and limited to 48 characters. requestId is idempotent; saved reports whether existing saved metadata was renamed (false means workspace-only).", inputSchema:{type:"object",additionalProperties:false,required:["instanceId","canvasId","documentId","title","requestId"],properties:{instanceId:{type:"string",minLength:1,maxLength:128},canvasId:{type:"string",minLength:1,maxLength:128},documentId:{type:"string",minLength:1,maxLength:256},title:{type:"string",minLength:1,maxLength:48,pattern:"^(?!.*[\\u0000-\\u001f\\u007f])(?=.*\\S).*$"},requestId:{type:"string",minLength:1,maxLength:128}}} },
   { name:"penecho_find_canvases", description:"Query the open documents in one exact browser MCP list, optionally by documentId. Closed documents are excluded.", inputSchema:{type:"object",additionalProperties:false,required:["instanceId","canvasId"],properties:{instanceId:{type:"string",minLength:1,maxLength:128},canvasId:{type:"string",minLength:1,maxLength:128},documentId:{type:"string",minLength:1,maxLength:256}}} },
   {
     name:"penecho_start_session",

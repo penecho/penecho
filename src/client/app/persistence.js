@@ -394,13 +394,21 @@
     });
     return snapshotDbPromise;
   }
-  function canvasBlob(canvas, type = "image/png", quality) {
+  function canvasBlob(canvas, type = "image/png", quality, execution = null) {
+    if(execution?.kind!=="mcp") {
+    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), type, quality));
+      }
+
+    const pending=canvasBlob.pending||(canvasBlob.pending=new Set());
+    if(pending.size>=128)return Promise.reject(Object.assign(Error("Canvas image encoders are still finishing."),{code:"CANVAS_BUSY"}));
+    const resource={};pending.add(resource);
+
     return new Promise((resolve, reject) => {
       let settled=false;
       const finish=(error,blob)=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve(blob);};
       const timer=setTimeout(()=>finish(Error("Canvas encoding timed out")),15_000);
-      try { canvas.toBlob(blob => blob ? finish(null,blob) : finish(Error("Could not encode canvas")), type, quality); }
-      catch(error){finish(error);}
+      try { canvas.toBlob(blob => {pending.delete(resource);blob ? finish(null,blob) : finish(Error("Could not encode canvas"));}, type, quality); }
+      catch(error){pending.delete(resource);finish(error);}
     });
   }
   function communityCanvasHasContent(canvas) {
@@ -488,7 +496,17 @@
       items = await requestResult(db.transaction(SNAPSHOT_STORE, "readonly").objectStore(SNAPSHOT_STORE).getAll());
     return items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
   }
-  function blobDataUrl(blob) {
+  function blobDataUrl(blob, execution = null) {
+    if(execution?.kind!=="mcp") {
+    return new Promise((resolve, reject) => {
+      if (!(blob instanceof Blob)) return reject(Error("Snapshot contains invalid binary data"));
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || Error("Could not encode snapshot data"));
+      reader.readAsDataURL(blob);
+    });
+      }
+
     return new Promise((resolve, reject) => {
       if (!(blob instanceof Blob)) return reject(Error("Snapshot contains invalid binary data"));
       const reader = new FileReader();let settled=false;
@@ -731,7 +749,23 @@
       for (const button of buttons) button.disabled = false;
     }
   }
-  function imageFromBlob(blob) {
+  function imageFromBlob(blob, execution = null) {
+    if(execution?.kind!=="mcp") {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob),
+        image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(Error("Could not decode snapshot tile"));
+      };
+      image.src = url;
+    });
+      }
+
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(blob),
         image = new Image();
@@ -759,6 +793,10 @@
     canvases.clear();
   }
   function waitForSnapshotTileFrame(signal = null) {
+      if(!signal) {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        }
+
     return new Promise((resolve) => {
       let frame = null, timer = null, finished = false;
       const finish = () => {
@@ -780,13 +818,13 @@
       timer = setTimeout(finish, document.hidden ? 0 : 100);
     });
   }
-  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent, onProgress = null) {
+  async function decodeSnapshotTilesInBatches(tileEntries, isCurrent, onProgress = null, execution = null) {
     const decodedTiles = new Map();
     try {
       if (!tileEntries.length) onProgress?.(1);
       for (let start = 0; start < tileEntries.length; start += SNAPSHOT_TILE_DECODE_BATCH_SIZE) {
         const end = Math.min(tileEntries.length, start + SNAPSHOT_TILE_DECODE_BATCH_SIZE),
-          batch = await Promise.all(tileEntries.slice(start, end).map(async ({ k, blob }) => ({ k, image:await imageFromBlob(blob) })));
+          batch = await Promise.all(tileEntries.slice(start, end).map(async ({ k, blob }) => ({ k, image:await imageFromBlob(blob, execution) })));
         if (!isCurrent()) {
           batch.length = 0;
           releaseSnapshotTileCanvases(decodedTiles);
@@ -806,7 +844,7 @@
         // canvases retain the pixels needed for the atomic swap below.
         batch.length = 0;
         if (end < tileEntries.length) {
-          await waitForSnapshotTileFrame();
+          await waitForSnapshotTileFrame(execution?.kind==="mcp" ? execution.controller.signal : null);
           if (!isCurrent()) {
             releaseSnapshotTileCanvases(decodedTiles);
             return null;
@@ -819,7 +857,7 @@
       throw error;
     }
   }
-  async function decodeSnapshotImagesInBatches(items, isCurrent, onProgress = null) {
+  async function decodeSnapshotImagesInBatches(items, isCurrent, onProgress = null, execution = null) {
     const source = Array.isArray(items) ? items.slice(0, MAX_VISIBLE_IMAGES) : [], decoded = [];
     if (!source.length) {
       onProgress?.(1);
@@ -827,12 +865,12 @@
     }
     for (let start = 0; start < source.length; start += SNAPSHOT_IMAGE_DECODE_BATCH_SIZE) {
       const end = Math.min(source.length, start + SNAPSHOT_IMAGE_DECODE_BATCH_SIZE),
-        batch = (await Promise.all(source.slice(start, end).map(decodeStoredImage))).filter(Boolean);
+        batch = (await Promise.all(source.slice(start, end).map(item=>decodeStoredImage(item,execution)))).filter(Boolean);
       if (!isCurrent()) return null;
       decoded.push(...batch);
       onProgress?.(end / source.length);
       if (end < source.length) {
-        await waitForSnapshotTileFrame();
+        await waitForSnapshotTileFrame(execution?.kind==="mcp" ? execution.controller.signal : null);
         if (!isCurrent()) return null;
       }
     }

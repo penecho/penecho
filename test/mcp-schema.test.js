@@ -264,7 +264,7 @@ test('image attachment tools accept bounded canonical sources and reject externa
 });
 
 test('v2 registry is complete and retired names do not remain aliases',()=>{
-  assert.equal(TOOLS.length,19);
+  assert.equal(TOOLS.length,20);
   const {COMMON_TOOL_NAMES}=require('../src/server/mcp/schema.js');
   assert.equal(COMMON_TOOL_NAMES.length,6);
   for(const name of ['penecho_capture_widget','penecho_read_feedback','penecho_read_messages','penecho_ack_messages'])assert.throws(()=>validateToolArguments(name,{}),{code:'tool_not_found'});
@@ -285,4 +285,22 @@ test('inbox modes cannot mix acknowledgement and read fields or silently enable 
   assert.deepEqual(validateToolArguments('penecho_inbox',{sessionId:'s'}),{sessionId:'s',mode:'read',messageAfter:0,limit:10,capture:false});
   assert.deepEqual(validateToolArguments('penecho_inbox',{sessionId:'s',mode:'ack',ids:['m'],status:'done'}),{sessionId:'s',mode:'ack',ids:['m'],status:'done'});
   for(const extra of [{quality:'detail'},{mode:'read',ids:['m']},{mode:'ack',ids:['m'],status:'done',capture:true},{messageAfter:-1},{feedbackAfter:-1},{limit:51}])assert.throws(()=>validateToolArguments('penecho_inbox',{sessionId:'s',...extra}),{code:'invalid_arguments'});
+});
+
+
+test("rename canvas requires exact targeting and a bounded trimmed title", () => {
+  const args = {instanceId:"instance",canvasId:"canvas",documentId:"doc",title:"  New title  ",requestId:"rename"};
+  assert.deepEqual(validateToolArguments("penecho_rename_canvas",args),{...args,title:"New title"});
+  const schema = TOOLS.find(tool => tool.name === "penecho_rename_canvas").inputSchema;
+  assert.deepEqual(schema.required,["instanceId","canvasId","documentId","title","requestId"]);
+  assert.equal(schema.additionalProperties,false);
+  assert.equal(schema.properties.title.maxLength,48);
+  const pattern = new RegExp(schema.properties.title.pattern);
+  for (const title of ["", "   ", "x".repeat(49), "bad\n", "bad\u0000", "bad\u007f"]) {
+    assert.throws(()=>validateToolArguments("penecho_rename_canvas",{...args,title}),error=>error.code === "invalid_arguments");
+    if (title.length <= 48) assert.equal(pattern.test(title),false);
+  }
+  for (const field of schema.required) {const missing = {...args};delete missing[field];assert.throws(()=>validateToolArguments("penecho_rename_canvas",missing));}
+  for (const extra of [{sessionId:"s"},{create:true},{show:true},{locator:{location:"device",id:"d"}},{target:"current"}]) assert.throws(()=>validateToolArguments("penecho_rename_canvas",{...args,...extra}));
+  assert.equal(validateToolArguments("penecho_rename_canvas",{...args,title:"x".repeat(48)}).title.length,48);
 });

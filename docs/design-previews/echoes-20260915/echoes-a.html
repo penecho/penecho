@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Echoes · Visual design proposal</title>
+<style>
+:root {
+  --bg:#f1f3f0; --paper:#fff; --subtle:#f7f8f5; --line:#dde1d8;
+  --ink:#30352f; --muted:#626b60; --accent:#3b5034; --selected:#e9eddf;
+  --nav:#f7f7ef; --nav-ink:#616b58; --nav-line:#d9ddcf;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;
+  color:var(--ink); background:var(--paper); font-size:13px;
+}
+* { box-sizing:border-box; }
+body { margin:0; min-width:0; }
+body[data-theme="b"] {
+  --bg:#f2f0eb; --paper:#fdfcf9; --subtle:#f4f2ed; --line:#e1ded6;
+  --ink:#30352f; --muted:#68665e; --accent:#3b5034; --selected:#e9eddf;
+  --nav:#f7f7ef; --nav-ink:#616b58; --nav-line:#d9ddcf;
+}
+button,input,select,textarea { font:inherit; color:inherit; }
+button,a { -webkit-tap-highlight-color:transparent; }
+button { cursor:pointer; }
+button { height:30px; padding:0 10px; border:1px solid var(--line); border-radius:5px; background:var(--paper); display:inline-flex; align-items:center; justify-content:center; gap:6px; font-weight:500; white-space:nowrap; position:relative; }
+button::after { content:""; position:absolute; inset:-3px 0; }
+button:hover { background:var(--subtle); border-color:var(--muted); }
+button:disabled { cursor:default; opacity:.5; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+button.quiet { background:transparent; border-color:transparent; }
+button.selected,button[aria-pressed="true"] { color:var(--accent); background:var(--selected); border-color:transparent; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+input,select { height:30px; border:1px solid var(--line); border-radius:5px; background:var(--paper); padding:0 9px; min-width:0; }
+textarea { width:100%; resize:vertical; min-height:82px; border:1px solid var(--line); background:var(--paper); border-radius:5px; padding:10px; line-height:1.6; }
+input::placeholder,textarea::placeholder { color:var(--muted); opacity:1; }
+input,textarea { caret-color:var(--accent); }
+::selection { background:var(--selected); color:var(--accent); }
+* { scrollbar-color:var(--line) transparent; scrollbar-width:thin; }
+svg.icon { width:16px; height:16px; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+a { color:var(--accent); text-decoration:none; text-underline-offset:3px; }
+a:hover { text-decoration:underline; }
+h1,h2,h3,p { margin:0; }
+h1 { font-size:25px; font-weight:650; letter-spacing:-.025em; line-height:1.25; }
+h2 { font-size:17px; font-weight:600; letter-spacing:-.015em; }
+h3 { font-size:14px; line-height:1.5; font-weight:600; }
+.muted { color:var(--muted); }
+.small { font-size:12px; }
+.row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.between { justify-content:space-between; }
+.fill { flex:1; min-width:0; }
+.reviewbar { min-height:44px; padding:6px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--paper); border-bottom:1px solid var(--line); }
+.reviewbar strong { font-size:12px; }
+.reviewbar .seg { margin-left:auto; }
+.review-note { font-size:11px; color:var(--muted); }
+.seg { display:inline-flex; align-items:center; gap:2px; background:var(--bg); padding:2px; border-radius:6px; }
+.seg button { height:24px; border:none; background:transparent; padding:0 10px; font-size:12.5px; }
+.seg button.selected { background:var(--paper); color:var(--ink); box-shadow:0 1px 3px #20242c14; }
+.app { display:grid; grid-template-columns:216px minmax(0,1fr); min-height:calc(100dvh - 44px); background:var(--bg); }
+.sidebar { background:var(--nav); border-right:1px solid var(--nav-line); color:var(--nav-ink); padding:20px 12px 12px; display:flex; flex-direction:column; gap:16px; }
+.brand { font-size:22px; color:var(--ink); padding:0 10px 12px; letter-spacing:-1px; }
+body[data-theme="b"] .brand { color:#30372d; }
+.brand b { font-weight:750; }
+.navgroup { display:grid; gap:4px; }
+.navgroup small { padding:0 10px 3px; font-size:11px; }
+.navgroup button { width:100%; justify-content:flex-start; background:transparent; border-color:transparent; gap:10px; color:inherit; height:32px; font-weight:400; }
+.navgroup button.selected { background:var(--selected); color:var(--accent); font-weight:600; }
+body[data-theme="b"] .navgroup button.selected { background:#e9eddf; color:#3b5034; }
+.sidebar-footer { margin-top:auto; padding-top:20px; display:grid; gap:6px; }
+.sidebar-footer .account { padding:10px 8px 0; border-top:1px solid var(--nav-line); display:flex; align-items:center; gap:8px; }
+.avatar { width:26px; height:26px; border-radius:50%; background:#e5eadf; color:#46543e; display:inline-grid; place-items:center; font-size:11px; font-weight:600; flex:none; }
+.avatar.orange { background:#f3dfd1; color:#8d4e2e; }
+.avatar.blue { background:#dce9f4; color:#355e84; }
+.workspace { min-width:0; container-type:inline-size; }
+.topline { height:46px; padding:0 24px; border-bottom:1px solid var(--line); background:var(--paper); display:flex; align-items:center; gap:10px; }
+.topline .crumb { color:var(--muted); font-size:12px; }
+.topline .spacer { flex:1; }
+.publicnav { display:none; }
+body.public-mode .sidebar { display:none; }
+body.public-mode .app { grid-template-columns:minmax(0,1fr); }
+body.public-mode .publicnav { display:flex; gap:10px; align-items:center; }
+.page { padding:24px; max-width:1600px; margin:auto; }
+.pagehead { display:flex; align-items:center; gap:16px; justify-content:space-between; margin-bottom:20px; }
+.pagehead p { margin-top:6px; line-height:1.5; color:var(--muted); }
+.tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.search { flex:1 1 240px; display:flex; align-items:center; position:relative; }
+.search svg { position:absolute; left:9px; color:var(--muted); }
+.search input { width:100%; padding-left:32px; }
+.resultsbar { display:flex; gap:12px; align-items:center; min-height:44px; }
+.resultsbar .layout { margin-left:auto; }
+.kind { font-size:11px; display:inline-flex; align-items:center; gap:4px; color:#3b5034; background:#e9eddf; border-radius:4px; padding:3px 6px; }
+.kind.widget { color:#955121; background:#f8eadb; }
+.kind svg { width:12px; height:12px; }
+.cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.card { min-width:0; background:var(--paper); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.card:hover { border-color:#a4a9b5; }
+.thumb { width:100%; height:154px; border:0; border-radius:0; padding:0; overflow:hidden; display:grid; place-items:center; background:#fafbfe; position:relative; color:var(--muted); }
+.thumb::after { inset:0; }
+.thumb img { width:100%; height:100%; object-fit:cover; }
+.thumb .kind { position:absolute; top:8px; left:8px; }
+.thumb .fallback { display:grid; justify-items:center; gap:9px; color:var(--muted); }
+.fallback svg { width:30px; height:30px; stroke-width:1.3; }
+.thumb.diagram { background:#eff1fa; }
+.cardbody { padding:12px; }
+.cardtitle { border:0; background:none; height:auto; display:block; white-space:normal; text-align:left; padding:0; line-height:1.45; font-size:14px; font-weight:600; width:100%; min-height:40px; }
+.cardtitle:hover { background:transparent; color:var(--accent); }
+.desc { color:var(--muted); font-size:12px; line-height:1.55; margin-top:5px; min-height:37px; }
+.tags { display:flex; gap:8px; flex-wrap:wrap; font-size:11px; line-height:1.7; margin:8px 0 10px; }
+.tags button { height:auto; border:0; padding:0; font-size:11px; color:var(--muted); background:none; }
+.tags button:hover { color:var(--accent); text-decoration:underline; }
+.byline { display:flex; align-items:center; gap:7px; min-width:0; font-size:11px; color:var(--muted); }
+.byline .author { color:var(--ink); border:0; height:auto; padding:0; background:none; display:block; font-size:11px; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.byline .copy { min-width:0; flex:1; }
+.social { display:flex; align-items:center; gap:5px; border-top:1px solid var(--line); padding:7px 8px; color:var(--muted); }
+.social button { border:0; background:transparent; height:28px; padding:0 5px; font-size:11px; font-weight:400; }
+.social button.hearted { color:#c43b56; }
+.social .echo-count { margin-right:auto; font-size:11px; padding-left:4px; white-space:nowrap; }
+.list-kind { display:none; }
+.cards.list .list-kind { display:inline-flex; }
+.cards.list .byline { flex-wrap:wrap; }
+.cards.list { display:flex; flex-direction:column; gap:0; border-top:1px solid var(--line); }
+.cards.list .card { display:grid; grid-template-columns:112px minmax(0,1fr) 144px; padding:12px 0; border:none; border-radius:0; border-bottom:1px solid var(--line); gap:16px; background:transparent; align-items:center; }
+.cards.list .thumb { height:80px; border-radius:5px; }
+.cards.list .thumb .kind { display:none; }
+.cards.list .cardbody { padding:0; }
+.cards.list .cardtitle { min-height:0; }
+.cards.list .desc { min-height:0; margin:4px 0; }
+.cards.list .tags { margin:3px 0 6px; }
+.cards.list .social { border:none; flex-wrap:wrap; justify-content:flex-end; padding:0; }
+.cards.list .echo-count { width:100%; margin:0; text-align:right; }
+.cards.list .byline .copy { display:flex; gap:8px; align-items:center; }
+.cards.list .byline .avatar { width:20px; height:20px; }
+.feedfoot { display:flex; justify-content:center; gap:12px; padding:24px 0 10px; color:var(--muted); }
+.filterbox { padding:16px; background:var(--paper); border:1px solid var(--line); border-radius:8px; margin:12px 0; }
+.filterbox .row + .row { margin-top:12px; }
+.filterbox label { display:flex; gap:8px; align-items:center; }
+.detailhead { margin:0 0 18px; }
+.detailhead h1 { max-width:800px; margin:10px 0; font-size:26px; }
+.detailhead .summary { color:var(--muted); line-height:1.65; max-width:78ch; }
+.detail-layout { display:grid; grid-template-columns:minmax(0,1fr) 286px; gap:24px; align-items:start; }
+.detail-preview { background:var(--paper); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.preview-tools { display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-bottom:1px solid var(--line); color:var(--muted); font-size:12px; }
+.large-preview { min-height:300px; height:360px; display:grid; place-items:center; background:#fff; overflow:hidden; }
+.large-preview img { width:100%; height:100%; object-fit:contain; }
+.large-preview .fallback { display:grid; justify-items:center; gap:12px; color:var(--muted); }
+.caption { padding:12px; border-top:1px solid var(--line); font-size:12px; line-height:1.6; }
+.caption b { display:block; font-weight:500; }
+.detail-side { padding:0; }
+.creator { display:flex; gap:10px; align-items:center; }
+.creator .avatar { width:36px; height:36px; font-size:14px; }
+.creator p { color:var(--muted); font-size:12px; margin-top:4px; }
+.detail-side .actions { display:grid; gap:8px; margin-top:20px; }
+.detail-side .actions > button { width:100%; }
+.detail-side .actions .row button { flex:1; }
+.explanation { font-size:12px; color:var(--muted); line-height:1.65; margin-top:10px; }
+.numbers { display:flex; justify-content:space-between; gap:10px; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:20px 0 12px; }
+.numbers b { font-size:18px; font-weight:600; display:block; margin-bottom:3px; }
+.numbers span { color:var(--muted); font-size:11px; }
+.collaborators { padding:12px 0; display:grid; gap:10px; }
+.section { margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
+.section .section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+.lineage { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; }
+.step { display:block; border:0; background:transparent; border-radius:0; padding:0 12px 0 0; white-space:normal; text-align:left; height:auto; position:relative; }
+.step .step-track { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
+.step .step-track::after { content:""; height:1px; background:var(--line); flex:1; }
+.step .dot { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--bg); color:var(--muted); font-size:11px; }
+.step.active .dot { background:var(--accent); color:#fff; }
+.step h3 { font-size:12px; font-weight:500; }
+.step p { color:var(--muted); font-size:11px; line-height:1.6; margin-top:5px; }
+.branch-row { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.next { margin-top:20px; background:var(--selected); padding:14px 16px; border-radius:8px; color:var(--accent); }
+.next p { line-height:1.65; font-size:12px; margin-top:4px; }
+.comments { max-width:900px; }
+.comment { display:flex; gap:10px; margin:16px 0; font-size:12px; line-height:1.65; }
+.comment time { margin-left:10px; font-size:11px; color:var(--muted); }
+.composer { margin-top:16px; }
+.composer .row { margin-top:8px; }
+.comment-image { max-width:180px; max-height:100px; border-radius:5px; display:block; margin-top:8px; }
+body[data-theme="b"] h1 { font-family:Georgia,"Songti SC",serif; font-weight:500; font-size:30px; }
+body[data-theme="b"] .page { background:var(--paper); min-height:calc(100dvh - 90px); }
+body[data-theme="b"] .detail-layout { grid-template-columns:300px minmax(0,1fr); }
+body[data-theme="b"] .detail-side { grid-column:1; grid-row:1; }
+body[data-theme="b"] .detail-work { grid-column:2; grid-row:1; }
+.state { padding:64px 20px; text-align:center; color:var(--muted); grid-column:1/-1; }
+.state h2 { color:var(--ink); margin-bottom:8px; }
+.state button { margin-top:16px; }
+.toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); padding:10px 16px; border-radius:8px; background:#252932; color:white; box-shadow:0 6px 14px #11182724; z-index:20; font-size:12px; }
+dialog { width:min(480px,calc(100% - 32px)); border:0; border-radius:14px; padding:24px; background:var(--paper); color:var(--ink); box-shadow:0 14px 30px #11182733; }
+dialog::backdrop { background:#00000038; }
+dialog .dialog-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:16px; }
+dialog p { line-height:1.65; margin:12px 0; color:var(--muted); }
+dialog input { width:100%; margin-bottom:14px; }
+dialog.preview-dialog { width:min(1080px,calc(100% - 32px)); }
+dialog.preview-dialog img { width:100%; max-height:75dvh; object-fit:contain; }
+[hidden] { display:none!important; }
+@container (max-width: 960px) {
+  .cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .detail-layout,body[data-theme="b"] .detail-layout { grid-template-columns:minmax(0,1fr) 260px; gap:16px; }
+  body[data-theme="b"] .detail-layout { grid-template-columns:260px minmax(0,1fr); }
+}
+@container (max-width: 720px) {
+  .page { padding:20px; }
+  .detail-layout,body[data-theme="b"] .detail-layout { display:flex; flex-direction:column; }
+  .detail-side,.detail-work { width:100%; }
+  .detail-side { display:contents; }
+  .detail-side > * { width:100%; }
+  .detail-side .creator { order:1; }
+  .detail-side .actions { order:2; margin-top:0; }
+  .detail-side .explanation { order:3; margin-top:0; }
+  .detail-work { order:4; }
+  .detail-side .numbers { order:5; }
+  .detail-side .social { order:6; }
+  .detail-side .collaborators { order:7; }
+  .detail-side .explanation:last-child { order:8; }
+  .detail-side .actions { grid-template-columns:1fr 1fr; }
+  .detail-side .actions .row { grid-column:1/-1; }
+  .detail-side .numbers { margin-top:12px; }
+  .large-preview { height:300px; }
+  .cards.list .card { grid-template-columns:96px minmax(0,1fr); gap:12px; }
+  .cards.list .social { grid-column:2; justify-content:flex-start; }
+  .cards.list .echo-count { width:auto; margin-right:auto; }
+  .cards.list .thumb { height:64px; align-self:start; }
+}
+@media (max-width:760px) {
+  .app { grid-template-columns:64px minmax(0,1fr); }
+  .sidebar { padding:18px 8px; }
+  .brand { font-size:19px; padding:0 2px 8px; }
+  .brand span,.navgroup small,.navgroup button span,.sidebar-footer .account .copy,.sidebar-footer button span { display:none; }
+  .brand b::after { content:""; }
+  .navgroup button { justify-content:center; padding:0; }
+  .sidebar-footer button { font-size:0; }
+  .sidebar-footer .account { padding:10px 0 0; justify-content:center; }
+  .topline { padding:0 16px; }
+  .review-note { display:none; }
+}
+@media (max-width:520px) {
+  .app { grid-template-columns:minmax(0,1fr); }
+  .sidebar { display:none; }
+  .reviewbar { padding:8px 12px; }
+  .reviewbar strong { flex-basis:100%; }
+  .reviewbar .seg { margin:0; }
+  .page { padding:16px; }
+  .pagehead { align-items:flex-start; }
+  .pagehead p { max-width:24ch; }
+  .cards { grid-template-columns:1fr; }
+  .tools select { flex:1; }
+  .lineage { grid-template-columns:1fr; gap:16px; }
+  .topline .crumb { display:none; }
+  .publicnav button:not(:first-child) { display:none; }
+  h1,body[data-theme="b"] h1 { font-size:24px; }
+}
+@media (prefers-reduced-motion:no-preference) { button { transition:background-color .12s ease-out,border-color .12s ease-out; } }
+@media (pointer:coarse) { button::after { inset:-7px 0; } .row,.tools { gap:14px 8px; } }
+@media (forced-colors:active) { .kind,.avatar,.dot { border:1px solid CanvasText; } button.selected { outline:2px solid Highlight; } }
+</style>
+</head>
+<body data-theme="a">
+<div class="reviewbar">
+  <strong id="proposal-name"></strong><span class="review-note">Interactive prototype · sample content</span>
+  <div class="seg" aria-label="Preview page"><button data-page="list" class="selected">Browse</button><button data-page="detail">Craft detail</button></div>
+  <select id="context" aria-label="Page context"><option value="dashboard">In Dashboard</option><option value="public">Standalone page</option></select>
+  <select id="state" aria-label="Preview state"><option value="normal">Default state</option><option value="no-image">Missing preview</option><option value="empty">No results</option><option value="loading">Loading</option><option value="error">Load error</option><option value="legacy">Echo not enabled</option><option value="blocked">Author only</option></select>
+</div>
+<div class="app">
+  <aside class="sidebar" aria-label="Dashboard navigation">
+    <div class="brand"><span>Pen</span><b>Echo</b></div>
+    <div class="navgroup"><button data-info="Dashboard" data-icon="dashboard"><span>Dashboard</span></button></div>
+    <div class="navgroup"><small>Workspace</small><button data-info="Projects" data-icon="grid"><span>Projects</span></button><button data-scope="all" data-icon="echo" class="selected"><span>Echoes</span></button><button data-scope="mine" data-icon="share"><span>My Crafts</span></button><button data-scope="saved" data-icon="save"><span>Favorites</span></button></div>
+    <div class="navgroup"><small>Connections</small><button data-info="MCP" data-icon="code"><span>MCP</span></button><button data-info="Linked Devices" data-icon="device"><span>Linked Devices</span></button></div>
+    <div class="navgroup"><small>Account</small><button data-info="Usage details" data-icon="chart"><span>Usage details</span></button><button data-info="Credits & billing" data-icon="card"><span>Credits & billing</span></button></div>
+    <div class="sidebar-footer"><button class="quiet" data-info="Feedback" data-icon="comment"><span>Feedback</span></button><div class="account"><span class="avatar">H</span><span class="copy">heack <span class="muted">⌄</span></span></div></div>
+  </aside>
+  <div class="workspace">
+    <div class="topline"><span class="crumb">Workspace</span><span class="crumb">/</span><strong id="breadcrumb">Echoes</strong><div class="spacer"></div><div class="publicnav"><button class="quiet" data-info="PenEcho home">PenEcho</button><button class="quiet" data-info="Downloads">Downloads</button><button class="quiet" data-info="Sponsors">Sponsors</button></div><button class="quiet" data-info="Switch language">English</button><button class="quiet" data-info="Account menu" data-icon="user"></button></div>
+    <main class="page" id="main"></main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button data-close aria-label="Close">×</button></div><div id="dialog-body"></div></dialog>
+<script>
+const THEME = 'a';
+const PATHS = {
+  search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
+  echo:'<path d="M4 18.5V6.8A2.8 2.8 0 0 1 6.8 4H20v14.5H7.5A3.5 3.5 0 0 0 4 22Z"/><path d="M8 8h8M8 12h6"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  canvas:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/>',
+  widget:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/>',
+  heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+  save:'<path d="M6 3h12v18l-6-4-6 4Z"/>',
+  share:'<path d="M12 15V3m-4 4 4-4 4 4M5 12v8h14v-8"/>',
+  comment:'<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H6l-4 2 1.8-5A8.5 8.5 0 1 1 21 11.5Z"/>',
+  list:'<path d="M8 5h13M8 12h13M8 19h13M3 5h.1M3 12h.1M3 19h.1"/>',
+  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',
+  arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>',
+  back:'<path d="M19 12H5m6-6-6 6 6 6"/>',
+  open:'<path d="M14 3h7v7m0-7L10 14M10 4H4v16h16v-6"/>',
+  play:'<path d="m8 4 12 8-12 8Z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+  device:'<rect x="2" y="3" width="14" height="12" rx="2"/><rect x="17" y="9" width="5" height="12" rx="1"/><path d="M6 19h6"/>',
+  dashboard:'<path d="M3 3h7v11H3zM14 3h7v6h-7zM14 13h7v8h-7zM3 18h7v3H3z"/>',
+  chart:'<path d="M3 3v18h18M8 16V9m5 7V5m5 11v-4"/>',
+  card:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
+  code:'<path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/>'
+};
+const icon = name => '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'+(PATHS[name]||PATHS.echo)+'</svg>';
+const escapeHTML = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const items = [
+  {id:0,name:'Household energy budget · labelled flows',desc:'Add clear input, storage, and usage labels to the original energy sketch.',author:'UAT rights-20260813 Builder',kind:'widget',category:'developer',date:'Aug 13',tags:['energy','labels'],echoes:2,hearts:1,saves:2,photo:true,saved:true,mine:false},
+  {id:1,name:'Rain garden · water-flow map',desc:'Map the route from roof runoff through storage, planting, and overflow.',author:'UAT craft-growth-0812 Builder',kind:'canvas',category:'design',date:'Aug 12',tags:['rain-garden','water'],echoes:2,hearts:0,saves:1,diagram:true,saved:false,mine:false},
+  {id:2,name:'UAT Open Canvas craft-rights-0811 · Root',desc:'An open Canvas with its origin preserved, ready for the next Crafter.',author:'UAT craft-rights-0811 Author',kind:'canvas',category:'design',date:'Aug 12',tags:['uat','lineage'],echoes:1,hearts:1,saves:1,saved:false,mine:false},
+  {id:3,name:'Calculus notes · from formula to intuition',desc:'Bring formulas, functions, and handwritten reasoning onto one Canvas.',author:'heack',kind:'canvas',category:'education',date:'Aug 12',tags:['calculus','learning'],echoes:3,hearts:4,saves:2,photo:true,saved:true,mine:true},
+  {id:4,name:'UAT Open Widget craft-20260811-a · Root',desc:'An open Widget. Every new direction stays connected to its first step.',author:'UAT craft-20260811-a Author',kind:'widget',category:'developer',date:'Aug 12',tags:['uat','lineage'],echoes:1,hearts:0,saves:1,saved:false,mine:false},
+  {id:5,name:'UAT Widget share-20260810-b',desc:'A persistent Widget, shared publicly and ready to save.',author:'UAT share-20260810-b Author',kind:'widget',category:'developer',date:'Aug 10',tags:['durability','widget'],echoes:0,hearts:0,saves:2,saved:false,mine:false}
+];
+const categories = {guidance:'Sharing & Guidance',collaboration:'Co-creation',learning:'Learning Notes',education:'Education',productivity:'Productivity',data:'Data',design:'Design',developer:'Developer',science:'Science',business:'Business',lifestyle:'Lifestyle',other:'Other'};
+let page='list', layout=THEME==='a'?'grid':'list', scope='all', kind='', query='', category='', sort='recommended', previewState='normal', selected=0, playing=null, step=2, filterOpen=false, commentImage=null;
+const comments=[];
+const main=document.getElementById('main');
+const dialog=document.getElementById('dialog');
+let toastTimer;
+document.getElementById('proposal-name').textContent=THEME==='a'?'A · Paper & Forest':'B · Warm Stone';
+function notify(){window.parent.postMessage({type:'penecho-widget-updated'},'*');}
+function toast(text){const box=document.getElementById('toast');box.textContent=text;box.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>box.hidden=true,3500);}
+function showDialog(title,html,large=false){document.getElementById('dialog-title').textContent=title;document.getElementById('dialog-body').innerHTML=html;dialog.classList.toggle('preview-dialog',large);dialog.showModal();notify();}
+function badge(item){return '<span class="kind '+item.kind+'">'+icon(item.kind)+(item.kind==='canvas'?'Canvas':'Widget')+'</span>';}
+function energyPreview(){
+  return `<svg viewBox="0 0 720 340" width="100%" height="100%" role="img" aria-label="Household energy flow: generation, storage, and daily usage">
+    <rect width="720" height="340" fill="#fcfbf7"/>
+    <g font-family="-apple-system, sans-serif" fill="#343c47">
+      <text x="36" y="40" font-size="20" font-weight="600">A clearer picture of household energy.</text>
+      <text x="36" y="67" font-size="13" fill="#737b87">Follow the flow from generation to everyday use.</text>
+      <g font-size="12" fill="#737b87"><text x="48" y="113">INPUT</text><text x="301" y="113">STORAGE</text><text x="549" y="113">USAGE</text></g>
+      <g fill="none" stroke="#8a93a4" stroke-width="2"><path d="M205 170h83m-10-6 10 6-10 6M431 170h87m-10-6 10 6-10 6"/><path d="M361 223v53h183" stroke-dasharray="5 5"/></g>
+      <rect x="36" y="130" width="169" height="94" rx="8" fill="#faedce"/>
+      <rect x="288" y="130" width="143" height="94" rx="8" fill="#e5ebf8"/>
+      <rect x="518" y="130" width="167" height="94" rx="8" fill="#e8ede4"/>
+      <g font-size="19" font-weight="600"><text x="54" y="168">Solar + grid</text><text x="306" y="168">Battery</text><text x="536" y="168">Home</text></g>
+      <g font-size="13"><text x="54" y="194">Incoming energy</text><text x="306" y="194">Save for later</text><text x="536" y="194">Heat · light · devices</text></g>
+      <text x="552" y="281" font-size="13" fill="#626b78">Reserve / loss</text>
+      <text x="36" y="315" font-size="12" fill="#7b818a">Labelled flows · Example Craft</text>
+    </g>
+  </svg>`;
+}
+function mathPreview(){
+  return `<svg viewBox="0 0 720 340" width="100%" height="100%" role="img" aria-label="A calculus example, showing a parabola and its slope">
+    <rect width="720" height="340" fill="#f4f7fb"/>
+    <g font-family="-apple-system, sans-serif" fill="#343c47"><text x="36" y="42" font-size="20" font-weight="600">From a curve to a rate of change.</text><text x="472" y="123" font-size="28" font-family="Georgia,serif">f(x) = x²</text><text x="472" y="163" font-size="22" font-family="Georgia,serif">f′(x) = 2x</text><text x="472" y="201" font-size="13" fill="#626b78">The slope changes at every point.</text></g>
+    <g fill="none" stroke="#bdc8d6" stroke-width="1"><path d="M65 260h340M227 83v209"/></g><path d="M85 95Q227 427 369 95" fill="none" stroke="#626ab4" stroke-width="3"/><path d="M251 280 367 98" fill="none" stroke="#bc6b40" stroke-width="2"/><circle cx="310" cy="187" r="5" fill="#bc6b40"/>
+    <text x="36" y="315" font-family="sans-serif" font-size="12" fill="#626b78">Calculus notes · Example Craft</text>
+  </svg>`;
+}
+function detailSocial(item){
+  return '<div class="social"><button data-heart="'+item.id+'" class="'+(item.hearted?'hearted':'')+'" aria-label="Heart" aria-pressed="'+!!item.hearted+'">'+icon('heart')+item.hearts+'</button><button data-comments="'+item.id+'" aria-label="View comments">'+icon('comment')+comments.length+'</button><span class="row small" style="margin-left:auto">'+icon('save')+item.saves+' saves</span></div>';
+}
+function media(item){
+  if(previewState==='no-image'||(!item.photo&&!item.diagram))return '<span class="fallback">'+icon(item.kind)+'<span class="small">No preview yet</span></span>';
+  if(item.photo)return item.id===3?mathPreview():energyPreview();
+  return '<svg viewBox="0 0 380 180" width="100%" height="100%" aria-label="Sample rainwater flow diagram"><g fill="none" stroke="#7975b8" stroke-width="2"><path d="M77 92h62m76 0h64M177 109v36h112"/><rect x="24" y="63" width="64" height="57" rx="8"/><rect x="139" y="63" width="76" height="57" rx="8"/><rect x="277" y="63" width="77" height="57" rx="8"/></g><g fill="#555775" font-family="sans-serif" font-size="13" text-anchor="middle"><text x="56" y="95">Roof runoff</text><text x="177" y="95">Storage</text><text x="315" y="95">Rain garden</text><text x="324" y="149">Overflow</text></g></svg>';
+}
+function tags(item){return '<div class="tags">'+item.tags.map(t=>'<button data-tag="'+t+'">#'+t+'</button>').join('')+'</div>';}
+function social(item){return '<div class="social"><span class="echo-count">'+item.echoes+' Echoes</span><button data-heart="'+item.id+'" class="'+(item.hearted?'hearted':'')+'" aria-label="Heart" aria-pressed="'+!!item.hearted+'">'+icon('heart')+item.hearts+'</button><button data-comments="'+item.id+'" aria-label="View comments">'+icon('comment')+(item.id===selected?comments.length:0)+'</button><button data-save="'+item.id+'" aria-label="Favorites" aria-pressed="'+item.saved+'">'+icon('save')+item.saves+'</button><button data-more="'+item.id+'" aria-label="More options">'+icon('more')+'</button></div>';}
+function card(item){return '<article class="card"><button class="thumb '+(item.diagram?'diagram':'')+'" data-detail="'+item.id+'" aria-label="Open '+escapeHTML(item.name)+'">'+media(item)+badge(item)+'</button><div class="cardbody"><button class="cardtitle" data-detail="'+item.id+'">'+escapeHTML(item.name)+'</button><p class="desc">'+item.desc+'</p>'+tags(item)+'<div class="byline"><span class="avatar '+(item.id%2?'orange':'blue')+'">'+item.author[0].toUpperCase()+'</span><div class="copy"><button class="author" data-author="'+escapeHTML(item.author)+'">'+escapeHTML(item.author)+'</button><span>'+item.date+' · '+categories[item.category]+'</span></div><span class="list-kind">'+badge(item)+'</span></div></div>'+social(item)+'</article>';}
+function results(){
+  let filtered=items.filter(i=>(!kind||i.kind===kind)&&(!category||i.category===category)&&(scope!=='saved'||i.saved)&&(scope!=='mine'||i.mine)&&[i.name,i.desc,i.author,...i.tags].join(' ').toLowerCase().includes(query.toLowerCase()));
+  if(sort==='forks')filtered.sort((a,b)=>b.echoes-a.echoes);
+  if(sort==='favorites')filtered.sort((a,b)=>b.saves-a.saves);
+  if(sort==='newest')filtered.sort((a,b)=>a.id-b.id);
+  if(sort==='following')filtered=filtered.filter(i=>i.id===0||i.id===3);
+  const grid=document.getElementById('cards');if(!grid)return;
+  let state=previewState;if(!filtered.length)state='empty';
+  const states={empty:['No matching Crafts','Try another keyword or clear your filters.'],loading:['Loading Crafts','Your Crafts will appear here when ready.'],error:['Couldn’t load Crafts','The connection was interrupted. Please try again.']};
+  grid.innerHTML=states[state]?'<div class="state"><h2>'+states[state][0]+'</h2><p>'+states[state][1]+'</p>'+(state==='loading'?'':'<button data-reset>'+ (state==='error'?'Try again':'Clear filters')+'</button>')+'</div>':filtered.map(card).join('');
+  document.getElementById('result-count').textContent=states[state]?'':filtered.length+' Crafts';
+  document.getElementById('feedfoot').hidden=!!states[state];
+  notify();
+}
+function filterMarkup(){return '<div class="filterbox" '+(filterOpen?'':'hidden')+'><div class="row between"><strong>Refine Echoes</strong><button class="quiet" data-filter-close>Close</button></div><div class="row"><label>Time range <select aria-label="Ranking time range" id="period"><option>Past week</option><option>Past day</option><option>Past month</option></select></label><button data-reset>Reset</button><button class="primary" data-filter-close>Show Crafts</button></div></div>';}
+function renderList(){
+  const title=scope==='saved'?'Favorites':scope==='mine'?'My Crafts':'Echoes';
+  main.innerHTML='<div class="pagehead"><div><h1>'+title+'</h1><p>Find a useful Canvas or Widget. Make the next idea yours.</p></div><button data-publish>'+icon('open')+'Open PenEcho</button></div><div class="tools"><div class="search">'+icon('search')+'<input id="search" aria-label="Search names, tags, and creators" placeholder="Search names, tags, creators…" value="'+escapeHTML(query)+'"></div><div class="seg" aria-label="Craft type">'+[['','All'],['widget','Widgets'],['canvas','Canvases']].map(([k,n])=>'<button data-kind="'+k+'" class="'+(kind===k?'selected':'')+'">'+n+'</button>').join('')+'</div><select id="sort" aria-label="Sort order"><option value="recommended">Recommended</option><option value="following">Following</option><option value="newest">Newest</option><option value="forks">Most Echoes</option><option value="favorites">Most favorites</option></select><select id="category" aria-label="Category"><option value="">All categories</option>'+Object.entries(categories).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select><button data-filter aria-expanded="'+filterOpen+'">'+icon('filter')+'Filters</button></div>'+filterMarkup()+'<div class="resultsbar"><span id="result-count" class="muted small"></span><span class="muted small" id="period-note"></span><div class="layout row"><button class="quiet '+(layout==='grid'?'selected':'')+'" data-layout="grid" aria-label="Grid view">'+icon('grid')+'</button><button class="quiet '+(layout==='list'?'selected':'')+'" data-layout="list" aria-label="List view">'+icon('list')+'</button></div></div><div class="cards '+(layout==='list'?'list':'')+'" id="cards"></div><div class="feedfoot" id="feedfoot"><button data-page-nav="Previous page">Previous page</button><button data-page-nav="Load more">Load more</button><button data-page-nav="Next page">Next page</button></div>';
+  document.getElementById('sort').value=sort;document.getElementById('category').value=category;results();
+}
+function renderDetail(){
+  const item=items[selected], unavailable=previewState==='legacy', blocked=previewState==='blocked';
+  main.innerHTML='<div class="detailhead"><button class="quiet" data-page="list">'+icon('back')+'Back to Echoes</button><div class="row" style="margin-top:16px">'+badge(item)+'<button class="quiet small" data-category="'+item.category+'">'+categories[item.category]+'</button><span class="muted small">'+item.date+'</span></div><h1>'+escapeHTML(item.name)+'</h1><p class="summary">'+item.desc+'</p>'+tags(item)+(blocked?'<div class="next"><b>Only you can see this Craft</b><p>Automated review did not approve this Craft. <button class="quiet" data-info="Contact support to appeal">Contact support to appeal</button></p></div>':'')+'</div><div class="detail-layout"><div class="detail-work"><div class="detail-preview"><div class="preview-tools"><span>Craft preview · Read-only</span><span class="small muted">Example content</span></div><div class="large-preview" id="large-preview">'+media(item)+'</div><div class="caption"><span class="muted" id="step-label">Step 3 · Current version</span><b id="step-caption">Added labels to make input, storage, and usage easier to follow.</b></div></div></div><aside class="detail-side"><div class="creator"><span class="avatar orange">'+item.author[0].toUpperCase()+'</span><div><button class="quiet" style="padding:0;height:auto;white-space:normal;text-align:left" data-author="'+escapeHTML(item.author)+'">'+escapeHTML(item.author)+'</button><p>Crafter at step 3</p></div></div><div class="actions"><button class="primary" data-echo '+(unavailable?'disabled':'')+'>'+ (unavailable?'Echo unavailable':'Echo · Continue creating')+icon('arrow')+'</button><button data-view>'+icon('open')+'View Craft</button><div class="row"><button data-share>'+icon('share')+'Share</button><button data-save="'+item.id+'" aria-pressed="'+item.saved+'">'+icon('save')+(item.saved?'Saved':'Favorites')+'</button><button data-more="'+item.id+'" aria-label="More">'+icon('more')+'</button></div></div><p class="explanation">'+(unavailable?'This earlier share has no expanded rights. Its creator can republish it to enable attributable continuation.':'Echo imports this Craft into your linked PenEcho host, preserving its source and attribution.')+'</p><div class="numbers"><div><b>3</b><span>Steps</span></div><div><b>3</b><span>Crafters</span></div><div><b>'+item.echoes+'</b><span>Branches</span></div></div>'+detailSocial(item)+'<div class="collaborators"><span class="muted small">Crafters</span><div class="row"><button class="quiet" data-step="0"><span class="avatar blue">U</span>Original author</button><button class="quiet" data-step="1"><span class="avatar">U</span>Co-creator</button></div></div><p class="explanation">This is a read-only public preview. PenEcho Cloud never runs the Canvas. <a href="https://penecho.ai/terms.html#public-crafts" target="_blank" rel="noopener noreferrer">Publication Agreement</a></p></aside></div><section class="section"><div class="section-head"><div><h2>How this idea grew</h2><p class="muted small" style="margin-top:5px">Each step keeps its source and attribution. New versions extend the work.</p></div><button id="play" data-play>'+icon('play')+'Watch this idea grow</button></div><div class="lineage">'+['The first sketch','Connected the flow','Added clear labels'].map((s,n)=>'<button class="step '+(n===step?'active':'')+'" data-step="'+n+'"><div class="step-track"><span class="dot">'+(n+1)+'</span><span class="muted small">'+(n===2?'Current version':'Aug '+(11+n)+'')+'</span></div><h3>'+s+'</h3><p>'+['UAT Author · The first stroke','UAT Builder · Input meets output','UAT Builder · Labeled the connections'][n]+'</p></button>').join('')+'</div><div class="branch-row"><span class="muted small">Other directions</span><button class="quiet" data-branch>Rain garden · water-flow map '+icon('arrow')+'</button></div><div class="next"><b>'+ (unavailable?'No expanded rights':'Your turn to take it further')+'</b><p>'+ (unavailable?'You can still view, save, and discuss this Craft.':'Add an everyday use case. Show how this diagram could help someone else.')+'</p></div></section><section class="section comments" id="comments"><div class="section-head"><h2>Comments <span class="muted" id="comment-count">'+comments.length+'</span></h2></div><div id="comment-list"></div><div class="composer"><label for="comment" class="small muted">Add a comment · paste an image from your clipboard</label><textarea id="comment" maxlength="1200" placeholder="Share your thoughts, or paste an image…"></textarea><div id="paste-preview"></div><div class="row between"><span class="muted small">Comments in this prototype stay in this preview.</span><button class="primary" data-comment-submit>Post comment</button></div></div></section>';
+  renderComments();notify();
+}
+function renderComments(){const box=document.getElementById('comment-list');if(!box)return;box.innerHTML=comments.length?comments.map(c=>'<div class="comment"><span class="avatar">H</span><div><b>heack</b><time>Just now</time><p>'+escapeHTML(c.text)+'</p>'+(c.image?'<img class="comment-image" src="'+c.image+'" alt="Comment image">':'')+'</div></div>').join(''):'<p class="muted small">No comments yet. How would you take this idea further?</p>';document.getElementById('comment-count').textContent=comments.length;}
+function render(){document.querySelectorAll('.reviewbar [data-page]').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));document.getElementById('breadcrumb').textContent=page==='detail'?'Echoes / Craft details':scope==='saved'?'Favorites':scope==='mine'?'My Crafts':'Echoes';page==='list'?renderList():renderDetail();}
+function stopPlayback(){if(playing){clearInterval(playing);playing=null;} }
+function selectStep(n){step=n;document.querySelectorAll('.step').forEach((b,i)=>b.classList.toggle('active',i===n));document.getElementById('step-label').textContent='Step '+(n+1)+''+(n===2?' · Current version':'');document.getElementById('step-caption').textContent=['Created the original sketch and its first connections.','Connected the flow between input, storage, and usage.','Added labels to make input, storage, and usage easier to follow.'][n];document.getElementById('large-preview').innerHTML=media(items[n===1?1:selected]);notify();}
+document.addEventListener('click',event=>{
+  const b=event.target.closest('button');if(!b)return;
+  if(b.hasAttribute('data-close')){dialog.close();return;}
+  if(b.dataset.page){stopPlayback();page=b.dataset.page;render();return;}
+  if(b.dataset.detail!==undefined||b.dataset.comments!==undefined){selected=Number(b.dataset.detail??b.dataset.comments);page='detail';render();if(b.dataset.comments!==undefined)document.getElementById('comments').scrollIntoView({block:'start'});return;}
+  if(b.dataset.scope){scope=b.dataset.scope;page='list';document.querySelectorAll('[data-scope]').forEach(x=>x.classList.toggle('selected',x===b));render();return;}
+  if(b.dataset.kind!==undefined){kind=b.dataset.kind;render();return;}
+  if(b.dataset.layout){layout=b.dataset.layout;render();return;}
+  if(b.dataset.tag){query=b.dataset.tag;page='list';render();return;}
+  if(b.dataset.category){category=b.dataset.category;page='list';render();return;}
+  if(b.hasAttribute('data-filter')||b.hasAttribute('data-filter-close')){filterOpen=!filterOpen;render();return;}
+  if(b.hasAttribute('data-reset')){query='';kind='';category='';sort='recommended';previewState='normal';document.getElementById('state').value='normal';render();return;}
+  if(b.dataset.heart!==undefined){const i=items[Number(b.dataset.heart)];i.hearted=!i.hearted;i.hearts+=i.hearted?1:-1;render();return;}
+  if(b.dataset.save!==undefined){const i=items[Number(b.dataset.save)];i.saved=!i.saved;i.saves+=i.saved?1:-1;render();toast(i.saved?'Added to Favorites · preview':'Removed from Favorites · preview');return;}
+  if(b.dataset.more!==undefined){showDialog('More options','<div class="row"><button data-hide="'+b.dataset.more+'">Not interested</button><button data-report>Report</button></div>');return;}
+  if(b.dataset.hide!==undefined){dialog.close();toast('The live page saves this preference and hides the Craft from recommendations.');return;}
+  if(b.hasAttribute('data-report')){showDialog('Report Craft','<p>Describe the issue so the work can be reviewed.</p><textarea aria-label="Report reason" placeholder="Describe the issue…"></textarea><div class="row" style="margin-top:12px"><button class="primary" data-report-submit>Submit report</button></div>');return;}
+  if(b.hasAttribute('data-report-submit')){dialog.close();toast('Report submission previewed. No report was sent.');return;}
+  if(b.hasAttribute('data-share')){showDialog('Share this Craft','<p>Copy a public link or linked image embed code.</p><input aria-label="Public link" readonly value="https://penecho.ai/community/example-craft"><div class="row"><button class="primary" data-copy="link">Share as link</button><button data-copy="image">Share as image</button></div><p class="small">Example link for previewing the sharing flow.</p>');return;}
+  if(b.dataset.copy){toast(b.dataset.copy==='image'?'Image embed copied · preview state':'Link copied · preview state');return;}
+  if(b.hasAttribute('data-echo')){showDialog('Echo · Continue creating','<p>On the live page, this action imports the Craft into your linked PenEcho host with its source and attribution.</p><p class="small">This is a visual prototype. No Craft has been imported.</p><button class="primary" data-close>Got it</button>');return;}
+  if(b.hasAttribute('data-view')){showDialog('View Craft · Read-only preview',media(items[selected]),true);return;}
+  if(b.hasAttribute('data-publish')){showDialog('Publish from PenEcho','<p>When your work is ready in PenEcho, use Share to publish it to Echoes.</p><button class="primary" data-info="Open PenEcho">Open PenEcho</button>');return;}
+  if(b.dataset.author){showDialog('Creator','<div class="creator"><span class="avatar">'+escapeHTML(b.dataset.author[0])+'</span><h3>'+escapeHTML(b.dataset.author)+'</h3></div><p>Browse this creator’s public work. Follow them to see new work in Following.</p><button data-follow>Follow</button>');return;}
+  if(b.hasAttribute('data-follow')){b.textContent=b.textContent==='Follow'?'Following':'Follow';return;}
+  if(b.dataset.step!==undefined){stopPlayback();selectStep(Number(b.dataset.step));return;}
+  if(b.hasAttribute('data-play')){if(playing){stopPlayback();b.innerHTML=icon('play')+'Continue playback';return;}selectStep(0);b.textContent='Pause playback';playing=setInterval(()=>{if(step===2){stopPlayback();b.innerHTML=icon('play')+'Watch again';return;}selectStep(step+1);},1500);return;}
+  if(b.hasAttribute('data-branch')){selected=1;page='detail';render();return;}
+  if(b.hasAttribute('data-comment-submit')){const field=document.getElementById('comment');if(!field.value.trim()&&!commentImage){field.focus();return;}comments.push({text:field.value.trim(),image:commentImage});commentImage=null;field.value='';document.getElementById('paste-preview').innerHTML='';renderComments();notify();return;}
+  if(b.hasAttribute('data-remove-image')){commentImage=null;document.getElementById('paste-preview').innerHTML='';return;}
+  if(b.dataset.pageNav){toast('This preview has 6 Crafts. The live page keeps: '+b.dataset.pageNav+'。');return;}
+  if(b.dataset.info){toast(b.dataset.info+' is retained in the live app. This is an Echoes visual preview.');}
+});
+document.addEventListener('input',event=>{if(event.target.id==='search'){query=event.target.value;results();}});
+document.addEventListener('change',event=>{
+  const e=event.target;
+  if(e.id==='sort'){sort=e.value;results();}
+  if(e.id==='category'){category=e.value;results();}
+  if(e.id==='state'){previewState=e.value;render();}
+  if(e.id==='context'){document.body.classList.toggle('public-mode',e.value==='public');notify();}
+  if(e.id==='period'){document.getElementById('period-note').textContent=e.value+' · Sample data';}
+});
+document.addEventListener('paste',event=>{
+  if(event.target.id!=='comment')return;
+  const file=Array.from(event.clipboardData?.files||[]).find(f=>f.type.startsWith('image/'));
+  if(!file)return;event.preventDefault();
+  const reader=new FileReader();reader.onload=()=>{commentImage=reader.result;document.getElementById('paste-preview').innerHTML='<img class="comment-image" alt="Image ready to post" src="'+commentImage+'"><button class="quiet" data-remove-image>Remove image</button>';notify();};reader.readAsDataURL(file);
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlayback();});
+document.querySelectorAll('[data-icon]').forEach(e=>e.insertAdjacentHTML('afterbegin',icon(e.dataset.icon)));
+render();
+</script>
+</body>
+</html>

@@ -45,7 +45,7 @@ const require = createRequire(import.meta.url)
 const { commandFromWidgetPatch } = require('../widget-patch.js')
 let packagedRipgrepPath = ''
 const PLUGIN_FORMAT = require('../../../public/plugins.js')
-const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping } = require('../../providers/reasoning-effort.js')
+const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping, isGlm53Model } = require('../../providers/reasoning-effort.js')
 const { projectFileReader, validateProjectFileContent } = require('./project-store.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 const turnLimit = require('./turn-limit.js')
@@ -164,7 +164,8 @@ async function mountRuntimePlugin(ctx, id, plugin, config) {
   return config === undefined ? ctx.plugin(plugin) : ctx.plugin(plugin, config)
 }
 
-const PERSONA = `You are PenEcho Agent inside a visual canvas.
+export const PERSONA = `You are PenEcho Agent inside a visual canvas.
+Reason to the depth the task warrants, preserving accuracy, completeness, and necessary verification. Avoid repetitive reasoning that adds no new information. Aim to keep internal reasoning within about 20,000 tokens per response, and use much less for simpler tasks; this is a soft upper bound, not a quota to fill.
 Canvas is authoritative; file reads and captures return current state, never history. After source conflicts, read the changed file.
 initialCanvasState is authoritative. If empty:true: skip initial inspection/capture; use automatic placement. Otherwise reuse its overview and read only the relevant source or geometry.
 Use visible tools and report verified results.
@@ -179,8 +180,8 @@ Follow requests; otherwise extend the current Canvas and PenEcho visual language
 Do not claim visible or pixel-verified success without the corresponding tool receipt or image.
 ${CANVAS_DECISION_PROTOCOL_SUMMARY}
 Fence source code/verbatim transcription with its language; use text for prose or handwriting.
-Public progress: before substantial tool work and after a meaningful finding or change of approach, send one task-specific line starting Progress: (Chinese: 进展：), max 160 characters; then continue. Skip quick answers, routine calls and repeated waiting notices. JSON CLI: use its progress field. Never expose hidden reasoning, paths, IDs, arguments, or unverified results.
-After tools finish, report briefly.`
+Public progress: use at most one short task-specific sentence before substantial work, starting Progress: (Chinese: 进展：), max 80 characters. Add another only for a blocker or material change of approach. Skip greetings, plan recaps, routine calls, and repeated waiting notices. JSON CLI: use its progress field. Never expose hidden reasoning, paths, IDs, arguments, or unverified results.
+After tools finish, give the outcome in one or two short sentences. Do not repeat content already delivered on Canvas. Expand only when the user requests explanation or when essential limitations or next actions need it.`
 
 function token(length = 32) {
   return randomBytes(length).toString('base64url')
@@ -2009,7 +2010,7 @@ function apiHarnessReasoning(connection) {
   if (connection.apiFormat !== 'anthropic') {
     let hostname = ''
     try { hostname = new URL(connection.apiUrl).hostname.toLowerCase().replace(/\.$/, '') } catch {}
-    if (hostname === 'api.deepseek.com') compat = { ...compat, maxTokensField:'max_tokens' }
+    if (hostname === 'api.deepseek.com' || isGlm53Model(model)) compat = { ...compat, maxTokensField:'max_tokens' }
   }
   return { reasoningEffort, reasoningEfforts, ...(compat ? { compat } : {}) }
 }
@@ -2041,7 +2042,12 @@ export function connectionProfile(connection, configuredTimeoutMs) {
       displayName:connection.name || `PenEcho ${model}`,
       api:connection.apiFormat === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
       baseURL:providerBaseURL(connection),
-      ...(connection.hosted === true && connection.apiFormat === 'anthropic' && connection.apiKey ? { headers:{ Authorization:`Bearer ${connection.apiKey}` } } : {}),
+      ...(connection.hosted === true ? {
+        headers:{ 'x-penecho-request-kind':'agent', ...(connection.apiFormat === 'anthropic' && connection.apiKey ? { Authorization:`Bearer ${connection.apiKey}` } : {}) },
+        // An inactivity deadline ends this request. Repeating it five times
+        // hides the failure for 18 minutes; keep transient-error recovery only.
+        retryPolicy:{mode:'normal',maxRetries:5,retryableCodes:['EMPTY_RESPONSE','RATE_LIMIT','SERVER','TRANSPORT']},
+      } : {}),
       streamIdleTimeoutMs:idleTimeoutMs,
       defaultInput:['text', 'image'],
       defaultContextWindow:CANVAS_AGENT_CONTEXT_WINDOW,

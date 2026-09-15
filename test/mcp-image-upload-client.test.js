@@ -53,3 +53,18 @@ test('definite HTTP rejection keeps safe actionable reason without server messag
  }
  assert.equal(requests,9);
 });
+
+test('pre-aborted upload is handled without a global unhandled rejection',async t=>{
+ const {options}=fixture(t),controller=new AbortController();controller.abort();
+ await assert.rejects(uploadImage({...options,signal:controller.signal}),{code:'request_cancelled',outcome:'not_dispatched'});
+ // node:test also fails the test if a detached rejection appears on this turn.
+ await new Promise(resolve=>setImmediate(resolve));
+});
+test('file opened after timeout is closed without proceeding to discovery',async t=>{
+ const {options}=fixture(t);let finishOpen,closed=0,statCalls=0,discoveries=0;
+ t.mock.method(fs.promises,'open',()=>new Promise(resolve=>{finishOpen=resolve;}));
+ await assert.rejects(uploadImage({...options,timeoutMs:10,loadCredentials:()=>{discoveries++;}}),{code:'UPLOAD_TIMEOUT',outcome:'not_dispatched'});
+ finishOpen({close:async()=>{closed++;},stat:async()=>{statCalls++;return {isFile:()=>true,size:1};}});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(closed,1);assert.equal(statCalls,0);assert.equal(discoveries,0);
+});

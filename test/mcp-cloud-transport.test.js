@@ -10,7 +10,7 @@ class Socket extends EventTarget {
   receive(message){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(message)}));}
   close(code=1000,reason=''){this.readyState=3;const event=new Event('close');Object.defineProperties(event,{code:{value:code},reason:{value:reason}});this.dispatchEvent(event);}
 }
-function setup(runtime='cloud',fetch){Socket.instances=[];const window=new EventTarget(),timers=new Map();window.PENECHO_CONFIG={runtime};let sequence=0;vm.runInNewContext(fs.readFileSync(require.resolve('../public/mcp-cloud-transport.js'),'utf8'),{window,fetch,sessionStorage:{getItem:()=>null},location:{protocol:'https:',host:'penecho.test'},WebSocket:Socket,EventTarget,Event,MessageEvent,setTimeout:(fn,ms)=>{timers.set(++sequence,{fn,ms});return sequence;},clearTimeout:id=>timers.delete(id)});return {window,timers};}
+function setup(runtime='cloud',fetch){Socket.instances=[];const window=new EventTarget(),timers=new Map();window.PENECHO_CONFIG={runtime};let sequence=0;vm.runInNewContext(fs.readFileSync(require.resolve('../public/mcp-cloud-transport.js'),'utf8'),{window,fetch,sessionStorage:{getItem:()=>null},location:{protocol:'https:',host:'penecho.test'},WebSocket:Socket,EventTarget,Event,MessageEvent,AbortController,setTimeout:(fn,ms)=>{timers.set(++sequence,{fn,ms});return sequence;},clearTimeout:id=>timers.delete(id)});return {window,timers};}
 test('one opted-in Canvas routes direct cloud and device calls separately, including colliding request IDs',()=>{
   const {window}=setup();window.PENECHO_REMOTE_CLOUD_STATUS={deviceId:'8c8d3342-8258-470e-8ca1-61b732222024'};
   const facade=new window.PenEchoCloudMcpSocket(),cloud=Socket.instances[0],received=[];facade.addEventListener('message',event=>received.push(JSON.parse(event.data)));
@@ -114,4 +114,64 @@ test('document catalog updates go only to channels that advertise support and re
   assert.equal(cloud.sent.filter(message=>message.type==='catalog').length,2);
   assert.equal(device.sent.filter(message=>message.type==='catalog').length,1);
   facade.close();
+});
+
+function fireTimer(timers,ms){const item=[...timers].find(([,entry])=>ms===undefined||entry.ms===ms);assert.ok(item,'expected timer');timers.delete(item[0]);item[1].fn();}
+test('timed-out status fetch retains single-flight capacity, aborts and ignores late state',async()=>{
+ let calls=0,resolveFetch,signal,updates=0;
+ const {window,timers}=setup('local',(_url,options)=>{calls++;signal=options.signal;return new Promise(resolve=>{resolveFetch=resolve;});});
+ window.PenEchoMcpSettings={setDeviceStatus:()=>updates++};
+ const facade=new window.PenEchoCloudMcpSocket();Socket.instances[0].open();
+ fireTimer(timers,5000);await new Promise(setImmediate);assert.equal(signal.aborted,true);
+ for(let i=0;i<5;i++){window.dispatchEvent(new Event('penecho:cloud-account-changed'));await facade.connectDevice();}
+ fireTimer(timers);await new Promise(setImmediate);assert.equal(calls,1);
+ resolveFetch({ok:true,json:async()=>({cloudMcpEnabled:true})});await new Promise(setImmediate);
+ assert.equal(updates,0);assert.equal(Socket.instances.length,1);
+ fireTimer(timers);assert.equal(calls,2);
+ resolveFetch({ok:true,json:async()=>({cloudMcpEnabled:true})});await new Promise(setImmediate);
+ // Coalesced account-change notifications may cause one fresh follow-up lookup.
+ if(facade.checking){resolveFetch({ok:true,json:async()=>({cloudMcpEnabled:true})});await new Promise(setImmediate);}
+ assert.equal(Socket.instances.length,2);facade.close();assert.equal(timers.size,0);
+});
+test('closing a status body read aborts transport and prevents late settings/socket changes',async()=>{
+ let finishBody,signal,updates=0;
+ const {window,timers}=setup('local',async(_url,options)=>{signal=options.signal;return {ok:true,json:()=>new Promise(resolve=>{finishBody=resolve;})};});
+ window.PenEchoMcpSettings={setDeviceStatus:()=>updates++};
+ const facade=new window.PenEchoCloudMcpSocket();Socket.instances[0].open();await new Promise(setImmediate);
+ facade.close();assert.equal(signal.aborted,true);assert.equal(timers.size,0);
+ finishBody({cloudMcpEnabled:true});await new Promise(setImmediate);
+ assert.equal(updates,0);assert.equal(Socket.instances.length,1);assert.equal(timers.size,0);
+});
+test('socket establishment deadlines close stalled primary and recover a stalled device',()=>{
+ let environment=setup(),facade=new environment.window.PenEchoCloudMcpSocket(),closed;
+ facade.addEventListener('close',event=>{closed=event;});fireTimer(environment.timers,10000);
+ assert.equal(facade.readyState,3);assert.equal(closed.code,4000);assert.equal(environment.timers.size,0);
+ environment=setup();environment.window.PENECHO_REMOTE_CLOUD_STATUS={deviceId:'8c8d3342-8258-470e-8ca1-61b732222024'};
+ facade=new environment.window.PenEchoCloudMcpSocket();Socket.instances[0].open();const stale=Socket.instances[1];
+ fireTimer(environment.timers,10000);assert.equal(stale.readyState,3);assert.equal(facade.device,null);
+ fireTimer(environment.timers);const fresh=Socket.instances[2];fresh.open();fresh.receive({type:'ready'});
+ stale.open();stale.receive({type:'ready'});assert.equal(facade.device,fresh);assert.equal(facade.availability.local,true);
+ assert.equal(environment.timers.size,0);facade.close();
+});
+test('duplicate active route IDs do not overwrite or redispatch the original work',()=>{
+ const {window}=setup(),facade=new window.PenEchoCloudMcpSocket(),socket=Socket.instances[0],received=[];
+ facade.addEventListener('message',event=>received.push(JSON.parse(event.data)));socket.open();
+ socket.receive({type:'call',requestId:'same',arguments:{}});const original=facade.routes.get('cloud:same');
+ socket.receive({type:'call',requestId:'same',arguments:{different:true}});
+ assert.equal(received.length,1);assert.equal(facade.routes.get('cloud:same'),original);assert.equal(socket.sent.at(-1).error.code,'REQUEST_ID_CONFLICT');
+ facade.send(JSON.stringify({type:'result',requestId:'cloud:same',ok:true,result:{original:true}}));
+ assert.equal(socket.sent.at(-1).result.original,true);facade.close();
+});
+test('device session metadata is bounded and disposal frees capacity',()=>{
+ const {window}=setup();window.PENECHO_REMOTE_CLOUD_STATUS={deviceId:'8c8d3342-8258-470e-8ca1-61b732222024'};
+ const facade=new window.PenEchoCloudMcpSocket();Socket.instances[0].open();const device=Socket.instances[1];device.open();
+ for(let i=0;i<256;i++)assert.equal(facade.rememberDeviceSession('session-'+i),true);
+ device.receive({type:'dispose-session',sessionId:'session-0'});assert.equal(facade.deviceSessions.size,255);
+ assert.equal(facade.rememberDeviceSession('another'),true);
+ assert.equal(facade.rememberDeviceSession('overflow'),false);assert.equal(device.readyState,3);assert.equal(facade.deviceSessions.size,0);facade.close();
+});
+test('primary overload close code 1013 passes through unchanged',()=>{
+ const {window}=setup(),facade=new window.PenEchoCloudMcpSocket();let closed;
+ facade.addEventListener('close',event=>{closed=event;});Socket.instances[0].close(1013,'Busy');
+ assert.equal(closed.code,1013);assert.equal(closed.reason,'Busy');
 });

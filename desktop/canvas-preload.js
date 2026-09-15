@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld("penechoDesktop", Object.freeze({
   readClipboardFile:() => ipcRenderer.invoke("penecho:read-clipboard-file"),
   readClipboardFiles:() => ipcRenderer.invoke("penecho:read-clipboard-files"),
   openProjectFile:projectId => ipcRenderer.invoke("penecho:open-project-file", projectId),
+  setMcpKeepAwake:enabled => ipcRenderer.invoke("penecho:mcp-keep-awake", enabled === true),
   setPageScale:scale => ipcRenderer.invoke("penecho:set-page-scale", scale),
 }));
 

@@ -95,7 +95,7 @@ function normalToolResult(value) {
 
 
 class PenEchoStdioServer {
-  constructor({ input = process.stdin, output = process.stdout, record, stateDirectory, registryStateDirectory, instanceId } = {}) {
+  constructor({ input = process.stdin, output = process.stdout, record, stateDirectory, registryStateDirectory, instanceId, maxRequests = 32 } = {}) {
     this.input = input;
     this.output = output;
     this.fixedRecord = record || null;
@@ -105,6 +105,8 @@ class PenEchoStdioServer {
     this.ownerId = crypto.randomUUID();
     this.sessions = new Map();
     this.pending = new Map();
+    this.executing = new Set();
+    this.maxRequests = Number.isSafeInteger(maxRequests) && maxRequests > 0 ? maxRequests : 32;
     this.buffer = Buffer.alloc(0);
     this.initialized = false;
     this.closed = false;
@@ -220,7 +222,9 @@ class PenEchoStdioServer {
       if (typeof name !== "string" || !args || typeof args !== "object" || Array.isArray(args)) return this.send({ jsonrpc:"2.0", id, error:{ code:-32602, message:"Invalid params" } });
       const controller = new AbortController(), key = responseKey(id);
       if (this.pending.has(key)) return this.send({ jsonrpc:"2.0", id, error:{ code:-32600, message:"Request ID already active" } });
+      if (this.executing.size >= this.maxRequests) return this.send({ jsonrpc:"2.0", id, error:{ code:-32000, message:"PenEcho MCP is busy. Retry after pending work finishes." } });
       this.pending.set(key, controller);
+      this.executing.add(controller);
       try {
         if (name === "penecho_get_guidance") {
           const { id:guidanceId } = validateToolArguments(name, args);
@@ -238,7 +242,7 @@ class PenEchoStdioServer {
         if (this.pending.get(key) !== controller) return;
         const failure = {code:String(error?.code || "mcp_bridge_error").slice(0,80),message:String(error?.message || "PenEcho MCP request failed.").slice(0,1_000),...(error?.details === undefined ? {} : {details:error.details})};
         this.send({ jsonrpc:"2.0", id, result:{ content:[{ type:"text", text:JSON.stringify(failure) }], structuredContent:failure, isError:true } });
-      } finally { if (this.pending.get(key) === controller) this.pending.delete(key); }
+      } finally { this.executing.delete(controller); if (this.pending.get(key) === controller) this.pending.delete(key); }
     } catch (error) {
       this.send({ jsonrpc:"2.0", id, error:{ code:-32603, message:String(error?.message || "Internal error").slice(0, 500) } });
     }
@@ -250,7 +254,7 @@ class PenEchoStdioServer {
     this.input.off("data", this.onData);
     this.input.off("end", this.onEnd);
     this.input.off("error", this.onEnd);
-    for (const controller of this.pending.values()) controller.abort();
+    for (const controller of this.executing) controller.abort();
     this.pending.clear();
   }
 }

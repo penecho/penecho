@@ -17,7 +17,7 @@
 <h1 align="center">Ein räumlicher Arbeitsbereich,<br>um mit KI zu denken.</h1>
 <p align="center">Zeichnen, erkunden und entwickeln Sie mit dem integrierten Agenten oder Ihrem eigenen MCP-kompatiblen Assistenten.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="Version 1.3.1">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -58,8 +58,8 @@ Sprechen Sie weiter mit **Codex, Claude, Kimi oder anderen KI-Agenten**. PenEcho
 | Arbeiten Sie mit dem KI-Agenten, den Sie bereits verwenden. | Der MCP-Server von PenEcho bringt Diagramme, Dokumente und interaktive Vorschauen auf den Canvas. | Probieren Sie das Ergebnis aus, kommentieren Sie es und lassen Sie Ihren Agenten das Feedback für die nächste Überarbeitung lesen. |
 
 <p align="center">
-  <a href="../assets/mcp-spatial-example.png">
-    <img src="../assets/mcp-spatial-example.png" alt="Eine Architekturdiskussion mit KI und handschriftlichem Feedback neben dem vorgeschlagenen Entwurf auf einem PenEcho Canvas" width="760">
+  <a href="../assets/mcp-spatial-example.webp">
+    <img src="../assets/mcp-spatial-example.webp" alt="Eine Architekturdiskussion mit KI und handschriftlichem Feedback neben dem vorgeschlagenen Entwurf auf einem PenEcho Canvas" width="760">
   </a>
 </p>
 <p align="center"><em>Eine Architekturdiskussion mit handschriftlichen Anmerkungen auf dem Canvas.</em></p>

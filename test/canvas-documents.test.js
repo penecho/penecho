@@ -1481,6 +1481,154 @@ test('raw upload refuses an active-document switch during decoding before saving
   assert.equal(closed,1);assert.equal(doc.receipts.size,0);assert.equal(h.state.currentSnapshotPreservedAssets?.length||0,0);
 });
 
+function cancellableMcp(h) {
+  const socket={readyState:1};h.mcpRuntime.socket=socket;h.mcpRuntime.generation=1;
+  h.context.canvasAgentAssertToolExecution=execution=>{if(execution?.kind==='mcp'&&!h.context.mcpExecutionCurrent(execution))throw Object.assign(Error('cancelled'),{code:'REQUEST_CANCELLED'});};
+  return {kind:'mcp',socket,generation:1,controller:new AbortController()};
+}
+const nextTask=()=>new Promise(resolve=>setImmediate(resolve));
+test('cancelled session readiness cannot register a late session or durable binding',async()=>{
+  const h=harness();await h.canvasDocumentsReady();const execution=cancellableMcp(h);let resume;
+  h.context.canvasDocumentsReady=()=>new Promise(resolve=>{resume=resolve;});
+  const pending=h.canvasDocumentsExecute('mcp_start_session',{sessionId:'cancelled',sessionKey:'cancelled-key',target:'current',client:'Codex'},execution);
+  const rejected=assert.rejects(pending,{code:'REQUEST_CANCELLED'});await nextTask();execution.controller.abort();await rejected;
+  resume();await nextTask();assert.equal(h.mcpRuntime.sessions.size,0);assert.equal(h.canvasDocumentsCurrent().bindings.length,0);
+});
+test('cancelled document hash cannot add a late canvas or persist its identity',async()=>{
+  const h=harness();await h.canvasDocumentsReady();const execution=cancellableMcp(h);let resume;
+  h.context.canvasAgentHash=()=>new Promise(resolve=>{resume=resolve;});
+  const before=h.canvasDocuments.records.size,writes=h.control.persistWrites;
+  const pending=h.canvasDocumentsExecute('mcp_open_canvas',{create:true,requestId:'late',title:'Late'},execution);
+  const rejected=assert.rejects(pending,{code:'REQUEST_CANCELLED'});await nextTask();execution.controller.abort();await rejected;
+  resume('late');await nextTask();assert.equal(h.canvasDocuments.records.size,before);assert.equal(h.control.persistWrites,writes);
+});
+test('cancelled MCP text preparation releases switch ownership and never swaps visible state',async()=>{
+  const h=harness();await h.canvasDocumentsReady();const opened=await createHidden(h,'target','Target'),execution=cancellableMcp(h);let resume;
+  const before={id:h.canvasDocuments.activeId,title:h.state.currentSnapshotName,text:h.state.textBoxes};
+  h.context.mcpPrepareTextBoxes=()=>new Promise(resolve=>{resume=resolve;});h.context.releaseTextRaster=()=>{};
+  const pending=h.context.canvasDocumentsShow(opened.documentId,execution),rejected=assert.rejects(pending,{code:'REQUEST_CANCELLED'});
+  await nextTask();assert.equal(h.canvasDocuments.switching,true);execution.controller.abort();await rejected;
+  assert.equal(h.canvasDocuments.switching,false);assert.equal(h.canvasDocuments.activeId,before.id);
+  resume([]);await nextTask();assert.equal(h.state.currentSnapshotName,before.title);assert.equal(h.state.textBoxes,before.text);
+  const next=cancellableMcp(h);await h.canvasDocumentsExecute('mcp_start_session',{sessionId:'next',sessionKey:'next',target:'current',client:'Codex'},next);
+  assert.equal(h.mcpRuntime.sessions.has('next'),true);
+});
+test('duplicate in-flight mutation receipts execute once and retain a successful result',async()=>{
+  const h=harness();let calls=0,resume;const store=new Map();const work=()=>{calls++;return new Promise(resolve=>{resume=resolve;});};
+  const first=h.context.canvasDocumentsOnce(store,'same',{value:1},work),second=h.context.canvasDocumentsOnce(store,'same',{value:1},work);
+  await nextTask();assert.equal(calls,1);resume({applied:true});assert.deepEqual(await first,await second);
+});
+
+const renameArgs=(documentId,title,requestId='rename-test')=>({instanceId:'instance',canvasId:'bridge',documentId,title,requestId});
+test('MCP rename updates active metadata and catalog without saving content, moving view or resetting Agent',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();
+ h.state.currentCanvasSuggestedName='Suggestion';h.state.drawing=true;h.state.history.push({stroke:1});
+ h.context.canvasAgent.running=true;const before=JSON.stringify({revision:h.state.userRevision,history:h.state.history,scale:h.state.scale,panX:h.state.panX,panY:h.state.panY});
+ h.context.finalizeCanvasForSnapshot=()=>{throw Error('rename must not finalize drawing');};
+ h.context.canvasAgentCanvasDidPersist=()=>{throw Error('rename must not reset Agent');};
+ const result=await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'  Release plan  '),cancellableMcp(h));
+ assert.equal(result.title,'Release plan');assert.equal(result.active,true);assert.equal(result.applied,true);assert.equal(result.saved,false);
+ assert.equal(h.state.currentSnapshotName,'Release plan');assert.equal(h.state.currentCanvasSuggestedName,'');assert.equal(h.state.currentSnapshotHasExplicitName,true);
+ assert.equal(JSON.stringify({revision:h.state.userRevision,history:h.state.history,scale:h.state.scale,panX:h.state.panX,panY:h.state.panY}),before);
+ assert.equal(h.mcpRuntime.sessions.size,0);assert.equal(h.records.get(doc.id).metadata.title,'Release plan');
+ assert.equal(h.context.canvasDocumentsCatalog().find(d=>d.documentId===doc.id).title,'Release plan');assert.equal(h.control.frames,0);
+});
+test('MCP rename persists hidden document metadata and retains bindings, objects and active canvas',async()=>{
+ const h=harness();const hidden=await createHidden(h,'hidden-rename','Before');await startHidden(h,hidden.documentId,'bound');
+ const doc=h.canvasDocuments.records.get(hidden.documentId);doc.stored.item.widgets.push({id:'existing',html:'<b>keep</b>'});
+ const active=h.canvasDocuments.activeId,bindings=JSON.stringify(doc.bindings),revision=doc.revision;
+ await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'后台画布'),cancellableMcp(h));
+ assert.equal(h.canvasDocuments.activeId,active);assert.equal(h.state.currentSnapshotName,'Visible');assert.equal(doc.title,'后台画布');assert.equal(doc.revision,revision);assert.equal(JSON.stringify(doc.bindings),bindings);
+ assert.equal(doc.stored.item.name,'后台画布');assert.equal(doc.stored.item.widgets[0].html,'<b>keep</b>');
+ const second=harness({records:h.records});await second.canvasDocumentsReady();assert.equal(second.canvasDocuments.records.get(doc.id).title,'后台画布');
+});
+test('MCP rename idempotency cannot overwrite a later rename and conflicts on different arguments',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent(),first=renameArgs(doc.id,'First');
+ await h.canvasDocumentsExecute('mcp_rename_canvas',first,cancellableMcp(h));
+ await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Second','rename-second'),cancellableMcp(h));const writes=h.control.persistWrites;
+ assert.equal((await h.canvasDocumentsExecute('mcp_rename_canvas',first,cancellableMcp(h))).title,'First');assert.equal(doc.title,'Second');assert.equal(h.control.persistWrites,writes);
+ await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',{...first,title:'Wrong'},cancellableMcp(h)),{code:'REQUEST_ID_CONFLICT'});
+});
+test('MCP rename rejects invalid titles and missing documents without creating one',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();
+ for(const title of ['', '   ', 'x'.repeat(49), 'bad\nname', 42])await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,title,String(title)),cancellableMcp(h)),{code:'INVALID_ARGUMENTS'});
+ const size=h.canvasDocuments.records.size;await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs('absent','Valid','missing-rename'),cancellableMcp(h)),{code:'DOCUMENT_NOT_FOUND'});
+ assert.equal(h.canvasDocuments.records.size,size);assert.equal(doc.title,'Visible');
+});
+for(const location of ['server','cloud'])test(`MCP rename updates ${location} saved name via metadata PATCH without a full save`,async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location,id:'saved/id'};let request;
+ h.context.fetch=async(url,options)=>{request={url,options};return {ok:true,json:async()=>({ok:true})};};h.context.snapshotApiResponse=response=>response.json();
+ const result=await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Saved name'),cancellableMcp(h));
+ assert.equal(result.saved,true);assert.equal(request.url,`${location==='cloud'?'/api/cloud/canvases/':'/api/canvases/'}saved%2Fid`);assert.equal(request.options.method,'PATCH');assert.deepEqual(JSON.parse(request.options.body),{name:'Saved name'});
+ assert.equal(request.options.signal.aborted,false);assert.equal(doc.title,'Saved name');
+});
+test('MCP device rename retains saved bytes and identity',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location:'device',id:'saved'};
+ const saved=new Map([['saved',{id:'saved',name:'Before',widgets:[{id:'w',html:'keep'}],bundleExtensions:{penechoDocument:{documentId:doc.id}},createdAt:4}]]);
+ h.context.snapshotDb=async()=>memoryDb(saved,{persistFailures:0,persistWrites:0});h.context.SNAPSHOT_STORE='snapshots';
+ const result=await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'After'),cancellableMcp(h));
+ assert.equal(result.saved,true);assert.equal(saved.get('saved').name,'After');assert.equal(saved.get('saved').widgets[0].html,'keep');assert.equal(saved.get('saved').bundleExtensions.penechoDocument.documentId,doc.id);assert.equal(saved.get('saved').createdAt,4);
+});
+test('MCP rename storage failure leaves the visible name and catalog unchanged',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();h.control.persistFailures=1;
+ await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Fail'),cancellableMcp(h)),/simulated persistence failure/);
+ assert.equal(doc.title,'Visible');assert.equal(h.state.currentSnapshotName,'Visible');
+ await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Retry','retry'),cancellableMcp(h));assert.equal(doc.title,'Retry');
+});
+test('MCP rename reports partial saved-name success if workspace persistence fails',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location:'cloud',id:'saved'};
+ h.context.fetch=async()=>({ok:true});h.context.snapshotApiResponse=async()=>({});h.control.persistFailures=1;
+ await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Remote name'),cancellableMcp(h)),e=>e.details.savedNameUpdated===true);
+ assert.equal(doc.title,'Visible');
+});
+test('cancelled rename readiness cannot update the name after the old operation resumes',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent(),execution=cancellableMcp(h);let resume;
+ h.context.canvasDocumentsReady=()=>new Promise(resolve=>{resume=resolve;});
+ const pending=h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Late'),execution),rejected=assert.rejects(pending,{code:'REQUEST_CANCELLED'});
+ await nextTask();execution.controller.abort();await rejected;resume();await nextTask();assert.equal(doc.title,'Visible');assert.equal(h.control.persistWrites,0);
+});
+test('cancelled MCP rename releases waiting but retains and fences an uncooperative fetch',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location:'cloud',id:'saved'};const execution=cancellableMcp(h);let resume,signal,bodies=0;
+ h.context.fetch=(_url,options)=>{signal=options.signal;return new Promise(resolve=>{resume=resolve;});};h.context.snapshotApiResponse=async()=>{bodies++;};
+ const pending=h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Late'),execution),rejected=assert.rejects(pending,{code:'REQUEST_CANCELLED'});
+ await nextTask();execution.controller.abort();await rejected;assert.equal(signal.aborted,true);assert.equal(doc.title,'Visible');assert.ok(h.canvasDocuments.pendingPreparations.size>0);
+ resume({ok:true});await nextTask();assert.equal(doc.title,'Visible');assert.equal(bodies,0);assert.equal(h.canvasDocuments.pendingPreparations.size,0);
+});
+test('MCP rename bounds response-body stalls and the next rename remains usable',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location:'cloud',id:'saved'};let resume;
+ h.context.setTimeout=(fn,ms)=>setTimeout(fn,ms===10000?20:ms);h.context.fetch=async()=>({ok:true});h.context.snapshotApiResponse=()=>new Promise(resolve=>{resume=resolve;});
+ await assert.rejects(h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Timeout'),cancellableMcp(h)),{code:'STORAGE_TIMEOUT'});
+ resume();await nextTask();assert.equal(doc.title,'Visible');h.context.snapshotApiResponse=async()=>({});
+ await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Recovered','recovered'),cancellableMcp(h));assert.equal(doc.title,'Recovered');
+});
+test('MCP rename does not overwrite a newer manual name after an asynchronous saved-name update',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();doc.locator={location:'cloud',id:'saved'};let resume;
+ h.context.fetch=()=>new Promise(resolve=>{resume=resolve;});h.context.snapshotApiResponse=async()=>({});
+ const pending=h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Old request'),cancellableMcp(h));
+ await nextTask();doc.title='Manual name';h.state.currentSnapshotName='Manual name';resume({ok:true});
+ await assert.rejects(pending,e=>e.code==='CANVAS_CHANGED'&&e.details.savedNameUpdated===true);assert.equal(doc.title,'Manual name');
+});
+
+
+test('MCP saved metadata rename remains authoritative after exact locator reopen',async()=>{
+ const h=harness();const opened=await createHidden(h,'rename-reopen','Before'),doc=h.canvasDocuments.records.get(opened.documentId);
+ doc.locator={location:'device',id:'saved'};
+ const saved=new Map([['saved',{id:'saved',name:'Before',widgets:[],images:[],textBoxes:[],animations:[],bundleExtensions:{penechoDocument:{version:1,documentId:doc.id,title:'Before'}}}]]);
+ h.context.snapshotDb=async()=>memoryDb(saved,{persistFailures:0,persistWrites:0});h.context.SNAPSHOT_STORE='snapshots';
+ h.context.readSnapshot=async(_location,id)=>({item:saved.get(id),tileEntries:[]});
+ await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'After'),cancellableMcp(h));
+ h.canvasDocuments.records.delete(doc.id);
+ const reopened=await h.canvasDocumentsExecute('mcp_open_canvas',{documentId:doc.id,locator:doc.locator,requestId:'reopen-renamed',show:false},cancellableMcp(h));
+ assert.equal(reopened.documentId,doc.id);assert.equal(reopened.title,'After');assert.equal(saved.get('saved').bundleExtensions.penechoDocument.title,'Before','renaming does not rewrite saved content');
+});
+test('MCP rename checks durable-write validity after database wait and preserves newer manual metadata',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent(),db=h.canvasDocuments.db;let calls=0,resume;
+ h.context.canvasDocumentsDb=async()=>{if(calls++===0)await new Promise(resolve=>{resume=resolve;});return db;};
+ const pending=h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Stale MCP'),cancellableMcp(h));
+ await nextTask();doc.title='Manual newer';h.state.currentSnapshotName='Manual newer';
+ await h.context.canvasDocumentsPersist(doc);resume();await assert.rejects(pending,{code:'CANVAS_CHANGED'});
+ assert.equal(doc.title,'Manual newer');assert.equal(h.records.get(doc.id).metadata.title,'Manual newer');
+});
 
 test("active external output remains unseen through automatic show and receipt replay", async () => {
   const h=harness(),opened=await createHidden(h,"active-unseen","Active unread");

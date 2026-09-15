@@ -8,11 +8,25 @@ const {
   normalizeReasoningEffort,
   reasoningEffortTimeoutMultiplier,
   reasoningEffortMapping,
+  isGlm53Model,
 } = require("../src/providers/reasoning-effort.js");
 
 test("all new reasoning configurations default to medium", () => {
   assert.equal(normalizeReasoningEffort(""), "medium");
   assert.equal(normalizeReasoningEffort("medium"), "medium");
+});
+
+test("GLM-5.3 native levels never turn a light request into maximum or disabled thinking", () => {
+  const expected = { none:"low", minimal:"low", low:"low", medium:"high", high:"high", xhigh:"max", max:"max" };
+  for (const model of ["glm-5.3", "glm-5.3-flash", "z-ai/GLM-5.3-Flash"]) {
+    for (const [effort, native] of Object.entries(expected)) {
+      assert.equal(reasoningEffortMapping({model,effort}).canDisable,false);
+      assert.deepEqual(apiReasoningParameters({model,effort}),{reasoning_effort:native});
+      assert.deepEqual(apiReasoningParameters({model,effort,apiFormat:"anthropic"}),{thinking:{type:"adaptive"},output_config:{effort:native}});
+    }
+  }
+  for (const model of ["glm-5.2", "glm-5.30", "custom-glm-5.3", "opaque-hosted-id"]) assert.equal(isGlm53Model(model),false);
+  assert.equal(reasoningEffortMapping({model:"glm-5.3",effort:"Provider_Native"}).value,"Provider_Native");
 });
 
 test("custom reasoning values preserve their exact spelling", () => {

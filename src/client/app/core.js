@@ -3749,23 +3749,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (diagramRuntimePromise) return diagramRuntimePromise;
     diagramRuntimePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      let settled=false;
-      const finish=(error,runtime)=>{
-        if(settled)return;
-        settled=true;
-        clearTimeout(timer);
-        script.onload=script.onerror=null;
-        if(error){script.remove?.();reject(error);}else resolve(runtime);
-      };
-      const timer=setTimeout(()=>finish(Error("Professional diagram runtime load timed out")),10_000);
       script.src = "plugins/flowchart/runtime.js";
       script.async = true;
       script.onload = () => {
         const runtime = diagramRuntime();
-        if (runtime) finish(null,runtime);
-        else finish(Error("Professional diagram runtime did not initialize"));
+        if (runtime) resolve(runtime);
+        else reject(Error("Professional diagram runtime did not initialize"));
       };
-      script.onerror = () => finish(Error("Professional diagram runtime could not be loaded"));
+      script.onerror = () => reject(Error("Professional diagram runtime could not be loaded"));
       document.head.append(script);
     }).catch((error) => {
       diagramRuntimePromise = null;

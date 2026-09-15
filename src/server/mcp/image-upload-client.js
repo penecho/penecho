@@ -60,6 +60,9 @@ async function uploadImage(options={}){
   let handle,stream,bound,operation,requestStarted=false,timedOut=false,cancelled=false,cancelReject;
   const controller=new AbortController();
   const cancellation=new Promise((_,reject)=>{cancelReject=reject;});
+  // A pre-aborted caller may exit before constructing the race.
+  cancellation.catch(()=>{});
+  const cleanup=async()=>{stream?.destroy();bound?.destroy();const opened=handle;handle=undefined;await opened?.close();};
   const abort=()=>{
     if(cancelled)return;
     cancelled=true;
@@ -75,11 +78,12 @@ async function uploadImage(options={}){
   try{
     if(cancelled)throw failure('request_cancelled',requestStarted);
     operation=(async()=>{
+      try {
       controller.signal.throwIfAborted();
       if(!/^[a-f0-9]{64}$/i.test(options.hostId||'')||!path.isAbsolute(options.uploadImage||'')||!['canvasId','documentId','requestId'].every(key=>typeof settings[key]==='string'&&settings[key].length>0&&settings[key].length<=(key==='documentId'?256:128)&&!/[\x00-\x1f]/.test(settings[key])))throw failure('INVALID_ARGUMENT');
       settings.name=uploadName(options.uploadImage);if(!settings.name||settings.name.length>200)throw failure('INVALID_ARGUMENT');
-      handle=await fs.promises.open(options.uploadImage,fs.constants.O_RDONLY|(fs.constants.O_NONBLOCK||0));const stat=await handle.stat();if(!stat.isFile()||stat.size<=0||stat.size>MAX_INPUT)throw failure('INVALID_FILE');
-      const credentials=await (options.loadCredentials||discovery.loadCredentials)(options.hostId,options);
+      handle=await fs.promises.open(options.uploadImage,fs.constants.O_RDONLY|(fs.constants.O_NONBLOCK||0));controller.signal.throwIfAborted();const stat=await handle.stat();controller.signal.throwIfAborted();if(!stat.isFile()||stat.size<=0||stat.size>MAX_INPUT)throw failure('INVALID_FILE');
+      const credentials=await (options.loadCredentials||discovery.loadCredentials)(options.hostId,options);controller.signal.throwIfAborted();
       const endpoint=await (options.resolveEndpoint||discovery.resolveEndpoint)({...options,signal:controller.signal});controller.signal.throwIfAborted();
       let total=0;const hash=crypto.createHash('sha256');
       bound=new Transform({transform(chunk,encoding,callback){total+=chunk.length;if(total>MAX_INPUT||total>stat.size)return callback(failure('INVALID_FILE'));hash.update(chunk);callback(null,chunk);},flush(callback){callback(total===stat.size?null:failure('INVALID_FILE'));}});
@@ -88,10 +92,11 @@ async function uploadImage(options={}){
       const response=metadata(await (options.requestUpload||requestUpload)(endpoint.url,credentials,bound,stat.size,{...settings,signal:controller.signal}),settings);
       if(total!==stat.size||response.inputSha256!==hash.digest('hex'))throw failure('INVALID_RESPONSE',true);
       return {ok:true,...response};
+      } finally { await cleanup(); }
     })();
     return await Promise.race([operation,cancellation]);
   }catch(error){const known=['INVALID_ARGUMENT','INVALID_FILE','INVALID_RESPONSE','AUTH_REJECTED','UPLOAD_REJECTED','UPLOAD_FAILED','UPLOAD_TIMEOUT','READ_FAILED','request_cancelled'];const code=timedOut?'UPLOAD_TIMEOUT':cancelled?'request_cancelled':known.includes(error.code)?error.code:'UPLOAD_FAILED';throw Object.assign(Error(code),{code,requestId,outcome:error.outcome|| (error.dispatched||requestStarted?'unknown':'not_dispatched'),...(Object.hasOwn(SERVER_ERRORS,error.serverCode)?{serverCode:error.serverCode}:{}),...(Number.isInteger(error.status)?{status:error.status}:{})});
-  }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);stream?.destroy();bound?.destroy();operation?.catch(()=>{});await handle?.close();}
+  }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);operation?.catch(()=>{});await cleanup();}
 }
 async function main(options={},io={}){
   try{(io.stdout||process.stdout).write(JSON.stringify(await uploadImage(options))+'\n');return 0;}

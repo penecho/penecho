@@ -16,7 +16,7 @@ const statusTitle = document.querySelector("#status-title"),
 const language = String(navigator.language || "en").toLowerCase().startsWith("zh") ? "zh" : "en";
 const copy = Object.freeze({
   en:{
-    windowTitle:"PenEcho Update", current:version => `Installed version: v${version}`,
+    windowTitle:"PenEcho Update", installedVersion:version => `Installed version: v${version}`,
     checking:["Checking for updates…", "This usually takes only a moment."],
     available:version => [`PenEcho v${version} is available`, "Download it now and keep working while it completes."],
     downloading:version => [`Downloading PenEcho v${version}…`, "You can close this window. The download will continue in the background."],
@@ -28,7 +28,7 @@ const copy = Object.freeze({
     starting:"Starting download…", progress:value => `Downloading · ${value}%`, unknownError:"Please try again later.",
   },
   zh:{
-    windowTitle:"PenEcho 更新", current:version => `当前版本：v${version}`,
+    windowTitle:"PenEcho 更新", installedVersion:version => `当前版本：v${version}`,
     checking:["正在检查更新…", "通常只需片刻。"],
     available:version => [`PenEcho v${version} 可以更新`, "现在下载；下载期间可以继续使用 PenEcho。"],
     downloading:version => [`正在下载 PenEcho v${version}…`, "可以关闭此窗口，下载会在后台继续。"],
@@ -63,7 +63,7 @@ function render(state) {
   if (!state) return;
   currentState = state;
   document.body.dataset.state = state.status || "checking";
-  versionLabel.textContent = state.currentVersion ? copy.current(state.currentVersion) : "";
+  versionLabel.textContent = state.currentVersion ? copy.installedVersion(state.currentVersion) : "";
   const [title, detail] = stateCopy(state);
   statusTitle.textContent = title;
   statusDetail.textContent = detail;

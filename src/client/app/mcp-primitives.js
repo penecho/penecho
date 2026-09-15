@@ -73,7 +73,7 @@
   }
   async function mcpPresentPrimitives(session,args,kind,execution) {
     canvasAgentMutationIdle(execution);
-    const revision=state.userRevision,previous=session.artifacts.get(args.artifactId);
+    const revision=state.userRevision,previous=session.artifacts.get(args.artifactId),textExecution=execution?.kind==="mcp"?{...execution,nextTextBoxId:state.nextTextBoxId}:execution;
     if(previous&&previous.kind!==kind)throw Error('This artifact belongs to a different tool. Use a new artifactId.');
     // An artifact keeps its original mapping even when the user later zooms.
     const worldPerPixel=previous?(previous.worldPerPixel||1):1/(Number.isFinite(state.scale)&&state.scale>0?state.scale:1);
@@ -82,6 +82,7 @@
     const prepared=[];let scene;
     if(kind==='plot'){
       const view=mcpPlotView(args),made=await plotObjectImage({expression:args.expression,title:args.title,w:args.width||900,h:args.height||600,color:args.color||state.inkColor||'#375b68',...(view?{_mcpView:view}:{})});
+      canvasAgentAssertToolExecution(execution);
       prepared.push({id:'plot',kind:'image',image:made.image,blob:made.blob,box:{x:0,y:0,w:made.logicalWidth,h:made.logicalHeight},plotExpression:args.expression});
       scene={bounds:prepared[0].box};
     }else{
@@ -90,7 +91,8 @@
         let item={...input};
         const former=old.get(item.id),object=former&&canvasAgentObject(former.objectId),source=JSON.stringify(input);
         if(item.type==='text'){
-          const record=former?.source===source&&object?.kind==='text'&&object.item.text===input.text?{...object.item}:await renderedTextBoxRecord({text:item.text,x:0,y:0,fontSize:item.fontSize||20,maxWidth:item.width||260,fontFamily:state.aiFont,color:item.color||state.inkColor||'#375b68'});
+          const record=former?.source===source&&object?.kind==='text'&&object.item.text===input.text?{...object.item}:await renderedTextBoxRecord({text:item.text,x:0,y:0,fontSize:item.fontSize||20,maxWidth:item.width||260,fontFamily:state.aiFont,color:item.color||state.inkColor||'#375b68'},undefined,textExecution);
+          canvasAgentAssertToolExecution(execution);
           if(!record)throw Error('Text could not be rendered.');item={...item,width:record.w,height:record.h,record,source};
         }else if(['rect','ellipse'].includes(item.type))item={...item,width:Math.max(80,item.width||260),height:Math.max(80,item.height||100)};
         if(object&&!['line','arrow','path'].includes(item.type)){
@@ -105,7 +107,8 @@
         if(item.type==='text')prepared.push({id:item.id,kind:'text',record:item.record,box:item.box,source:item.source});
         else {
           const renderKey=JSON.stringify({type:item.type,text:item.text,font:item.fontSize,color:item.color||state.inkColor,fill:item.fill,stroke:item.strokeWidth,w:item.box.w,h:item.box.h,points:item.points?.map(p=>({x:p.x-item.box.x,y:p.y-item.box.y}))}),former=old.get(item.id),object=former&&canvasAgentObject(former.objectId),reuse=former?.renderKey===renderKey&&object?.kind==='image';
-          const image=reuse?object.item.image:mcpPrimitiveRaster(item),blob=reuse?object.item.blob:await canvasBlob(image);
+          const image=reuse?object.item.image:mcpPrimitiveRaster(item),blob=reuse?object.item.blob:await canvasBlob(image,undefined,undefined,execution);
+          canvasAgentAssertToolExecution(execution);
           prepared.push({id:item.id,kind:'image',image,blob,box:item.box,preserveFrame:!item.from,renderKey});
         }
       }
@@ -122,6 +125,7 @@
     const removed=new Set([...old].filter(([id])=>!elements.has(id)).map(([,value])=>value.objectId));
     for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('Canvas object limit reached. Remove unused objects before drawing.');
     // Prepare fully before one synchronous history transaction; never mark AI output as user feedback.
+    if(textExecution?.kind==="mcp")state.nextTextBoxId=Math.max(state.nextTextBoxId,textExecution.nextTextBoxId);
     save();state.textBoxHistoryBefore=textBoxHistoryState();state.imageHistoryBefore=imageHistoryState();
     for(const key of ['textBoxes','images'])state[key]=state[key].filter(item=>!removed.has(item.id));
     for(const item of records){if(item.object)Object.assign(item.object.item,item.record);else state[item.kind==='text'?'textBoxes':'images'].push(item.record);}

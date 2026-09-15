@@ -28,9 +28,23 @@ function mapKimiReasoningEffort(effort) {
   return { none:"low", low:"low", medium:"high", high:"high", xhigh:"max", max:"max" }[effort];
 }
 
+function isGlm53Model(model) {
+  return /^glm-5\.3(?:$|-)/i.test(String(model || "").trim().split("/").pop());
+}
+
+function mapGlm53ReasoningEffort(effort) {
+  // GLM-5.3 / Flash force thinking and accept only low, high, max.
+  // Unsupported common levels otherwise silently select maximum reasoning.
+  return { off:"low", none:"low", minimal:"low", low:"low", medium:"high", high:"high", xhigh:"max", max:"max" }[String(effort || "").trim().toLowerCase()] || effort;
+}
+
 function reasoningEffortMapping({ provider = "api", apiFormat = "openai", apiPreset = "", apiUrl = "", model = "", effort } = {}) {
   const raw = String(effort || "").trim(), requested = raw || DEFAULT_REASONING_EFFORT,
     family = provider === "api" ? apiFamily({ apiPreset, apiUrl }) : provider.replace(/-cli$/, "");
+  if (provider === "api" && isGlm53Model(model)) {
+    const anthropic = String(apiFormat).trim().toLowerCase() === "anthropic";
+    return { requested, family:"glm", mode:anthropic ? "output_config.effort" : "reasoning_effort", value:mapGlm53ReasoningEffort(requested), canDisable:false, ...(anthropic ? { adaptiveThinking:true } : {}) };
+  }
   if (family === "kimi") {
     if (provider !== "api") return { requested, family, mode:"reasoning_effort", value:mapKimiReasoningEffort(requested) || requested, canDisable:false };
     const id = String(model || "").trim().toLowerCase();
@@ -52,7 +66,7 @@ function apiReasoningParameters(options = {}) {
   if (mapping.family === "kimi" && mapping.mode === "thinking") return { thinking:{ type:mapping.value } };
   if (mapping.family === "kimi" && mapping.mode === "native-default") return {};
   if (String(options.apiFormat || "").trim().toLowerCase() === "anthropic") {
-    if (mapping.requested === "none") return { thinking:{ type:"disabled" } };
+    if (mapping.requested === "none" && mapping.canDisable) return { thinking:{ type:"disabled" } };
     return { thinking:{ type:"adaptive" }, output_config:{ effort:mapping.value } };
   }
   return { reasoning_effort:mapping.value };
@@ -64,6 +78,8 @@ module.exports = {
   apiFamily,
   apiReasoningParameters,
   mapKimiReasoningEffort,
+  isGlm53Model,
+  mapGlm53ReasoningEffort,
   normalizeReasoningEffort,
   reasoningEffortTimeoutMultiplier,
   reasoningEffortMapping,

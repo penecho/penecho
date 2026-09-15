@@ -426,8 +426,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /TimeStamperCertificate/);
   assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
   assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
-  assert.equal(rootPackage.version, "1.3.1");
-  assert.equal(rootPackage.config.desktopVersion, "1.3.1");
+  assert.equal(rootPackage.version, "1.3.2");
+  assert.equal(rootPackage.config.desktopVersion, "1.3.2");
   assert.ok(rootPackage.files.includes("src/"));
   for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
     assert.ok(rootPackage.files.includes(asset), asset);

@@ -645,6 +645,7 @@ test("PenEcho Agent sends Canvas-selected reasoning effort through Harness API r
   t.after(()=>fs.rmSync(stateDirectory,{recursive:true,force:true}));
   const {CanvasHarnessHost}=await import("../src/server/canvas-agent/runtime.mjs"),connections=[
     {id:"deepseek",provider:"api",name:"DeepSeek",apiFormat:"openai",apiUrl:"https://api.deepseek.com/v1",apiModel:"deepseek-flash",apiKey:"test-only",effort:"high"},
+    {id:"glm",provider:"api",name:"GLM",apiFormat:"openai",apiUrl:"https://open.bigmodel.cn/api/paas/v4",apiModel:"glm-5.3-flash",apiKey:"test-only",effort:"medium"},
     {id:"qwen",provider:"api",name:"Qwen",apiFormat:"openai",apiUrl:"https://qwen.example.test/v1",apiModel:"qwen3.8",apiKey:"qwen-key",effort:"high"},
     {id:"kimi",provider:"api",name:"Kimi",apiFormat:"openai",apiPreset:"kimi-global-api",apiUrl:"https://api.moonshot.ai/v1",apiModel:"kimi-k3",apiKey:"kimi-key",effort:"medium"},
     {id:"kimi-coding",provider:"api",name:"Kimi Coding",apiFormat:"openai",apiPreset:"kimi-global-coding",apiUrl:"https://api.kimi.com/coding/v1",apiModel:"k3-256k",apiKey:"kimi-coding-key",effort:"medium"},
@@ -690,6 +691,10 @@ test("PenEcho Agent sends Canvas-selected reasoning effort through Harness API r
   assert.equal(deepseekRequest.body.max_tokens,64000);
   assert.equal(deepseekRequest.body.max_completion_tokens,undefined);
   assert.equal(deepseekRequest.body.reasoning_effort,"high");
+  const glmRequest=requests.find(request=>request.body.model==="glm-5.3-flash");
+  assert.equal(glmRequest.body.reasoning_effort,"high");
+  assert.equal(glmRequest.body.max_tokens,64000);
+  assert.equal(glmRequest.body.max_completion_tokens,undefined);
   assert.equal(requests.find(request=>request.body.model==="gpt-5.6-sol").body.max_completion_tokens,64000);
   assert.equal(qwenRequest.body.messages[0].role,"developer");
   assert.equal(kimiRequest.body.reasoning_effort,"high");

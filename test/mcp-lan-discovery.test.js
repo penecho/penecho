@@ -48,7 +48,9 @@ test('progress callback and final candidates are capped at sixteen',async()=>{
  for(let i=1;i<=20;i++)f.sockets[0].emit('message',f.announcement(hostId,3000,[`10.1.1.${i}`]));
  assert.equal(seen.length,16);f.expire();assert.deepEqual(Array.from(await result),seen);
 });
-test('multicast sender releases its queue when a dgram callback never arrives',async()=>{
+test('multicast sender releases its queue when a dgram callback never arrives',async t=>{
+ // The mocked socket has no native handle to keep Node 22 alive for unref'ed deadlines.
+ const keepAlive=setTimeout(()=>{},10_000);t.after(()=>clearTimeout(keepAlive));
  const {multicastSender}=require('../src/server/mcp/lan-discovery.js');let sends=0;
  const sender=multicastSender({setMulticastInterface(){},send(){sends++;}},10);
  const first=sender(Buffer.from('one'),['192.168.1.2']);

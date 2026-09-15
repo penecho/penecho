@@ -17,7 +17,7 @@
 <h1 align="center">AI와 함께 생각하는<br>공간형 작업 환경.</h1>
 <p align="center">내장 Agent 또는 MCP 호환 AI 어시스턴트로 그리고, 탐색하고, 만들어 보세요.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="버전 1.3.1">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="버전 1.3.2">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -58,8 +58,8 @@ MCP를 통해 AI는 설명을 다이어그램으로, 아이디어를 대화형 �
 | 평소 사용하던 AI 에이전트로 작업합니다. | PenEcho의 MCP 서버가 다이어그램, 문서, 대화형 미리보기를 Canvas에 배치합니다. | 결과를 사용해 보고 주석을 달면 에이전트가 피드백을 읽고 다음 수정에 반영합니다. |
 
 <p align="center">
-  <a href="../assets/mcp-spatial-example.png">
-    <img src="../assets/mcp-spatial-example.png" alt="PenEcho Canvas의 설계안 옆에 손글씨 피드백을 남긴 AI 아키텍처 논의" width="760">
+  <a href="../assets/mcp-spatial-example.webp">
+    <img src="../assets/mcp-spatial-example.webp" alt="PenEcho Canvas의 설계안 옆에 손글씨 피드백을 남긴 AI 아키텍처 논의" width="760">
   </a>
 </p>
 <p align="center"><em>Canvas에 손글씨 주석을 더한 아키텍처 논의.</em></p>

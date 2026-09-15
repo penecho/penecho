@@ -122,20 +122,33 @@
   function releaseTextRaster(image) {
     if (image?.tagName === "CANVAS") image.width = image.height = 1;
   }
-  async function renderTextBoxImage(item, pixelRatio = desiredCanvasTextRasterRatio()) {
+  async function renderTextBoxImage(item, pixelRatio = desiredCanvasTextRasterRatio(), execution = null) {
+    if(execution?.kind!=="mcp") {
     const fontFamily = normalizeTextBoxFontFamily(item.fontFamily),
       color = item.color || state.inkColor;
-    let timer;
     try {
-      const image=await Promise.race([
-        mixedTextImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, pixelRatio),
-        new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Text rendering timed out")),8_000);}),
-      ]);
-      return { image, mixedFallback:false };
+      return { image:await mixedTextImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, pixelRatio), mixedFallback:false };
     } catch {
       return { image:textImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, TEXT_INPUT_MAX_LENGTH, pixelRatio), mixedFallback:true };
-    } finally { clearTimeout(timer); }
+    }
+      }
+
+    const fontFamily=normalizeTextBoxFontFamily(item.fontFamily),color=item.color||state.inkColor;
+    const pending=renderTextBoxImage.pending||(renderTextBoxImage.pending=new Set());
+    let timer,abandoned=false;
+    try {
+      if(pending.size>=8)throw Error("Previous MCP text rasters are still finishing");
+      const operation=Promise.resolve().then(()=>mixedTextImage(item.text,item.fontSize,color,item.maxWidth,1.35,fontFamily,pixelRatio));
+      pending.add(operation);
+      operation.then(image=>{pending.delete(operation);if(abandoned)releaseTextRaster(image);},()=>pending.delete(operation));
+      const image=await Promise.race([operation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Text rendering timed out")),8_000);})]);
+      return {image,mixedFallback:false};
+    } catch {
+      abandoned=true;
+      return {image:textImage(item.text,item.fontSize,color,item.maxWidth,1.35,fontFamily,TEXT_INPUT_MAX_LENGTH,pixelRatio),mixedFallback:true};
+    } finally {clearTimeout(timer);}
   }
+
   async function refreshVisibleTextBoxQuality() {
     const generation = ++canvasTextQualityGeneration;
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -216,10 +229,10 @@
     }
     return null;
   }
-  async function fittedTextBoxContent(text, fontSize, color, maxWidth, fontFamily = TEXT_EDITOR_FONT_FAMILY, pixelRatio = desiredCanvasTextRasterRatio()) {
+  async function fittedTextBoxContent(text, fontSize, color, maxWidth, fontFamily = TEXT_EDITOR_FONT_FAMILY, pixelRatio = desiredCanvasTextRasterRatio(), execution = null) {
     fontFamily = normalizeTextBoxFontFamily(fontFamily);
     const render = async () => {
-      return renderTextBoxImage({ text, fontSize, color, maxWidth, fontFamily }, pixelRatio);
+      return renderTextBoxImage({ text, fontSize, color, maxWidth, fontFamily }, pixelRatio, execution);
     };
     maxWidth = Math.min(SIZE, Math.max(fontSize * 3, maxWidth));
     let result = await render(),
@@ -242,7 +255,7 @@
       height:Math.min(SIZE, height),
     };
   }
-  async function renderedTextBoxRecord(item, pixelRatio = desiredCanvasTextRasterRatio()) {
+  async function renderedTextBoxRecord(item, pixelRatio = desiredCanvasTextRasterRatio(), execution = null) {
     if (!item || typeof item !== "object" || typeof item.text !== "string" || !item.text.trim() || item.text.length > TEXT_INPUT_MAX_LENGTH) return null;
     const x = Number(item.x),
       y = Number(item.y),
@@ -250,14 +263,14 @@
       maxWidth = Number(item.maxWidth);
     if (![x, y, fontSize, maxWidth].every(Number.isFinite) || x < 0 || y < 0 || fontSize < 1 || fontSize > 2000 || maxWidth < fontSize * 3 || maxWidth > SIZE) return null;
     const color = item.color || state.inkColor,
-      fitted = await fittedTextBoxContent(item.text, fontSize, color, maxWidth, item.fontFamily, pixelRatio),
+      fitted = await fittedTextBoxContent(item.text, fontSize, color, maxWidth, item.fontFamily, pixelRatio, execution),
       width = fitted.width,
       height = fitted.height,
       fittedX = Math.max(0, Math.min(SIZE - width, x)),
       fittedY = Math.max(0, Math.min(SIZE - height, y));
     if (width <= 0 || height <= 0) return null;
     return {
-      id:typeof item.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${state.nextTextBoxId++}`,
+      id:typeof item.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${execution?.kind==="mcp" ? execution.nextTextBoxId++ : state.nextTextBoxId++}`,
       x:fittedX,
       y:fittedY,
       w:width,
@@ -269,6 +282,26 @@
       text:item.text,
       image:fitted.image,
     };
+  }
+  async function mcpPrepareTextBoxes(items,execution) {
+    const prepared=[];execution.nextTextBoxId=1;
+    try {
+      for(const item of Array.isArray(items)?items.slice(0,MAX_VISIBLE_TEXT_BOXES):[]) {
+        canvasAgentAssertToolExecution(execution);
+        let record;
+        try {
+          record=item?.image&&textImageRasterRatio(item.image)>=1/1.05?textBoxHistoryRecord(item):await renderedTextBoxRecord(item,1,execution);
+        }catch(error){canvasAgentAssertToolExecution(execution);continue;}
+        if(!record)continue;
+        try {canvasAgentAssertToolExecution(execution);}catch(error){if(record.image!==item?.image)releaseTextRaster(record.image);throw error;}
+        if([item.x,item.y,item.w,item.h].every(Number.isFinite)&&item.x>=0&&item.y>=0&&item.w>0&&item.h>0&&item.x+item.w<=SIZE&&item.y+item.h<=SIZE)Object.assign(record,{x:item.x,y:item.y,w:item.w,h:item.h});
+        if(prepared.some(existing=>existing.id===record.id))continue;
+        const numbered=/^text-box-(\d+)$/.exec(record.id);
+        if(numbered)execution.nextTextBoxId=Math.max(execution.nextTextBoxId,Number(numbered[1])+1);
+        prepared.push(record);
+      }
+      return prepared;
+    }catch(error){for(const item of prepared)if(!items.some(original=>original.image===item.image))releaseTextRaster(item.image);throw error;}
   }
   async function restoreTextBoxes(items, pixelRatio = 1) {
     canvasTextQualityGeneration++;
@@ -454,10 +487,10 @@
       state.images.push(record);
     }
   }
-  async function decodeStoredImage(item) {
+  async function decodeStoredImage(item,execution=null) {
     if (!item || !(item.blob instanceof Blob)) return null;
     try {
-      const image = await imageFromBlob(item.blob);
+      const image = await imageFromBlob(item.blob,execution);
       return imageRecord({ ...item, image });
     } catch {
       return null;

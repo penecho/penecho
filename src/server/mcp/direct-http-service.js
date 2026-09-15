@@ -147,13 +147,12 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     req.once('aborted',abort);res.once('close',abort);
     let cancel;
     const cancelled=new Promise((_,reject)=>{cancel=()=>reject(Object.assign(fault(408,'Upload cancelled or timed out'),{code:'upload_cancelled'}));controller.signal.addEventListener('abort',cancel,{once:true});});
-    let operationSettled = false, released = false, releaseTimer;
+    let released = false;
     const release = () => {
       if (released) return;
       released = true;
       uploads.delete(controller);
       active--;
-      clearTimeout(releaseTimer);
     };
     const operation=(async()=>{
       const bytes=await new Promise((resolve,reject)=>{
@@ -169,18 +168,13 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       controller.signal.throwIfAborted();
       return uploadImage({...args,...prepared},{signal:controller.signal});
     })();
-    operation.then(() => { operationSettled = true; release(); }, () => { operationSettled = true; release(); });
+    operation.then(release, release);
     try { send(res,200,await Promise.race([operation,cancelled])); }
     catch(e) { const failure=toolFailure(e);send(res,e.status||500,{error:{code:failure.code,message:e.status||e.code?failure.message:'Image upload failed'}},{connection:'close'}); }
     finally {
       clearTimeout(timer);req.off('aborted',abort);res.off('close',abort);controller.signal.removeEventListener('abort',cancel);
-      // A callback ignoring cancellation must not hold the upload slot forever.
-      // The operation remains detached and is still given the signal, but the
-      // admission counter has an absolute cleanup deadline.
-      if (!operationSettled) {
-        releaseTimer = setTimeout(release, boundedMs(uploadCancelGraceMs, 1));
-        releaseTimer.unref?.();
-      } else release();
+      // Response cancellation does not end backend work; retain its execution slot
+      // until settlement so repeated cancellations cannot bypass admission.
     }
   }
   async function handle(req, res) {
@@ -244,19 +238,21 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       pendingKey = keyOf(body.id);
       if (session.pending.has(pendingKey)) { pendingKey = undefined; throw fault(409,'Request ID already active'); }
       requestController = new AbortController(); session.pending.set(pendingKey,requestController);
-      let cancelledBySignal = false, cancelResponse;
+      let cancelResponse;
       cancelListener = () => {
-        cancelledBySignal = true;
         cancelResponse?.({jsonrpc:'2.0',id:body.id,error:{code:-32800,message:'Request cancelled'}});
       };
       const cancelled = new Promise(resolve => { cancelResponse = resolve; requestController.signal.addEventListener('abort', cancelListener, {once:true}); });
       if (requestController.signal.aborted) cancelListener();
       // Keep the slot occupied until the operation settles, even when cancellation wins.
       const operation = rpc(body,session,requestController.signal);
+      const executionSession = session;
+      const releaseExecution = () => { active--; executionSession.active--; executionSession.lastSeen = now(); };
+      operation.then(releaseExecution, releaseExecution);
+      counted = false; // The backend operation now owns the execution counters.
       const response = await Promise.race([operation,cancelled]);
       send(res,200,response,{'mcp-session-id':session.id});
-      if (cancelledBySignal) await settleWithin(operation, requestCancelGraceMs);
-      else await operation;
+
     } catch (e) { if(req.url === '/mcp/images' || req.url.startsWith('/mcp/images?')) { const failure=toolFailure(e); send(res,e.status||500,{error:{code:e.code||'upload_request_failed',message:e.status?failure.message:'Image upload failed'}},{connection:'close'}); } else send(res,e.status || 500,{error:e.status ? e.message : 'MCP request failed'},e.status===408||e.status===413?{connection:'close'}:{}); }
     finally {
       if (pendingKey && session) session.pending.delete(pendingKey);

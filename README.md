@@ -17,7 +17,7 @@
 <h1 align="center">A spatial workspace<br>for thinking with AI.</h1>
 <p align="center">Draw, explore, and build with the built-in Agent or your own MCP-compatible assistant.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="Version 1.3.1">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -58,8 +58,8 @@ Through MCP, your AI can turn explanations into diagrams and ideas into interact
 | Work with the AI agent you already use. | PenEcho's MCP server brings diagrams, documents, and interactive previews onto the Canvas. | Try the result, annotate it, and let your agent read your feedback for the next revision. |
 
 <p align="center">
-  <a href="docs/assets/mcp-spatial-example.png">
-    <img src="docs/assets/mcp-spatial-example.png" alt="An architecture discussion with AI, with handwritten feedback alongside the proposed design on a PenEcho Canvas" width="760">
+  <a href="docs/assets/mcp-spatial-example.webp">
+    <img src="docs/assets/mcp-spatial-example.webp" alt="An architecture discussion with AI, with handwritten feedback alongside the proposed design on a PenEcho Canvas" width="760">
   </a>
 </p>
 <p align="center"><em>An architecture discussion, annotated by hand on the Canvas.</em></p>

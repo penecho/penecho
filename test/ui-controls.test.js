@@ -1338,7 +1338,7 @@ test("declarative scenes and widgets render below the dedicated ink and interact
   assert.match(app, /SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8/);
   const decodeTiles = functionSource(app, "decodeSnapshotTilesInBatches"),
     loadSnapshot = functionSource(app, "loadSnapshot");
-  assert.match(decodeTiles, /Promise\.all\(tileEntries\.slice\(start, end\)[\s\S]*?context\.drawImage\(image, 0, 0\)[\s\S]*?batch\.length = 0[\s\S]*?waitForSnapshotTileFrame\(\)/);
+  assert.match(decodeTiles, /Promise\.all\(tileEntries\.slice\(start, end\)[\s\S]*?context\.drawImage\(image, 0, 0\)[\s\S]*?batch\.length = 0[\s\S]*?waitForSnapshotTileFrame\(execution\?\.kind==="mcp" \? execution\.controller\.signal : null\)/);
   assert.match(loadSnapshot, /decodeSnapshotTilesInBatches\(tileEntries, loadIsCurrent,[\s\S]*?for \(const \[k, canvas\] of decodedTiles\) tiles\.set\(k, canvas\);[\s\S]*?restoreWidgets\(item\.widgets\)/);
   assert.doesNotMatch(loadSnapshot, /Promise\.all\(tileEntries\.map/);
 
@@ -4163,7 +4163,7 @@ test("text tool toggles a real MD+TeX preview and confirms the unchanged source"
   assert.match(app, /header\.className = "text-editor-header object-toolbar-shell"/);
   assert.match(app, /header\.append\(cancelButton, title, helpButton, mixedModeButton, acceptButton\)/);
   assert.match(app, /openTextHelp\(editor, helpButton\)/);
-  assert.match(app, /function fittedTextBoxContent\(text, fontSize, color, maxWidth, fontFamily = TEXT_EDITOR_FONT_FAMILY, pixelRatio = desiredCanvasTextRasterRatio\(\)\)/);
+  assert.match(app, /function fittedTextBoxContent\(text, fontSize, color, maxWidth, fontFamily = TEXT_EDITOR_FONT_FAMILY, pixelRatio = desiredCanvasTextRasterRatio\(\), execution = null\)/);
   assert.match(app, /function textEditorContentMetrics\(editor\)/);
   assert.match(app, /function textImageContentInset\(image\)/);
   assert.match(app, /function textBoxOriginFromEditor\(editor, contentMetrics, contentInset, scale\)/);
@@ -4626,7 +4626,7 @@ test("AI text defaults to the cross-platform handwritten font and remembers expl
   assert.match(ai, /fontFamily = family \|\| AI_FONT_HANDWRITTEN/);
   assert.match(ai, /resolvedFamily = family \|\| AI_FONT_HANDWRITTEN/);
   assert.match(fitTextBox, /fontFamily = normalizeTextBoxFontFamily\(fontFamily\)/);
-  assert.match(renderTextBox, /fittedTextBoxContent\(item\.text, fontSize, color, maxWidth, item\.fontFamily, pixelRatio\)/);
+  assert.match(renderTextBox, /fittedTextBoxContent\(item\.text, fontSize, color, maxWidth, item\.fontFamily, pixelRatio, execution\)/);
   assert.match(renderTextBox, /fontFamily:fitted\.fontFamily/);
   assert.match(prepareAgentItems, /fontFamily:state\.aiFont/);
   assert.match(app, /AI_FONT_HANDWRITTEN = "Bradley Hand, Segoe Print, Comic Sans MS, cursive"/);
@@ -5102,7 +5102,7 @@ test("Widget right-click lists the toolbar without decisions and interaction sho
     chromeSpecs = functionSource(app, "objectChromeSpecs"),
     widgetBranch = chromeSpecs.slice(chromeSpecs.indexOf("prefix:`widget:${handTarget.id}`"), chromeSpecs.indexOf("pendingChromeSpecs(specs, state.pending)"));
 
-  assert.match(app, /view\.addEventListener\('dblclick'[\s\S]*?handObjectToolbarTargetAtPoint\(clientPoint\(event\)\)[\s\S]*?showImagePresentation\(target\.object\)[\s\S]*?enterWidgetInteraction\(target\.object\)/);
+  assert.match(app, /view\.addEventListener\('dblclick'[\s\S]*?handObjectToolbarTargetAtPoint\(point\)[\s\S]*?showImagePresentation\(target\.object\)[\s\S]*?enterWidgetInteraction\(target\.object\)/);
   assert.match(app, /view\.addEventListener\('contextmenu', \(event\) => \{ showWidgetContextToolbar\(event\); \}\)/);
   assert.doesNotMatch(app, /screen\.addEventListener\("contextmenu"/);
   assert.match(functionSource(app, "showWidgetContextToolbar"), /event\.preventDefault\(\)[\s\S]*?state\.viewMode \|\| state\.spacePan \|\| state\.interactingWidgetId[\s\S]*?\["pen", "hand", "select"\]\.includes\(state\.mode\)[\s\S]*?canvasWidgetAtEvent\(event\)[\s\S]*?showHandObjectToolbar\("widget", widget\)/);

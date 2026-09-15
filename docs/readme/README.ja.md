@@ -17,7 +17,7 @@
 <h1 align="center">AI と考えるための<br>空間ワークスペース。</h1>
 <p align="center">内蔵 Agent や MCP 対応の AI アシスタントで、描き、探究し、形にしましょう。</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="バージョン 1.3.1">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="バージョン 1.3.2">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -58,8 +58,8 @@ MCP を通じて、AI は説明を図に、アイデアをインタラクティ�
 | 使い慣れた AI エージェントで作業できます。 | PenEcho の MCP サーバーが図、ドキュメント、インタラクティブなプレビューを Canvas に配置します。 | 成果を試して注釈を加え、エージェントに読み取らせて次の修正につなげます。 |
 
 <p align="center">
-  <a href="../assets/mcp-spatial-example.png">
-    <img src="../assets/mcp-spatial-example.png" alt="AI とのアーキテクチャ検討。Canvas 上の設計案に手書きでフィードバックを追加。" width="760">
+  <a href="../assets/mcp-spatial-example.webp">
+    <img src="../assets/mcp-spatial-example.webp" alt="AI とのアーキテクチャ検討。Canvas 上の設計案に手書きでフィードバックを追加。" width="760">
   </a>
 </p>
 <p align="center"><em>Canvas に手書きで注釈を加えたアーキテクチャの検討。</em></p>

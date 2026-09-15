@@ -298,7 +298,7 @@ test("MCP service keeps discovery credentials private and binds a session to its
   assert.equal(browserStatus.value.config.type, "stdio");
   assert.equal(browserStatus.value.config.args[2], browserStatus.value.http.hostId);
 
-  const { ws, ready } = await openCanvas(address.port, calls);
+  const { ws, ready } = await openCanvas(address.port, calls, undefined, []);
   t.after(async()=>{ws.terminate();await service.close();if(server.listening)await closeServer(server);});
   assert.equal(ready.instanceId, status.instanceId);
   assert.equal(ready.catalog, true);
@@ -310,7 +310,7 @@ test("MCP service keeps discovery credentials private and binds a session to its
 
   const ownerId = crypto.randomUUID();
   const listed = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"list_canvases",ownerId} });
-  assert.deepEqual(listed.value.result.canvases, [], "a connected browser without a document catalog is not itself a Canvas");
+  assert.deepEqual(listed.value.result.canvases, [], "an explicit empty catalog does not list the connection as a Canvas");
   await reportCanvasCatalog(ws, [
     { documentId:"document-new", title:"Workspace document", active:true },
     { documentId:"document-background", title:"Background document", active:false },
@@ -330,7 +330,9 @@ test("MCP service keeps discovery credentials private and binds a session to its
   assert.equal(calls.filter(call => call.name === "mcp_open_canvas").length,1);
   const callsBeforeFind = calls.length;
   const found = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_find_canvases",arguments:{canvasId:catalogEntry.canvasId,instanceId:status.instanceId,documentId:catalogEntry.documentId}}});
-  assert.equal(found.value.result.candidates[0].documentId,"document-background");
+  assert.equal(found.value.result.canvases[0].documentId,"document-background");
+  assert.deepEqual(found.value.result.candidates,found.value.result.canvases,"new alias must preserve the original canvases collection");
+  assert.equal(found.value.result.timing.durationMs,found.value.result.timing.completedAt-found.value.result.timing.requestedAt);
   assert.equal(calls.length,callsBeforeFind,"find_canvases reads the open-document catalog without entering the browser request queue");
   const started = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:catalogEntry.canvasId,instanceId:status.instanceId,documentId:catalogEntry.documentId,takeover:true,title:"Build chart",client:"Codex",sessionKey:"stable"}} });
   assert.equal(started.status, 200);
@@ -1046,4 +1048,176 @@ test("remote channels register canvases, route tools, replace and revoke pending
     assert.equal(await main(["mcp",argument],{errorOutput:{write:value=>{message+=value;}}}),1);
     assert.match(message,/removed.*mcp connect/);
   }
+});
+
+test('slow progress retains only the latest coalesced update and cancelling a flush releases the caller', async t => {
+  const service=createMcpService({server:new EventEmitter(),authorizeBrowser:()=>true,cloudRuntime:true});
+  t.after(()=>service.close());
+  const socket=new EventEmitter(),frames=[];
+  Object.assign(socket,{readyState:1,ping(){},send(raw){
+    const frame=JSON.parse(raw);frames.push(frame);
+    if(frame.name==='mcp_start_session')queueMicrotask(()=>reply(frame,{sessionId:frame.arguments.sessionId,documentId:'doc',revision:0}));
+  },close(){this.readyState=3;this.emit('close');},terminate(){this.close();}});
+  const reply=(frame,result)=>socket.emit('message',Buffer.from(JSON.stringify({type:'result',requestId:frame.requestId,ok:true,result})));
+  service.attachBrowser(socket);
+  socket.emit('message',Buffer.from(JSON.stringify({type:'hello',canvasId:'canvas',title:'Canvas',documents:[{documentId:'doc',title:'Doc',active:true}]})));
+  const owner=crypto.randomUUID(),call=(name,args,options={})=>service.callTool(owner,name,args,{direct:true,...options});
+  const {sessionId}=await call('penecho_start_session',{title:'Test',canvasId:'canvas',documentId:'doc'});
+  for(let i=1;i<=5;i++){await call('penecho_update_session',{sessionId,summary:`update ${i}`});await delay(110);}
+  const updates=()=>frames.filter(frame=>frame.name==='mcp_update_session');
+  assert.equal(updates().length,1);
+  const controller=new AbortController();
+  const closing=call('penecho_close_session',{sessionId},{signal:controller.signal});
+  controller.abort();
+  await assert.rejects(closing,error=>error.code==='request_cancelled');
+  assert.equal(frames.filter(frame=>frame.name==='mcp_close_session').length,0);
+  reply(updates()[0],{revision:1,applied:true});await delay(5);
+  assert.deepEqual(updates().map(frame=>frame.arguments.summary),['update 1','update 5']);
+  for(const frame of updates()){assert.ok(frame.timeoutMs>0&&frame.timeoutMs<=45000);assert.ok(frame.expiresAt<=Date.now()+45000);}
+  reply(updates()[1],{revision:2,applied:true});await delay(5);
+  assert.equal(updates().length,2);
+});
+
+
+test("1.3.1 browsers without catalog remain discoverable and retain legacy find response",async t=>{
+  const server=http.createServer(),service=createMcpService({server,authorizeBrowser:()=>null}),calls=[];
+  const address=await listen(server),{ws}=await openCanvas(address.port,calls);
+  t.after(async()=>{ws.terminate();await service.close();if(server.listening)await closeServer(server);});
+  const owner=crypto.randomUUID(),listed=await service.callTool(owner,"penecho_list_canvases",{});
+  assert.equal(listed.canvases.length,1);assert.equal(service.listCanvases().length,1);
+  assert.equal(listed.canvases[0].canvasId,"canvas-a");assert.equal(listed.canvases[0].title,"Research board");
+  assert.equal(Object.hasOwn(listed.canvases[0],"documentId"),false,"do not invent a document ID for a legacy connection");
+  ws.removeAllListeners("message");
+  ws.on("message",raw=>{
+    const message=JSON.parse(raw);if(message.type!=="call")return;calls.push(message);
+    assert.equal(message.name,"mcp_find_canvases");assert.equal(message.arguments.documentId,"legacy-doc");
+    ws.send(JSON.stringify({type:"result",requestId:message.requestId,ok:true,result:{canvases:[{documentId:"legacy-doc",title:"Old document",open:true,active:true}],providers:[{location:"device",status:"ok"}]}}));
+  });
+  const found=await service.callTool(owner,"penecho_find_canvases",{instanceId:service.instanceId,canvasId:"canvas-a",documentId:"legacy-doc"});
+  assert.deepEqual(found.canvases,[{documentId:"legacy-doc",title:"Old document",open:true,active:true}]);
+  assert.deepEqual(found.providers,[{location:"device",status:"ok"}]);assert.ok(found.timing);
+  assert.equal(calls.length,1);
+  await reportCanvasCatalog(ws,[]);
+  assert.deepEqual((await service.callTool(owner,"penecho_list_canvases",{})).canvases,[]);
+  const empty=await service.callTool(owner,"penecho_find_canvases",{instanceId:service.instanceId,canvasId:"canvas-a"});
+  assert.deepEqual(empty.canvases,[]);assert.equal(calls.length,1,"after catalog negotiation an empty directory must not fall back to browser RPC");
+});
+
+
+test("rename routes exact documents with owner and operation scoped receipts, strict responses and cancellation", async t => {
+  // Remote fixture channels have no native socket handle; retain Node 22 through the deadline assertion.
+  const keepAlive = setTimeout(() => {}, 10_000); t.after(() => clearTimeout(keepAlive));
+  const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
+  const execute = service.executeRemote;
+  const owner = crypto.randomUUID(), otherOwner = crypto.randomUUID();
+  let channelId;
+  const frame = value => execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify(value)});
+  const pull = async () => (await execute({operation:"canvas.mcp.pull",channelId})).frames.map(value=>JSON.parse(value));
+  const args = {instanceId:service.instanceId,canvasId:"rename-canvas",documentId:"doc",title:"Renamed",requestId:"same-id"};
+  const receipt = {documentId:"doc",title:"Renamed",active:false,applied:true,saved:false};
+  const reply = (call,result) => frame({type:"result",requestId:call.requestId,ok:true,result});
+  try {
+    ({channelId} = await execute({operation:"canvas.mcp.open"}));
+    await frame({type:"hello",canvasId:"rename-canvas",title:"Canvas",documentRename:true,documents:[{documentId:"doc",title:"Original",active:true}]});
+    await pull();
+    for (const [override,code] of [[{instanceId:"wrong"},"instance_mismatch"],[{canvasId:"missing"},"canvas_not_found"],[{documentId:"missing"},"document_not_found"]]) await assert.rejects(service.callTool(owner,"penecho_rename_canvas",{...args,...override}),error=>error.code===code);
+    await frame({type:"ping"});
+    assert.deepEqual(await pull(),[{type:"pong"}]);
+    const pending = service.callTool(owner,"penecho_rename_canvas",{...args,title:"  Renamed  "});
+    const [call] = await pull();
+    assert.equal(call.name,"mcp_rename_canvas");
+    assert.deepEqual(call.arguments,{...args,requestId:call.arguments.requestId});
+    assert.notEqual(call.arguments.requestId,args.requestId);
+    assert.ok(call.expiresAt > 0);
+    await reply(call,receipt);
+    const result = await pending;
+    assert.deepEqual({...result,timing:undefined},{...receipt,timing:undefined});
+    assert.equal((await service.callTool(owner,"penecho_rename_canvas",args)).reused,true);
+    await assert.rejects(service.callTool(owner,"penecho_rename_canvas",{...args,title:"Different"}),error=>error.code === "REQUEST_ID_CONFLICT");
+    await frame({type:"ping"});
+    assert.deepEqual(await pull(),[{type:"pong"}]);
+    const otherPending = service.callTool(otherOwner,"penecho_rename_canvas",args), [otherCall] = await pull();
+    assert.notEqual(otherCall.arguments.requestId,call.arguments.requestId);
+    await reply(otherCall,{...receipt,saved:true});
+    assert.equal((await otherPending).saved,true);
+    const openPending = service.callTool(owner,"penecho_open_canvas",{instanceId:service.instanceId,canvasId:args.canvasId,documentId:"doc",requestId:args.requestId});
+    const [openCall] = await pull();
+    assert.equal(openCall.name,"mcp_open_canvas");
+    assert.equal(openCall.arguments.requestId,crypto.createHash("sha256").update(`${owner}\0${args.requestId}`).digest("hex"));
+    assert.notEqual(openCall.arguments.requestId,call.arguments.requestId);
+    await reply(openCall,{documentId:"doc",title:"Original",active:true});await openPending;
+    let index=0;
+    for (const bad of [{documentId:"missing"},{title:"Wrong"},{active:1},{applied:false},{saved:"yes"}]) {
+      const pendingBad = service.callTool(owner,"penecho_rename_canvas",{...args,requestId:`bad-${++index}`});
+      const rejected = assert.rejects(pendingBad,error=>error.code === "invalid_browser_result");
+      const [badCall] = await pull();await reply(badCall,{...receipt,...bad});await rejected;
+    }
+    const catalog = await service.callTool(owner,"penecho_list_canvases",{});
+    assert.equal(catalog.canvases.length,1);
+    assert.equal(catalog.canvases[0].documentId,"doc");
+    assert.equal(catalog.canvases[0].title,"Original");
+    for (const mode of ["timeout","abort"]) {
+      const controller = new AbortController();
+      const pendingCancel = service.callTool(owner,"penecho_rename_canvas",{...args,requestId:mode},{timeoutMs:mode === "timeout" ? 10 : 1000,signal:controller.signal});
+      const rejected = assert.rejects(pendingCancel,error=>error.code === (mode === "timeout" ? "canvas_timeout" : "request_cancelled"));
+      const [cancelCall] = await pull();
+      if (mode === "abort") controller.abort();
+      await rejected;
+      assert.deepEqual(await pull(),[{type:"cancel",requestId:cancelCall.requestId}]);
+      await reply(cancelCall,receipt); // Late results cannot revive completed calls.
+      const retry = service.callTool(owner,"penecho_rename_canvas",{...args,requestId:mode});
+      const [retryCall] = await pull();
+      assert.equal(retryCall.arguments.requestId,cancelCall.arguments.requestId);
+      assert.notEqual(retryCall.requestId,cancelCall.requestId);
+      await reply(retryCall,receipt);
+      assert.equal((await retry).applied,true);
+    }
+  } finally {await service.close();}
+});
+
+test("legacy browser rename fails with an actionable unsupported error without dispatch", async () => {
+  const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
+  try {
+    const {channelId} = await service.executeRemote({operation:"canvas.mcp.open"});
+    await service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"legacy",title:"Canvas"})});
+    await service.executeRemote({operation:"canvas.mcp.pull",channelId});
+    await assert.rejects(service.callTool(crypto.randomUUID(),"penecho_rename_canvas",{instanceId:service.instanceId,canvasId:"legacy",documentId:"doc",title:"Title",requestId:"r"}),error=>error.code === "unsupported_operation" && /Update PenEcho.*refresh/.test(error.message));
+    await service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"ping"})});
+    assert.deepEqual((await service.executeRemote({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse),[{type:"pong"}]);
+  } finally {await service.close();}
+});
+
+
+test("settled failed rename receipts are evictable while live requests remain protected", async () => {
+  const service = createMcpService({server:http.createServer(),authorizeBrowser:() => "Forbidden",stateDirectory:tempDirectory()});
+  const owner = crypto.randomUUID();
+  try {
+    const {channelId} = await service.executeRemote({operation:"canvas.mcp.open"});
+    const frame = value => service.executeRemote({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify(value)});
+    const pull = async () => (await service.executeRemote({operation:"canvas.mcp.pull",channelId})).frames.map(JSON.parse);
+    await frame({type:"hello",canvasId:"capacity",title:"Canvas",documentRename:true,documents:[{documentId:"doc",title:"Original",active:true}]});await pull();
+    const args = {instanceId:service.instanceId,canvasId:"capacity",documentId:"doc",title:"Renamed",requestId:"r"};
+    for (let index=0;index<40;index++) {
+      const failed = service.callTool(owner,"penecho_rename_canvas",{...args,requestId:`failed-${index}`});
+      const rejected = assert.rejects(failed,error=>error.code === "rename_failed");
+      const [call] = await pull();
+      await frame({type:"result",requestId:call.requestId,ok:false,error:{code:"rename_failed",message:"Storage unavailable"}});await rejected;
+    }
+    await assert.rejects(service.callTool(owner,"penecho_rename_canvas",{...args,requestId:"failed-39",title:"Different"}),error=>error.code === "REQUEST_ID_CONFLICT");
+    const live=[];
+    for(let index=0;index<32;index++) {
+      const promise=service.callTool(owner,"penecho_rename_canvas",{...args,requestId:`live-${index}`});
+      // Attach rejection handling before future frame/close operations.
+      promise.catch(()=>{});
+      const [call]=await pull();live.push({promise,call});
+    }
+    await assert.rejects(service.callTool(owner,"penecho_rename_canvas",{...args,requestId:"overflow"}),error=>error.code === "request_limit");
+    for(const {promise,call} of live) {
+      await frame({type:"result",requestId:call.requestId,ok:true,result:{documentId:"doc",title:"Renamed",active:true,applied:true,saved:false}});
+      assert.equal((await promise).applied,true);
+    }
+    const recovered=service.callTool(owner,"penecho_rename_canvas",{...args,requestId:"recovered"});const [call]=await pull();
+    await frame({type:"result",requestId:call.requestId,ok:true,result:{documentId:"doc",title:"Renamed",active:true,applied:true,saved:false}});
+    assert.equal((await recovered).applied,true);
+  } finally {await service.close();}
 });

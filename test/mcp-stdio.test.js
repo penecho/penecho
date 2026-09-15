@@ -84,7 +84,8 @@ test("stdio MCP negotiates 2025-11-25, lists tools, emits image blocks, and keep
   send({jsonrpc:"2.0",id:2,method:"tools/list",params:{}});
   const listedTools = await next();
   assert.deepEqual(listedTools.result.tools,require("../src/server/mcp/schema.js").TOOLS);
-  assert.equal(listedTools.result.tools.length,19);
+  assert.equal(listedTools.result.tools.length,20);
+  assert.deepEqual(listedTools.result.tools.find(tool=>tool.name==="penecho_rename_canvas").inputSchema.required,["instanceId","canvasId","documentId","title","requestId"]);
   assert.ok(listedTools.result.tools.find(tool=>tool.name==="penecho_inbox"));
   const widgetPresentation = listedTools.result.tools.find(tool => tool.name === "penecho_present_widget").inputSchema.properties.presentation;
   assert.deepEqual(widgetPresentation.properties.size.enum, ["base","wide","tall","large","page"]);
@@ -434,4 +435,28 @@ test('stdio bridge deadline stops a peer that sends bytes but never finishes JSO
   t.after(() => { server.closeAllConnections(); return close(server); });
   await assert.rejects(loaded.exports.bridgeRequest({port:address.port,secret:'test',instanceId:'test'},{operation:'list_canvases'}),/timed out/);
   assert.equal(deadlineDelay,50000,'retain the existing request timeout budget');
+});
+
+test('stdio admission bounds cancelled unresolved work while preserving control and recovery',async t=>{
+ const output=new PassThrough(),next=outputReader(output);
+ const stdio=new PenEchoStdioServer({input:new PassThrough(),output,maxRequests:1});
+ t.after(()=>stdio.close());stdio.initialized=true;
+ let release,calls=0;
+ stdio.listCanvases=()=>{calls++;return new Promise(resolve=>{release=resolve;});};
+ const call=id=>({jsonrpc:'2.0',id,method:'tools/call',params:{name:'penecho_list_canvases'}});
+ const first=stdio.handle(call(1));
+ await stdio.handle({jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:1}});
+ assert.equal((await next()).error.code,-32800);
+ assert.equal(stdio.pending.size,0);assert.equal(stdio.executing.size,1);
+ for(let id=2;id<6;id++){
+  await stdio.handle(call(id));assert.equal((await next()).error.code,-32000);
+ }
+ assert.equal(calls,1);
+ for(const method of ['initialize','ping','tools/list']){
+  await stdio.handle({jsonrpc:'2.0',id:10,method});assert.ok((await next()).result);
+ }
+ release({canvases:[]});await first;assert.equal(stdio.executing.size,0);
+ const second=stdio.handle(call(20));assert.equal(calls,2);
+ release({canvases:[]});await second;
+ assert.deepEqual((await next()).result.structuredContent,{canvases:[]});
 });

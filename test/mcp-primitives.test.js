@@ -128,3 +128,22 @@ test('small shapes retain author size and connectors follow a single moved node'
  assert.equal(edge.w,expected.w*.5);assert.equal(edge.h,expected.h*.5);
  assert.notEqual(edge.image,oldImage);assert.equal(a.w,40);assert.equal(b.h,60);
 });
+
+
+test('MCP native text stages IDs and passes execution independently of raster scale',async()=>{
+ const h=harness(),session={artifacts:new Map()},execution={kind:'mcp',controller:new AbortController()};h.context.state.nextTextBoxId=7;
+ h.context.canvasAgentAssertToolExecution=value=>{if(value.controller.signal.aborted)throw Error('cancelled');};
+ h.context.renderedTextBoxRecord=async(raw,pixelRatio,owner)=>{
+   assert.equal(pixelRatio,undefined);assert.equal(owner.controller,execution.controller);assert.equal(h.context.state.nextTextBoxId,7);
+   return {...raw,id:`text-box-${owner.nextTextBoxId++}`,w:100,h:40,image:{width:100,height:40}};
+ };
+ const result=await h.mcpPresentPrimitives(session,{artifactId:'text',items:[{id:'label',type:'text',text:'Ready'}]},'drawing',execution);
+ assert.equal(result.objectIds[0],'text-box-7');assert.equal(h.context.state.nextTextBoxId,8);
+});
+test('canceling native text preparation does not allocate live IDs or continue the batch',async()=>{
+ const h=harness(),session={artifacts:new Map()},execution={kind:'mcp',controller:new AbortController()};h.context.state.nextTextBoxId=7;let calls=0;
+ h.context.canvasAgentAssertToolExecution=value=>{if(value.controller.signal.aborted)throw Error('cancelled');};
+ h.context.renderedTextBoxRecord=async(raw,pixelRatio,owner)=>{calls++;execution.controller.abort();return {...raw,id:`text-box-${owner.nextTextBoxId++}`,w:100,h:40};};
+ await assert.rejects(h.mcpPresentPrimitives(session,{artifactId:'text',items:[{id:'one',type:'text',text:'One'},{id:'two',type:'text',text:'Two'}]},'drawing',execution),/cancelled/);
+ assert.equal(calls,1);assert.equal(h.context.state.nextTextBoxId,7);assert.equal(h.saved.length,0);assert.equal(session.artifacts.size,0);
+});

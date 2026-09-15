@@ -17,7 +17,7 @@
 <h1 align="center">Un espace de travail spatial<br>pour réfléchir avec l’IA.</h1>
 <p align="center">Dessinez, explorez et créez avec l’Agent intégré ou votre propre assistant compatible MCP.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-087f83" alt="Version 1.3.1">
+  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -58,8 +58,8 @@ Grâce à MCP, votre IA peut transformer des explications en schémas et des id�
 | Travaillez avec l’agent IA que vous utilisez déjà. | Le serveur MCP de PenEcho apporte schémas, documents et aperçus interactifs sur le Canvas. | Essayez le résultat, annotez-le et laissez votre agent lire vos retours pour la prochaine révision. |
 
 <p align="center">
-  <a href="../assets/mcp-spatial-example.png">
-    <img src="../assets/mcp-spatial-example.png" alt="Une discussion d’architecture avec l’IA, accompagnée de retours manuscrits à côté de la proposition sur un Canvas PenEcho" width="760">
+  <a href="../assets/mcp-spatial-example.webp">
+    <img src="../assets/mcp-spatial-example.webp" alt="Une discussion d’architecture avec l’IA, accompagnée de retours manuscrits à côté de la proposition sur un Canvas PenEcho" width="760">
   </a>
 </p>
 <p align="center"><em>Une discussion d’architecture, annotée à la main sur le Canvas.</em></p>

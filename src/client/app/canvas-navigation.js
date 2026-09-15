@@ -367,7 +367,17 @@
     const tool = state.viewMode ? state.viewTool : state.mode;
     if (tool !== 'hand' && tool !== 'select') return;
     if (canvasWidgetInteractionChromeTarget(event.target)) return;
-    const target = handObjectToolbarTargetAtPoint(clientPoint(event));
+    // Canvas resize zones extend beyond the DOM handles. Use the same hit
+    // test as the resize cursor and drag gesture before body activation.
+    const point = clientPoint(event);
+    const resize = !state.viewMode && widgetPointerHit(point, event.pointerType || 'mouse', false);
+    if (resize && ['width', 'height', 'resize'].includes(resize.hit)) {
+      event.preventDefault();
+      event.stopPropagation();
+      requestWidgetContentFit(resize.widget, resize.hit);
+      return;
+    }
+    const target = handObjectToolbarTargetAtPoint(point);
     if (target?.kind === "image") {
       event.preventDefault();
       showImagePresentation(target.object);

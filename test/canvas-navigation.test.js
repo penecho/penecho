@@ -80,6 +80,7 @@ function gestureHarness(overrides={}) {
   localStorage:{setItem(){},getItem:()=>null},
   syncWidgetHostStates(){},resetCanvasCursor(){},requestInteractionLayerRender(){},requestCoordinatesUpdate(){},wheelNavigating(){},
   visibleWidgets:()=>widgets,clientPoint:e=>({x:e.clientX,y:e.clientY}),
+  widgetPointerHit:()=>null, // This harness exercises Widget body activation, outside resize zones.
   handObjectToolbarTargetAtPoint:()=>({kind:'widget',object:widgets[1]}),
   canvasViewportMetrics:()=>({width:1000,height:800}),
   showHandObjectToolbar:(kind,object)=>{calls.push(['toolbar',kind,object?.id]);return true;},

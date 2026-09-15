@@ -1,0 +1,50 @@
+[
+  {
+    "theme": "a",
+    "passed": true,
+    "viewports": [
+      1440,
+      1939,
+      768,
+      390
+    ],
+    "checks": [
+      "search",
+      "type filters",
+      "detail navigation",
+      "favorites",
+      "share dialog",
+      "Escape",
+      "lineage selection",
+      "comment",
+      "legacy Echo disabled",
+      "empty/loading/error/image fallback",
+      "no horizontal overflow",
+      "no JavaScript errors"
+    ]
+  },
+  {
+    "theme": "b",
+    "passed": true,
+    "viewports": [
+      1440,
+      1939,
+      768,
+      390
+    ],
+    "checks": [
+      "search",
+      "type filters",
+      "detail navigation",
+      "favorites",
+      "share dialog",
+      "Escape",
+      "lineage selection",
+      "comment",
+      "legacy Echo disabled",
+      "empty/loading/error/image fallback",
+      "no horizontal overflow",
+      "no JavaScript errors"
+    ]
+  }
+]

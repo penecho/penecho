@@ -1,6 +1,8 @@
   // External MCP sessions share Canvas primitives, but never an Agent conversation.
   var mcpRuntime = { socket:null, browserId:null, wanted:false, reconnectTimer:0, reconnectStatusTimer:0, reconnectAt:0, reconnecting:false, reconnectDelay:1000, generation:0, sessions:new Map(), previews:new Map(), controllers:new Map(), queue:Promise.resolve(), queued:0, status:null, loading:null, loadError:null, configuring:false, configureResult:null, feedbackSequence:0, feedback:[], ready:false, connectionLost:false, authRequired:false, heartbeatTimer:0, heartbeatSupported:false, catalogSupported:false, catalogSignature:"", lastPong:0, activeMutation:null, mutationDocumentId:null, glowTimer:0, glowing:false, pendingView:new Map(), viewSequence:0, layoutTimer:0, layoutSince:0, viewPaused:false, exampleStatusTimer:0 };
   const mcpCopy = {
+    keepAwake:["Keep awake while MCP is connected","MCP 连接时保持唤醒"],
+    keepAwakeHelp:["Optional. In a browser, keep this tab visible. Your device may still suspend.","可选。浏览器中请保持此标签页可见；设备仍可能进入休眠。"],
     troubleshoot:["Troubleshoot","Troubleshoot"],
     troubleshootHeading:["Allow MCP inbound connections","允许 MCP 入站连接"],
     troubleshootHelp:["If PenEcho works on the host but other computers cannot connect, send the prompt below to an Agent on the host to allow the required inbound TCP ports.","如果 PenEcho 在主机上可用，但其他电脑无法连接，请将下方提示词发给主机上的 Agent，开放所需的 TCP 入站端口。"],
@@ -136,7 +138,7 @@
   }
   function mcpWaitForExecution(promise,execution) {
     const signal=execution.controller.signal;
-    if(signal.aborted)return Promise.reject(mcpExecutionAbortError(signal));
+    if(signal.aborted){Promise.resolve(promise).catch(()=>{});return Promise.reject(mcpExecutionAbortError(signal));}
     return new Promise((resolve,reject)=>{
       const abort=()=>reject(mcpExecutionAbortError(signal));
       signal.addEventListener("abort",abort,{once:true});
@@ -157,12 +159,46 @@
     return typeof canvasDocumentsCatalog==="function"?canvasDocumentsCatalog():[];
   }
   function mcpPublishCanvasCatalog(force=false) {
-    const socket=mcpRuntime.socket,documents=mcpOpenCanvasCatalog(),signature=JSON.stringify(documents);
+    const socket=mcpRuntime.socket;
+    if(!socket||socket.readyState!==WebSocket.OPEN||!mcpRuntime.catalogSupported)return;
+    const documents=mcpOpenCanvasCatalog(),signature=JSON.stringify(documents);
     if(!socket||socket.readyState!==WebSocket.OPEN||!mcpRuntime.catalogSupported||!force&&signature===mcpRuntime.catalogSignature)return;
     socket.send(JSON.stringify({type:"catalog",documents}));mcpRuntime.catalogSignature=signature;
   }
+  function mcpKeepAwakeEnabled() {
+    try{return localStorage.getItem("penecho-mcp-keep-awake")==="true";}catch{return false;}
+  }
+  function mcpReleaseWakeLock() {
+    mcpRuntime.wakeGeneration=(mcpRuntime.wakeGeneration||0)+1;
+    const lock=mcpRuntime.wakeLock;mcpRuntime.wakeLock=null;
+    if(lock)Promise.resolve(lock.release()).catch(()=>{});
+    if(mcpRuntime.desktopAwake){mcpRuntime.desktopAwake=false;Promise.resolve(window.penechoDesktop?.setMcpKeepAwake?.(false)).catch(()=>{});}
+  }
+  async function mcpSyncWakeLock() {
+    const connected=mcpKeepAwakeEnabled()&&mcpRuntime.wanted&&mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN;
+    if(!connected){mcpReleaseWakeLock();return;}
+    if(window.penechoDesktop?.setMcpKeepAwake) {
+      if(mcpRuntime.desktopWakeRequest)return;
+      mcpRuntime.desktopAwake=true;
+      const generation=mcpRuntime.wakeGeneration||0;
+      const request=Promise.resolve().then(()=>{if(generation===(mcpRuntime.wakeGeneration||0)&&mcpRuntime.desktopAwake)return window.penechoDesktop.setMcpKeepAwake(true);});mcpRuntime.desktopWakeRequest=request;
+      try{await request;}catch{}finally{if(mcpRuntime.desktopWakeRequest===request)mcpRuntime.desktopWakeRequest=null;}
+      return;
+    }
+    if(document.hidden){mcpReleaseWakeLock();return;}
+    if(mcpRuntime.wakeLock||mcpRuntime.wakeRequest||!globalThis.navigator?.wakeLock?.request)return;
+    const generation=mcpRuntime.wakeGeneration||0;
+    const request=Promise.resolve().then(()=>navigator.wakeLock.request("screen"));mcpRuntime.wakeRequest=request;
+    try {
+      const lock=await request;
+      if(generation!==(mcpRuntime.wakeGeneration||0)||document.hidden||!mcpKeepAwakeEnabled()||!mcpRuntime.wanted||!mcpRuntime.ready){await lock.release();return;}
+      mcpRuntime.wakeLock=lock;
+      lock.addEventListener("release",()=>{if(mcpRuntime.wakeLock===lock)mcpRuntime.wakeLock=null;},{once:true});
+    }catch{}finally{if(mcpRuntime.wakeRequest===request)mcpRuntime.wakeRequest=null;}
+  }
   function mcpDisconnect(lost=false) {
     if(!mcpRuntime)return;
+    if(typeof mcpReleaseWakeLock==="function")mcpReleaseWakeLock();
     clearTimeout(mcpRuntime.reconnectTimer);mcpRuntime.reconnectTimer=0;
     clearTimeout(mcpRuntime.reconnectStatusTimer);mcpRuntime.reconnectStatusTimer=0;mcpRuntime.reconnectAt=0;
     if(!lost){mcpRuntime.wanted=false;mcpRuntime.reconnecting=false;}
@@ -434,6 +470,7 @@
 
   function mcpHeartbeat(socket) {
     if(socket!==mcpRuntime.socket)return;
+    void mcpSyncWakeLock();
     if(!document.hidden&&(!mcpRuntime.ready||mcpRuntime.heartbeatSupported)&&Date.now()-mcpRuntime.lastPong>45000){mcpDisconnect(true);return;}
     if(socket.readyState===WebSocket.OPEN&&mcpRuntime.ready&&mcpRuntime.heartbeatSupported){try{socket.send(JSON.stringify({type:"ping"}));}catch{mcpDisconnect(true);return;}}
     mcpRuntime.heartbeatTimer=setTimeout(()=>mcpHeartbeat(socket),15000);
@@ -456,6 +493,7 @@
         }));
       }});
     document.querySelectorAll("[data-mcp-aria]").forEach(node=>{node.setAttribute("aria-label",mcpText(node.dataset.mcpAria));});
+    if(mcpEl("mcpKeepAwake"))mcpEl("mcpKeepAwake").checked=mcpKeepAwakeEnabled();
     const connected=mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN, connecting=!!mcpRuntime.socket&&!connected;
     mcpRenderCanvasStatus();mcpRenderToolbar();mcpRenderLan();
     mcpRenderTroubleshoot();
@@ -728,28 +766,38 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       :new WebSocket(`${location.protocol==="https:"?"wss:":"ws:"}//${location.host}${window.PENECHO_CONFIG?.runtime==="cloud"?"/api/v1/remote-canvas/mcp":"/api/mcp/canvas"}`);
     mcpRuntime.socket=socket;mcpRuntime.lastPong=Date.now();mcpHeartbeat(socket);
     socket.addEventListener("availabilitychange",()=>{if(socket===mcpRuntime.socket)mcpRenderSettings();});
-    socket.addEventListener("open",()=>{if(socket!==mcpRuntime.socket)return;const documents=mcpOpenCanvasCatalog();mcpRuntime.catalogSignature=JSON.stringify(documents);socket.send(JSON.stringify({type:"hello",canvasId:mcpRuntime.browserId,title:state.currentSnapshotName||"PenEcho Canvas",documents}));mcpRenderSettings();});
+    socket.addEventListener("open",()=>{if(socket!==mcpRuntime.socket)return;const documents=mcpOpenCanvasCatalog();mcpRuntime.catalogSignature=JSON.stringify(documents);socket.send(JSON.stringify({type:"hello",canvasId:mcpRuntime.browserId,title:state.currentSnapshotName||"PenEcho Canvas",documents,documentRename:true}));mcpRenderSettings();});
     socket.addEventListener("message",event=>{
       if(socket!==mcpRuntime.socket)return;let message;try{message=JSON.parse(event.data);}catch{return;}
       if(message.type==="dispose-session"){mcpDisposeSession(message.sessionId);return;}
       if(message.type==="lan-status-changed"){void mcpLanRefresh();return;}
-      if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();return;}
+      if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();void mcpSyncWakeLock();return;}
       if(message.type==="pong"){mcpRuntime.lastPong=Date.now();return;}
       if(message.type==="cancel"){mcpRuntime.controllers.get(message.requestId)?.abort(Object.assign(Error("The MCP request was cancelled."),{code:"REQUEST_CANCELLED"}));return;}
       if(message.type!=="call")return;
-      if(mcpRuntime.queued>=32){socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"CANVAS_BUSY",message:"Canvas update queue is full."}}));return;}
+      if(mcpRuntime.queued>=32&&message.name!=="mcp_find_canvases"){socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"CANVAS_BUSY",message:"Canvas update queue is full."}}));return;}
       if(mcpRuntime.controllers.has(message.requestId)){socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"INVALID_REQUEST",message:"This MCP request ID is already active."}}));return;}
+      // Server and renderer may run on different machines. Only compare local
+      // elapsed time; the server owns its absolute deadline and sends cancellation.
+      const remaining=Number.isFinite(message.timeoutMs)?message.timeoutMs:MCP_BROWSER_CALL_DEADLINE_MS;
+      if(remaining<=0){socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"REQUEST_EXPIRED",message:"This MCP call expired before the browser received it. Retry the current request."}}));return;}
       const controller=new AbortController();mcpRuntime.controllers.set(message.requestId,controller);mcpRuntime.queued++;
       const execution={kind:"mcp",socket,generation,controller,preserveView:true};
-      const deadline=setTimeout(()=>controller.abort(Object.assign(Error("The Canvas operation exceeded its browser execution deadline."),{code:"CANVAS_OPERATION_TIMEOUT"})),MCP_BROWSER_CALL_DEADLINE_MS);
-      mcpRuntime.queue=mcpRuntime.queue.catch(()=>{}).then(async()=>{
+      const timeoutMs=Math.max(1,Math.min(MCP_BROWSER_CALL_DEADLINE_MS,remaining)),deadlineAt=performance.now()+timeoutMs;
+      const expire=()=>controller.abort(Object.assign(Error("The Canvas operation exceeded its browser execution deadline."),{code:"CANVAS_OPERATION_TIMEOUT"}));
+      const deadline=setTimeout(expire,timeoutMs);
+      const run=async()=>{
         const started=performance.now(),mutation=["mcp_start_session","mcp_update_session","mcp_present_widget","mcp_draw","mcp_plot","mcp_close_session"].includes(message.name)&&message.arguments?.presentation?.intent!=="inspect";
         try{
+          if(performance.now()>=deadlineAt)expire();
           canvasAgentAssertToolExecution(execution);
           if(mutation)mcpBeginMutation(message.arguments?.client||mcpRuntime.sessions.get(message.arguments?.sessionId)?.client,message.arguments?.documentId||mcpRuntime.sessions.get(message.arguments?.sessionId)?.documentId||null);
           const previousRegion=message.name==="mcp_edit_canvas"&&message.arguments?.action==="delete"?mcpContentUpdateRegion({documentId:message.arguments.documentId||mcpRuntime.sessions.get(message.arguments.sessionId)?.documentId},message.arguments):null;
-          const operation=typeof canvasDocumentsExecute==="function"?canvasDocumentsExecute(message.name,message.arguments||{},execution):mcpExecute(message.name,message.arguments||{},execution),
-            result=await mcpWaitForExecution(operation,execution);
+          const operations=mcpRuntime.operations||(mcpRuntime.operations=new Set());
+          if(operations.size>=8&&message.name!=="mcp_find_canvases")throw Object.assign(Error("Previous Canvas operations are still finishing."),{code:"CANVAS_BUSY"});
+          const operation=typeof canvasDocumentsExecute==="function"?canvasDocumentsExecute(message.name,message.arguments||{},execution):mcpExecute(message.name,message.arguments||{},execution);
+          operations.add(operation);Promise.resolve(operation).then(()=>operations.delete(operation),()=>operations.delete(operation));
+          const result=await mcpWaitForExecution(operation,execution);
           canvasAgentAssertToolExecution(execution);
           if(["mcp_present_widget","mcp_draw","mcp_plot","mcp_patch_file","mcp_edit_canvas","mcp_place_image"].includes(message.name)&&message.arguments?.presentation?.intent!=="inspect"&&message.arguments?.action!=="show"&&!result.reused){
             const region=mcpContentUpdateRegion(result,message.arguments||{})||previousRegion;
@@ -758,8 +806,25 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
           if(mutation){const session=mcpRuntime.sessions.get(message.arguments?.sessionId);if(session)session.updatedAt=Date.now();}
           socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:true,result:{...result,browserElapsedMs:Math.round(performance.now()-started)}}));
         }catch(error){if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:error.code||"CANVAS_TOOL_FAILED",message:String(error.message||error),...(error.details?{details:error.details}:{})}}));}
-        finally{try{if(generation===mcpRuntime.generation){mcpRuntime.queued--;if(mcpRuntime.controllers.get(message.requestId)===controller)mcpRuntime.controllers.delete(message.requestId);}if(mutation&&socket===mcpRuntime.socket){mcpEndMutation();mcpRenderSettings();}if(socket===mcpRuntime.socket)await mcpWaitForExecution(window.PenEchoStudioNavigator?.flushMcpFollow?.(execution),execution).catch(()=>{});}finally{clearTimeout(deadline);}}
-      });
+        finally{try{if(generation===mcpRuntime.generation){mcpRuntime.queued--;if(mcpRuntime.controllers.get(message.requestId)===controller)mcpRuntime.controllers.delete(message.requestId);}if(mutation&&socket===mcpRuntime.socket){mcpEndMutation();mcpRenderSettings();}if(socket===mcpRuntime.socket) {
+            // Following new content is presentation work, outside the RPC queue.
+            // One follow is enough; the navigator already coalesces pending targets.
+            if(!mcpRuntime.followOperation&&typeof window.PenEchoStudioNavigator?.flushMcpFollow==="function") {
+              const followController=new AbortController(),follow={kind:"mcp",socket,generation,controller:followController,preserveView:true};
+              mcpRuntime.controllers.set("mcp-follow",followController);
+              const followTimer=setTimeout(()=>followController.abort(Object.assign(Error("Canvas follow timed out."),{code:"CANVAS_OPERATION_TIMEOUT"})),MCP_BROWSER_CALL_DEADLINE_MS);
+              const followOperation=Promise.resolve().then(()=>window.PenEchoStudioNavigator.flushMcpFollow(follow));
+              mcpRuntime.followOperation=followOperation;
+              followOperation.catch(()=>{}).finally(()=>{
+                clearTimeout(followTimer);
+                if(mcpRuntime.controllers.get("mcp-follow")===followController)mcpRuntime.controllers.delete("mcp-follow");
+                if(mcpRuntime.followOperation===followOperation)mcpRuntime.followOperation=null;
+              });
+            }
+          }}finally{clearTimeout(deadline);}}
+      };
+      if(message.name==="mcp_find_canvases")void run();
+      else mcpRuntime.queue=mcpRuntime.queue.catch(()=>{}).then(run);
     });
     socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
     socket.addEventListener("error",()=>{if(socket===mcpRuntime.socket)mcpDisconnect(true);});
@@ -794,7 +859,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
     // Preserve nearby design context, independently of where the user has since panned.
     const margin=120,x=Math.max(0,dirtyRegion.x-margin),y=Math.max(0,dirtyRegion.y-margin),
       region={x,y,width:Math.min(SIZE,dirtyRegion.x+dirtyRegion.w+margin)-x,height:Math.min(SIZE,dirtyRegion.y+dirtyRegion.h+margin)-y};
-    const captured=await canvasAgentCapture({target:"region",region,quality:"basic",coordinates:"metadata"},{signal:execution.controller?.signal,assertCurrent:()=>canvasAgentAssertToolExecution(execution)});
+    const captured=await canvasAgentCapture({target:"region",region,quality:"basic",coordinates:"metadata"},{execution,signal:execution.controller?.signal,assertCurrent:()=>canvasAgentAssertToolExecution(execution)});
     canvasAgentAssertToolExecution(execution);
     if(state.drawing)throw Error("Finish the current stroke before capturing feedback, then retry with the same cursor.");
     return {...result,...captured,visualContext:"current-canvas-with-nearby-design"};
@@ -817,6 +882,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   async function mcpCreateWidget(item,execution) {
     const result=await canvasAgentCreate({baseRevision:state.userRevision,items:[{type:"widget",widgetType:"html_widget",pluginId:"general",sourceFormat:"penecho-mcp+html",...item}]},
       {...execution,widgetContentViewport:{width:item.contentWidth||item.width,height:item.contentHeight||item.height}});
+    canvasAgentAssertToolExecution(execution);
     return canvasAgentObject(result.receipts[0].objectId).item;
   }
   async function mcpWaitForWidgetLoad(widget,execution) {
@@ -853,7 +919,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       canvasAgentAssertToolExecution(execution);
       const rasterMs=Math.round(performance.now()-started),scale=Math.min(1,policy.maxLongEdge/Math.max(snapshot.width,snapshot.height),Math.sqrt(policy.maxPixels/(snapshot.width*snapshot.height))),canvas=document.createElement("canvas");
       canvas.width=Math.max(1,Math.floor(snapshot.width*scale));canvas.height=Math.max(1,Math.floor(snapshot.height*scale));canvas.getContext("2d").drawImage(snapshot,0,0,canvas.width,canvas.height);
-      const encoded=await canvasAgentCompressedCanvas(canvas,policy),dataUrl=await canvasAgentReadDataUrl(encoded.blob);
+      const encoded=await canvasAgentCompressedCanvas(canvas,policy,execution),dataUrl=await canvasAgentReadDataUrl(encoded.blob,execution);
       canvasAgentAssertToolExecution(execution);
       const result={dataUrl,mediaType:encoded.blob.type,width:encoded.canvas.width,height:encoded.canvas.height,encodedBytes:encoded.blob.size,quality,
         artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,viewport:{width:widget.contentW,height:widget.contentH},rasterMs,
@@ -875,6 +941,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
     } finally {unmountWidget(widget);mcpRuntime.previews.delete(id);widget.snapshotImage=null;widget.snapshotDataUrl="";}
   }
   async function mcpExecute(name,args,execution) {
+    canvasAgentAssertToolExecution(execution);
     if(name==="mcp_start_session"){
       if(mcpRuntime.sessions.has(args.sessionId))return {sessionId:args.sessionId,boardObjectId:mcpRuntime.sessions.get(args.sessionId).boardObjectId,feedbackCursor:mcpRuntime.sessions.get(args.sessionId).feedbackStart};
       const session={sessionId:args.sessionId,title:args.title,client:args.client||"",status:"working",summary:"",steps:[],events:[],artifacts:new Map(),feedbackStart:mcpRuntime.feedbackSequence};
@@ -905,13 +972,16 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(artifact&&!widget)throw Error("This preview was removed. Use a new artifactId to create another.");
       if(widget){
         const context=widgetEditContext(widget,"agent"),expectedHash=await canvasAgentHash(context);
+        canvasAgentAssertToolExecution(execution);
         const command={...context,tool:"html_widget",pluginId:"general",html:args.html,title:args.title,x:widget.x,y:widget.y,w:widget.w,h:widget.h};
         await canvasAgentReplaceWidget({baseRevision:state.userRevision,objectId:widget.id,expectedHash,command},execution);
+        canvasAgentAssertToolExecution(execution);
         // Source updates preserve the user's footprint. Explicit geometry edits use
         // penecho_edit_canvas and its revision/collision checks.
       }else{
         const plan=mcpPlanPlacement(size.width,size.height,session,presentation);
         widget=await mcpCreateWidget({title:args.title,html:args.html,width:size.width,height:size.height,contentWidth:size.contentWidth,contentHeight:size.contentHeight,placement:plan.placement},{...execution,preserveView:true});
+        canvasAgentAssertToolExecution(execution);
         session.layout=plan.layout;mcpQueueView(session,widget,presentation);
         artifact={objectId:widget.id,title:args.title};session.artifacts.set(args.artifactId,artifact);
       }
@@ -925,7 +995,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(state.drawing)throw Error("Finish the current stroke before capturing.");
       const bounds=mcpTaskBounds(session,artifact.objectIds);if(!bounds)throw Error("Drawing was removed.");
       const x=Math.max(0,bounds.x-24),y=Math.max(0,bounds.y-24),region={x,y,width:Math.min(SIZE,bounds.x+bounds.w+24)-x,height:Math.min(SIZE,bounds.y+bounds.h+24)-y};
-      const capture=await canvasAgentCapture({target:"region",region,quality:args.quality||"basic",coordinates:"metadata"},{signal:execution.controller?.signal,assertCurrent:()=>canvasAgentAssertToolExecution(execution)});
+      const capture=await canvasAgentCapture({target:"region",region,quality:args.quality||"basic",coordinates:"metadata"},{execution,signal:execution.controller?.signal,assertCurrent:()=>canvasAgentAssertToolExecution(execution)});
       canvasAgentAssertToolExecution(execution);if(state.drawing)throw Error("Finish the current stroke before capturing.");
       return {...capture,artifactId:args.artifactId,revision:state.userRevision};
     }
@@ -936,7 +1006,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       return mcpCaptureWidget(object.item,args,execution);
     }
     if(name==="mcp_inspect_session")return {sessionId:session.sessionId,boardObjectId:board?.id||null,...mcpProgressData(session),attention:mcpAttentionState(session),artifacts:[...session.artifacts].map(([artifactId,value])=>{const object=canvasAgentObject(value.objectId);return {artifactId,title:value.title,presentation:value.presentation,kind:value.kind||"widget",objectId:value.objectId,...(value.objectIds?{objectIds:value.objectIds,elements:(value.elements||[]).map(([id,entry])=>{const child=canvasAgentObject(entry.objectId);return {id,objectId:entry.objectId,kind:entry.kind,...(child?{bounds:canvasAgentBox(child)}:{removed:true})};})}:{}),...(object?{bounds:value.objectIds?mcpTaskBounds(session,value.objectIds):canvasAgentBox(object)}:{removed:true})};}),revision:state.userRevision};
-    if(name==="mcp_close_session"){session.status="done";await mcpExecute("mcp_update_session",{sessionId:args.sessionId,status:"done"},execution);session.closed=true;mcpRuntime.pendingView.delete(session.sessionId);mcpRenderSettings();return {closed:true,retainedOnCanvas:true};}
+    if(name==="mcp_close_session"){session.status="done";await mcpExecute("mcp_update_session",{sessionId:args.sessionId,status:"done"},execution);canvasAgentAssertToolExecution(execution);session.closed=true;mcpRuntime.pendingView.delete(session.sessionId);mcpRenderSettings();return {closed:true,retainedOnCanvas:true};}
     throw Error(`Unsupported MCP Canvas operation: ${name}`);
   }
   mcpEl("mcpReconnectCancel")?.addEventListener("click",mcpCancelReconnect);
@@ -944,6 +1014,10 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});
   mcpEl("mcpToolbarToggle")?.addEventListener("click",mcpToolbarClick);
+  mcpEl("mcpKeepAwake")?.addEventListener("change",event=>{
+    try{localStorage.setItem("penecho-mcp-keep-awake",String(event.target.checked));}catch{}
+    void mcpSyncWakeLock();
+  });
   mcpEl("mcpEnabled")?.addEventListener("click",event=>{
     if(mcpRuntime.wanted||mcpRuntime.socket)return mcpCancelReconnect();
     try{mcpConnect();}catch{mcpDisconnect(true);setStatus(mcpText(mcpRuntime.wanted?"toolbarCancelRetry":"toolbarRetry"));}
@@ -999,6 +1073,6 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       mcpRuntime.configureResult={client:clientName,kind,detail:kind==="failed"?String(error.message):""};
     }finally{mcpRuntime.configuring=false;if(!["saved","updated"].includes(mcpRuntime.configureResult?.kind)&&mcpEl("mcpManual"))mcpEl("mcpManual").open=true;mcpRenderSettings();if(mcpEl("settingsPageMcp")?.hidden===false)mcpEl("mcpConfigureStatus")?.scrollIntoView?.({block:"nearest"});}
   });
-  addEventListener("visibilitychange",()=>{if(!document.hidden&&mcpRuntime.socket){mcpRuntime.lastPong=Date.now();clearTimeout(mcpRuntime.heartbeatTimer);mcpHeartbeat(mcpRuntime.socket);}});
+  addEventListener("visibilitychange",()=>{void mcpSyncWakeLock();if(!document.hidden&&mcpRuntime.socket){mcpRuntime.lastPong=Date.now();clearTimeout(mcpRuntime.heartbeatTimer);mcpHeartbeat(mcpRuntime.socket);}});
   addEventListener("offline",()=>{if(mcpRuntime.socket)mcpDisconnect(true);});
   addEventListener("pagehide",()=>mcpDisconnect());

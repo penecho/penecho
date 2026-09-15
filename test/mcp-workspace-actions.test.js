@@ -378,7 +378,7 @@ test("A failed in-flight follow preserves a newer target including another updat
   }
 });
 
- test("automatic Follow latest preserves unread acknowledgement",async()=>{
+test("automatic Follow latest preserves unread acknowledgement",async()=>{
   const h=harness({documents:[mcpDoc("active"),mcpDoc("latest",{unseen:1})]});
   h.noteStudioMcpContentUpdate("latest");
   await h.flushStudioMcpFollowLatest();

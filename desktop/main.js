@@ -5,8 +5,10 @@ const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { fileURLToPath, pathToFileURL } = require("node:url");
 const {
-  app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell,
+  app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell, powerSaveBlocker,
 } = require("electron");
+const { createMcpPowerLease } = require("./mcp-power.js");
+const mcpPowerLease = createMcpPowerLease(powerSaveBlocker);
 const {
   parseArgs, resolveConfiguration,
 } = require("../cli.js");
@@ -205,7 +207,9 @@ function createMainWindow(url) {
   });
   mainWindow.once("ready-to-show", () => void revealMainWindow(mainWindow));
   mainWindow.webContents.once("did-finish-load", updateDesktopUpdateUi);
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.webContents.on("render-process-gone",()=>mcpPowerLease.release());
+  mainWindow.webContents.on("did-start-navigation",(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace)mcpPowerLease.release();});
+  mainWindow.on("closed", () => { mcpPowerLease.release();mainWindow = null; });
   void mainWindow.loadURL(url);
   return mainWindow;
 }
@@ -434,6 +438,10 @@ function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents),
     fromUpdateWindow = event => Boolean(updateWindow && !updateWindow.isDestroyed() && event.sender === updateWindow.webContents),
     fromUpdateSurface = event => fromCanvas(event) || fromUpdateWindow(event);
+  ipcMain.handle("penecho:mcp-keep-awake",(event,enabled)=>{
+    if(!fromCanvas(event)||event.senderFrame!==event.sender.mainFrame)return false;
+    return mcpPowerLease.set(enabled===true,event.sender);
+  });
   ipcMain.on("penecho:has-clipboard-file", event => { event.returnValue=fromCanvas(event)&&clipboardFilePaths().length>0; });
   ipcMain.handle("penecho:read-clipboard-file", event => fromCanvas(event)?readCanvasClipboardFile():{ok:false});
   ipcMain.handle("penecho:read-clipboard-files", event => fromCanvas(event)?readCanvasClipboardFiles():{ok:false});
@@ -587,6 +595,7 @@ if (gotLock) {
   });
   app.on("before-quit", () => {
     quitting = true;
+    mcpPowerLease.release();
     updateManager?.stop();
     if (server?.listening) server.close();
   });
