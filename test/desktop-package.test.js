@@ -501,8 +501,24 @@ test("Windows installer animation shows the full color logo and image-based word
 });
 
 test("desktop icons retain the color symbol, white Mac tile and transparent Windows background", async () => {
+  const ico = fs.readFileSync(path.join(ROOT, "build/icons/penecho.ico")),
+    icns = fs.readFileSync(path.join(ROOT, "build/icons/penecho.icns"));
+  assert.equal(ico.readUInt16LE(2), 1);
+  assert.ok(ico.readUInt16LE(4) >= 5, "Windows ICO includes multiple resolutions");
+  assert.equal(icns.toString("ascii", 0, 4), "icns");
+  assert.equal(icns.readUInt32BE(4), icns.length);
+  // Inspect the shipped ICNS instead of an ignored, locally generated PNG.
+  let macPng;
+  for (let offset = 8; offset < icns.length;) {
+    assert.ok(offset + 8 <= icns.length, "ICNS entry header must be complete");
+    const type = icns.toString("ascii", offset, offset + 4), length = icns.readUInt32BE(offset + 4);
+    assert.ok(length > 8 && offset + length <= icns.length, "ICNS entry must fit within the file");
+    if (type === "ic10") macPng = icns.subarray(offset + 8, offset + length);
+    offset += length;
+  }
+  assert.ok(macPng, "Mac ICNS includes a 1024px icon");
   const windows = await sharp(path.join(ROOT, "build/icons/penecho-desktop-1024.png")).ensureAlpha().raw().toBuffer({ resolveWithObject:true }),
-    mac = await sharp(path.join(ROOT, "build/icons/generated/penecho-mac-1024.png")).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
+    mac = await sharp(macPng).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   for (const pixels of [windows, mac]) {
     assert.equal(pixels.info.width, 1024);
     assert.equal(pixels.info.height, 1024);
@@ -516,12 +532,6 @@ test("desktop icons retain the color symbol, white Mac tile and transparent Wind
   const center = (512 * 1024 + 512) * 4;
   assert.equal(windows.data[center + 3], 0, "symbol center is empty rather than a pen or text");
   assert.deepEqual([...mac.data.subarray(center, center + 4)], [255, 255, 255, 255]);
-  const ico = fs.readFileSync(path.join(ROOT, "build/icons/penecho.ico")),
-    icns = fs.readFileSync(path.join(ROOT, "build/icons/penecho.icns"));
-  assert.equal(ico.readUInt16LE(2), 1);
-  assert.ok(ico.readUInt16LE(4) >= 5, "Windows ICO includes multiple resolutions");
-  assert.equal(icns.toString("ascii", 0, 4), "icns");
-  assert.equal(icns.readUInt32BE(4), icns.length);
 });
 
 test("Windows first run waits for Squirrel to close before revealing PenEcho", async () => {
