@@ -3,7 +3,7 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-const { fileURLToPath } = require("node:url");
+const { fileURLToPath, pathToFileURL } = require("node:url");
 const {
   app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell,
 } = require("electron");
@@ -16,6 +16,7 @@ const { inspectCli, installCli } = require("./cli-installer.js");
 const { createUpdateManager } = require("./update-manager.js");
 const { lanUrls } = require("./network-access.js");
 const { desktopConfigurationEnvironment } = require("./config-environment.js");
+const { waitForSquirrelFirstRunExit } = require("./squirrel-first-run.js");
 const { CONNECTION_STORE_VERSION } = require("../src/server/connection-store.js");
 const { issueNativePickerGrant } = require("../src/server/canvas-agent/native-picker-grants.js");
 const { CanvasAgentProjectStore } = require("../src/server/canvas-agent/project-store.js");
@@ -57,13 +58,17 @@ function handleSquirrelStartup() {
 const squirrelStartup = handleSquirrelStartup(),
   gotLock = !squirrelStartup && app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
+const squirrelFirstRunComplete = waitForSquirrelFirstRunExit();
 
 const ROOT = path.resolve(__dirname, ".."),
   CANVAS_PRELOAD = path.join(__dirname, "canvas-preload.js"),
+  UPDATE_WINDOW_PRELOAD = path.join(__dirname, "update-window-preload.js"),
+  UPDATE_WINDOW_HTML = path.join(__dirname, "update-window.html"),
   WINDOW_ICON = path.join(ROOT, "build", "icons", "penecho.png"),
   HELP_URL = "https://github.com/penecho/penecho#quick-start";
 
 let mainWindow = null,
+  updateWindow = null,
   server = null,
   updateManager = null,
   currentLanUrls = [],
@@ -160,6 +165,13 @@ function restrictNavigation(window, allowed) {
   });
 }
 
+async function revealMainWindow(window, focus = false) {
+  await squirrelFirstRunComplete;
+  if (!window || window.isDestroyed()) return;
+  window.show();
+  if (focus) window.focus();
+}
+
 function showSettings() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     if (!server?.listening) return;
@@ -169,15 +181,14 @@ function showSettings() {
     window.webContents.once("did-finish-load", () => window.webContents.send("penecho:show-connections"));
     return;
   }
-  mainWindow.show();
-  mainWindow.focus();
-  mainWindow.webContents.send("penecho:show-connections");
+  void revealMainWindow(mainWindow, true).then(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("penecho:show-connections");
+  });
 }
 
 function createMainWindow(url) {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
+    void revealMainWindow(mainWindow, true);
     return mainWindow;
   }
   const origin = new URL(url).origin;
@@ -192,14 +203,15 @@ function createMainWindow(url) {
   restrictNavigation(mainWindow, candidate => {
     try { return new URL(candidate).origin === origin; } catch { return false; }
   });
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
-  mainWindow.webContents.once("did-finish-load", () => sendUpdateState(mainWindow));
+  mainWindow.once("ready-to-show", () => void revealMainWindow(mainWindow));
+  mainWindow.webContents.once("did-finish-load", updateDesktopUpdateUi);
   mainWindow.on("closed", () => { mainWindow = null; });
   void mainWindow.loadURL(url);
   return mainWindow;
 }
 
 async function showLanAccessNotice(window) {
+  await squirrelFirstRunComplete;
   if (!currentLanUrls.length || !window || window.isDestroyed()) return;
   const result = await dialog.showMessageBox(window, {
     type:"info",
@@ -240,13 +252,58 @@ function startServer(configuration) {
   });
 }
 
-function sendUpdateState(window) {
-  if (!window || window.isDestroyed() || !updateManager) return;
-  window.webContents.send("penecho:update-state", updateManager.getState());
+function sendUpdateState(window, state) {
+  if (!window || window.isDestroyed() || !state) return;
+  window.webContents.send("penecho:update-state", state);
 }
 
 function updateDesktopUpdateUi() {
-  sendUpdateState(mainWindow);
+  if (!updateManager) return;
+  const state = updateManager.getState(),
+    updateWindowVisible = Boolean(updateWindow && !updateWindow.isDestroyed() && updateWindow.isVisible());
+  sendUpdateState(mainWindow, { ...state, visible:state.visible && !updateWindowVisible });
+  sendUpdateState(updateWindow, state);
+}
+
+function isPenEchoReleaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com" &&
+      url.pathname.startsWith("/penecho/penecho/releases/");
+  } catch { return false; }
+}
+
+function showUpdateWindow() {
+  if (!updateManager) return;
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    void revealMainWindow(updateWindow, true).then(updateDesktopUpdateUi);
+  } else {
+    updateWindow = new BrowserWindow(secureWindowOptions({
+      width:440,
+      height:330,
+      minWidth:400,
+      minHeight:300,
+      maxWidth:560,
+      maxHeight:440,
+      title:"PenEcho Update",
+      autoHideMenuBar:true,
+      maximizable:false,
+      fullscreenable:false,
+      backgroundColor:"#ffffff",
+      webPreferences:{ preload:UPDATE_WINDOW_PRELOAD },
+    }));
+    restrictNavigation(updateWindow, candidate => candidate === pathToFileURL(UPDATE_WINDOW_HTML).href);
+    updateWindow.once("ready-to-show", () => void revealMainWindow(updateWindow, true).then(updateDesktopUpdateUi));
+    updateWindow.webContents.once("did-finish-load", updateDesktopUpdateUi);
+    updateWindow.on("closed", () => {
+      updateWindow = null;
+      updateDesktopUpdateUi();
+    });
+    void updateWindow.loadFile(UPDATE_WINDOW_HTML);
+  }
+  const status = updateManager.getState().status;
+  if (status === "installing") updateDesktopUpdateUi();
+  else void updateManager.check(true);
 }
 
 function installMenu() {
@@ -280,7 +337,7 @@ function installMenu() {
     { label:"Help", submenu:[
       { label:"Getting started", click:() => void shell.openExternal(HELP_URL) },
       { type:"separator" },
-      { label:"Check for Updates…", click:() => void updateManager?.check(true) },
+      { label:"Check for Updates…", click:showUpdateWindow },
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -374,7 +431,9 @@ async function readCanvasClipboardFiles() {
 }
 
 function registerIpc() {
-  const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+  const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents),
+    fromUpdateWindow = event => Boolean(updateWindow && !updateWindow.isDestroyed() && event.sender === updateWindow.webContents),
+    fromUpdateSurface = event => fromCanvas(event) || fromUpdateWindow(event);
   ipcMain.on("penecho:has-clipboard-file", event => { event.returnValue=fromCanvas(event)&&clipboardFilePaths().length>0; });
   ipcMain.handle("penecho:read-clipboard-file", event => fromCanvas(event)?readCanvasClipboardFile():{ok:false});
   ipcMain.handle("penecho:read-clipboard-files", event => fromCanvas(event)?readCanvasClipboardFiles():{ok:false});
@@ -425,11 +484,23 @@ function registerIpc() {
     if (result.canceled || !selectedPath) return { canceled:true };
     return { canceled:false, path:selectedPath, pickerToken:issueNativePickerGrant({ selectedPath, kind:"file" }) };
   });
-  ipcMain.handle("penecho:get-update-state", event => fromCanvas(event) ? updateManager?.getState() : null);
-  ipcMain.handle("penecho:update-check", event => fromCanvas(event) ? updateManager?.check(true) : false);
-  ipcMain.handle("penecho:update-download", event => fromCanvas(event) ? updateManager?.download() : false);
+  ipcMain.handle("penecho:get-update-state", event => fromUpdateSurface(event) ? updateManager?.getState() : null);
+  ipcMain.handle("penecho:update-check", event => fromUpdateSurface(event) ? updateManager?.check(true) : false);
+  ipcMain.handle("penecho:update-download", event => fromUpdateSurface(event) ? updateManager?.download() : false);
   ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);
-  ipcMain.handle("penecho:update-install", event => fromCanvas(event) ? updateManager?.install() : false);
+  ipcMain.handle("penecho:update-install", event => fromUpdateSurface(event) ? updateManager?.install() : false);
+  ipcMain.handle("penecho:update-open-release-page", async event => {
+    if (!fromUpdateWindow(event)) return false;
+    const url = updateManager?.getState().releaseUrl || "";
+    if (!isPenEchoReleaseUrl(url)) return false;
+    await shell.openExternal(url);
+    return true;
+  });
+  ipcMain.handle("penecho:update-window-close", event => {
+    if (!fromUpdateWindow(event)) return false;
+    updateWindow.close();
+    return true;
+  });
   ipcMain.handle("penecho:set-page-scale", (event, value) => {
     if (!fromCanvas(event) || !mainWindow || mainWindow.isDestroyed()) return { ok:false };
     const scale = normalizeCanvasPageScale(value);
@@ -500,8 +571,7 @@ if (gotLock) {
     const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     if (!window) return;
     if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
+    void revealMainWindow(window, true);
   });
   app.whenReady().then(bootstrap).catch(error => {
     void dialog.showErrorBox("PenEcho startup failed", error.message || String(error));

@@ -1,81 +1,104 @@
-.desktop-update-prompt {
-  position: static;
-  z-index: 1;
-  grid-column: 4;
-  max-width: min(400px, 34vw);
-  align-self: center;
-  justify-self: end;
+main > footer { position: relative; }
+#desktopUpdatePrompt.desktop-update-prompt {
+  position: absolute;
+  z-index: 70;
+  top: 50%;
+  right: 4px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
+  height: 22px;
+  overflow: visible;
   color: #172033;
-  border: 1px solid #c9d8ef;
-  border-radius: 9px;
-  background: rgba(245, 249, 255, .98);
-  font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  box-shadow: 0 4px 12px rgba(24, 50, 79, .15);
-  backdrop-filter: blur(10px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: 400 11px/18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  box-shadow: none;
+  transform: translateY(-50%);
 }
-.desktop-update-prompt[hidden] { display: none; }
-main > footer.penecho-desktop-update-visible { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; }
-.desktop-update-row {
+#desktopUpdatePrompt.desktop-update-prompt[hidden] { display: none; }
+#desktopUpdatePrompt .desktop-update-row {
   display: flex;
-  min-height: 46px;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-}
-.desktop-update-copy {
-  display: grid;
+  height: 22px;
   min-width: 0;
-  flex: 1;
-  gap: 2px;
-  padding-left: 4px;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
 }
-.desktop-update-copy[hidden] { display: none; }
-.desktop-update-title { flex: 0 0 auto; font-size: 13px; }
-.desktop-update-detail {
+#desktopUpdatePrompt .desktop-update-title {
   min-width: 0;
   overflow: hidden;
-  color: #53637a;
+  font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.desktop-update-progress { width: min(220px, 26vw); height: 8px; accent-color: #315efb; }
-.desktop-update-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
-.desktop-update-actions button {
-  min-height: 32px;
-  padding: 6px 11px;
-  color: #26344b;
-  border: 1px solid #afc2dc;
-  border-radius: 8px;
-  background: #fff;
-  font: 500 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+#desktopUpdatePrompt .desktop-update-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+#desktopUpdatePrompt .desktop-update-primary {
+  position: relative;
+  display: inline-flex;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  height: 18px;
+  min-height: 18px;
+  max-height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 7px;
+  color: #fff;
+  border: 0;
+  border-radius: 5px;
+  background: #0f5e5c;
+  font: 600 10.5px/18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   letter-spacing: 0;
   cursor: pointer;
 }
-.desktop-update-actions button:hover { border-color: #315efb; }
-.desktop-update-actions button:focus-visible { border-color: #315efb; outline: 2px solid #315efb; outline-offset: 2px; }
-.desktop-update-actions .desktop-update-primary { color: #fff; border-color: #315efb; background: linear-gradient(135deg, #315efb, #6948e8); box-shadow: 0 5px 14px rgba(49, 94, 251, .28); }
-.desktop-update-prompt.is-available .desktop-update-row { min-height: 0; gap: 2px; padding: 2px; }
-.desktop-update-prompt.is-available .desktop-update-primary { min-height: 28px; padding: 5px 9px; border-radius: 7px; font-size: 11.5px; box-shadow: 0 3px 9px rgba(49, 94, 251, .22); }
-.desktop-update-prompt.is-available .desktop-update-close { width: 24px; min-height: 28px; font-size: 16px; }
-.desktop-update-actions .desktop-update-close {
-  width: 30px;
+#desktopUpdatePrompt .desktop-update-primary::after { position: absolute; inset: -3px 0; border: 0; background: none; content: ""; }
+#desktopUpdatePrompt .desktop-update-primary:hover { color: #fff; border: 0; background: #0b4f4d; }
+#desktopUpdatePrompt .desktop-update-primary:active { color: #fff; border: 0; background: #083f3e; }
+#desktopUpdatePrompt .desktop-update-primary:focus-visible,
+#desktopUpdatePrompt .desktop-update-close:focus-visible { outline: 2px solid #315efb; outline-offset: 1px; box-shadow: none; }
+#desktopUpdatePrompt .desktop-update-actions .desktop-update-close {
+  display: grid;
+  box-sizing: border-box;
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  max-height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
   padding: 0;
+  place-items: center;
   color: #53637a;
-  border-color: transparent;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
-  font-size: 20px;
-  font-weight: 400;
+  cursor: pointer;
 }
+#desktopUpdatePrompt .desktop-update-close:hover { color: #172033; border: 0; background: transparent; }
+#desktopUpdatePrompt .desktop-update-close:active { color: #172033; border: 0; background: transparent; }
+#desktopUpdatePrompt .desktop-update-close svg { width: 11px; height: 11px; min-width: 0; flex: 0 0 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 body[data-theme="arcane"] .desktop-update-prompt,
 body[data-theme="scifi"] .desktop-update-prompt {
   color: #edf3ff;
-  border-color: #435678;
-  background: rgba(23, 34, 56, .96);
 }
-body[data-theme="arcane"] .desktop-update-detail,
-body[data-theme="scifi"] .desktop-update-detail { color: #c1cee2; }
-@media (max-width: 720px) {
-  .desktop-update-prompt { max-width: 46vw; }
-  .desktop-update-row { gap: 6px; }
-  .desktop-update-progress { width: min(260px, 55vw); }
+body[data-theme="arcane"] #desktopUpdatePrompt .desktop-update-close,
+body[data-theme="scifi"] #desktopUpdatePrompt .desktop-update-close { color: #b9c8de; }
+body[data-theme="arcane"] #desktopUpdatePrompt .desktop-update-close:hover,
+body[data-theme="scifi"] #desktopUpdatePrompt .desktop-update-close:hover { color: #fff; background: transparent; }
+@media (max-width: 420px) {
+  #desktopUpdatePrompt.desktop-update-prompt { right: 2px; max-width: calc(100vw - 8px); }
+}
+@media (forced-colors: active) {
+  #desktopUpdatePrompt .desktop-update-primary { border: 1px solid ButtonText; }
+  #desktopUpdatePrompt .desktop-update-close:focus-visible { outline-color: Highlight; }
 }

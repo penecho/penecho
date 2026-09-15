@@ -17,6 +17,7 @@ const {
 } = require("../desktop/update-manager.js");
 const { isPrivateIpv4, lanHosts, lanUrls } = require("../desktop/network-access.js");
 const { desktopConfigurationEnvironment } = require("../desktop/config-environment.js");
+const { processIsRunning, waitForSquirrelFirstRunExit } = require("../desktop/squirrel-first-run.js");
 const { parseArgs, resolveConfiguration } = require("../cli.js");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -246,6 +247,10 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
     serverMain = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
     canvasPreload = fs.readFileSync(path.join(ROOT, "desktop", "canvas-preload.js"), "utf8"),
     updateCss = fs.readFileSync(path.join(ROOT, "public", "desktop-update.css"), "utf8"),
+    updateWindowHtml = fs.readFileSync(path.join(ROOT, "desktop", "update-window.html"), "utf8"),
+    updateWindowCss = fs.readFileSync(path.join(ROOT, "desktop", "update-window.css"), "utf8"),
+    updateWindowJs = fs.readFileSync(path.join(ROOT, "desktop", "update-window.js"), "utf8"),
+    updateWindowPreload = fs.readFileSync(path.join(ROOT, "desktop", "update-window-preload.js"), "utf8"),
     forge = fs.readFileSync(path.join(ROOT, "forge.config.js"), "utf8"),
     rootPackage = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.doesNotMatch(main, /settingsWindow|configurationIsReady|save-and-test|SETTINGS_FILE/);
@@ -272,6 +277,13 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /createUpdateManager\(\{[\s\S]*?currentVersion:DESKTOP_VERSION/);
   assert.match(main, /updateManager\.start\(\)/);
   assert.match(main, /Check for Updates/);
+  assert.match(main, /Check for Updates…", click:showUpdateWindow/);
+  assert.match(main, /UPDATE_WINDOW_PRELOAD = path\.join\(__dirname, "update-window-preload\.js"\)/);
+  assert.match(main, /UPDATE_WINDOW_HTML = path\.join\(__dirname, "update-window\.html"\)/);
+  assert.match(main, /visible:state\.visible && !updateWindowVisible/);
+  assert.match(main, /if \(status === "installing"\) updateDesktopUpdateUi\(\);\s*else void updateManager\.check\(true\)/);
+  assert.match(main, /url\.pathname\.startsWith\("\/penecho\/penecho\/releases\/"\)/);
+  assert.match(main, /penecho:update-open-release-page/);
   assert.doesNotMatch(main, /macUpdateMenu/);
   assert.match(main, /--squirrel-\(\?:install\|updated\|uninstall\|obsolete\)/);
   assert.doesNotMatch(main, /setProgressBar/);
@@ -297,14 +309,37 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(main, /issueNativePickerGrant.*require\("\.\.\/src\/server\/canvas-agent\/native-picker-grants\.js"\)/);
   assert.doesNotMatch(canvasPreload, /openSettings/);
   assert.match(canvasPreload, /\["darwin", "win32"\]\.includes\(process\.platform\)/);
-  assert.match(canvasPreload, /`New\$\{version\} \\u00b7 Upgrade`/);
-  assert.match(canvasPreload, /新版本/);
-  assert.match(canvasPreload, /desktop-update-progress/);
+  assert.match(canvasPreload, /`Update available\$\{version\}`/);
+  assert.match(canvasPreload, /有新版本/);
+  assert.match(canvasPreload, /download:"Download"/);
+  assert.match(canvasPreload, /download:"下载"/);
+  assert.doesNotMatch(canvasPreload, /desktop-update-progress|element\("progress"/);
   assert.match(canvasPreload, /document\.querySelector\("main > footer"\)/);
   assert.match(canvasPreload, /\(footer \|\| document\.body\)\.append\(prompt\)/);
-  assert.match(updateCss, /\.desktop-update-prompt\s*\{[\s\S]*?position: static;[\s\S]*?grid-column: 4;/);
-  assert.match(updateCss, /main > footer\.penecho-desktop-update-visible/);
-  assert.match(updateCss, /\.desktop-update-prompt\.is-available \.desktop-update-primary\s*\{[^}]*min-height: 28px;/);
+  assert.match(canvasPreload, /prompt\.id = "desktopUpdatePrompt"/);
+  assert.match(canvasPreload, /data-pe-surface", "toast"/);
+  assert.match(canvasPreload, /data-pe-presentation", "anchored"/);
+  assert.match(updateCss, /main > footer \{ position: relative; \}/);
+  assert.match(updateCss, /#desktopUpdatePrompt\.desktop-update-prompt\s*\{[\s\S]*?position: absolute;[\s\S]*?top: 50%;[\s\S]*?right: 4px;[\s\S]*?height: 22px;[\s\S]*?border: 0;[\s\S]*?background: transparent;/);
+  assert.doesNotMatch(updateCss, /grid-column:\s*4|penecho-desktop-update-visible\s*\{[^}]*grid-template-columns/);
+  assert.match(updateCss, /#desktopUpdatePrompt \.desktop-update-row\s*\{[^}]*height: 22px;/);
+  assert.match(updateCss, /#desktopUpdatePrompt \.desktop-update-primary\s*\{[^}]*height: 18px;[^}]*min-height: 18px;[^}]*max-height: 18px;[^}]*border-radius: 5px;/);
+  assert.match(updateCss, /#desktopUpdatePrompt \.desktop-update-actions \.desktop-update-close\s*\{[^}]*width: 18px;[^}]*min-width: 18px;[^}]*max-width: 18px;[^}]*height: 18px;[^}]*min-height: 18px;[^}]*max-height: 18px;[^}]*border: 0;[^}]*background: transparent;/);
+  assert.match(updateCss, /#desktopUpdatePrompt \.desktop-update-close:hover\s*\{[^}]*border: 0;[^}]*background: transparent;/);
+  assert.doesNotMatch(updateCss, /min-height:\s*(?:2[5-9]|[3-9]\d)px|box-shadow:\s*0 [1-9]/);
+  assert.match(updateWindowHtml, /Content-Security-Policy/);
+  assert.doesNotMatch(updateWindowHtml, /<style|<script(?! src)/);
+  assert.match(updateWindowHtml, /role="progressbar"/);
+  assert.match(updateWindowHtml, /id="release-button"/);
+  assert.match(updateWindowCss, /grid-template-rows: auto 1fr auto/);
+  assert.match(updateWindowCss, /prefers-reduced-motion: reduce/);
+  assert.match(updateWindowJs, /The download will continue in the background/);
+  assert.match(updateWindowJs, /下载会在后台继续/);
+  assert.match(updateWindowJs, /currentState\.status === "available"\) await api\.download\(\)/);
+  assert.match(updateWindowJs, /currentState\.status === "ready" \|\| currentState\.ready/);
+  assert.match(updateWindowPreload, /openReleasePage:\(\) => invoke\("penecho:update-open-release-page"\)/);
+  assert.match(updateWindowPreload, /close:\(\) => invoke\("penecho:update-window-close"\)/);
+  assert.doesNotMatch(updateWindowPreload, /update-dismiss/);
   assert.match(main, /label:"Settings…"[\s\S]*?click:showSettings/);
   assert.match(serverMain, /canvasAgentAutoOpen:CANVAS_AGENT_AUTO_OPEN/);
   assert.match(forge, /node_modules\/\{sharp,@img,@vscode\}/);
@@ -405,26 +440,110 @@ test("Windows installer splash keeps a font-independent PenEcho wordmark", async
   const generator = fs.readFileSync(path.join(ROOT, "scripts", "generate-icons.js"), "utf8"),
     splash = path.join(ROOT, "build", "icons", "penecho-install.gif"),
     metadata = await sharp(splash).metadata(),
-    pixels = await sharp(splash).flatten({ background:"#ffffff" }).raw().toBuffer({ resolveWithObject:true });
+    animatedMetadata = await sharp(splash, { animated:true }).metadata(),
+    pixels = await sharp(splash, { animated:true }).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   assert.match(generator, /wordmarkSource = path\.join\(ROOT, "public", "penecho-readme-header\.png"\)/);
   assert.doesNotMatch(generator, /<text\b/);
-  assert.match(generator, /insetX = 2[\s\S]*?echoMask = Buffer\.alloc\([\s\S]*?x = 41[\s\S]*?255 - Math\.min\([\s\S]*?dilateAlpha\(echoMask, width, height\)/);
+  assert.match(generator, /width = 112, height = 22[\s\S]*?echoStart = 50[\s\S]*?dilateAlpha\(echoMask, width, height\)/);
+  assert.match(generator, /resize\(60, 60, \{ fit:"contain", background:\{ r:0, g:0, b:0, alpha:0 \} \}\)[\s\S]*?joinChannel\(markAlpha/);
+  assert.match(generator, /pageHeight:height[\s\S]*?background:\{ r:255, g:255, b:255, alpha:1 \}[\s\S]*?delay:\[240, 240, 240\]/);
   assert.equal(metadata.width, 268);
   assert.equal(metadata.height, 167);
-  const rgba = await sharp(splash).ensureAlpha().raw().toBuffer();
-  assert.equal(rgba[3], 0, "installer background must be transparent");
-  assert.equal(rgba[(20 * 268 + 24) * 4 + 3], 0, "installer must not paint the old gray frame");
-  let inkPixels = 0, rightEdgeInkPixels = 0;
-  for (let y = 100; y < 124; y += 1) {
-    for (let x = 82; x < 186; x += 1) {
-      const offset = (y * pixels.info.width + x) * pixels.info.channels,
-        darkest = Math.min(pixels.data[offset], pixels.data[offset + 1], pixels.data[offset + 2]);
-      if (darkest < 120) inkPixels += 1;
-      if (x === 179 && darkest < 120) rightEdgeInkPixels += 1;
+  assert.equal(animatedMetadata.pages, 3);
+  assert.equal(animatedMetadata.height, 501);
+  assert.equal(animatedMetadata.pageHeight, 167);
+  let inkPixels = 0, rightEdgeInkPixels = 0, bluePixels = 0, seamPixels = 0;
+  for (let frame = 0; frame < animatedMetadata.pages; frame += 1) {
+    const frameTop = frame * animatedMetadata.pageHeight,
+      backgroundOffset = (frameTop * pixels.info.width) * pixels.info.channels;
+    assert.deepEqual(
+      Array.from(pixels.data.subarray(backgroundOffset, backgroundOffset + 4)),
+      [255, 255, 255, 255],
+      `installer frame ${frame + 1} background must be opaque white`,
+    );
+    for (let y = 96; y < 126; y += 1) {
+      for (let x = 74; x < 194; x += 1) {
+        const offset = ((frameTop + y) * pixels.info.width + x) * pixels.info.channels,
+          darkest = Math.min(pixels.data[offset], pixels.data[offset + 1], pixels.data[offset + 2]);
+        if (darkest < 120) inkPixels += 1;
+        if (x === 193 && darkest < 120) rightEdgeInkPixels += 1;
+      }
+    }
+    for (let y = 20; y < 150; y += 1) {
+      for (let x = 70; x < 198; x += 1) {
+        const offset = ((frameTop + y) * pixels.info.width + x) * pixels.info.channels,
+          red = pixels.data[offset], green = pixels.data[offset + 1], blue = pixels.data[offset + 2];
+        if (blue > red + 20 || blue > green + 20) bluePixels += 1;
+        if (y === 85 && red < 80 && green < 80 && blue < 80) seamPixels += 1;
+      }
     }
   }
   assert.ok(inkPixels > 80, `expected a visible PenEcho wordmark, found ${inkPixels} dark pixels`);
   assert.equal(rightEdgeInkPixels, 0, "expected a clear safety column after the bold Echo wordmark");
+  assert.equal(bluePixels, 0, "installer mark and PenEcho wordmark must be monochrome black");
+  assert.equal(seamPixels, 0, "the resized mark must not paint a black padding seam");
+});
+
+test("desktop application icons use a white Mac tile and a transparent Windows background", async () => {
+  const generator = fs.readFileSync(path.join(ROOT, "scripts", "generate-icons.js"), "utf8"),
+    windowsIcon = path.join(ROOT, "build", "icons", "penecho-1024.png"),
+    macIcon = path.join(ROOT, "build", "icons", "generated", "penecho-mac-1024.png"),
+    windowsPixels = await sharp(windowsIcon).ensureAlpha().raw().toBuffer({ resolveWithObject:true }),
+    macPixels = await sharp(macIcon).ensureAlpha().raw().toBuffer({ resolveWithObject:true }),
+    iconGenerator = generator.slice(generator.indexOf("async function monochromeMark("), generator.indexOf("function dilateAlpha("));
+  assert.match(iconGenerator, /async function windowsPng[\s\S]*?markSize = Math\.max\(1, Math\.round\(size \* \.86\)\)/);
+  assert.match(iconGenerator, /async function macPng[\s\S]*?markSize = Math\.max\(1, Math\.round\(size \* \.72\)\)[\s\S]*?<rect[^>]*fill="#fff"/);
+  assert.match(iconGenerator, /extractChannel\(3\)[\s\S]*?background:\{ r:17, g:19, b:24 \}/);
+  assert.equal(windowsPixels.info.width, 1024);
+  assert.equal(windowsPixels.info.height, 1024);
+  let transparent = 0, ink = 0, blue = 0;
+  for (let offset = 0; offset < windowsPixels.data.length; offset += windowsPixels.info.channels) {
+    const red = windowsPixels.data[offset], green = windowsPixels.data[offset + 1], value = windowsPixels.data[offset + 2], alpha = windowsPixels.data[offset + 3];
+    if (alpha === 0) transparent += 1;
+    if (alpha > 128 && red < 60 && green < 60 && value < 60) ink += 1;
+    if (alpha > 32 && value > red + 20) blue += 1;
+  }
+  assert.ok(transparent > 200000, "the Windows icon must retain a substantial transparent background");
+  assert.ok(ink > 10000, "the Windows PenEcho mark must remain visible in near-black");
+  assert.equal(blue, 0, "the Windows icon must not retain the old blue treatment");
+  let macWhite = 0, macInk = 0, macBlue = 0;
+  for (let offset = 0; offset < macPixels.data.length; offset += macPixels.info.channels) {
+    const red = macPixels.data[offset], green = macPixels.data[offset + 1], value = macPixels.data[offset + 2], alpha = macPixels.data[offset + 3];
+    if (alpha > 250 && red > 245 && green > 245 && value > 245) macWhite += 1;
+    if (alpha > 128 && red < 60 && green < 60 && value < 60) macInk += 1;
+    if (alpha > 32 && value > red + 20) macBlue += 1;
+  }
+  assert.ok(macWhite > 300000, "the Mac icon must paint an opaque white app tile");
+  assert.ok(macInk > 10000, "the Mac PenEcho mark must remain visible in near-black");
+  assert.equal(macBlue, 0, "the Mac icon must not retain the old blue treatment");
+  assert.equal(macPixels.data[3], 0, "the Mac tile keeps transparent outer corners for the rounded silhouette");
+});
+
+test("Windows first run waits for Squirrel to close before revealing PenEcho", async () => {
+  let now = 0, checks = 0;
+  assert.equal(await waitForSquirrelFirstRunExit({
+    platform:"darwin",
+    argv:["PenEcho", "--squirrel-firstrun"],
+    isRunning:() => { throw new Error("must not inspect a process outside Windows first run"); },
+  }), false);
+  assert.equal(await waitForSquirrelFirstRunExit({
+    platform:"win32",
+    argv:["PenEcho", "--squirrel-firstrun"],
+    parentPid:42,
+    pollMs:100,
+    maxWaitMs:1000,
+    now:() => now,
+    delay:async milliseconds => { now += milliseconds; },
+    isRunning:pid => { assert.equal(pid, 42); checks += 1; return checks < 4; },
+  }), true);
+  assert.equal(now, 300);
+  assert.equal(processIsRunning(42, () => {}), true);
+  assert.equal(processIsRunning(42, () => { const error = new Error("denied"); error.code = "EPERM"; throw error; }), true);
+  assert.equal(processIsRunning(42, () => { const error = new Error("gone"); error.code = "ESRCH"; throw error; }), false);
+  const main = fs.readFileSync(path.join(ROOT, "desktop", "main.js"), "utf8");
+  assert.match(main, /const squirrelFirstRunComplete = waitForSquirrelFirstRunExit\(\)/);
+  assert.match(main, /async function revealMainWindow[\s\S]*?await squirrelFirstRunComplete[\s\S]*?window\.show\(\)/);
+  assert.doesNotMatch(main, /ready-to-show", \(\) => mainWindow\?\.show\(\)/);
 });
 
 test("desktop Canvas file picker is sender-guarded, single-file, and type-limited", () => {
@@ -547,6 +666,60 @@ test("desktop updates resolve published GitHub Releases for each packaged target
   assert.match(source, /sha256/);
   assert.equal(manager.start(), true);
   manager.stop();
+});
+
+test("desktop update dismissal stays quiet through a background download until a manual check", async () => {
+  let finishDownload;
+  const manager = createUpdateManager({
+    app:{ getVersion:() => "0.6.0", getPath:() => "/tmp" },
+    platform:"win32",
+    arch:"x64",
+    logger:{ warn:() => {} },
+    fetchImpl:async () => ({
+      ok:true,
+      status:200,
+      json:async () => ({
+        tag_name:"v0.7.1",
+        name:"PenEcho 0.7.1",
+        assets:[{
+          name:"PenEcho-Setup-0.7.1-win-x64.exe",
+          browser_download_url:"https://github.com/penecho/penecho/releases/download/v0.7.1/PenEcho-Setup-0.7.1-win-x64.exe",
+        }],
+      }),
+    }),
+    downloadImpl:async input => {
+      input.onProgress(12.4);
+      await new Promise(resolve => { finishDownload = resolve; });
+      input.onProgress(58.9);
+      return input.destination;
+    },
+  });
+
+  assert.equal(await manager.check(false), true);
+  const pendingDownload = manager.download();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(manager.getState().status, "downloading");
+  assert.equal(manager.getState().progress, 12.4);
+
+  assert.equal(manager.dismiss(), true);
+  assert.equal(manager.getState().status, "downloading");
+  assert.equal(manager.getState().visible, false);
+  assert.equal(await manager.check(false), false);
+
+  assert.equal(await manager.check(true), true);
+  assert.equal(manager.getState().status, "downloading");
+  assert.equal(manager.getState().visible, true);
+  assert.equal(manager.getState().progress, 12.4);
+
+  assert.equal(manager.dismiss(), true);
+  finishDownload();
+  assert.equal(await pendingDownload, true);
+  assert.equal(manager.getState().status, "ready");
+  assert.equal(manager.getState().visible, false);
+
+  assert.equal(await manager.check(true), true);
+  assert.equal(manager.getState().status, "ready");
+  assert.equal(manager.getState().visible, true);
 });
 
 test("desktop update checks honor the desktop-only version override", () => {

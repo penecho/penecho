@@ -298,7 +298,13 @@ function createUpdateManager(options) {
       publish("ready", { visible:true, progress:100 });
       return true;
     }
-    if (checkingMetadata || downloadActive || dismissed && !manual) return false;
+    if (downloadActive) {
+      if (!manual) return false;
+      dismissed = false;
+      publish("downloading", { visible:true, progress:state.progress });
+      return true;
+    }
+    if (checkingMetadata || dismissed && !manual) return false;
     if (!supported || process.env.PENECHO_DISABLE_AUTO_UPDATE === "1") {
       if (manual) publish("error", {
         visible:true,
@@ -368,20 +374,20 @@ function createUpdateManager(options) {
           const rounded = progress === null ? null : Math.floor(progress);
           if (rounded === lastProgress) return;
           lastProgress = rounded;
-          publish("downloading", { visible:true, progress });
+          publish("downloading", { visible:!dismissed, progress });
         },
       });
       downloadActive = false;
       downloadController = null;
       downloadReady = true;
-      publish("ready", { visible:true, progress:100 });
+      publish("ready", { visible:!dismissed, progress:100 });
       return true;
     } catch (error) {
       downloadActive = false;
       downloadController = null;
       logger.warn?.(`PenEcho update download failed: ${error.message || error}`);
       publish("error", {
-        visible:true,
+        visible:!dismissed,
         error:`The update could not be downloaded. ${String(error?.message || error || "").trim()}`.trim().slice(0, 500),
       });
       return false;
@@ -389,8 +395,12 @@ function createUpdateManager(options) {
   }
 
   function dismiss() {
-    if (state.status === "downloading" || state.status === "installing") return false;
+    if (state.status === "installing") return false;
     dismissed = true;
+    if (downloadActive) {
+      publish("downloading", { visible:false, progress:state.progress });
+      return true;
+    }
     publish("dismissed", { visible:false });
     return true;
   }

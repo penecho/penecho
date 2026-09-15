@@ -1200,9 +1200,12 @@
       // Read first, then apply one stylesheet. Preserve authored styles and live DOM.
       const axes = widgetState.maximized || widgetState.fitContent ? "resize" : widgetState.fitContentAxes;
       const fitWidth = axes !== "height", fitHeight = axes !== "width";
+      const rootOverflow = widgetState.maximized
+        ? "overflow:hidden!important;overflow:clip!important;"
+        : (fitHeight ? "overflow-y:visible!important;" : "") + (fitWidth ? "overflow-x:visible!important;" : "");
       const rules = ["html,body{"
-        + (fitHeight ? "height:auto!important;min-height:0!important;max-height:none!important;overflow-y:visible!important;" : "")
-        + (fitWidth ? "max-width:none!important;overflow-x:visible!important;" : "") + "}"
+        + (fitHeight ? "height:auto!important;min-height:0!important;max-height:none!important;" : "")
+        + (fitWidth ? "max-width:none!important;" : "") + rootOverflow + "}"
         + (widgetState.maximized ? "html,body{overscroll-behavior:auto!important}" : "")];
       const containers = [];
       for (const element of document.body?.querySelectorAll("*") || []) {
@@ -1242,7 +1245,7 @@
     // One presentation owner: refresh authored scrolling layouts only when dirty,
     // then measure their natural extent without using the iframe viewport height.
     let presentationFrame = 0, presentationObserver = null, presentationMutations = null;
-    let presentationLayoutDirty = false, lastPresentationSize = "";
+    let presentationLayoutDirty = false, lastPresentationSize = "", presentationViewportWidth = 0;
     function schedulePresentationSize(refresh = false) {
       if (!widgetState.maximized) return;
       presentationLayoutDirty ||= refresh;
@@ -1257,8 +1260,8 @@
         const body = document.body, rect = body.getBoundingClientRect();
         let width = Math.max(1, rect.right + scrollX, body.scrollWidth);
         // The body border box excludes its trailing margin, but that margin
-        // contributes to the document's scroll extent. Include it so a nearly
-        // full-height inner scrollbar cannot consume the next wheel gesture.
+        // contributes to the document's extent. Include it so the outer
+        // presentation scroller can reach all trailing content.
         const bottomMargin = Math.max(0, parseFloat(getComputedStyle(body).marginBottom) || 0);
         let height = Math.max(1, rect.bottom + scrollY + bottomMargin);
         // Out-of-flow content contributes to the presentation without making the
@@ -1287,10 +1290,12 @@
         presentationMutations?.disconnect();
         presentationObserver = presentationMutations = null;
         lastPresentationSize = "";
+        presentationViewportWidth = 0;
         presentationLayoutDirty = false;
         return;
       }
       if (document.body && !presentationObserver && typeof ResizeObserver === "function") {
+        presentationViewportWidth = innerWidth;
         presentationObserver = new ResizeObserver(() => schedulePresentationSize());
         presentationObserver.observe(document.body);
       }
@@ -1303,7 +1308,16 @@
       }
       if (refresh) schedulePresentationSize(true);
     }
-    addEventListener("resize", () => schedulePresentationSize(true));
+    addEventListener("resize", () => {
+      if (!widgetState.maximized) return;
+      const widthChanged = presentationViewportWidth !== innerWidth;
+      presentationViewportWidth = innerWidth;
+      // Our measured height is written back to the iframe. Reclassifying the
+      // authored containers against that new height can alternately expand and
+      // restore the same container forever. Only width changes require reflow
+      // classification here; authored mutations already invalidate it above.
+      schedulePresentationSize(widthChanged);
+    });
     addEventListener("load", () => { if (widgetState.maximized) setPresentationLayout(); });
     addEventListener("message", (event) => {
       if (event.source !== parent) return;

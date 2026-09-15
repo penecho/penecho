@@ -86,7 +86,7 @@ Kimi 和 zcode 可能使用不同的 skill 目录；请查阅各自当前官方�
 
 ## Browser and conversation binding / 浏览器与对话绑定
 
-Enable MCP in at least one authorized browser. For a new conversation, call `penecho_start_session` with required `title`, a stable `client`, and a unique, stable `sessionKey`. `canvasId` and `instanceId` may be omitted: the direct HTTP service chooses the most recently registered opted-in browser. Explicit targets still use exact IDs returned by `penecho_list_canvases`; do not guess a document by its title.
+Enable MCP in at least one authorized browser. For a new conversation, call `penecho_start_session` with required `title`, a stable `client`, and a unique, stable `sessionKey`. `canvasId` and `instanceId` may be omitted: the direct HTTP service chooses the most recently registered opted-in browser. Explicit targets use the exact `instanceId`, `canvasId`, and `documentId` returned by `penecho_list_canvases`; do not guess a document by its title. This list mirrors the browser's open MCP workspace: a manually created or loaded Canvas remains present until the user closes it.
 
 Retain the returned `documentId` and `sessionId`. Reuse `client` plus `sessionKey` across turns and reconnects; an old conversation restores its original document instead of moving to the newest browser document. A closed saved document may reopen in the background. `restore` defaults true: only confirmed `DOCUMENT_NOT_FOUND` permits creating a replacement; permission, unavailable storage and other provider errors must remain errors. `restore:false` disables replacement; `show` defaults false. New unbound conversations create a named document.
 
@@ -103,9 +103,9 @@ the current bridge contract for adapters and documentation.
 
 | Tool | Input contract | Purpose |
 | --- | --- | --- |
-| penecho_list_canvases | `{}` | List connected, MCP-enabled canvases and their exact IDs across live instances in shared discovery. |
+| penecho_list_canvases | `{}` | List every open Canvas in each connected browser's MCP workspace, with exact connection and document IDs. Closed Canvases are excluded. |
 | penecho_open_canvas | `instanceId`, `canvasId`, required `requestId`; either exclusive `create:true`, or `documentId`, `locator`, or both; optional `title` for create and `show` (default false) | Create or open a persistent document through that exact opted-in connection. Supplying ID plus locator verifies an exact saved copy. It does not change the visible document unless `show:true`. |
-| penecho_find_canvases | `instanceId`, `canvasId`; optional `documentId` | Return authorized document candidates and per-provider statuses from that connection, without cross-host guessing. |
+| penecho_find_canvases | `instanceId`, `canvasId`; optional `documentId` | Query that connection's open MCP workspace, optionally by exact document ID. Closed Canvases are excluded. |
 | penecho_start_session | `title`; optional `instanceId`, `canvasId`, `restore` (default true), `show` (default false), `target:"current"` (exclusive with `documentId`), `documentId`, `takeover` (default false), `client`, `sessionKey` | Start session metadata bound to the browser-selected document. No progress board is created automatically; `boardObjectId` may be null. The returned session ID owns all later document routing. |
 | penecho_list_files / penecho_read_file | `sessionId`; virtual path and bounded pagination/line range | List or read public virtual Canvas sources. These tools never access the host filesystem. `context.md` is user-editable document context appended to the internal Agent's local user turn. |
 | penecho_patch_file | `sessionId`, virtual `path`, `contentHash`, one-file unified `patch`, `requestId` | Apply a zero-fuzz source-only edit after a read. SOURCE_CONFLICT requires a reread and new request; retry unknown outcomes with the same request ID. |
@@ -121,9 +121,9 @@ the current bridge contract for adapters and documentation.
 
 | 工具 | 输入契约 | 用途 |
 | --- | --- | --- |
-| penecho_list_canvases | `{}` | 列出同一 state directory 下存活实例的已连接、已启用 MCP Canvas 及准确 ID。 |
+| penecho_list_canvases | `{}` | 列出每个已连接浏览器左侧 MCP 工作区中的全部打开画布，并返回准确的连接 ID 与文档 ID；已关闭画布不返回。 |
 | penecho_open_canvas | `instanceId`、`canvasId`、必填 `requestId`；使用独占的 `create:true`，或 `documentId`、`locator`、二者组合；创建时可选 `title`，`show` 默认 false | 通过准确的已授权连接创建或打开持久文档；ID 与 locator 同时提供时验证准确保存副本；仅 `show:true` 会切换当前视图。 |
-| penecho_find_canvases | `instanceId`、`canvasId`；可选 `documentId` | 返回该连接授权的文档候选和各存储提供方状态，不跨主机猜测。 |
+| penecho_find_canvases | `instanceId`、`canvasId`；可选 `documentId` | 查询该连接左侧 MCP 工作区的打开画布，可按准确文档 ID 筛选；已关闭画布不返回。 |
 | penecho_start_session | `title`；可选 `instanceId`、`canvasId`、`restore`（默认 true）、`show`（默认 false）、`target:"current"`（与 `documentId` 互斥）、`documentId`、`takeover`（默认 false）、`client`、`sessionKey` | 为浏览器选定文档建立 session 元数据；不会自动创建进度板，`boardObjectId` 可以是 null；后续文档路由完全由返回的 sessionId 负责。 |
 | penecho_list_files / penecho_read_file | `sessionId`、虚拟路径及有界分页/行范围 | 列出或读取公开的 Canvas 虚拟源文件，不访问主机文件系统；`context.md` 是用户可编辑的文档上下文，会附加到内部 Agent 的本地 user turn。 |
 | penecho_patch_file | `sessionId`、虚拟 `path`、`contentHash`、单文件 unified diff、`requestId` | 在先读后写基础上执行 fuzz=0 的源码编辑；SOURCE_CONFLICT 要重新读取并换 requestId，结果未知时用相同 requestId 重试。 |
@@ -143,9 +143,9 @@ The current result shapes are also useful when writing an adapter:
 
 | Tool | Current result (abbreviated) |
 | --- | --- |
-| penecho_list_canvases | `{canvases:[{canvasId,instanceId,title,connectedAt}]}`; each Canvas record carries instanceId for explicit connection selection. |
+| penecho_list_canvases | `{canvases:[{canvasId,instanceId,documentId,title,active,connectedAt}]}`; each record is one open document and carries its exact connection identity. |
 | penecho_open_canvas | `{documentId,title,active,locator?,timing}`. `documentId` is independent from the opted-in bridge `canvasId`. |
-| penecho_find_canvases | Authorized metadata candidates and per-provider availability/error statuses. Ambiguity and cross-storage failures retain bounded structured details. |
+| penecho_find_canvases | `{candidates:[{documentId,title,active,open:true}],providers:[{location:"workspace",status:"ok"}]}` for the selected browser's current open-document catalog. |
 | penecho_start_session | A session snapshot with `sessionId`, exact Canvas and instance IDs, optional actual returned `documentId`, title, status, progress fields, render state, `boardObjectId` (possibly null), and revision metadata. |
 | file/message/edit tools | Bounded browser-owned public results plus timing. Virtual file reads include `contentHash`; patch and edit mutations are idempotent by request ID. |
 | penecho_capture_canvas | `{sessionId,target,image:{mimeType,data,bytes},pixelVerified:true,width,height,encodedBytes,revision,timing}` after a real image capture; the transport emits MCP image content. |
@@ -160,9 +160,9 @@ The current result shapes are also useful when writing an adapter:
 
 | 工具 | 当前结果 |
 | --- | --- |
-| penecho_list_canvases | `{canvases:[{canvasId,instanceId,title,connectedAt}]}`；每个 Canvas 记录都带有显式选择连接时使用的 instanceId。 |
+| penecho_list_canvases | `{canvases:[{canvasId,instanceId,documentId,title,active,connectedAt}]}`；每条记录对应一个打开文档，并带有准确的连接标识。 |
 | penecho_open_canvas | `{documentId,title,active,locator?,timing}`；`documentId` 与桥接授权用的 `canvasId` 相互独立。 |
-| penecho_find_canvases | 授权的元数据候选与各提供方可用/错误状态；歧义和跨存储失败保留有界结构化 details。 |
+| penecho_find_canvases | 返回所选浏览器当前打开文档目录：`{candidates:[{documentId,title,active,open:true}],providers:[{location:"workspace",status:"ok"}]}`。 |
 | penecho_start_session | session snapshot，包含 `sessionId`、准确的 Canvas/instance ID、浏览器实际返回时的 `documentId`、title、status、进度字段、render 状态、可能为 null 的 `boardObjectId` 及 revision 元数据。 |
 | 文件/消息/编辑工具 | 浏览器拥有的有界公开结果与 timing；虚拟文件读取包含 `contentHash`，patch/edit 通过 requestId 幂等。 |
 | penecho_capture_canvas | 真实图片捕获后返回 `{sessionId,target,image:{mimeType,data,bytes},pixelVerified:true,width,height,encodedBytes,revision,timing}`；MCP transport 会输出 MCP image content。 |

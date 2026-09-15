@@ -21,3 +21,8 @@ test('MCP does not hide non-conflict errors', async () => {
 test('explicit ephemeral port remains ephemeral', async () => {
   const value = server([]); await listenMcp(value,0); assert.deepEqual(value.ports,[0]);
 });
+test('MCP listen rejects when neither listening nor error is emitted', async () => {
+  const value = new EventEmitter(); value.listen = port => { value.port = port; };
+  await assert.rejects(listenMcp(value,0,20), {code:'MCP_LISTEN_TIMEOUT'});
+  assert.equal(value.listenerCount('error'),0); assert.equal(value.listenerCount('listening'),0);
+});

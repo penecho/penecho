@@ -57,23 +57,41 @@ function requestUpload(endpoint,credentials,stream,size,options){
 }
 async function uploadImage(options={}){
   const requestId=options.requestId||crypto.randomUUID(),settings={...options,requestId};
-  let handle,stream,bound;const controller=new AbortController();let timedOut=false;
-  const abort=()=>controller.abort();options.signal?.addEventListener('abort',abort,{once:true});if(options.signal?.aborted)abort();
-  const timer=setTimeout(()=>{timedOut=true;controller.abort();},options.timeoutMs||120000);
+  let handle,stream,bound,operation,requestStarted=false,timedOut=false,cancelled=false,cancelReject;
+  const controller=new AbortController();
+  const cancellation=new Promise((_,reject)=>{cancelReject=reject;});
+  const abort=()=>{
+    if(cancelled)return;
+    cancelled=true;
+    controller.abort();
+    const error=failure('request_cancelled',requestStarted);
+    error.outcome=requestStarted?'unknown':'not_dispatched';
+    cancelReject(error);
+  };
+  const requestedTimeout=Number(options.timeoutMs),timeoutMs=Number.isFinite(requestedTimeout)&&requestedTimeout>0?requestedTimeout:120000;
+  const timer=setTimeout(()=>{if(cancelled)return;cancelled=true;timedOut=true;controller.abort();const error=failure('UPLOAD_TIMEOUT',requestStarted);error.outcome=requestStarted?'unknown':'not_dispatched';cancelReject(error);},timeoutMs);
+  options.signal?.addEventListener('abort',abort,{once:true});
+  if(options.signal?.aborted)abort();
   try{
-    if(!/^[a-f0-9]{64}$/i.test(options.hostId||'')||!path.isAbsolute(options.uploadImage||'')||!['canvasId','documentId','requestId'].every(key=>typeof settings[key]==='string'&&settings[key].length>0&&settings[key].length<=(key==='documentId'?256:128)&&!/[\x00-\x1f]/.test(settings[key])))throw failure('INVALID_ARGUMENT');
-    settings.name=uploadName(options.uploadImage);if(!settings.name||settings.name.length>200)throw failure('INVALID_ARGUMENT');
-    handle=await fs.promises.open(options.uploadImage,fs.constants.O_RDONLY|(fs.constants.O_NONBLOCK||0));const stat=await handle.stat();if(!stat.isFile()||stat.size<=0||stat.size>MAX_INPUT)throw failure('INVALID_FILE');
-    const credentials=await (options.loadCredentials||discovery.loadCredentials)(options.hostId,options);
-    const endpoint=await (options.resolveEndpoint||discovery.resolveEndpoint)({...options,signal:controller.signal});controller.signal.throwIfAborted();
-    let total=0;const hash=crypto.createHash('sha256');
-    bound=new Transform({transform(chunk,encoding,callback){total+=chunk.length;if(total>MAX_INPUT||total>stat.size)return callback(failure('INVALID_FILE'));hash.update(chunk);callback(null,chunk);},flush(callback){callback(total===stat.size?null:failure('INVALID_FILE'));}});
-    stream=handle.createReadStream({autoClose:false,highWaterMark:64*1024});stream.on('error',()=>bound.destroy(failure('READ_FAILED')));stream.pipe(bound);
-    const response=metadata(await (options.requestUpload||requestUpload)(endpoint.url,credentials,bound,stat.size,{...settings,signal:controller.signal}),settings);
-    if(total!==stat.size||response.inputSha256!==hash.digest('hex'))throw failure('INVALID_RESPONSE',true);
-    return {ok:true,...response};
-  }catch(error){const code=['INVALID_ARGUMENT','INVALID_FILE','INVALID_RESPONSE','AUTH_REJECTED','UPLOAD_REJECTED','UPLOAD_FAILED','UPLOAD_TIMEOUT','READ_FAILED'].includes(error.code)?error.code:timedOut?'UPLOAD_TIMEOUT':'UPLOAD_FAILED';throw Object.assign(Error(code),{code,requestId,outcome:error.outcome|| (error.dispatched?'unknown':'not_dispatched'),...(Object.hasOwn(SERVER_ERRORS,error.serverCode)?{serverCode:error.serverCode}:{}),...(Number.isInteger(error.status)?{status:error.status}:{})});
-  }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);stream?.destroy();bound?.destroy();await handle?.close();}
+    if(cancelled)throw failure('request_cancelled',requestStarted);
+    operation=(async()=>{
+      controller.signal.throwIfAborted();
+      if(!/^[a-f0-9]{64}$/i.test(options.hostId||'')||!path.isAbsolute(options.uploadImage||'')||!['canvasId','documentId','requestId'].every(key=>typeof settings[key]==='string'&&settings[key].length>0&&settings[key].length<=(key==='documentId'?256:128)&&!/[\x00-\x1f]/.test(settings[key])))throw failure('INVALID_ARGUMENT');
+      settings.name=uploadName(options.uploadImage);if(!settings.name||settings.name.length>200)throw failure('INVALID_ARGUMENT');
+      handle=await fs.promises.open(options.uploadImage,fs.constants.O_RDONLY|(fs.constants.O_NONBLOCK||0));const stat=await handle.stat();if(!stat.isFile()||stat.size<=0||stat.size>MAX_INPUT)throw failure('INVALID_FILE');
+      const credentials=await (options.loadCredentials||discovery.loadCredentials)(options.hostId,options);
+      const endpoint=await (options.resolveEndpoint||discovery.resolveEndpoint)({...options,signal:controller.signal});controller.signal.throwIfAborted();
+      let total=0;const hash=crypto.createHash('sha256');
+      bound=new Transform({transform(chunk,encoding,callback){total+=chunk.length;if(total>MAX_INPUT||total>stat.size)return callback(failure('INVALID_FILE'));hash.update(chunk);callback(null,chunk);},flush(callback){callback(total===stat.size?null:failure('INVALID_FILE'));}});
+      stream=handle.createReadStream({autoClose:false,highWaterMark:64*1024});stream.on('error',()=>bound.destroy(failure('READ_FAILED')));stream.pipe(bound);
+      requestStarted=true;
+      const response=metadata(await (options.requestUpload||requestUpload)(endpoint.url,credentials,bound,stat.size,{...settings,signal:controller.signal}),settings);
+      if(total!==stat.size||response.inputSha256!==hash.digest('hex'))throw failure('INVALID_RESPONSE',true);
+      return {ok:true,...response};
+    })();
+    return await Promise.race([operation,cancellation]);
+  }catch(error){const known=['INVALID_ARGUMENT','INVALID_FILE','INVALID_RESPONSE','AUTH_REJECTED','UPLOAD_REJECTED','UPLOAD_FAILED','UPLOAD_TIMEOUT','READ_FAILED','request_cancelled'];const code=timedOut?'UPLOAD_TIMEOUT':cancelled?'request_cancelled':known.includes(error.code)?error.code:'UPLOAD_FAILED';throw Object.assign(Error(code),{code,requestId,outcome:error.outcome|| (error.dispatched||requestStarted?'unknown':'not_dispatched'),...(Object.hasOwn(SERVER_ERRORS,error.serverCode)?{serverCode:error.serverCode}:{}),...(Number.isInteger(error.status)?{status:error.status}:{})});
+  }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);stream?.destroy();bound?.destroy();operation?.catch(()=>{});await handle?.close();}
 }
 async function main(options={},io={}){
   try{(io.stdout||process.stdout).write(JSON.stringify(await uploadImage(options))+'\n');return 0;}

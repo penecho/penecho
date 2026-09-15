@@ -150,6 +150,8 @@
     settingsApiPresetFields = document.querySelector("#settingsApiPresetFields"),
     settingsApiRegion = document.querySelector("#settingsApiRegion"),
     settingsApiService = document.querySelector("#settingsApiService"),
+    settingsKimiSignup = document.querySelector("#settingsKimiSignup"),
+    settingsKimiSignupLink = document.querySelector("#settingsKimiSignupLink"),
     settingsCliFields = document.querySelector("#settingsCliFields"),
     settingsKimiCliRecommendation = document.querySelector("#settingsKimiCliRecommendation"),
     settingsCliModel = document.querySelector("#settingsCliModel"),
@@ -223,6 +225,13 @@
     "minimax-china-api":Object.freeze({ family:"minimax", region:"china", service:"api", format:"openai", url:"https://api.minimaxi.com/v1", model:"MiniMax-M3" }),
     "minimax-global-coding":Object.freeze({ family:"minimax", region:"global", service:"coding", format:"anthropic", url:"https://api.minimax.io/anthropic", model:"MiniMax-M3" }),
     "minimax-china-coding":Object.freeze({ family:"minimax", region:"china", service:"coding", format:"anthropic", url:"https://api.minimaxi.com/anthropic", model:"MiniMax-M3" }),
+  });
+  const KIMI_SIGNUP = Object.freeze({
+    api:Object.freeze({
+      global:Object.freeze({ url:"https://platform.kimi.ai?aff=penecho", label:"settingsKimiApiSignupGlobal" }),
+      china:Object.freeze({ url:"https://platform.kimi.com?aff=penecho", label:"settingsKimiApiSignupChina" }),
+    }),
+    coding:Object.freeze({ url:"https://www.kimi.com/code?aff=penecho", label:"settingsKimiCodingSignup" }),
   });
   const API_DEFAULTS = Object.freeze({
     openai:Object.freeze({ format:"openai", url:"https://api.openai.com/v1", model:"gpt-5.6-sol" }),
@@ -682,6 +691,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsApiService: "Service",
       settingsApiServiceApi: "API",
       settingsApiServiceCoding: "Coding Plan",
+      settingsKimiPartner: "PenEcho is a Kimi 2026 Open Source Partner.",
+      settingsKimiApiSignupGlobal: "Get a Kimi API key for Global access",
+      settingsKimiApiSignupChina: "Get a Kimi API key for Mainland China",
+      settingsKimiCodingSignup: "Get a Kimi Coding Plan API key",
       settingsApiModel: "Model",
       settingsApiUrl: "Base URL",
       settingsApiKey: "API key",
@@ -1094,7 +1107,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       openCanvasAgent: "Open PenEcho Agent",
       closeCanvasAgent: "Close PenEcho Agent",
       newCanvasAgentConversation: "New PenEcho Agent conversation",
-      canvasAgentAutoAIFocusPaused: "PenEcho Agent has focus · Canvas Auto AI is paused.",
+      canvasAgentAutoAIFocusPaused: "PenEcho Agent is open · Canvas Auto AI is paused.",
       canvasAgentExternalAIPaused: "External conversation selected · Canvas Auto AI is paused. Feedback is kept for the external AI.",
       canvasAgentAutoAIRequestPaused: "PenEcho Agent is working · Canvas Auto AI is paused.",
       canvasAgentProject: "Manage projects and files",
@@ -2832,6 +2845,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const family = settingsApiFormat?.value || "openai";
     return API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
   }
+  function updateKimiSignup() {
+    if (!settingsKimiSignup || !settingsKimiSignupLink) return;
+    const isKimi = settingsApiFormat?.value === "kimi";
+    settingsKimiSignup.hidden = !isKimi;
+    if (!isKimi) return;
+    const service = settingsApiService?.value === "coding" ? "coding" : "api",
+      destination = service === "coding" ? KIMI_SIGNUP.coding : KIMI_SIGNUP.api[settingsApiRegion?.value === "china" ? "china" : "global"];
+    settingsKimiSignupLink.href = destination.url;
+    settingsKimiSignupLink.dataset.i18n = destination.label;
+    settingsKimiSignupLink.textContent = t(destination.label);
+  }
   function apiModelSuggestions() {
     const presets = API_MODELS[settingsApiFormat?.value || "openai"] || [], presetValues = new Set(presets);
     return [...new Set([...presets, ...settings.fetchedApiModels.filter(model => !presetValues.has(model))])];
@@ -2915,6 +2939,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       enabled = presetFamily && settingsProvider?.value === "api" && settings.configurationMode === "api";
     settingsApiPresetFields.hidden = !presetFamily;
     for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
+    updateKimiSignup();
     if (resetModel) clearFetchedApiModels();
     updateApiModelChoices();
     const defaults = selectedApiPreset() || API_DEFAULTS[family];
@@ -3724,14 +3749,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (diagramRuntimePromise) return diagramRuntimePromise;
     diagramRuntimePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
+      let settled=false;
+      const finish=(error,runtime)=>{
+        if(settled)return;
+        settled=true;
+        clearTimeout(timer);
+        script.onload=script.onerror=null;
+        if(error){script.remove?.();reject(error);}else resolve(runtime);
+      };
+      const timer=setTimeout(()=>finish(Error("Professional diagram runtime load timed out")),10_000);
       script.src = "plugins/flowchart/runtime.js";
       script.async = true;
       script.onload = () => {
         const runtime = diagramRuntime();
-        if (runtime) resolve(runtime);
-        else reject(Error("Professional diagram runtime did not initialize"));
+        if (runtime) finish(null,runtime);
+        else finish(Error("Professional diagram runtime did not initialize"));
       };
-      script.onerror = () => reject(Error("Professional diagram runtime could not be loaded"));
+      script.onerror = () => finish(Error("Professional diagram runtime could not be loaded"));
       document.head.append(script);
     }).catch((error) => {
       diagramRuntimePromise = null;

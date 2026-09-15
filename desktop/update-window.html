@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>PenEcho Update</title>
+  <link rel="stylesheet" href="update-window.css">
+</head>
+<body>
+  <main class="update-shell" aria-labelledby="update-title">
+    <header class="update-header">
+      <div class="update-mark" aria-hidden="true"><span></span></div>
+      <div>
+        <h1 id="update-title">PenEcho Update</h1>
+        <p id="update-version" class="update-version"></p>
+      </div>
+    </header>
+
+    <section class="update-content" aria-live="polite" aria-atomic="true">
+      <h2 id="status-title">Checking for updates…</h2>
+      <p id="status-detail" class="status-detail">This usually takes only a moment.</p>
+      <div id="progress-region" class="progress-region" hidden>
+        <div class="progress-track" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="progress-value"></span>
+        </div>
+        <span id="progress-label" class="progress-label">Starting download…</span>
+      </div>
+      <p id="error-detail" class="error-detail" hidden></p>
+    </section>
+
+    <footer class="update-footer">
+      <button id="release-button" class="button button-link" type="button" hidden>Open release page</button>
+      <div class="footer-actions">
+        <button id="close-button" class="button button-secondary" type="button">Close</button>
+        <button id="primary-button" class="button button-primary" type="button" hidden></button>
+      </div>
+    </footer>
+  </main>
+  <script src="update-window.js"></script>
+</body>
+</html>

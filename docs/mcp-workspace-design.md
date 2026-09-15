@@ -35,7 +35,8 @@ Save records the present document and view only. Inactive workspace recovery is 
 
 - Canvas navigation → `penecho-design-language.html` Workbench architecture: one left navigator and an unobstructed Canvas. Open documents merge into existing Recent Work groups by their saved locator; unsaved documents remain addressable by document ID.
 - New/Close and retry → catalog compact toolbar controls and recoverable error state: controls live in the navigator footer, with an inline error and explicit Retry.
-- Unread updates → user-requested small green trailing dot and matching navigator-toggle dot; no numeric badge. The catalog has no unread-dot example: this bounded addition uses its semantic success color (`--pe-success`) and a 7 px dot, with an accessible update label. Opening the document acknowledges its updates; merely opening the sidebar does not.
+- Canvas order uses descending last-save time; an unsaved Canvas uses its persisted creation or first-seen time instead. Selecting a Canvas, following updates, or receiving Agent activity never promotes it or changes that time.
+- Unread updates → a small trailing dot and matching navigator-toggle dot; no numeric badge. Only explicit manual Canvas selection acknowledges updates, including selection of the already active Canvas. Automatic Follow, MCP Show, programmatic switching for Close, and opening the sidebar preserve unread state.
 - MCP activity → catalog semantic accent and opaque working-surface rules: a temporary one-pixel accent outline only, with no inner shadow, background wash or blur. Reduced motion disables the fade.
 - Background updates change indicator state in place; closed navigation does not rebuild lists or decode previews. Structural workspace changes mark the navigator dirty for its next opening.
 

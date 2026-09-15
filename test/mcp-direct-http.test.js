@@ -249,3 +249,32 @@ test('raw upload bounds chunked bodies and times out incomplete bodies before di
   const req=https.request(status.localUrl.replace('/mcp','/mcp/images?canvasId=c&documentId=d&requestId=r&name=x'),{method:'POST',ca:status.certificatePem,agent:false,headers:{authorization:`Bearer ${status.accessToken}`,'content-type':'application/octet-stream','content-length':'100'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.write('x');
  });assert.equal(incomplete,408);assert.equal(calls,0);
 });
+test('MCP body deadline rejects a slow drip before dispatch',async t=>{
+ const {status}=await fixture(t,{requestBodyTimeoutMs:20});
+ const result=await new Promise((resolve,reject)=>{
+  const req=https.request(status.localUrl,{method:'POST',ca:status.certificatePem,agent:false,headers:{authorization:`Bearer ${status.accessToken}`,'content-type':'application/json','content-length':'8'}} ,res=>{let data='';res.on('data',chunk=>data+=chunk);res.on('end',()=>resolve({status:res.statusCode,body:data?JSON.parse(data):null}));});
+  req.on('error',()=>{});req.write('{"j');setTimeout(()=>req.end('son}'),40);
+ });
+ assert.equal(result.status,408);assert.equal(result.body.error,'Request body timed out');
+});
+test('non-cooperative cancelled RPC releases its admission slot after a bounded grace',async t=>{
+ let started=false;
+ const {status}=await fixture(t,{maxRequests:1,maxSessionRequests:1,requestCancelGraceMs:20,callTool:()=>{started=true;return new Promise(()=>{});}});
+ const session=(await request(status,message('initialize'))).headers['mcp-session-id'];
+ const pending=request(status,message('tools/call',11,{name:'stuck'}),{session});
+ while(!started)await new Promise(resolve=>setTimeout(resolve,1));
+ assert.equal((await request(status,{jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:11}},{session})).status,202);
+ assert.equal((await pending).body.error.code,-32800);
+ assert.equal((await request(status,message('ping',12),{session})).status,429);
+ await new Promise(resolve=>setTimeout(resolve,40));
+ assert.equal((await request(status,message('ping',13),{session})).status,200);
+});
+test('non-cooperative raw upload releases its global slot after a bounded grace',async t=>{
+ let calls=0;
+ const {status}=await fixture(t,{maxRequests:1,uploadTimeoutMs:20,uploadCancelGraceMs:20,uploadImage:()=>{calls++;return new Promise(()=>{});}});
+ const bytes=await require('sharp')({create:{width:8,height:8,channels:3,background:'red'}}).png().toBuffer();
+ assert.equal((await upload(status,bytes)).status,408);
+ assert.equal((await upload(status,bytes)).status,429);
+ await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal((await upload(status,bytes)).status,408);assert.equal(calls,2);
+});

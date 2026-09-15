@@ -28,7 +28,7 @@ function harness({documents=[],dirty=false}={}){
     state,document,mcpRuntime,canvasDocuments,selectCanvasToolMode:mode=>{state.mode=mode;},
     mcpEl:id=>id==="settingsLayer"?settingsLayer:null,
     canvasDocumentsCopy:text=>text,
-    canvasDocumentsShow:async id=>{calls.push(["show",id]);const error=typeof controls.showError==="function"?controls.showError(id):controls.showError;if(error)throw error;if(controls.showGate&&controls.showGate.id===id)await controls.showGate.promise;canvasDocuments.activeId=id;controls.showAfter?.(id);return true;},
+    canvasDocumentsShow:async (id,execution,options)=>{controls.lastShowOptions=options;calls.push(["show",id]);const error=typeof controls.showError==="function"?controls.showError(id):controls.showError;if(error)throw error;if(controls.showGate&&controls.showGate.id===id)await controls.showGate.promise;canvasDocuments.activeId=id;controls.showAfter?.(id);return true;},
     canvasDocumentsClose:async(id,sourceId)=>{calls.push(["close",id,sourceId]);const error=typeof controls.closeError==="function"?controls.closeError(id):controls.closeError;if(error)throw error;if(controls.closeGate&&controls.closeGate.id===id)await controls.closeGate.promise;closed.push(id);controls.addOnClose?.(id);records.delete(id);return true;},
     canvasDocumentsCurrent:()=>({id:canvasDocuments.activeId}),
     canvasHasUnsavedChanges:()=>context.dirty,
@@ -38,7 +38,7 @@ function harness({documents=[],dirty=false}={}){
     clearTimeout,performance,queueMicrotask,
   });
   context.dirty=dirty;
-  const functions=["studioMcpOpenDocumentIds","syncStudioMcpActions","cancelStudioMcpCloseAll","continueStudioMcpCloseAll","closeOtherStudioCanvases","closeOtherStudioMcpCanvases","closeAllStudioMcpCanvases","noteStudioMcpContentUpdate","flushStudioMcpFollowLatest","syncStudioNavigatorMcp"].map(name=>extract(name,studioSource)).join("\n");
+  const functions=["studioMcpOpenDocumentIds","syncStudioMcpActions","cancelStudioMcpCloseAll","continueStudioMcpCloseAll","closeOtherStudioCanvases","closeOtherStudioMcpCanvases","closeAllStudioMcpCanvases","noteStudioMcpContentUpdate","studioMcpConnectionCurrent","flushStudioMcpFollowLatest","syncStudioNavigatorMcp"].map(name=>extract(name,studioSource)).join("\n");
   vm.runInContext(`
     let pendingCanvasTransition=null;
     let studioMcpFollowLatest=true,studioMcpLatestDocumentId=null,studioMcpLatestRegion=null,studioMcpPendingDocumentId=null,studioMcpPendingRegion=null,studioMcpFollowing=false,studioMcpCloseQueue=null,studioMcpUpdateRevision=0;
@@ -241,6 +241,16 @@ test("Follow latest reveals a newer same-document region that arrives during an 
   assert.deepEqual(h.calls,[["show","latest"],["reveal",newRegion]]);assert.equal(h.mcpState().pending,null);assert.equal(h.mcpState().following,false);
 });
 
+test("disconnecting an in-flight Follow latest prevents the retired connection from revealing content",async()=>{
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;}),region=mcpRegion(5,6,70,80),h=harness({documents:[mcpDoc("active"),mcpDoc("latest")]});
+  const socket={readyState:1},controller=new AbortController(),execution={socket,generation:3,controller};
+  h.context.WebSocket={OPEN:1};h.mcpRuntime.socket=socket;h.mcpRuntime.generation=3;h.controls.showGate={id:"latest",promise:gate};h.noteStudioMcpContentUpdate("latest",region);
+  const following=h.flushStudioMcpFollowLatest(execution);await new Promise(resolve=>setImmediate(resolve));
+  controller.abort();h.mcpRuntime.generation=4;h.mcpRuntime.socket=null;release();await following;
+  assert.equal(h.calls.some(call=>call[0]==="reveal"),false);assert.equal(h.mcpState().pending,"latest");
+});
+
 test("MCP completion hook only marks content producing tools and excludes reads/progress/inspect",()=>{
   const match=mcpRuntimeSource.match(/if\(\["mcp_present_widget","mcp_draw","mcp_plot","mcp_patch_file","mcp_edit_canvas","mcp_place_image"\][\s\S]*?noteMcpContentUpdate\?\.\(result\.documentId,region\);/);
   assert.ok(match,"content update hook whitelist should remain explicit");assert.doesNotMatch(match[0],/mcp_read_feedback|mcp_update_session|mcp_inspect_session|mcp_capture_widget/);assert.match(match[0],/presentation\?\.intent!=="inspect"/);assert.match(match[0],/message\.arguments\?\.action!=="show"/);
@@ -365,5 +375,33 @@ test("A failed in-flight follow preserves a newer target including another updat
     reject(Object.assign(Error("load failed"),{code:"LOAD_FAILED"}));await first;await new Promise(resolve=>setImmediate(resolve));
     assert.equal(h.mcpState().follow,true);assert.equal(h.reports.length,1);assert.equal(h.canvasDocuments.activeId,target);
     assert.deepEqual(h.calls.filter(call=>call[0]==="reveal"),[["reveal",newest]]);assert.equal(h.mcpState().pending,null);
+  }
+});
+
+ test("automatic Follow latest preserves unread acknowledgement",async()=>{
+  const h=harness({documents:[mcpDoc("active"),mcpDoc("latest",{unseen:1})]});
+  h.noteStudioMcpContentUpdate("latest");
+  await h.flushStudioMcpFollowLatest();
+  assert.equal(h.canvasDocuments.activeId,"latest");
+  assert.equal(h.controls.lastShowOptions.markSeen,false);
+});
+
+test("cancelling a Canvas close preserves unread updates on active and background documents",async()=>{
+  for(const activeId of ["other","target"]){
+    const target={id:"target",unseen:3},workspace={records:new Map([["target",target]]),activeId,switching:false};
+    let click,shown=0,confirmations=0;
+    const close={classList:{add(){},toggle(){}},setAttribute(){},addEventListener(event,handler){if(event==="click")click=handler;}};
+    const context=vm.createContext({document:{createElement:()=>close},canvasDocuments:workspace,peButton(){},canvasDocumentsCopy:text=>text,
+      canvasDocumentsUiAction:action=>action(),
+      canvasDocumentsShow:async(id,execution,options)=>{shown++;if(options?.markSeen!==false)target.unseen=0;workspace.activeId=id;},
+      requestCanvasTransition:async transition=>{assert.equal(transition.type,"close");assert.equal(transition.documentId,target.id);confirmations++;return false;},
+    });
+    vm.runInContext(extract("appendStudioCanvasClose",studioSource),context);
+    context.appendStudioCanvasClose({classList:{add(){},toggle(){}},append(){}},target.id,activeId===target.id,"Target");
+    await click();
+    assert.equal(shown,activeId===target.id?0:1);
+    assert.equal(confirmations,1);
+    assert.equal(target.unseen,3,"a cancelled close is not an explicit selection acknowledgement");
+    assert.ok(workspace.records.has(target.id));
   }
 });

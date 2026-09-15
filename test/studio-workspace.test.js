@@ -7,7 +7,7 @@ function extract(name,input=source){
   for(let i=body;i<input.length;i++){if(input[i]==="{")depth++;else if(input[i]==="}"&&--depth===0)return input.slice(start,i+1);}
   throw Error(name);
 }
-test("Recent Work merges saved documents once and prioritizes open canvases",()=>{
+test("Recent Work merges saved documents once and sorts by last save",()=>{
   const records=new Map([
     ["active",{id:"active",title:"Current",locator:{location:"server",id:"one"},unseen:0}],
     ["background",{id:"background",title:"AI draft",unseen:4,stored:{item:{name:"AI draft"}}}],
@@ -18,8 +18,8 @@ test("Recent Work merges saved documents once and prioritizes open canvases",()=
     snapshotName:item=>item.name,canvasAgentHistoryForCanvas:()=>[],t:key=>key,
   });
   assert.equal(groups.length,3);
-  assert.deepEqual(Array.from(groups,group=>group.documentId||group.canvasKey),["active","background","server:older"]);
-  assert.equal(groups[0].name,"Current");assert.equal(groups[1].unseen,true);
+  assert.deepEqual(Array.from(groups,group=>group.documentId||group.canvasKey),["server:older","active","background"]);
+  assert.equal(groups[1].name,"Current");assert.equal(groups[2].unseen,true);
 });
 test("unread dots update in place and opening the sidebar does not acknowledge updates",()=>{
   let open=false,renders=0;const doc={id:"background",title:"AI draft",unseen:2};
@@ -86,14 +86,13 @@ test("MCP connection opens its tab once, preserves Follow latest and clears pend
   context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,true);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(context.studioMcpFollowLatest,true);
   const before=actions.length;context.syncStudioNavigatorMcp(true,{reveal:false});assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(actions.length,before,"automatic recovery must not open sidebar, switch tool or close Agent");
 });
-test("MCP list contains only participating canvases, including retained and live sessions",()=>{
+test("MCP list contains every open Canvas in saved order independent of catalog selection",()=>{
   const docs=[{id:"ordinary"},{id:"bound",bindings:[{}]},{id:"retained",sessions:[{}]},{id:"live"}];
   const result=vm.runInNewContext(`(${extract("studioNavigatorMcpGroups")})()`,{
-    studioMcpOrder:new Map(),studioMcpOrderSequence:0,
     studioNavigatorWorkGroups:()=>[...docs.map(doc=>({documentId:doc.id})),{canvasKey:"server:unrelated"}],
-    canvasDocuments:{records:new Map(docs.map(doc=>[doc.id,doc]))},mcpRuntime:{sessions:new Map([["s",{documentId:"live"}]])},
+    canvasDocumentsCatalog:()=>[{documentId:"retained",active:true},...docs.filter(doc=>doc.id!=="retained").map(doc=>({documentId:doc.id,active:false}))],
   });
-  assert.deepEqual(Array.from(result,group=>group.documentId),["live","retained","bound"]);
+  assert.deepEqual(Array.from(result,group=>group.documentId),["ordinary","bound","retained","live"]);
 });
 test("tab keyboard navigation includes MCP only while enabled",()=>{
   for(const enabled of [false,true]){
@@ -163,46 +162,62 @@ test("canvas metadata distinguishes current, background open and closed saved ca
   }
 });
 
- test("MCP keeps arrival order across updates and selection, inserting new entries first",()=>{
+ test("MCP order changes on saving, never selection or new content",()=>{
   const records=new Map([
-    ["new",{id:"new",title:"New current",bindings:[{}],stored:{item:{createdAt:200}},changes:[]}],
-    ["old",{id:"old",title:"Older edited",bindings:[{}],stored:{item:{createdAt:100}},changes:[{at:300}]}],
+    ["new",{id:"new",title:"New current",savedAt:200,bindings:[{}],stored:{item:{createdAt:200}},changes:[]}],
+    ["old",{id:"old",title:"Older edited",savedAt:100,bindings:[{}],stored:{item:{createdAt:100}},changes:[{at:300}]}],
   ]);
-  const context=vm.createContext({studioMcpOrder:new Map(),studioMcpOrderSequence:0,canvasDocuments:{records,activeId:"new"},state:{canvasAgentCanvasKey:""},
+  const context=vm.createContext({canvasDocuments:{records,activeId:"new"},state:{canvasAgentCanvasKey:""},
     studioCanvasOpenedAt:()=>0,canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>[],t:key=>key,mcpRuntime:{sessions:new Map()}});
+  context.canvasDocumentsCatalog=()=>[...records.values()].sort((a,b)=>Number(b.id===context.canvasDocuments.activeId)-Number(a.id===context.canvasDocuments.activeId)).map(doc=>({documentId:doc.id,title:doc.title,active:doc.id===context.canvasDocuments.activeId}));
   vm.runInContext(extract("studioNavigatorWorkGroups")+"\n"+extract("studioNavigatorMcpGroups"),context);
-  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["old","new"]);
-  assert.equal(context.studioNavigatorMcpGroups()[0].updatedAt,300);
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old"]);
+  assert.equal(context.studioNavigatorMcpGroups()[1].updatedAt,300);
   records.get("new").changes.push({at:400});
-  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["old","new"]);
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old"]);
   context.canvasDocuments.activeId="old";
-  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["old","new"]);
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old"]);
   records.set("latest",{id:"latest",title:"Latest",bindings:[{}],changes:[]});
-  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["latest","old","new"]);
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old","latest"]);
+  records.get("old").savedAt=500;
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["old","new","latest"]);
   records.delete("old");
-  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["latest","new"]);
+  assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","latest"]);
  });
 
-test("sidebar visits persist locally without rewriting content timestamps or counting rerenders",()=>{
-  const storage=new Map(), context=vm.createContext({localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)}});
-  vm.runInContext(`const STUDIO_CANVAS_OPENED_KEY="visits";let studioCanvasOpened=new Map(),studioLastOpenedKey="";${extract("readStudioCanvasOpened")}${extract("rememberStudioCanvasOpened")}${extract("studioCanvasOpenedAt")}`,context);
-  context.rememberStudioCanvasOpened("server:old");
-  const first=context.studioCanvasOpenedAt("server:old");
-  context.rememberStudioCanvasOpened("server:old");
-  assert.equal(context.studioCanvasOpenedAt("server:old"),first);
-  context.rememberStudioCanvasOpened("server:other");
-  context.rememberStudioCanvasOpened("server:old");
-  assert.ok(context.studioCanvasOpenedAt("server:old")>context.studioCanvasOpenedAt("server:other"));
-  assert.equal(context.readStudioCanvasOpened().get("server:old"),context.studioCanvasOpenedAt("server:old"));
-  assert.equal(context.studioCanvasOpenedAt("cloud:old"),0);
-});
-test("recently viewed saved Canvas precedes newer unvisited content",()=>{
+test("recently viewed Canvas does not precede a more recently saved Canvas",()=>{
   const items=[{id:"old",location:"server",updatedAt:1},{id:"new",location:"server",updatedAt:999}];
   const groups=vm.runInNewContext(`(${extract("studioNavigatorWorkGroups")})()`,{
     canvasDocuments:{records:new Map(),activeId:null},state:{canvasAgentCanvasKey:"",language:"en"},
     studioCanvasOpenedAt:key=>key==="server:old"?10:0,canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>items,
     snapshotName:item=>item.id,canvasAgentHistoryForCanvas:()=>[],t:key=>key,
   });
-  assert.deepEqual(Array.from(groups,g=>g.canvasKey),["server:old","server:new"]);
+  assert.deepEqual(Array.from(groups,g=>g.canvasKey),["server:new","server:old"]);
   assert.equal(items[0].updatedAt,1);
+});
+
+ test("drafts and saved canvases share descending effective time order when the selected draft is inserted first into groups",()=>{
+  const records=new Map([
+    ["first",{id:"first",title:"First draft",firstSeenAt:100,savedAt:0,changes:[]}],
+    ["second",{id:"second",title:"Second draft",firstSeenAt:200,savedAt:0,changes:[]}],
+    ["third",{id:"third",title:"Third draft",firstSeenAt:300,savedAt:0,changes:[]}]
+  ]);
+  const context=vm.createContext({canvasDocuments:{records,activeId:"third"},state:{canvasAgentCanvasKey:"draft:third"},
+    canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>[],studioNavigatorCanvasIdentity:()=>null,
+    studioNavigatorCanvasGroupSnapshot:()=>null,currentCanvasDisplayName:()=>"Selected draft",canvasAgentHistoryForCanvas:()=>[],t:key=>key});
+  vm.runInContext(extract("studioNavigatorWorkGroups"),context);
+  const order=()=>Array.from(context.studioNavigatorWorkGroups(),g=>g.documentId);
+  assert.deepEqual(order(),["third","second","first"]);
+  for(const id of ["first","second","third"]){
+    context.canvasDocuments.activeId=id;context.state.canvasAgentCanvasKey="draft:"+id;
+    assert.deepEqual(order(),["third","second","first"]);
+  }
+  records.get("first").savedAt=250;
+  assert.deepEqual(order(),["third","first","second"],"new draft precedes older saves");
+  records.get("second").savedAt=1000;
+  assert.deepEqual(order(),["second","third","first"]);
+  context.canvasDocuments.activeId="first";context.state.canvasAgentCanvasKey="draft:first";
+  assert.deepEqual(order(),["second","third","first"]);
+  records.get("third").savedAt=2000;
+  assert.deepEqual(order(),["third","second","first"]);
 });

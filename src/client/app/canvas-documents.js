@@ -1,6 +1,6 @@
   // One visible Canvas; inactive documents contain data, never hidden iframe trees.
   // Ordinary saves carry this extension in bundle V2. This is not version history.
-  var canvasDocuments = { records:new Map(), activeId:null, ready:null, db:null, switching:false, epoch:0, error:null, retry:null, receipts:new Map(), write:Promise.resolve() };
+  var canvasDocuments = { records:new Map(), activeId:null, ready:null, db:null, switching:false, epoch:0, firstSeenClock:0, error:null, retry:null, receipts:new Map(), write:Promise.resolve() };
   const CANVAS_DOCUMENT_EXTENSION = "penechoDocument", CANVAS_WORKSPACE_EXTENSION = "penechoWorkspace", CANVAS_DOCUMENT_LIMIT = 64;
   const CANVAS_IMAGE_ASSET_TYPE="image-attachment", CANVAS_IMAGE_ASSET_LIMIT=64, CANVAS_IMAGE_ASSET_BYTES=16000000;
   function canvasImageAssets(doc=canvasDocumentsCurrent()) {
@@ -115,10 +115,25 @@
     canvasDocuments.records.set(id,doc);canvasDocuments.activeId=id;
     return doc;
   }
-  function canvasDocumentsRecord(meta,stored=null) {
-    return {id:meta.documentId,title:meta.title||canvasDocumentsCopy("Untitled Canvas","未命名画布"),context:meta.context||"",bindings:meta.bindings||[],locators:meta.locators||[],processor:{kind:"penecho"},stored,
-      revision:1,savedRevision:0,feedback:[],feedbackSequence:0,messages:[],messageSequence:0,changes:[],changeSequence:0,sessions:[],internalSessions:[],unseen:0,undo:[],redo:[],receipts:new Map()};
+  function canvasDocumentsCatalog() {
+    const documents=[...canvasDocuments.records.values()];
+    return documents.sort((a,b)=>(b.savedAt||b.firstSeenAt||0)-(a.savedAt||a.firstSeenAt||0)||a.id.localeCompare(b.id)).map(doc=>({documentId:doc.id,title:doc.title||canvasDocumentsCopy("Untitled Canvas","未命名画布"),active:doc.id===canvasDocuments.activeId}));
   }
+  function canvasDocumentsRecord(meta,stored=null) {
+    return {id:meta.documentId,title:meta.title||canvasDocumentsCopy("Untitled Canvas","未命名画布"),context:meta.context||"",bindings:meta.bindings||[],locators:meta.locators||[],processor:{kind:"penecho"},stored,firstSeenAt:canvasDocumentsFirstSeenAt(stored?.item?.createdAt),
+      revision:1,savedRevision:0,savedAt:0,feedback:[],feedbackSequence:0,messages:[],messageSequence:0,changes:[],changeSequence:0,sessions:[],internalSessions:[],unseen:0,undo:[],redo:[],receipts:new Map()};
+  }
+  function canvasDocumentsFirstSeenAt(value) {
+    const timestamp=canvasDocumentsSavedAt(value)||Math.max(Date.now(),canvasDocuments.firstSeenClock+1);
+    canvasDocuments.firstSeenClock=Math.max(canvasDocuments.firstSeenClock,timestamp);return timestamp;
+  }
+  function canvasDocumentsRestoreFirstSeenAt(doc,item) {
+    // Legacy drafts retain their first observed restore order until persisted.
+    doc.firstSeenAt=canvasDocumentsSavedAt(item.firstSeenAt)||canvasDocumentsSavedAt(item.stored?.item?.createdAt)||doc.firstSeenAt||canvasDocumentsFirstSeenAt();
+    canvasDocuments.firstSeenClock=Math.max(canvasDocuments.firstSeenClock,doc.firstSeenAt);
+  }
+  function canvasDocumentsSavedAt(value) { return Number.isFinite(value) && value > 0 ? value : 0; }
+  function canvasDocumentsSnapshotSavedAt(item) { return canvasDocumentsSavedAt(item?.updatedAt)||canvasDocumentsSavedAt(item?.createdAt); }
   function canvasDocumentsUnseen(value) { return Number.isSafeInteger(value) && value >= 0 ? value : 0; }
   function canvasDocumentsIsActive(doc) { return doc.id === canvasDocuments.activeId; }
   function canvasDocumentsExternal() {
@@ -163,12 +178,13 @@
       const candidates=new Map();
       for(const item of items) {
         const meta=!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata);
+        if(meta&&canvasDocuments.records.has(meta.documentId))canvasDocumentsRestoreFirstSeenAt(canvasDocuments.records.get(meta.documentId),item);
         if(meta&&!canvasDocuments.records.has(meta.documentId))candidates.set(meta.documentId,{item,meta});
       }
       const available=Math.max(0,CANVAS_DOCUMENT_LIMIT-canvasDocuments.records.size);
       for(const {item,meta} of available?[...candidates.values()].slice(-available):[]) {
-        const doc=canvasDocumentsRecord(meta,item.stored);canvasDocumentsRestoreWorkspace(doc,item.workspace);
-        doc.revision=item.revision||1;doc.savedRevision=item.savedRevision||0;doc.unseen=canvasDocumentsUnseen(item.unseen);doc.locator=item.locator||null;doc.agentDraft=typeof item.agentDraft==="string"?item.agentDraft.slice(0,16000):"";
+        const doc=canvasDocumentsRecord(meta,item.stored);canvasDocumentsRestoreFirstSeenAt(doc,item);canvasDocumentsRestoreWorkspace(doc,item.workspace);
+        doc.revision=item.revision||1;doc.savedRevision=item.savedRevision||0;doc.unseen=canvasDocumentsUnseen(item.unseen);doc.locator=item.locator||null;doc.savedAt=canvasDocumentsSavedAt(item.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(item.stored?.item):0);doc.agentDraft=typeof item.agentDraft==="string"?item.agentDraft.slice(0,16000):"";
         canvasDocuments.records.set(doc.id,doc);
       }
       canvasDocumentsRender();
@@ -176,7 +192,7 @@
     return canvasDocuments.ready;
   }
   async function canvasDocumentsPersist(doc,closed=false) {
-    const db=await canvasDocumentsDb(),payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),closed};
+    const db=await canvasDocumentsDb(),payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),closed};
     await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(payload);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
   }
   function canvasDocumentsReport(error,retry=null) {
@@ -186,7 +202,7 @@
     if(canvasDocumentsIsActive(doc))doc.revision=state.userRevision;else doc.revision++;
     doc.changes.push({cursor:++doc.changeSequence,kind,objectId,at:Date.now()});
     if(doc.changes.length>200)doc.changes.splice(0,doc.changes.length-200);
-    if(!canvasDocumentsIsActive(doc))doc.unseen++;
+    doc.unseen=Math.min(Number.MAX_SAFE_INTEGER,canvasDocumentsUnseen(doc.unseen)+1);
     canvasDocumentsSyncExtension(doc);canvasDocumentsRender();
   }
   function canvasDocumentsActiveSnapshot() {
@@ -207,10 +223,10 @@
     doc.feedback=mcpRuntime.feedback;doc.feedbackSequence=mcpRuntime.feedbackSequence;
     await canvasDocumentsPersist(doc);return doc;
   }
-  async function canvasDocumentsShow(id,execution=null) {
+  async function canvasDocumentsShow(id,execution=null,options={}) {
     const doc=canvasDocuments.records.get(id);
     if(!doc)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","This Canvas is not open. Resolve its saved location and retry.");
-    if(canvasDocumentsIsActive(doc)) { if(doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc);} return {documentId:id,active:true}; }
+    if(canvasDocumentsIsActive(doc)) { if(options.markSeen!==false&&doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc);} return {documentId:id,active:true}; }
     if(canvasDocuments.switching||snapshotLoadInProgress||typeof snapshotSaveInProgress!=="undefined"&&snapshotSaveInProgress)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("A Canvas is opening or saving. Retry after it finishes.","画布正在打开或保存，完成后请重试。"));
     if(state.drawing||state.widgetGesture||state.imageGesture||state.selectionGesture)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("Finish the current gesture, then retry switching Canvas.","请完成当前操作，再重试切换画布。"));
     if(typeof canvasAgent!=="undefined"&&(canvasAgent.running||canvasAgent.requestPending))throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("PenEcho Agent is working on this Canvas. Wait or use Stop, then retry switching.","PenEcho Agent 正在处理当前画布。请等待完成或点击停止，再重试切换。"));
@@ -251,7 +267,7 @@
       resetCanvasDefaultMode();
       canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();}
-      doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
+      if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       window.PenEchoStudioNavigator?.updateDocument?.();await canvasDocumentsPersist(doc);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);canvasDocuments.switching=false;canvasDocumentsRender();}
   }
@@ -263,8 +279,8 @@
   }
   async function canvasDocumentsAdopt(item,location) {
     const locator={location,id:item.id},meta=canvasDocumentIdentity.normalizeMetadata(item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:item.name||""};
-    const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta);
-    doc.title=item.name||doc.title;doc.locator=locator;doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
+    const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta,{item});
+    doc.title=item.name||doc.title;doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(item);doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
     canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
     canvasDocuments.records.set(doc.id,doc);canvasDocuments.activeId=doc.id;canvasDocuments.epoch++;
     mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;doc.revision=state.userRevision;doc.savedRevision=state.snapshotSavedRevision;
@@ -283,7 +299,7 @@
       // An independent copy starts with its own Undo stack and external bindings.
       state.history=[];state.future=[];
     }
-    await canvasDocumentsAdopt({...item,id:storedId},location);
+    await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location);
     const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId},tileEntries};canvasDocumentsSyncExtension(doc);
   }
   function canvasDocumentsObjects(doc) {
@@ -449,6 +465,13 @@
   }
   async function canvasDocumentsFind(args={}) {
     await canvasDocumentsReady();
+    const canvases=canvasDocumentsCatalog().filter(doc=>!args.documentId||doc.documentId===args.documentId).map(entry=>{
+      const doc=canvasDocuments.records.get(entry.documentId);
+      return {...entry,open:true,dirty:(entry.active?state.userRevision:doc.revision)!==doc.savedRevision,...(doc.locator?{locator:doc.locator}:{})};
+    });
+    return {canvases,providers:[{location:"workspace",status:"ok"}]};
+  }
+  async function canvasDocumentsFindSaved(args={}) {
     const candidates=[],providers=[];
     await Promise.all(["device","server","cloud"].map(async location=>{
       try {
@@ -466,8 +489,7 @@
         providers.push({location,status:"ok"});
       } catch(error) {providers.push({location,status:[401,403].includes(error.status)?"unauthorized":error.name==="TimeoutError"||error instanceof TypeError?"offline":"unavailable",retryable:true,message:String(error.message).slice(0,200)});}
     }));
-    const active=[...canvasDocuments.records.values()].filter(doc=>!args.documentId||doc.id===args.documentId).map(doc=>({documentId:doc.id,title:doc.title,active:canvasDocumentsIsActive(doc),open:true,dirty:(canvasDocumentsIsActive(doc)?state.userRevision:doc.revision)!==doc.savedRevision,...(doc.locator?{locator:doc.locator}:{})}));
-    return {canvases:[...active,...candidates.filter(c=>!active.some(a=>a.documentId===c.documentId&&a.locator?.location===c.locator.location&&a.locator?.id===c.locator.id))],providers};
+    return {canvases:candidates,providers};
   }
   async function canvasDocumentsOpen(args,execution) {
     await canvasDocumentsReady();
@@ -488,14 +510,14 @@
           if(canvasDocuments.records.size>=CANVAS_DOCUMENT_LIMIT)throw canvasDocumentsError("DOCUMENT_LIMIT",canvasDocumentsLimitMessage());
           const meta=canvasDocumentIdentity.normalizeMetadata(saved.metadata);
           if(!meta)throw canvasDocumentsError("DOCUMENT_CONFLICT","The saved workspace identity is invalid.");
-          doc=canvasDocumentsRecord(meta,saved.stored);canvasDocumentsRestoreWorkspace(doc,saved.workspace);
-          doc.revision=saved.revision||1;doc.savedRevision=saved.savedRevision||0;doc.locator=saved.locator||null;doc.unseen=canvasDocumentsUnseen(saved.unseen);doc.agentDraft=typeof saved.agentDraft==="string"?saved.agentDraft.slice(0,16000):"";
+          doc=canvasDocumentsRecord(meta,saved.stored);canvasDocumentsRestoreFirstSeenAt(doc,saved);canvasDocumentsRestoreWorkspace(doc,saved.workspace);
+          doc.revision=saved.revision||1;doc.savedRevision=saved.savedRevision||0;doc.locator=saved.locator||null;doc.savedAt=canvasDocumentsSavedAt(saved.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(saved.stored?.item):0);doc.unseen=canvasDocumentsUnseen(saved.unseen);doc.agentDraft=typeof saved.agentDraft==="string"?saved.agentDraft.slice(0,16000):"";
           canvasDocuments.records.set(doc.id,doc);
         }
         if(!doc) {
         let locator=args.locator;
         if(!locator) {
-          const found=await canvasDocumentsFind(args),resolved=canvasDocumentIdentity.resolveCandidates({documentId:args.documentId,candidates:found.canvases,active:found.canvases.filter(c=>c.open),providers:found.providers});
+          const found=await canvasDocumentsFindSaved(args),resolved=canvasDocumentIdentity.resolveCandidates({documentId:args.documentId,candidates:found.canvases,active:[],providers:found.providers});
           if(resolved.status!=="found")throw canvasDocumentsError(resolved.status==="ambiguous"?"DOCUMENT_AMBIGUOUS":resolved.status==="not_found"?"DOCUMENT_NOT_FOUND":"STORAGE_UNAVAILABLE",resolved.status==="ambiguous"?"Several saved copies match. Choose an exact location and retry.":resolved.status==="not_found"?"No saved Canvas matches this ID. Check its ID or create a new Canvas explicitly.":"A save location is unavailable. Reconnect or sign in, then retry.",resolved);
           locator=resolved.candidate.locator;
         }
@@ -505,12 +527,12 @@
         if(args.documentId&&meta.documentId!==args.documentId)throw canvasDocumentsError("DOCUMENT_CONFLICT","The saved location contains a different Canvas. Check its ID and retry.");
         if(canvasDocuments.records.has(meta.documentId))throw canvasDocumentsError("DOCUMENT_AMBIGUOUS","This Canvas is already open from another location. Use the open document or save an independent copy first.");
         if(canvasDocuments.records.size>=CANVAS_DOCUMENT_LIMIT)throw canvasDocumentsError("DOCUMENT_LIMIT",canvasDocumentsLimitMessage());
-        doc=canvasDocumentsRecord(meta,stored);doc.locator=locator;canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);canvasDocuments.records.set(doc.id,doc);
+        doc=canvasDocumentsRecord(meta,stored);doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(stored.item);canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);canvasDocuments.records.set(doc.id,doc);
         }
       }
     }
     canvasAgentAssertToolExecution(execution);await canvasDocumentsPersist(doc);
-    if(args.show)await canvasDocumentsShow(doc.id,execution);
+    if(args.show)await canvasDocumentsShow(doc.id,execution,{markSeen:false});
     canvasDocumentsRender();return {documentId:doc.id,title:doc.title,active:canvasDocumentsIsActive(doc),locator:doc.locator||null,created:args.create===true};
   }
   async function canvasDocumentsOnce(store,key,args,work) {
@@ -628,7 +650,7 @@
   }
   async function canvasDocumentsEdit(doc,args,execution) {
     if(args.action==="show") {
-      await canvasDocumentsShow(doc.id,execution);
+      await canvasDocumentsShow(doc.id,execution,{markSeen:false});
       execution.activeDocumentId=doc.id;execution.documentEpoch=canvasDocuments.epoch;
       const box=args.region||(args.objectId?canvasDocumentsBounds(canvasDocumentsObject(doc,args.objectId)):null);
       if(box)mcpRevealRegion(box);return {documentId:doc.id,active:true};
@@ -806,6 +828,7 @@
       if(object&&!canvasDocumentsSourceEditable(object))throw canvasDocumentsError("READ_ONLY_FILE","Professional Diagram and private plugin source editing is unavailable. Existing content is preserved.");
     }
     const work=async()=>{
+      const revisionBefore=canvasDocumentsIsActive(doc)?state.userRevision:doc.revision;
       if(args.completion)canvasDocumentsMessageEntries(doc,session,args.completion.handledMessageIds||[]);
       let result;
       if(name==="mcp_list_files") {
@@ -840,6 +863,7 @@
         }
       } else result=canvasDocumentsIsActive(doc)?await mcpExecute(name,args,execution):await canvasDocumentsBackground(doc,name,args,execution);
       if(["mcp_present_widget","mcp_draw","mcp_plot","mcp_patch_file","mcp_edit_canvas","mcp_upload_image","mcp_place_image"].includes(name)) {
+        if((canvasDocumentsIsActive(doc)?state.userRevision:doc.revision)!==revisionBefore&&!doc.unseen){doc.unseen=1;canvasDocumentsRender();}
         result={...result,applied:true};
         if(name==="mcp_present_widget"&&result.objectId) {
           const sourcePath=`objects/${result.objectId}/widget.html`;
@@ -924,6 +948,7 @@
     const root=document.getElementById("canvasWorkspace"),doc=canvasDocuments.records.get(canvasDocuments.activeId);
     if(doc)doc.title=(typeof currentCanvasDisplayName==="function"?currentCanvasDisplayName():state.currentSnapshotName)||doc.title;
     window.PenEchoStudioNavigator?.workspaceChanged?.();
+    if(typeof mcpPublishCanvasCatalog==="function")mcpPublishCanvasCatalog();
     if(!root||!doc)return;
     root.hidden=false;
     const close=document.getElementById("canvasWorkspaceClose");
@@ -945,7 +970,7 @@
     const closingIds=new Set([id,...(sourceDocumentId?[sourceDocumentId]:[])]);
     let next=[...canvasDocuments.records.values()].find(d=>!closingIds.has(d.id)),created=false;
     if(!next){next=canvasDocumentsRecord({documentId:canvasDocumentsId(),title:canvasDocumentsCopy("Untitled Canvas","未命名画布")},{item:{widgets:[],textBoxes:[],images:[],animations:[],theme:state.theme},tileEntries:[]});canvasDocuments.records.set(next.id,next);created=true;}
-    try{await canvasDocumentsShow(next.id);}catch(error){if(created&&!canvasDocumentsIsActive(next))canvasDocuments.records.delete(next.id);throw error;}
+    try{await canvasDocumentsShow(next.id,null,{markSeen:false});}catch(error){if(created&&!canvasDocumentsIsActive(next))canvasDocuments.records.delete(next.id);throw error;}
     const retained=new Set();
     for(const closingId of closingIds){const closing=canvasDocuments.records.get(closingId);if(closing?.bindings?.length){await canvasDocumentsPersist(closing,true);retained.add(closingId);}}
     const deleted=[...closingIds].filter(id=>!retained.has(id));

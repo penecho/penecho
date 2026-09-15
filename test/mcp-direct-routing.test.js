@@ -110,6 +110,29 @@ test('simultaneous protocol owners share one logical binding without creating tw
   const results=await Promise.all(sessions.map(session=>start(current,session,{sessionKey:'same-key'})));
   assert.equal(output(results[0]).documentId,output(results[1]).documentId);assert.equal(a.calls[0].arguments.documentId,undefined);assert.equal(a.calls[1].arguments.documentId,output(results[0]).documentId);
 });
+test('a binding store that never settles releases the serialized session start',async t=>{
+  const directory=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'penecho-binding-timeout-'));let stalled=true;
+  const bindings={read:()=>stalled?new Promise(()=>{}):null,write:async()=>{}};
+  const current=await app(directory,{bindings,bindingTimeoutMs:15});
+  t.after(async()=>{await current.close();fs.rmSync(directory,{recursive:true,force:true});});
+  await browser(current,'browser-a');const session=await initialize(current);
+  const timedOut=await start(current,session,{sessionKey:'stalled'});
+  assert.equal(timedOut.body.result.isError,true);assert.equal(timedOut.body.result.structuredContent.code,'binding_timeout');
+  stalled=false;
+  assert.equal(output(await start(current,session,{sessionKey:'stalled'},2)).canvasId,'browser-a');
+});
+test('a binding write timeout retains the browser session for an idempotent retry',async t=>{
+  const directory=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'penecho-binding-write-timeout-'));let writes=0;
+  const bindings={read:async()=>null,write:async()=>++writes===1?new Promise(()=>{}):undefined};
+  const current=await app(directory,{bindings,bindingTimeoutMs:15});
+  t.after(async()=>{await current.close();fs.rmSync(directory,{recursive:true,force:true});});
+  const canvas=await browser(current,'browser-a'),session=await initialize(current);
+  const timedOut=await start(current,session,{sessionKey:'write-stalled'});
+  assert.equal(timedOut.body.result.structuredContent.code,'binding_timeout');
+  const retried=output(await start(current,session,{sessionKey:'write-stalled'},2));
+  assert.equal(retried.sessionId,canvas.calls[0].arguments.sessionId);
+  assert.equal(canvas.calls[1].arguments.sessionId,canvas.calls[0].arguments.sessionId);
+});
 test('HTTP reset route refreshes credentials and protocol owner disposal retains durable bindings',async t=>{
   const directory=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'penecho-reset-routing-'));const current=await app(directory);
   t.after(async()=>{await current.close();fs.rmSync(directory,{recursive:true,force:true});});

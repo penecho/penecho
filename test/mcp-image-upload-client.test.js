@@ -33,6 +33,18 @@ test('HTTPS response limit and deadline terminate transport without mutation rep
  await assert.rejects(uploadImage(settings),{code:'INVALID_RESPONSE',outcome:'unknown'});assert.equal(requests,1);mode='timeout';await assert.rejects(uploadImage({...settings,timeoutMs:50}),error=>error.outcome==='unknown'&&['UPLOAD_TIMEOUT','UPLOAD_FAILED'].includes(error.code));assert.equal(requests,2);
 });
 test('document IDs allow 256 characters but reject 257',async t=>{const {bytes,options}=fixture(t);const requestUpload=async(url,c,stream,size,args)=>{for await(const chunk of stream){}return receipt(bytes,args);};assert.equal((await uploadImage({...options,documentId:'d'.repeat(256),requestUpload})).documentId.length,256);await assert.rejects(uploadImage({...options,documentId:'d'.repeat(257),requestUpload}),{code:'INVALID_ARGUMENT'});});
+test('absolute timeout releases a custom upload transport that ignores AbortSignal',async t=>{
+ const {options}=fixture(t);let started=false;
+ await assert.rejects(uploadImage({...options,timeoutMs:20,requestUpload:async()=>{started=true;return new Promise(()=>{});}}),error=>error.code==='UPLOAD_TIMEOUT'&&error.outcome==='unknown');
+ assert.equal(started,true);
+});
+test('caller cancellation settles even when the custom upload transport ignores AbortSignal',async t=>{
+ const {options}=fixture(t),controller=new AbortController();let started=false;
+ const pending=uploadImage({...options,requestUpload:async()=>{started=true;return new Promise(()=>{});},signal:controller.signal});
+ while(!started)await new Promise(resolve=>setTimeout(resolve,1));
+ controller.abort();
+ await assert.rejects(pending,{code:'request_cancelled',outcome:'unknown'});
+});
 test('definite HTTP rejection keeps safe actionable reason without server message secrets',async t=>{
  const {dir,options}=fixture(t);const {loadDirectHttpIdentity,createDirectHttpLeaf}=require('../src/server/mcp/direct-http-identity.js');const host=loadDirectHttpIdentity(path.join(dir,'server'));let response,requests=0;
  const server=https.createServer(createDirectHttpLeaf(host,['127.0.0.1'],[]),(req,res)=>{requests++;req.resume();res.writeHead(response.status,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:response.code,message:host.accessToken+' /private/secret.png'}}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});

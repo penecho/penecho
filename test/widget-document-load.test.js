@@ -15,7 +15,7 @@ function harness(){
       runtimeVersion:4,forwardWidgetState:()=>{},Date:{now:()=>10000},lastUpdate:0,UPDATE_FORWARD_INTERVAL_MS:100,
       parent:{postMessage:message=>forwarded.push(message)},parentOrigin:"http://local"};
   vm.runInNewContext(handler+load+';this.handle=handleWidgetMessage;this.wait=mcpWaitForWidgetLoad;this.forward=function(message){'+forward+'};',context);
-  return {widget,requests,forwarded,controller,
+  return {widget,requests,forwarded,controller,context,
     wait:()=>context.wait(widget,{controller}),
     message:message=>context.handle({source:widget.frame.contentWindow,origin:"http://local",data:message}),
     forward:message=>context.forward(message)};
@@ -53,4 +53,13 @@ test("ordinary content updates still reject an in-flight stale snapshot",async()
   await h.message({type:"penecho-widget-updated"});
   await h.message({type:"penecho-widget-snapshot",requestId:"capture",dataUrl:"data:image/png;base64,AQ==",width:100,height:50});
   assert.equal(resolved,false);assert.equal(rejected.message,"Widget export failed");assert.equal(h.widget.snapshotDataUrl,"");assert.equal(h.requests.size,0);
+});
+test("snapshot deadline remains active while the returned PNG is decoding",async()=>{
+  const h=harness();let rejectRequest;
+  h.widget.contentVersion=4;
+  h.context.decodeWidgetSnapshot=()=>new Promise(()=>{});
+  const result=new Promise((resolve,reject)=>{rejectRequest=reject;h.requests.set("capture",{widget:h.widget,contentVersion:4,resolve,reject,signal:null,abort:null,timer:setTimeout(()=>{h.requests.delete("capture");reject(Error("decode deadline"));},10)});});
+  void h.message({type:"penecho-widget-snapshot",requestId:"capture",dataUrl:"data:image/png;base64,AQ==",width:100,height:50});
+  await assert.rejects(result,/decode deadline/);
+  assert.equal(h.requests.size,0);assert.equal(h.widget.snapshotDataUrl,"old");
 });

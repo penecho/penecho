@@ -1,0 +1,152 @@
+:root {
+  color-scheme: light;
+  --ink: #172033;
+  --muted: #637188;
+  --line: #dce3ec;
+  --surface: #ffffff;
+  --subtle: #f5f7fa;
+  --accent: #0f5e5c;
+  --accent-hover: #0b4f4d;
+  --focus: #315efb;
+  --danger: #a62d2d;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body { width: 100%; min-width: 0; height: 100%; margin: 0; }
+
+body {
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: none;
+}
+
+button { font: inherit; }
+
+.update-shell {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto 1fr auto;
+}
+
+.update-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 17px 22px 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.update-mark {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+}
+
+.update-mark span {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+body[data-state="checking"] .update-mark,
+body[data-state="downloading"] .update-mark,
+body[data-state="installing"] .update-mark {
+  border-color: var(--line);
+  border-top-color: var(--accent);
+  animation: update-spin 800ms linear infinite;
+}
+
+body[data-state="error"] .update-mark { border-color: var(--danger); }
+body[data-state="error"] .update-mark span { background: var(--danger); }
+
+@keyframes update-spin { to { transform: rotate(360deg); } }
+
+h1,
+h2,
+p { margin: 0; }
+
+h1 { font-size: 16px; font-weight: 650; line-height: 1.3; letter-spacing: -0.01em; }
+.update-version { min-height: 18px; margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+.update-content {
+  min-height: 0;
+  padding: 25px 24px 20px;
+}
+
+h2 { font-size: 15px; font-weight: 650; line-height: 1.4; letter-spacing: -0.01em; }
+.status-detail { max-width: 52ch; margin-top: 6px; color: var(--muted); }
+
+.progress-region { margin-top: 22px; }
+.progress-track { height: 5px; overflow: hidden; border-radius: 3px; background: #e4e9ef; }
+.progress-track span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 160ms ease-out;
+}
+.progress-label { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.error-detail { max-width: 58ch; margin-top: 13px; color: var(--danger); font-size: 12px; user-select: text; }
+
+.update-footer {
+  display: flex;
+  min-height: 61px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--subtle);
+}
+
+.footer-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.button {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.button:hover { background: #e8edf3; }
+.button:active { background: #dfe5ec; }
+.button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.button:disabled { cursor: default; opacity: 0.55; }
+.button-primary { min-width: 82px; color: #fff; border-color: var(--accent); background: var(--accent); }
+.button-primary:hover { background: var(--accent-hover); }
+.button-primary:active { background: #083f3e; }
+.button-secondary { border-color: #c8d0db; background: var(--surface); }
+.button-link { padding-inline: 6px; color: #2457b8; font-weight: 500; }
+
+::selection { color: #fff; background: var(--focus); }
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-state="checking"] .update-mark,
+  body[data-state="downloading"] .update-mark,
+  body[data-state="installing"] .update-mark { animation-duration: 1800ms; }
+  .progress-track span { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .update-mark,
+  .progress-track,
+  .button { border: 1px solid ButtonText; }
+  .progress-track span { background: Highlight; }
+}

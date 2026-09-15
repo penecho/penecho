@@ -125,11 +125,16 @@
   async function renderTextBoxImage(item, pixelRatio = desiredCanvasTextRasterRatio()) {
     const fontFamily = normalizeTextBoxFontFamily(item.fontFamily),
       color = item.color || state.inkColor;
+    let timer;
     try {
-      return { image:await mixedTextImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, pixelRatio), mixedFallback:false };
+      const image=await Promise.race([
+        mixedTextImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, pixelRatio),
+        new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Text rendering timed out")),8_000);}),
+      ]);
+      return { image, mixedFallback:false };
     } catch {
       return { image:textImage(item.text, item.fontSize, color, item.maxWidth, 1.35, fontFamily, TEXT_INPUT_MAX_LENGTH, pixelRatio), mixedFallback:true };
-    }
+    } finally { clearTimeout(timer); }
   }
   async function refreshVisibleTextBoxQuality() {
     const generation = ++canvasTextQualityGeneration;
@@ -1951,11 +1956,16 @@
     if (!["penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) return;
     const pending = widgetSnapshotRequests.get(message.requestId);
     if (!pending || pending.widget !== widget) return;
-    widgetSnapshotRequests.delete(message.requestId);
-    clearTimeout(pending.timer);
-    pending.signal?.removeEventListener("abort",pending.abort);
+    const finishPending=()=>{
+      if(widgetSnapshotRequests.get(message.requestId)!==pending)return false;
+      widgetSnapshotRequests.delete(message.requestId);
+      clearTimeout(pending.timer);
+      pending.signal?.removeEventListener("abort",pending.abort);
+      return true;
+    };
     if (message.type === "penecho-widget-snapshot-error" || typeof message.dataUrl !== "string" || !message.dataUrl.startsWith("data:image/png;base64,")
       || !Number.isFinite(message.width) || message.width <= 0 || !Number.isFinite(message.height) || message.height <= 0) {
+      if(!finishPending())return;
       const snapshotFailure = message.type === "penecho-widget-snapshot-error"
         ? String(message.error || t("widgetExportFailed")).replace(/[\r\n\t]+/g, " ").slice(0, 300)
         : t("widgetExportFailed");
@@ -1967,10 +1977,13 @@
       pending.reject(error);
       return;
     }
+    if(pending.decoding)return;
+    pending.decoding=true;
     try {
       const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
       if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
       if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      if(!finishPending())return;
       if (pending.fullContent) {
         pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl });
         return;
@@ -1981,7 +1994,7 @@
       widget.snapshotVersion = pending.contentVersion;
       pending.resolve(widget.snapshotImage);
     } catch (error) {
-      pending.reject(error);
+      if(finishPending())pending.reject(error);
     }
   }
   function selectedWidget() {

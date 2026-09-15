@@ -54,24 +54,30 @@ function installDesktopUpdatePrompt() {
   document.head.append(link);
 
   const prompt = element("aside", "desktop-update-prompt");
+  prompt.id = "desktopUpdatePrompt";
   prompt.setAttribute("role", "status");
   prompt.setAttribute("aria-live", "polite");
+  prompt.setAttribute("data-pe-surface", "toast");
+  prompt.setAttribute("data-pe-size", "s");
+  prompt.setAttribute("data-pe-layout", "single");
+  prompt.setAttribute("data-pe-presentation", "anchored");
+  prompt.setAttribute("data-pe-material", "opaque");
   prompt.hidden = true;
 
   const row = element("div", "desktop-update-row"),
-    copy = element("div", "desktop-update-copy"),
     title = element("strong", "desktop-update-title"),
-    detail = element("span", "desktop-update-detail"),
-    progress = element("progress", "desktop-update-progress"),
     actions = element("div", "desktop-update-actions"),
     primaryButton = element("button", "desktop-update-primary"),
-    closeButton = element("button", "desktop-update-close", "\u00d7");
+    closeButton = element("button", "desktop-update-close");
 
-  progress.hidden = true;
   primaryButton.type = closeButton.type = "button";
-  copy.append(title, detail, progress);
+  primaryButton.setAttribute("data-pe-button", "primary");
+  primaryButton.setAttribute("data-pe-density", "compact");
+  closeButton.setAttribute("data-pe-button", "icon");
+  closeButton.setAttribute("data-pe-density", "compact");
+  closeButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
   actions.append(primaryButton, closeButton);
-  row.append(copy, actions);
+  row.append(title, actions);
   prompt.append(row);
   const footer = document.querySelector("main > footer");
   (footer || document.body).append(prompt);
@@ -80,38 +86,30 @@ function installDesktopUpdatePrompt() {
   const translations = Object.freeze({
     en:{
       dismiss:"Dismiss update notification until next launch",
-      newVersion:version => `New${version} \u00b7 Upgrade`,
-      downloading:version => `Downloading PenEcho${version}...`,
-      keepWorking:"You can keep working.",
-      downloaded:progressValue => `${progressValue}% downloaded`,
-      ready:version => `PenEcho${version} is ready`,
-      readyDetail:"Install the update and restart PenEcho.",
-      install:"Install & restart",
-      installing:version => `Installing PenEcho${version}...`,
-      installingDetail:"PenEcho will restart when installation finishes.",
-      checking:"Checking for PenEcho updates...",
+      newVersion:version => `Update available${version}`,
+      download:"Download",
+      downloading:progressValue => progressValue === null ? "Downloading update…" : `Downloading update · ${progressValue}%`,
+      ready:version => `Update${version} downloaded`,
+      install:"Install",
+      installing:"Installing update…",
+      checking:"Checking for updates…",
       current:version => `PenEcho v${version} is up to date`,
-      failed:"PenEcho update failed",
+      failed:"Update failed",
       tryLater:"Try again later.",
-      retryInstall:"Retry install",
       retry:"Retry",
     },
     zh:{
       dismiss:"本次启动不再提示更新",
-      newVersion:version => `新版本${version} \u00b7 升级`,
-      downloading:version => `正在下载 PenEcho${version}...`,
-      keepWorking:"下载期间可以继续使用。",
-      downloaded:progressValue => `已下载 ${progressValue}%`,
-      ready:version => `PenEcho${version} 已准备好`,
-      readyDetail:"安装更新并重启 PenEcho。",
-      install:"安装并重启",
-      installing:version => `正在安装 PenEcho${version}...`,
-      installingDetail:"安装完成后 PenEcho 将重新启动。",
-      checking:"正在检查 PenEcho 更新...",
+      newVersion:version => `有新版本${version}`,
+      download:"下载",
+      downloading:progressValue => progressValue === null ? "正在下载…" : `正在下载 · ${progressValue}%`,
+      ready:version => `更新${version}已下载`,
+      install:"安装",
+      installing:"正在安装…",
+      checking:"正在检查更新…",
       current:version => `PenEcho v${version} 已是最新版本`,
-      failed:"PenEcho 更新失败",
+      failed:"更新失败",
       tryLater:"请稍后重试。",
-      retryInstall:"重试安装",
       retry:"重试",
     },
   });
@@ -142,32 +140,24 @@ function installDesktopUpdatePrompt() {
     if (!visible) return;
 
     const words = translations[language], version = state.version ? ` v${state.version}` : "";
-    prompt.classList.toggle("is-available", state.status === "available");
-    copy.hidden = state.status === "available";
+    prompt.setAttribute("data-pe-state", state.status === "ready" ? "success" : ["checking", "downloading", "installing"].includes(state.status) ? "busy" : state.status === "error" ? "error" : "default");
     primaryButton.hidden = false;
-    closeButton.hidden = state.status === "downloading";
-    detail.textContent = "";
-    progress.hidden = true;
+    closeButton.hidden = state.status === "installing";
+    prompt.title = "";
+    title.removeAttribute("aria-label");
 
     if (state.status === "available") {
-      primaryButton.textContent = words.newVersion(version);
+      title.textContent = words.newVersion(version);
+      primaryButton.textContent = words.download;
     } else if (state.status === "downloading") {
-      title.textContent = words.downloading(version);
-      detail.textContent = state.progress === null ? words.keepWorking : words.downloaded(Math.round(state.progress));
-      progress.hidden = false;
-      if (state.progress === null) progress.removeAttribute("value");
-      else progress.value = state.progress;
-      progress.max = 100;
+      title.textContent = words.downloading(state.progress === null ? null : Math.round(state.progress));
       primaryButton.hidden = true;
     } else if (state.status === "ready") {
       title.textContent = words.ready(version);
-      detail.textContent = words.readyDetail;
       primaryButton.textContent = words.install;
     } else if (state.status === "installing") {
-      title.textContent = words.installing(version);
-      detail.textContent = words.installingDetail;
+      title.textContent = words.installing;
       primaryButton.hidden = true;
-      closeButton.hidden = true;
     } else if (state.status === "checking") {
       title.textContent = words.checking;
       primaryButton.hidden = true;
@@ -176,9 +166,11 @@ function installDesktopUpdatePrompt() {
       primaryButton.hidden = true;
     } else {
       title.textContent = words.failed;
-      detail.textContent = state.error || words.tryLater;
-      primaryButton.textContent = state.ready ? words.retryInstall : words.retry;
+      prompt.title = state.error || words.tryLater;
+      title.setAttribute("aria-label", `${words.failed}. ${state.error || words.tryLater}`);
+      primaryButton.textContent = words.retry;
     }
+    primaryButton.title = primaryButton.textContent;
   }
 
   setLanguage();

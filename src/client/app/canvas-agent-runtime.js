@@ -371,14 +371,17 @@
   function canvasAgentHasFocus() {
     return !canvasAgentPanel.hidden && canvasAgentPanel.contains(document.activeElement);
   }
+  function canvasAgentIsOpen() {
+    return !canvasAgentPanel.hidden && document.body.classList.contains("canvas-agent-open");
+  }
   function canvasAgentSuppressesAutomaticAI() {
-    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgent.requestPending || canvasAgent.running || canvasAgentHasFocus();
+    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgent.requestPending || canvasAgent.running || canvasAgentIsOpen();
   }
   function canvasAgentAutomaticAIStatusKey() {
     if (!state.auto) return null;
     if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal())return "canvasAgentExternalAIPaused";
     if (canvasAgent.requestPending || canvasAgent.running) return "canvasAgentAutoAIRequestPaused";
-    return canvasAgentHasFocus() ? "canvasAgentAutoAIFocusPaused" : null;
+    return canvasAgentIsOpen() ? "canvasAgentAutoAIFocusPaused" : null;
   }
   function canvasAgentSyncAutomaticAIStatus() {
     const nextKey = canvasAgentAutomaticAIStatusKey();
@@ -2232,22 +2235,33 @@
   }
   function canvasAgentReadDataUrl(blob) {
     return new Promise((resolve,reject)=>{
-      const reader = new FileReader();
-      reader.onload = ()=>resolve(String(reader.result || ""));
-      reader.onerror = ()=>reject(reader.error || Error("Could not read the image."));
+      const reader = new FileReader();let settled=false;
+      const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);reader.onload=reader.onerror=reader.onabort=null;error?reject(error):resolve(value);};
+      const timer=setTimeout(()=>{finish(Error("Image reading timed out."));try{reader.abort();}catch{}},15_000);
+      reader.onload = ()=>finish(null,String(reader.result || ""));
+      reader.onerror = ()=>finish(reader.error || Error("Could not read the image."));
+      reader.onabort = ()=>finish(Error("Image reading was cancelled."));
       reader.readAsDataURL(blob);
     });
   }
   function canvasAgentDecodeImage(blob) {
     return new Promise((resolve,reject)=>{
-      const url = URL.createObjectURL(blob), image = new Image();
-      image.onload = ()=>{ URL.revokeObjectURL(url); resolve(image); };
-      image.onerror = ()=>{ URL.revokeObjectURL(url); reject(Error("Could not decode the image.")); };
+      const url = URL.createObjectURL(blob), image = new Image();let settled=false;
+      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);image.onload=image.onerror=null;URL.revokeObjectURL(url);error?reject(error):resolve(image);};
+      const timer=setTimeout(()=>{image.src="";finish(Error("Image decoding timed out."));},15_000);
+      image.onload = ()=>finish();
+      image.onerror = ()=>finish(Error("Could not decode the image."));
       image.src = url;
     });
   }
   function canvasAgentCanvasBlob(canvas,type,quality) {
-    return new Promise(resolve=>canvas.toBlob(resolve,type,quality));
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(error,blob)=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve(blob);};
+      const timer=setTimeout(()=>finish(Error("Image encoding timed out.")),15_000);
+      try{canvas.toBlob(blob=>blob?finish(null,blob):finish(Error("Could not encode the image.")),type,quality);}
+      catch(error){finish(error);}
+    });
   }
   async function canvasAgentWireImage(file,image) {
     const sourceType = String(file.type || "").toLowerCase(), sourceLongEdge=Math.max(image.naturalWidth,image.naturalHeight);
@@ -4743,6 +4757,7 @@
     // inspector keeps its persisted width class while closed, so the slide can
     // begin on the click frame instead of waiting for layout reads below.
     document.body.classList.add("canvas-agent-open");
+    canvasAgentPauseAutomaticAI();
     window.PenEchoStudioNavigator?.agentWillOpen?.();
     if(animate&&docked){
       canvasAgentScheduleDockedOpenWork(focus,connect);
@@ -4804,6 +4819,7 @@
       }
       canvasAgentToggle.setAttribute("aria-expanded","false");
       document.body.classList.remove("canvas-agent-open");
+      canvasAgentResumeAutomaticAI();
       if(focus)canvasAgentToggle.focus();
       else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();
       if(animate){canvasAgentScheduleDockedCloseWork();return;}
@@ -4813,6 +4829,7 @@
     const panelRect=canvasAgentPanel.hidden?null:pageLayoutRect(canvasAgentPanel);
     canvasAgentToggle.setAttribute("aria-expanded","false");
     document.body.classList.remove("canvas-agent-open");
+    canvasAgentResumeAutomaticAI();
     if(focus)canvasAgentToggle.focus();
     else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();
     if(animate){

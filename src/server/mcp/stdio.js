@@ -78,6 +78,11 @@ function bridgeRequest(record, payload, signal) {
       });
       response.on("error", reject);
     });
+    // Socket inactivity alone is not a deadline: a stalled peer can keep
+    // sending partial bytes forever without completing its JSON response.
+    const deadline = setTimeout(() => request.destroy(new Error("PenEcho MCP request timed out.")), REQUEST_TIMEOUT_MS);
+    deadline.unref?.();
+    request.once("close", () => clearTimeout(deadline));
     request.on("timeout", () => request.destroy(new Error("PenEcho MCP request timed out.")));
     request.on("error", reject);
     request.end(body);
@@ -214,6 +219,7 @@ class PenEchoStdioServer {
       const name = message.params?.name, args = message.params?.arguments === undefined ? {} : message.params.arguments;
       if (typeof name !== "string" || !args || typeof args !== "object" || Array.isArray(args)) return this.send({ jsonrpc:"2.0", id, error:{ code:-32602, message:"Invalid params" } });
       const controller = new AbortController(), key = responseKey(id);
+      if (this.pending.has(key)) return this.send({ jsonrpc:"2.0", id, error:{ code:-32600, message:"Request ID already active" } });
       this.pending.set(key, controller);
       try {
         if (name === "penecho_get_guidance") {
@@ -224,15 +230,15 @@ class PenEchoStdioServer {
         const value = name === "penecho_list_canvases"
           ? await this.listCanvases(controller.signal)
           : await bridgeRequest(record, { operation:"call", ownerId:this.ownerId, name, arguments:args }, controller.signal);
-        if (!this.pending.has(key)) return;
+        if (this.pending.get(key) !== controller) return;
         if (name === "penecho_start_session" && typeof value?.sessionId === "string") this.sessions.set(value.sessionId, record);
         if (name === "penecho_close_session" && value?.closed === true) this.sessions.delete(args.sessionId);
         this.send({ jsonrpc:"2.0", id, result:value?.image ? captureToolResult(value) : normalToolResult(value) });
       } catch (error) {
-        if (!this.pending.has(key)) return;
+        if (this.pending.get(key) !== controller) return;
         const failure = {code:String(error?.code || "mcp_bridge_error").slice(0,80),message:String(error?.message || "PenEcho MCP request failed.").slice(0,1_000),...(error?.details === undefined ? {} : {details:error.details})};
         this.send({ jsonrpc:"2.0", id, result:{ content:[{ type:"text", text:JSON.stringify(failure) }], structuredContent:failure, isError:true } });
-      } finally { this.pending.delete(key); }
+      } finally { if (this.pending.get(key) === controller) this.pending.delete(key); }
     } catch (error) {
       this.send({ jsonrpc:"2.0", id, error:{ code:-32603, message:String(error?.message || "Internal error").slice(0, 500) } });
     }

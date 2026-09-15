@@ -395,7 +395,13 @@
     return snapshotDbPromise;
   }
   function canvasBlob(canvas, type = "image/png", quality) {
-    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not encode canvas"))), type, quality));
+    return new Promise((resolve, reject) => {
+      let settled=false;
+      const finish=(error,blob)=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve(blob);};
+      const timer=setTimeout(()=>finish(Error("Canvas encoding timed out")),15_000);
+      try { canvas.toBlob(blob => blob ? finish(null,blob) : finish(Error("Could not encode canvas")), type, quality); }
+      catch(error){finish(error);}
+    });
   }
   function communityCanvasHasContent(canvas) {
     const sample=document.createElement("canvas"),width=Math.min(64,canvas.width),height=Math.min(64,canvas.height);
@@ -485,9 +491,12 @@
   function blobDataUrl(blob) {
     return new Promise((resolve, reject) => {
       if (!(blob instanceof Blob)) return reject(Error("Snapshot contains invalid binary data"));
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error || Error("Could not encode snapshot data"));
+      const reader = new FileReader();let settled=false;
+      const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);reader.onload=reader.onerror=reader.onabort=null;error?reject(error):resolve(value);};
+      const timer=setTimeout(()=>{finish(Error("Snapshot data encoding timed out"));try{reader.abort();}catch{}},15_000);
+      reader.onload = () => finish(null,String(reader.result || ""));
+      reader.onerror = () => finish(reader.error || Error("Could not encode snapshot data"));
+      reader.onabort = () => finish(Error("Snapshot data encoding was cancelled"));
       reader.readAsDataURL(blob);
     });
   }
@@ -726,13 +735,21 @@
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(blob),
         image = new Image();
-      image.onload = () => {
+      let settled=false;
+      const finish=(error)=>{
+        if(settled)return;
+        settled=true;
+        clearTimeout(timer);
+        image.onload=image.onerror=null;
         URL.revokeObjectURL(url);
-        resolve(image);
+        error?reject(error):resolve(image);
+      };
+      const timer=setTimeout(()=>{image.src="";finish(Error("Snapshot tile decoding timed out"));},15_000);
+      image.onload = () => {
+        finish();
       };
       image.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(Error("Could not decode snapshot tile"));
+        finish(Error("Could not decode snapshot tile"));
       };
       image.src = url;
     });
@@ -741,8 +758,27 @@
     for (const canvas of canvases.values()) canvas.width = canvas.height = 1;
     canvases.clear();
   }
-  function waitForSnapshotTileFrame() {
-    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  function waitForSnapshotTileFrame(signal = null) {
+    return new Promise((resolve) => {
+      let frame = null, timer = null, finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (frame !== null) cancelAnimationFrame(frame);
+        if (timer !== null) clearTimeout(timer);
+        signal?.removeEventListener("abort", finish);
+        document.removeEventListener("visibilitychange", visibilityChanged);
+        resolve();
+      };
+      const visibilityChanged = () => { if (document.hidden) finish(); };
+      if (signal?.aborted) { finish(); return; }
+      signal?.addEventListener("abort", finish, { once:true });
+      document.addEventListener("visibilitychange", visibilityChanged);
+      // Foreground decoding yields to paint. Hidden or suspended animation
+      // frames must not retain the Canvas operation queue indefinitely.
+      frame = requestAnimationFrame(finish);
+      timer = setTimeout(finish, document.hidden ? 0 : 100);
+    });
   }
   async function decodeSnapshotTilesInBatches(tileEntries, isCurrent, onProgress = null) {
     const decodedTiles = new Map();

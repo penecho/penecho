@@ -243,21 +243,118 @@ test("History loads legacy canvases without Web Crypto and permits retry after a
   }
 });
 
-test("MCP finds legacy canvases in every store without misreporting missing Web Crypto as unavailable storage", async () => {
-  const h = harness({
-    crypto: { getRandomValues: crypto.webcrypto.getRandomValues.bind(crypto.webcrypto) },
-    snapshots: [{ id: "device-old", name: "Device lesson" }],
+test("MCP finds only open workspace records, excludes closed provider copies, and filters documentId", async () => {
+  const records = new Map(), first = harness({records});
+  await first.canvasDocumentsReady();
+  const open = await createHidden(first, "catalog-open", "Open workspace");
+  const closed = await createHidden(first, "catalog-closed", "Closed workspace");
+  await startHidden(first, closed.documentId, "catalog-close-session", "catalog-close-key");
+  await first.context.canvasDocumentsShow(closed.documentId);
+  await first.canvasDocumentsClose(closed.documentId);
+  assert.equal(records.get(closed.documentId).closed, true);
+
+  const second = harness({
+    records,
+    snapshots: [{id:"device-old",name:"Device lesson"}],
     remote: {
-      "/api/canvases?metadataOnly=1": [{ id: "server-old", name: "Server lesson" }],
-      "/api/cloud/library": [{ id: "cloud-old", name: "Cloud lesson" }],
+      "/api/canvases?metadataOnly=1": [{id:"server-old",name:"Server lesson"}],
+      "/api/cloud/library": [{id:"cloud-old",name:"Cloud lesson"}],
     },
   });
-  const found = await h.canvasDocumentsExecute("mcp_find_canvases", {}, {});
-  for (const location of ["device", "server", "cloud"]) {
-    assert.equal(found.providers.find(provider => provider.location === location).status, "ok");
-    const expected = `legacy-${crypto.createHash("sha256").update(JSON.stringify({ location, scope: "", id: `${location}-old` })).digest("hex")}`;
-    assert.equal(found.canvases.find(canvas => canvas.locator?.location === location).documentId, expected);
+  await second.canvasDocumentsReady();
+  const found = await second.canvasDocumentsExecute("mcp_find_canvases", {}, {});
+  const openIds = found.canvases.filter(item => item.open).map(item => item.documentId);
+  assert.equal(openIds.includes("device-old"), false);
+  assert.equal(openIds.includes("server-old"), false);
+  assert.equal(openIds.includes("cloud-old"), false);
+  assert.equal(openIds.includes(closed.documentId), false);
+  assert.equal(openIds.includes(open.documentId), true);
+
+  const filtered = await second.canvasDocumentsExecute("mcp_find_canvases", {documentId:open.documentId}, {});
+  assert.equal(JSON.stringify(filtered.canvases.map(({documentId,title,active}) => ({documentId,title,active}))), JSON.stringify([
+    {documentId:open.documentId,title:"Open workspace",active:false},
+  ]));
+  const closedFilter = await second.canvasDocumentsExecute("mcp_find_canvases", {documentId:closed.documentId}, {});
+  assert.equal(closedFilter.canvases.length, 0);
+});
+
+test("MCP document catalog mirrors every open record, keeps document titles, and drops a closed record", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const visible = h.canvasDocumentsCurrent();
+  h.state.currentSnapshotName = "Visible work";
+  visible.title = "Visible work";
+  const userNew = await createHidden(h, "catalog-user-new", "New board");
+  const userLoaded = await createHidden(h, "catalog-user-load", "Loaded board");
+  const loaded = h.canvasDocuments.records.get(userLoaded.documentId);
+  loaded.locator = { location:"device", id:"saved-loaded-board" };
+
+  // The records represent a user-created Canvas and a loaded saved Canvas;
+  // neither needs an MCP open request to be part of the open-page catalog.
+  const catalog = await h.canvasDocumentsExecute("mcp_find_canvases", {}, {});
+  assert.equal(JSON.stringify(catalog.canvases.filter(item => item.open).map(({documentId,title,active}) => ({documentId,title,active}))), JSON.stringify([
+    {documentId:userLoaded.documentId,title:"Loaded board",active:false},
+    {documentId:userNew.documentId,title:"New board",active:false},
+    {documentId:visible.id,title:"Visible work",active:true},
+  ]));
+  assert.equal(catalog.canvases.find(item => item.documentId === userLoaded.documentId).locator.id, "saved-loaded-board");
+
+  await startHidden(h, userNew.documentId, "catalog-session", "catalog-key", "Codex");
+  assert.equal(h.canvasDocuments.records.get(userNew.documentId).title, "New board", "a session title must not replace the Canvas title");
+
+  await h.context.canvasDocumentsShow(userLoaded.documentId);
+  await h.canvasDocumentsClose(userLoaded.documentId);
+  const afterClose = await h.canvasDocumentsExecute("mcp_find_canvases", {}, {});
+  assert.equal(afterClose.canvases.some(item => item.documentId === userLoaded.documentId), false, "closing a document removes it from the open catalog");
+  assert.equal(afterClose.canvases.find(item => item.documentId === userNew.documentId).title, "New board");
+});
+
+test("MCP browser catalog publishes every open document with its stable identity", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const visible = h.canvasDocumentsCurrent();
+  h.state.currentSnapshotName = "Visible work";
+  visible.title = "Visible work";
+  const userNew = await createHidden(h, "catalog-wire-new", "New board");
+  const userLoaded = await createHidden(h, "catalog-wire-load", "Loaded board");
+
+  class CatalogSocket {
+    static OPEN = 1;
+    static instances = [];
+    constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.listeners = new Map(); CatalogSocket.instances.push(this); }
+    addEventListener(type, listener) { const listeners = this.listeners.get(type) || []; listeners.push(listener); this.listeners.set(type, listeners); }
+    send(value) { this.sent.push(JSON.parse(value)); }
+    close() { this.readyState = 3; for (const listener of this.listeners.get("close") || []) listener(); }
+    emit(type, value) { for (const listener of this.listeners.get(type) || []) listener(value); }
   }
+  Object.assign(h.context, {
+    WebSocket: CatalogSocket,
+    mcpHeartbeat: () => {}, mcpRenderSettings: () => {}, mcpLanOpened: async () => {}, showCanvasHint: () => {},
+  });
+  vm.runInContext("mcpConnect()", h.context);
+  const socket = CatalogSocket.instances.at(-1);
+  socket.readyState = CatalogSocket.OPEN;
+  socket.emit("open");
+  const hello = socket.sent.find(message => message.type === "hello");
+  assert.ok(hello, "opening MCP must identify the browser");
+  assert.equal(JSON.stringify(hello.documents.map(({documentId,title,active}) => ({documentId,title,active}))), JSON.stringify([
+    {documentId:userLoaded.documentId,title:"Loaded board",active:false},
+    {documentId:userNew.documentId,title:"New board",active:false},
+    {documentId:visible.id,title:"Visible work",active:true},
+  ]));
+  socket.emit("message", { data: JSON.stringify({ type:"ready", heartbeat:false, catalog:true }) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.mcpRuntime.catalogSupported, true);
+  assert.equal(socket.readyState, CatalogSocket.OPEN);
+  assert.equal(h.context.WebSocket.OPEN, CatalogSocket.OPEN);
+  assert.equal(h.mcpRuntime.socket, socket);
+  assert.equal(h.mcpRuntime.catalogSignature, JSON.stringify(hello.documents));
+  await h.context.canvasDocumentsShow(userLoaded.documentId);
+  await h.canvasDocumentsClose(userLoaded.documentId);
+  await new Promise(resolve => setImmediate(resolve));
+  const afterClose = socket.sent.filter(message => message.type === "catalog").at(-1);
+  assert.ok(afterClose, "closing a document must republish the catalog");
+  assert.equal(afterClose.documents.some(document => document.documentId === userLoaded.documentId), false);
 });
 
 test("two documents route hidden sessions without changing or mounting the visible Canvas", async () => {
@@ -446,7 +543,7 @@ test("keyless sessions stay independent and do not restore a saved binding", asy
   assert.equal(second.canvasDocuments.records.get(opened.documentId).bindings.length, 0);
 });
 
-test("unseen background updates survive reload and clear persistently when shown", async () => {
+test("unseen background updates survive automatic display and clear persistently on manual selection", async () => {
   const records = new Map(), first = harness({ records });
   const opened = await createHidden(first, "unseen-persist", "Unread");
   await startHidden(first, opened.documentId, "unseen-session");
@@ -461,6 +558,8 @@ test("unseen background updates survive reload and clear persistently when shown
   assert.equal(reloaded.unseen, unseen);
 
   await second.canvasDocumentsExecute("mcp_open_canvas", { documentId: opened.documentId, requestId: "unseen-show", show: true }, {});
+  assert.equal(reloaded.unseen, unseen);
+  await second.context.canvasDocumentsShow(opened.documentId);
   assert.equal(reloaded.unseen, 0);
   assert.equal(records.get(opened.documentId).unseen, 0);
 
@@ -642,7 +741,7 @@ test("showing an updated Canvas acknowledges only that document", async () => {
   await h.canvasDocumentsExecute("mcp_present_widget",{sessionId:"unread-session-two",artifactId:"unread-artifact-two",title:"Unread two",html:"<p>Two update</p>"},{});
   const first=h.canvasDocuments.records.get(one.documentId),second=h.canvasDocuments.records.get(two.documentId);
   assert.ok(first.unseen>0);assert.ok(second.unseen>0);
-  await h.canvasDocumentsExecute("mcp_open_canvas",{documentId:one.documentId,requestId:"read-one",show:true},{});
+  await h.context.canvasDocumentsShow(one.documentId);
   assert.equal(first.unseen,0);assert.ok(second.unseen>0);
 });
 
@@ -1380,4 +1479,93 @@ test('raw upload refuses an active-document switch during decoding before saving
   h.context.createImageBitmap=async()=>{h.canvasDocuments.activeId=hidden.documentId;return {width:120,height:60,close(){closed++;}};};
   await assert.rejects(h.canvasDocumentsExecute('mcp_upload_image_to_document',{documentId:doc.id,requestId:'raw-switch',name:'a.png',originalName:'a.png',inputSha256:'a'.repeat(64),source:assetTestImage},{}),/no longer/);
   assert.equal(closed,1);assert.equal(doc.receipts.size,0);assert.equal(h.state.currentSnapshotPreservedAssets?.length||0,0);
+});
+
+
+test("active external output remains unseen through automatic show and receipt replay", async () => {
+  const h=harness(),opened=await createHidden(h,"active-unseen","Active unread");
+  await startHidden(h,opened.documentId,"active-unseen-session");
+  await h.context.canvasDocumentsShow(opened.documentId,null,{markSeen:false});
+  const args={sessionId:"active-unseen-session",artifactId:"active-new-output",title:"New output",html:"<p>Updated</p>",requestId:"active-output-receipt"};
+  await h.canvasDocumentsExecute("mcp_present_widget",args,{});
+  const doc=h.canvasDocuments.records.get(opened.documentId);
+  assert.ok(doc.unseen>0);
+  const unseen=doc.unseen;
+  await h.context.canvasDocumentsShow(opened.documentId,null,{markSeen:false});
+  assert.equal(doc.unseen,unseen);
+  await h.context.canvasDocumentsShow(opened.documentId);
+  assert.equal(doc.unseen,0);
+  await h.canvasDocumentsExecute("mcp_present_widget",args,{});
+  assert.equal(doc.unseen,0,"replaying an acknowledged receipt is not new content");
+});
+
+test("saved time survives parking and reload and changes only on save", async () => {
+  const records=new Map(),h=harness({records});
+  await h.canvasDocumentsReady();
+  const doc=h.canvasDocumentsCurrent();
+  const item={id:"saved-time",name:"Saved time",updatedAt:123456,createdAt:100000,widgets:[],images:[],textBoxes:[],bundleExtensions:h.canvasDocumentsSaveMetadata()};
+  await h.canvasDocumentsDidSave(item,"device","saved-time");
+  assert.equal(doc.savedAt,123456);
+  h.context.canvasDocumentsChanged(doc,"source","changed-object");
+  const hidden=await createHidden(h,"time-other","Other");
+  await h.context.canvasDocumentsShow(hidden.documentId,null,{markSeen:false});
+  assert.equal(doc.savedAt,123456);
+  assert.equal(records.get(doc.id).savedAt,123456);
+  const reloaded=harness({records,activeId:"time-reload"});
+  await reloaded.canvasDocumentsReady();
+  assert.equal(reloaded.canvasDocuments.records.get(doc.id).savedAt,123456);
+  await h.context.canvasDocumentsShow(doc.id);
+  await h.canvasDocumentsDidSave({...item,updatedAt:234567},"device","saved-time");
+  assert.equal(doc.savedAt,234567);
+  const copy={...item,updatedAt:345678,bundleExtensions:h.canvasDocumentsSaveMetadata({copy:true})};
+  await h.canvasDocumentsDidSave(copy,"device","saved-time-copy");
+  assert.equal(doc.savedAt,234567,"saving a copy leaves the original save time unchanged");
+  assert.equal(h.canvasDocumentsCurrent().savedAt,345678);
+});
+
+test("catalog uses creation or save time descending without selection priority", async () => {
+  const h=harness();await h.canvasDocumentsReady();
+  const initial=h.canvasDocumentsCurrent();
+  const one=await createHidden(h,"stable-one","First draft"),two=await createHidden(h,"stable-two","Second draft");
+  const ids=()=>Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId);
+  const first=h.canvasDocuments.records.get(one.documentId),second=h.canvasDocuments.records.get(two.documentId);
+  assert.ok(initial.firstSeenAt<first.firstSeenAt&&first.firstSeenAt<second.firstSeenAt);
+  const original=ids();
+  assert.deepEqual(original,[second.id,first.id,initial.id]);
+  await h.context.canvasDocumentsShow(two.documentId);
+  assert.deepEqual(ids(),original);
+  assert.equal(h.context.canvasDocumentsCatalog().find(entry=>entry.documentId===two.documentId).active,true);
+  const save=(doc,updatedAt)=>h.canvasDocumentsDidSave({name:doc.title,updatedAt,bundleExtensions:h.canvasDocumentsSaveMetadata(),widgets:[],images:[],textBoxes:[]},"device",doc.id);
+  await save(second,second.firstSeenAt+1000);
+  assert.deepEqual(ids(),[second.id,first.id,initial.id]);
+  await h.context.canvasDocumentsShow(first.id);
+  assert.deepEqual(ids(),[second.id,first.id,initial.id]);
+  await save(first,second.firstSeenAt+2000);
+  assert.deepEqual(ids(),[first.id,second.id,initial.id]);
+  await h.context.canvasDocumentsShow(second.id);
+  assert.deepEqual(ids(),[first.id,second.id,initial.id]);
+});
+
+test("draft first appearance survives switching and workspace restoration", async () => {
+  const records=new Map(),h=harness({records});await h.canvasDocumentsReady();
+  const one=await createHidden(h,"first-seen-one","One"),two=await createHidden(h,"first-seen-two","Two");
+  const first=h.canvasDocuments.records.get(one.documentId),second=h.canvasDocuments.records.get(two.documentId),timestamps=[first.firstSeenAt,second.firstSeenAt];
+  await h.context.canvasDocumentsShow(second.id);await h.context.canvasDocumentsShow(first.id);
+  assert.deepEqual([first.firstSeenAt,second.firstSeenAt],timestamps);
+  assert.equal(records.get(first.id).firstSeenAt,timestamps[0]);
+  const reloaded=harness({records});await reloaded.canvasDocumentsReady();
+  assert.deepEqual([reloaded.canvasDocuments.records.get(first.id).firstSeenAt,reloaded.canvasDocuments.records.get(second.id).firstSeenAt],timestamps);
+  const ids=Array.from(reloaded.context.canvasDocumentsCatalog(),entry=>entry.documentId);
+  assert.ok(ids.indexOf(second.id)<ids.indexOf(first.id));
+});
+
+test("legacy drafts retain observed restore order and saved creation metadata seeds first appearance", async () => {
+  const h=harness();
+  const meta=id=>({documentId:id,title:id});
+  const saved=h.canvasDocumentsRecord(meta("saved"),{item:{createdAt:12345}});
+  assert.equal(saved.firstSeenAt,12345);
+  for(const id of ["legacy-z","legacy-a"]){const doc=h.canvasDocumentsRecord(meta(id));h.context.canvasDocumentsRestoreFirstSeenAt(doc,{});h.canvasDocuments.records.set(id,doc);}
+  assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),["legacy-a","legacy-z"]);
+  h.canvasDocuments.activeId="legacy-a";
+  assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),["legacy-a","legacy-z"]);
 });

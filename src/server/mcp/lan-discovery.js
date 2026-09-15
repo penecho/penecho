@@ -1,7 +1,7 @@
 'use strict';
 // Standalone DNS-SD transport: discovered addresses are hints; TLS pinning remains authority.
 const dgram=require('node:dgram'),os=require('node:os'),net=require('node:net');
-const GROUP='224.0.0.251',PORT=5353,SERVICE='_penecho-mcp._tcp.local';
+const GROUP='224.0.0.251',PORT=5353,SERVICE='_penecho-mcp._tcp.local',SEND_DEADLINE_MS=1000;
 const privateIP=a=>net.isIPv4(a)&&(/^(10\.|192\.168\.)/.test(a)||/^172\.(1[6-9]|2\d|3[01])\./.test(a));
 const interfaces=()=>[...new Set(Object.values(os.networkInterfaces()).flat().filter(a=>a?.family==='IPv4'&&privateIP(a.address)).map(a=>a.address))];
 function names(hostId){if(!/^[a-f0-9]{64}$/i.test(hostId))throw new Error('Invalid host identity');const id=hostId.toLowerCase();let n=BigInt('0x'+id),label='';for(let i=0;i<52;i++){label='abcdefghijklmnopqrstuvwxyz234567'[Number(n&31n)]+label;n>>=5n;}return {instance:`${label}.${SERVICE}`,host:`${id.slice(0,32)}.${id.slice(32)}.penecho.local`};}
@@ -28,25 +28,26 @@ function announcement(hostId,port,addresses,ttl=120){const {instance,host}=names
  const header=Buffer.alloc(12);header.writeUInt16BE(0x8400,2);header.writeUInt16BE(records.length,6);return Buffer.concat([header,...records]);
 }
 function socket(onError){const s=dgram.createSocket({type:'udp4',reuseAddr:true});s.on('error',e=>{try{onError?.(e);}catch{}});return s;}
-// dgram.send may defer the actual OS send; never change the interface until its callback.
-function multicastSender(s){let queue=Promise.resolve();return (packet,addresses)=>{queue=queue.then(()=>new Promise(resolve=>{const list=[...addresses];function next(){const address=list.shift();if(!address)return resolve();try{s.setMulticastInterface(address);s.send(packet,PORT,GROUP,()=>next());}catch{next();}}next();}));return queue;};}
+// dgram.send may defer the actual OS send. Keep each packet bounded so a
+// missing callback cannot hold every later refresh (or goodbye) in the queue.
+function multicastSender(s,timeoutMs=SEND_DEADLINE_MS){const duration=Number(timeoutMs);const deadline=Number.isFinite(duration)&&duration>0?duration:SEND_DEADLINE_MS;let queue=Promise.resolve();return (packet,addresses)=>{const run=queue.then(()=>new Promise(resolve=>{const list=[...addresses];let finished=false,timer;const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);resolve();};const next=()=>{if(finished)return;const address=list.shift();if(!address)return finish();try{s.setMulticastInterface(address);s.send(packet,PORT,GROUP,()=>next());}catch{next();}};timer=setTimeout(finish,deadline);timer.unref?.();next();}));queue=run.catch(()=>{});return run;};}
 function join(s,addresses){for(const a of addresses){try{s.addMembership(GROUP,a);}catch{}}}
 function createAnnouncer({hostId,port,getAddresses=interfaces,onError=()=>{}}){
  const {instance,host}=names(hostId);if(!Number.isInteger(port)||port<1||port>65535)throw new Error('Invalid LAN port');
- const s=socket(onError),multicast=multicastSender(s);let closed=false,ready=false,timer,addresses=[];const members=new Set();
+ const s=socket(onError),multicast=multicastSender(s);let closed=false,ready=false,timer,addresses=[],closePromise;const members=new Set();
  function send(ttl=120){if(!ready)return;const packet=announcement(hostId,port,addresses,ttl);return multicast(packet,addresses);}
  function refresh(){const next=[...new Set(getAddresses().filter(privateIP))].slice(0,16);for(const a of next)if(!members.has(a)){try{s.addMembership(GROUP,a);members.add(a);}catch{}}for(const a of members)if(!next.includes(a)){try{s.dropMembership(GROUP,a);}catch{}members.delete(a);}addresses=next;send();}
  let lastReply=0;s.on('message',(data,remote)=>{try{const p=parsePacket(data);if(!p.response&&Date.now()-lastReply>200&&p.questions.some(q=>[SERVICE,instance,host].includes(q.name)&&[1,12,16,33,255].includes(q.type))){lastReply=Date.now();if((remote.port!==PORT||p.questions.some(q=>q.unicast))&&privateIP(remote.address)){const packet=announcement(hostId,port,addresses);data.copy(packet,0,0,2);s.send(packet,remote.port,remote.address,()=>{});}else send();}}catch{}});
- s.bind(PORT,()=>{if(closed)return;ready=true;s.setMulticastTTL(255);refresh();timer=setInterval(refresh,30000);timer.unref();});s.unref();
- return {close(){if(closed)return;closed=true;clearInterval(timer);const goodbye=send(0);ready=false;Promise.resolve(goodbye).finally(()=>{try{s.close();}catch{}})}};
+ s.bind(PORT,()=>{if(closed)return;ready=true;s.setMulticastTTL(255);refresh();timer=setInterval(refresh,30000);timer.unref?.();});s.unref?.();
+ return {close(){if(closePromise)return closePromise;closed=true;clearInterval(timer);const goodbye=send(0);ready=false;let deadlineTimer;const deadline=new Promise(resolve=>{deadlineTimer=setTimeout(resolve,SEND_DEADLINE_MS);deadlineTimer.unref?.();});closePromise=Promise.race([Promise.resolve(goodbye),deadline]).catch(()=>{}).finally(()=>{clearTimeout(deadlineTimer);try{s.close();}catch{}});return closePromise;}};
 }
 function discover({hostId,signal,timeoutMs=5000,onCandidate}){
  const {instance}=names(hostId);return new Promise((resolve,reject)=>{
   if(signal?.aborted)return resolve([]);
-  let s,done=false,timer,retry;const records=new Map(),emitted=new Set();
+  let s,done=false,timer,retry,sendTimer;const records=new Map(),emitted=new Set();
   function candidates(){const urls=new Set();for(const r of records.values())if(r.type===33&&r.name===instance&&r.value?.port>0){for(const a of records.values())if(a.type===1&&a.name===r.value.host&&privateIP(a.value))urls.add(`https://${a.value}:${r.value.port}/mcp`);}return [...urls].slice(0,16);}
   function close(target){try{target?.close();}catch{}}
-  function finish(error){if(done)return;done=true;clearTimeout(timer);clearInterval(retry);signal?.removeEventListener('abort',abort);close(s);if(error)reject(Object.assign(new Error('LAN discovery network unavailable',{cause:error}),{code:'LAN_DISCOVERY_NETWORK'}));else resolve(candidates());}
+  function finish(error){if(done)return;done=true;clearTimeout(timer);clearTimeout(sendTimer);clearInterval(retry);signal?.removeEventListener('abort',abort);close(s);if(error)reject(Object.assign(new Error('LAN discovery network unavailable',{cause:error}),{code:'LAN_DISCOVERY_NETWORK'}));else resolve(candidates());}
   function abort(){finish();}
   function message(data){if(done)return;try{const p=parsePacket(data);if(!p.response)return;for(const r of p.records){if(![1,33].includes(r.type)||!r.value)continue;const key=`${r.name}/${r.type}/${JSON.stringify(r.value)}`;if(!r.ttl)records.delete(key);else if(records.size<128)records.set(key,r);}}catch{return;}
    for(const url of candidates()){if(done||emitted.size>=16)break;if(emitted.has(url))continue;emitted.add(url);try{onCandidate?.(url);}catch{}}
@@ -59,7 +60,9 @@ function discover({hostId,signal,timeoutMs=5000,onCandidate}){
     // Serialize per-interface sends; abort and socket replacement invalidate queued work.
     let sending=false;
     const send=()=>{if(done||target!==s||sending)return;sending=true;const pending=[...addresses],packet=question(instance,unicast);
-     function next(error){if(done||target!==s)return;if(error){sending=false;fail(error);return;}const address=pending.shift();if(!address){sending=false;return;}try{target.setMulticastInterface(address);target.send(packet,PORT,GROUP,next);}catch(e){sending=false;fail(e);}}
+     let finished=false;const release=()=>{if(finished)return;finished=true;clearTimeout(sendTimer);sendTimer=null;sending=false;};
+     function next(error){if(finished)return;if(done||target!==s){release();return;}if(error){release();fail(error);return;}const address=pending.shift();if(!address){release();return;}try{target.setMulticastInterface(address);target.send(packet,PORT,GROUP,next);}catch(e){release();fail(e);}}
+     sendTimer=setTimeout(release,SEND_DEADLINE_MS);sendTimer.unref?.();
      next();
     };
     retry=setInterval(send,1000);send();

@@ -61,28 +61,6 @@
       studioNavigatorHistoryDirty = true,
       studioEdgeSwipe = null;
 
-    // Sidebar-only browser metadata; never part of a Canvas snapshot or server write.
-    const STUDIO_CANVAS_OPENED_KEY = "penecho-studio-canvas-last-opened";
-    let studioCanvasOpened = readStudioCanvasOpened(), studioLastOpenedKey = "";
-    function readStudioCanvasOpened() {
-      try {
-        const entries = JSON.parse(localStorage.getItem(STUDIO_CANVAS_OPENED_KEY) || "[]");
-        return new Map(Array.isArray(entries) ? entries.filter(entry => Array.isArray(entry) && typeof entry[0] === "string" && Number.isFinite(entry[1])) : []);
-      } catch { return new Map(); }
-    }
-    function rememberStudioCanvasOpened(key) {
-      if (!key) { studioLastOpenedKey = ""; return; }
-      if (key === studioLastOpenedKey) return;
-      studioLastOpenedKey = key;
-      studioCanvasOpened.set(key, Math.max(Date.now(), ...studioCanvasOpened.values(), 0) + 1);
-      studioCanvasOpened = new Map([...studioCanvasOpened].sort((a,b) => b[1]-a[1]).slice(0,1000));
-      try { localStorage.setItem(STUDIO_CANVAS_OPENED_KEY, JSON.stringify([...studioCanvasOpened])); } catch {}
-      return true;
-    }
-    function studioCanvasOpenedAt(key) {
-      return studioCanvasOpened.get(key) || 0;
-    }
-
     function storedStudioNavigatorTab() {
       try {
         const stored=localStorage.getItem(STUDIO_NAVIGATOR_TAB_KEY);
@@ -293,7 +271,7 @@
       const label = studioNavigatorCanvasMeta(current, open, location, updatedAt);
       meta.title = label;
       meta.setAttribute("aria-label", label);
-      // Open state is textual; green is reserved for unread updates.
+      // Selection, unread content, and save order are independent states.
       meta.textContent = [current ? t("studioNavigatorCurrent") : "", location ? snapshotLocationLabel(location) : "", studioNavigatorMetaTime(updatedAt)].filter(Boolean).join(" · ");
     }
     function syncStudioNavigatorCurrentSource() {
@@ -460,27 +438,27 @@
       const histories=new Map(canvasAgentStoredHistoryGroups().map((group)=>[group.canvasKey,group])),groups=new Map();
       for(const item of studioNavigatorSnapshots()){
         const canvasKey=`${item.location}:${item.id}`,history=histories.get(canvasKey);
-        groups.set(canvasKey,{canvasKey,location:item.location,item,name:snapshotName(item),updatedAt:Math.max(Number(item.updatedAt||item.createdAt)||0,Number(history?.updatedAt)||0),conversations:history?.conversations||[]});
+        groups.set(canvasKey,{canvasKey,location:item.location,item,name:snapshotName(item),savedAt:Number(item.updatedAt||item.createdAt)||0,firstSeenAt:Number(item.createdAt)||0,updatedAt:Math.max(Number(item.updatedAt||item.createdAt)||0,Number(history?.updatedAt)||0),conversations:history?.conversations||[]});
         histories.delete(canvasKey);
       }
       for(const history of histories.values()){
         if(history.canvasKey.startsWith("draft:")&&history.canvasKey!==state.canvasAgentCanvasKey)continue;
         const identity=studioNavigatorCanvasIdentity(history.canvasKey),item=studioNavigatorCanvasGroupSnapshot(history);
-        groups.set(history.canvasKey,{...history,location:identity?.location||"",item,name:studioNavigatorCanvasGroupName(history)});
+        groups.set(history.canvasKey,{...history,location:identity?.location||"",item,name:studioNavigatorCanvasGroupName(history),savedAt:Number(item?.updatedAt||item?.createdAt)||0});
       }
       if(state.canvasAgentCanvasKey&&!groups.has(state.canvasAgentCanvasKey)){
         const identity=studioNavigatorCanvasIdentity(state.canvasAgentCanvasKey),item=studioNavigatorCanvasGroupSnapshot({canvasKey:state.canvasAgentCanvasKey});
-        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),updatedAt:Number(item?.updatedAt||item?.createdAt)||Date.now(),conversations:canvasAgentHistoryForCanvas(state.canvasAgentCanvasKey)});
+        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),savedAt:Number(item?.updatedAt||item?.createdAt)||0,updatedAt:Number(item?.updatedAt||item?.createdAt)||Date.now(),conversations:canvasAgentHistoryForCanvas(state.canvasAgentCanvasKey)});
       }
-      if(typeof canvasDocuments!=="undefined")for(const doc of canvasDocuments.records.values()){
+      if(typeof canvasDocuments!=="undefined")for(const [index,doc] of [...canvasDocuments.records.values()].entries()){
         const current=doc.id===canvasDocuments.activeId,
           canvasKey=doc.locator?`${doc.locator.location}:${doc.locator.id}`:current&&state.canvasAgentCanvasKey||`workspace:${doc.id}`,
           previous=groups.get(canvasKey),item=previous?.item||doc.stored?.item||null;
         groups.set(canvasKey,{...previous,canvasKey,documentId:doc.id,location:doc.locator?.location||"",item,
-          name:doc.title||t("canvasUntitledName"),updatedAt:Math.max(Number(previous?.updatedAt)||0,Number(item?.updatedAt||item?.createdAt)||0,...(doc.changes||[]).map(change=>Number(change.at)||0)),
+          name:doc.title||t("canvasUntitledName"),firstSeenAt:Number(doc.firstSeenAt)||index+1,savedAt:Math.max(Number(doc.savedAt)||0,Number(previous?.savedAt)||0),updatedAt:Math.max(Number(previous?.updatedAt)||0,Number(item?.updatedAt||item?.createdAt)||0,...(doc.changes||[]).map(change=>Number(change.at)||0)),
           conversations:previous?.conversations||[],current,unseen:doc.unseen>0});
       }
-      return [...groups.values()].map((group)=>({...group,current:group.documentId?group.current:group.canvasKey===state.canvasAgentCanvasKey})).sort((a,b)=>Number(b.current)-Number(a.current)||studioCanvasOpenedAt(b.canvasKey)-studioCanvasOpenedAt(a.canvasKey)||Number(Boolean(b.documentId))-Number(Boolean(a.documentId))||b.updatedAt-a.updatedAt);
+      return [...groups.values()].map((group)=>({...group,current:group.documentId?group.current:group.canvasKey===state.canvasAgentCanvasKey})).sort((a,b)=>(b.savedAt||b.firstSeenAt||0)-(a.savedAt||a.firstSeenAt||0)||String(a.documentId||a.canvasKey).localeCompare(String(b.documentId||b.canvasKey)));
     }
     function studioNavigatorGroupMatches(group,query) {
       if(!query)return true;
@@ -529,7 +507,7 @@
       if(group.documentId){
         heading.dataset.workspaceDocumentId=group.documentId;
         const dot=document.createElement("span");dot.className="workspace-update-dot";dot.hidden=!group.unseen;
-        dot.setAttribute("role","img");dot.title=canvasDocumentsCopy("New updates","有新内容");dot.setAttribute("aria-label",dot.title);meta.prepend(dot);
+        dot.setAttribute("role","img");dot.title=canvasDocumentsCopy("New updates","有新内容");dot.setAttribute("aria-label",dot.title);name.prepend(dot);
         heading.disabled=canvasDocuments.switching;
       }
       heading.addEventListener("click",()=>{
@@ -559,7 +537,7 @@
       close.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>';
       close.disabled=canvasDocuments.switching;
       close.addEventListener("click",()=>canvasDocumentsUiAction(async()=>{
-        if(canvasDocuments.activeId!==documentId)await canvasDocumentsShow(documentId);
+        if(canvasDocuments.activeId!==documentId)await canvasDocumentsShow(documentId,null,{markSeen:false});
         return requestCanvasTransition({type:"close",documentId});
       }));
       section.append(close);
@@ -604,7 +582,6 @@
     }
     function studioNavigatorCanvasDidLoad(identity) {
       const key=identity?.id&&identity?.location?`${identity.location}:${identity.id}`:"";
-      rememberStudioCanvasOpened(key);
       if(!studioNavigatorPendingConversation||studioNavigatorPendingConversation.canvasKey!==key)return false;
       void openStudioConversationOnCurrentCanvas(studioNavigatorPendingConversation).catch(error=>{
         studioNavigatorPendingConversation=null;
@@ -706,15 +683,7 @@
       const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter((group)=>studioNavigatorGroupMatches(group,query));
       studioNavigatorQueueCanvasGroupSnapshots(groups);
       studioWorkRecentList.replaceChildren();
-      const current=groups.filter((group)=>group.current),recent=groups.filter((group)=>!group.current);
-      if(current.length){
-        studioWorkRecentList.append(studioNavigatorSectionLabel("studioNavigatorCurrent"));
-        for(const group of current)studioWorkRecentList.append(studioNavigatorGroupSection(group));
-      }
-      if(recent.length){
-        studioWorkRecentList.append(studioNavigatorSectionLabel("studioNavigatorRecent"));
-        for(const group of recent)studioWorkRecentList.append(studioNavigatorGroupSection(group));
-      }
+      for(const group of groups)studioWorkRecentList.append(studioNavigatorGroupSection(group));
       renderStudioNavigatorSourceStates(studioWorkRecentList,query);
       if(!studioWorkRecentList.childElementCount)studioNavigatorEmpty(studioWorkRecentList,query?"studioNavigatorNoMatch":"studioNavigatorEmpty");
     }
@@ -726,43 +695,13 @@
       }
       studioNavigatorHistoryDirty = false;
       releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
-      const items=studioNavigatorSnapshots().sort((a,b)=>studioCanvasOpenedAt(`${b.location}:${b.id}`)-studioCanvasOpenedAt(`${a.location}:${a.id}`)||(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0)),query=studioNavigatorSearchQuery(),locale=state.language==="zh"?"zh-CN":"en",
-        filtered=query?items.filter((item)=>`${snapshotName(item)} ${snapshotLocationLabel(item.location)}`.toLocaleLowerCase(locale).includes(query)):items;
+      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter(group=>group.documentId||group.location);
       studioCanvasRecentList.replaceChildren();
-      for(const group of studioNavigatorWorkGroups().filter(group=>group.documentId&&!group.location&&studioNavigatorGroupMatches(group,query))){
+      for(const group of groups.filter(group=>studioNavigatorGroupMatches(group,query))){
         studioCanvasRecentList.append(studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls}));
       }
-      for (const item of filtered) {
-        const row = document.createElement("button"), body = document.createElement("span"), title = document.createElement("strong"),
-          meta = document.createElement("small"), current = item.id === state.currentSnapshotId && item.location === state.currentSnapshotLocation;
-        row.type = "button";
-        peChoice(row);
-        row.className = "studio-navigator-item";
-        row.dataset.snapshotId = item.id;
-        row.classList.toggle("current", current);
-        if (current) row.setAttribute("aria-current", "page");
-        body.className = "studio-navigator-item-body";
-        title.textContent = snapshotName(item);
-        const workspaceDoc=typeof canvasDocuments!=="undefined"?[...canvasDocuments.records.values()].find(doc=>doc.locator?.id===item.id&&doc.locator?.location===item.location):null;
-        studioNavigatorRenderCanvasMeta(meta,current,Boolean(workspaceDoc),item.location,item.updatedAt || item.createdAt);
-        body.append(title, meta);
-        row.append(studioNavigatorCanvasPreview(item), body);
-        if(workspaceDoc){
-          row.dataset.workspaceDocumentId=workspaceDoc.id;
-          const dot=document.createElement("span");dot.className="workspace-update-dot";dot.hidden=!workspaceDoc.unseen;
-          dot.setAttribute("role","img");dot.setAttribute("aria-label",canvasDocumentsCopy("New updates","有新内容"));row.append(dot);row.disabled=canvasDocuments.switching;
-        }
-        row.addEventListener("click", () => {
-          closeStudioNavigatorAfterCompactAction();
-          void runSnapshotLoadAction(row, () => requestLoadSnapshot(item.id, item.location));
-        });
-        if(workspaceDoc){
-          const entry=document.createElement("section");entry.className="studio-navigator-group";entry.append(row);
-          appendStudioCanvasClose(entry,workspaceDoc.id,current,snapshotName(item));studioCanvasRecentList.append(entry);
-        }else studioCanvasRecentList.append(row);
-      }
       renderStudioNavigatorSourceStates(studioCanvasRecentList,query);
-      if(!studioCanvasRecentList.childElementCount)studioNavigatorEmpty(studioCanvasRecentList,items.length?"studioNavigatorCanvasNoMatch":"studioNavigatorCanvasEmpty");
+      if(!studioCanvasRecentList.childElementCount)studioNavigatorEmpty(studioCanvasRecentList,groups.length?"studioNavigatorCanvasNoMatch":"studioNavigatorCanvasEmpty");
     }
     let studioMcpFollowLatest=true,studioMcpLatestDocumentId=null,studioMcpPendingDocumentId=null,studioMcpFollowing=false,studioMcpCloseQueue=null;
     let studioMcpLatestRegion=null,studioMcpPendingRegion=null,studioMcpUpdateRevision=0;
@@ -801,13 +740,13 @@
       while(batch.length&&!canvasDocuments.records.has(batch[0]))batch.shift();
       if(!batch.length){
         try {
-          if(batch.retainedDocumentId&&canvasDocuments.records.has(batch.retainedDocumentId)&&canvasDocuments.activeId!==batch.retainedDocumentId)await canvasDocumentsShow(batch.retainedDocumentId);
+          if(batch.retainedDocumentId&&canvasDocuments.records.has(batch.retainedDocumentId)&&canvasDocuments.activeId!==batch.retainedDocumentId)await canvasDocumentsShow(batch.retainedDocumentId,null,{markSeen:false});
         } finally {cancelStudioMcpCloseAll();}
         return;
       }
       const id=batch[0];
       try {
-        await canvasDocumentsShow(id);
+        await canvasDocumentsShow(id,null,{markSeen:false});
         if(studioMcpCloseQueue!==batch)return;
         await requestCanvasTransition({type:"close",documentId:id,onCancel:cancelStudioMcpCloseAll,onComplete:async()=>{
           if(studioMcpCloseQueue!==batch)return;
@@ -847,7 +786,11 @@
       studioMcpLatestRegion=region;
       if(studioMcpFollowLatest){studioMcpPendingDocumentId=documentId;studioMcpPendingRegion=region;}
     }
-    async function flushStudioMcpFollowLatest() {
+    function studioMcpConnectionCurrent(execution) {
+      return !execution||execution.socket===mcpRuntime.socket&&execution.socket?.readyState===WebSocket.OPEN&&execution.generation===mcpRuntime.generation&&!execution.controller.signal.aborted;
+    }
+    async function flushStudioMcpFollowLatest(execution=null) {
+      if(!studioMcpConnectionCurrent(execution))return;
       if(!studioMcpFollowLatest||!studioMcpPendingDocumentId||studioMcpFollowing||studioMcpCloseQueue||canvasDocuments.switching||mcpRuntime.queued||!mcpRuntime.ready)return;
       const active=document.activeElement;
       if(mcpViewBlockedBy()||document.querySelector("dialog[open]")||active?.matches?.("input,textarea,select,[contenteditable='true']"))return;
@@ -855,7 +798,8 @@
       if(!canvasDocuments.records.has(id)){studioMcpPendingDocumentId=null;studioMcpPendingRegion=null;return;}
       studioMcpFollowing=true;
       try {
-        if(id!==canvasDocuments.activeId)await canvasDocumentsShow(id);
+        if(id!==canvasDocuments.activeId)await canvasDocumentsShow(id,execution,{markSeen:false});
+        if(!studioMcpConnectionCurrent(execution))return;
         // Loading yields: recheck user activity and use the newest region even
         // when another update arrived for this same document during the switch.
         if(!studioMcpFollowLatest||studioMcpPendingDocumentId!==id||canvasDocuments.activeId!==id||mcpRuntime.queued||mcpViewBlockedBy()||document.querySelector("dialog[open]")||document.activeElement?.matches?.("input,textarea,select,[contenteditable='true']"))return;
@@ -876,21 +820,11 @@
         }
       } finally {
         studioMcpFollowing=false;syncStudioMcpActions();
-        if(studioMcpFollowLatest&&studioMcpPendingDocumentId&&(studioMcpPendingDocumentId!==id||studioMcpUpdateRevision!==updateRevision))queueMicrotask(()=>void flushStudioMcpFollowLatest());
+        if(studioMcpConnectionCurrent(execution)&&studioMcpFollowLatest&&studioMcpPendingDocumentId&&(studioMcpPendingDocumentId!==id||studioMcpUpdateRevision!==updateRevision))queueMicrotask(()=>void flushStudioMcpFollowLatest());
       }
     }
-    const studioMcpOrder=new Map();
-    let studioMcpOrderSequence=0;
     function studioNavigatorMcpGroups() {
-      // Assign once in workspace insertion order. Updates and selection never move a row.
-      for(const doc of canvasDocuments.records.values()){
-        if(!studioMcpOrder.has(doc.id)&&(doc.bindings?.length||doc.sessions?.length||[...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id)))studioMcpOrder.set(doc.id,++studioMcpOrderSequence);
-      }
-      for(const id of studioMcpOrder.keys())if(!canvasDocuments.records.has(id))studioMcpOrder.delete(id);
-      return studioNavigatorWorkGroups().filter(group=>{
-        const doc=canvasDocuments.records.get(group.documentId);
-        return doc && (doc.bindings?.length || doc.sessions?.length || [...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id));
-      }).sort((a,b)=>studioMcpOrder.get(b.documentId)-studioMcpOrder.get(a.documentId));
+      return studioNavigatorWorkGroups().filter(group=>group.documentId);
     }
     function renderStudioMcpHistory() {
       syncStudioMcpActions();
@@ -925,14 +859,12 @@
     let studioWorkspaceSignature="";
     function studioWorkspaceChanged() {
       if(typeof canvasDocuments==="undefined")return;
-      const active = canvasDocuments.records.get(canvasDocuments.activeId);
-      if (!canvasDocuments.switching && rememberStudioCanvasOpened(active ? active.locator ? `${active.locator.location}:${active.locator.id}` : `workspace:${active.id}` : "")) studioWorkspaceSignature = "";
       syncStudioMcpActions();
       const documents=[...canvasDocuments.records.values()],hasUpdates=documents.some(doc=>doc.unseen>0),attention=hasUpdates||Boolean(canvasDocuments.error);
       studioNavigatorToggle.dataset.workspaceUpdates=String(attention);
       const hint=document.getElementById("studioWorkspaceUpdateHint");
       if(hint)hint.textContent=canvasDocuments.error?canvasDocumentsCopy("Canvas needs attention. Open Recent Work to retry.","画布操作需要处理。打开最近工作以重试。"):hasUpdates?canvasDocumentsCopy("Canvases have new updates","画布有新内容"):"";
-      const signature=JSON.stringify([canvasDocuments.activeId,...documents.map(doc=>[doc.id,doc.title,doc.locator?.location,doc.locator?.id,doc.bindings?.length,doc.sessions?.length,typeof mcpRuntime!=="undefined"&&[...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id)])]);
+      const signature=JSON.stringify([canvasDocuments.activeId,...documents.map(doc=>[doc.id,doc.title,doc.savedAt,doc.locator?.location,doc.locator?.id,doc.bindings?.length,doc.sessions?.length,typeof mcpRuntime!=="undefined"&&[...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id)])]);
       if(signature!==studioWorkspaceSignature){studioWorkspaceSignature=signature;renderActiveStudioNavigatorHistory();}
       if(!studioNavigatorIsOpen()){studioNavigatorHistoryDirty=true;return;}
       for(const row of studioNavigator.querySelectorAll("[data-workspace-document-id]")){
@@ -949,9 +881,7 @@
           if(studioMcpRecentList.children[index]!==section)studioMcpRecentList.insertBefore(section,studioMcpRecentList.children[index]||null);
           const meta=row.querySelector("small");
           if(meta&&meta.dataset.updatedAt!==String(group.updatedAt)){
-            const dot=meta.querySelector(".workspace-update-dot");
             studioNavigatorRenderCanvasMeta(meta,group.current,true,group.location,group.updatedAt);
-            if(dot)meta.prepend(dot);
             meta.dataset.updatedAt=String(group.updatedAt);
           }
           index++;

@@ -13,12 +13,68 @@ const {getAuthoringGuidance} = require('./authoring-guidance.js');
 const normal = value => ({content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value});
 const fault = (status, message) => Object.assign(new Error(message), {status});
 const keyOf = id => `${typeof id}:${id}`;
+const boundedMs = (value, fallback) => { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : fallback; };
+function settleWithin(promise, timeoutMs) {
+  let timer, timedOut = false;
+  const deadline = new Promise(resolve => {
+    timer = setTimeout(() => { timedOut = true; resolve(); }, boundedMs(timeoutMs, 1));
+    timer.unref?.();
+  });
+  return Promise.race([Promise.resolve(promise).catch(() => {}), deadline]).then(() => timedOut).finally(() => clearTimeout(timer));
+}
+function readRequestBody(req, maxBytes, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let length = 0, done = false, timer;
+    const cleanup = () => {
+      clearTimeout(timer);
+      req.off('data', data);
+      req.off('end', end);
+      req.off('aborted', aborted);
+      req.off('error', error);
+    };
+    const finish = (failure, value) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      failure ? reject(failure) : resolve(value);
+    };
+    const closeRequest = () => {
+      // Let the response carry the connection-close decision. Destroying the
+      // request immediately would also tear down the response before a client
+      // can receive the bounded error. Resume the stream so the parser cannot
+      // retain a paused request while the response is being written.
+      try { req.resume(); } catch {}
+    };
+    const data = chunk => {
+      length += chunk.length;
+      if (length > maxBytes) {
+        closeRequest();
+        finish(fault(413, 'Request too large'));
+        return;
+      }
+      chunks.push(chunk);
+    };
+    const end = () => finish(null, Buffer.concat(chunks, length));
+    const aborted = () => finish(fault(408, 'Request body was cancelled or timed out'));
+    const error = error => finish(error || fault(400, 'Request body could not be read'));
+    timer = setTimeout(() => {
+      closeRequest();
+      finish(fault(408, 'Request body timed out'));
+    }, boundedMs(timeoutMs, 1));
+    timer.unref?.();
+    req.on('data', data);
+    req.once('end', end);
+    req.once('aborted', aborted);
+    req.once('error', error);
+  });
+}
 function send(res, status, value, headers = {}) {
   if (res.destroyed || res.writableEnded) return;
   res.writeHead(status, {'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff', ...headers});
   res.end(value === undefined ? undefined : JSON.stringify(value));
 }
-function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const host=require('node:os').hostname().toLowerCase().replace(/\.$/,'');return host.endsWith('.local')?[host]:[host,host+'.local'];},stateDirectory, callTool, uploadImage, uploadTimeoutMs = 30000, disposeOwner, getAddresses = lanAddresses, announce = createAnnouncer, now = Date.now, onChange = () => {}, sessionIdleMs = 30 * 60 * 1000, maxSessions = 256, maxSessionRequests = 8, maxRequests = 32}) {
+function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const host=require('node:os').hostname().toLowerCase().replace(/\.$/,'');return host.endsWith('.local')?[host]:[host,host+'.local'];},stateDirectory, callTool, uploadImage, uploadTimeoutMs = 30000, uploadCancelGraceMs = 1000, requestCancelGraceMs = 1000, requestBodyTimeoutMs = 15000, disposeOwner, getAddresses = lanAddresses, announce = createAnnouncer, now = Date.now, onChange = () => {}, sessionIdleMs = 30 * 60 * 1000, maxSessions = 256, maxSessionRequests = 8, maxRequests = 32}) {
   if(!Number.isInteger(preferredPort)||preferredPort<0||preferredPort>65535)throw new TypeError('Invalid preferred MCP port');
   const hostnames=[...new Set(getHostnames())].filter(host=>typeof host==='string'&&/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.local)?$/i.test(host)).map(host=>host.toLowerCase());
   let identity, server, announcer, timer, startedAt, addresses = [], transition = Promise.resolve(), active = 0;
@@ -87,10 +143,18 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     if(active>=maxRequests || uploads.size>=2) throw fault(429,'Busy');
     const controller=new AbortController(); uploads.add(controller); active++;
     const abort=()=>controller.abort();
-    const timer=setTimeout(abort,uploadTimeoutMs); timer.unref();
+    const timer=setTimeout(abort,boundedMs(uploadTimeoutMs,30000)); timer.unref();
     req.once('aborted',abort);res.once('close',abort);
     let cancel;
     const cancelled=new Promise((_,reject)=>{cancel=()=>reject(Object.assign(fault(408,'Upload cancelled or timed out'),{code:'upload_cancelled'}));controller.signal.addEventListener('abort',cancel,{once:true});});
+    let operationSettled = false, released = false, releaseTimer;
+    const release = () => {
+      if (released) return;
+      released = true;
+      uploads.delete(controller);
+      active--;
+      clearTimeout(releaseTimer);
+    };
     const operation=(async()=>{
       const bytes=await new Promise((resolve,reject)=>{
         const chunks=[];let size=0;
@@ -105,16 +169,22 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       controller.signal.throwIfAborted();
       return uploadImage({...args,...prepared},{signal:controller.signal});
     })();
+    operation.then(() => { operationSettled = true; release(); }, () => { operationSettled = true; release(); });
     try { send(res,200,await Promise.race([operation,cancelled])); }
     catch(e) { const failure=toolFailure(e);send(res,e.status||500,{error:{code:failure.code,message:e.status||e.code?failure.message:'Image upload failed'}},{connection:'close'}); }
     finally {
       clearTimeout(timer);req.off('aborted',abort);res.off('close',abort);controller.signal.removeEventListener('abort',cancel);
-      // A callback ignoring cancellation must not create unlimited background work.
-      operation.catch(()=>{}).finally(()=>{uploads.delete(controller);active--;});
+      // A callback ignoring cancellation must not hold the upload slot forever.
+      // The operation remains detached and is still given the signal, but the
+      // admission counter has an absolute cleanup deadline.
+      if (!operationSettled) {
+        releaseTimer = setTimeout(release, boundedMs(uploadCancelGraceMs, 1));
+        releaseTimer.unref?.();
+      } else release();
     }
   }
   async function handle(req, res) {
-    let session, counted = false, pendingKey;
+    let session, counted = false, pendingKey, requestController, cancelListener;
     try {
       refresh(); prune();
       const seenHeaders=new Set();
@@ -149,9 +219,8 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
         remove(session); return send(res,200,{});
       }
       if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) throw fault(415,'Use application/json');
-      const chunks = []; let length = 0;
-      for await (const chunk of req) { length += chunk.length; if (length > 3 * 1024 * 1024) throw fault(413,'Request too large'); chunks.push(chunk); }
-      let body; try { body = JSON.parse(Buffer.concat(chunks)); } catch { throw fault(400,'Invalid JSON'); }
+      const bodyBytes = await readRequestBody(req, 3 * 1024 * 1024, requestBodyTimeoutMs);
+      let body; try { body = JSON.parse(bodyBytes); } catch { throw fault(400,'Invalid JSON'); }
       if (!body || Array.isArray(body) || body.jsonrpc !== '2.0' || typeof body.method !== 'string' || (body.id !== undefined && typeof body.id !== 'string' && !(typeof body.id === 'number' && Number.isFinite(body.id)))) return send(res,400,{jsonrpc:'2.0',id:null,error:{code:-32600,message:'Invalid Request'}});
       if (body.method !== 'initialize' && req.headers['mcp-protocol-version'] !== undefined && req.headers['mcp-protocol-version'] !== PROTOCOL_VERSION) throw fault(400,'Unsupported MCP protocol version');
       if (body.method === 'initialize') {
@@ -174,27 +243,45 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       active++; session.active++; counted = true;
       pendingKey = keyOf(body.id);
       if (session.pending.has(pendingKey)) { pendingKey = undefined; throw fault(409,'Request ID already active'); }
-      const controller = new AbortController(); session.pending.set(pendingKey,controller);
-      const cancelled = new Promise(resolve => controller.signal.addEventListener('abort', () => resolve({jsonrpc:'2.0',id:body.id,error:{code:-32800,message:'Request cancelled'}}), {once:true}));
+      requestController = new AbortController(); session.pending.set(pendingKey,requestController);
+      let cancelledBySignal = false, cancelResponse;
+      cancelListener = () => {
+        cancelledBySignal = true;
+        cancelResponse?.({jsonrpc:'2.0',id:body.id,error:{code:-32800,message:'Request cancelled'}});
+      };
+      const cancelled = new Promise(resolve => { cancelResponse = resolve; requestController.signal.addEventListener('abort', cancelListener, {once:true}); });
+      if (requestController.signal.aborted) cancelListener();
       // Keep the slot occupied until the operation settles, even when cancellation wins.
-      const operation = rpc(body,session,controller.signal);
+      const operation = rpc(body,session,requestController.signal);
       const response = await Promise.race([operation,cancelled]);
       send(res,200,response,{'mcp-session-id':session.id});
-      await operation;
-    } catch (e) { if(req.url === '/mcp/images' || req.url.startsWith('/mcp/images?')) { const failure=toolFailure(e); send(res,e.status||500,{error:{code:e.code||'upload_request_failed',message:e.status?failure.message:'Image upload failed'}},{connection:'close'}); } else send(res,e.status || 500,{error:e.status ? e.message : 'MCP request failed'}); }
+      if (cancelledBySignal) await settleWithin(operation, requestCancelGraceMs);
+      else await operation;
+    } catch (e) { if(req.url === '/mcp/images' || req.url.startsWith('/mcp/images?')) { const failure=toolFailure(e); send(res,e.status||500,{error:{code:e.code||'upload_request_failed',message:e.status?failure.message:'Image upload failed'}},{connection:'close'}); } else send(res,e.status || 500,{error:e.status ? e.message : 'MCP request failed'},e.status===408||e.status===413?{connection:'close'}:{}); }
     finally {
       if (pendingKey && session) session.pending.delete(pendingKey);
+      if (requestController && cancelListener) requestController.signal.removeEventListener('abort', cancelListener);
       if (counted) { active--; if (session) { session.active--; session.lastSeen = now(); } }
     }
   }
   async function stop() {
     clearInterval(timer); timer = null;
     const old = server; server = null; startedAt = null;
-    try { await announcer?.close(); } catch {} announcer = null;
+    try { await settleWithin(announcer?.close?.(), 2000); } catch {} announcer = null;
     for (const session of sessions.values()) remove(session);
     for (const controller of uploads) controller.abort();
     for (const socket of sockets) socket.destroy(); sockets.clear();
-    if (old) await new Promise(resolve => old.close(resolve));
+    if (old) {
+      let closed = false;
+      const closeResult = new Promise(resolve => {
+        try { old.close(() => { closed = true; resolve(); }); }
+        catch { closed = true; resolve(); }
+      });
+      const timedOut = await settleWithin(closeResult, 2000);
+      if (timedOut || !closed) {
+        try { old.closeAllConnections?.(); old.closeIdleConnections?.(); } catch {}
+      }
+    }
     notify();
   }
   function enqueue(fn) { const result = transition.then(fn); transition = result.catch(() => {}); return result; }

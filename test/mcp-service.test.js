@@ -40,6 +40,13 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function reportCanvasCatalog(ws, documents) {
+  ws.send(JSON.stringify({ type:"catalog", documents }));
+  // Let the server-side ws message handler consume the frame before callers
+  // inspect the in-memory catalog directly.
+  await delay(5);
+}
+
 function waitForSocketEvent(socket, event, timeoutMs = 500) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timed out waiting for WebSocket ${event}.`)), timeoutMs);
@@ -99,11 +106,12 @@ async function invokeServiceHttp(service, remoteAddress, target, { method = "POS
   return { handled, status:res.statusCode, value:text ? JSON.parse(text) : null };
 }
 
-function openCanvas(port, calls, progress) {
+function openCanvas(port, calls, progress, documents) {
   return new Promise((resolve, reject) => {
+    const sessionDocuments = new Map();
     const ws = new WebSocket(`ws://127.0.0.1:${port}/api/mcp/canvas`, { headers:{ "x-test-browser":"allowed" } });
     ws.once("error", reject);
-    ws.once("open", () => ws.send(JSON.stringify({ type:"hello", canvasId:"canvas-a", title:"Research board" })));
+    ws.once("open", () => ws.send(JSON.stringify({ type:"hello", canvasId:"canvas-a", title:"Research board", ...(documents === undefined ? {} : {documents}) })));
     ws.on("message", raw => {
       const message = JSON.parse(raw.toString("utf8"));
       if (message.type === "ready") { ws.off("error", reject); resolve({ ws, ready:message }); return; }
@@ -111,9 +119,15 @@ function openCanvas(port, calls, progress) {
       calls.push(message);
       if (message.name === "mcp_patch_file" && message.arguments.requestId === "unknown-outcome" && calls.filter(call => call.name === "mcp_patch_file" && call.arguments.requestId === "unknown-outcome").length === 1) return;
       let result = { applied:true, visible:true, revision:calls.length };
-      if (message.name === "mcp_start_session") result = { sessionId:message.arguments.sessionId, documentId:message.arguments.documentId || "document-active", boardObjectId:null, revision:1, feedbackCursor:0 };
+      if (message.name === "mcp_start_session") {
+        const documentId = message.arguments.documentId || "document-active";
+        // A current-document attachment can reuse an existing session without
+        // carrying documentId. Keep that session's stable catalog identity.
+        if (message.arguments.documentId || !sessionDocuments.has(message.arguments.sessionId)) sessionDocuments.set(message.arguments.sessionId, documentId);
+        result = { sessionId:message.arguments.sessionId, documentId, boardObjectId:null, revision:1, feedbackCursor:0 };
+      }
       if (message.name === "mcp_open_canvas") result = {documentId:"document-new",title:"Persistent document",active:message.arguments.show,locator:{location:"device",id:"device-1"}};
-      if (message.name === "mcp_find_canvases") result = {candidates:[{documentId:"document-new",title:"Persistent document"}],providers:{device:{status:"available"},cloud:{status:"signed_out"}}};
+      if (message.name === "mcp_find_canvases") result = {candidates:[{documentId:message.arguments.documentId || "document-new",title:message.arguments.documentId === "document-background" ? "Background document" : "Persistent document"}],providers:{device:{status:"available"},cloud:{status:"signed_out"}}};
       if (message.name === "mcp_list_files") result = {sessionId:message.arguments.sessionId,path:message.arguments.path,files:[{path:"/notes.md",kind:"text"}],offset:0,nextOffset:null};
       if (message.name === "mcp_read_file") result = {sessionId:message.arguments.sessionId,path:message.arguments.path,content:"hello\n",contentHash:"hash-1"};
       if (message.name === "mcp_patch_file") result = {sessionId:message.arguments.sessionId,path:message.arguments.path,contentHash:"hash-2",applied:true};
@@ -173,7 +187,7 @@ function openCanvas(port, calls, progress) {
       if (message.name === "mcp_patch_file" && message.arguments.expectedHash === "stale") {
         ws.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"SOURCE_CONFLICT",message:"Source changed",details:{currentContentHash:"hash-1",retry:"read-before-patch"}}}));
       } else if (message.name === "mcp_capture_canvas" && message.arguments.target === "selection") {
-        ws.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"CANVAS_NOT_VISIBLE",message:"Show this Canvas before capture.",details:{documentId:"document-new",retryable:true,retry:"show-then-capture"}}}));
+        ws.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"CANVAS_NOT_VISIBLE",message:"Show this Canvas before capture.",details:{documentId:sessionDocuments.get(message.arguments.sessionId)||"document-new",retryable:true,retry:"show-then-capture"}}}));
       } else if (message.name === "mcp_patch_file" && message.arguments.requestId === "browser-conflict") {
         ws.send(JSON.stringify({type:"result",requestId:message.requestId,ok:false,error:{code:"SOURCE_CONFLICT",message:"Source changed during apply.",details:{currentContentHash:"hash-3",retry:"read-before-patch"}}}));
       } else ws.send(JSON.stringify({ type:"result", requestId:message.requestId, ok:true, result }));
@@ -287,6 +301,7 @@ test("MCP service keeps discovery credentials private and binds a session to its
   const { ws, ready } = await openCanvas(address.port, calls);
   t.after(async()=>{ws.terminate();await service.close();if(server.listening)await closeServer(server);});
   assert.equal(ready.instanceId, status.instanceId);
+  assert.equal(ready.catalog, true);
   const rpcHeaders = { authorization:`Bearer ${records[0].secret}`, "x-penecho-mcp-instance":status.instanceId };
   const originRejected = await requestJson(address.port, "/api/mcp/rpc", { headers:{...rpcHeaders,origin:"http://127.0.0.1"}, body:{operation:"list_canvases",ownerId:crypto.randomUUID()} });
   assert.equal(originRejected.status, 403);
@@ -295,36 +310,49 @@ test("MCP service keeps discovery credentials private and binds a session to its
 
   const ownerId = crypto.randomUUID();
   const listed = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"list_canvases",ownerId} });
-  assert.deepEqual(listed.value.result.canvases.map(item => item.canvasId), ["canvas-a"]);
+  assert.deepEqual(listed.value.result.canvases, [], "a connected browser without a document catalog is not itself a Canvas");
+  await reportCanvasCatalog(ws, [
+    { documentId:"document-new", title:"Workspace document", active:true },
+    { documentId:"document-background", title:"Background document", active:false },
+  ]);
+  const catalogued = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"list_canvases",ownerId} });
+  assert.deepEqual(catalogued.value.result.canvases.map(({canvasId,documentId,title,active}) => ({canvasId,documentId,title,active})), [
+    {canvasId:"canvas-a",documentId:"document-new",title:"Workspace document",active:true},
+    {canvasId:"canvas-a",documentId:"document-background",title:"Background document",active:false},
+  ], "catalog titles and document IDs come from browser records, not the stale hello title");
+  const catalogEntry = catalogued.value.result.canvases.find(item => item.documentId === "document-background");
+  assert.deepEqual({canvasId:catalogEntry.canvasId,documentId:catalogEntry.documentId},{canvasId:"canvas-a",documentId:"document-background"});
   const opened = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_open_canvas",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,create:true,title:"Persistent document",requestId:"open-1"}}});
   assert.deepEqual({documentId:opened.value.result.documentId,active:opened.value.result.active,locator:opened.value.result.locator},{documentId:"document-new",active:false,locator:{location:"device",id:"device-1"}});
   assert.equal(calls.at(-1).arguments.show,false);
   const openedRetry = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_open_canvas",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,create:true,title:"Persistent document",requestId:"open-1"}}});
   assert.equal(openedRetry.value.result.reused,true);
   assert.equal(calls.filter(call => call.name === "mcp_open_canvas").length,1);
-  const found = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_find_canvases",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,documentId:"document-new"}}});
-  assert.equal(found.value.result.candidates[0].documentId,"document-new");
-  const started = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,documentId:"document-new",takeover:true,title:"Build chart",client:"Codex",sessionKey:"stable"}} });
+  const callsBeforeFind = calls.length;
+  const found = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_find_canvases",arguments:{canvasId:catalogEntry.canvasId,instanceId:status.instanceId,documentId:catalogEntry.documentId}}});
+  assert.equal(found.value.result.candidates[0].documentId,"document-background");
+  assert.equal(calls.length,callsBeforeFind,"find_canvases reads the open-document catalog without entering the browser request queue");
+  const started = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:catalogEntry.canvasId,instanceId:status.instanceId,documentId:catalogEntry.documentId,takeover:true,title:"Build chart",client:"Codex",sessionKey:"stable"}} });
   assert.equal(started.status, 200);
   assert.equal(started.value.result.slotIndex, 0);
   assert.equal(started.value.result.boardObjectId, null);
   assert.equal(started.value.result.feedbackCursor, 0);
-  assert.equal(started.value.result.documentId, "document-new");
+  assert.equal(started.value.result.documentId, "document-background");
   const upload = started.value.result.imageUpload;
   assert.match(upload.hostId,/^[a-f0-9]{64}$/);
   assert.equal(upload.canvasId,"canvas-a");
-  assert.equal(upload.documentId,"document-new");
-  assert.deepEqual(upload.args,["--host-id",upload.hostId,"--upload-image","ABSOLUTE_IMAGE_PATH","--canvas-id","canvas-a","--document-id","document-new","--request-id","UNIQUE_UPLOAD_ID"]);
+  assert.equal(upload.documentId,"document-background");
+  assert.deepEqual(upload.args,["--host-id",upload.hostId,"--upload-image","ABSOLUTE_IMAGE_PATH","--canvas-id","canvas-a","--document-id","document-background","--request-id","UNIQUE_UPLOAD_ID"]);
   assert.equal(upload.accessToken,undefined);
   assert.equal(started.value.result.instructions, undefined);
   assert.equal(started.value.result.guidanceVersion,"2");
   const sessionId = started.value.result.sessionId;
   const startCall = calls.find(call => call.name === "mcp_start_session");
   assert.equal(startCall.arguments.slotIndex, 0);
-  assert.deepEqual({documentId:startCall.arguments.documentId,takeover:startCall.arguments.takeover,client:startCall.arguments.client,sessionKey:startCall.arguments.sessionKey},{documentId:"document-new",takeover:true,client:"Codex",sessionKey:"stable"});
+  assert.deepEqual({documentId:startCall.arguments.documentId,takeover:startCall.arguments.takeover,client:startCall.arguments.client,sessionKey:startCall.arguments.sessionKey},{documentId:"document-background",takeover:true,client:"Codex",sessionKey:"stable"});
   assert.equal(startCall.arguments.instructions, undefined);
 
-  const reused = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,documentId:"document-new",takeover:true,title:"Build chart",client:"Codex",sessionKey:"stable"}} });
+  const reused = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,documentId:"document-background",takeover:true,title:"Build chart",client:"Codex",sessionKey:"stable"}} });
   assert.equal(reused.status, 200);
   assert.equal(reused.value.result.reused, true);
   assert.equal(reused.value.result.instructions, undefined);
@@ -385,7 +413,7 @@ test("MCP service keeps discovery credentials private and binds a session to its
   assert.deepEqual(calls.filter(call => call.name === "mcp_capture_canvas").at(-1).arguments,{sessionId,target:"viewport",quality:"basic"});
   const hiddenCapture = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_capture_canvas",arguments:{sessionId,target:"selection",quality:"detail"}}});
   assert.equal(hiddenCapture.value.error.code,"CANVAS_NOT_VISIBLE");
-  assert.deepEqual(hiddenCapture.value.error.details,{documentId:"document-new",retryable:true,retry:"show-then-capture"});
+  assert.deepEqual(hiddenCapture.value.error.details,{documentId:"document-background",retryable:true,retry:"show-then-capture"});
   const invalidCanvasCapture = await requestJson(address.port, "/api/mcp/rpc", {headers:rpcHeaders,body:{operation:"call",ownerId,name:"penecho_capture_canvas",arguments:{sessionId,target:"object",objectId:"bad-bytes"}}});
   assert.equal(invalidCanvasCapture.value.error.code,"invalid_capture");
   assert.equal(invalidCanvasCapture.status,502);
@@ -516,6 +544,11 @@ test("MCP service keeps discovery credentials private and binds a session to its
   const closeIndex = calls.findIndex(call => call.name === "mcp_close_session");
   assert.equal(finalUpdateIndex >= 0 && closeIndex > finalUpdateIndex, true);
 
+  await reportCanvasCatalog(ws, [{documentId:"document-new",title:"Workspace document",active:true}]);
+  assert.deepEqual(service.listCanvases().map(({canvasId,documentId,title,active}) => ({canvasId,documentId,title,active})), [
+    {canvasId:"canvas-a",documentId:"document-new",title:"Workspace document",active:true},
+  ], "a browser catalog replacement removes a document as soon as the user closes it");
+
   const lostStarted = await requestJson(address.port, "/api/mcp/rpc", { headers:rpcHeaders, body:{operation:"call",ownerId,name:"penecho_start_session",arguments:{canvasId:"canvas-a",instanceId:status.instanceId,title:"Lost session"}} });
   const lostSessionId = lostStarted.value.result.sessionId;
   ws.close();
@@ -527,6 +560,25 @@ test("MCP service keeps discovery credentials private and binds a session to its
   await service.close();
   assert.equal(readRecords(directory).length, 0);
   await closeServer(server);
+});
+
+test("MCP hello seeds the exact open document catalog and advertises catalog replacement", async t => {
+  const server = http.createServer(), service = createMcpService({
+    server,
+    authorizeBrowser:req => req.headers["x-test-browser"] === "allowed" ? null : "Forbidden",
+    stateDirectory:tempDirectory(),
+  });
+  const address = await listen(server), documents = [
+    {documentId:"hello-active",title:"Active document",active:true},
+    {documentId:"hello-background",title:"Background document",active:false},
+  ];
+  const {ws,ready} = await openCanvas(address.port, [], undefined, documents);
+  t.after(async () => { ws.terminate(); await service.close(); if (server.listening) await closeServer(server); });
+  assert.equal(ready.catalog, true);
+  assert.deepEqual(service.listCanvases().map(({canvasId,documentId,title,active}) => ({canvasId,documentId,title,active})), [
+    {canvasId:"canvas-a",documentId:"hello-active",title:"Active document",active:true},
+    {canvasId:"canvas-a",documentId:"hello-background",title:"Background document",active:false},
+  ]);
 });
 
 test("authenticated LAN browser status is allowed while configuration and private RPC stay local", async () => {
@@ -885,12 +937,14 @@ test("authenticated LAN WebSocket participates in local RPC discovery and routin
   const record = readRecords(recordsDirectory(stateDirectory))[0];
   try {
     const {ws} = await openCanvas(address.port, []);
+    await reportCanvasCatalog(ws, [{documentId:"lan-document",title:"LAN document",active:true}]);
     assert.equal(service.status().lan, undefined);
     const owner = crypto.randomUUID();
     const rpc = await requestJson(address.port,"/api/mcp/rpc",{headers:{authorization:`Bearer ${record.secret}`,"x-penecho-mcp-instance":service.instanceId},body:{operation:"list_canvases",ownerId:owner}});
     assert.equal(rpc.status,200);
     assert.equal(rpc.value.result.canvases.length, 1);
-    const started = await service.callTool(owner, "penecho_start_session", {instanceId:service.instanceId,canvasId:"canvas-a",title:"LAN"});
+    assert.deepEqual(rpc.value.result.canvases.map(({canvasId,documentId,title,active}) => ({canvasId,documentId,title,active})), [{canvasId:"canvas-a",documentId:"lan-document",title:"LAN document",active:true}]);
+    const started = await service.callTool(owner, "penecho_start_session", {instanceId:service.instanceId,canvasId:"canvas-a",documentId:"lan-document",title:"LAN"});
     assert.ok(started.sessionId);
     const closed = waitForSocketEvent(ws, "close");
     ws.close();
@@ -963,12 +1017,13 @@ test("remote channels register canvases, route tools, replace and revoke pending
     await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"hello",canvasId:"cloud-canvas",title:"Cloud"})});
     const ready = await execute({operation:"canvas.mcp.pull",channelId});
     assert.equal(JSON.parse(ready.frames[0]).type,"ready");
+    await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"catalog",documents:[{documentId:"cloud-document",title:"Cloud document",active:true}]})});
     return channelId;
   };
   try {
     const channelId = await open(), owner = crypto.randomUUID();
-    assert.equal(service.listCanvases()[0].canvasId,"cloud-canvas");
-    const call = service.callTool(owner,"penecho_start_session",{instanceId:service.instanceId,canvasId:"cloud-canvas",title:"Cloud work"});
+    assert.deepEqual(service.listCanvases().map(({canvasId,documentId,title,active}) => ({canvasId,documentId,title,active})), [{canvasId:"cloud-canvas",documentId:"cloud-document",title:"Cloud document",active:true}]);
+    const call = service.callTool(owner,"penecho_start_session",{instanceId:service.instanceId,canvasId:"cloud-canvas",documentId:"cloud-document",title:"Cloud work"});
     const pulled = await execute({operation:"canvas.mcp.pull",channelId}), frame = JSON.parse(pulled.frames[0]);
     assert.equal(frame.name,"mcp_start_session");
     await execute({operation:"canvas.mcp.frame",channelId,frame:JSON.stringify({type:"result",requestId:frame.requestId,ok:true,result:{sessionId:frame.arguments.sessionId,revision:1}})});

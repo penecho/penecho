@@ -238,6 +238,8 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(html, /id="settingsApiPresetFields"[^>]*hidden/);
   assert.match(html, /id="settingsApiRegion"/);
   assert.match(html, /id="settingsApiService"/);
+  assert.match(html, /id="settingsKimiSignup"[^>]*role="note"[^>]*hidden/);
+  assert.match(html, /id="settingsKimiSignupLink"[^>]*https:\/\/platform\.kimi\.ai\?aff=penecho/);
   assert.match(html, /id="settingsApiModel"[^>]*list="settingsApiModelPresets"/);
   const effortInput = html.match(/<input id="settingsEffort"[^>]*>/)?.[0] || "",
     effortOptions = html.match(/<div id="settingsEffortOptions"[\s\S]*?<\/div>/)?.[0] || "";
@@ -264,6 +266,10 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
     "https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1", "https://api.kimi.com/coding/v1",
     "https://api.minimax.io/v1", "https://api.minimax.io/anthropic", "https://api.minimaxi.com/v1", "https://api.minimaxi.com/anthropic",
   ]) assert.match(app, new RegExp(endpoint.replaceAll(".", "\\.")));
+  for (const signup of ["https://platform.kimi.ai?aff=penecho", "https://platform.kimi.com?aff=penecho", "https://www.kimi.com/code?aff=penecho"]) assert.match(app, new RegExp(signup.replaceAll(".", "\\.").replace("?", "\\?")));
+  assert.match(functionSource(app, "updateKimiSignup"), /settingsApiFormat\?\.value === "kimi"[\s\S]*?settingsApiService\?\.value === "coding"[\s\S]*?settingsApiRegion\?\.value === "china"[\s\S]*?destination\.url/);
+  assert.match(functionSource(app, "updateApiPresetFields"), /updateKimiSignup\(\)/);
+  assert.match(css, /\.settings-kimi-signup\[hidden\]\s*\{\s*display:\s*none/);
   for (const model of ["k3", "kimi-k3", "MiniMax-M3", "MiniMax-M2.7"]) assert.match(app, new RegExp(`"${model.replaceAll(".", "\\.")}"`));
   assert.match(app, /function connectionTitle\(connection\)/);
   assert.match(app, /const title = connection\.provider === "api" \? connection\.apiModel \|\| "API" : connection\.cliModel/);
@@ -306,6 +312,10 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(app, /if \(window\.penechoDesktop\) document\.querySelector\("\.settings-links"\)\?\.remove\(\)/);
   assert.doesNotMatch(css, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.settings-panel/);
   for (const key of ["settingsApiRegion", "settingsApiService", "settingsApiServiceCoding"]) {
+    assert.match(app, new RegExp(`${key}:`));
+    assert.match(zh, new RegExp(`${key}:`));
+  }
+  for (const key of ["settingsKimiPartner", "settingsKimiApiSignupGlobal", "settingsKimiApiSignupChina", "settingsKimiCodingSignup"]) {
     assert.match(app, new RegExp(`${key}:`));
     assert.match(zh, new RegExp(`${key}:`));
   }
@@ -3673,7 +3683,7 @@ test("Studio navigator groups recent Agent sessions by canvas and opens the boun
   assert.match(build, /src\/client\/app\/studio-navigator\.js/);
   assert.match(navigator, /let studioNavigatorOpenPreference = false/);
   assert.doesNotMatch(navigator, /STUDIO_NAVIGATOR_OPEN_KEY|penecho-studio-navigator-open/);
-  assert.match(functionSource(navigator, "studioNavigatorWorkGroups"), /canvasAgentStoredHistoryGroups\(\)[\s\S]*?studioNavigatorSnapshots\(\)[\s\S]*?sort\(\(a,b\)=>Number\(b\.current\)-Number\(a\.current\)\|\|studioCanvasOpenedAt\(b\.canvasKey\)-studioCanvasOpenedAt\(a\.canvasKey\)\|\|Number\(Boolean\(b\.documentId\)\)-Number\(Boolean\(a\.documentId\)\)\|\|b\.updatedAt-a\.updatedAt\)/);
+  assert.match(functionSource(navigator, "studioNavigatorWorkGroups"), /sort\(\(a,b\)=>\(b\.savedAt\|\|b\.firstSeenAt\|\|0\)-\(a\.savedAt\|\|a\.firstSeenAt\|\|0\)/);
   assert.match(navigator, /className="studio-navigator-group"[\s\S]*?className="studio-navigator-group-conversations"/);
   assert.match(functionSource(navigator, "studioNavigatorCanvasGroupSnapshot"), /snapshotItemsLocation===identity\.location[\s\S]*?snapshotItems\.find\(candidate=>candidate\.id===identity\.id\)[\s\S]*?studioNavigatorCanvasGroupSnapshots\.set\(key,item\)/);
   assert.match(functionSource(navigator, "studioNavigatorLoadDraftSnapshot"), /await snapshotPreviewBlob\(\)[\s\S]*?request\.canvasKey===state\.canvasAgentCanvasKey[\s\S]*?studioNavigatorDraftSnapshot\.item=\{id:request\.canvasKey,preview\}/);
@@ -3686,12 +3696,13 @@ test("Studio navigator groups recent Agent sessions by canvas and opens the boun
   const renderCanvasHistory=functionSource(navigator,"renderStudioCanvasHistory");
   assert.match(navigator, /meta\.textContent = \[current \? t\("studioNavigatorCurrent"\) : "", location \? snapshotLocationLabel\(location\) : "", studioNavigatorMetaTime\(updatedAt\)\]/);
   assert.doesNotMatch(navigator, /studioNavigatorCurrentStateLabel|meta\.textContent=\[[^\n]*studioNavigatorSessionCount/);
-  assert.match(renderCanvasHistory, /studioNavigatorRenderCanvasMeta\(meta,current,Boolean\(workspaceDoc\),item\.location,item\.updatedAt \|\| item\.createdAt\)/);
+  assert.match(renderCanvasHistory, /studioNavigatorGroupSection\(group,\{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls\}\)/);
   assert.doesNotMatch(renderCanvasHistory, /canvasAgentHistoryCurrent/);
   const renderAgentHistory=functionSource(navigator, "renderStudioAgentHistory"), renderWorkHistory=functionSource(navigator,"renderStudioWorkHistory");
   assert.match(renderAgentHistory, /studioNavigatorWorkGroups\(\)[\s\S]*?conversations:query\?group\.conversations\.filter/);
   assert.match(renderAgentHistory, /releaseStudioNavigatorPreviewUrls\(studioNavigatorAgentPreviewUrls\)[\s\S]*?studioNavigatorQueueCanvasGroupSnapshots\(groups\)[\s\S]*?studioNavigatorGroupSection\(group,\{previewUrls:studioNavigatorAgentPreviewUrls\}\)/);
-  assert.match(renderWorkHistory, /studioNavigatorWorkGroups\(\)[\s\S]*?studioNavigatorSectionLabel\("studioNavigatorCurrent"\)[\s\S]*?studioNavigatorSectionLabel\("studioNavigatorRecent"\)/);
+  assert.match(renderWorkHistory, /for\(const group of groups\)studioWorkRecentList\.append\(studioNavigatorGroupSection\(group\)\)/);
+  assert.doesNotMatch(renderWorkHistory, /studioNavigatorSectionLabel/);
   const navigatorCanvasPreview=functionSource(navigator, "studioNavigatorCanvasPreview");
   assert.match(navigatorCanvasPreview, /item\?\.preview instanceof Blob[\s\S]*?urls\.set\(url, image\)[\s\S]*?image\.onerror[\s\S]*?urls\.delete\(url\)/);
   assert.doesNotMatch(navigatorCanvasPreview, /image\.onload\s*=/);
@@ -3711,7 +3722,8 @@ test("Studio navigator groups recent Agent sessions by canvas and opens the boun
   assert.match(navigator, /document\.addEventListener\("focusin", collapseStudioNavigatorForWorkspaceFocus\)/);
   assert.doesNotMatch(navigator, /(?:view|canvasAgentPanel)\.addEventListener\("(?:pointerdown|focusin)", collapseStudioNavigatorForWorkspaceFocus/);
   assert.match(functionSource(navigator, "studioNavigatorCanvasDidLoad"), /openStudioConversationOnCurrentCanvas\(studioNavigatorPendingConversation\)/);
-  assert.match(functionSource(navigator,"renderStudioCanvasHistory"), /studioNavigatorSnapshots\(\)[\s\S]*?requestLoadSnapshot\(item\.id, item\.location\)/);
+  assert.match(functionSource(navigator,"renderStudioCanvasHistory"), /studioNavigatorWorkGroups\(\)/);
+  assert.match(navigator, /requestLoadSnapshot\(identity\.id,identity\.location\)/);
   assert.match(navigator, /openHistoryPanel\(\)/);
   assert.match(functionSource(navigator, "updateStudioNavigatorSurfaceInert"), /studioNavigatorIsCompact\(\)[\s\S]*?view\.inert = true[\s\S]*?dataset\.studioNavigatorInert[\s\S]*?view\.inert = false/);
   assert.match(functionSource(navigator,"handleStudioNavigatorCompactChange"), /studioNavigatorIsOpen\(\)[\s\S]*?studioNavigatorIsCompact\(\)\)suspendStudioAgentForNavigator\(\)[\s\S]*?restoreStudioAgentAfterNavigator\(\)/);

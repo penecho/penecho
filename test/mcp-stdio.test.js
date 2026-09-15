@@ -380,3 +380,58 @@ test("canvas discovery distinguishes empty, unavailable, partial and invalid ins
   assert.deepEqual(bounded, {canvases:[],discovery:{status:"instance-unavailable",instances:10,reachable:0,issues:records.slice(0,8).map(record => ({instanceId:record.instanceId,code:"connection-failed"}))}});
   assert.doesNotMatch(JSON.stringify(bounded), /secret-token|http:|127\.0\.0\.1|\/private/);
 });
+
+test('stdio rejects duplicate active IDs without losing the original request', async t => {
+  const output = new PassThrough(), next = outputReader(output);
+  const stdio = new PenEchoStdioServer({input:new PassThrough(),output});
+  t.after(() => stdio.close()); stdio.initialized = true;
+  let resolve, calls = 0;
+  stdio.listCanvases = () => { calls++; return new Promise(done => { resolve = done; }); };
+  const call = {jsonrpc:'2.0',id:91,method:'tools/call',params:{name:'penecho_list_canvases'}};
+  const first = stdio.handle(call);
+  await stdio.handle(call);
+  assert.equal((await next()).error.code,-32600);
+  assert.equal(calls,1);
+  assert.equal(stdio.pending.size,1);
+  resolve({canvases:[]}); await first;
+  assert.deepEqual((await next()).result.structuredContent,{canvases:[]});
+  assert.equal(stdio.pending.size,0);
+});
+
+test('late cancelled stdio completion cannot consume a reused request ID', async t => {
+  const output = new PassThrough(), next = outputReader(output);
+  const stdio = new PenEchoStdioServer({input:new PassThrough(),output});
+  t.after(() => stdio.close()); stdio.initialized = true;
+  const work = [];
+  stdio.listCanvases = signal => new Promise((resolve,reject) => work.push({signal,resolve,reject}));
+  const call = {jsonrpc:'2.0',id:92,method:'tools/call',params:{name:'penecho_list_canvases'}};
+  const first = stdio.handle(call);
+  await stdio.handle({jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:92}});
+  assert.equal((await next()).error.code,-32800); assert.equal(work[0].signal.aborted,true);
+  const second = stdio.handle(call);
+  work[0].reject(new Error('late cancellation')); await first;
+  assert.equal(stdio.pending.size,1);
+  assert.equal(stdio.pending.get('number:92').signal,work[1].signal);
+  work[1].resolve({canvases:[{canvasId:'new'}]}); await second;
+  assert.equal((await next()).result.structuredContent.canvases[0].canvasId,'new');
+  assert.equal(stdio.pending.size,0);
+});
+
+test('stdio bridge deadline stops a peer that sends bytes but never finishes JSON', {timeout:2000}, async t => {
+  const vm = require('node:vm'), {createRequire} = require('node:module');
+  const filename = require.resolve('../src/server/mcp/stdio.js'), loaded = {exports:{}};
+  let deadlineDelay;
+  vm.runInNewContext(fs.readFileSync(filename,'utf8'), {
+    require:createRequire(filename),module:loaded,Buffer,process,
+    setTimeout:(callback,ms) => { deadlineDelay = ms; return setTimeout(callback,40); },clearTimeout,
+  },{filename});
+  const server = http.createServer((req,res) => {
+    res.writeHead(200,{'content-type':'application/json'}); res.write('{');
+    const heartbeat = setInterval(() => res.write(' '),5);
+    res.once('close',() => clearInterval(heartbeat));
+  });
+  const address = await listen(server);
+  t.after(() => { server.closeAllConnections(); return close(server); });
+  await assert.rejects(loaded.exports.bridgeRequest({port:address.port,secret:'test',instanceId:'test'},{operation:'list_canvases'}),/timed out/);
+  assert.equal(deadlineDelay,50000,'retain the existing request timeout budget');
+});

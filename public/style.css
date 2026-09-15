@@ -2508,10 +2508,10 @@ body[data-theme="studio"] .canvas-frame.canvas-agent-resizing .canvas-agent-cont
 .canvas-workspace[hidden] {display:none;}
 #canvasWorkspaceStatus {flex:1 1 100%;overflow-wrap:anywhere;color:var(--muted);font-size:12px;line-height:1.45;}
 #canvasWorkspaceStatus:empty {display:none;}
-.workspace-update-dot {width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--pe-success,#277a4c);}
+.workspace-update-dot {width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--pe-accent,var(--accent));}
 .workspace-update-dot[hidden] {display:none;}
 #studioNavigatorToggle {position:relative;}
-#studioNavigatorToggle[data-workspace-updates="true"]::after {content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--pe-success,#277a4c);outline:2px solid var(--studio-toolbar,var(--panel));}
+#studioNavigatorToggle[data-workspace-updates="true"]::after {content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--pe-accent,var(--accent));outline:2px solid var(--studio-toolbar,var(--panel));}
 @media (forced-colors:active) { .workspace-update-dot,#studioNavigatorToggle[data-workspace-updates="true"]::after {background:Highlight;forced-color-adjust:none;} }
 body:not([data-theme="studio"]) .canvas-workspace {top:12px;}
 @media (max-width:700px) {.canvas-workspace {right:12px;left:12px;max-width:calc(100% - 24px);}.canvas-workspace select {width:120px;}}
@@ -2592,6 +2592,11 @@ body:not([data-theme="studio"]) .canvas-workspace {top:12px;}
 .settings-field select, .settings-fields select { padding-right: 34px; }
 .settings-field input:focus, .settings-fields input:focus, .settings-fields select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, transparent); }
 .settings-field small { color: var(--muted); font-weight: 430; }
+.settings-kimi-signup { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; margin: -1px 0 10px; color: var(--muted); font: 450 .7rem/1.45 system-ui, sans-serif; }
+.settings-kimi-signup[hidden] { display: none; }
+.settings-kimi-signup a { color: var(--gold-bright); font-weight: 500; text-decoration: none; }
+.settings-kimi-signup a::after { content: " ↗"; }
+.settings-kimi-signup a:hover, .settings-kimi-signup a:focus-visible { color: var(--ink); }
 .settings-combobox { position: relative; min-width: 0; }
 .settings-combobox input { padding-right: 42px; }
 .settings-combobox-toggle { position: absolute; z-index: 2; top: 1px; right: 1px; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; color: var(--muted); border: 0; border-left: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: 0 6px 6px 0; background: var(--panel); cursor: pointer; }
@@ -7636,8 +7641,8 @@ body[data-theme="studio"].studio-mcp-docked .studio-navigator-head { padding-bot
 :is(#studioMcpCloseAll, #canvasWorkspaceCloseAll)[aria-busy="true"]::before { position:absolute; inset:0; margin:auto; color:var(--pe-ink); }
 body[data-theme="studio"].studio-mcp-docked .studio-navigator-title-row { display: none; }
 body[data-theme="studio"].studio-mcp-docked .studio-navigator-search { margin-top: 0; }
-.studio-navigator-item-body small > .workspace-update-dot { display: inline-block; width: 5px; height: 5px; margin-right: 5px; vertical-align: 1px; }
-.studio-navigator-item-body small > .workspace-update-dot[hidden] { display: none; }
+.studio-navigator-item-body strong > .workspace-update-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: 1px; }
+.studio-navigator-item-body strong > .workspace-update-dot[hidden] { display: none; }
 @media(prefers-reduced-motion:reduce) { #canvasWorkspaceCount[aria-busy="true"]::after { animation: none; } }
 body[data-theme="studio"].studio-mcp-docked .studio-navigator :is(.studio-navigator-head,.studio-navigator-body,.studio-navigator-foot) { width: 100%; }
 body[data-theme="studio"].studio-mcp-docked :is(#pe-button-contract, .mcp-canvas-notice) > button[data-pe-button] {

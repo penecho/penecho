@@ -59,11 +59,12 @@ test("selection falls back to first saved connection and preserves explicit save
   Object.assign(context.window.PENECHO_CONFIG,{browserCanvasEditing:true,linkedDeviceOnline:false});
   context.syncLocalConnectionSelection();assert.equal(context.selectedAiConnectionId(),second,"offline must not silently select a different local model");
 });
-test("desktop Settings menu reveals the existing Canvas and sends the shared-page event",()=>{
+test("desktop Settings menu reveals the existing Canvas and sends the shared-page event",async()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[];
-  const context=vm.createContext({mainWindow:{isDestroyed:()=>false,show:()=>calls.push("show"),focus:()=>calls.push("focus"),webContents:{send:channel=>calls.push(channel)}}});
-  vm.runInContext(main.slice(main.indexOf("function showSettings()"),main.indexOf("function createMainWindow(")),context);
+  const context=vm.createContext({squirrelFirstRunComplete:Promise.resolve(),mainWindow:{isDestroyed:()=>false,show:()=>calls.push("show"),focus:()=>calls.push("focus"),webContents:{send:channel=>calls.push(channel)}}});
+  vm.runInContext(main.slice(main.indexOf("async function revealMainWindow("),main.indexOf("function createMainWindow(")),context);
   context.showSettings();
+  await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(calls,["show","focus","penecho:show-connections"]);
 });
 test("desktop bootstrap starts Canvas without checking whether AI is configured",async()=>{

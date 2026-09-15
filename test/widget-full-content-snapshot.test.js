@@ -25,7 +25,7 @@ test('full content response leaves every preview cache field intact',async()=>{
  const code=client.slice(start,end).replace(/\n  }\s*$/,'');
  const oldImage={},image={},widget={snapshotImage:oldImage,snapshotDataUrl:'old',snapshotVersion:4,snapshotHighResolution:false,contentVersion:5};
  let result;
- const context={widget,message:{dataUrl:'data:image/png;base64,new'},pending:{fullContent:true,contentVersion:5,resolve:r=>result=r,reject:e=>{throw e;}},decodeWidgetSnapshot:async()=>image};
+ const context={widget,message:{dataUrl:'data:image/png;base64,new'},pending:{fullContent:true,contentVersion:5,resolve:r=>result=r,reject:e=>{throw e;}},finishPending:()=>true,decodeWidgetSnapshot:async()=>image};
  vm.createContext(context);await vm.runInContext(`(async()=>{${code}})()`,context);
  assert.equal(result.image,image);assert.equal(result.dataUrl,'data:image/png;base64,new');
  assert.equal(widget.snapshotImage,oldImage);assert.equal(widget.snapshotDataUrl,'old');assert.equal(widget.snapshotVersion,4);assert.equal(widget.snapshotHighResolution,false);
