@@ -1,0 +1,13 @@
+{
+  "name": "penecho",
+  "owner": {
+    "name": "PenEcho"
+  },
+  "plugins": [
+    {
+      "name": "penecho-cloud",
+      "source": "./integrations/penecho-cloud",
+      "description": "A shared visual workspace for AI agents."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "penecho-cloud",
+  "version": "1.0.0",
+  "description": "A shared visual workspace for AI agents: create diagrams and interactive previews, then revise them from handwritten feedback.",
+  "author": {
+    "name": "PenEcho",
+    "url": "https://penecho.ai"
+  },
+  "homepage": "https://penecho.ai",
+  "repository": "https://github.com/penecho/penecho",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "canvas",
+    "handwriting",
+    "diagrams",
+    "visualization"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "PenEcho",
+    "shortDescription": "A shared visual workspace for AI agents",
+    "longDescription": "A shared visual workspace for AI agents: create diagrams and interactive previews, then revise them from handwritten feedback.",
+    "developerName": "PenEcho",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://penecho.ai",
+    "privacyPolicyURL": "https://penecho.ai/privacy.html",
+    "termsOfServiceURL": "https://penecho.ai/terms.html",
+    "defaultPrompt": [
+      "Draw this project’s architecture on my PenEcho canvas.",
+      "Build an interactive preview of this idea in PenEcho.",
+      "Read my handwritten feedback and revise the canvas."
+    ],
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/logo.png"
+  }
+}

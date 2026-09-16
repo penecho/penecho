@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.penecho/cloud",
+  "title": "PenEcho",
+  "description": "Create diagrams and interactive previews on a shared canvas; revise from handwritten feedback.",
+  "version": "1.0.0",
+  "websiteUrl": "https://penecho.ai",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://penecho.ai/mcp"
+    }
+  ]
+}
