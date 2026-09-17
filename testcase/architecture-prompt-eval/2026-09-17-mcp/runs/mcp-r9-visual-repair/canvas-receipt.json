@@ -1,0 +1,35 @@
+{
+  "sessionId": "943910c1-2566-4b58-ae10-901da791eb7d",
+  "artifactId": "mcp-architecture-r9-review",
+  "objectId": "widget-4",
+  "revision": 5,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "compare",
+    "role": "alternative",
+    "relativeTo": "mcp-architecture-r8-geometry",
+    "relation": "below",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1939,
+    "height": 1134
+  },
+  "sourcePath": "objects/widget-4/widget.html",
+  "contentHash": "2a7bc450bfaf1d720e4c961e0a391c63205da6c95c0d21eca3bd397627dda412",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 111168
+  },
+  "width": 1440,
+  "height": 842,
+  "encodedBytes": 111168
+}

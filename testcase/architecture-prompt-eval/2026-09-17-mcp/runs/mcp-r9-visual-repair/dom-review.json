@@ -1,0 +1,41 @@
+{
+  "viewport": [
+    1939,
+    1134
+  ],
+  "documentSize": [
+    1939,
+    1134
+  ],
+  "textCount": 35,
+  "overlaps": [],
+  "thresholdPx": 2,
+  "panels": [
+    {
+      "domain": "transport",
+      "borderTopColor": "rgb(13, 148, 136)",
+      "overflowWidth": 0
+    },
+    {
+      "domain": "host",
+      "borderTopColor": "rgb(234, 88, 12)",
+      "overflowWidth": 0
+    },
+    {
+      "domain": "binding",
+      "borderTopColor": "rgb(124, 58, 237)",
+      "overflowWidth": 0
+    },
+    {
+      "domain": "browser",
+      "borderTopColor": "rgb(21, 128, 61)",
+      "overflowWidth": 0
+    },
+    {
+      "domain": "mixed",
+      "borderTopColor": "rgb(107, 114, 128)",
+      "overflowWidth": 0
+    }
+  ],
+  "source": "Read-only browser DOM inspection at actual MCP CSS viewport; see canvas.webp for delivered pixels."
+}

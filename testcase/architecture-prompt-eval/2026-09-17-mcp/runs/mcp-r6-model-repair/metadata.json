@@ -1,0 +1,42 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "outputFormat": "replace-patches",
+  "requestSha256": "369bf6af4f5ef9b937766daf1a048668639a5f97c98c50793dcf6da406df6680",
+  "systemSha256": "cec766518ed78578010551b8ece02de2dcdad579e3686282757fa55cd05bb506",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 14110,
+    "output_tokens": 3242,
+    "cache_read_input_tokens": 0,
+    "server_tool_use": {
+      "web_search_requests": 0
+    },
+    "service_tier": "standard"
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 1,
+    "content_block_delta": 3146,
+    "content_block_stop": 1,
+    "message_delta": 1,
+    "message_stop": 1
+  },
+  "deltaTypes": {
+    "text_delta": 3146
+  },
+  "completed": true,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "stopReason": "end_turn",
+  "error": "Expecting ',' delimiter: line 1 column 8471 (char 8470)",
+  "elapsedSeconds": 55.33
+}

@@ -1,0 +1,52 @@
+{
+  "originalDocument": "doc-618546ca32a3fa7c9761e752f74bb49a0e4add46b5326df73d76242cf9c4ebe7",
+  "originalSessionRebound": "ffdef612-56e0-49fc-96cc-1a0d8f1f4589",
+  "originalInspectedRevision": 2,
+  "originalArtifacts": [
+    "mcp-architecture-r1"
+  ],
+  "r2NotPresentInRestoredDocument": true,
+  "newComparisonSession": {
+    "sessionId": "72bd9573-9ed5-4c2b-9bb9-425542078d31",
+    "canvasId": "7ce3d649-e5f3-4ec4-9c7d-b6332d44a548",
+    "documentId": "doc-557f20e61f2406f8650b4ac80bdf1abd171c88d29440dd6fb15409e2f1064a82",
+    "instanceId": "1d92d853-ab27-4358-aafd-e481ea504eef",
+    "slotIndex": 0,
+    "title": "MCP 架构 · R7 排版与连线实测",
+    "status": "working",
+    "summary": "",
+    "steps": [],
+    "events": [],
+    "feedbackCursor": 0,
+    "createdAt": 1789662120774,
+    "updatedAt": 1789662120774,
+    "render": {
+      "state": "applied",
+      "applied": true,
+      "pixelVerified": false,
+      "requestedAt": 1789662120327,
+      "completedAt": 1789662120774,
+      "durationMs": 447,
+      "revision": 1
+    },
+    "boardObjectId": null,
+    "revision": 1,
+    "guidanceVersion": "2",
+    "imageUpload": {
+      "url": "https://penecho.ai/mcp/images",
+      "method": "POST",
+      "contentType": "application/octet-stream",
+      "authorization": "Same Bearer credential as this MCP connection",
+      "sessionId": "72bd9573-9ed5-4c2b-9bb9-425542078d31",
+      "query": [
+        "sessionId",
+        "requestId",
+        "name"
+      ],
+      "maxBytes": 33554432,
+      "maxPixels": 40000000,
+      "transferTimeoutSeconds": 90,
+      "processingTimeoutSeconds": 30
+    }
+  }
+}

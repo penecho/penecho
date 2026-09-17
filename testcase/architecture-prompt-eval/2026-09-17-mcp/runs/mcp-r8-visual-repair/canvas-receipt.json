@@ -1,0 +1,35 @@
+{
+  "sessionId": "943910c1-2566-4b58-ae10-901da791eb7d",
+  "artifactId": "mcp-architecture-r8-visual-repair",
+  "objectId": "widget-2",
+  "revision": 3,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "compare",
+    "role": "alternative",
+    "relativeTo": "mcp-architecture-r8",
+    "relation": "below",
+    "attention": "normal"
+  },
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1939,
+    "height": 1134
+  },
+  "sourcePath": "objects/widget-2/widget.html",
+  "contentHash": "73886cf163bb9984379ff264ac39d19ec1c9b50e972cc04743acebfc91ff047e",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 102356
+  },
+  "width": 1440,
+  "height": 842,
+  "encodedBytes": 102356
+}

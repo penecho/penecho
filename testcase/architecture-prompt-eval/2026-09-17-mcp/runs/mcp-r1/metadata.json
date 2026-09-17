@@ -1,0 +1,21 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "outputFormat": "html",
+  "requestSha256": "2fcb2c612fc928a3de67106f4136d4f3a36bc6379b0ae95d6d3d402653718d70",
+  "systemSha256": "08425bed9be567d5546e43b71ace00a24bcea1e0ca53cd417dfe477d798d25ee",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {},
+  "eventTypes": {},
+  "deltaTypes": {},
+  "completed": false,
+  "error": "<urlopen error [Errno 8] nodename nor servname provided, or not known>",
+  "elapsedSeconds": 0.02
+}

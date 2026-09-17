@@ -1,0 +1,53 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "outputFormat": "html",
+  "requestSha256": "8104874480d6644560c8e9610b5a71106094233107a1e15b52fc53373baa178b",
+  "systemSha256": "5d0a78e5ceb8a0552414fd84c3228fb85d64439018ef53564246f827a54acb27",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 14634,
+    "output_tokens": 6843,
+    "cache_read_input_tokens": 0,
+    "server_tool_use": {
+      "web_search_requests": 0
+    },
+    "service_tier": "standard"
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 2,
+    "content_block_delta": 6618,
+    "content_block_stop": 2,
+    "message_delta": 1,
+    "message_stop": 1
+  },
+  "deltaTypes": {
+    "thinking_delta": 541,
+    "signature_delta": 1,
+    "text_delta": 6076
+  },
+  "completed": true,
+  "reviewImages": [
+    {
+      "path": "/Users/heack/workspace/penecho_071_version/testcase/architecture-prompt-eval/2026-09-17-mcp/runs/mcp-r8-geometry-reconstructed/canvas.webp",
+      "mime": "image/webp",
+      "bytes": 105360,
+      "sha256": "ff6bfedcb73bd020559b07e4ed26b912a4055b02052c4035c2e05c34a043439a"
+    }
+  ],
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "stopReason": "end_turn",
+  "htmlSha256": "361e5667949e4a79f90b84c243441b7a864104cd0526b22fbadfe56a84304331",
+  "htmlBytes": 19145,
+  "elapsedSeconds": 73.76
+}

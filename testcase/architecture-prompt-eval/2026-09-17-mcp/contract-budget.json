@@ -1,0 +1,7 @@
+{
+  "baselineToolCount": 20,
+  "currentToolCount": 20,
+  "toolSchemaEstimatedTokenDelta": 38,
+  "method": "characters/4 estimate, not model tokenization",
+  "budgetScriptIssue": "Existing script expects 19 tools; HEAD schema already has 20"
+}

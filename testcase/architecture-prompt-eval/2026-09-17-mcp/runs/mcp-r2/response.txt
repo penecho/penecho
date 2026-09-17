@@ -1,0 +1,225 @@
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>PenEcho MCP 架构</title>
+<style>
+  :root{
+    --ink:#1c2733; --muted:#5b6b7a; --line:#d5dde4;
+    --client:#6b46c1; --bridge:#0e7c86; --access:#1d5fb8;
+    --core:#c2570f; --browser:#1c7a3d; --cloud:#8a94a0;
+    --bg:#f7f9fb; --card:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:transparent;}
+  .doc{width:100%;min-width:0;background:var(--bg);padding:20px 26px 28px;}
+  header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:6px;}
+  h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
+  .sub{font-size:14px;color:var(--muted);}
+  .badges{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+  .badge{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px 10px;}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:6px 0 10px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .mapwrap{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;overflow-x:auto;}
+  svg.mainmap{display:block;width:100%;min-width:1500px;height:auto;}
+  .panels{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:14px;}
+  @media (max-width:1500px){.panels{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:900px){.panels{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--access);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.55;}
+  .card h2{font-size:14.5px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:7px;}
+  .card .tag{font-size:11px;font-weight:600;color:#fff;border-radius:4px;padding:1px 6px;}
+  .card ul{list-style:none;}
+  .card li{padding-left:12px;position:relative;margin-bottom:5px;color:#2b3a48;}
+  .card li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:#9fb0be;}
+  .card code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;background:#eef2f6;border-radius:3px;padding:0 4px;}
+  .cA{border-top-color:var(--bridge);} .cB{border-top-color:var(--access);}
+  .cC{border-top-color:var(--browser);} .cD{border-top-color:var(--core);}
+  .cE{border-top-color:var(--cloud);}
+  .note{font-size:11.5px;color:var(--muted);margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header>
+    <h1>PenEcho MCP 架构</h1>
+    <div class="sub">谁调用谁 · 哪些能力属于同一宿主 · 如何到达浏览器画布</div>
+    <div class="badges">
+      <span class="badge">单 Node 宿主 · 多职责</span>
+      <span class="badge">MCP HTTPS 3922 / 13922 / 23922</span>
+      <span class="badge">浏览器 WS /api/mcp/canvas</span>
+      <span class="badge">文档与快照由浏览器持有</span>
+    </div>
+  </header>
+  <div class="legend">
+    <span><i class="dot" style="background:#6b46c1"></i>调用方 / Agent</span>
+    <span><i class="dot" style="background:#0e7c86"></i>stdio 桥</span>
+    <span><i class="dot" style="background:#1d5fb8"></i>宿主接入</span>
+    <span><i class="dot" style="background:#c2570f"></i>宿主核心（协议/分派/操作）</span>
+    <span><i class="dot" style="background:#1c7a3d"></i>浏览器运行时</span>
+    <span><i class="dot" style="background:#8a94a0"></i>可选 / 只读分支</span>
+  </div>
+
+  <div class="mapwrap">
+  <svg class="mainmap" viewBox="0 0 1860 580" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PenEcho MCP 架构图">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#42536a"/>
+      </marker>
+      <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8a94a0"/>
+      </marker>
+    </defs>
+
+    <!-- ══ 外部直接 HTTPS 客户端 ══ -->
+    <rect x="20" y="28" width="220" height="58" rx="9" fill="#f4f0fb" stroke="#6b46c1" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <text x="130" y="52" text-anchor="middle" font-size="15" font-weight="600" fill="#4a3287">支持直接 HTTPS 的客户端</text>
+    <text x="130" y="72" text-anchor="middle" font-size="12" fill="#7a6ba0">不经 stdio 桥</text>
+    <path d="M240,57 C330,57 380,72 540,92" fill="none" stroke="#42536a" stroke-width="1.8" marker-end="url(#ar)"/>
+    <text x="360" y="46" text-anchor="middle" font-size="13" fill="#1d5fb8" font-weight="600">同一 HTTPS MCP 接入</text>
+
+    <!-- ══ 外部 AI 客户端 ══ -->
+    <rect x="20" y="180" width="220" height="70" rx="9" fill="#f4f0fb" stroke="#6b46c1" stroke-width="2"/>
+    <text x="130" y="209" text-anchor="middle" font-size="17" font-weight="700" fill="#4a3287">外部 AI 客户端</text>
+    <text x="130" y="231" text-anchor="middle" font-size="12.5" fill="#7a6ba0">调用 MCP 工具 · 生成 HTML</text>
+
+    <!-- ══ stdio 桥 ══ -->
+    <rect x="295" y="172" width="195" height="86" rx="9" fill="#e8f5f6" stroke="#0e7c86" stroke-width="2"/>
+    <text x="392" y="200" text-anchor="middle" font-size="16" font-weight="700" fill="#0b5f66">stdio 桥</text>
+    <text x="392" y="220" text-anchor="middle" font-size="12" fill="#3d7d83">client.js（轻量进程）</text>
+    <text x="392" y="240" text-anchor="middle" font-size="11.5" fill="#3d7d83">读凭据与发现缓存 · 校验 TLS · 复用连接</text>
+    <path d="M215,215 L288,215" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- ══ Node 宿主 frame ══ -->
+    <rect x="545" y="20" width="640" height="540" rx="14" fill="#fbfcfe" stroke="#1d5fb8" stroke-width="2.2"/>
+    <text x="575" y="50" font-size="17" font-weight="700" fill="#163f78">PenEcho Node 宿主（同一进程 · 不同职责）</text>
+
+    <!-- HTTPS 接入 -->
+    <rect x="575" y="72" width="340" height="58" rx="8" fill="#e9f0fb" stroke="#1d5fb8" stroke-width="1.8"/>
+    <text x="745" y="96" text-anchor="middle" font-size="15" font-weight="600" fill="#164a8f">HTTPS MCP 接入 · 认证 · 传输会话</text>
+    <text x="745" y="117" text-anchor="middle" font-size="12" fill="#4a72ad">direct-http-service.js</text>
+    <path d="M490,215 C540,215 540,110 568,101" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- RPC -->
+    <rect x="575" y="158" width="340" height="58" rx="8" fill="#fdf0e6" stroke="#c2570f" stroke-width="1.8"/>
+    <text x="745" y="182" text-anchor="middle" font-size="15" font-weight="600" fill="#94450c">RPC / Schema 协议分发</text>
+    <text x="745" y="203" text-anchor="middle" font-size="12" fill="#a8683c">rpc.js · schema.js</text>
+    <path d="M745,130 L745,151" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- guidance branch -->
+    <rect x="955" y="158" width="205" height="58" rx="8" fill="#ffffff" stroke="#8a94a0" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <text x="1057" y="182" text-anchor="middle" font-size="14" font-weight="600" fill="#5c6672">authoring-guidance.js</text>
+    <text x="1057" y="203" text-anchor="middle" font-size="12" fill="#8a94a0">按需规则正文（只读）</text>
+    <path d="M915,187 L948,187" fill="none" stroke="#8a94a0" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arg)"/>
+    <text x="931" y="176" text-anchor="middle" font-size="11.5" fill="#8a94a0">只读</text>
+
+    <!-- 会话分派 -->
+    <rect x="575" y="252" width="340" height="58" rx="8" fill="#fdf0e6" stroke="#c2570f" stroke-width="1.8"/>
+    <text x="745" y="276" text-anchor="middle" font-size="15" font-weight="600" fill="#94450c">会话与工具分派 · 浏览器目录</text>
+    <text x="745" y="297" text-anchor="middle" font-size="12" fill="#a8683c">service.js</text>
+    <path d="M745,216 L745,245" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- 绑定存储 -->
+    <rect x="575" y="352" width="340" height="48" rx="8" fill="#ffffff" stroke="#c2570f" stroke-width="1.4" stroke-dasharray="5 3"/>
+    <text x="745" y="374" text-anchor="middle" font-size="13.5" font-weight="600" fill="#94450c">持久会话绑定 conversation-bindings.js</text>
+    <text x="745" y="392" text-anchor="middle" font-size="11.5" fill="#a8683c">client/sessionKey → canvasId / documentId</text>
+    <path d="M745,310 L745,345" fill="none" stroke="#8a94a0" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arg)"/>
+    <text x="756" y="334" font-size="11.5" fill="#8a94a0">读取 / 更新</text>
+
+    <!-- 共用画布操作 -->
+    <rect x="575" y="440" width="340" height="58" rx="8" fill="#fdf0e6" stroke="#c2570f" stroke-width="2"/>
+    <text x="745" y="464" text-anchor="middle" font-size="15" font-weight="600" fill="#94450c">共用画布操作（核心枢纽）</text>
+    <text x="745" y="485" text-anchor="middle" font-size="12" fill="#a8683c">bound-operations.js · 版本/hash · 幂等 · 虚拟文件</text>
+    <path d="M745,400 C745,425 745,420 745,433" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- 内置 Agent -->
+    <rect x="985" y="440" width="185" height="58" rx="8" fill="#f4f0fb" stroke="#6b46c1" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <text x="1077" y="464" text-anchor="middle" font-size="13.5" font-weight="600" fill="#4a3287">内置 Agent</text>
+    <text x="1077" y="485" text-anchor="middle" font-size="11.5" fill="#7a6ba0">document-tools.mjs</text>
+    <path d="M985,469 L922,469" fill="none" stroke="#6b46c1" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+    <text x="953" y="458" text-anchor="middle" font-size="11" fill="#6b46c1">复用 · 独立绑定</text>
+
+    <!-- ══ 主通道箭头：宿主 → 浏览器 ══ -->
+    <path d="M1185,469 C1225,469 1215,140 1250,140" fill="none" stroke="#42536a" stroke-width="2.6" marker-end="url(#ar)"/>
+    <path d="M1250,175 C1215,175 1225,495 1185,495" fill="none" stroke="#9fb0be" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arg)"/>
+    <text x="1218" y="308" text-anchor="middle" font-size="13.5" font-weight="700" fill="#163f78" transform="rotate(90 1218 308)">WebSocket /api/mcp/canvas</text>
+    <text x="1237" y="308" text-anchor="middle" font-size="11.5" fill="#5b6b7a" transform="rotate(90 1237 308)">hello · call →｜← result · 错误 · 截图（同通道）</text>
+
+    <!-- ══ 浏览器 frame ══ -->
+    <rect x="1255" y="72" width="580" height="370" rx="14" fill="#f4fbf6" stroke="#1c7a3d" stroke-width="2.2"/>
+    <text x="1285" y="102" font-size="17" font-weight="700" fill="#135a2b">浏览器（已授权 opt-in · 持有文档与快照）</text>
+
+    <rect x="1285" y="122" width="520" height="54" rx="8" fill="#e5f4ea" stroke="#1c7a3d" stroke-width="1.8"/>
+    <text x="1545" y="145" text-anchor="middle" font-size="15" font-weight="600" fill="#135a2b">画布 WS 运行时</text>
+    <text x="1545" y="165" text-anchor="middle" font-size="12" fill="#3d8558">mcp-runtime.js · hello / catalog / 执行 call · 心跳 · 取消</text>
+
+    <rect x="1285" y="196" width="520" height="54" rx="8" fill="#e5f4ea" stroke="#1c7a3d" stroke-width="1.8"/>
+    <text x="1545" y="219" text-anchor="middle" font-size="15" font-weight="600" fill="#135a2b">画布文档与执行上下文</text>
+    <text x="1545" y="239" text-anchor="middle" font-size="12" fill="#3d8558">canvas-documents.js · 文档 / 快照由浏览器持有（非 Node 文件存储）</text>
+
+    <rect x="1285" y="270" width="520" height="76" rx="8" fill="#dff2e5" stroke="#1c7a3d" stroke-width="2"/>
+    <text x="1545" y="296" text-anchor="middle" font-size="15" font-weight="600" fill="#135a2b">Widget 沙箱 iframe（实际渲染处）</text>
+    <text x="1545" y="318" text-anchor="middle" font-size="12" fill="#3d8558">present_widget 交付 HTML/CSS/SVG · read_file / patch_file 围绕同一文档</text>
+    <text x="1545" y="337" text-anchor="middle" font-size="11.5" fill="#5c8a6c">虚拟 source path（objects/&lt;id&gt;/widget.html）≠ 模型电脑的真实文件路径</text>
+    <path d="M1545,176 L1545,189" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M1545,250 L1545,263" fill="none" stroke="#42536a" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- ══ Cloud 可选通道 ══ -->
+    <rect x="1255" y="484" width="580" height="58" rx="9" fill="#f2f4f6" stroke="#8a94a0" stroke-width="1.6" stroke-dasharray="6 4"/>
+    <text x="1545" y="507" text-anchor="middle" font-size="14" font-weight="600" fill="#5c6672">可选 Cloud 通道：浏览器 → /api/mcp/cloud-canvas → CloudMcpBridge → Cloud WSS /api/v1/mcp/device-canvas</text>
+    <text x="1545" y="528" text-anchor="middle" font-size="12" fill="#8a94a0">双向转发画布帧 · 由 Cloud MCP 运行时发起操作 · 云端内部未展开</text>
+    <path d="M1545,442 L1545,477" fill="none" stroke="#8a94a0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arg)"/>
+
+    <!-- 底部注释 -->
+    <text x="20" y="560" font-size="12" fill="#5b6b7a">端口 3922 / 13922 / 23922 是同一 listener 的候选端口，冲突后可选空闲端口 —— 不是多台服务器。HTTP 空闲清理不会终止仍打开 stdin 的桥；下一次调用重连并恢复原文档。</text>
+  </svg>
+  </div>
+
+  <div class="panels">
+    <div class="card cA">
+      <h2><span class="tag" style="background:#0e7c86">A</span>stdio 桥与发现</h2>
+      <ul>
+        <li>桥是轻量进程，<b>不是</b>完整 PenEcho 应用；分发光为 <code>client.js</code>。</li>
+        <li>先试已知地址与缓存，再按需发现（<code>discovery-client / lan-discovery</code>），无常驻守护进程。</li>
+        <li>桥与宿主各持自己的信任/凭据资料；图中只画职责，不写凭据内容。</li>
+      </ul>
+    </div>
+    <div class="card cB">
+      <h2><span class="tag" style="background:#1d5fb8">B</span>宿主内部职责</h2>
+      <ul>
+        <li>接入 / RPC / 分派 / 浏览器通道是<b>同一宿主</b>内的职责划分。</li>
+        <li><code>direct-http-service.js</code>：HTTPS listener、认证、传输会话；<code>rpc.js</code>：JSON-RPC；<code>schema.js</code>：工具输入校验。</li>
+        <li><code>main.js</code> 创建 MCP service，复用本地宿主；主 Web 服务默认 3888。</li>
+      </ul>
+    </div>
+    <div class="card cC">
+      <h2><span class="tag" style="background:#1c7a3d">C</span>浏览器端与 Widget 交付</h2>
+      <ul>
+        <li>已 opt-in 的浏览器才连 <code>/api/mcp/canvas</code>；关闭授权后不再接受外部画布操作。</li>
+        <li>浏览器执行具体文档动作；Node 端<b>不是</b> HTML 排版渲染器。</li>
+        <li>Widget 在沙箱 iframe 内渲染；后续 <code>read_file</code> / <code>patch_file</code> 操作同一文档的虚拟源文件。</li>
+      </ul>
+    </div>
+    <div class="card cD">
+      <h2><span class="tag" style="background:#c2570f">D</span>两种存储 · guidance 分支</h2>
+      <ul>
+        <li>持久绑定（Node，<code>conversation-bindings.js</code>）与文档/快照（浏览器）<b>所有者不同</b>。</li>
+        <li>浏览器连接 ID、文档 ID、业务 sessionId、HTTPS 传输 sessionId 互不相同。</li>
+        <li><code>get_guidance</code> 是 RPC 独立只读分支：不进浏览器画布队列，不调用模型。</li>
+      </ul>
+    </div>
+    <div class="card cE">
+      <h2><span class="tag" style="background:#8a94a0">E</span>周边通道</h2>
+      <ul>
+        <li>图片上传 <code>/mcp/images</code> 复用同一 HTTPS 接入与认证，服务端有界处理后交给指定文档。</li>
+        <li><code>request-trace.js</code> 按需记录多轮交互；日志不是画布源文件。</li>
+        <li>Cloud 通道由 Cloud MCP 运行时发起，不代表云端请求必经本地工具分派。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">依据本地工作树可执行代码整理（含未提交改动），仅描述本仓库可确认的事实；Cloud 内部实现不在范围内。</p>
+</div>
+</body>
+</html>
+```

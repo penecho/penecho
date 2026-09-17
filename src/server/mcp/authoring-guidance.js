@@ -4,7 +4,19 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const GUIDANCE_IDS = Object.freeze(["visual-explorer", "general-html", "math-2d", "physics-2d", "math-3d"]);
+// The registry contains discovery metadata only. Rule bodies are read only by
+// an explicit get_guidance(id) call and never appended to another guide.
+const visualRulesDirectory = path.join(__dirname, "../canvas-agent/visual-rules");
+const BASE_GUIDANCE_IDS = Object.freeze(["visual-explorer", "general-html", "math-2d", "physics-2d", "math-3d"]);
+const VISUAL_RULES = Object.freeze(JSON.parse(fs.readFileSync(path.join(visualRulesDirectory, "registry.json"), "utf8")));
+for (const [id, rule] of Object.entries(VISUAL_RULES)) {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || BASE_GUIDANCE_IDS.includes(id) || !rule || rule.base !== "visual-explorer" || typeof rule.title !== "string" || !rule.title || typeof rule.scope !== "string" || !rule.scope) {
+    throw new Error(`Invalid scoped visual rule: ${id}.`);
+  }
+  Object.freeze(rule);
+}
+const GUIDANCE_IDS = Object.freeze([...BASE_GUIDANCE_IDS, ...Object.keys(VISUAL_RULES)]);
+const VISUAL_RULE_CATALOG = `## On-demand visual rules\nRead only the rule matching the requested visual region with penecho_get_guidance({id}). Each rule applies only to that region in the current artifact; it does not change other regions, future tasks, or the general Visual Explorer defaults. Reuse an unchanged hash, but never carry a rule into an unrelated task. Available rules:\n${Object.entries(VISUAL_RULES).map(([id, rule]) => `- ${id}: ${rule.title}. ${rule.scope}.`).join("\n")}`;
 const cache = new Map();
 // Keep route selection sourced from the same 1.2.0 contract as visual design.
 const visualExplorerContract = fs.readFileSync(path.join(__dirname, "../canvas-agent/visual-explorer-contract.md"), "utf8");
@@ -28,6 +40,10 @@ function getFullGuidance(id) {
     const end = contract.indexOf("## PenEcho Agent source and invocation");
     if (start < 0 || end <= start) throw new Error("Visual Explorer design contract boundaries are missing.");
     document = `# Visual Explorer authoring guidance\n\n${ROUTING}\n\n${CANVAS_RENDERING_ROUTING}\n\n${contract.slice(start, end)}## Final Visual Explorer review\nCheck composition-wide typography against the design contract: font family, scale, weight, line height, and casing must form a coordinated hierarchy. Correct a concrete mismatch found in rendered evidence before delivery; do not skip this design check merely because the document is runnable.\n\n## Technical evidence quality\nState the assumptions beside conditional formulas. Use a worked numerical example or a calibrated chart when comparing quantities; never substitute an arbitrary curve for the claimed mechanism. If a figure is only schematic, label that limit clearly and do not attach quantitative conclusions to its shape.\n\n${DELIVERY}`;
+    document += `\n\n${VISUAL_RULE_CATALOG}`;
+  } else if (Object.hasOwn(VISUAL_RULES, id)) {
+    document = fs.readFileSync(path.join(visualRulesDirectory, `${id}.md`), "utf8");
+    if (!document.trim() || Buffer.byteLength(document, "utf8") > 16_000) throw new Error(`Invalid visual rule document: ${id}.`);
   } else if (id === "general-html") {
     const contract = fs.readFileSync(path.join(__dirname, "../canvas-agent/general-html-contract.md"), "utf8");
     const section = (start, end) => {
@@ -45,7 +61,8 @@ function getFullGuidance(id) {
     document = fs.readFileSync(path.join(__dirname, `../canvas-agent/visual-skills/${id}.md`), "utf8");
   }
   const hash = crypto.createHash("sha256").update(document).digest("hex");
-  const result = Object.freeze({ id, version:"1", hash, document });
+  const rule = VISUAL_RULES[id];
+  const result = Object.freeze({ id, version:"1", hash, document, ...(rule ? { kind:"visual-rule", base:rule.base, scope:rule.scope } : {}) });
   cache.set(id, result);
   return result;
 }
@@ -57,7 +74,7 @@ function getAuthoringGuidance(id, detail = "brief") {
   // The default read must deliver the canonical design contract, not an
   // independent summary that silently weakens visual quality. Loading remains
   // on demand; existing explicit brief callers receive the same requirements.
-  if(id === "visual-explorer")return {...full,detail:"brief",fullHash:full.hash};
+  if(id === "visual-explorer" || Object.hasOwn(VISUAL_RULES,id))return {...full,detail:"brief",fullHash:full.hash};
   const document = {
     "general-html":"Build the requested real product UI with working local interactions, responsive layout and readable normal CSS type. Use width:100%, min-width:0, media/container queries and vertical scrolling; never shrink a whole page with transform/zoom. Keep source on stable separate lines and reuse uploaded asset references. Preserve geometry when editing.",
     "math-2d":"Use calibrated coordinates and consistent units for mathematical geometry/curves. Load full guidance before implementing unfamiliar renderer APIs; verify formulas, domains, axes and labels.",
@@ -67,4 +84,4 @@ function getAuthoringGuidance(id, detail = "brief") {
   return {id,version:"2",hash:crypto.createHash("sha256").update(document).digest("hex"),detail:"brief",fullHash:full.hash,document};
 }
 
-module.exports = { GUIDANCE_IDS, ROUTING, NATIVE_DRAWING_ROUTING, CANVAS_RENDERING_ROUTING, VISUAL_EXPLORER_SELECTION, getAuthoringGuidance };
+module.exports = { GUIDANCE_IDS, VISUAL_RULES, ROUTING, NATIVE_DRAWING_ROUTING, CANVAS_RENDERING_ROUTING, VISUAL_EXPLORER_SELECTION, getAuthoringGuidance };

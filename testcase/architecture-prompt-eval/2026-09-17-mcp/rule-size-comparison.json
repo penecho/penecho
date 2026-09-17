@@ -1,0 +1,26 @@
+{
+  "r6": {
+    "characters": 5862,
+    "bytes": 5874,
+    "tokensEstimateCharsDiv4": 1466,
+    "sha256": "27a1fd25cec900f1213ff207a73cf72f7c2b1226194c1c6849b2a32c3daf2d48"
+  },
+  "r7": {
+    "characters": 6164,
+    "bytes": 6176,
+    "tokensEstimateCharsDiv4": 1541,
+    "sha256": "60b983a1ecbe2a8218a67345a0434060741f6a1be34355d7fb5288d1cbf4b630"
+  },
+  "r8": {
+    "characters": 4893,
+    "bytes": 4907,
+    "tokensEstimateCharsDiv4": 1223,
+    "sha256": "2cdf4bf02dd78ca49297634b66a87c597a6ffd23b21813490ee019e6962a9fcf"
+  },
+  "r9": {
+    "characters": 5259,
+    "bytes": 5273,
+    "tokensEstimateCharsDiv4": 1315,
+    "sha256": "90a8446af9300927c70b4cfdf19c4c7c892585258822b9e014d7d1026daf64c0"
+  }
+}

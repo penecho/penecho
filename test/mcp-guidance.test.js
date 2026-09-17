@@ -167,7 +167,7 @@ test("Agent and MCP use the canonical 1.2.0 Visual Explorer selection conditions
   for (const document of [ROUTING, CANVAS_RENDERING_ROUTING, DOCUMENT_TOOL_INSTRUCTIONS, getAuthoringGuidance("visual-explorer").document]) {
     assert.ok(document.includes(VISUAL_EXPLORER_SELECTION));
     assert.match(document, /even when the user does not explicitly ask for an infographic/);
-    assert.match(document, /substantial pasted text, equations to explain, project explanations, document analysis, study material, structured summaries/);
+    assert.match(document, /substantial pasted text, equations to explain, project explanations \(including architecture and sequence diagrams\), document analysis, study material, structured summaries/);
     assert.match(document, /Do not select it when the primary task is merely to supplement or modify existing Canvas/);
   }
 });

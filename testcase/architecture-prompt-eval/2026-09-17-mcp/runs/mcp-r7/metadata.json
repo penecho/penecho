@@ -1,0 +1,33 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "outputFormat": "html",
+  "requestSha256": "54a4f94df71240eb705f09bec7599b0892a9fe84d75b2d9c0ef2774f7ac74b1f",
+  "systemSha256": "072b24b6c37eb4e44e8a193502ea76c5bede710b5a979d2a76739c0df23add9b",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 1,
+    "content_block_delta": 5188
+  },
+  "deltaTypes": {
+    "thinking_delta": 5188
+  },
+  "completed": false,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "error": "The read operation timed out",
+  "elapsedSeconds": 300.88
+}

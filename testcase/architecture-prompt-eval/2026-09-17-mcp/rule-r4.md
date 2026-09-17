@@ -1,0 +1,25 @@
+# Architecture diagrams
+
+Scope: architecture regions of the current artifact only. This rule replaces generic infographic density, feature-card and panel-count defaults there; shared runtime, accessibility and delivery requirements still apply. Other visuals and later tasks keep their own rules.
+
+The result is a **readable relationship map with simple entities, named boundary frames and separate supporting detail**. Choose the viewpoint, orientation, abstraction and number of views from the system and the reader's question. There is no prescribed node count, layer count, column count or layout template.
+
+## Author in this order
+
+1. **Select the architectural story.** Identify the important actors/components/stores, their owners and the relationships needed to explain the question. Preserve branches and independent paths. Use the supplied implementation facts as evidence, not as a checklist of boxes to display. Leave secondary mechanisms in detail or a related view. A meaningful abstraction may combine steps, but must preserve their relationships.
+
+2. **Establish topology before positions.** For each displayed relationship determine source, target, direction and meaning. Distinguish calls/control flow from data access and configuration. If A calls B and B reads store S, the edges are A→B and B→S, not A→S→B. A connection, response path and request direction are different semantics; name the chosen meaning consistently. Frames express real containment (responsibility, process, deployment or trust), not a decorative layer stack. Group membership never substitutes for a component relationship.
+
+3. **Budget readable labels first.** Each main-map entity contains its short name and at most one short role line. File paths, parameter lists, port alternatives, counts and protocol mechanics go in detail. Set text at its actual displayed scale before fitting the layout: main names normally 16–20 CSS px and edge labels 13–15 CSS px. Do not build an oversized viewBox and shrink it to fit. If text cannot fit, shorten the label, increase space or choose another arrangement/view; do not reduce everything to small print.
+
+4. **Arrange around connections.** Align connected entities on shared rows/columns where practical. Prefer straight horizontal/vertical edges; use orthogonal routing lanes for necessary bends, optionally with small rounded corners. Move nodes before introducing detours. Sweeping curves or diagonal shortcuts are not a remedy for poor placement. Reserve space for labels and arrowheads as part of the gap. Comparable boxes, headings and parallel-edge labels share alignment guides and consistent spacing.
+
+5. **Construct without disconnected geometry.** Keep entity bounds in one place and derive ports, edge endpoints and label locations from those bounds/route segments. Each edge must visibly reach its actual source and target outlines, including across frames; it cannot stop at a convenient frame or blank gap when a component endpoint is known. In SVG, paint boundary backgrounds first, connections above those backgrounds, and entities/text above connections. A later opaque frame must never erase an entering arrow. Keep the implementation small; no elaborate layout engine is required.
+
+6. **Give every text item its own space.** Use short horizontal relation labels near a clear segment of their own edge; move long protocol strings to detail. Check actual text bounds, wrapping and padding, including frame titles and legends. Paths avoid unrelated entities and text. Labels cannot overlap each other, nodes, titles or bends. A label backing may interrupt its own edge only; masking a collision is not a fix. Crossings must not look like junctions. An optional path needs identifiable endpoints; omit it from this view if it cannot be drawn clearly.
+
+7. **Connect detail through color and names.** Assign restrained, distinct accents to meaningful entities/domains and reuse the same accent and name in their detail headings. Keep detail outside the topology. Group detail by ownership, not page order or arbitrary letters. A cross-domain explanation is neutral or explicitly identifies its constituent domains. Color aids recognition; visible names remain necessary. State each fact once in its most useful place.
+
+## Acceptance
+
+Check two things separately before delivery: (a) trace the important routes and frame membership against the facts, including bypasses and branches; (b) check visible endpoints, drawing order, alignment, text bounds, clipping and readability at the actual host viewport. Essential labels that overlap, are covered or require magnification fail acceptance, as does a false/missing relationship. Simplify the abstraction or rearrange the view until both checks pass. The reader should understand the main system without reading the implementation detail.
