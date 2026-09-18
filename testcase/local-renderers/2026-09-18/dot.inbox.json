@@ -1,0 +1,19 @@
+{
+  "sessionId": "0a423607-91c9-4674-844f-e50c74691dec",
+  "messages": {
+    "messages": [],
+    "after": 0,
+    "nextCursor": 0,
+    "latestCursor": 0,
+    "hasMore": false
+  },
+  "feedback": {
+    "sessionId": "0a423607-91c9-4674-844f-e50c74691dec",
+    "after": 0,
+    "nextCursor": 0,
+    "latestCursor": 0,
+    "hasMore": false,
+    "truncated": false,
+    "entries": []
+  }
+}

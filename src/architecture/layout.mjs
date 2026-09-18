@@ -1,32 +1,9 @@
 import schema from './schema.js';
-import { textUnits } from './vendor/archify/utils.mjs';
 import { normalizeRoutePoints, rectsOverlap, segmentIntersectsRect } from './vendor/archify/geometry.mjs';
 
-export const FONT = 'Arial, "PingFang SC", "Microsoft YaHei", sans-serif';
+import { FONT, wrap, measureFallback } from '../diagrams/text.mjs';
+export { FONT, wrap };
 export const MIN_MAP_SCALE = 0.9;
-const measureFallback = (s, px) => textUnits(s) * px * 0.58;
-export function wrap(text, width, size, measure = (s, px) => textUnits(s) * px * 0.58) {
-  const lines = []; let line = '';
-  const flush=()=>{if(line.trim())lines.push(line.trim());line='';};
-  // Preserve short Latin words/paths and parenthetical phrases. Oversized tokens
-  // can still wrap; a closing punctuation mark must not occupy a line by itself.
-  const tokens=String(text || '').match(/\([^()\n]*\)|（[^（）\n]*）|[A-Za-z0-9_./:+-]+|[ \t]+|\n|[^\s]/gu) || [];
-  for (const token of tokens) {
-    if(token==='\n'){flush();continue;}
-    for(const part of measure(token,size)>width?Array.from(token):[token]) {
-      if(!line){line=part.trimStart();continue;}
-      if(measure(line+part,size)<=width){line+=part;continue;}
-      if(/^[，。！？；：、）】》〉”’.,!?;:)\]}]$/u.test(part)) {
-        const chars=Array.from(line.trimEnd()),last=chars.pop();line=chars.join('');flush();line=(last||'')+part;
-      } else {
-        let opening='';if(/[（(【《“‘]$/u.test(line)){opening=line.slice(-1);line=line.slice(0,-1);}
-        flush();line=opening+part.trimStart();
-      }
-    }
-  }
-  flush();
-  return lines;
-}
 
 // ELK owns both node placement and orthogonal routing, including compound frames.
 // A caller may supply measured browser text widths; the fallback is conservative CJK-aware.

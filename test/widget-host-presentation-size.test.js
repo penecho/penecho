@@ -81,10 +81,13 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  const control=new Element({height:'450px',minHeight:'450px',overflowY:'auto',overflowX:'auto'},true);
  const architectureMap=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'auto'});
  architectureMap.scrollWidth=1200;architectureMap.clientWidth=400;
- architectureMap.closest=selector=>selector==='[data-penecho-architecture] .pa-map'?architectureMap:null;
+ architectureMap.closest=selector=>selector.split(', ').includes('[data-penecho-architecture] .pa-map')?architectureMap:null;
  viewport.setAttribute('data-penecho-fit-scroll','authored-root');
  scroller.setAttribute('data-penecho-fit-scroll','authored-scroller');
- const nodes=[viewport,minimum,scroller,control,architectureMap],sheet=stylesheetHarness();
+ const sequenceMap=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'auto'});
+ sequenceMap.scrollWidth=980;sequenceMap.clientWidth=400;
+ sequenceMap.closest=selector=>selector.split(', ').includes('[data-penecho-sequence] .pa-map')?sequenceMap:null;
+ const nodes=[viewport,minimum,scroller,control,architectureMap,sequenceMap],sheet=stylesheetHarness();
  const authoredStyles=nodes.map(element=>({...element.authored}));
  const ctx={widgetState:{maximized:true},innerHeight:450,HTMLElement:Element,getComputedStyle:element=>element.authored,
   document:{body:{querySelectorAll:()=>nodes},head:{append(){}},createElement:()=>sheet}};
@@ -106,6 +109,7 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  assert.equal(stylesheetValue(sheet,scrollerSelector,'min-width'),'902px!important');
  assert.equal(control.getAttribute('data-penecho-fit-scroll'),null);
  assert.equal(architectureMap.getAttribute('data-penecho-fit-scroll'),null,'architecture retains its own width-aware map scroller');
+ assert.equal(sequenceMap.getAttribute('data-penecho-fit-scroll'),null,'sequence retains participant-column scrolling');
  ctx.widgetState={maximized:false,fitContent:true};ctx.setFitContentLayout(true,true);
  assert.equal(sheet.disabled,false);
  assert.equal(stylesheetValue(sheet,'html,body','overflow-y'),'visible!important');

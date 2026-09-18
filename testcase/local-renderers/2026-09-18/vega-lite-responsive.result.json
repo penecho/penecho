@@ -1,0 +1,27 @@
+{
+  "sessionId": "70d964aa-bf5c-4a12-ae7a-b1b5b7cf71ff",
+  "artifactId": "vega-lite",
+  "objectId": "widget-1",
+  "revision": 4,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "deliver",
+    "role": "primary",
+    "size": "page",
+    "attention": "quiet"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-82f7a4b8489e166c-25615",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

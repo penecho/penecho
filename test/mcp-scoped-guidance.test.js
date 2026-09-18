@@ -13,7 +13,7 @@ test("scoped rule discovery loads metadata without reading rule bodies", () => {
     const original = fs.readFileSync;
     const reads = [];
     fs.readFileSync = function(file, ...args) {
-      if (/visual-rules[\\\\/]architecture\\.md$/.test(String(file))) reads.push(String(file));
+      if (/visual-rules[\\\\/](architecture|sequence)\\.md$/.test(String(file))) reads.push(String(file));
       return original.call(this, file, ...args);
     };
     const g = require('./src/server/mcp/authoring-guidance.js');
@@ -24,6 +24,8 @@ test("scoped rule discovery loads metadata without reading rule bodies", () => {
     if (reads.length !== 1) throw Error('Explicit rule read must load one body');
     const full = g.getAuthoringGuidance('architecture', 'full');
     if (reads.length !== 1 || full.document !== rule.document || full.hash !== rule.hash) throw Error('Brief/full rule identity drift');
+    const sequence = g.getAuthoringGuidance('sequence');
+    if (reads.length !== 2 || g.getAuthoringGuidance('sequence', 'full').hash !== sequence.hash || reads.length !== 2) throw Error('Sequence must load separately exactly once');
     for (const id of Object.keys(before)) {
       if (g.getAuthoringGuidance(id, 'full') !== before[id]) throw Error('Loading a rule mutated an unrelated guide');
     }
@@ -43,12 +45,12 @@ test("each registered rule is independently addressable and scoped without scien
     assert.ok(!getAuthoringGuidance("visual-explorer").document.includes(rule.document));
     assert.doesNotMatch(rule.document, /penecho-visual-skill|manim-web/);
   }
-  for (const id of ["../architecture", "architecture/../general-html", "sequence", "gantt", "ppt"]) {
+  for (const id of ["../architecture", "architecture/../general-html", "unknown-rule", "gantt", "ppt"]) {
     assert.throws(() => getAuthoringGuidance(id), RangeError);
   }
 });
 
-test("Agent, stdio and HTTP RPC return the same architecture rule without Canvas or model side effects", async () => {
+test("Agent, stdio and HTTP RPC return the same diagram rules without Canvas or model side effects", async () => {
   const { createDocumentTools } = await import("../src/server/canvas-agent/document-tools.mjs");
   const { PenEchoStdioServer } = require("../src/server/mcp/stdio.js");
   const { createMcpRpc } = require("../src/server/mcp/rpc.js");
@@ -59,7 +61,7 @@ test("Agent, stdio and HTTP RPC return the same architecture rule without Canvas
   server.records = fail;
   await server.handle({jsonrpc:"2.0",id:1,method:"initialize",params:{}});
   const rpc = createMcpRpc({callTool:fail,toolFailure:error => ({message:error.message})});
-  for (const args of [{id:"architecture"}, {id:"architecture",detail:"brief"}, {id:"architecture",detail:"full"}]) {
+  for (const args of ["architecture","sequence"].flatMap(id => [{id},{id,detail:"brief"},{id,detail:"full"}])) {
     const request = {jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"penecho_get_guidance",arguments:args}};
     const expected = getAuthoringGuidance(args.id,args.detail);
     assert.deepEqual(await agent.execute(args, {}), expected);

@@ -1,0 +1,32 @@
+{
+  "sessionId": "0a423607-91c9-4674-844f-e50c74691dec",
+  "artifactId": "dot",
+  "objectId": "widget-1",
+  "revision": 2,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "size": "page",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 2259,
+    "height": 1436
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-ba709f26f142cbce-25485",
+  "completion": {
+    "status": "done",
+    "summary": "DOT 生产渲染器验收样例；正在检查浏览器输出。",
+    "handledMessageIds": []
+  },
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

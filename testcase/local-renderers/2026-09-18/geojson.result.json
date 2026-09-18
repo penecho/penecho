@@ -1,0 +1,26 @@
+{
+  "sessionId": "fac7278d-ca6d-496e-83a5-2098e08202df",
+  "artifactId": "geojson",
+  "objectId": "widget-1",
+  "revision": 2,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-2cc45fb41f8f5015-25392",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

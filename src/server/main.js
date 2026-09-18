@@ -3871,7 +3871,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(VISUAL_EXPLAINER_RUNTIME).pipe(res);
   }
-  if ((req.method === "GET" || req.method === "HEAD") && ["/architecture-runtime.js", "/architecture-worker.js"].includes(url.pathname)) {
+  if ((req.method === "GET" || req.method === "HEAD") && ["/architecture-runtime.js", "/architecture-worker.js", "/sequence-runtime.js"].includes(url.pathname)) {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(path.join(PUBLIC, "vendor", url.pathname.slice(1))).pipe(res);

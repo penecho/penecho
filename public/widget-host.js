@@ -30,7 +30,8 @@
     visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
     authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
-    architectureRuntimeUrl = new URL("architecture-runtime.js?v=4", location.href).href,
+    architectureRuntimeUrl = new URL("architecture-runtime.js?v=5", location.href).href,
+    sequenceRuntimeUrl = new URL("sequence-runtime.js?v=1", location.href).href,
     architectureWorkerUrl = new URL("architecture-worker.js?v=1", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     snapshotDebugEnabled = remoteCanvas && (() => {
@@ -1085,6 +1086,10 @@
           stage = "architecture-layout";
           await withTimeout(globalThis.__penechoArchitectureWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
+        if (typeof globalThis.__penechoSequenceWhenSettled === "function") {
+          stage = "sequence-layout";
+          await withTimeout(globalThis.__penechoSequenceWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
+        }
         if (message.fullContent === true) {
           const root = document.documentElement, body = document.body;
           requestedWidth = Math.ceil(Math.max(requestedWidth, root.scrollWidth, body?.scrollWidth || 0));
@@ -1218,7 +1223,7 @@
         if (!(element instanceof HTMLElement) || element.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
         // Architecture owns width-aware reflow and its last-resort map scroller.
         // Expanding that scroller would feed the old graph width back into layout.
-        if (element.closest("[data-penecho-architecture] .pa-map")) continue;
+        if (element.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map")) continue;
         const style = getComputedStyle(element);
         const vertical = fitHeight && /^(auto|scroll)$/.test(style.overflowY);
         const horizontal = fitWidth && /^(auto|scroll)$/.test(style.overflowX);
@@ -1277,7 +1282,7 @@
         // viewport-sized document scrollHeight the next iframe height.
         for (const element of body.querySelectorAll("*")) {
           if (element.parentElement?.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
-          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map")) continue;
+          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map")) continue;
           const child = element.getBoundingClientRect();
           width = Math.max(width, child.right + scrollX);
           height = Math.max(height, child.bottom + scrollY);
@@ -1495,11 +1500,12 @@
     return html.replace(/penecho-asset:[a-f0-9]{64}/g,ref=>{const source=resolved.get(ref);if((expanded+=source.length-ref.length)>16000000)throw Error("Widget image expansion exceeds the supported limit");return source;});
   }
 
-  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false) {
+  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
     const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
       .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
+      .concat(sequenceMode ? [sequenceRuntimeUrl] : [])
       .map(url => url.replace(/[?#].*$/, ""))
       .join(" ");
     return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
@@ -1756,7 +1762,7 @@
       requestTwoFrames(() => {
         delete globalThis.__penechoScienceRendererReady;
         globalThis.__penechoSnapshotDebug?.("document-ready-marker", { mode:"science", rendererAvailable:typeof globalThis.html2canvas === "function" });
-        if (typeof globalThis.__penechoArchitectureRendererReady === "function") globalThis.__penechoArchitectureRendererReady();
+        if (typeof globalThis.__penechoLocalDiagramsRendererReady === "function") globalThis.__penechoLocalDiagramsRendererReady();
         else parent.postMessage({ type:"penecho-widget-document-ready", runtimeVersion:documentVersion }, "*");
       });
     }
@@ -1817,10 +1823,12 @@
     parsed.querySelectorAll("a[href]").forEach(safeOutboundLink);
     const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
     const architectureMode = !!parsed.querySelector("[data-penecho-architecture] script[type='application/json'][data-architecture-source]");
-    inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${architectureMode ? " allow-downloads" : ""}`);
+    const sequenceMode = !!parsed.querySelector("[data-penecho-sequence] script[type='application/json'][data-sequence-source]");
+    const localDiagrams = [architectureMode ? "architecture" : null, sequenceMode ? "sequence" : null].filter(Boolean);
+    inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${localDiagrams.length ? " allow-downloads" : ""}`);
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode);
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode, sequenceMode);
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1837,22 +1845,19 @@
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{user-select:none!important}html.penecho-widget-resize-width,html.penecho-widget-resize-width *{cursor:ew-resize!important}html.penecho-widget-resize-height,html.penecho-widget-resize-height *{cursor:ns-resize!important}html.penecho-widget-resize-corner,html.penecho-widget-resize-corner *{cursor:nwse-resize!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     if(mcpPreview)bridgeStyle.textContent=bridgeStyle.textContent.replace("background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);","");
     parsed.head.append(bridgeStyle);
-    if (architectureMode) {
-      const architectureReady = parsed.createElement("script");
-      architectureReady.textContent = `(() => { let layout=false,renderer=false,sent=false;const finish=()=>{if(sent||!layout||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-architecture-ready",()=>{layout=true;finish()},{once:true});globalThis.__penechoArchitectureRendererReady=()=>{renderer=true;finish()};globalThis.__penechoArchitectureLoadError=()=>{document.querySelectorAll('[data-penecho-architecture]').forEach(root=>{const p=document.createElement('p');p.setAttribute('role','alert');p.textContent='架构渲染模块加载失败，请重新加载。';root.append(p)});layout=true;finish()};})()`;
-      parsed.body.append(architectureReady);
-      const architectureWorker = parsed.createElement("script");
-      architectureWorker.src = architectureWorkerUrl;
-      architectureWorker.setAttribute("onerror", "globalThis.__penechoArchitectureLoadError?.()");
-      parsed.body.append(architectureWorker);
-      const architectureRuntime = parsed.createElement("script");
-      architectureRuntime.src = architectureRuntimeUrl;
-      architectureRuntime.setAttribute("onerror", "globalThis.__penechoArchitectureLoadError?.()");
-      parsed.body.append(architectureRuntime);
+    if (localDiagrams.length) {
+      const localReady = parsed.createElement("script");
+      localReady.textContent = `(() => { const pending=new Set(${JSON.stringify(localDiagrams)});let renderer=false,sent=false;const finish=()=>{if(sent||pending.size||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};for(const kind of pending)addEventListener("penecho-"+kind+"-ready",()=>{pending.delete(kind);finish()},{once:true});globalThis.__penechoLocalDiagramsRendererReady=()=>{renderer=true;finish()};globalThis.__penechoLocalDiagramLoadError=kind=>{document.querySelectorAll('[data-penecho-'+kind+']').forEach(root=>{const p=document.createElement('p');p.setAttribute('role','alert');p.textContent=(kind==='sequence'?'时序':'架构')+'渲染模块加载失败，请重新加载。';root.append(p)});pending.delete(kind);finish()};})()`;
+      parsed.body.append(localReady);
+      for (const [kind,url] of [...(architectureMode ? [["architecture",architectureWorkerUrl],["architecture",architectureRuntimeUrl]] : []),...(sequenceMode ? [["sequence",sequenceRuntimeUrl]] : [])]) {
+        const script=parsed.createElement("script"); script.src=url;
+        script.setAttribute("onerror", `globalThis.__penechoLocalDiagramLoadError?.(${JSON.stringify(kind)})`);
+        parsed.body.append(script);
+      }
     }
     if (visualPlan && !scienceMode) {
       const visualReady = parsed.createElement("script");
-      visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{globalThis.__penechoSnapshotDebug?.("visual-ready-state",{visual,renderer,sent});if(sent||!visual||!renderer)return;sent=true;globalThis.__penechoSnapshotDebug?.("document-ready-marker",{mode:"visual",rendererAvailable:typeof globalThis.html2canvas==="function"});if(typeof globalThis.__penechoArchitectureRendererReady==="function")globalThis.__penechoArchitectureRendererReady();else parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
+      visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{globalThis.__penechoSnapshotDebug?.("visual-ready-state",{visual,renderer,sent});if(sent||!visual||!renderer)return;sent=true;globalThis.__penechoSnapshotDebug?.("document-ready-marker",{mode:"visual",rendererAvailable:typeof globalThis.html2canvas==="function"});if(typeof globalThis.__penechoLocalDiagramsRendererReady==="function")globalThis.__penechoLocalDiagramsRendererReady();else parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
       parsed.body.append(visualReady);
       const vendor = parsed.createElement("script");
       vendor.src = visualExplainerVendorUrl;
@@ -1871,9 +1876,9 @@
       const rendererReady = parsed.createElement("script");
       rendererReady.textContent = "if(typeof globalThis.html2canvas===\"function\")globalThis.__penechoScienceRendererReady?.();delete globalThis.__penechoScienceRendererReady";
       parsed.body.append(rendererReady);
-    } else if (architectureMode && !visualPlan) {
+    } else if (localDiagrams.length && !visualPlan) {
       const architectureRendererReady = parsed.createElement("script");
-      architectureRendererReady.textContent = "globalThis.__penechoArchitectureRendererReady?.();delete globalThis.__penechoArchitectureRendererReady";
+      architectureRendererReady.textContent = "globalThis.__penechoLocalDiagramsRendererReady?.();delete globalThis.__penechoLocalDiagramsRendererReady";
       parsed.body.append(architectureRendererReady);
     } else if (visualPlan) {
       const rendererReady = parsed.createElement("script");

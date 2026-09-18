@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Sequence sandbox acceptance</title>
+<style>body{margin:0;background:#f5f7fa;font:14px Arial}header{display:flex;gap:12px;align-items:center;padding:12px;flex-wrap:wrap}iframe{display:block;width:100%;height:2200px;border:0;background:white}#stage{width:1280px;max-width:100%;margin:auto}button{padding:8px}#status{font-size:12px}</style>
+<header><button data-width="1280">宽版 1280</button><button data-width="760">中版 760</button><button data-width="390">窄版 390</button><span id="status">加载中</span></header><div id="stage"><iframe id="host" src="/public/widget-host.html" title="时序图验收"></iframe></div>
+<script>
+let sent=false,start=performance.now();const host=document.querySelector('iframe'),params=new URLSearchParams(location.search),mode=params.get('mode'),fixture=params.get('fixture')||'mcp';
+document.querySelectorAll('[data-width]').forEach(button=>button.onclick=()=>document.querySelector('#stage').style.width=button.dataset.width+'px');
+const region=(kind,data)=>'<section data-penecho-'+kind+'><script type="application/json" data-'+kind+'-source>'+JSON.stringify(data).replace(/</g,'\\u003c')+'<'+ '/script></section>';
+addEventListener('message',async event=>{if(event.source!==host.contentWindow)return;const m=event.data;
+ if(m.type==='penecho-widget-host-ready'&&!sent){sent=true;const data=await(await fetch(fixture+'.semantic.json')).json();let graph=region('sequence',data);
+ if(mode==='mixed')graph+='<h2 style="font:18px Arial">同一文档中的架构图</h2>'+region('architecture',{version:1,title:'混合架构区',nodes:[{id:'a',label:'Client'},{id:'b',label:'API'}],edges:[{from:'a',to:'b',label:'Call'}]});
+ const html='<!doctype html><body style="margin:8px;font:16px Arial">'+(mode==='plain'?'<h1>普通 HTML</h1><p>不应加载两种图表运行时。</p>':graph);
+ host.contentWindow.postMessage({type:'penecho-widget-init',title:data.title,sourceFormat:'penecho-mcp+html',html},location.origin);host.contentWindow.postMessage({type:'penecho-widget-state',selected:true,active:true,interactive:true,scaleX:1,scaleY:1},location.origin);}
+ if(m.type==='penecho-widget-capture-ready')document.querySelector('#status').textContent='就绪 '+Math.round(performance.now()-start)+' ms';
+ if(m.type==='penecho-widget-runtime-diagnostics'&&m.errors.length)document.querySelector('#status').textContent=JSON.stringify(m.errors);
+});</script></html>

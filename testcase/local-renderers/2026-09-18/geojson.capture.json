@@ -1,0 +1,16 @@
+{
+  "sessionId": "fac7278d-ca6d-496e-83a5-2098e08202df",
+  "artifactId": "geojson",
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 13732
+  },
+  "pixelVerified": true,
+  "width": 944,
+  "height": 550,
+  "revision": 2,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  }
+}

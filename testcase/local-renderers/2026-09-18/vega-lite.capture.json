@@ -1,0 +1,16 @@
+{
+  "sessionId": "70d964aa-bf5c-4a12-ae7a-b1b5b7cf71ff",
+  "artifactId": "vega-lite",
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 20088
+  },
+  "pixelVerified": true,
+  "width": 944,
+  "height": 550,
+  "revision": 2,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  }
+}

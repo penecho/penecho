@@ -1,0 +1,26 @@
+{
+  "sessionId": "a6c36e70-febb-47c6-8f27-b12b1776fcec",
+  "artifactId": "cytoscape-json",
+  "objectId": "widget-1",
+  "revision": 2,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-ae468d7f819b8f91-25544",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

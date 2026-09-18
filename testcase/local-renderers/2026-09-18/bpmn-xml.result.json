@@ -1,0 +1,26 @@
+{
+  "sessionId": "16010519-1ded-4b26-9357-c14cb5aba7bc",
+  "artifactId": "bpmn-xml",
+  "objectId": "widget-1",
+  "revision": 2,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-b2b16c4bf25e305c-28282",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

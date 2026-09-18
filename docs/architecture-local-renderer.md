@@ -8,8 +8,9 @@ their existing paths.
 
 ## Delivery and editable source
 
-`penecho_present_widget` accepts exactly one of `html` and `architecture`.
-The latter requires `version:1`, `title`, `nodes` and `edges`; the lazy
+`penecho_present_widget` accepts exactly one of `html`, `architecture` and
+`sequence` (see [sequence documentation](sequence-local-renderer.md)).
+The architecture object requires `version:1`, `title`, `nodes` and `edges`; the lazy
 `architecture` guidance documents optional domains, groups, details and notes.
 `src/architecture/schema.js` checks references, nesting, types and bounded sizes.
 It converts the semantic object into a small HTML envelope. It does **not** load

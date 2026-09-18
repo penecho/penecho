@@ -1,0 +1,26 @@
+{
+  "sessionId": "e2aee74e-e03c-470b-9978-1a05ea2b7f31",
+  "artifactId": "composition",
+  "objectId": "widget-1",
+  "revision": 2,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "sourcePath": "objects/widget-1/widget.html",
+  "contentHash": "fallback-de2606007f9ea568-4394",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

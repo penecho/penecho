@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions" targetNamespace="urn:penecho:test">
+<bpmn:process id="Process" isExecutable="false"><bpmn:startEvent id="Start" name="Receive"/><bpmn:task id="Review" name="Review request"/><bpmn:exclusiveGateway id="Decision" name="Approved?"/><bpmn:task id="Fulfil" name="Fulfil order"/><bpmn:task id="Reject" name="Notify rejection"/><bpmn:endEvent id="End" name="Done"/>
+<bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Review"/><bpmn:sequenceFlow id="f2" sourceRef="Review" targetRef="Decision"/><bpmn:sequenceFlow id="f3" name="Yes" sourceRef="Decision" targetRef="Fulfil"/><bpmn:sequenceFlow id="f4" name="No" sourceRef="Decision" targetRef="Reject"/><bpmn:sequenceFlow id="f5" sourceRef="Fulfil" targetRef="End"/><bpmn:sequenceFlow id="f6" sourceRef="Reject" targetRef="End"/></bpmn:process>
+<bpmndi:BPMNDiagram id="Diagram"><bpmndi:BPMNPlane id="Plane" bpmnElement="Process">
+<bpmndi:BPMNShape id="s1" bpmnElement="Start"><dc:Bounds x="60" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s2" bpmnElement="Review"><dc:Bounds x="150" y="120" width="130" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s3" bpmnElement="Decision" isMarkerVisible="true"><dc:Bounds x="340" y="135" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s4" bpmnElement="Fulfil"><dc:Bounds x="460" y="50" width="140" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s5" bpmnElement="Reject"><dc:Bounds x="460" y="220" width="140" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s6" bpmnElement="End"><dc:Bounds x="690" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="e1" bpmnElement="f1"><di:waypoint x="96" y="160"/><di:waypoint x="150" y="160"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e2" bpmnElement="f2"><di:waypoint x="280" y="160"/><di:waypoint x="340" y="160"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e3" bpmnElement="f3"><di:waypoint x="365" y="135"/><di:waypoint x="365" y="90"/><di:waypoint x="460" y="90"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e4" bpmnElement="f4"><di:waypoint x="365" y="185"/><di:waypoint x="365" y="260"/><di:waypoint x="460" y="260"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e5" bpmnElement="f5"><di:waypoint x="600" y="90"/><di:waypoint x="708" y="90"/><di:waypoint x="708" y="142"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e6" bpmnElement="f6"><di:waypoint x="600" y="260"/><di:waypoint x="708" y="260"/><di:waypoint x="708" y="178"/></bpmndi:BPMNEdge>
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>

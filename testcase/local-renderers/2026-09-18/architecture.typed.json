@@ -1,0 +1,24 @@
+{
+  "sessionId": "e2aee74e-e03c-470b-9978-1a05ea2b7f31",
+  "artifactId": "architecture-typed-inspect",
+  "presentation": {
+    "intent": "inspect",
+    "role": "primary",
+    "attention": "quiet"
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 10180
+  },
+  "width": 883,
+  "height": 588,
+  "encodedBytes": 10180,
+  "revision": 3,
+  "ephemeral": true,
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1200,
+    "height": 800
+  }
+}

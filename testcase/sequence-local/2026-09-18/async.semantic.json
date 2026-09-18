@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "title": "异步报告生成",
+  "description": "合成业务示例 · 提交后立即返回，后台分支独立执行，再汇合通知。",
+  "domains": [
+    {
+      "id": "client",
+      "label": "用户端",
+      "color": "blue"
+    },
+    {
+      "id": "api",
+      "label": "应用服务",
+      "color": "teal"
+    },
+    {
+      "id": "background",
+      "label": "后台任务",
+      "color": "purple"
+    },
+    {
+      "id": "data",
+      "label": "数据存储",
+      "color": "green"
+    }
+  ],
+  "participants": [
+    {
+      "id": "client",
+      "label": "分析工作台",
+      "domain": "client",
+      "type": "frontend"
+    },
+    {
+      "id": "api",
+      "label": "报告 API",
+      "domain": "api"
+    },
+    {
+      "id": "queue",
+      "label": "任务队列",
+      "domain": "background",
+      "type": "messagebus"
+    },
+    {
+      "id": "worker",
+      "label": "报告生成器",
+      "domain": "background"
+    },
+    {
+      "id": "store",
+      "label": "对象存储与通知",
+      "domain": "data",
+      "type": "database"
+    }
+  ],
+  "messages": [
+    {
+      "id": "submit",
+      "from": "client",
+      "to": "api",
+      "label": "提交报告生成请求"
+    },
+    {
+      "id": "publish",
+      "from": "api",
+      "to": "queue",
+      "label": "发布任务",
+      "kind": "async"
+    },
+    {
+      "id": "accepted",
+      "from": "api",
+      "to": "client",
+      "label": "202 Accepted · 任务 ID",
+      "kind": "return"
+    },
+    {
+      "id": "dispatch",
+      "from": "queue",
+      "to": "worker",
+      "label": "分派任务",
+      "kind": "async"
+    },
+    {
+      "id": "compute",
+      "from": "worker",
+      "to": "worker",
+      "label": "汇总统计数据"
+    },
+    {
+      "id": "assets",
+      "from": "worker",
+      "to": "store",
+      "label": "读取报告素材"
+    },
+    {
+      "id": "read",
+      "from": "store",
+      "to": "worker",
+      "label": "返回素材",
+      "kind": "return"
+    },
+    {
+      "id": "save",
+      "from": "worker",
+      "to": "store",
+      "label": "合并内容并保存报告"
+    },
+    {
+      "id": "saved",
+      "from": "store",
+      "to": "worker",
+      "label": "报告 URL",
+      "kind": "return"
+    },
+    {
+      "id": "notify",
+      "from": "worker",
+      "to": "api",
+      "label": "发送完成事件",
+      "kind": "async"
+    },
+    {
+      "id": "deliver",
+      "from": "api",
+      "to": "client",
+      "label": "推送报告就绪通知",
+      "kind": "async"
+    }
+  ],
+  "fragments": [
+    {
+      "kind": "par",
+      "label": "计算分支",
+      "from": "compute",
+      "to": "read",
+      "branches": [
+        {
+          "from": "assets",
+          "label": "素材分支（与计算并行）"
+        }
+      ]
+    }
+  ],
+  "activations": [
+    {
+      "participant": "worker",
+      "from": "dispatch",
+      "to": "notify"
+    }
+  ],
+  "details": [
+    {
+      "title": "用户端",
+      "domain": "client",
+      "items": [
+        "提交后即可继续操作；任务完成后收到通知。"
+      ]
+    },
+    {
+      "title": "应用服务",
+      "domain": "api",
+      "items": [
+        "任务接收与最终完成是两个不同事件。"
+      ]
+    },
+    {
+      "title": "后台任务",
+      "domain": "background",
+      "items": [
+        "空心箭头表示异步消息；par 中的分支可并行执行。"
+      ]
+    },
+    {
+      "title": "数据存储",
+      "domain": "data",
+      "items": [
+        "只有所需分支全部完成后，才合并和保存报告。"
+      ]
+    }
+  ],
+  "notes": [
+    "合成示例。par 内上下排列的是并行分支，不代表分支之间的执行先后。"
+  ]
+}

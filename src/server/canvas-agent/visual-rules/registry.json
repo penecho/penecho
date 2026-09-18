@@ -3,5 +3,10 @@
     "title": "Architecture diagrams",
     "scope": "Architecture diagrams or architecture regions of mixed documents only",
     "base": "visual-explorer"
+  },
+  "sequence": {
+    "title": "Sequence diagrams",
+    "scope": "Sequence diagrams or sequence regions of mixed documents only",
+    "base": "visual-explorer"
   }
 }

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "title": "MCP 请求如何到达画布",
+  "description": "本地 MCP 工具调用示例；规则读取与画布执行属于不同分支。",
+  "domains": [
+    {"id":"client","label":"调用方","color":"blue"},
+    {"id":"host","label":"Node 宿主","color":"orange"},
+    {"id":"browser","label":"授权浏览器","color":"green"}
+  ],
+  "participants": [
+    {"id":"ai","label":"AI 客户端（Codex / Claude / ZCode）","subtitle":"工具调用方","type":"external","domain":"client","details":["准备结构化内容并调用 MCP。此示例不包含模型生成内容的耗时。"]},
+    {"id":"mcp","label":"本地 MCP 服务","subtitle":"HTTPS /mcp","domain":"host","details":["认证、RPC 输入校验与会话分派属于同一 Node 宿主。"]},
+    {"id":"rules","label":"按需规则","subtitle":"authoring-guidance","domain":"host"},
+    {"id":"canvas","label":"浏览器文档运行时","subtitle":"已 opt-in 授权","type":"frontend","domain":"browser"},
+    {"id":"widget","label":"Widget Host","subtitle":"沙箱中的本地渲染","type":"frontend","domain":"browser"}
+  ],
+  "messages": [
+    {"id":"guidance","from":"ai","to":"mcp","label":"get_guidance(sequence)"},
+    {"id":"read","from":"mcp","to":"rules","label":"读取规则正文与版本"},
+    {"id":"rule","from":"rules","to":"mcp","label":"返回规则","kind":"return"},
+    {"id":"ready","from":"mcp","to":"ai","label":"规则与 hash","kind":"return","note":"只读指导分支，不进入浏览器画布队列。"},
+    {"id":"present","from":"ai","to":"mcp","label":"present_widget(sequence JSON)","details":["模型输出参与者、消息与条件；渲染器计算坐标、文字换行与连线。"]},
+    {"id":"validate","from":"mcp","to":"mcp","label":"校验引用、绑定与 requestId"},
+    {"id":"call","from":"mcp","to":"canvas","label":"canvasCall：执行文档操作"},
+    {"id":"render","from":"canvas","to":"widget","label":"加载时序图资源并渲染"},
+    {"id":"loaded","from":"widget","to":"canvas","label":"渲染就绪","kind":"return"},
+    {"id":"capture","from":"canvas","to":"widget","label":"请求截图"},
+    {"id":"image","from":"widget","to":"canvas","label":"返回当前布局图片","kind":"return"},
+    {"id":"result","from":"canvas","to":"mcp","label":"result / 文档版本","kind":"return"},
+    {"id":"done","from":"mcp","to":"ai","label":"工具调用结果","kind":"return"}
+  ],
+  "fragments": [{"kind":"opt","label":"请求包含 capture:true","from":"capture","to":"image"}],
+  "activations": [
+    {"participant":"mcp","from":"guidance","to":"ready"},
+    {"participant":"mcp","from":"present","to":"done"},
+    {"participant":"canvas","from":"call","to":"result"},
+    {"participant":"widget","from":"render","to":"loaded"}
+  ],
+  "details": [
+    {"title":"语义输入","domain":"client","items":["参与者顺序和消息顺序由模型表达。模型不输出坐标、SVG 或排版代码。"]},
+    {"title":"本地执行","domain":"host","items":["Node 负责验证、绑定和分派；图表在浏览器本地渲染。"]},
+    {"title":"交互与导出","domain":"browser","items":["点击参与者或消息查看详情；主图可单独导出 SVG 和 PNG。"]}
+  ],
+  "notes":["示例按逻辑先后排列，垂直距离不代表实际耗时。返回箭头用虚线；异步消息用空心箭头。"]
+}

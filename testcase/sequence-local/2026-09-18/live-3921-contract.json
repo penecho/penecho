@@ -1,0 +1,442 @@
+{
+  "checkedAt": "2026-09-18T08:50:00.242Z",
+  "appPort": 3921,
+  "mcpEndpoint": "https://127.0.0.1:3922/mcp",
+  "initialize": {
+    "protocolVersion": "2025-11-25",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      },
+      "prompts": {
+        "listChanged": false
+      },
+      "resources": {
+        "subscribe": false,
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "PenEcho",
+      "version": "1.0.0"
+    },
+    "instructions": "Use a stable sessionKey per conversation; retain sessionId/documentId. Never switch documents implicitly. Read virtual source before patching with contentHash and requestId; unknown outcomes need identical retries, conflicts need a fresh read. Use baseRevision for geometry edits. Capture only unresolved visual evidence; never show hidden content implicitly. Inbox message/feedback cursors are independent; reading never acknowledges or wakes a model. Prefer mutation completion for status/handled IDs; mark done only after success. Use present_widget for interactive HTML, draw for native marks, plot for functions. Load penecho_get_guidance on demand; reuse unchanged versions. Finish when correct, readable and usable."
+  },
+  "tools": [
+    {
+      "name": "penecho_get_guidance",
+      "description": "Read task-specific authoring guidance. Visual Explorer includes its complete base contract and a scoped-rule catalog, not rule bodies. Load a matching rule separately (architecture or sequence for their respective diagrams); rules apply only to that region/current artifact. Other guides are brief by default, full for examples. Reuse unchanged version/hash.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "visual-explorer",
+              "general-html",
+              "math-2d",
+              "physics-2d",
+              "math-3d",
+              "architecture",
+              "sequence"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "brief",
+              "full"
+            ],
+            "default": "brief"
+          }
+        }
+      },
+      "_meta": {
+        "penecho/usage": "specialized"
+      }
+    },
+    {
+      "name": "penecho_present_widget",
+      "description": "Render rich explanations, sequence/flow diagrams (including static diagrams), and product UI as an HTML/CSS/SVG Widget. Create/update stable artifactId, preserving geometry; returned viewport is actual CSS size. relativeTo is a known artifactId. inspect requires capture:true and renders exact dimensions without saving an object. Capture failures may leave applied:true. Format source for patches.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "artifactId",
+          "title",
+          "requestId"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "html"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "architecture"
+                  ]
+                },
+                {
+                  "required": [
+                    "sequence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "architecture"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "html"
+                  ]
+                },
+                {
+                  "required": [
+                    "sequence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "sequence"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "html"
+                  ]
+                },
+                {
+                  "required": [
+                    "architecture"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "artifactId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "html": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000
+          },
+          "architecture": {
+            "type": "object",
+            "description": "Semantic architecture/1 JSON for local rendering. Load architecture guidance for fields; omit html."
+          },
+          "sequence": {
+            "type": "object",
+            "description": "Semantic sequence/1 JSON for local rendering. Load sequence guidance for fields; omit html and architecture."
+          },
+          "width": {
+            "type": "number",
+            "minimum": 300,
+            "maximum": 4096,
+            "description": "CSS width: capped on creation, exact for inspect."
+          },
+          "height": {
+            "type": "number",
+            "minimum": 200,
+            "maximum": 4096,
+            "description": "CSS height: independently capped on creation, exact for inspect."
+          },
+          "capture": {
+            "type": "boolean",
+            "default": false
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "basic",
+              "detail"
+            ]
+          },
+          "presentation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "intent": {
+                "type": "string",
+                "enum": [
+                  "explain",
+                  "deliver",
+                  "compare",
+                  "review",
+                  "inspect"
+                ],
+                "default": "deliver"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "supporting",
+                  "alternative"
+                ],
+                "default": "primary"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "base",
+                  "wide",
+                  "tall",
+                  "large",
+                  "page"
+                ],
+                "default": "page",
+                "description": "Preferred CSS viewport: base480×360, wide992×360, tall480×752, large992×752, page1200×800. Widget page/default fits available viewport; other dimensions are capped. Presets exclude width/height; source updates preserve geometry."
+              },
+              "relativeTo": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "below",
+                  "beside"
+                ]
+              },
+              "attention": {
+                "type": "string",
+                "enum": [
+                  "quiet",
+                  "normal",
+                  "request"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "relation"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "relativeTo"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "intent": {
+                      "const": "inspect"
+                    }
+                  },
+                  "required": [
+                    "intent"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "attention": {
+                      "const": "quiet"
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "relativeTo"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "relation"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "output": {
+            "type": "string",
+            "enum": [
+              "concise",
+              "detailed"
+            ],
+            "default": "concise"
+          },
+          "completion": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "done",
+                  "waiting",
+                  "error"
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "handledMessageIds": {
+                "type": "array",
+                "maxItems": 50,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "quality"
+              ]
+            },
+            "then": {
+              "required": [
+                "capture"
+              ],
+              "properties": {
+                "capture": {
+                  "const": true
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "presentation": {
+                  "properties": {
+                    "intent": {
+                      "const": "inspect"
+                    }
+                  },
+                  "required": [
+                    "intent"
+                  ]
+                }
+              },
+              "required": [
+                "presentation"
+              ]
+            },
+            "then": {
+              "required": [
+                "capture"
+              ],
+              "properties": {
+                "capture": {
+                  "const": true
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "presentation": {
+                  "required": [
+                    "size"
+                  ]
+                }
+              },
+              "required": [
+                "presentation"
+              ]
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "width"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "height"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "matchesLocal": [
+    {
+      "name": "penecho_get_guidance",
+      "exact": true
+    },
+    {
+      "name": "penecho_present_widget",
+      "exact": true
+    }
+  ],
+  "sequence": {
+    "httpStatus": 200,
+    "isError": false,
+    "id": "sequence",
+    "kind": "visual-rule",
+    "base": "visual-explorer",
+    "scope": "Sequence diagrams or sequence regions of mixed documents only",
+    "hash": "b1bcd38b69ab7bf0da1f91791a24d459069a3b3029257ce4b24a725a123421f4",
+    "document": "# Sequence diagrams — sequence/1\n\nScope: only sequence diagrams/regions. Other Visual Explorer content keeps its own rules. Use `penecho_present_widget` with **sequence** instead of html or architecture. The local renderer owns coordinates, wrapping, lifelines, arrow styles, interaction and SVG/PNG export. Do not generate CSS/SVG, x/y, Mermaid or layout code.\n\nRequired: `{version:1,title,participants:[...],messages:[...]}`. Participants are left-to-right; messages are in logical time order. Keep one scenario readable; move implementation detail into details. Do not invent a return, async operation or parallel branch absent from the evidence. Vertical distance is not elapsed time.\n\nFields (`?` = optional; unknown fields rejected):\n- `description?`: short context. `domains?`: `[{id,label,color?}]`; colors `blue|teal|orange|purple|green|slate`. Reuse domain IDs on participants and detail cards so colors correspond.\n- `participants` (1–16): `{id,label,subtitle?,type?,domain?,details?:string[]}`. Unique IDs start with a letter, then letters/digits/_/-. `type`: `frontend|backend|database|cloud|security|messagebus|external`. Label ≤100 chars, subtitle ≤160; no geometry. Use concise role names, renderer wraps long labels.\n- `messages` (1–120): `{id?,from,to,label,kind?,note?,details?:string[]}`. Endpoints reference participant IDs. `from===to` is a self-call. `kind`: `call` (default, solid filled arrow), `return` (dashed), `async` (solid open arrow). Label ≤120 chars; note ≤400. IDs are unique and needed only when a range references a message. Numbers are automatic.\n- `activations?`: `[{participant,from,to}]`; from/to are explicit message IDs bounding active execution. Optional; do not infer activity merely because a participant exists.\n- `fragments?`: `[{kind,label,from,to,branches?:[{from,label}]}]`; kind `alt|opt|loop|par|critical`. Range endpoints are inclusive message IDs. Label is the first condition/branch. For alt/par only, branches name subsequent operands starting at explicit message IDs, strictly ordered inside the range. alt operands are alternatives; par operands can overlap in time. Ranges must be disjoint or strictly nested (max depth 4); nested fragments cannot cross a parent's branch boundary.\n- `details?`: `[{title,domain?,items:string[]}]` for explanations below the diagram. `notes?`: string array for assumptions or scope. Keep main labels short, put paths and long evidence here.\n\nMinimal tool content (sessionId/artifactId/title remain OUTSIDE sequence):\n```json\n{\"version\":1,\"title\":\"Request\",\"participants\":[{\"id\":\"ui\",\"label\":\"Client\"},{\"id\":\"api\",\"label\":\"API\"}],\"messages\":[{\"from\":\"ui\",\"to\":\"api\",\"label\":\"Get report\"},{\"from\":\"api\",\"to\":\"ui\",\"label\":\"Report\",\"kind\":\"return\"}]}\n```\nFor mixed documents only: ordinary HTML may contain `<section data-penecho-sequence><script type=\"application/json\" data-sequence-source>SEMANTIC_JSON</script></section>`. Escape `<` as `\\u003c` inside JSON. Keep surrounding content independent; do not load this rule for unrelated content. Read/patch the stored widget.html JSON source for edits, retaining artifact identity and user geometry.\n"
+  }
+}

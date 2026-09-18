@@ -1,0 +1,16 @@
+{
+  "sessionId": "38ae5278-0639-4084-9623-b7a867e8b5c0",
+  "artifactId": "smiles",
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 17546
+  },
+  "pixelVerified": true,
+  "width": 944,
+  "height": 550,
+  "revision": 2,
+  "viewport": {
+    "width": 1200,
+    "height": 700
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "title": "支付授权与重试",
+  "description": "合成业务示例 · 正常支付与失败分支；loop 片段表达重试范围。",
+  "domains": [
+    {
+      "id": "user",
+      "label": "用户端",
+      "color": "blue"
+    },
+    {
+      "id": "service",
+      "label": "业务服务",
+      "color": "orange"
+    },
+    {
+      "id": "bank",
+      "label": "外部支付",
+      "color": "purple"
+    }
+  ],
+  "participants": [
+    {
+      "id": "app",
+      "label": "收银台",
+      "subtitle": "用户确认支付",
+      "domain": "user",
+      "type": "frontend"
+    },
+    {
+      "id": "order",
+      "label": "订单服务",
+      "subtitle": "校验与订单状态",
+      "domain": "service"
+    },
+    {
+      "id": "pay",
+      "label": "支付网关",
+      "subtitle": "幂等与重试控制",
+      "domain": "service"
+    },
+    {
+      "id": "bank",
+      "label": "银行授权服务",
+      "subtitle": "外部授权接口",
+      "domain": "bank",
+      "type": "external"
+    }
+  ],
+  "messages": [
+    {
+      "id": "submit",
+      "from": "app",
+      "to": "order",
+      "label": "提交订单与幂等键"
+    },
+    {
+      "id": "verify",
+      "from": "order",
+      "to": "order",
+      "label": "校验金额与订单状态"
+    },
+    {
+      "id": "charge",
+      "from": "order",
+      "to": "pay",
+      "label": "请求支付授权"
+    },
+    {
+      "id": "auth",
+      "from": "pay",
+      "to": "bank",
+      "label": "提交授权请求"
+    },
+    {
+      "id": "retry",
+      "from": "bank",
+      "to": "pay",
+      "label": "暂时不可用 / 恢复后成功",
+      "kind": "return",
+      "note": "最多 3 次；成功后提前结束循环。"
+    },
+    {
+      "id": "ok",
+      "from": "pay",
+      "to": "order",
+      "label": "授权成功",
+      "kind": "return"
+    },
+    {
+      "id": "confirmed",
+      "from": "order",
+      "to": "app",
+      "label": "订单已支付",
+      "kind": "return"
+    },
+    {
+      "id": "fail",
+      "from": "pay",
+      "to": "order",
+      "label": "授权失败",
+      "kind": "return"
+    },
+    {
+      "id": "failed",
+      "from": "order",
+      "to": "app",
+      "label": "提示重新选择支付方式",
+      "kind": "return"
+    }
+  ],
+  "fragments": [
+    {
+      "kind": "loop",
+      "label": "暂时不可用时重试，最多 3 次",
+      "from": "auth",
+      "to": "retry"
+    },
+    {
+      "kind": "alt",
+      "label": "授权成功",
+      "from": "ok",
+      "to": "failed",
+      "branches": [
+        {
+          "from": "fail",
+          "label": "授权失败"
+        }
+      ]
+    }
+  ],
+  "activations": [
+    {
+      "participant": "order",
+      "from": "submit",
+      "to": "failed"
+    },
+    {
+      "participant": "pay",
+      "from": "charge",
+      "to": "fail"
+    }
+  ],
+  "details": [
+    {
+      "title": "用户端",
+      "domain": "user",
+      "items": [
+        "同一笔支付复用幂等键，避免重复下单。"
+      ]
+    },
+    {
+      "title": "业务服务",
+      "domain": "service",
+      "items": [
+        "自调用表示内部校验；虚线表示返回。",
+        "alt 的两个分支互斥，不表示先成功再失败。"
+      ]
+    },
+    {
+      "title": "外部支付",
+      "domain": "bank",
+      "items": [
+        "示意性重试策略，不代表任何真实银行接口规范。"
+      ]
+    }
+  ],
+  "notes": [
+    "合成示例。时序图按逻辑先后阅读，垂直距离不代表耗时。"
+  ]
+}

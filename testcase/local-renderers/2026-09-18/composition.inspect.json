@@ -1,0 +1,24 @@
+{
+  "sessionId": "e2aee74e-e03c-470b-9978-1a05ea2b7f31",
+  "artifactId": "composition-inspection",
+  "presentation": {
+    "intent": "inspect",
+    "role": "primary",
+    "attention": "quiet"
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 85076
+  },
+  "width": 1228,
+  "height": 1440,
+  "encodedBytes": 85076,
+  "revision": 3,
+  "ephemeral": true,
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1280,
+    "height": 1500
+  }
+}

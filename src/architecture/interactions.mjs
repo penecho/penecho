@@ -3,14 +3,18 @@ import { tone } from './render.mjs';
 
 export function bindInteractions(root, data) {
   const popover=root.querySelector('.pa-popover');
+  const nodes=data.nodes || data.participants, edges=data.edges || data.messages;
+  const selector='[data-node-id],[data-message-id]';
   let selected=null;
   function close() { popover.hidden=true; selected?.removeAttribute('data-selected'); selected=null; }
   function open(nodeElement) {
-    const node=data.nodes.find(n=>n.id===nodeElement.dataset.nodeId); if(!node)return;
+    const message=nodeElement.dataset.messageId ? data.messages?.[Number(nodeElement.dataset.messageId.replace('message-',''))] : null;
+    const node=message ? {...message,subtitle:`${nodes.find(n=>n.id===message.from).label} → ${nodes.find(n=>n.id===message.to).label}`,domain:nodes.find(n=>n.id===message.from).domain,details:[...(message.note?[message.note]:[]),...(message.details || [])]} : nodes.find(n=>n.id===nodeElement.dataset.nodeId); if(!node)return;
+    popover.setAttribute('aria-label',message?'消息详情':data.participants?'参与者详情':'节点详情');
     close(); selected=nodeElement; nodeElement.setAttribute('data-selected','');
-    const related=data.edges.filter(e=>e.from===node.id || e.to===node.id);
+    const related=message?[]:edges.filter(e=>e.from===node.id || e.to===node.id);
     popover.style.setProperty('--tone',tone(data,node.domain)[0]);
-    popover.innerHTML=`<button aria-label="关闭详情" data-close>×</button><h2>${esc(node.label)}</h2>${node.subtitle?`<p>${esc(node.subtitle)}</p>`:''}<ul>${(node.details || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>${related.length?'<hr><p>相关关系</p>':''}<ul>${related.map(e=>`<li>${esc(data.nodes.find(n=>n.id===e.from).label)} ${e.bidirectional?'↔':'→'} ${esc(data.nodes.find(n=>n.id===e.to).label)}${e.label?` · ${esc(e.label)}`:''}</li>`).join('')}</ul>`;
+    popover.innerHTML=`<button aria-label="关闭详情" data-close>×</button><h2>${esc(node.label)}</h2>${node.subtitle?`<p>${esc(node.subtitle)}</p>`:''}<ul>${(node.details || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>${related.length?'<hr><p>相关关系</p>':''}<ul>${related.map(e=>`<li>${esc(nodes.find(n=>n.id===e.from).label)} ${e.bidirectional?'↔':'→'} ${esc(nodes.find(n=>n.id===e.to).label)}${e.label?` · ${esc(e.label)}`:''}</li>`).join('')}</ul>`;
     popover.hidden=false;
     position();
     popover.querySelector('button').focus();
@@ -23,13 +27,13 @@ export function bindInteractions(root, data) {
   }
   root.addEventListener('click', event=>{
     if(event.target.closest('[data-close]')) { const previous=selected; close(); previous?.focus(); return; }
-    const node=event.target.closest('[data-node-id]'); if(node){open(node);return;}
+    const node=event.target.closest(selector); if(node){open(node);return;}
     const button=event.target.closest('[data-export]'); if(button) void exportDiagram(button.dataset.export);
     else if(!event.target.closest('.pa-popover'))close();
   });
   root.addEventListener('keydown',event=>{
     if(event.key==='Escape'){const previous=selected;close();previous?.focus();}
-    if(['Enter',' '].includes(event.key) && event.target.matches('[data-node-id]')){event.preventDefault();open(event.target);}
+    if(['Enter',' '].includes(event.key) && event.target.matches(selector)){event.preventDefault();open(event.target);}
   });
   function download(blob, extension) {
     const url=URL.createObjectURL(blob), link=document.createElement('a');
@@ -38,7 +42,7 @@ export function bindInteractions(root, data) {
   async function exportDiagram(format) {
     const status=root.querySelector('.pa-status');
     try {
-      await globalThis.__penechoArchitectureWhenSettled?.();
+      await Promise.all([globalThis.__penechoArchitectureWhenSettled?.(),globalThis.__penechoSequenceWhenSettled?.()]);
       const svg=root.querySelector('svg');
       const clone=svg.cloneNode(true);clone.querySelectorAll('[data-selected]').forEach(n=>n.removeAttribute('data-selected'));
       const xml=new XMLSerializer().serializeToString(clone), blob=new Blob([xml],{type:'image/svg+xml;charset=utf-8'});
@@ -56,7 +60,8 @@ export function bindInteractions(root, data) {
   }
   return {refresh() {
     if(selected) {
-      selected=root.querySelector(`[data-node-id="${selected.dataset.nodeId}"]`);
+      const attribute=selected.hasAttribute("data-message-id")?"data-message-id":"data-node-id";
+      selected=root.querySelector(`[${attribute}="${selected.getAttribute(attribute)}"]`);
       if(selected)selected.setAttribute('data-selected','');else close();
       position();
     }
