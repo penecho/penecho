@@ -22,6 +22,9 @@ function validateArchitecture(value) {
     if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(v)) fail(`${path} must start with a letter and contain letters, digits, _ or -`);
     return v;
   };
+  if (value && typeof value === "object" && ["sessionId", "artifactId", "requestId"].some(key => key in value)) {
+    fail("sessionId, artifactId and requestId belong beside architecture in the tool arguments, not inside the architecture object");
+  }
   obj(value, "diagram", ["version", "title", "description", "direction", "domains", "groups", "nodes", "edges", "details", "notes"]);
   if (value.version !== 1) fail("version:1 is required");
   text(value.title, "title");

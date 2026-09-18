@@ -79,9 +79,12 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  const scroller=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'scroll'});
  scroller.scrollWidth=900;scroller.clientWidth=400;scroller.offsetWidth=402;
  const control=new Element({height:'450px',minHeight:'450px',overflowY:'auto',overflowX:'auto'},true);
+ const architectureMap=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'auto'});
+ architectureMap.scrollWidth=1200;architectureMap.clientWidth=400;
+ architectureMap.closest=selector=>selector==='[data-penecho-architecture] .pa-map'?architectureMap:null;
  viewport.setAttribute('data-penecho-fit-scroll','authored-root');
  scroller.setAttribute('data-penecho-fit-scroll','authored-scroller');
- const nodes=[viewport,minimum,scroller,control],sheet=stylesheetHarness();
+ const nodes=[viewport,minimum,scroller,control,architectureMap],sheet=stylesheetHarness();
  const authoredStyles=nodes.map(element=>({...element.authored}));
  const ctx={widgetState:{maximized:true},innerHeight:450,HTMLElement:Element,getComputedStyle:element=>element.authored,
   document:{body:{querySelectorAll:()=>nodes},head:{append(){}},createElement:()=>sheet}};
@@ -102,6 +105,7 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  assert.equal(stylesheetValue(sheet,scrollerSelector,'overflow-x'),'visible!important');
  assert.equal(stylesheetValue(sheet,scrollerSelector,'min-width'),'902px!important');
  assert.equal(control.getAttribute('data-penecho-fit-scroll'),null);
+ assert.equal(architectureMap.getAttribute('data-penecho-fit-scroll'),null,'architecture retains its own width-aware map scroller');
  ctx.widgetState={maximized:false,fitContent:true};ctx.setFitContentLayout(true,true);
  assert.equal(sheet.disabled,false);
  assert.equal(stylesheetValue(sheet,'html,body','overflow-y'),'visible!important');

@@ -2,7 +2,7 @@ import { esc } from './vendor/archify/utils.mjs';
 import { tone } from './render.mjs';
 
 export function bindInteractions(root, data) {
-  const popover=root.querySelector('.pa-popover'), svg=root.querySelector('svg');
+  const popover=root.querySelector('.pa-popover');
   let selected=null;
   function close() { popover.hidden=true; selected?.removeAttribute('data-selected'); selected=null; }
   function open(nodeElement) {
@@ -12,10 +12,14 @@ export function bindInteractions(root, data) {
     popover.style.setProperty('--tone',tone(data,node.domain)[0]);
     popover.innerHTML=`<button aria-label="关闭详情" data-close>×</button><h2>${esc(node.label)}</h2>${node.subtitle?`<p>${esc(node.subtitle)}</p>`:''}<ul>${(node.details || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>${related.length?'<hr><p>相关关系</p>':''}<ul>${related.map(e=>`<li>${esc(data.nodes.find(n=>n.id===e.from).label)} ${e.bidirectional?'↔':'→'} ${esc(data.nodes.find(n=>n.id===e.to).label)}${e.label?` · ${esc(e.label)}`:''}</li>`).join('')}</ul>`;
     popover.hidden=false;
-    const box=nodeElement.getBoundingClientRect(), w=popover.offsetWidth, h=popover.offsetHeight;
+    position();
+    popover.querySelector('button').focus();
+  }
+  function position() {
+    if (!selected || popover.hidden) return;
+    const box=selected.getBoundingClientRect(), w=popover.offsetWidth, h=popover.offsetHeight;
     popover.style.left=`${Math.max(12,Math.min(innerWidth-w-12,box.right+12))}px`;
     popover.style.top=`${Math.max(12,Math.min(innerHeight-h-12,box.top))}px`;
-    popover.querySelector('button').focus();
   }
   root.addEventListener('click', event=>{
     if(event.target.closest('[data-close]')) { const previous=selected; close(); previous?.focus(); return; }
@@ -34,6 +38,8 @@ export function bindInteractions(root, data) {
   async function exportDiagram(format) {
     const status=root.querySelector('.pa-status');
     try {
+      await globalThis.__penechoArchitectureWhenSettled?.();
+      const svg=root.querySelector('svg');
       const clone=svg.cloneNode(true);clone.querySelectorAll('[data-selected]').forEach(n=>n.removeAttribute('data-selected'));
       const xml=new XMLSerializer().serializeToString(clone), blob=new Blob([xml],{type:'image/svg+xml;charset=utf-8'});
       if(format==='svg'){download(blob,'svg');return;}
@@ -48,4 +54,11 @@ export function bindInteractions(root, data) {
       status.textContent='';
     } catch(error){status.textContent=`导出失败：${error.message}`;}
   }
+  return {refresh() {
+    if(selected) {
+      selected=root.querySelector(`[data-node-id="${selected.dataset.nodeId}"]`);
+      if(selected)selected.setAttribute('data-selected','');else close();
+      position();
+    }
+  }};
 }

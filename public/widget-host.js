@@ -30,7 +30,7 @@
     visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
     authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
-    architectureRuntimeUrl = new URL("architecture-runtime.js?v=2", location.href).href,
+    architectureRuntimeUrl = new URL("architecture-runtime.js?v=4", location.href).href,
     architectureWorkerUrl = new URL("architecture-worker.js?v=1", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     snapshotDebugEnabled = remoteCanvas && (() => {
@@ -1081,6 +1081,10 @@
         if (mcpPreviewMode) await waitForSnapshotViewport(requestedWidth, requestedHeight, timeoutMs);
         const presentedFrame = await settleSnapshotFrame();
         if (requirePresentedFrame && !presentedFrame) throw Error("Widget frame was not presented");
+        if (typeof globalThis.__penechoArchitectureWhenSettled === "function") {
+          stage = "architecture-layout";
+          await withTimeout(globalThis.__penechoArchitectureWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
+        }
         if (message.fullContent === true) {
           const root = document.documentElement, body = document.body;
           requestedWidth = Math.ceil(Math.max(requestedWidth, root.scrollWidth, body?.scrollWidth || 0));
@@ -1212,6 +1216,9 @@
       const containers = [];
       for (const element of document.body?.querySelectorAll("*") || []) {
         if (!(element instanceof HTMLElement) || element.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
+        // Architecture owns width-aware reflow and its last-resort map scroller.
+        // Expanding that scroller would feed the old graph width back into layout.
+        if (element.closest("[data-penecho-architecture] .pa-map")) continue;
         const style = getComputedStyle(element);
         const vertical = fitHeight && /^(auto|scroll)$/.test(style.overflowY);
         const horizontal = fitWidth && /^(auto|scroll)$/.test(style.overflowX);
@@ -1270,6 +1277,7 @@
         // viewport-sized document scrollHeight the next iframe height.
         for (const element of body.querySelectorAll("*")) {
           if (element.parentElement?.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
+          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map")) continue;
           const child = element.getBoundingClientRect();
           width = Math.max(width, child.right + scrollX);
           height = Math.max(height, child.bottom + scrollY);

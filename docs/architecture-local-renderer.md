@@ -76,8 +76,32 @@ intersection, label collision and routes through boundary titles. A detected
 failure is visible; the capture readiness barrier waits for layout success/error
 rather than capturing an unfinished placeholder. There is no guarantee that every
 arbitrary dense topology will be readable; split genuinely separate subjects into
-views rather than shrinking labels indefinitely. Narrow widgets scroll the map
-instead of reducing text below the local minimum scale.
+views rather than shrinking labels indefinitely. Width-aware layout tries a
+wrapped or downward arrangement before falling back to local map scrolling.
+
+## Width-aware layout
+
+The architecture section measures its own content width in CSS pixels. A
+`ResizeObserver` schedules reflow after 180 ms of stable width; 16 px buckets avoid
+pixel-level churn. Canvas pan/zoom transforms and height-only changes do not
+trigger layout. The last three widths are cached and computations across multiple
+graphs in one document are serialized. Stale work is cancelled and cannot replace
+the current layout.
+
+The semantic direction is a preference. If the natural layout cannot fit at a
+minimum scale of 0.9, ELK tries multi-row wrapping, downward placement and, where
+needed, compact downward placement (at most four candidates). Only geometry-valid
+candidates are preferred; scoring considers height and route length to avoid
+large detours around compound groups. Group titles reserve header space and wrap
+within clear slots. A topology that cannot fit at a readable scale retains a local
+map scroller instead of shrinking indefinitely or losing nodes/relationships.
+
+Reflow replaces only the map SVG. The mixed HTML document, detail cards, open node
+inspector and selected node survive. Snapshot and SVG/PNG export wait for the
+current width's pending layout. Widget fit-content measurement leaves the map's
+overflow under architecture control, preventing a layout/auto-size feedback loop.
+No JSON field or prompt change is required. Other Visual Explorer content and
+professional diagrams do not receive this layout controller.
 
 ## Lazy prompting
 
@@ -138,10 +162,20 @@ Reproducible input, raw model output, layout iterations and captures live in
   Preview source and semantic source are retained; these two test paths must not
   be represented as a deployed update.
 
-Current assets: runtime 30,062 bytes (12,347 gzip); Worker source asset 1,603,643
+Current assets: runtime 35,447 bytes (14,461 gzip); Worker source asset 1,603,643
 bytes (467,489 gzip). About 480 KB gzip is a compression measurement, **not a claim
 that the local server currently compresses this response**. Local raw transfer is
 about 1.63 MB on a cold architecture load and is cached afterward. The main weight
 is ELK, not the retained Archify helpers. Ordinary widgets load none of these bytes.
 
 Final checks: `npm run check` passed all 2,002 tests. The actual mixed-document sandbox showed its ordinary header and footer with the graph in the same iframe (298 ms local render, 678 ms document-ready). A plain HTML Widget had zero architecture script elements and remained functional.
+
+Width-adaptation follow-up: `npm run check` passes 2,008 tests. Browser validation
+used the actual Widget host/sandbox with the same reference JSON at 2200, 1000 and
+640 px container widths; its SVG changed from 2030×465 to 764×1226 and 460×1846.
+Local reflow took roughly 0.3–0.4 seconds including Worker startup in these runs.
+These are local observations, not a performance guarantee. Resize-then-capture,
+SVG/PNG export, retained node inspector, height/transform stability and a complex
+model-authored graph at 200% browser zoom were checked. New evidence is in
+`testcase/archify-responsive/2026-09-18/`; `baseline1` and earlier captures remain
+unchanged. This follow-up is local source work, not a deployment.

@@ -5,6 +5,7 @@ const simple={version:1,title:'Architecture',nodes:[{id:'a',label:'Client'},{id:
 test('architecture input rejects bad references, cycles, duplicate IDs, geometry and executable markup',()=>{
  for(const data of [{...simple,nodes:[...simple.nodes,simple.nodes[0]]},{...simple,edges:[{from:'a',to:'missing'}]},{...simple,groups:[{id:'g',label:'G',parent:'g'}]},{...simple,nodes:[{id:'a',label:'A',x:40}]},{...simple,version:undefined}])assert.throws(()=>validateArchitecture(data),/Architecture:/);
  const data={...simple,title:'</script><img src=x onerror=alert(1)>'};const html=architectureHtml(data);assert.equal((html.match(/<script/g)||[]).length,1);assert.ok(!html.includes('<img'));assert.match(html,/\\u003c/);
+ assert.throws(()=>validateArchitecture({...simple,artifactId:'wrong-level'}),/belong beside architecture/);
 });
 test('MCP accepts semantic architecture and preserves existing HTML-only requests',()=>{
  const base={sessionId:'s',artifactId:'a',title:'T',requestId:'req'};
@@ -31,6 +32,13 @@ test('semantic return edges do not reverse the main call chain; words and punctu
  const lines=wrap('Widget Host（沙箱 iframe）',178,16);
  assert.ok(lines.some(line=>line.includes('iframe')));assert.ok(!lines.some(line=>/^[）】,。]$/u.test(line)));
  assert.deepEqual(wrap('get_guidance（只读）',110,12),['get_guidance','（只读）']);
+});
+test('compound edge entry paths avoid frame titles in the accepted UK power regression',async()=>{
+ const ELK=require('elkjs/lib/elk.bundled.js'),{layoutArchitecture}=await import('../src/architecture/layout.mjs');
+ const data=JSON.parse(fs.readFileSync('testcase/archify-local/2026-09-18/uk-power-regression.json','utf8'));
+ const layout=await layoutArchitecture(data,new ELK());
+ assert.deepEqual(layout.issues,[]);
+ assert.ok(layout.groups.every(group=>Number.isFinite(group.titleX)&&group.titleRect));
 });
 test('renderer escapes text and reuses domain colors independent of card order',async()=>{
  const {renderSvg,tone}=await import('../src/architecture/render.mjs');

@@ -1,0 +1,273 @@
+{
+  "version": 1,
+  "title": "英国权力架构 · 议会制君主立宪制",
+  "description": "主权在民、议会至上：君主统而不治，行政权产生于下议院信任，司法独立，并向苏格兰、威尔士、北爱尔兰下放权力。",
+  "direction": "DOWN",
+  "domains": [
+    {
+      "id": "people",
+      "label": "民意基础",
+      "color": "slate"
+    },
+    {
+      "id": "crown",
+      "label": "王权",
+      "color": "purple"
+    },
+    {
+      "id": "legislature",
+      "label": "立法",
+      "color": "blue"
+    },
+    {
+      "id": "executive",
+      "label": "行政",
+      "color": "teal"
+    },
+    {
+      "id": "judiciary",
+      "label": "司法",
+      "color": "orange"
+    },
+    {
+      "id": "devolved",
+      "label": "地方分权",
+      "color": "green"
+    }
+  ],
+  "groups": [
+    {
+      "id": "parliament",
+      "label": "英国议会（威斯敏斯特）",
+      "domain": "legislature"
+    },
+    {
+      "id": "government",
+      "label": "中央政府",
+      "domain": "executive"
+    },
+    {
+      "id": "judicial-branch",
+      "label": "司法体系",
+      "domain": "judiciary"
+    },
+    {
+      "id": "devolved-admins",
+      "label": "下放议会与政府",
+      "domain": "devolved"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "electorate",
+      "label": "选民",
+      "subtitle": "主权在民·权力最终来源",
+      "domain": "people",
+      "type": "external"
+    },
+    {
+      "id": "monarch",
+      "label": "君主（国王）",
+      "subtitle": "国家元首·统而不治",
+      "domain": "crown",
+      "type": "external"
+    },
+    {
+      "id": "commons",
+      "label": "下议院",
+      "subtitle": "650席民选·掌握实权",
+      "domain": "legislature",
+      "group": "parliament"
+    },
+    {
+      "id": "lords",
+      "label": "上议院",
+      "subtitle": "终身贵族等·修订与制衡",
+      "domain": "legislature",
+      "group": "parliament"
+    },
+    {
+      "id": "pm",
+      "label": "首相",
+      "subtitle": "政府首脑·下院多数党领袖",
+      "domain": "executive",
+      "group": "government"
+    },
+    {
+      "id": "cabinet",
+      "label": "内阁与政府部门",
+      "subtitle": "集体负责·执行政策",
+      "domain": "executive",
+      "group": "government"
+    },
+    {
+      "id": "supreme",
+      "label": "最高法院",
+      "subtitle": "2009年设立·司法终审",
+      "domain": "judiciary",
+      "group": "judicial-branch"
+    },
+    {
+      "id": "courts",
+      "label": "下级法院体系",
+      "subtitle": "刑事民事审判",
+      "domain": "judiciary",
+      "group": "judicial-branch"
+    },
+    {
+      "id": "scot",
+      "label": "苏格兰议会与政府",
+      "subtitle": "爱丁堡·权限最广含税收司法",
+      "domain": "devolved",
+      "group": "devolved-admins"
+    },
+    {
+      "id": "wales",
+      "label": "威尔士议会与政府",
+      "subtitle": "卡迪夫·卫生经济事务",
+      "domain": "devolved",
+      "group": "devolved-admins"
+    },
+    {
+      "id": "ni",
+      "label": "北爱尔兰议会与政府",
+      "subtitle": "贝尔法斯特·权力共享行政",
+      "domain": "devolved",
+      "group": "devolved-admins"
+    }
+  ],
+  "edges": [
+    {
+      "from": "electorate",
+      "to": "commons",
+      "label": "大选·约每5年",
+      "kind": "data"
+    },
+    {
+      "from": "monarch",
+      "to": "commons",
+      "label": "御准与开幕·循惯例",
+      "kind": "optional"
+    },
+    {
+      "from": "monarch",
+      "to": "pm",
+      "label": "正式任命·循惯例",
+      "kind": "optional"
+    },
+    {
+      "from": "commons",
+      "to": "pm",
+      "label": "信任与问责",
+      "bidirectional": true
+    },
+    {
+      "from": "pm",
+      "to": "cabinet",
+      "label": "组阁与领导"
+    },
+    {
+      "from": "cabinet",
+      "to": "commons",
+      "label": "法案/预算送审"
+    },
+    {
+      "from": "commons",
+      "to": "lords",
+      "label": "法案两院流转",
+      "bidirectional": true
+    },
+    {
+      "from": "courts",
+      "to": "supreme",
+      "label": "上诉终审"
+    },
+    {
+      "from": "supreme",
+      "to": "cabinet",
+      "label": "司法审查"
+    },
+    {
+      "from": "electorate",
+      "to": "scot",
+      "label": "地方选举",
+      "kind": "data"
+    },
+    {
+      "from": "electorate",
+      "to": "wales",
+      "label": "地方选举",
+      "kind": "data"
+    },
+    {
+      "from": "electorate",
+      "to": "ni",
+      "label": "地方选举",
+      "kind": "data"
+    },
+    {
+      "from": "commons",
+      "to": "scot",
+      "label": "权力下放(1998)",
+      "kind": "config"
+    },
+    {
+      "from": "commons",
+      "to": "wales",
+      "label": "权力下放(1998)",
+      "kind": "config"
+    },
+    {
+      "from": "commons",
+      "to": "ni",
+      "label": "权力下放(1998)",
+      "kind": "config"
+    }
+  ],
+  "details": [
+    {
+      "title": "王权（The Crown）",
+      "domain": "crown",
+      "items": [
+        "君主是国家元首但“统而不治”：任命首相、御准法案、召集议会均为礼仪性职权。",
+        "王权特权（宣战、缔约、任免）实际由首相与内阁以君主名义行使，并受议会监督。"
+      ]
+    },
+    {
+      "title": "立法：君主+两院",
+      "domain": "legislature",
+      "items": [
+        "法案须经下议院、上议院先后通过并获御准方成法律（King/Queen-in-Parliament）。",
+        "下议院民选、握有财政优先权；上议院只能修订和延迟，不能最终否决（《1949年议会法》）。"
+      ]
+    },
+    {
+      "title": "行政：首相与内阁",
+      "domain": "executive",
+      "items": [
+        "大选后下院多数党领袖受邀组阁；失去下院信任即须辞职或请求解散重选。",
+        "内阁实行集体负责制，大臣对议会负责，接受每周首相质询与专门委员会审查。"
+      ]
+    },
+    {
+      "title": "司法",
+      "domain": "judiciary",
+      "items": [
+        "司法独立：2009年最高法院取代上议院司法职能，法官由独立委员会任命。",
+        "最高法院可审查政府行为越权、裁决下放权限争议，为联合王国民事刑事终审法院。"
+      ]
+    },
+    {
+      "title": "地方分权",
+      "domain": "devolved",
+      "items": [
+        "1998年起苏格兰、威尔士、北爱尔兰设立民选议会与政府，分管教育、卫生、交通等。",
+        "苏格兰权限最广（含税收与司法）；国防、外交、货币、移民等保留事项归威斯敏斯特。"
+      ]
+    }
+  ],
+  "notes": [
+    "英国无单一成文宪法：由议会法案、普通法与宪政惯例共同构成，遵循议会主权原则。",
+    "御准自1708年以来从未被拒绝；君主一切实权均以大臣建议的形式行使。"
+  ]
+}
