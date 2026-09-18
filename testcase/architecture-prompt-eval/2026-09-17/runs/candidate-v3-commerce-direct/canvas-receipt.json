@@ -1,0 +1,35 @@
+{
+  "sessionId": "096f9122-4633-4d71-ba91-b61eb55d96f6",
+  "artifactId": "eval-f-commerce-v3",
+  "objectId": "widget-6",
+  "revision": 8,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "compare",
+    "role": "alternative",
+    "relativeTo": "eval-e-penecho-v3",
+    "relation": "below",
+    "attention": "normal"
+  },
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1939,
+    "height": 1134
+  },
+  "sourcePath": "objects/widget-6/widget.html",
+  "contentHash": "a58729246fdf39a2e3abbfed4396cc445357716062f260feb4a7717c8482c7b1",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 70872
+  },
+  "width": 1440,
+  "height": 842,
+  "encodedBytes": 70872
+}

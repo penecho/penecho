@@ -17,7 +17,7 @@ recommended-refresh-seconds: 86400
 
 Use only when the required artifact needs established professional notation, a faithful quantitative chart with axes and scales, domain-tool compatibility, or editable domain source. Do not select it merely because the user says diagram, chart, architecture, model, structure, process, flow, or draw. Explanation-, organization-, and planning-first compositions belong in Visual Explainer when available, otherwise General HTML. Behavior-first simulations, live dashboards, and browser tools belong in General HTML unless professional source defines the deliverable. Coverage includes process, BPMN, UML, architecture, topology, dependencies, lineage, ER/database, timelines; statistical and scientific charts; electrical/electronic circuits and IEC/IEEE schematics; control/signal systems; mechanical kinematics and assemblies; optics and apparatus; chemical structures and processes; biological pathways, medical devices and clinical paths; financial cash flow and risk; causal graphs, networks and geography. Professional fields not named here remain in scope.
 
-Choose exactly one primary Widget path. An explicit feasible professional format wins. C4/BPMN, editable circuits or schemas, GeoJSON, and exact Vega-Lite belong here; Transformer explanations, notes, itineraries, and schedules use Visual Explainer; simulators, live maps, and interactive schedulers use General HTML. Explanatory labels do not change a standard artifact, and manual positioning does not justify this path.
+Choose exactly one primary Widget path. Ordinary architecture and sequence explanations use Visual Explorer (or General HTML when unavailable), not a dedicated Professional Diagram. An explicit feasible professional format wins. C4/BPMN, editable circuits or schemas, GeoJSON, and exact Vega-Lite belong here; Transformer explanations, notes, itineraries, and schedules use Visual Explainer; simulators, live maps, and interactive schedulers use General HTML. Explanatory labels do not change a standard artifact, and manual positioning does not justify this path.
 
 The user's sketch and spatial relationships are authoritative. Preserve labels, arrows, containment, groups, lanes, order and terminology. Improve alignment, spacing, hierarchy and routing without inventing content.
 
@@ -29,7 +29,6 @@ Return exactly one command and no prose.
 
 Prefer `diagram_source` whenever one of these built-in local renderers faithfully fits. Use the exact `sourceFormat` shown:
 
-- `mermaid`: flowcharts, decision trees, swimlanes, sequence diagrams, state diagrams, class diagrams, ER diagrams, mind maps, Gantt charts and timelines.
 - `dot`: Graphviz DOT for software or cloud architecture, network topology, dependencies, data lineage, causal structures and other directed graphs.
 - `bpmn-xml`: complete BPMN 2.0 XML, including diagram geometry, for business processes, events, gateways, tasks, pools and lanes.
 - `vega-lite`: complete Vega-Lite JSON for statistical, scientific, financial, operational and comparative charts.
@@ -74,7 +73,7 @@ The examples above are not a whitelist and do not limit this plugin. The user ma
 
 PenEcho injects the full CSS at runtime; do not repeat it in HTML. Use `.pd-root` with palette `standard`, `cool`, `warm`, `mono`, or `high-contrast` and density `comfortable` or `compact`. Select the palette and density that best match the current PenEcho theme and nearby Canvas content when host context exposes them; preserve an existing target's palette and density during refinement unless the user requests a style change. Reuse `.pd-header`, `.pd-title`, `.pd-subtitle`, `.pd-stage`, `.pd-cluster`, `.pd-lane`, `.pd-node` and semantic modifiers (`--start`, `--end`, `--process`, `--decision`, `--event`, `--service`, `--database`, `--success`, `--warning`, `--danger`), plus `.pd-class`, `.pd-lifeline`, `.pd-edge`, `.pd-legend`, `.pd-note`, `.pd-badge`, and the `--pd-*` surface/text/border/accent/info/success/warning/danger variables. Generic SVG is allowed when no component fits. Keep labels readable, use a stable `viewBox`, routed connectors, explicit node sizes and no outer dashboard chrome.
 
-For more than about 10 nodes, use 3–5 meaningful phases, lanes, clusters or subgraphs only when most inter-phase flow stays forward; otherwise prefer fewer groups and a compact primary path. Keep rework, exception and rejection branches beside the decision that creates them. Avoid distant catch-all groups and backward edges that span the whole diagram; when a literal return edge would dominate the layout, use a clearly labeled local return/reference node without losing the relationship. For a multi-stage business process with repeated cross-phase returns, prefer `bpmn-xml` with explicit diagram geometry instead of forcing it into Mermaid. For responsive Mermaid flowcharts add `%% penecho:responsive`, start with top-level `flowchart LR`, and use `direction TB` inside phase subgraphs. PenEcho reflows the diagram automatically as the widget is resized. For responsive DOT add `// penecho:responsive`; PenEcho likewise adapts Graphviz layout to the widget shape. Use the corresponding fixed-layout marker only when the user explicitly requires a fixed orientation. Preserve groups during refinement. Do not repeat the trusted widget title as a Mermaid or Graphviz diagram title.
+For more than about 10 nodes, use 3–5 meaningful phases, lanes, clusters or subgraphs only when most inter-phase flow stays forward; otherwise prefer fewer groups and a compact primary path. Keep rework, exception and rejection branches beside the decision that creates them. Avoid distant catch-all groups and backward edges that span the whole diagram; when a literal return edge would dominate the layout, use a clearly labeled local return/reference node without losing the relationship. For a multi-stage business process with repeated cross-phase returns, prefer `bpmn-xml` with explicit diagram geometry when explicit routing is needed. For responsive DOT add `// penecho:responsive`; PenEcho likewise adapts Graphviz layout to the widget shape. Use the corresponding fixed-layout marker only when the user explicitly requires a fixed orientation. Preserve groups during refinement. Do not repeat the trusted widget title as a Graphviz diagram title.
 
 ## HTML rendering
 
@@ -82,10 +81,12 @@ For an unlisted need, return `html_widget` with the most suitable established fo
 
 Keep a semantic native fallback or a specific usable error so the stage is never empty. Preserve a successful render if later non-rendering work fails. Notify `penecho-widget-updated` after stable rendering and meaningful changes.
 
+Mermaid rendering is retired. Do not load Mermaid in HTML; use a semantic HTML/SVG view for ordinary explanations or a supported professional format when requested.
+
 ## Refinement
 
 When widget edit context is present, follow `modelInput.widgetEditPolicy` and return exactly one `widget_patch` command. Patch only the virtual files listed in `widgetEdit.patchFiles`, preserve the existing tool and `sourceFormat`, and do not return a complete replacement or explanation. Preserve terminology, direction, grouping, unaffected content, renderer, palette, density, layout, and stable formatting. Apply the smallest complete modification unless restructuring is necessary. Repair blank, clipped or failed rendering before applying the requested change.
 
 ## One-shot example
 
-User sketches Client -> API -> Database and asks for an architecture diagram. Return one `diagram_source` with `diagramKind:"architecture"`, `sourceFormat:"dot"`, and complete DOT in `source`.
+User explicitly requests a reusable Graphviz DOT dependency graph for Client -> API -> Database. Return one `diagram_source` with `diagramKind:"dependency"`, `sourceFormat:"dot"`, and complete DOT in `source`.

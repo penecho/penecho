@@ -1,25 +1,30 @@
-# Architecture diagrams
+# Architecture · local renderer / 1
 
-Scope: architecture regions of this artifact only. Here this rule supersedes generic infographic density, feature-card and panel-count defaults. Keep shared runtime, accessibility and delivery requirements. Other visual types, regions and later tasks retain their own rules.
+Scope: architecture diagrams only. Other visual types and mixed-document regions retain their own rules. The browser owns layout, routes, wrapping and styling. Do not generate diagram SVG, coordinates, CSS or rendering code.
 
-Produce a relationship map: simple named entities, meaningful boundary frames, explicit connections, and separate supporting detail. Choose the viewpoint, abstraction, orientation and number of views to answer the reader's question. There is no fixed template, node count, layer count or column count.
+Call `penecho_present_widget` with `architecture:{...}` instead of `html`, plus the normal sessionId, artifactId, title and requestId. Existing HTML widgets remain supported.
 
-## Build in dependency order
+Required fields inside architecture:
+- `version:1`, `title:string`, `nodes:Node[]`, `edges:Edge[]`.
+- Node: `{id,label}`; optional `subtitle`, `domain`, `group`, `type`, `details:string[]`. Types: `frontend|backend|database|cloud|security|messagebus|external`; default backend. Use a short name and role line; put mechanics and evidence in details.
+- Edge: `{from,to}` referencing node IDs; optional `id`, short `label`, `kind:call|data|config|optional|return` (default call), `bidirectional:boolean`.
 
-1. **Meaning.** Select the relationships that explain the system. Establish each displayed edge's source, target, direction and short meaning before arranging boxes. Preserve branches and independent paths. Calls, data access and configuration are different relationships: if A calls B and B reads S, show A→B and B→S, not A→S→B. Frames mean actual responsibility, process, deployment or trust boundaries. A frame is not a substitute endpoint when the actual component is known. Implementation facts are evidence, not a checklist of nodes.
+Optional top-level fields:
+- `description:string`; `direction:RIGHT|DOWN` when the subject warrants one.
+- `domains:[{id,label,color?}]`, color `blue|teal|orange|purple|green|slate`. Reuse domain IDs in nodes, groups and detail cards for matching color.
+- `groups:[{id,label,domain?,parent?}]`: actual process, responsibility, deployment or trust boundaries. Nodes refer through group; nested groups through parent. A frame does not imply a separate server.
+- `details:[{title,domain?,items:string[]}]`: explanation cards below the map. Avoid copying their text into every node.
+- `notes:string[]`: whole-diagram qualifications, e.g. omitted return traffic or optional scope.
 
-2. **Entities and detail.** Give a main-map entity a short name and, only if needed, one short role line. Move filenames, paths, mechanics and lists to matching detail outside the map. Do not reproduce the entire evidence inventory. Reserve readable type at the actual host scale: normally 16–20 CSS px for entity names and 13–15 px for relations. Shorten or wrap labels and enlarge their allocation before shrinking type; never shrink an oversized viewBox to fit. The map should make sense without reading the detail.
+IDs start with a letter and use letters/digits/_/-. Node and group IDs must be unique, references must exist, and groups cannot be empty or cyclic. Limits: 60 nodes, 120 edges, 20 groups, 20 detail cards, 60,000 characters. These are safety limits, not targets: choose the smallest meaningful view and put secondary facts in details.
 
-3. **Geometry.** Use one shared geometry description for entity bounds, ports, routes and label rectangles; derive connected positions from it instead of independently guessing coordinates. Align connected entities on shared rows/columns where practical. Prefer straight horizontal/vertical connections, then orthogonal bends with optional small corner radii. Reposition entities before adding detours. Reserve a clear corridor for each relation, including its label and arrowhead. Parallel inputs use aligned distinct ports or an explicit junction. A shared line means a real shared relationship; an accidental crossing must not suggest a junction.
+Model discretion governs viewpoint, abstraction and topology. Show actual relationships, including branches and independent paths; a feature list or stack of layer boxes is insufficient. If A calls B and B reads S, show A→B and B→S, not A→S→B. Frames are not endpoints. Semantic domain colors identify responsibility and link the map to details; color is not arbitrary position.
 
-4. **Collision-free routing.** Treat every entity, title and text label as occupied space with padding. A route can touch its source/target outlines, but cannot cross an unrelated entity, run along its border, or pass through text. Separate nearby branch lanes. Put short horizontal edge labels beside a clear straight segment, using consistent offsets; their full width must fit the allocated space without reaching another node, label, bend or arrowhead. Match the text anchor to that position: a segment midpoint centers the text box, not its first letter. A backing may interrupt the label's own edge only. If a route is crowded, move the entities or simplify the view; masking a collision is not a fix.
+Example:
+```json
+{"version":1,"title":"Request path","domains":[{"id":"app","label":"Application","color":"blue"},{"id":"data","label":"Storage","color":"purple"}],"groups":[{"id":"service","label":"Service process","domain":"app"}],"nodes":[{"id":"client","label":"Client","domain":"app"},{"id":"api","label":"API","group":"service","domain":"app"},{"id":"db","label":"Database","domain":"data","type":"database"}],"edges":[{"from":"client","to":"api","label":"Request"},{"from":"api","to":"db","label":"Read/write","kind":"data"}],"details":[{"title":"Storage","domain":"data","items":["Durable state."]}]}
+```
 
-5. **Frames and composition.** Fit frames around their children and internal routes, with distinct title and inner-padding space. Crossing a boundary is allowed; stopping at it instead of the target is not. Paint frame backgrounds first, then edges, then entities/text so fills cannot erase routes. Put legends and general notes outside all architectural frames in normal document flow with a separate gap. Comparable boxes, headings and detail columns use consistent alignment and spacing. Detail may scroll; the main map must remain readable at the requested viewport.
+For mixed content in one widget, embed the same JSON in `<section data-penecho-architecture><script type="application/json" data-architecture-source>…</script></section>` within HTML. Escape `<` inside JSON strings as `\u003c`. Other content surrounds the section in the same document; no nested iframe. Do not load CDN or Archify scripts yourself.
 
-6. **Semantic color.** Define a palette keyed by entity/domain identity and reuse the same key for map accents and the corresponding detail heading, border and badge. Bind markup/styles to semantic domain keys, not A/B/C panel classes; reordering details must not change their meaning or color. Mixed-domain detail is neutral or distinguishes the relevant named domains. Color helps locate details but does not replace names. An optional relationship follows the same topology and ownership rules; explain it in detail or another view if including it would obscure the main map.
-
-## Verify the rendered result
-
-Trace every displayed path against the evidence, then check the actual host rendering. Inspect whole text bounds, ports, arrowheads, routes through unrelated entities, drawing order, frame padding and color correspondence—not just text-to-text overlaps. Essential text that is covered, clipped or requires magnification fails; a visually tidy false relationship also fails. Check the delivered capture/export when the host rasterizes HTML. Supporting identifiers should wrap readably; remove decorative inline backgrounds if they obscure adjacent text across line breaks.
-
-Use available rendering/capture tools for the first visual check. On a concrete defect, patch its cause (topology or allocated geometry), render the changed result and recheck the affected routes. Preserve working content and artifact identity unless comparison versions are requested. Stop when meaning and readability both pass; do not repeat captures of unchanged content. If rendering is unavailable, state that visual verification is pending.
+Source stays in the widget's existing virtual `widget.html`. Read and patch its JSON block with the current contentHash. Add/remove nodes and their incident edges together; local layout reruns after the patch. Click a node for details and related edges. SVG/PNG export includes only the main diagram. Verify the canonical capture when visual evidence is needed and retain historical comparison canvases.

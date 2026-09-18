@@ -1,0 +1,1 @@
+{"model": "glm-5.3-flash", "max_tokens": 512, "stream": true, "system": "Return only a complete HTML document. No external requests.", "messages": [{"role": "user", "content": "Return a minimal HTML document whose only body text is API OK."}], "thinking": {"type": "disabled"}}

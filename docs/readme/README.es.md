@@ -182,3 +182,15 @@ Estas recomendaciones equilibran la calidad de respuesta y la latencia de las ta
 Lee [CONTRIBUTING.md](../../CONTRIBUTING.md) para contribuir; ejecuta `npm run check` antes de abrir una pull request. Informa de errores en [Issues](https://github.com/penecho/penecho/issues), comenta ideas en [Discussions](https://github.com/penecho/penecho/discussions) o únete a [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Bajo licencia [AGPL-3.0-only](../../LICENSE). Hay una [licencia comercial](../../COMMERCIAL-LICENSE.md) alternativa disponible. Consulta la [política de marcas](../../TRADEMARKS.md) y el [acuerdo de contribución](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## Historial de estrellas
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="Gráfico del historial de estrellas de PenEcho en GitHub" width="800">
+    </picture>
+  </a>
+</p>

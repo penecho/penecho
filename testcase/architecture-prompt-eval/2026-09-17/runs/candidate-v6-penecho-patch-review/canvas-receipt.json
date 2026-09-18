@@ -1,0 +1,35 @@
+{
+  "sessionId": "afb5b326-686b-425e-a3b0-f1d37421df60",
+  "artifactId": "eval-v6-penecho-reviewed",
+  "objectId": "widget-4",
+  "revision": 6,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "compare",
+    "role": "alternative",
+    "relativeTo": "eval-v6-penecho",
+    "relation": "below",
+    "attention": "normal"
+  },
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1939,
+    "height": 1134
+  },
+  "sourcePath": "objects/widget-4/widget.html",
+  "contentHash": "2305eba0d87502d9c109d2a3e1dab00cbe295a2c96ea3c2518735eeb037f242d",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 64006
+  },
+  "width": 1440,
+  "height": 842,
+  "encodedBytes": 64006
+}

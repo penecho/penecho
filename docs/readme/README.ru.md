@@ -186,3 +186,15 @@ npm start
 Для участия прочитайте [CONTRIBUTING.md](../../CONTRIBUTING.md) и выполните `npm run check` перед открытием pull request. Сообщайте об ошибках в [Issues](https://github.com/penecho/penecho/issues), обсуждайте идеи в [Discussions](https://github.com/penecho/penecho/discussions) или присоединяйтесь к [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Лицензия — [AGPL-3.0-only](../../LICENSE). Доступна альтернативная [коммерческая лицензия](../../COMMERCIAL-LICENSE.md). См. [политику товарных знаков](../../TRADEMARKS.md) и [соглашение с участниками](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## История звёзд
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="График роста числа звёзд PenEcho на GitHub" width="800">
+    </picture>
+  </a>
+</p>

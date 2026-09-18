@@ -1,0 +1,33 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "requestSha256": "68b0a6c8251c74c31736562f5724d227ca65785fec7d554ef25018d0303464b8",
+  "systemSha256": "d2b767bc9295d638320b3d2bbc57056490c615a0b2dcc92c9fd1c2c2e27ffa33",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 1,
+    "content_block_delta": 4159
+  },
+  "deltaTypes": {
+    "thinking_delta": 4159
+  },
+  "completed": false,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "error": "The read operation timed out",
+  "elapsedSeconds": 287.85,
+  "supervisorDisposition": "No visible HTML was returned before the HTTP stream read timeout. This is an execution failure, not a visual-quality sample. Initial zero usage counters are not final usage; actual billed tokens unavailable."
+}

@@ -1745,7 +1745,7 @@ test("html_widget commands fill required fields and discard invalid optional met
 });
 
 test("professional diagrams accept local source renderers and keep unknown formats on html_widget", { timeout:20000 }, async () => {
-  const diagram = (sourceFormat, source = "flowchart LR\nA --> B") => ({
+  const diagram = (sourceFormat, source = "digraph G {\nA -> B;\n}") => ({
       tool:"diagram_source",
       pluginId:"flowchart",
       x:120,
@@ -1761,13 +1761,14 @@ test("professional diagrams accept local source renderers and keep unknown forma
     upstream = await startApiServer("", {
       response:({index}) => ({
         body:[
-          response(diagram("mermaid")),
+          response(diagram("dot")),
           response(diagram("Graphviz DOT", "digraph G { A -> B }")),
           response(diagram("plantuml", "@startuml\nA -> B\n@enduml")),
-          response({ tool:"widget_patch", patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,2 +1,2 @@\n flowchart LR\n-A --> B\n+A --> B --> C\n" }),
+          response({ tool:"widget_patch", patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,3 +1,3 @@\n digraph G {\n-A -> B;\n+A -> B -> C;\n }\n" }),
           response(diagram("dot", "digraph G { A -> B -> C }")),
           response(diagram("dot", "digraph G { A -> B -> C }")),
-          response(diagram("mermaid", `%% ${"x".repeat(90 * 1024)}`)),
+          response(diagram("dot", `// ${"x".repeat(90 * 1024)}`)),
+          response(diagram("mermaid", "flowchart LR; A --> B")),
         ][index],
       }),
     }),
@@ -1789,8 +1790,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
       h:700,
       title:"Professional diagram",
       refreshSeconds:0,
-      sourceFormat:"mermaid",
-      source:"flowchart LR\nA --> B",
+      sourceFormat:"dot",
+      source:"digraph G {\nA -> B;\n}",
       diagramKind:"process",
     });
 
@@ -1820,8 +1821,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
         instructionMode:"implicit-polish",
         box:{ x:120, y:240, w:1200, h:700 },
         diagramKind:"process",
-        sourceFormat:"mermaid",
-        source:"flowchart LR\nA --> B",
+        sourceFormat:"dot",
+        source:"digraph G {\nA -> B;\n}",
         communityOriginItemId:"123e4567-e89b-42d3-a456-426614174099",
         communityRootItemId:"123e4567-e89b-42d3-a456-426614174098",
         communityOriginName:"Forged origin",
@@ -1834,8 +1835,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
       body:JSON.stringify(refinePayload),
     }).then(value => value.json());
     assert.equal(refined.commands[0].tool, "diagram_source");
-    assert.equal(refined.commands[0].sourceFormat, "mermaid");
-    assert.equal(refined.commands[0].source, "flowchart LR\nA --> B --> C");
+    assert.equal(refined.commands[0].sourceFormat, "dot");
+    assert.equal(refined.commands[0].source, "digraph G {\nA -> B -> C;\n}");
 
     const fullReplacementResponse = await fetch(`${running.origin}/api/ai/command`, {
       method:"POST",
@@ -1853,6 +1854,14 @@ test("professional diagrams accept local source renderers and keep unknown forma
     assert.equal(largeSource.commands.length,1);
     assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") > 20 * 1024);
     assert.ok(Buffer.byteLength(largeSource.commands[0].source,"utf8") <= 100 * 1024);
+
+    const retired = await fetch(`${running.origin}/api/ai/command`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(payload),
+    }).then(value => value.json());
+    assert.deepEqual(retired.commands, [], "new Mermaid diagram_source commands are rejected");
+
 
     const modelText = outboundModelText(upstream.requests[3]),
       { metadata:modelInput, files, retryInstruction } = parseRefineModelText(modelText);
@@ -1884,11 +1893,11 @@ test("professional diagrams accept local source renderers and keep unknown forma
       title:"Professional diagram",
       refreshSeconds:0,
       diagramKind:"process",
-      sourceFormat:"mermaid",
+      sourceFormat:"dot",
       sourceFile:"widget.source",
     });
-    assert.equal(files[1].readView, "     1\tflowchart LR\n     2\tA --> B");
-    assert.match(modelText, /numbering: nl -ba -w6 -s TAB\n[\s\S]*?<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\n     1\tflowchart LR\n     2\tA --> B\n<<<END/);
+    assert.equal(files[1].readView, "     1\tdigraph G {\n     2\tA -> B;\n     3\t}");
+    assert.match(modelText, /numbering: nl -ba -w6 -s TAB\n[\s\S]*?<<<BEGIN PENECHO_VIRTUAL_FILE_[a-f0-9]{64}>>>\n     1\tdigraph G {\n     2\tA -> B;\n     3\t}\n<<<END/);
   } finally {
     await stopServer(running.child);
     await new Promise(resolve => upstream.server.close(resolve));
@@ -1907,14 +1916,14 @@ test("diagram refinement applies editable manifest metadata and a new source for
       '-  "diagramKind": "molecular-structure",',
       '-  "sourceFormat": "smiles",',
       '+  "diagramKind": "process",',
-      '+  "sourceFormat": "mermaid",',
+      '+  "sourceFormat": "dot",',
       '   "sourceFile": "widget.source"',
       "--- a/widget.source",
       "+++ b/widget.source",
       "@@ -1 +1,2 @@",
       "-CCO",
-      "+flowchart LR",
-      "+A --> B",
+      "+digraph G {",
+      "+A -> B; }",
       "",
     ].join("\n"),
     upstream = await startApiServer(JSON.stringify({ intent:"answer",commands:[{ tool:"widget_patch",patch }] })),
@@ -1948,8 +1957,8 @@ test("diagram refinement applies editable manifest metadata and a new source for
       h:700,
       title:"Process",
       refreshSeconds:0,
-      sourceFormat:"mermaid",
-      source:"flowchart LR\nA --> B",
+      sourceFormat:"dot",
+      source:"digraph G {\nA -> B; }",
       diagramKind:"process",
     });
   } finally {

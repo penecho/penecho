@@ -1,0 +1,44 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "requestSha256": "e74bb7049f8de408c165d794167ff153fdc7f9bc20d64c1431c41acbc001f238",
+  "systemSha256": "b08b68162c9dd08d77c4cf175935346ec514e2051e26113fa295fd023914ae05",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 4491,
+    "output_tokens": 8907,
+    "cache_read_input_tokens": 0,
+    "server_tool_use": {
+      "web_search_requests": 0
+    },
+    "service_tier": "standard"
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 2,
+    "content_block_delta": 8806,
+    "content_block_stop": 2,
+    "message_delta": 1,
+    "message_stop": 1
+  },
+  "deltaTypes": {
+    "thinking_delta": 3713,
+    "signature_delta": 1,
+    "text_delta": 5092
+  },
+  "completed": true,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "stopReason": "end_turn",
+  "htmlSha256": "afd88599a4bb41cb349417ccdc415da0ce0ed913f0f6ad328ba09b1d235c3d1e",
+  "htmlBytes": 15321,
+  "elapsedSeconds": 137.48
+}

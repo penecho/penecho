@@ -1,0 +1,43 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "requestSha256": "d83c10df539577b5fc09e908b4cda85ede43cf79b4edbb2e22251ffe3680e218",
+  "systemSha256": "75f115904e80c5370338588e68b1a894bc438498870f2383384cc247ad130cf8",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 16000,
+    "stream": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "usage": {
+    "input_tokens": 1169,
+    "output_tokens": 16000,
+    "cache_read_input_tokens": 0,
+    "server_tool_use": {
+      "web_search_requests": 0
+    },
+    "service_tier": "standard"
+  },
+  "eventTypes": {
+    "message_start": 1,
+    "ping": 1,
+    "content_block_start": 2,
+    "content_block_delta": 15952,
+    "content_block_stop": 2,
+    "message_delta": 1,
+    "message_stop": 1
+  },
+  "deltaTypes": {
+    "thinking_delta": 13714,
+    "signature_delta": 1,
+    "text_delta": 2237
+  },
+  "completed": false,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "stopReason": "max_tokens",
+  "error": "Model did not finish normally; partial output is not accepted",
+  "elapsedSeconds": 320.67
+}

@@ -121,6 +121,7 @@ function installDesktopUpdatePrompt() {
   }
   function setLanguage(event) {
     language = detectLanguage(event);
+    ipcRenderer.send("penecho:set-language", language);
     const words = translations[language];
     closeButton.setAttribute("aria-label", words.dismiss);
     closeButton.title = words.dismiss;

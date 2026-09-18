@@ -230,9 +230,9 @@ test("MCP request tracing records failures without changing errors and prunes on
   await new Promise(resolve => setTimeout(resolve, 2));
   await service.callTool(ownerId, "penecho_list_canvases", {});
   const retained = traces(traceDirectory);
-  assert.equal(fs.readdirSync(traceDirectory).length, 2);
+  assert.equal(fs.readdirSync(traceDirectory).length, 1);
   assert.equal(retained.length, 5);
-  assert.equal(retained.every(trace => trace.kind === "mcp-request"), true);
+  assert.equal(retained.every(trace => trace.kind === "mcp-tool-call"), true);
 
   ws.close();
   await service.close();
@@ -309,4 +309,50 @@ test("extracts an actual PNG byte-for-byte and records its manifest", () => {
   const manifest=JSON.parse(fs.readFileSync(path.join(trace.directory,"response-images.json")));
   assert.deepEqual(fs.readFileSync(path.join(trace.directory,manifest[0].filename)),Buffer.from(png,"base64"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(trace.directory,"response.json"))).image.data,png);
+});
+
+test("one logical request contains guidance, failed validation, repair and capture; next completion boundary splits it",()=>{
+  const directory=tempDirectory(),tracer=createMcpRequestTracer({requestTraceDirectory:directory});
+  const call=(name,args,result={})=>{const trace=tracer.begin({ownerId:"owner",name,arguments:args});tracer.complete(trace,result);return trace;};
+  const start=call("penecho_start_session",{sessionKey:"conversation"},{sessionId:"session"});
+  const guidance=call("penecho_get_guidance",{id:"visual-explorer"});
+  const failed=tracer.begin({ownerId:"owner",name:"penecho_present_widget",arguments:{sessionId:"session",completion:{status:"done"}}});
+  tracer.fail(failed,new Error('html: missing required content'));
+  const fixed=call("penecho_present_widget",{sessionId:"session",completion:{status:"done"}},{applied:true});
+  const capture=call("penecho_capture_canvas",{sessionId:"session"});
+  for(const trace of [guidance,failed,fixed,capture])assert.equal(trace.group.directory,start.group.directory);
+  const index=JSON.parse(fs.readFileSync(path.join(start.group.directory,"trace.json")));
+  assert.equal(index.kind,"mcp-request");assert.equal(index.status,"done");assert.equal(index.tools.length,5);
+  assert.equal(index.pendingToolCalls,0);assert.equal(index.tools[2].status,"failed");
+  for(const tool of index.tools)assert.ok(fs.existsSync(path.join(start.group.directory,tool.path)));
+  const nextGuide=call("penecho_get_guidance",{id:"general-html"});
+  const next=call("penecho_present_widget",{sessionId:"session",completion:{status:"done"}},{applied:true});
+  assert.notEqual(next.group.directory,start.group.directory);assert.equal(nextGuide.group.directory,next.group.directory);
+  assert.equal(fs.readdirSync(directory).length,2);
+});
+
+test("incomplete requests split after inactivity; queued final completion waits for actual application",()=>{
+  let time=1000;const directory=tempDirectory(),tracer=createMcpRequestTracer({requestTraceDirectory:directory,now:()=>time});
+  const first=tracer.begin({ownerId:"owner",name:"penecho_update_session",arguments:{sessionId:"session",status:"done"}});
+  tracer.complete(first,{accepted:true,applied:false});assert.equal(first.group.closed,undefined);
+  tracer.queuedUpdateOutcome(first,"failed",{error:"disconnected"});assert.equal(first.group.closed,undefined);
+  time+=31*60*1000;
+  const retry=tracer.begin({ownerId:"owner",name:"penecho_update_session",arguments:{sessionId:"session",status:"done"}});
+  assert.notEqual(retry.group.directory,first.group.directory);
+  tracer.complete(retry,{accepted:true,applied:false});tracer.queuedUpdateOutcome(retry,"applied",{applied:true});
+  assert.equal(retry.group.closed,true);
+});
+
+test("widget contract failures are logged before any Canvas dispatch with full repairable input",async()=>{
+  const directory=tempDirectory(),server=http.createServer();
+  const service=createMcpService({server,authorizeBrowser:()=>null,requestTraceEnabled:true,requestTraceDirectory:directory});
+  try {
+    const input={sessionId:"session",artifactId:"explainer",title:"Explainer",html:""};
+    await assert.rejects(service.callTool(crypto.randomUUID(),"penecho_present_widget",input),/html is invalid/);
+    const [trace]=traces(directory);assert.equal(trace.status,"failed");assert.equal(trace.browserInteractions.length,0);
+    assert.match(trace.error.message,/html is invalid/);
+    const folder=path.join(directory,fs.readdirSync(directory)[0]);const index=JSON.parse(fs.readFileSync(path.join(folder,"trace.json")));
+    const request=JSON.parse(fs.readFileSync(path.join(folder,path.dirname(index.tools[0].path),"request.json")));
+    assert.deepEqual(request.arguments,input);
+  }finally{await service.close();}
 });

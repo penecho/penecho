@@ -1,0 +1,24 @@
+{
+  "replacements": [
+    {
+      "old": "    <rect x=\"1160\" y=\"167\" width=\"320\" height=\"50\" rx=\"7\" fill=\"#ffffff\" stroke=\"#d97706\" stroke-width=\"1.5\"/>\n    <text x=\"1320\" y=\"189\" font-size=\"14\" font-weight=\"600\" fill=\"#1e293b\" text-anchor=\"middle\">模型 API / 本地 CLI 子进程</text>\n    <text x=\"1320\" y=\"207\" font-size=\"11.5\" fill=\"#64748b\" text-anchor=\"middle\">模型适配器的后端</text>",
+      "new": "    <rect x=\"1160\" y=\"257\" width=\"320\" height=\"50\" rx=\"7\" fill=\"#ffffff\" stroke=\"#d97706\" stroke-width=\"1.5\"/>\n    <text x=\"1320\" y=\"279\" font-size=\"14\" font-weight=\"600\" fill=\"#1e293b\" text-anchor=\"middle\">模型 API / 本地 CLI 子进程</text>\n    <text x=\"1320\" y=\"297\" font-size=\"11.5\" fill=\"#64748b\" text-anchor=\"middle\">模型适配器的后端</text>"
+    },
+    {
+      "old": "    <!-- E3: node.canvasAI -> ext.model（上）＋ 返回（下，虚线） -->\n    <line x1=\"960\" y1=\"179\" x2=\"1154\" y2=\"179\" stroke=\"#059669\" stroke-width=\"2\" marker-end=\"url(#arrG)\"/>\n    <text x=\"1057\" y=\"170\" font-size=\"12\" font-weight=\"600\" fill=\"#059669\" text-anchor=\"middle\">经模型适配器调用</text>\n    <line x1=\"1160\" y1=\"206\" x2=\"966\" y2=\"206\" stroke=\"#d97706\" stroke-width=\"2\" stroke-dasharray=\"6 4\" marker-end=\"url(#arrO)\"/>\n    <text x=\"1057\" y=\"226\" font-size=\"12\" font-weight=\"600\" fill=\"#d97706\" text-anchor=\"middle\">返回结构化绘图指令 → 浏览器展示草稿，用户确认</text>",
+      "new": "    <!-- E3: node.canvasAI -> ext.model（上）＋ 返回（下，虚线） -->\n    <line x1=\"960\" y1=\"272\" x2=\"1154\" y2=\"272\" stroke=\"#059669\" stroke-width=\"2\" marker-end=\"url(#arrG)\"/>\n    <text x=\"1057\" y=\"263\" font-size=\"12\" font-weight=\"600\" fill=\"#059669\" text-anchor=\"middle\">经模型适配器调用</text>\n    <line x1=\"1160\" y1=\"292\" x2=\"966\" y2=\"292\" stroke=\"#d97706\" stroke-width=\"2\" stroke-dasharray=\"6 4\" marker-end=\"url(#arrO)\"/>\n    <text x=\"1057\" y=\"308\" font-size=\"12\" font-weight=\"600\" fill=\"#d97706\" text-anchor=\"middle\">返回绘图指令</text>\n    <!-- E3b: node.agent -> ext.model（Canvas Agent 自有模型连接） -->\n    <path d=\"M 960 372 L 1090 372 L 1090 320 L 1290 320 L 1290 307\" fill=\"none\" stroke=\"#059669\" stroke-width=\"2\" marker-end=\"url(#arrG)\"/>\n    <text x=\"1100\" y=\"348\" font-size=\"12\" font-weight=\"600\" fill=\"#059669\">模型连接</text>"
+    },
+    {
+      "old": "    <path d=\"M 640 462 L 560 462 L 560 208 L 426 208\" fill=\"none\" stroke=\"#059669\" stroke-width=\"2\" stroke-dasharray=\"7 4\" marker-end=\"url(#arrG)\"/>\n    <text transform=\"translate(551,345) rotate(-90)\" font-size=\"12\" font-weight=\"600\" fill=\"#059669\" text-anchor=\"middle\">授权浏览器通道读写 Canvas</text>",
+      "new": "    <path d=\"M 640 462 L 545 462 L 545 195 L 402 195\" fill=\"none\" stroke=\"#059669\" stroke-width=\"2\" stroke-dasharray=\"7 4\" marker-end=\"url(#arrG)\"/>\n    <text transform=\"translate(536,340) rotate(-90)\" font-size=\"12\" font-weight=\"600\" fill=\"#059669\" text-anchor=\"middle\">授权通道读写 Canvas</text>"
+    },
+    {
+      "old": "        <li>模型凭据只留在服务端，不进入浏览器</li>\n      </ul>",
+      "new": "        <li>模型凭据只留在服务端，不进入浏览器</li>\n        <li>返回结构化绘图指令，浏览器展示草稿，由用户确认</li>\n      </ul>"
+    },
+    {
+      "old": "    <div class=\"card c-node\">\n      <h3>本地 Node 服务</h3>",
+      "new": "    <div class=\"card c-ext\">\n      <h3>外部服务</h3>\n      <ul>\n        <li>模型后端分两类：模型 API（HTTPS 云端调用）与本地 CLI 子进程（<code>codex-cli</code> / <code>claude-cli</code> / <code>kimi-cli</code>，本机进程，非云端）</li>\n        <li>Canvas Agent 持有自己的模型连接，与 Canvas AI 管线相互独立</li>\n        <li>外部 MCP Agent 是 MCP 客户端，经 HTTPS MCP 调用本地 MCP 服务</li>\n      </ul>\n    </div>\n    <div class=\"card c-node\">\n      <h3>本地 Node 服务</h3>"
+    }
+  ]
+}

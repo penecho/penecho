@@ -77,7 +77,10 @@ function createMcpRequestTracer({ requestTraceDirectory, requestTraceLimit = 100
   const root = path.resolve(requestTraceDirectory), groups = new Map(), aliases = new Map();
   let rootAvailable = false;
   const hash = value => crypto.createHash("sha256").update(String(value)).digest("hex");
-  const sessionPattern = /^session-[a-f0-9]{64}$/;
+  const requestPattern = /^request-[0-9]{13}-[a-f0-9]{64}$/;
+  const idleMs = 30 * 60 * 1000;
+  const terminalStatuses = new Set(["done", "waiting", "error"]);
+  const readOnlyTools = new Set(["penecho_read_file", "penecho_capture_canvas", "penecho_inspect_session"]);
   function report(error, requestId) {
     try { logger({ type:"mcp-request-trace-error", requestId, errorCode:String(error?.code || "write_failed").slice(0, 80) }); } catch {}
   }
@@ -98,7 +101,9 @@ function createMcpRequestTracer({ requestTraceDirectory, requestTraceLimit = 100
   function write(trace) { if (!trace.available) return; guarded(trace, () => {
     trace.data.updatedAt = isoTime(now());
     file(trace.directory, "trace.json", JSON.stringify(trace.data, null, 2));
-    file(trace.group.directory, "session.json", JSON.stringify({ schemaVersion:2, kind:"mcp-session", identityHash:trace.group.id, ...trace.group.metadata, updatedAt:trace.data.updatedAt }, null, 2));
+    Object.assign(trace.record, {status:trace.data.status, completedAt:trace.data.completedAt, durationMs:trace.data.durationMs, queuedState:trace.data.queuedUpdate?.state});
+    const group = trace.group;
+    file(group.directory, "trace.json", JSON.stringify({schemaVersion:3, kind:"mcp-request", requestId:group.id, ...group.metadata, startedAt:isoTime(group.startedAt), updatedAt:trace.data.updatedAt, completedAt:group.completedAt || null, status:group.status || "working", boundary:group.boundary || null, pendingToolCalls:group.active.size, tools:group.records}, null, 2));
   }); }
   function payload(trace, label, value) { if (!trace.available) return; return guarded(trace, () => {
     let asset = 0; const assets = []; const seen = new WeakSet();
@@ -134,30 +139,64 @@ function createMcpRequestTracer({ requestTraceDirectory, requestTraceLimit = 100
   }); }
   function prune() { if (!rootAvailable) return; guarded(null, () => {
     privateDirectory(root);
-    const entries = fs.readdirSync(root, { withFileTypes:true }).filter(entry => entry.isDirectory() && sessionPattern.test(entry.name))
+    const entries = fs.readdirSync(root, { withFileTypes:true }).filter(entry => entry.isDirectory() && requestPattern.test(entry.name))
       .map(entry => ({ name:entry.name, time:fs.statSync(path.join(root, entry.name)).mtimeMs })).sort((a,b) => a.time-b.time);
     let excess = entries.length - requestTraceLimit;
     for (const entry of entries) {
       if (excess <= 0) break;
-      const group = groups.get(entry.name.slice(8));
+      const group = groups.get(entry.name);
       if (group?.active.size) continue;
       fs.rmSync(path.join(root, entry.name), {recursive:true, force:true}); excess--;
+      groups.delete(entry.name);
+      for (const [key, value] of aliases) if (value === group) aliases.delete(key);
     }
   }); }
-  function groupFor(identity) {
-    const id = hash(identity); let group = groups.get(id);
-    if (!group) { group = {id, directory:path.join(root, `session-${id}`), active:new Set()}; groups.set(id, group); }
-    return group;
-  }
+  function bind(identity, group) { if (identity) aliases.set(identity, group); }
   function begin({ ownerId, name, arguments:args }) {
     const startedAt = now(), requestId = String(createRequestId()), owner = String(ownerId);
     const sessionIdentity = args?.sessionId ? `${owner}\0id:${args.sessionId}` : null;
-    const group = aliases.get(sessionIdentity) || groupFor(`${owner}\0${args?.sessionKey ? `key:${args.sessionKey}` : args?.sessionId ? `id:${args.sessionId}` : name === "penecho_start_session" ? `start:${requestId}` : "discovery"}`);
-    group.metadata ||= {ownerId:safeTraceValue(ownerId), sessionKey:safeTraceValue(args?.sessionKey), title:safeTraceValue(args?.title), client:safeTraceValue(args?.client), sessionIds:[]};
-    const trace = { available:false, group, owner, directory:path.join(group.directory, `request-${String(startedAt).padStart(13,"0")}-${hash(requestId)}`), data:{schemaVersion:2, kind:"mcp-request", requestId, startedAt:isoTime(startedAt), updatedAt:isoTime(startedAt), completedAt:null, durationMs:null, status:"running", request:{ownerId:safeTraceValue(ownerId), tool:safeTraceValue(name), arguments:safeTraceValue(args)}, browserInteractions:[], outcome:null, error:null} };
+    const keyIdentity = args?.sessionKey ? `${owner}\0key:${args.sessionKey}` : null;
+    let group = aliases.get(sessionIdentity) || aliases.get(keyIdentity);
+    // Guidance/discovery calls carry no sessionId. Attach only when attribution is unambiguous.
+    if (!group) {
+      const candidates = [...groups.values()].filter(g => g.owner === owner && !g.closed && startedAt - g.lastAt < idleMs &&
+        ((!sessionIdentity && !keyIdentity && name !== "penecho_start_session") || !g.bound));
+      if (candidates.length === 1) group = candidates[0];
+      else if (!candidates.length && !sessionIdentity && !keyIdentity && name !== "penecho_start_session") group = aliases.get(`${owner}\0current`);
+    }
+    const expired = group && startedAt - group.lastAt >= idleMs && !group.active.size;
+    const rollover = group && group.records.length >= 1024 && !group.active.size;
+    if (!group || expired || rollover || group.closed && !readOnlyTools.has(name)) {
+      const previous = group;
+      const id = `request-${String(startedAt).padStart(13,"0")}-${hash(requestId)}`;
+      group = {id, owner, directory:path.join(root, id), active:new Set(), records:[], startedAt, lastAt:startedAt, metadata:{ownerId:safeTraceValue(ownerId), sessionIds:[]}};
+      groups.set(id, group);
+      // A logical request can span reconnects to the same sessionKey.
+      if (previous) for (const [key, value] of aliases) if (value === previous) bind(key, group);
+      group.metadata.grouping = "session binding; terminal completion starts next request; 30-minute idle fallback";
+      if (expired || rollover) group.metadata.startedBy = expired ? "idle-timeout" : "tool-limit";
+    }
+    group.lastAt = startedAt;
+    bind(`${owner}\0current`, group);
+    bind(sessionIdentity, group); bind(keyIdentity, group);
+    if (sessionIdentity || keyIdentity || name === "penecho_start_session") group.bound = true;
+    for (const key of ["sessionKey","title","client"]) if (args?.[key] !== undefined && group.metadata[key] === undefined) group.metadata[key] = safeTraceValue(args[key]);
+    if (args?.sessionId && !group.metadata.sessionIds.includes(args.sessionId)) group.metadata.sessionIds.push(safeTraceValue(args.sessionId));
+    const toolDirectory = `tool-${String(group.records.length + 1).padStart(4,"0")}-${hash(name).slice(0,12)}`;
+    const record = {tool:safeTraceValue(name), path:`${toolDirectory}/trace.json`, startedAt:isoTime(startedAt), status:"running"};
+    group.records.push(record);
+    const terminal = name === "penecho_close_session" ? "done" : name === "penecho_update_session" ? args?.status : args?.completion?.status;
+    const trace = { available:false, group, record, owner, terminal:terminalStatuses.has(terminal) ? terminal : null, directory:path.join(group.directory, toolDirectory), data:{schemaVersion:3, kind:"mcp-tool-call", requestId, startedAt:isoTime(startedAt), updatedAt:isoTime(startedAt), completedAt:null, durationMs:null, status:"running", request:{ownerId:safeTraceValue(ownerId), tool:safeTraceValue(name), arguments:safeTraceValue(args)}, browserInteractions:[], outcome:null, error:null} };
     group.active.add(trace);
     guarded(trace, () => { privateDirectory(root); rootAvailable = true; privateDirectory(group.directory); privateDirectory(trace.directory); trace.available = true; });
     payload(trace, "request", {ownerId, tool:name, arguments:args}); write(trace); prune(); return trace;
+  }
+  function closeRequest(trace) {
+    if (!trace.terminal) return;
+    trace.group.closed = true;
+    trace.group.status = trace.terminal;
+    trace.group.completedAt = isoTime(now());
+    trace.group.boundary = trace.data.request.tool === "penecho_close_session" ? "close_session" : "completion.status";
   }
   function browserStarted(trace, {requestId, name, arguments:args, requestedAt}) {
     if (!trace) return null;
@@ -179,8 +218,10 @@ function createMcpRequestTracer({ requestTraceDirectory, requestTraceLimit = 100
   function queuedUpdateOutcome(trace, state, details) {
     if (!trace) return;
     trace.data.queuedUpdate = {state, recordedAt:isoTime(now()), ...safeTraceValue(details)};
-    payload(trace, "queued-outcome", {state, ...details}); write(trace);
-    trace.group.active.delete(trace); prune();
+    payload(trace, "queued-outcome", {state, ...details});
+    trace.group.active.delete(trace);
+    if (state === "applied") closeRequest(trace);
+    write(trace); prune();
   }
   function finish(trace, result, error) {
     if (!trace) return;
@@ -190,8 +231,11 @@ function createMcpRequestTracer({ requestTraceDirectory, requestTraceLimit = 100
     }
     const completedAt = now();
     Object.assign(trace.data, {status:error ? "failed" : "completed", completedAt:isoTime(completedAt), durationMs:Math.max(0, completedAt-new Date(trace.data.startedAt).getTime()), outcome:error ? null : safeTraceValue(result), error:error ? safeTraceValue(error) : null});
-    payload(trace, error ? "error" : "response", error || result); write(trace);
-    if (error || !result?.accepted || result?.applied !== false || trace.data.queuedUpdate) trace.group.active.delete(trace);
+    payload(trace, error ? "error" : "response", error || result);
+    const queued = result?.accepted && result?.applied === false;
+    if (error || !queued || trace.data.queuedUpdate) trace.group.active.delete(trace);
+    if (!error && (!queued || trace.data.queuedUpdate?.state === "applied")) closeRequest(trace);
+    write(trace);
     prune();
   }
   return {begin, browserCompleted, browserFailed, browserStarted, complete:(trace,result) => finish(trace,result,null), fail:(trace,error) => finish(trace,null,error), queuedUpdateOutcome};

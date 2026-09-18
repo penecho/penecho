@@ -14,7 +14,7 @@ Call `canvas_read` for the authoritative virtual resource before changing conten
 * Direct professional HTML Widgets may use `widget.html` for the rendering and `widget.source` for distinct reusable source. Read every resource that the requested change must keep synchronized.
 * Preserve the existing `sourceFormat`, `diagramKind`, renderer, framework version, title, and untouched content unless the user explicitly asks to change them.
 
-Common locally rendered formats are `mermaid`, `dot`, `bpmn-xml`, `vega-lite`, `geojson`, `smiles`, and `cytoscape-json`. Other existing professional Widgets may contain PlantUML, D2, Structurizr DSL, DBML or SQL DDL, draw.io XML, Excalidraw JSON, KiCad, SPICE, WaveDrom, or another established format. Treat the Widget's current format as authoritative; never relabel a substitute syntax.
+Common locally rendered formats are `dot`, `bpmn-xml`, `vega-lite`, `geojson`, `smiles`, and `cytoscape-json`. Other existing professional Widgets may contain PlantUML, D2, Structurizr DSL, DBML or SQL DDL, draw.io XML, Excalidraw JSON, KiCad, SPICE, WaveDrom, or another established format. Treat the Widget's current format as authoritative; never relabel a substitute syntax.
 
 ## Patch in place
 

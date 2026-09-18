@@ -182,3 +182,15 @@ Ces recommandations équilibrent la qualité des réponses et la latence dans le
 Lisez [CONTRIBUTING.md](../../CONTRIBUTING.md) pour contribuer ; exécutez `npm run check` avant d’ouvrir une pull request. Signalez les bugs dans les [Issues](https://github.com/penecho/penecho/issues), échangez dans les [Discussions](https://github.com/penecho/penecho/discussions) ou rejoignez [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Sous licence [AGPL-3.0-only](../../LICENSE). Une [licence commerciale](../../COMMERCIAL-LICENSE.md) alternative est disponible. Consultez la [politique relative aux marques](../../TRADEMARKS.md) et l’[accord de contribution](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## Historique des étoiles
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="Graphique de l’évolution des étoiles de PenEcho sur GitHub" width="800">
+    </picture>
+  </a>
+</p>

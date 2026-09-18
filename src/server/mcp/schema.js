@@ -517,8 +517,13 @@ const validators = {
   },
   penecho_present_widget(input) {
     object(input, "arguments");
-    exactKeys(input, new Set(["sessionId", "artifactId", "title", "html", "width", "height", "capture", "quality", "presentation"]), "arguments");
-    const html = typeof input.html === "string" ? input.html : invalid("html is invalid.");
+    exactKeys(input, new Set(["sessionId", "artifactId", "title", "html", "architecture", "width", "height", "capture", "quality", "presentation"]), "arguments");
+    if ((input.html !== undefined) === (input.architecture !== undefined)) invalid("Provide exactly one of html or architecture. For architecture fields, load architecture guidance.");
+    let html;
+    if (input.architecture !== undefined) {
+      try { html = require("../../architecture/schema.js").architectureHtml(input.architecture); }
+      catch (error) { invalid(error.message); }
+    } else html = typeof input.html === "string" ? input.html : invalid("html is invalid.");
     if (!html || html.length > MAX_HTML_CHARS || Buffer.byteLength(html, "utf8") > MAX_HTML_BYTES) invalid("html is invalid or too large.");
     if (input.capture !== undefined && typeof input.capture !== "boolean") invalid("capture is invalid.");
     if (input.quality !== undefined && input.capture !== true) invalid("quality requires capture to be true.");
@@ -645,7 +650,7 @@ const TOOLS = [
   {
     name:"penecho_present_widget",
     description:"Render rich explanations, sequence/flow diagrams (including static diagrams), and product UI as an HTML/CSS/SVG Widget. Create/update stable artifactId, preserving geometry; returned viewport is actual CSS size. relativeTo is a known artifactId. inspect requires capture:true and renders exact dimensions without saving an object. Capture failures may leave applied:true. Format source for patches.",
-    inputSchema:{ type:"object", additionalProperties:false, required:["sessionId","artifactId","title","html"], properties:{sessionId:{type:"string",minLength:1,maxLength:128},artifactId:{type:"string",minLength:1,maxLength:128},title:{type:"string",minLength:1,maxLength:MAX_TITLE_CHARS},html:{type:"string",minLength:1,maxLength:MAX_HTML_CHARS},width:{type:"number",minimum:300,maximum:4096,description:"CSS width: capped on creation, exact for inspect."},height:{type:"number",minimum:200,maximum:4096,description:"CSS height: independently capped on creation, exact for inspect."},capture:{type:"boolean",default:false},quality:{type:"string",enum:["basic","detail"]},presentation:presentationSchema({allowInspect:true})}, allOf:[{if:{required:["quality"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{properties:{intent:{const:"inspect"}},required:["intent"]}},required:["presentation"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{required:["size"]}},required:["presentation"]},then:{not:{anyOf:[{required:["width"]},{required:["height"]}]}}}] },
+    inputSchema:{ type:"object", additionalProperties:false, required:["sessionId","artifactId","title"], oneOf:[{required:["html"],not:{required:["architecture"]}},{required:["architecture"],not:{required:["html"]}}], properties:{sessionId:{type:"string",minLength:1,maxLength:128},artifactId:{type:"string",minLength:1,maxLength:128},title:{type:"string",minLength:1,maxLength:MAX_TITLE_CHARS},html:{type:"string",minLength:1,maxLength:MAX_HTML_CHARS},architecture:{type:"object",description:"Semantic architecture/1 JSON for local rendering. Load architecture guidance for fields; omit html."},width:{type:"number",minimum:300,maximum:4096,description:"CSS width: capped on creation, exact for inspect."},height:{type:"number",minimum:200,maximum:4096,description:"CSS height: independently capped on creation, exact for inspect."},capture:{type:"boolean",default:false},quality:{type:"string",enum:["basic","detail"]},presentation:presentationSchema({allowInspect:true})}, allOf:[{if:{required:["quality"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{properties:{intent:{const:"inspect"}},required:["intent"]}},required:["presentation"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{required:["size"]}},required:["presentation"]},then:{not:{anyOf:[{required:["width"]},{required:["height"]}]}}}] },
   },
 
   {

@@ -13,10 +13,9 @@ const statusTitle = document.querySelector("#status-title"),
   closeButton = document.querySelector("#close-button"),
   primaryButton = document.querySelector("#primary-button");
 
-const language = String(navigator.language || "en").toLowerCase().startsWith("zh") ? "zh" : "en";
-const copy = Object.freeze({
+const translations = Object.freeze({
   en:{
-    windowTitle:"PenEcho Update", installedVersion:version => `Installed version: v${version}`,
+    progressLabel:"Download progress", windowTitle:"PenEcho Update", installedVersion:version => `Installed version: v${version}`,
     checking:["Checking for updates…", "This usually takes only a moment."],
     available:version => [`PenEcho v${version} is available`, "Download it now and keep working while it completes."],
     downloading:version => [`Downloading PenEcho v${version}…`, "You can close this window. The download will continue in the background."],
@@ -28,7 +27,7 @@ const copy = Object.freeze({
     starting:"Starting download…", progress:value => `Downloading · ${value}%`, unknownError:"Please try again later.",
   },
   zh:{
-    windowTitle:"PenEcho 更新", installedVersion:version => `当前版本：v${version}`,
+    progressLabel:"下载进度", windowTitle:"PenEcho 更新", installedVersion:version => `当前版本：v${version}`,
     checking:["正在检查更新…", "通常只需片刻。"],
     available:version => [`PenEcho v${version} 可以更新`, "现在下载；下载期间可以继续使用 PenEcho。"],
     downloading:version => [`正在下载 PenEcho v${version}…`, "可以关闭此窗口，下载会在后台继续。"],
@@ -39,15 +38,22 @@ const copy = Object.freeze({
     download:"下载", install:"安装", retry:"重新检查", close:"关闭", release:"打开更新页面",
     starting:"正在开始下载…", progress:value => `正在下载 · ${value}%`, unknownError:"请稍后重试。",
   },
-})[language];
+});
 
-document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-document.title = copy.windowTitle;
-document.querySelector("#update-title").textContent = copy.windowTitle;
-closeButton.textContent = copy.close;
-releaseButton.textContent = copy.release;
+let currentState = null, language = null, copy = translations.en;
 
-let currentState = null;
+function setLanguage(value) {
+  const next = value === "zh" ? "zh" : "en";
+  if (next === language) return;
+  language = next;
+  copy = translations[language];
+  document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  document.title = copy.windowTitle;
+  document.querySelector("#update-title").textContent = copy.windowTitle;
+  closeButton.textContent = copy.close;
+  releaseButton.textContent = copy.release;
+  progressTrack.setAttribute("aria-label", copy.progressLabel);
+}
 
 function stateCopy(state) {
   if (state.status === "available") return copy.available(state.version);
@@ -62,6 +68,7 @@ function stateCopy(state) {
 function render(state) {
   if (!state) return;
   currentState = state;
+  setLanguage(state.language);
   document.body.dataset.state = state.status || "checking";
   versionLabel.textContent = state.currentVersion ? copy.installedVersion(state.currentVersion) : "";
   const [title, detail] = stateCopy(state);

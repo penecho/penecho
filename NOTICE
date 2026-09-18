@@ -12,6 +12,19 @@ Alternative commercial licenses may be available. See COMMERCIAL-LICENSE.md.
 Third-party software
 --------------------
 
+The architecture renderer contains adapted Archify 2.17 SVG/geometry helpers
+(https://github.com/tt-a1i/archify), distributed under the MIT License.
+Copyright notices, the full license and source hashes are retained in
+src/architecture/vendor/archify/. These adaptations retain MIT; PenEcho's own
+integration remains under the repository license.
+
+Automatic layout uses the unmodified elkjs 0.12.0 worker, distributed under
+Eclipse Public License 2.0. Source is available at
+https://github.com/kieler/elkjs/tree/0.12.0 and through the elkjs npm package;
+the upstream project documents its ELK source/build inputs. The full license
+is included in public/vendor/architecture-LICENSES.txt. This separately
+licensed worker is not relicensed under the repository's AGPL-only default.
+
 DeepSeek Harness local backports are distributed under the MIT License,
 Copyright (c) 2026 DeepSeek. Local adaptations retain MIT. The complete license
 and upstream commit provenance are included in src/server/canvas-agent/vendor/.

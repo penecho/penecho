@@ -1,0 +1,27 @@
+{
+  "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+  "requestedModel": "glm-5.3-flash",
+  "requestSha256": "633747e6bf321b199b56bc592b2f92ffa3730082b988b4d2b5147644e6a43ae8",
+  "systemSha256": "f68068fb6d67ffd372b5079163e5d1a0742ffff7406ac36a1954bec9e819afda",
+  "parameters": {
+    "model": "glm-5.3-flash",
+    "max_tokens": 24000,
+    "stream": true,
+    "thinking": {
+      "type": "enabled",
+      "budget_tokens": 8192
+    },
+    "output_config": {
+      "effort": "max"
+    }
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "completed": false,
+  "httpStatus": 200,
+  "returnedModel": "glm-5.3-flash",
+  "elapsedSeconds": 516.72,
+  "supervisorDisposition": "Cancelled after more than eight minutes without visible HTML; protocol probe succeeded independently. This incomplete attempt is not a quality sample."
+}

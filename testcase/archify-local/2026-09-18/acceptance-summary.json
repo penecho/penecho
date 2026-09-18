@@ -1,0 +1,74 @@
+{
+  "source": "/Users/heack/workspace/penecho_071_version",
+  "branch": "codex/update-localization",
+  "baseline": "baseline1",
+  "status": "accepted local baseline; release deployment not included in this acceptance",
+  "checks": {
+    "fullTestsPassed": 2002,
+    "ordinaryHtmlArchitectureScripts": 0,
+    "mixedDocumentRenderMs": 298,
+    "mixedDocumentReadyMs": 678,
+    "svgExport": true,
+    "pngExportPixels": [
+      4096,
+      863
+    ]
+  },
+  "canvasDocuments": {
+    "reference": "doc-fe45ef1558615a97e11727a60adde388a1d86d3526a9f9669fd6f9d118f4a53d",
+    "raw": "doc-b94d2f08a350af36576621a23b6c1b29936add0708568e049dd71c78c260fdd3",
+    "reviewed": "doc-76ecf335e38caedcbec700eb5ed03ad40251111c20de9695156a4995e551554e"
+  },
+  "liveCanvasMode": "locally compiled compatibility previews; existing installed host has not been upgraded",
+  "modelRuns": {
+    "glm-json-r1": {
+      "returnedModel": "glm-5.3-flash",
+      "usage": {
+        "input_tokens": 2651,
+        "output_tokens": 11181,
+        "cache_read_input_tokens": 0,
+        "server_tool_use": {
+          "web_search_requests": 0
+        },
+        "service_tier": "standard"
+      },
+      "elapsedSeconds": 227.25,
+      "completed": true,
+      "jsonSha256": "3f4d3a54477224bceaa43efa4c1f5078f7c1c9d9c08924f46824b6271cf7ebed",
+      "jsonBytes": 9195
+    },
+    "glm-json-fast": {
+      "returnedModel": "glm-5.3-flash",
+      "usage": {
+        "input_tokens": 2651,
+        "output_tokens": 1808,
+        "cache_read_input_tokens": 0,
+        "server_tool_use": {
+          "web_search_requests": 0
+        },
+        "service_tier": "standard"
+      },
+      "elapsedSeconds": 32.94,
+      "completed": true,
+      "jsonSha256": "6411bf413e51c11f5cdc19206e8c332a39f7758a2ea34ca0b3b50d3c4058faa9",
+      "jsonBytes": 7517
+    },
+    "glm-json-reviewed": {
+      "returnedModel": "glm-5.3-flash",
+      "usage": {
+        "input_tokens": 2938,
+        "output_tokens": 2678,
+        "cache_read_input_tokens": 2624,
+        "server_tool_use": {
+          "web_search_requests": 0
+        },
+        "service_tier": "standard"
+      },
+      "elapsedSeconds": 39.56,
+      "completed": true,
+      "jsonSha256": "c437abf3cfa042f75fcd9641b29763cfe73af266b2bf3d35370753363d3d8bc3",
+      "jsonBytes": 7229
+    }
+  },
+  "runtimeSha256": "83572ad46af6779de894758a48a8f4d162259acb154ef3dbde3b7f370e9103d7"
+}

@@ -1,0 +1,129 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PenEcho 项目架构</title>
+<style>
+  :root{
+    --teal:#0f766e; --teal-bg:#f0fdfa;
+    --indigo:#4338ca; --indigo-bg:#eef2ff;
+    --orange:#c2410c; --orange-bg:#fff7ed;
+    --purple:#7e22ce; --purple-bg:#faf5ff;
+    --amber:#b45309; --amber-bg:#fffbeb;
+    --slate:#475569; --slate-bg:#f8fafc;
+    --line:#cbd5e1; --ink:#1e293b; --mut:#64748b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:transparent}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--ink); padding:16px;
+  }
+  .sheet{
+    background:#ffffff; border:1px solid #e2e8f0; border-radius:14px;
+    max-width:1500px; margin:0 auto; padding:20px 22px 26px;
+    box-shadow:0 2px 10px rgba(15,23,42,.06);
+  }
+  h1{font-size:20px;margin:2px 0 2px}
+  .lede{font-size:13px;color:var(--mut);margin:0 0 14px}
+  .scroll{overflow-x:auto}
+  svg.arch{display:block;min-width:980px;width:100%;height:auto}
+  .notes{
+    margin-top:18px; border-top:1px dashed var(--line); padding-top:14px;
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px 18px;
+  }
+  .note{font-size:12px;line-height:1.65;color:#334155;padding-left:16px;position:relative}
+  .note b{font-size:12.5px}
+  .note::before{
+    content:"";position:absolute;left:0;top:5px;width:9px;height:9px;border-radius:50%;
+  }
+  .n-teal::before{background:var(--teal)} .n-indigo::before{background:var(--indigo)}
+  .n-orange::before{background:var(--orange)} .n-purple::before{background:var(--purple)}
+  .n-amber::before{background:var(--amber)} .n-slate::before{background:var(--slate)}
+  .note code{background:#f1f5f9;border-radius:4px;padding:0 4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>PenEcho 项目架构</h1>
+  <p class="lede">浏览器 · 本地 Node 服务（单进程多职责）· 外部模型与 MCP Agent 的组件关系图</p>
+  <div class="scroll"><svg class="arch" id="arch" viewBox="0 0 1500 830" role="img" aria-label="PenEcho 项目架构图"></svg></div>
+  <div class="notes">
+    <div class="note n-teal"><b>浏览器前端</b><br><code>src/client/app/</code> 构建为 <code>public/app.js</code>；画布为 20000×20000 逻辑坐标、512×512 稀疏瓦片</div>
+    <div class="note n-indigo"><b>服务端</b><br>入口 <code>src/server/main.js</code>；Canvas Agent 位于 <code>src/server/canvas-agent/</code>，同一进程内的不同职责</div>
+    <div class="note n-orange"><b>模型接入</b><br><code>src/providers/</code>：api · codex-cli · claude-cli · kimi-cli；模型凭据不进入浏览器</div>
+    <div class="note n-purple"><b>MCP 通道</b><br>MCP 服务位于 <code>src/server/mcp/</code>；经已授权浏览器通道读写同一 Canvas，不经过 Canvas AI 模型适配器</div>
+    <div class="note n-amber"><b>存储归属</b><br>IndexedDB 快照归浏览器私有；<code>connections.json</code> 与请求日志归本地 Node 服务</div>
+    <div class="note n-slate"><b>外部 CDN</b><br>MathJax 由浏览器直接访问 jsDelivr，不经过本地服务转发</div>
+  </div>
+</div>
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg';
+  var svg=document.getElementById('arch');
+  function el(tag,attrs,parent){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;}
+  function txt(x,y,s,attrs,parent){var a={x:x,y:y};for(var k in attrs)a[k]=attrs[k];var t=el('text',a,parent);t.textContent=s;return t;}
+
+  var C={teal:'#0f766e',indigo:'#4338ca',orange:'#c2410c',purple:'#7e22ce',amber:'#b45309',slate:'#475569',line:'#94a3b8',mut:'#64748b',ink:'#1e293b'};
+
+  // ---- frames (named boundaries) ----
+  var frames=[
+    {id:'browser',x:40, y:80, w:320,h:340,fill:'#f0fdfa',title:'浏览器',sub:'客户端 · 信任边界'},
+    {id:'local',  x:560,y:80, w:420,h:560,fill:'#eef2ff',title:'本地 Node 服务',sub:'单进程 · 部署边界 · 多职责'},
+    {id:'ext',    x:1060,y:80,w:400,h:260,fill:'#fff7ed',title:'外部服务',sub:'进程外'},
+    {id:'launch', x:560,y:690,w:520,h:110,fill:'#f8fafc',title:'启动入口',sub:'同一服务器的两种入口'}
+  ];
+
+  // ---- node table (stable IDs, single position source) ----
+  var nodes={
+    canvas:  {x:70, y:170,w:260,h:90, accent:C.teal,  title:'Canvas 画布',        sub:'绘制交互 · Widget 展示'},
+    idb:     {x:110,y:300,w:200,h:56, accent:C.amber, title:'IndexedDB 快照',     sub:'浏览器私有'},
+    api:     {x:590,y:160,w:340,h:56, accent:C.indigo,title:'HTTP API · 静态资源', sub:'src/server/main.js'},
+    ai:      {x:590,y:260,w:340,h:70, accent:C.indigo,title:'Canvas AI 请求管线',  sub:'模型适配器 · src/providers/'},
+    agent:   {x:590,y:375,w:340,h:56, accent:C.indigo,title:'Canvas Agent',       sub:'模型连接 · 文档工具'},
+    mcp:     {x:590,y:475,w:340,h:56, accent:C.purple,title:'MCP 服务',           sub:'src/server/mcp/'},
+    conn:    {x:590,y:552,w:340,h:48, accent:C.amber, title:'connections.json · 请求日志'},
+    model:   {x:1090,y:160,w:340,h:64,accent:C.orange,title:'外部模型服务',       sub:'HTTP API · 本地 CLI 子进程'},
+    mcpagent:{x:1090,y:250,w:340,h:56,accent:C.purple,title:'外部 MCP Agent',     sub:'MCP 客户端'},
+    electron:{x:600,y:735,w:220,h:56, accent:C.slate, title:'Electron 主进程',    sub:'加载服务器 · 打开窗口'},
+    cli:     {x:860,y:735,w:180,h:56, accent:C.slate, title:'CLI',                sub:'启动同一服务器'}
+  };
+
+  // ---- lanes (each position defined once) ----
+  var L={e1:470,e3:435,e4v:20,e4y:445,e4b:505,e7:320,m2:985,m3:1010,m5:965,m6:1045};
+
+  // ---- defs: arrowheads per color ----
+  var defs=el('defs',{});
+  Object.keys(C).forEach(function(k){
+    if(['line','mut','ink'].indexOf(k)>=0)return;
+    var m=el('marker',{id:'ar-'+k,viewBox:'0 0 10 10',refX:'9',refY:'5',markerWidth:'7',markerHeight:'7',orient:'auto-start-reverse'},defs);
+    el('path',{d:'M0,0 L10,5 L0,10 z',fill:C[k]},m);
+  });
+
+  // ---- render frames ----
+  frames.forEach(function(f){
+    el('rect',{x:f.x,y:f.y,width:f.w,height:f.h,rx:12,fill:f.fill,stroke:C.line,'stroke-width':1.5});
+    txt(f.x+16,f.y+24,f.title,{'font-size':'13.5px','font-weight':'700',fill:C.ink});
+    txt(f.x+16+ (f.title.length*14+8),f.y+24,f.sub,{'font-size':'11px',fill:C.mut});
+  });
+
+  // ---- render nodes ----
+  function node(n,id){
+    el('rect',{x:n.x,y:n.y,width:n.w,height:n.h,rx:8,fill:'#ffffff',stroke:n.accent,'stroke-width':1.5});
+    el('rect',{x:n.x,y:n.y,width:5,height:n.h,rx:2.5,fill:n.accent});
+    var single=!n.sub;
+    var ty=single? n.y+n.h/2+5 : n.y+(n.h>=70?30:(n.h>=64?26:23));
+    txt(n.x+18,ty,n.title,{'font-size':'15px','font-weight':'600',fill:C.ink});
+    if(!single) txt(n.x+18,ty+19,n.sub,{'font-size':'11px',fill:C.mut});
+  }
+  Object.keys(nodes).forEach(function(k){node(nodes[k],k);});
+
+  // ---- ports derived from node bounds ----
+  function port(id,side,t){
+    var n=nodes[id],p={};
+    if(side==='left') p={x:n.x,      y:n.y+n.h*t};
+    if(side==='right')p={x:n.x+n.w,  y:n.y+n.h*t};
+    if(side==='top')  p={x:n.x+n.w*t,y:n.y};
+    if(side==='bottom')p={x:n.x+n.w*t,y:n.y+n

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {"title":"PenEcho MCP 架构","locale":"zh-CN","quality_profile":"showcase"},
+  "layout": {"mode":"grid","origin":[40,80],"cols":8,"cellW":170,"cellH":84,"gapX":90,"gapY":74},
+  "components": [
+    {"id":"client","type":"frontend","label":"外部 AI 客户端","sublabel":"调用工具","row":1,"col":0},
+    {"id":"stdio","type":"cloud","label":"stdio 桥接进程","sublabel":"TLS 校验 · 连接复用","row":1,"col":1},
+    {"id":"https","type":"backend","label":"HTTPS MCP 接入","sublabel":"认证 · 传输会话","row":1,"col":2},
+    {"id":"rpc","type":"backend","label":"RPC / Schema","sublabel":"协议分发 · 输入校验","row":1,"col":3},
+    {"id":"dispatch","type":"backend","label":"会话与工具分派","sublabel":"绑定浏览器与文档","row":1,"col":4},
+    {"id":"operations","type":"backend","label":"共用画布操作","sublabel":"版本 · 幂等 · 虚拟读写","row":1,"col":5},
+    {"id":"browser","type":"security","label":"浏览器文档运行时","sublabel":"WebSocket 画布通道","row":1,"col":6},
+    {"id":"widget","type":"security","label":"Widget Host","sublabel":"沙箱 iframe 渲染","row":1,"col":7},
+    {"id":"guidance","type":"database","label":"authoring-guidance","sublabel":"规则文件 · 只读","row":0,"col":3},
+    {"id":"direct","type":"frontend","label":"直接 HTTPS 客户端","sublabel":"不经 stdio 桥","row":2,"col":1},
+    {"id":"binding","type":"database","label":"持久会话绑定","sublabel":"Node 侧存储","row":2,"col":4},
+    {"id":"agent","type":"external","label":"PenEcho 内置 Agent","sublabel":"独立会话绑定 · 非必经","row":2,"col":5},
+    {"id":"documents","type":"security","label":"文档与快照","sublabel":"浏览器持有","row":2,"col":7}
+  ],
+  "boundaries": [
+    {"kind":"region","label":"PenEcho Node 宿主（同一进程 · 非多台服务器）","wraps":["https","rpc","dispatch","operations","guidance","binding","agent"],"pad":26},
+    {"kind":"security-group","label":"浏览器（已 opt-in 授权）","wraps":["browser","widget","documents"],"pad":26}
+  ],
+  "connections": [
+    {"from":"client","to":"stdio"},
+    {"from":"stdio","to":"https"},
+    {"from":"https","to":"rpc"},
+    {"from":"rpc","to":"dispatch"},
+    {"from":"dispatch","to":"operations"},
+    {"from":"operations","to":"browser","label":"canvasCall"},
+    {"from":"browser","to":"widget","label":"渲染"},
+    {"from":"rpc","to":"guidance","label":"只读分支"},
+    {"from":"dispatch","to":"binding","label":"读写绑定","labelDy":24},
+    {"from":"agent","to":"operations","label":"复用","variant":"dashed"},
+    {"from":"direct","to":"https","label":"同一接入端点"},
+    {"from":"browser","to":"documents","label":"管理 / 执行"}
+  ]
+}

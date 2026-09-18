@@ -12,7 +12,6 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 test("diagram runtime exposes the exact source-first capability registry", () => {
   assert.deepEqual(runtime.FORMATS.map((format) => format.id), [
-    "mermaid",
     "dot",
     "bpmn-xml",
     "vega-lite",
@@ -26,18 +25,23 @@ test("diagram runtime exposes the exact source-first capability registry", () =>
 });
 
 test("diagram runtime generates an isolated lazy renderer document", () => {
-  const source = "flowchart LR\nA[Client] --> B[API]",
-    html = runtime.documentFor({ sourceFormat:"mermaid", source, title:"Client path" });
-  assert.match(html, /mermaid@10\.9\.1/);
-  assert.equal(html.split("flowchart LR").length, 1);
-  assert.match(html, new RegExp(Buffer.from(source, "utf8").toString("base64")));
+  const source = "digraph G { Client -> API; }", html = runtime.documentFor({sourceFormat:"dot",source,title:"Client path"});
+  assert.match(html, /@viz-js/);
+  assert.ok(html.includes(Buffer.from(source,"utf8").toString("base64")));
   assert.match(html, /Client path/);
-  assert.match(html, /if \(format === "mermaid"\) await renderMermaid\(\)[\s\S]*?else if \(format === "dot"\)/);
+  assert.doesNotMatch(html, /mermaid@|renderMermaid/);
+});
+
+test("retired Mermaid sources remain readable without loading a renderer", () => {
+  assert.equal(runtime.supports("mermaid"),false);
+  const html=runtime.documentFor({sourceFormat:"mermaid",source:'flowchart LR\nA[<script>bad()</script>] --> B',title:"Old source"});
+  assert.match(html,/Original source|original source/);
+  assert.match(html,/&lt;script&gt;bad/);
+  assert.doesNotMatch(html,/<script|mermaid@|renderMermaid/);
 });
 
 test("each local format maps to one fixed on-demand renderer and unknown formats stay unsupported", () => {
   const expected = new Map([
-    ["mermaid", "mermaid@10.9.1"],
     ["dot", "@viz-js/viz@3.9.0"],
     ["bpmn-xml", "bpmn-js@17.11.1"],
     ["vega-lite", "vega-embed@6.26.0"],
@@ -71,37 +75,8 @@ test("each local format maps to one fixed on-demand renderer and unknown formats
   const compactSmiles = runtime.documentFor({ sourceFormat:"smiles", source:"CC(=O)Oc1ccccc1C(=O)O", title:"Compact aspirin", diagramKind:"molecular-structure-compact" });
   assert.match(compactSmiles, /"compactDrawing":true/);
   assert.equal(runtime.documentFor({ sourceFormat:"plantuml", source:"@startuml", title:"Unsupported" }), "");
-  assert.ok(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(100 * 1024), title:"Large source" }));
-  assert.equal(runtime.documentFor({ sourceFormat:"mermaid", source:"x".repeat(100 * 1024 + 1), title:"Too large" }), "");
-});
-
-test("complex Mermaid phases reflow when the widget aspect ratio changes", () => {
-  const source = `%% penecho:responsive
-flowchart LR
-  subgraph Shop
-    direction TB
-    A --> B --> C --> D
-  end
-  subgraph Pay
-    direction TB
-    E --> F --> G --> H
-  end
-  subgraph Fulfill
-    direction TB
-    I --> J --> K --> L
-  end
-  D --> E
-  H --> I`,
-    wide = runtime.responsiveMermaidSource(source, 1400, 700),
-    narrow = runtime.responsiveMermaidSource(source, 600, 1000);
-  assert.equal(wide.direction, "LR");
-  assert.equal(wide.responsive, true);
-  assert.match(wide.source, /^flowchart LR/m);
-  assert.equal((wide.source.match(/direction TB/g) || []).length, 3);
-  assert.equal(narrow.direction, "TB");
-  assert.equal(narrow.responsive, true);
-  assert.match(narrow.source, /^flowchart TB/m);
-  assert.equal((narrow.source.match(/direction LR/g) || []).length, 3);
+  assert.ok(runtime.documentFor({ sourceFormat:"dot", source:"x".repeat(100 * 1024), title:"Large source" }));
+  assert.equal(runtime.documentFor({ sourceFormat:"dot", source:"x".repeat(100 * 1024 + 1), title:"Too large" }), "");
 });
 
 test("complex Graphviz diagrams provide horizontal and vertical layouts for the widget shape", () => {
@@ -147,24 +122,15 @@ test("Graphviz renderer selects the layout with the largest readable fit on resi
   assert.match(html, /resizeRender = paint/);
 });
 
-test("responsive Mermaid reflows one rendered diagram as the widget changes shape", () => {
-  const html = runtime.documentFor({ sourceFormat:"mermaid", source:"%% penecho:responsive\nflowchart LR\nA-->B", title:"Flow" });
-  assert.match(html, /flowchart:\{ defaultRenderer:"elk" \}/);
-  assert.match(html, /responsiveMermaidSource\(source, stage\.clientWidth, stage\.clientHeight\)/);
-  assert.match(html, /renderedDirection = next\.direction/);
-  assert.match(html, /resizeRender = \(\) => void paint\(\)\.catch/);
-});
-
 test("every local renderer defaults its outer visualization surface to transparent", () => {
   const vegaDefault = runtime.vegaLiteSpecWithDefaultBackground({ mark:"bar" }),
     explicitVega = runtime.vegaLiteSpecWithDefaultBackground({ background:"#fff", mark:"bar" }),
     configuredVega = runtime.vegaLiteSpecWithDefaultBackground({ config:{ background:"black" }, mark:"bar" }),
-    html = runtime.documentFor({ sourceFormat:"mermaid", source:"flowchart LR\nA-->B", title:"Transparent" });
+    html = runtime.documentFor({ sourceFormat:"dot", source:"digraph G { A -> B; }", title:"Transparent" });
   assert.equal(vegaDefault.background, "transparent");
   assert.equal(explicitVega.background, "#fff");
   assert.equal(configuredVega.config.background, "black");
   assert.equal(Object.prototype.hasOwnProperty.call(configuredVega, "background"), false);
-  assert.match(html, /themeVariables:\{ background:"transparent" \}/);
   assert.match(html, /svg\.style\.background="transparent"/);
   assert.match(html, /stage\.style\.background = "transparent"/);
   assert.match(html, /\.pd-stage\{[^}]*background:transparent/);
@@ -190,3 +156,14 @@ test("diagram source is persisted canonically and regenerated through the widget
 });
 
 module.exports = runtime;
+
+// Other Professional Diagram renderers keep the original single-document path.
+test("professional runtime has no nested diagram viewer or retired native types", () => {
+  for (const format of ["architecture", "sequence", "mermaid"]) assert.equal(runtime.supports(format), false);
+  for (const format of runtime.FORMATS) {
+    const html = runtime.documentFor({ sourceFormat:format.id, source:"source", title:"Retained renderer" });
+    assert.doesNotMatch(html, /<iframe|archify|diagram-assets|renderMermaid/i);
+  }
+  const guidance = read("src/server/canvas-agent/visual-explorer-contract.md");
+  assert.match(guidance, /Visual Explorer is the default route[\s\S]*architecture and sequence diagrams/);
+});

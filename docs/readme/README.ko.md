@@ -186,3 +186,15 @@ npm start
 기여하려면 [CONTRIBUTING.md](../../CONTRIBUTING.md)를 읽고 풀 리퀘스트 전에 `npm run check`를 실행하세요. 버그는 [Issues](https://github.com/penecho/penecho/issues), 아이디어는 [Discussions](https://github.com/penecho/penecho/discussions), 커뮤니티 참여는 [Discord](https://discord.gg/3jrPJ3mXdX)를 이용하세요.
 
 [AGPL-3.0-only](../../LICENSE) 라이선스가 적용됩니다. 별도의 [상용 라이선스](../../COMMERCIAL-LICENSE.md)도 이용할 수 있습니다. [상표 정책](../../TRADEMARKS.md)과 [기여자 계약](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)을 확인하세요.
+
+## 스타 기록
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="PenEcho GitHub 스타 증가 기록 차트" width="800">
+    </picture>
+  </a>
+</p>

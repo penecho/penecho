@@ -168,16 +168,29 @@ def run_job(job_path, api_key):
                 html = html.replace(old, new, 1)
             metadata["replacementsApplied"] = len(replacements)
             (output / "model-patches.json").write_text(json.dumps(patch, ensure_ascii=False, indent=2))
-        fenced = re.fullmatch(r"```(?:html)?\s*\n([\s\S]*?)\n```", html)
-        if fenced:
-            html = fenced.group(1)
-        if not re.search(r"<(?:!doctype\s+html|html)\b", html, re.I):
-            raise ValueError("Response is not a complete HTML document")
-        if not metadata["completed"]:
-            raise ValueError("Model did not finish normally; partial output is not accepted")
-        (output / "response.html").write_text(html)
-        metadata["htmlSha256"] = hashlib.sha256(html.encode()).hexdigest()
-        metadata["htmlBytes"] = len(html.encode())
+        if job.get("outputFormat") == "architecture-json":
+            import subprocess
+            fenced_json = re.fullmatch(r"```(?:json)?\s*\n([\s\S]*?)\n```", html)
+            document = json.loads(fenced_json.group(1) if fenced_json else html)
+            if not metadata["completed"]:
+                raise ValueError("Model did not finish normally")
+            encoded = json.dumps(document, ensure_ascii=False)
+            project = Path(__file__).resolve().parents[1]
+            subprocess.run(["node", "-e", "const fs=require('node:fs');require('./src/architecture/schema.js').validateArchitecture(JSON.parse(fs.readFileSync(0,'utf8')));"], input=encoded, text=True, cwd=project, check=True, capture_output=True)
+            (output / "response.json").write_text(json.dumps(document, ensure_ascii=False, indent=2))
+            metadata["jsonSha256"] = hashlib.sha256(encoded.encode()).hexdigest()
+            metadata["jsonBytes"] = len(encoded.encode())
+        else:
+            fenced = re.fullmatch(r"```(?:html)?\s*\n([\s\S]*?)\n```", html)
+            if fenced:
+                html = fenced.group(1)
+            if not re.search(r"<(?:!doctype\s+html|html)\b", html, re.I):
+                raise ValueError("Response is not a complete HTML document")
+            if not metadata["completed"]:
+                raise ValueError("Model did not finish normally; partial output is not accepted")
+            (output / "response.html").write_text(html)
+            metadata["htmlSha256"] = hashlib.sha256(html.encode()).hexdigest()
+            metadata["htmlBytes"] = len(html.encode())
     except urllib.error.HTTPError as error:
         metadata["httpStatus"] = error.code
         metadata["error"] = error.read(4000).decode(errors="replace").replace(api_key, "[REDACTED]")

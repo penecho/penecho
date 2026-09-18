@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PenEcho 项目架构</title>
+<style>
+  html,body{margin:0;padding:0;background:transparent;}
+  body{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;color:#1e293b;}
+  .page{padding:24px 28px 32px;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{font-size:13px;color:#64748b;margin:0 0 16px;}
+  .surface{background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:auto;}
+  svg{display:block;width:100%;min-width:1100px;height:auto;}
+  .detail{margin-top:18px;display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;}
+  .card{flex:1 1 calc(33.33% - 12px);min-width:0;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;border-left-width:4px;border-left-style:solid;}
+  .card h3{margin:0 0 6px;font-size:13.5px;}
+  .card ul{margin:0;padding-left:16px;font-size:12.5px;line-height:1.7;color:#475569;}
+  .c-browser{border-left-color:#2563eb;} .c-browser h3{color:#2563eb;}
+  .c-node{border-left-color:#059669;} .c-node h3{color:#059669;}
+  .c-ext{border-left-color:#d97706;} .c-ext h3{color:#d97706;}
+  .c-launch{border-left-color:#7c3aed;} .c-launch h3{color:#7c3aed;}
+  code{background:#f1f5f9;border-radius:4px;padding:0 4px;font-size:11.5px;color:#334155;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>PenEcho 项目架构</h1>
+  <p class="sub">组件关系图 · 浏览器 ⇄ 本地 Node 服务 ⇄ 外部模型 / MCP Agent，双启动入口</p>
+  <div class="surface">
+  <svg viewBox="0 0 1900 790" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PenEcho 项目架构图">
+    <defs>
+      <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/></marker>
+      <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#059669"/></marker>
+      <marker id="arrO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d97706"/></marker>
+      <marker id="arrP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
+    </defs>
+
+    <!-- ===== 节点渲染（node 表驱动，坐标集中于 rect） ===== -->
+    <!-- 浏览器 frame -->
+    <rect x="60" y="120" width="360" height="260" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="80" y="148" font-size="15" font-weight="700" fill="#2563eb">浏览器</text>
+    <rect x="80" y="165" width="320" height="55" rx="7" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="240" y="188" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">绘制交互 / Widget 展示</text>
+    <text x="240" y="208" font-size="11.5" fill="#64748b" text-anchor="middle">Canvas 画布界面</text>
+    <rect x="80" y="265" width="320" height="50" rx="7" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="240" y="287" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">IndexedDB</text>
+    <text x="240" y="305" font-size="11.5" fill="#64748b" text-anchor="middle">画布快照（浏览器本地）</text>
+
+    <!-- 本地 Node 服务 frame -->
+    <rect x="600" y="100" width="400" height="440" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+    <text x="620" y="128" font-size="15" font-weight="700" fill="#059669">本地 Node 服务（同一服务 · 不同职责）</text>
+    <rect x="640" y="167" width="320" height="50" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="800" y="189" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">HTTP API / 静态资源</text>
+    <text x="800" y="207" font-size="11.5" fill="#64748b" text-anchor="middle">请求入口</text>
+    <rect x="640" y="257" width="320" height="50" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="800" y="279" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">Canvas AI 请求管线</text>
+    <text x="800" y="297" font-size="11.5" fill="#64748b" text-anchor="middle">结构化绘图指令</text>
+    <rect x="640" y="347" width="320" height="50" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="800" y="369" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">Canvas Agent</text>
+    <text x="800" y="387" font-size="11.5" fill="#64748b" text-anchor="middle">模型连接 + 文档工具</text>
+    <rect x="640" y="437" width="320" height="50" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="800" y="459" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">MCP 服务</text>
+    <text x="800" y="477" font-size="11.5" fill="#64748b" text-anchor="middle">外部 Agent 的操作入口</text>
+    <line x1="800" y1="217" x2="800" y2="252" stroke="#059669" stroke-width="1.8" marker-end="url(#arrG)"/>
+    <text x="812" y="240" font-size="11" fill="#64748b">转发</text>
+
+    <!-- 外部服务 frame -->
+    <rect x="1120" y="100" width="400" height="440" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1140" y="128" font-size="15" font-weight="700" fill="#d97706">外部服务</text>
+    <rect x="1160" y="257" width="320" height="50" rx="7" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1320" y="279" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">模型 API / 本地 CLI 子进程</text>
+    <text x="1320" y="297" font-size="11.5" fill="#64748b" text-anchor="middle">模型适配器的后端</text>
+    <rect x="1160" y="437" width="320" height="50" rx="7" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1320" y="459" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">外部 MCP Agent</text>
+    <text x="1320" y="477" font-size="11.5" fill="#64748b" text-anchor="middle">MCP 客户端（独立进程）</text>
+
+    <!-- 启动入口 frame -->
+    <rect x="60" y="590" width="360" height="180" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+    <text x="80" y="618" font-size="15" font-weight="700" fill="#7c3aed">启动入口</text>
+    <rect x="80" y="635" width="320" height="45" rx="7" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5"/>
+    <text x="240" y="663" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">Electron 主进程</text>
+    <rect x="80" y="700" width="320" height="45" rx="7" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5"/>
+    <text x="240" y="728" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">CLI</text>
+
+    <!-- ===== 边（edge 记录渲染，端点取自节点边界） ===== -->
+    <!-- E1: browser.canvas -> node.http -->
+    <line x1="400" y1="192" x2="634" y2="192" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+    <text x="517" y="183" font-size="12" font-weight="600" fill="#2563eb" text-anchor="middle">HTTP POST /api/ai/command</text>
+
+    <!-- E3: node.canvasAI -> ext.model（上）＋ 返回（下，虚线） -->
+    <line x1="960" y1="272" x2="1154" y2="272" stroke="#059669" stroke-width="2" marker-end="url(#arrG)"/>
+    <text x="1057" y="263" font-size="12" font-weight="600" fill="#059669" text-anchor="middle">经模型适配器调用</text>
+    <line x1="1160" y1="292" x2="966" y2="292" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrO)"/>
+    <text x="1057" y="308" font-size="12" font-weight="600" fill="#d97706" text-anchor="middle">返回绘图指令</text>
+    <!-- E3b: node.agent -> ext.model（Canvas Agent 自有模型连接） -->
+    <path d="M 960 372 L 1090 372 L 1090 320 L 1290 320 L 1290 307" fill="none" stroke="#059669" stroke-width="2" marker-end="url(#arrG)"/>
+    <text x="1100" y="348" font-size="12" font-weight="600" fill="#059669">模型连接</text>
+
+    <!-- E4: browser <-> agent WebSocket（双向） -->
+    <path d="M 400 208 L 470 208 L 470 372 L 634 372" fill="none" stroke="#2563eb" stroke-width="2" marker-start="url(#arrB)" marker-end="url(#arrB)"/>
+    <text x="479" y="298" font-size="12" font-weight="600" fill="#2563eb">WebSocket</text>
+
+    <!-- E5: ext.mcpAgent -> node.mcp -->
+    <line x1="1160" y1="462" x2="966" y2="462" stroke="#d97706" stroke-width="2" marker-end="url(#arrO)"/>
+    <text x="1063" y="453" font-size="12" font-weight="600" fill="#d97706" text-anchor="middle">HTTPS MCP 调用</text>
+
+    <!-- E6: node.mcp -> 浏览器画布底部独立端口（授权通道，虚线） -->
+    <path d="M 640 462 L 430 462 L 430 240 L 340 240 L 340 224" fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="7 4" marker-end="url(#arrG)"/>
+    <text x="535" y="453" font-size="12" font-weight="600" fill="#059669" text-anchor="middle">授权通道读写 Canvas</text>
+
+    <!-- E7: electron -> node frame -->
+    <path d="M 400 657 L 620 657 L 620 546" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrP)"/>
+    <text x="512" y="648" font-size="12" font-weight="600" fill="#7c3aed" text-anchor="middle">加载本地服务器 · 打开窗口</text>
+
+    <!-- E8: cli -> node frame -->
+    <path d="M 400 722 L 700 722 L 700 546" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrP)"/>
+    <text x="552" y="742" font-size="12" font-weight="600" fill="#7c3aed" text-anchor="middle">启动同一服务器</text>
+  </svg>
+  </div>
+
+  <div class="detail">
+    <div class="card c-browser">
+      <h3>浏览器</h3>
+      <ul>
+        <li>前端代码 <code>src/client/app/</code>，构建产物为 <code>public/app.js</code></li>
+        <li>画布：20000×20000 逻辑坐标，512×512 稀疏瓦片</li>
+        <li>快照存于自身 IndexedDB，与 Node 服务持有的数据归属不同</li>
+        <li>MathJax 由浏览器直接访问 jsDelivr CDN</li>
+      </ul>
+    </div>
+    <div class="card c-node">
+      <h3>Canvas AI 请求管线</h3>
+      <ul>
+        <li>服务端代码 <code>src/server/main.js</code></li>
+        <li>经模型适配器选择后端：<code>src/providers/</code> 提供 <code>api</code>、<code>codex-cli</code>、<code>claude-cli</code>、<code>kimi-cli</code></li>
+        <li>模型凭据只留在服务端，不进入浏览器</li>
+        <li>返回结构化绘图指令，浏览器展示草稿，由用户确认</li>
+      </ul>
+    </div>
+    <div class="card c-node">
+      <h3>Canvas Agent 与 MCP 服务</h3>
+      <ul>
+        <li>Canvas Agent：<code>src/server/canvas-agent/</code>，经 WebSocket 与浏览器通信，使用模型连接与文档工具</li>
+        <li>MCP 服务：<code>src/server/mcp/</code>，经已授权浏览器通道读写同一 Canvas，不经过 Canvas AI 的模型适配器</li>
+      </ul>
+    </div>
+    <div class="card c-ext">
+      <h3>外部服务</h3>
+      <ul>
+        <li>模型后端分两类：模型 API（HTTPS 云端调用）与本地 CLI 子进程（<code>codex-cli</code> / <code>claude-cli</code> / <code>kimi-cli</code>，本机进程，非云端）</li>
+        <li>Canvas Agent 持有自己的模型连接，与 Canvas AI 管线相互独立</li>
+        <li>外部 MCP Agent 是 MCP 客户端，经 HTTPS MCP 调用本地 MCP 服务</li>
+      </ul>
+    </div>
+    <div class="card c-node">
+      <h3>本地 Node 服务</h3>
+      <ul>
+        <li>静态资源 / HTTP API / Canvas AI / Canvas Agent / MCP 是同一本地服务中的不同职责</li>
+        <li>服务端持有 <code>connections.json</code> 与请求日志</li>
+      </ul>
+    </div>
+    <div class="card c-launch">
+      <h3>启动入口</h3>
+      <ul>
+        <li>Electron 主进程加载本地服务器并打开浏览器窗口</li>
+        <li>CLI 可启动同一服务器，是另一种入口</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

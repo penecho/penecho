@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PenEcho 项目架构</title>
+<style>
+  :root{
+    --blue:#2563eb; --teal:#0d9488; --green:#16a34a; --orange:#ea580c;
+    --purple:#7c3aed; --red:#dc2626; --ink:#1e293b; --muted:#64748b;
+    --line:#cbd5e1; --bg:#f8fafc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:transparent;}
+  body{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif;color:var(--ink);font-size:14px;line-height:1.5;}
+  .doc{width:100%;min-width:0;padding:20px 22px 26px;background:var(--bg);}
+  .page{max-width:1360px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px 26px 26px;}
+
+  /* header */
+  .hdr{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;border-bottom:2px solid var(--ink);padding-bottom:10px;}
+  .hdr h1{font-size:24px;font-weight:700;letter-spacing:.5px;}
+  .hdr .sub{color:var(--muted);font-size:13px;}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto;}
+  .badge{font-size:11px;border:1px solid var(--line);background:var(--bg);border-radius:4px;padding:2px 8px;color:var(--ink);}
+  .badge b{font-weight:700;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0 4px;font-size:11.5px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* main map */
+  .map{margin-top:10px;}
+  .map svg{width:100%;height:auto;display:block;}
+  svg text{font-family:inherit;}
+  .cap{font-size:11px;color:var(--muted);text-align:right;margin-top:2px;}
+
+  /* detail panels */
+  .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:16px;}
+  .panel{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px 14px;}
+  .panel h3{font-size:14px;font-weight:700;margin-bottom:2px;}
+  .panel h3 .tag{display:inline-block;font-size:11px;color:#fff;border-radius:3px;padding:0 6px;margin-right:6px;vertical-align:1px;}
+  .panel .intro{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .panel ul{list-style:none;font-size:12.5px;}
+  .panel li{padding:2px 0 2px 14px;position:relative;}
+  .panel li::before{content:"";position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:1px;background:var(--line);}
+  .panel code{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:0 4px;}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:12px;margin:6px 0;}
+  .fstep{border:1px solid var(--line);border-radius:4px;padding:3px 8px;background:var(--bg);white-space:nowrap;}
+  .farr{color:var(--muted);font-weight:700;}
+  .own{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;}
+  .ownbox{flex:1;min-width:130px;border-radius:6px;padding:6px 10px;font-size:12px;border:1px solid;}
+  .warn{margin-top:8px;font-size:11.5px;color:var(--red);border-left:3px solid var(--red);padding-left:8px;}
+  @media (max-width:640px){ .hdr h1{font-size:19px;} .doc{padding:12px;} .page{padding:14px;} }
+</style>
+</head>
+<body>
+<div class="doc"><div class="page">
+
+  <header class="hdr">
+    <h1>PenEcho 项目架构</h1>
+    <span class="sub">浏览器 Canvas · 本地 Node 服务 · 外部模型 · MCP Agent</span>
+    <div class="badges">
+      <span class="badge">本地服务 <b>1 台</b>（4 类职责）</span>
+      <span class="badge">画布 <b>20000×20000</b> 逻辑坐标</span>
+      <span class="badge">瓦片 <b>512×512</b> 稀疏</span>
+      <span class="badge">凭据<b>不进入浏览器</b></span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--blue)"></i>浏览器 / 前端</span>
+    <span><i class="dot" style="background:var(--orange)"></i>本地 Node 服务</span>
+    <span><i class="dot" style="background:var(--purple)"></i>外部模型服务</span>
+    <span><i class="dot" style="background:var(--green)"></i>外部 MCP Agent</span>
+    <span><i class="dot" style="background:var(--teal)"></i>数据 / 存储</span>
+    <span>— HTTP &nbsp;— WebSocket &nbsp;— HTTPS(MCP) &nbsp;授权通道（虚线）</span>
+  </div>
+
+  <section class="map" aria-label="PenEcho 架构拓扑图">
+  <svg viewBox="0 0 1280 560" role="img">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+      </marker>
+      <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--teal)"/>
+      </marker>
+    </defs>
+    <style>
+      .node{rx:8;stroke-width:1.6;}
+      .t{font-size:15px;font-weight:700;fill:var(--ink);}
+      .r{font-size:11.5px;fill:var(--muted);}
+      .lb{font-size:11.5px;fill:#475569;}
+      .code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;fill:var(--muted);}
+      .frame{fill:none;stroke-width:1.8;rx:10;}
+      .ft{font-size:13px;font-weight:700;}
+      .edge{fill:none;stroke:#475569;stroke-width:1.6;}
+      .dsh{stroke-dasharray:6 4;}
+      .lbl{font-size:11px;fill:#334155;}
+      .pill{rx:9;}
+    </style>
+
+    <!-- 外部 MCP Agent -->
+    <g>
+      <rect class="node" x="40" y="150" width="190" height="110" fill="#f0fdf4" stroke="var(--green)"/>
+      <text class="t" x="60" y="185">外部 AI Agent</text>
+      <text class="r" x="60" y="207">MCP 客户端</text>
+      <text class="r" x="60" y="226">第三方自动化任务</text>
+    </g>
+
+    <!-- 外部模型服务 -->
+    <g>
+      <rect class="node" x="40" y="330" width="190" height="130" fill="#faf5ff" stroke="var(--purple)"/>
+      <text class="t" x="60" y="358">外部模型服务</text>
+      <text class="r" x="60" y="380">HTTP API</text>
+      <text class="r" x="60" y="400">本地 CLI 子进程</text>
+      <text class="code" x="60" y="428">src/providers/</text>
+      <text class="code" x="60" y="444">api · codex · claude · kimi</text>
+    </g>
+
+    <!-- Electron / CLI 启动层 -->
+    <g>
+      <rect class="node" x="960" y="30" width="290" height="80" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text class="t" x="978" y="58" style="font-size:13.5px">启动入口（二选一）</text>
+      <text class="r" x="978" y="78">Electron 主进程：加载本地服务器 + 打开窗口</text>
+      <text class="r" x="978" y="96">CLI：直接启动同一服务器</text>
+    </g>
+
+    <!-- 浏览器 Canvas 帧 -->
+    <rect class="frame" x="320" y="80" width="430" height="200" stroke="var(--blue)" fill="#eff6ff"/>
+    <text class="ft" x="336" y="104" fill="var(--blue)">浏览器 · Canvas 前端</text>
+    <g>
+      <rect class="node" x="340" y="118" width="190" height="64" fill="#fff" stroke="var(--blue)"/>
+      <text class="t" x="352" y="140" style="font-size:13px">绘制与交互</text>
+      <text class="r" x="352" y="158">矢量绘制 · 用户编辑</text>
+      <text class="code" x="352" y="173">src/client/app/ → public/app.js</text>
+    </g>
+    <g>
+      <rect class="node" x="550" y="118" width="180" height="64" fill="#fff" stroke="var(--blue)"/>
+      <text class="t" x="562" y="140" style="font-size:13px">Widget 展示</text>
+      <text class="r" x="562" y="158">AI 草稿 → 用户确认</text>
+    </g>
+    <g>
+      <rect class="node" x="340" y="196" width="390" height="56" fill="#fff" stroke="var(--teal)"/>
+      <text class="t" x="352" y="217" style="font-size:13px">IndexedDB 画布快照</text>
+      <text class="r" x="352" y="235">浏览器本地持有 · 独立归属</text>
+    </g>
+
+    <!-- 本地 Node 服务帧 -->
+    <rect class="frame" x="320" y="320" width="700" height="220" stroke="var(--orange)" fill="#fff7ed"/>
+    <text class="ft" x="336" y="344" fill="var(--orange)">本地 Node 服务（同一进程 / 端口，四类职责）</text>
+    <g>
+      <rect class="node" x="340" y="360" width="200" height="70" fill="#fff" stroke="var(--orange)"/>
+      <text class="t" x="352" y="383" style="font-size:13px">静态资源 / HTTP API</text>
+      <text class="r" x="352" y="401">托管前端 + API 入口</text>
+      <text class="code" x="352" y="417">src/server/main.js</text>
+    </g>
+    <g>
+      <rect class="node" x="560" y="360" width="210" height="70" fill="#fff" stroke="var(--orange)"/>
+      <text class="t" x="572" y="383" style="font-size:13px">Canvas AI 请求管线</text>
+      <text class="r" x="572" y="401">模型适配器 · 凭据在服务端</text>
+      <text class="code" x="572" y="417">POST /api/ai/command</text>
+    </g>
+    <g>
+      <rect class="node" x="790" y="360" width="210" height="70" fill="#fff" stroke="var(--orange)"/>
+      <text class="t" x="802" y="383" style="font-size:13px">Canvas Agent</text>
+      <text class="r" x="802" y="401">WebSocket 服务 · 文档工具</text>
+      <text class="code" x="802" y="417">src/server/canvas-agent/</text>
+    </g>
+    <g>
+      <rect class="node" x="340" y="452" width="200" height="66" fill="#fff" stroke="var(--orange)"/>
+      <text class="t" x="352" y="474" style="font-size:13px">MCP 服务</text>
+      <text class="r" x="352" y="492">经授权浏览器通道读写 Canvas</text>
+      <text class="code" x="352" y="507">src/server/mcp/</text>
+    </g>
+    <g>
+      <rect class="node" x="560" y="452" width="210" height="66" fill="#f0fdfa" stroke="var(--teal)"/>
+      <text class="t" x="572" y="474" style="font-size:13px">connections.json</text>
+      <text class="r" x="572" y="492">+ 请求日志</text>
+      <text class="r" x="572" y="507">Node 服务持有</text>
+    </g>
+
+    <!-- 边 -->
+    <!-- AI 路径 -->
+    <path class="edge" d="M530,280 L640,280 L640,356" marker-end="url(#arr)"/>
+    <rect x="470" y="266" width="150" height="16" fill="#fff"/>
+    <text class="lbl" x="474" y="278">HTTP POST /api/ai/command</text>
+    <path class="edge" d="M665,430 L540,560 L260,560 L260,420 L234,405" marker-end="url(#arr)" transform="translate(0,-64)"/>
+    <path class="edge" d="M770,395 L800,560 L260,560" fill="none" stroke="none"/>
+    <path class="edge" d="M665,418 C665,520 480,520 320,500 C250,490 236,450 232,432" marker-end="url(#arr)" opacity="0"/>
+    <path class="edge" d="M700,432 C680,520 420,540 240,432" marker-end="url(#arr)"/>
+    <text class="lbl" x="430" y="530">调用模型 API / CLI 子进程</text>
+    <path class="edge" d="M240,560 C240,560 240,430 236,438" opacity="0"/>
+
+    <!-- Agent WS -->
+    <path class="edge" d="M740,276 L880,276 L880,356" marker-end="url(#arr)"/>
+    <rect x="752" y="262" width="90" height="16" fill="#fff"/>
+    <text class="lbl" x="758" y="274">WebSocket</text>
+
+    <!-- MCP -->
+    <path class="edge dsh" d="M232,205 L316,205" marker-end="url(#arr)"/>
+    <text class="lbl" x="236" y="196">HTTPS · MCP</text>
+    <path class="edge dsh" d="M560,485 C480,485 470,300 540,284" marker-end="url(#arrB)" stroke="var(--teal)"/>
+    <rect x="452" y="440" width="160" height="16" fill="#fff"/>
+    <text class="lbl" x="456" y="452" fill="var(--teal)">已授权浏览器通道（写 Canvas）</text>
+
+    <!-- 静态资源到浏览器 -->
+    <path class="edge dsh" d="M400,356 L400,284" marker-end="url(#arr)" stroke="#94a3b8"/>
+    <text class="lbl" x="336" y="326">静态资源 app.js</text>
+
+    <!-- MathJax -->
+    <g>
+      <rect class="pill" x="960" y="150" width="290" height="46" fill="#fff" stroke="#94a3b8"/>
+      <text class="t" x="976" y="172" style="font-size:13px">MathJax（jsDelivr CDN）</text>
+      <text class="r" x="976" y="189">浏览器直接访问，不经过本地服务</text>
+    </g>
+    <path class="edge dsh" d="M955,173 L754,173" marker-end="url(#arr)" stroke="#94a3b8"/>
+    <text class="lbl" x="800" y="165">HTTPS</text>
+
+    <!-- 启动入口连接 -->
+    <path class="edge" d="M1100,112 L1100,140 C1100,180 1000,180 880,220 C800,246 760,250 754,250" fill="none" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <text class="lbl" x="890" y="200">启动本地服务</text>
+
+    <!-- 说明标注 -->
+    <g>
+      <rect x="960" y="240" width="290" height="150" fill="#fffbeb" stroke="#f59e0b" rx="8"/>
+      <text class="t" x="976" y="264" style="font-size:13px;fill:#b45309">关键设计要点</text>
+      <text class="r" x="976" y="286">① 四类职责同属一个本地服务，非四台服务器</text>
+      <text class="r" x="976" y="308">② 模型凭据只留在服务端，不进入浏览器</text>
+      <text class="r" x="976" y="330">③ MCP 读写 Canvas 绕过模型适配器，</text>
+      <text class="r" x="990" y="348">走已授权浏览器通道</text>
+      <text class="r" x="976" y="372">④ connections.json / 日志归 Node；</text>
+      <text class="r" x="990" y="390">IndexedDB 归浏览器，归属不同</text>
+    </g>
+  </svg>
+  <p class="cap">虚线 = 数据 / 授权 / 静态资源通道；实线 = 调用 / 通信路径。图为拓扑示意，未按进程/端口比例绘制。</p>
+  </section>
+
+  <section class="panels">
+    <div class="panel">
+      <h3><span class="tag" style="background:var(--orange)">A</span>Canvas AI 请求管线</h3>
+      <p class="intro">绘图主路径：一次请求返回结构化指令，用户确认后上画布。</p>
+      <div class="flow">
+        <span class="fstep">浏览器交互</span><span class="farr">→</span>
+        <span class="fstep"><code>POST /api/ai/command</code></span><span class="farr">→</span>
+        <span class="fstep">模型适配器</span><span class="farr">→</span>
+        <span class="fstep">外部模型 / CLI</span><span class="farr">→</span>
+        <span class="fstep">结构化绘图指令</span><span class="farr">→</span>
+        <span class="fstep">草稿展示 → 用户确认</span>
+      </div>
+      <ul>
+        <li>适配器：<code>src/providers/</code> 提供 <code>api</code>、<code>codex-cli</code>、<code>claude-cli</code>、<code>kimi-cli</code></li>
+        <li>凭据仅在服务端；浏览器不接触模型密钥</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h3><span class="tag" style="background:var(--orange)">B</span>Canvas Agent 通道</h3>
+      <p class="intro">面向长任务的多轮协作通道，独立于 AI 请求管线。</p>
+      <div class="flow">
+        <span class="fstep">浏览器</span><span class="farr">⇄</span>
+        <span class="fstep">WebSocket</span><span class="farr">⇄</span>
+        <span class="fstep">Canvas Agent</span><span class="farr">⇄</span>
+        <span class="fstep">模型连接</span>
+      </div>
+      <ul>
+        <li>Agent 自带模型连接与文档工具，可自主完成任务</li>
+        <li>代码位于 <code>src/server/canvas-agent/</code></li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h3><span class="tag" style="background:var(--green)">C</span>外部 MCP Agent 路径</h3>
+      <p class="intro">第三方 Agent 以 MCP 客户端身份接入本地 MCP 服务。</p>
+      <div class="flow">
+        <span class="fstep">外部 AI Agent（MCP 客户端）</span><span class="farr">→</span>
+        <span class="fstep">HTTPS MCP</span><span class="farr">→</span>
+        <span class="fstep">MCP 服务</span><span class="farr">→</span>
+        <span class="fstep">读写 Canvas</span>
+      </div>
+      <ul>
+        <li>经<b>已授权浏览器通道</b>操作画布</li>
+        <li><b>不经过</b> Canvas AI 的模型适配器</li>
+        <li>代码位于 <code>src/server/mcp/</code></li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h3><span class="tag" style="background:var(--teal)">D</span>数据归属与启动入口</h3>
+      <p class="intro">两侧存储互不隶属；服务可由两种入口拉起同一实例。</p>
+      <div class="own">
+        <div class="ownbox" style="border-color:var(--teal);background:#f0fdfa">
+          <b>Node 服务持有</b><br>connections.json<br>请求日志
+        </div>
+        <div class="ownbox" style="border-color:var(--blue);background:#eff6ff">
+          <b>浏览器持有</b><br>IndexedDB 画布快照<br>（20000×20000 / 512 稀疏瓦片）
+        </div>
+      </div>
+      <ul style="margin-top:6px">
+        <li>Electron 主进程：加载本地服务器并打开浏览器窗口</li>
+        <li>CLI：启动同一服务器，是另一种入口</li>
+        <li>MathJax 由浏览器直接访问 jsDelivr，不经过本地服务</li>
+      </ul>
+      <p class="warn">注意：不要把「静态资源 / API / AI 管线 / Agent / MCP」理解为多台服务器——它们是同一本地 Node 服务内的职责划分。</p>
+    </div>
+  </section>
+
+</div></div>
+</body>
+</html>

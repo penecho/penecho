@@ -1,0 +1,15 @@
+{
+  "penecho": {
+    "title": "PenEcho 项目架构",
+    "sources": ["src/server/main.js", "desktop/main.js", "public/index.html", "src/server/canvas-agent/http.js", "src/server/mcp/service.js", "docs/architecture.md"],
+    "facts": "PenEcho 有浏览器 Canvas、本地 Node 服务、外部模型服务和外部 MCP Agent。浏览器拥有绘制交互、Widget 展示与 IndexedDB 画布快照。本地服务里有静态资源/HTTP API、Canvas AI 请求管线、Canvas Agent、MCP 服务；这些是同一本地服务中的不同职责，不是四台服务器。浏览器经 HTTP POST /api/ai/command 调用 Canvas AI，请求管线经模型适配器调用外部模型 API 或本地 CLI 子进程；返回结构化绘图指令，浏览器展示草稿，由用户确认。浏览器另经 WebSocket 与 Canvas Agent 通信，Agent 使用模型连接和文档工具完成任务。外部 AI Agent 是 MCP 客户端，通过 HTTPS MCP 调用本地 MCP 服务；MCP 服务经已授权浏览器通道读写同一个 Canvas，不必经过 Canvas AI 模型适配器。Node 服务持有 connections.json 与请求日志；浏览器持有自己的 IndexedDB，两者归属不同。Electron 主进程加载本地服务器并打开浏览器窗口；CLI 也可启动同一服务器，是另一种启动入口。详情材料：前端 src/client/app/ 构建到 public/app.js；画布为 20000×20000 逻辑坐标与 512×512 稀疏瓦片；src/providers/ 提供 api、codex-cli、claude-cli、kimi-cli；模型凭据不进入浏览器；MathJax 从浏览器直接访问 jsDelivr；服务端 src/server/main.js，Agent src/server/canvas-agent/，MCP src/server/mcp/。请根据重要性选择这些事实，不必把全部实现细节画成主图节点。"
+  },
+  "commerce": {
+    "title": "电商服务架构（给定设计）",
+    "facts": "这是给定的示例设计，不是特定云厂商的产品。用户经 CDN 访问前端静态资源，经公网负载均衡器访问私有应用区的 API Gateway。Gateway 分别调用商品服务、订单服务、账户服务；不是商品→订单→账户的串联流水线。商品服务读取商品数据库并访问缓存；订单服务读写订单数据库并向消息队列发布订单事件。库存 Worker 消费订单事件，更新库存数据库，并发布处理结果。通知 Worker 消费处理结果，调用边界外的邮件供应商。账户服务访问账户数据库。数据库、缓存和消息队列位于私有数据区；数据库没有公网入口。应用区与数据区都属于同一私有网络；CDN 和邮件供应商在网络之外。详情：服务用 HTTPS 同步通信，消息队列承载异步处理；Worker 需要幂等消费；订单状态通过订单服务查询。请自主选择适合该拓扑的布局。"
+  },
+  "rag": {
+    "title": "知识检索与生成架构（给定设计）",
+    "facts": "这是给定的示例设计。系统有离线知识处理和在线问答两种工作负载，共享向量数据库。离线：文档源进入对象存储，导入任务读取文档后解析和切分，调用嵌入服务，把向量和文档引用写入向量数据库；元数据另写元数据存储。在线：用户经 Web 应用调用问答 API；API 先检查身份和权限，调用嵌入服务对问题编码，检索向量数据库，再按文档引用读取对象存储的原文片段，组成上下文后调用外部 LLM 服务，向用户返回带引用的答案。评估任务读取脱敏的问答样本和基准数据，生成评估报告，不能画成每次回答必经的同步步骤。对象存储、向量库、元数据存储属于本系统的数据域；LLM 服务是外部供应方。详情：索引更新异步完成；问答 API 做权限过滤；共享存储不表示离线与在线任务直接互调。请根据这些关系自行组织图形，不指定方向或面板数。"
+  }
+}

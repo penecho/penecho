@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电商服务架构（给定设计）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    padding: 18px;
+  }
+  .root { width: 100%; min-width: 0; max-width: 1280px; margin: 0 auto; }
+  .title-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: .5px; }
+  .subtitle { font-size: 13px; color: #64748b; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
+  .badge {
+    font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;
+  }
+  .badge b { color: #0f172a; }
+  .badge.ext { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+  .badge.priv { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
+
+  .topology-wrap {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 8px; margin-bottom: 14px;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: inherit; }
+
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .panel {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px;
+  }
+  .panel h2 { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .panel h2 .tag {
+    font-size: 11px; font-weight: 700; color: #fff; border-radius: 4px; padding: 1px 7px;
+  }
+  .panel ul { list-style: none; }
+  .panel li {
+    font-size: 12.5px; line-height: 1.55; color: #334155; padding: 4px 0 4px 16px; position: relative;
+  }
+  .panel li::before {
+    content: ""; position: absolute; left: 2px; top: 11px; width: 6px; height: 6px; border-radius: 2px;
+  }
+  .panel.sync li::before { background: #f97316; }
+  .panel.async li::before { background: #0d9488; }
+  .panel.rule li::before { background: #7c3aed; }
+  .k { color: #0f172a; font-weight: 600; }
+  .panel .note { font-size: 11.5px; color: #64748b; margin-top: 8px; border-top: 1px dashed #e2e8f0; padding-top: 6px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 12px; color: #475569; align-items: center; }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 22px; height: 0; border-top: 2.5px solid; }
+  .legend .bx { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+</style>
+</head>
+<body>
+<div class="root">
+  <div class="title-bar">
+    <h1>电商服务架构（给定设计）</h1>
+    <span class="subtitle">示例设计 · 非特定云厂商 · 用于技术讲解</span>
+  </div>
+  <div class="badges">
+    <span class="badge"><b>3</b> 个微服务</span>
+    <span class="badge"><b>3</b> 个数据库 · <b>1</b> 缓存 · <b>1</b> 消息队列</span>
+    <span class="badge"><b>2</b> 个 Worker（幂等消费）</span>
+    <span class="badge ext">外部网络：CDN · 邮件供应商</span>
+    <span class="badge priv">同一私有网络：应用区 + 数据区</span>
+  </div>
+
+  <div class="topology-wrap">
+  <svg viewBox="0 0 1240 640" role="img" aria-label="电商服务架构拓扑图">
+    <defs>
+      <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 Z" fill="#475569"/>
+      </marker>
+      <marker id="arr-orange" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 Z" fill="#ea580c"/>
+      </marker>
+      <marker id="arr-teal" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 Z" fill="#0d9488"/>
+      </marker>
+    </defs>
+
+    <!-- ================= 外部网络（左） ================= -->
+    <rect x="10" y="30" width="180" height="580" rx="10" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="100" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">外部网络</text>
+
+    <!-- CDN -->
+    <rect x="35" y="80" width="130" height="52" rx="8" fill="#ffffff" stroke="#ef4444" stroke-width="2"/>
+    <text x="100" y="101" text-anchor="middle" font-size="14" font-weight="700" fill="#991b1b">CDN</text>
+    <text x="100" y="119" text-anchor="middle" font-size="10.5" fill="#b91c1c">静态资源分发</text>
+
+    <!-- 邮件供应商 -->
+    <rect x="35" y="470" width="130" height="52" rx="8" fill="#ffffff" stroke="#ef4444" stroke-width="2"/>
+    <text x="100" y="491" text-anchor="middle" font-size="14" font-weight="700" fill="#991b1b">邮件供应商</text>
+    <text x="100" y="509" text-anchor="middle" font-size="10.5" fill="#b91c1c">网络边界外</text>
+
+    <!-- 用户 -->
+    <text x="100" y="164" text-anchor="middle" font-size="12.5" fill="#334155" font-weight="600">👤 用户请求</text>
+    <line x1="100" y1="172" x2="100" y2="192" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- ================= 公网接入（中左） ================= -->
+    <rect x="250" y="80" width="150" height="52" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+    <text x="325" y="101" text-anchor="middle" font-size="13.5" font-weight="700" fill="#9a3412">公网负载均衡器</text>
+    <text x="325" y="119" text-anchor="middle" font-size="10.5" fill="#c2410c">公网入口</text>
+
+    <!-- CDN → LB? no: 用户→CDN→前端; 用户→LB→Gateway -->
+    <path d="M100,132 C100,160 100,180 100,192" stroke="none" fill="none"/>
+    <!-- 用户经CDN取静态资源（向上反馈） -->
+    <path d="M35,106 C18,106 18,60 35,60" stroke="none" fill="none"/>
+
+    <!-- 公网 LB → API Gateway -->
+    <path d="M400,106 C440,106 450,120 480,120" stroke="#475569" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <text x="440" y="98" text-anchor="middle" font-size="10.5" fill="#475569">HTTPS</text>
+
+    <!-- CDN ↔ 用户 已有；用户 → LB：从外部网络框穿到 LB -->
+    <path d="M165,150 C200,150 210,110 250,108" stroke="#475569" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <text x="207" y="145" text-anchor="middle" font-size="10.5" fill="#475569">页面/API 请求</text>
+
+    <!-- ================= 私有网络大框 ================= -->
+    <rect x="470" y="30" width="760" height="580" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+    <text x="500" y="54" font-size="13" font-weight="700" fill="#334155">私有网络（应用区 + 数据区）</text>
+
+    <!-- ---- 应用区 ---- -->
+    <rect x="490" y="70" width="720" height="270" rx="8" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.5"/>
+    <text x="510" y="92" font-size="12.5" font-weight="700" fill="#1e40af">应用区（私有）</text>
+
+    <!-- API Gateway -->
+    <rect x="520" y="94" width="150" height="52" rx="8" fill="#ffffff" stroke="#ea580c" stroke-width="2"/>
+    <text x="595" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="#9a3412">API Gateway</text>
+    <text x="595" y="133" text-anchor="middle" font-size="10.5" fill="#c2410c">统一 API 入口</text>
+
+    <!-- 三个服务 -->
+    <g>
+      <rect x="800" y="112" width="170" height="58" rx="8" fill="#ffffff" stroke="#0d9488" stroke-width="2"/>
+      <text x="885" y="136" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">商品服务</text>
+      <text x="885" y="154" text-anchor="middle" font-size="10.5" fill="#0f766e">商品目录查询</text>
+    </g>
+    <g>
+      <rect x="800" y="196" width="170" height="58" rx="8" fill="#ffffff" stroke="#0d9488" stroke-width="2"/>
+      <text x="885" y="220" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">订单服务</text>
+      <text x="885" y="238" text-anchor="middle" font-size="10.5" fill="#0f766e">下单 / 状态查询</text>
+    </g>
+    <g>
+      <rect x="800" y="280" width="170" height="48" rx="8" fill="#ffffff" stroke="#0d9488" stroke-width="2"/>
+      <text x="885" y="300" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">账户服务</text>
+      <text x="885" y="318" text-anchor="middle" font-size="10.5" fill="#0f766e">账户信息</text>
+    </g>
+
+    <!-- Gateway → 三服务（HTTPS，扇出而非串联） -->
+    <path d="M670,110 C730,105 750,132 800,140" stroke="#ea580c" stroke-width="2" fill="none" marker-end="url(#arr-orange)"/>
+    <path d="M670,122 C730,122 740,222 800,225" stroke="#ea580c" stroke-width="2" fill="none" marker-end="url(#arr-orange)"/>
+    <path d="M670,136 C730,142 750,295 800,302" stroke="#ea580c" stroke-width="2" fill="none" marker-end="url(#arr-orange)"/>
+    <text x="735" y="180" text-anchor="middle" font-size="10.5" fill="#c2410c" font-weight="600">HTTPS 同步调用（扇出）</text>
+
+    <!-- ---- 数据区 ---- -->
+    <rect x="490" y="362" width="720" height="232" rx="8" fill="#f0fdf4" stroke="#4ade80" stroke-width="1.5"/>
+    <text x="510" y="384" font-size="12.5" font-weight="700" fill="#166534">私有数据区（无公网入口）</text>
+
+    <!-- 商品 DB -->
+    <g>
+      <rect x="530" y="400" width="130" height="48" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.8"/>
+      <path d="M542,400 v48 M648,400 v48" stroke="#16a34a" stroke-width="1.2"/>
+      <text x="595" y="421" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">商品数据库</text>
+      <text x="595" y="438" text-anchor="middle" font-size="10" fill="#15803d">只读</text>
+    </g>
+    <!-- 缓存 -->
+    <g>
+      <rect x="530" y="472" width="130" height="44" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 3"/>
+      <text x="595" y="499" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">缓存</text>
+    </g>
+    <!-- 订单 DB -->
+    <g>
+      <rect x="700" y="400" width="130" height="48" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.8"/>
+      <path d="M712,400 v48 M818,400 v48" stroke="#16a34a" stroke-width="1.2"/>
+      <text x="765" y="421" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">订单数据库</text>
+      <text x="765" y="438" text-anchor="middle" font-size="10" fill="#15803d">读写</text>
+    </g>
+    <!-- 消息队列 -->
+    <g>
+      <rect x="700" y="472" width="130" height="44" rx="6" fill="#ffffff" stroke="#0d9488" stroke-width="1.8"/>
+      <text x="765" y="492" text-anchor="middle" font-size="13" font-weight="700" fill="#0f766e">消息队列</text>
+      <text x="765" y="508" text-anchor="middle" font-size="10" fill="#0f766e">异步事件通道</text>
+    </g>
+    <!-- 库存 DB -->
+    <g>
+      <rect x="870" y="400" width="130" height="48" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.8"/>
+      <path d="M882,400 v48 M988,400 v48" stroke="#16a34a" stroke-width="1.2"/>
+      <text x="930" y="421" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">库存数据库</text>
+      <text x="930" y="438" text-anchor="middle" font-size="10" fill="#15803d">更新</text>
+    </g>
+    <!-- 账户 DB -->
+    <g>
+      <rect x="1040" y="400" width="130" height="48" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.8"/>
+      <path d="M1052,400 v48 M1158,400 v48" stroke="#16a34a" stroke-width="1.2"/>
+      <text x="1105" y="421" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">账户数据库</text>
+      <text x="1105" y="438" text-anchor="middle" font-size="10" fill="#15803d">访问</text>
+    </g>
+
+    <!-- Workers -->
+    <g>
+      <rect x="1040" y="256" width="150" height="50" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+      <text x="1115" y="277" text-anchor="middle" font-size="13.5" font-weight="700" fill="#6d28d9">库存 Worker</text>
+      <text x="1115" y="294" text-anchor="middle" font-size="10" fill="#7c3aed">消费订单事件 · 幂等</text>
+    </g>
+    <g>
+      <rect x="1040" y="472" width="130" height="50" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+      <text x="1105" y="493" text-anchor="middle" font-size="13.5" font-weight="700" fill="#6d28d9">通知 Worker</text>
+      <text x="1105" y="510" text-anchor="middle" font-size="10" fill="#7c3aed">消费处理结果 · 幂等</text>
+    </g>
+
+    <!-- ==== 数据区连接 ==== -->
+    <!-- 商品服务 → 商品DB / 缓存 -->
+    <path d="M860,170 C860,300 740,380 660,410" stroke="#16a34a" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <path d="M855,172 C830,340 720,450 660,486" stroke="#16a34a" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <!-- 订单服务 → 订单DB / MQ -->
+    <path d="M880,254 C875,320 820,360 768,400" stroke="#16a34a" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <path d="M905,254 C915,330 830,430 800,480" stroke="#0d9488" stroke-width="2" stroke-dasharray="6 3" fill="none" marker-end="url(#arr-teal)"/>
+    <text x="878" y="330" text-anchor="middle" font-size="10.5" fill="#0f766e">发布订单事件</text>
+    <!-- 账户服务 → 账户DB -->
+    <path d="M950,328 C1000,360 1060,375 1100,400" stroke="#16a34a" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <!-- MQ → 库存 Worker -->
+    <path d="M830,480 C930,470 1000,340 1040,292" stroke="#0d9488" stroke-width="2" stroke-dasharray="6 3" fill="none" marker-end="url(#arr-teal)"/>
+    <text x="920" y="420" text-anchor="middle" font-size="10.5" fill="#0f766e">消费订单事件</text>
+    <!-- 库存 Worker → 库存DB -->
+    <path d="M1115,306 L1115,400" stroke="#16a34a" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+    <!-- 库存 Worker → MQ（发布处理结果） -->
+    <path d="M1040,300 C990,340 880,430 830,478" stroke="#0d9488" stroke-width="2" stroke-dasharray="6 3" fill="none" marker-end="url(#arr-teal)"/>
+    <text x="965" y="372" text-anchor="middle" font-size="10.5" fill="#0f766e">发布处理结果</text>
+    <!-- MQ → 通知 Worker -->
+    <path d="M830,498 C900,505 970,500 1040,498" stroke="#0d9488" stroke-width="2" stroke-dasharray="6 3" fill="none" marker-end="url(#arr-teal)"/>
+    <!-- 通知 Worker → 邮件供应商（跨边界） -->
+    <path d="M1040,505 C900,560 350,560 165,500" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+    <text x="600" y="570" text-anchor="middle" font-size="10.5" fill="#dc2626">跨边界调用：发送邮件</text>
+
+    <!-- 用户 ← CDN（静态资源返回） -->
+    <path d="M90,74 C60,50 60,50 78,74" stroke="none" fill="none"/>
+    <text x="100" y="76" text-anchor="middle" font-size="0"> </text>
+    <!-- CDN返回静态资源标注 -->
+    <text x="42" y="200" font-size="10.5" fill="#991b1b" transform="rotate(90 42 200)" text-anchor="start">静态资源返回</text>
+
+    <!-- 订单状态查询标注（用户/网关 → 订单服务） -->
+    <g>
+      <rect x="516" y="180" width="180" height="30" rx="6" fill="#fefce8" stroke="#ca8a04" stroke-width="1.2"/>
+      <text x="606" y="200" text-anchor="middle" font-size="11" fill="#854d0e" font-weight="600">订单状态经订单服务查询</text>
+    </g>
+  </svg>
+
+  <div class="legend">
+    <span class="item"><span class="sw" style="border-color:#ea580c"></span>同步调用（HTTPS）</span>
+    <span class="item"><span class="sw" style="border-color:#0d9488; border-top-style:dashed"></span>异步事件（消息队列）</span>
+    <span class="item"><span class="sw" style="border-color:#16a34a"></span>数据访问</span>
+    <span class="item"><span class="sw" style="border-color:#dc2626"></span>跨网络边界</span>
+    <span class="item"><span class="bx" style="border-color:#60a5fa; background:#eff6ff"></span>应用区</span>
+    <span class="item"><span class="bx" style="border-color:#4ade80; background:#f0fdf4"></span>私有数据区</span>
+    <span class="item"><span class="bx" style="border-color:#fca5a5; background:#fef2f2"></span>外部网络</span>
+  </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel sync">
+      <h2><span class="tag" style="background:#ea580c">A</span>同步路径（HTTPS）</h2>
+      <ul>
+        <li><span class="k">用户 → CDN</span>：获取前端静态资源</li>
+        <li><span class="k">用户 → 公网 LB → API Gateway</span>：私有应用区的统一入口</li>
+        <li><span class="k">Gateway 扇出调用</span>商品 / 订单 / 账户三个服务；<b>三者并行独立，并非串联流水线</b></li>
+      </ul>
+    </div>
+    <div class="panel async">
+      <h2><span class="tag" style="background:#0d9488">B</span>异步链路（消息队列）</h2>
+      <ul>
+        <li>订单服务下单后向消息队列<b>发布订单事件</b></li>
+        <li>库存 Worker <b>消费订单事件</b> → 更新库存数据库 → 发布处理结果</li>
+        <li>通知 Worker <b>消费处理结果</b> → 调用边界外的邮件供应商</li>
+      </ul>
+      <div class="note">所有 Worker 必须幂等消费：同一事件重复投递不产生副作用。</div>
+    </div>
+    <div class="panel rule">
+      <h2><span class="tag" style="background:#7c3aed">C</span>边界与约束</h2>
+      <ul>
+        <li><span class="k">同一私有网络</span>：应用区与数据区均在其内</li>
+        <li><span class="k">网络之外</span>：CDN 与邮件供应商</li>
+        <li><span class="k">数据区无公网入口</span>：数据库、缓存、消息队列仅限内网访问</li>
+        <li><span class="k">订单状态</span>：统一通过订单服务查询，不直连订单数据库</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+  window.addEventListener('load', function(){ try{ parent.postMessage({type:'penecho-widget-updated'}, '*'); }catch(e){} });
+</script>
+</body>
+</html>

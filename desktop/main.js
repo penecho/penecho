@@ -74,6 +74,7 @@ let mainWindow = null,
   server = null,
   updateManager = null,
   currentLanUrls = [],
+  desktopLanguage = "en",
   cliOperation = null,
   quitting = false,
   desktopProjectStore = null;
@@ -258,7 +259,7 @@ function startServer(configuration) {
 
 function sendUpdateState(window, state) {
   if (!window || window.isDestroyed() || !state) return;
-  window.webContents.send("penecho:update-state", state);
+  window.webContents.send("penecho:update-state", { ...state, language:desktopLanguage });
 }
 
 function updateDesktopUpdateUi() {
@@ -289,7 +290,7 @@ function showUpdateWindow() {
       minHeight:300,
       maxWidth:560,
       maxHeight:440,
-      title:"PenEcho Update",
+      title:desktopLanguage === "zh" ? "PenEcho 更新" : "PenEcho Update",
       autoHideMenuBar:true,
       maximizable:false,
       fullscreenable:false,
@@ -341,7 +342,7 @@ function installMenu() {
     { label:"Help", submenu:[
       { label:"Getting started", click:() => void shell.openExternal(HELP_URL) },
       { type:"separator" },
-      { label:"Check for Updates…", click:showUpdateWindow },
+      { label:desktopLanguage === "zh" ? "检查更新…" : "Check for Updates…", click:showUpdateWindow },
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -438,6 +439,14 @@ function registerIpc() {
   const fromCanvas = event => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents),
     fromUpdateWindow = event => Boolean(updateWindow && !updateWindow.isDestroyed() && event.sender === updateWindow.webContents),
     fromUpdateSurface = event => fromCanvas(event) || fromUpdateWindow(event);
+  ipcMain.on("penecho:set-language", (event, language) => {
+    if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame || !["en", "zh"].includes(language)) return;
+    if (desktopLanguage === language) return;
+    desktopLanguage = language;
+    installMenu();
+    if (updateWindow && !updateWindow.isDestroyed()) updateWindow.setTitle(language === "zh" ? "PenEcho 更新" : "PenEcho Update");
+    updateDesktopUpdateUi();
+  });
   ipcMain.handle("penecho:mcp-keep-awake",(event,enabled)=>{
     if(!fromCanvas(event)||event.senderFrame!==event.sender.mainFrame)return false;
     return mcpPowerLease.set(enabled===true,event.sender);
@@ -492,7 +501,7 @@ function registerIpc() {
     if (result.canceled || !selectedPath) return { canceled:true };
     return { canceled:false, path:selectedPath, pickerToken:issueNativePickerGrant({ selectedPath, kind:"file" }) };
   });
-  ipcMain.handle("penecho:get-update-state", event => fromUpdateSurface(event) ? updateManager?.getState() : null);
+  ipcMain.handle("penecho:get-update-state", event => fromUpdateSurface(event) && updateManager ? { ...updateManager.getState(), language:desktopLanguage } : null);
   ipcMain.handle("penecho:update-check", event => fromUpdateSurface(event) ? updateManager?.check(true) : false);
   ipcMain.handle("penecho:update-download", event => fromUpdateSurface(event) ? updateManager?.download() : false);
   ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);

@@ -30,6 +30,8 @@
     visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
     authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
+    architectureRuntimeUrl = new URL("architecture-runtime.js?v=2", location.href).href,
+    architectureWorkerUrl = new URL("architecture-worker.js?v=1", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     snapshotDebugEnabled = remoteCanvas && (() => {
       try {
@@ -1485,10 +1487,11 @@
     return html.replace(/penecho-asset:[a-f0-9]{64}/g,ref=>{const source=resolved.get(ref);if((expanded+=source.length-ref.length)>16000000)throw Error("Widget image expansion exceeds the supported limit");return source;});
   }
 
-  function csp(allowNestedFrames = false, scienceMode = false) {
+  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
     const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
+      .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
       .map(url => url.replace(/[?#].*$/, ""))
       .join(" ");
     return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
@@ -1745,7 +1748,8 @@
       requestTwoFrames(() => {
         delete globalThis.__penechoScienceRendererReady;
         globalThis.__penechoSnapshotDebug?.("document-ready-marker", { mode:"science", rendererAvailable:typeof globalThis.html2canvas === "function" });
-        parent.postMessage({ type:"penecho-widget-document-ready", runtimeVersion:documentVersion }, "*");
+        if (typeof globalThis.__penechoArchitectureRendererReady === "function") globalThis.__penechoArchitectureRendererReady();
+        else parent.postMessage({ type:"penecho-widget-document-ready", runtimeVersion:documentVersion }, "*");
       });
     }
     globalThis.__penechoScienceRendererReady = () => {
@@ -1804,9 +1808,11 @@
     });
     parsed.querySelectorAll("a[href]").forEach(safeOutboundLink);
     const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
+    const architectureMode = !!parsed.querySelector("[data-penecho-architecture] script[type='application/json'][data-architecture-source]");
+    inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${architectureMode ? " allow-downloads" : ""}`);
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode);
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode);
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1823,9 +1829,22 @@
     bridgeStyle.textContent = "html,body{background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);overscroll-behavior:contain}html.penecho-widget-dragging,html.penecho-widget-dragging *{user-select:none!important}html.penecho-widget-resize-width,html.penecho-widget-resize-width *{cursor:ew-resize!important}html.penecho-widget-resize-height,html.penecho-widget-resize-height *{cursor:ns-resize!important}html.penecho-widget-resize-corner,html.penecho-widget-resize-corner *{cursor:nwse-resize!important}html.penecho-widget-paused *,html.penecho-widget-paused *::before,html.penecho-widget-paused *::after{animation-play-state:paused!important}";
     if(mcpPreview)bridgeStyle.textContent=bridgeStyle.textContent.replace("background:transparent!important;color-scheme:light!important;font-size:clamp(36px,1.2cqw,52px);","");
     parsed.head.append(bridgeStyle);
+    if (architectureMode) {
+      const architectureReady = parsed.createElement("script");
+      architectureReady.textContent = `(() => { let layout=false,renderer=false,sent=false;const finish=()=>{if(sent||!layout||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-architecture-ready",()=>{layout=true;finish()},{once:true});globalThis.__penechoArchitectureRendererReady=()=>{renderer=true;finish()};globalThis.__penechoArchitectureLoadError=()=>{document.querySelectorAll('[data-penecho-architecture]').forEach(root=>{const p=document.createElement('p');p.setAttribute('role','alert');p.textContent='架构渲染模块加载失败，请重新加载。';root.append(p)});layout=true;finish()};})()`;
+      parsed.body.append(architectureReady);
+      const architectureWorker = parsed.createElement("script");
+      architectureWorker.src = architectureWorkerUrl;
+      architectureWorker.setAttribute("onerror", "globalThis.__penechoArchitectureLoadError?.()");
+      parsed.body.append(architectureWorker);
+      const architectureRuntime = parsed.createElement("script");
+      architectureRuntime.src = architectureRuntimeUrl;
+      architectureRuntime.setAttribute("onerror", "globalThis.__penechoArchitectureLoadError?.()");
+      parsed.body.append(architectureRuntime);
+    }
     if (visualPlan && !scienceMode) {
       const visualReady = parsed.createElement("script");
-      visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{globalThis.__penechoSnapshotDebug?.("visual-ready-state",{visual,renderer,sent});if(sent||!visual||!renderer)return;sent=true;globalThis.__penechoSnapshotDebug?.("document-ready-marker",{mode:"visual",rendererAvailable:typeof globalThis.html2canvas==="function"});parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
+      visualReady.textContent = `(() => { let visual=false,renderer=false,sent=false;const finish=()=>{globalThis.__penechoSnapshotDebug?.("visual-ready-state",{visual,renderer,sent});if(sent||!visual||!renderer)return;sent=true;globalThis.__penechoSnapshotDebug?.("document-ready-marker",{mode:"visual",rendererAvailable:typeof globalThis.html2canvas==="function"});if(typeof globalThis.__penechoArchitectureRendererReady==="function")globalThis.__penechoArchitectureRendererReady();else parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};addEventListener("penecho-visual-explainer-ready",()=>{visual=true;finish()},{once:true});globalThis.__penechoVisualRendererReady=()=>{renderer=true;finish()};setTimeout(()=>{visual=true;finish()},3200) })()`;
       parsed.body.append(visualReady);
       const vendor = parsed.createElement("script");
       vendor.src = visualExplainerVendorUrl;
@@ -1844,6 +1863,10 @@
       const rendererReady = parsed.createElement("script");
       rendererReady.textContent = "if(typeof globalThis.html2canvas===\"function\")globalThis.__penechoScienceRendererReady?.();delete globalThis.__penechoScienceRendererReady";
       parsed.body.append(rendererReady);
+    } else if (architectureMode && !visualPlan) {
+      const architectureRendererReady = parsed.createElement("script");
+      architectureRendererReady.textContent = "globalThis.__penechoArchitectureRendererReady?.();delete globalThis.__penechoArchitectureRendererReady";
+      parsed.body.append(architectureRendererReady);
     } else if (visualPlan) {
       const rendererReady = parsed.createElement("script");
       rendererReady.textContent = `globalThis.__penechoVisualRendererReady?.();delete globalThis.__penechoVisualRendererReady`;

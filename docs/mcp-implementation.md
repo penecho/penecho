@@ -94,13 +94,50 @@ MCP 状态入口上移，避让新缩放工具条；宽、窄、200% 缩放和 A
 
 ## MCP request logging
 
-MCP interactions with third-party clients use the existing Settings request-recording switch (`PENECHO_REQUEST_TRACE`). When enabled, records live under `logs/mcp-requests`, parallel to AI request records under `logs/requests`. With the desktop state directory this is `~/.penecho/logs/mcp-requests`; `~/.penecho/mcp/instances` contains connection-discovery records, not interaction logs. The switch follows the existing system-settings restart behavior. Disabled recording does not collect request payloads or create trace files.
+Local MCP uses the same Settings request-recording switch (`PENECHO_REQUEST_TRACE`)
+and retention count (`PENECHO_REQUEST_TRACE_LIMIT`) as PenEcho Agent. Settings changes
+follow the existing system-settings restart behavior. Disabled logging creates no
+trace files and does not serialize payloads. Logging failures never change tool results.
 
-Interaction logs group calls by external session, preserving complete incoming arguments, returned text, browser RPCs, errors, timings, and asynchronous queued-update outcomes. Long text and source bodies are retained without the diagnostic summary's truncation. Images and screenshots are also saved as real binary files that can be opened directly. Credential redaction remains enabled. Existing historical logs cannot recover text or image bodies that were previously omitted; full records begin with calls handled by the updated service.
+Both directories are under the running host's state directory, not the bridge's
+connection-discovery directory. Desktop uses Electron `userData`: on macOS normally
+`~/Library/Application Support/PenEcho/logs/`, on Windows `%APPDATA%/PenEcho/logs/`.
+Web/npm uses `PENECHO_STATE_DIR/logs/`, or the repository's `logs/` without a state override.
 
-Each `session-<hash>` directory has identifying metadata in `session.json` and timestamped `request-<timestamp>-<hash>` call directories. Read `request.json` / `response.json` (or their `.txt` copies) for full payloads; `trace.json` remains a compact timing/status summary. `*-source-*.html` / `.txt` contain source bodies, `*-image-*` files contain decoded image bytes, and `*-images.json` maps those image artifacts. Original data URLs/base64 remain in the full payload. Browser RPC files use `browser-N-` prefixes; failures use `error` files and queued updates use `queued-outcome` files.
+```text
+logs/
+  requests/                         PenEcho Agent requests
+  mcp-requests/                      local external MCP requests
+    request-<timestamp>-<hash>/      one logical request, multiple tool calls
+      trace.json                    ordered tool index, status, session IDs and grouping boundary
+      tool-0001-<hash>/
+        trace.json                  tool arguments summary, outcome, timings, browser RPCs
+        request.json / request.txt  full credential-redacted input
+        response.json / .txt        full output, or error.json / .txt
+        browser-N-request.json      forwarded Canvas RPC; response/error alongside
+        *-source-*.html / .txt       complete source bodies
+        *-image-*.png / jpg / webp   decoded image bytes
+        *-images.json               image manifest
+        queued-outcome.json         asynchronous application result, when applicable
+      tool-0002-<hash>/
+```
 
-Session keys and returned session IDs are scoped to the external client owner; discovery calls without a session are grouped separately for that owner. The configured retention count (`PENECHO_REQUEST_TRACE_LIMIT`) applies to session directories, preserving running calls and pending queued updates until completion. Legacy per-request directories and unrelated files are left untouched. Files are private to the local user and logging failures do not change tool results.
+Grouping reuses owner-scoped sessionKey/sessionId bindings across reconnects.
+An existing `completion.status` (done/waiting/error), applied final update_session,
+or successful close_session seals a request. Subsequent authoring starts a new
+folder; validation failures and repair calls stay together. Immediate capture/read
+verification remains with the completed request. Sessionless guidance/discovery is
+attached only when the active request is unambiguous for that owner.
+
+MCP has no guaranteed external chat-turn identifier, so this is protocol-based
+logical grouping, not an assertion that the host can observe every user message.
+Clients omitting completion fall back to a new folder after 30 minutes of inactivity
+or 1024 tool calls. No new model-output field or mandatory extra tool call is required.
+Full payload/source/image files retain content omitted from the compact summary,
+while credentials are redacted. Historical truncated logs cannot be reconstructed.
+Retention applies to request folders, protects running/queued calls, and leaves
+legacy session folders and unrelated files untouched. Files/directories are private
+to the local user. UAT web deployment does not update an installed desktop host.
 
 ## Canvas live access indicator (2026-09-07)
 

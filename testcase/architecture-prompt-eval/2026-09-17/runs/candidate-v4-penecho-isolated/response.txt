@@ -1,0 +1,156 @@
+```html
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PenEcho 项目架构</title>
+<style>
+  html,body{margin:0;padding:0;background:transparent;}
+  #wrap{width:100%;min-width:0;box-sizing:border-box;padding:16px;overflow-x:auto;}
+  #surface{background:#ffffff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:16px 16px 8px;box-sizing:border-box;max-width:1200px;margin:0 auto;}
+  h1{font:600 20px/1.4 "PingFang SC","Microsoft YaHei",sans-serif;color:#1e293b;margin:4px 0 12px;}
+  svg{width:100%;height:auto;display:block;}
+  svg text{font-family:"PingFang SC","Microsoft YaHei",sans-serif;}
+  #details{font:13px/1.7 "PingFang SC","Microsoft YaHei",sans-serif;color:#475569;margin:10px 0 12px;border-top:1px solid #e2e8f0;padding-top:10px;}
+  #details b{color:#334155;font-weight:600;}
+  #details ul{margin:4px 0 0;padding-left:18px;}
+  @media (max-width:700px){ #details{font-size:12px;} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="surface">
+    <h1>PenEcho 项目架构</h1>
+    <div id="svgHost"></div>
+    <div id="details">
+      <b>补充细节</b>
+      <ul>
+        <li><b>浏览器</b>：前端源码 src/client/app/，构建产物 public/app.js；画布为 20000×20000 逻辑坐标 + 512×512 稀疏瓦片；快照存于浏览器自己的 IndexedDB；MathJax 由浏览器直接访问 jsDelivr。</li>
+        <li><b>本地 Node 服务</b>：入口 src/server/main.js；Canvas Agent 位于 src/server/canvas-agent/，MCP 服务位于 src/server/mcp/；服务持有 connections.json 与请求日志；四者职责同属一个本地服务进程，并非四台服务器。</li>
+        <li><b>模型适配器</b>：src/providers/ 提供 api、codex-cli、claude-cli、kimi-cli 四类后端；模型凭据只留在服务端，不进入浏览器。</li>
+        <li><b>启动入口</b>：Electron 主进程加载本地服务器并打开浏览器窗口；CLI 也可启动同一服务器，是另一种入口。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  // ---------- graph data ----------
+  var NODES = {
+    canvas:   {x:95,  y:165, w:235, h:55, label:"Canvas 绘制交互", role:"画布与用户交互"},
+    widget:   {x:95,  y:250, w:235, h:55, label:"Widget 展示", role:"结构化内容渲染"},
+    idb:      {x:95,  y:335, w:235, h:55, label:"IndexedDB 快照", role:"画布持久化"},
+    api:      {x:490, y:165, w:280, h:55, label:"HTTP API / 静态资源", role:"请求入口"},
+    pipeline: {x:490, y:250, w:280, h:55, label:"Canvas AI 请求管线", role:"绘图指令生成"},
+    agent:    {x:490, y:335, w:280, h:55, label:"Canvas Agent", role:"任务型对话"},
+    mcp:      {x:490, y:430, w:280, h:55, label:"MCP 服务", role:"外部 Agent 接入"},
+    model:    {x:880, y:230, w:220, h:70, label:"外部模型 API / CLI 子进程", role:"推理后端"},
+    mcpagent: {x:880, y:430, w:220, h:70, label:"外部 AI Agent", role:"MCP 客户端"},
+    electron: {x:120, y:660, w:200, h:60, label:"Electron 主进程", role:"桌面入口"},
+    cli:      {x:400, y:660, w:170, h:60, label:"CLI 启动", role:"命令行入口"}
+  };
+  var GROUPS = [
+    {x:60,  y:120, w:310, h:360, title:"浏览器（用户端）"},
+    {x:455, y:120, w:355, h:420, title:"本地 Node 服务（单进程多职责）"}
+  ];
+  // edges: from, to, side ports, waypoints, label, style
+  var EDGES = [
+    {from:"canvas", fs:"r", to:"api", ts:"l", fp:[0,-12], tp:[0,-12],
+     label:"HTTP POST /api/ai/command", lp:0.5, lo:-10, style:"solid"},
+    {from:"api", fs:"l", to:"canvas", ts:"r", fp:[0,12], tp:[0,12],
+     label:"草稿预览 · 用户确认", lp:0.5, lo:16, style:"dashed"},
+    {from:"pipeline", fs:"r", to:"model", ts:"l", fp:[0,-12], tp:[0,-12],
+     label:"模型适配器调用", lp:0.5, lo:-10, style:"solid"},
+    {from:"model", fs:"l", to:"pipeline", ts:"r", fp:[0,14], tp:[0,14],
+     label:"返回结构化绘图指令", lp:0.5, lo:16, style:"dashed"},
+    {from:"canvas", fs:"out", of:{dx:240,dy:22}, to:"agent", ts:"l", fp:[0,0], tp:[0,0],
+     label:"WebSocket（双向）", lp:0.5, lo:-10, style:"both"},
+    {from:"agent", fs:"t", to:"pipeline", ts:"b", fp:[-60,0], tp:[-60,0],
+     label:"复用模型连接", lp:0.5, lo:0, style:"dashed", lv:{dx:10,dy:4}},
+    {from:"mcpagent", fs:"l", to:"mcp", ts:"r", fp:[0,0], tp:[0,0],
+     label:"HTTPS MCP 调用", lp:0.5, lo:-10, style:"solid"},
+    {from:"mcp", fs:"b", to:"canvas", ts:"l", fp:[-70,0], tp:[0,0],
+     wp:[[560,600],[80,600],[80,192]],
+     label:"已授权通道读写 Canvas", lp:0, lo:0, style:"dashed", lseg:1},
+    {from:"electron", fs:"r", to:"g1", ts:"b", fp:[0,0], tp:[0,0], tpt:[560,540],
+     wp:[[560,690]],
+     label:"加载并启动", lp:0, lo:0, style:"solid", lseg:0},
+    {from:"electron", fs:"t", to:"g0", ts:"b", fp:[90,0], tp:[0,0], tpt:[250,480],
+     label:"打开浏览器窗口", lp:0.5, lo:-8, style:"solid"},
+    {from:"cli", fs:"t", to:"g1", ts:"b", fp:[0,0], tp:[0,0], tpt:[510,540],
+     label:"另一启动入口", lp:0.5, lo:-8, style:"solid"}
+  ];
+
+  // ---------- helpers ----------
+  function port(n, side, off){
+    var cx = n.x + n.w/2, cy = n.y + n.h/2;
+    if(side==="l") return [n.x, cy + (off?off[1]:0)];
+    if(side==="r") return [n.x + n.w, cy + (off?off[1]:0)];
+    if(side==="t") return [cx + (off?off[0]:0), n.y];
+    if(side==="b") return [cx + (off?off[0]:0), n.y + n.h];
+    return [cx,cy];
+  }
+  var ARROW = "M0,0 L10,4 L0,8 Z";
+  function defs(){
+    var m = (id,c)=>'<marker id="'+id+'" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="'+ARROW+'" fill="'+c+'"/></marker>';
+    return "<defs>"+m("aS","#334155")+m("aD","#94a3b8")+"</defs>";
+  }
+  function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;");}
+
+  function edgePath(e){
+    var n1 = NODES[e.from];
+    var p1;
+    if(e.fs==="out"){ p1 = [n1.x + e.of.dx, n1.y + e.of.dy]; }
+    else p1 = port(n1, e.fs, e.fp);
+    var p2 = e.tpt ? e.tpt.slice() : port(NODES[e.to], e.ts, e.tp);
+    var pts = [p1].concat(e.wp||[]).concat([p2]);
+    var d = "M"+pts[0][0]+","+pts[0][1];
+    for(var i=1;i<pts.length;i++) d += " L"+pts[i][0]+","+pts[i][1];
+    return {d:d, pts:pts};
+  }
+
+  function render(){
+    var s = "";
+    s += defs();
+    // groups
+    GROUPS.forEach(function(g,i){
+      s += '<rect x="'+g.x+'" y="'+g.y+'" width="'+g.w+'" height="'+g.h+'" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>';
+      s += '<text x="'+(g.x+14)+'" y="'+(g.y+24)+'" font-size="14" font-weight="600" fill="#475569">'+esc(g.title)+'</text>';
+      eTargetId["g"+i] = true;
+    });
+    // edges
+    EDGES.forEach(function(e){
+      var r = edgePath(e);
+      var col = e.style==="dashed" ? "#94a3b8" : "#334155";
+      var dash = e.style==="dashed" ? ' stroke-dasharray="6,5"' : "";
+      var mk  = e.style==="dashed" ? "aD" : "aS";
+      var m1 = (e.style==="both") ? ' marker-start="url(#'+mk+')"' : "";
+      s += '<path d="'+r.d+'" fill="none" stroke="'+col+'" stroke-width="1.8"'+dash+m1+' marker-end="url(#'+mk+')"/>';
+      // label
+      var lp = e.lp, lo = e.lo;
+      var segs = r.pts;
+      var segIdx = (e.lseg!==undefined)? e.lseg : 0;
+      var a = segs[segIdx], b = segs[segIdx+1];
+      var lx = a[0] + (b[0]-a[0])*lp, ly = a[1] + (b[1]-a[1])*lp;
+      var tx = lx + (e.lv? e.lv.dx : 0), ty = ly + (e.lv? e.lv.dy : (lo-6));
+      var anchor = (e.lv && e.lv.dx>0) ? "start" : "middle";
+      s += '<text x="'+tx+'" y="'+ty+'" font-size="12" fill="#475569" text-anchor="'+anchor+'" paint-order="stroke" stroke="#ffffff" stroke-width="4">'+esc(e.label)+'</text>';
+    });
+    // nodes
+    for(var id in NODES){
+      var n = NODES[id];
+      s += '<g><rect x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" rx="7" fill="#ffffff" stroke="#64748b" stroke-width="1.6"/>';
+      s += '<text x="'+(n.x+n.w/2)+'" y="'+(n.y+n.h/2 - 2)+'" font-size="14" font-weight="600" fill="#1e293b" text-anchor="middle">'+esc(n.label)+'</text>';
+      s += '<text x="'+(n.x+n.w/2)+'" y="'+(n.y+n.h/2 + 16)+'" font-size="11" fill="#94a3b8" text-anchor="middle">'+esc(n.role)+'</text></g>';
+    }
+    return s;
+  }
+  var eTargetId = {};
+  var svg = '<svg viewBox="0 0 1140 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PenEcho 项目架构图">'+render()+'</svg>';
+  document.getElementById("svgHost").innerHTML = svg;
+})();
+</script>
+</body>
+</html>
+```

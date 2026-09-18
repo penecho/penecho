@@ -1,0 +1,35 @@
+{
+  "sessionId": "096f9122-4633-4d71-ba91-b61eb55d96f6",
+  "artifactId": "eval-h-isolated-v4",
+  "objectId": "widget-8",
+  "revision": 10,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "compare",
+    "role": "alternative",
+    "relativeTo": "eval-g-full-v4",
+    "relation": "below",
+    "attention": "normal"
+  },
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1939,
+    "height": 1134
+  },
+  "sourcePath": "objects/widget-8/widget.html",
+  "contentHash": "42281bdfe70b2692d9b9e3e089a714fa1508afb092321dd85ed763720bb269a8",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 40736
+  },
+  "width": 1440,
+  "height": 842,
+  "encodedBytes": 40736
+}

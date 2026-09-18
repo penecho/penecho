@@ -222,7 +222,6 @@ const BUILTIN_PLUGIN_IDS = new Set([
   "natural-events", "space-weather", "stocks", "tech-news", "weather",
 ]);
 const DIAGRAM_SOURCE_FORMAT_ALIASES = new Map([
-  ["mermaid", "mermaid"],
   ["dot", "dot"],
   ["graphviz", "dot"],
   ["graphviz-dot", "dot"],
@@ -1795,7 +1794,7 @@ function canonicalWidgetEdit(value, plugins) {
     || !box || typeof value.title !== "string" || !value.title.trim() || value.title.length > 120
     || sourceFormat.length > 80 || diagramKind.length > 80 || frameworkVersion.length > 120 || !(refreshSeconds === 0 || Number.isInteger(refreshSeconds) && refreshSeconds >= 60 && refreshSeconds <= 86400)
     || (widgetType === "diagram_source" ? Buffer.byteLength(source, "utf8") > MAX_DIAGRAM_SOURCE_BYTES : !sourceMirrorsHtml && source.length > MAX_WIDGET_COPY_TEXT_LENGTH) || html.length > MAX_WIDGET_HTML_LENGTH || copyLabel.length > 80
-    || widgetType === "diagram_source" && (plugin.id !== "flowchart" || !source.trim() || !normalizedDiagramSourceFormat(sourceFormat))
+    || widgetType === "diagram_source" && (plugin.id !== "flowchart" || !source.trim() || !normalizedDiagramSourceFormat(sourceFormat) && sourceFormat !== "mermaid")
     || widgetType === "html_widget" && !html.trim()) return false;
   return {
     mode:"replace",
@@ -3871,6 +3870,11 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(VISUAL_EXPLAINER_RUNTIME).pipe(res);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && ["/architecture-runtime.js", "/architecture-worker.js"].includes(url.pathname)) {
+    res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
+    if (req.method === "HEAD") return res.end();
+    return fs.createReadStream(path.join(PUBLIC, "vendor", url.pathname.slice(1))).pipe(res);
   }
   if (req.method === "GET" && url.pathname === "/api/debug/log") {
     if (!DEBUG_ARTIFACTS || !isLoopback(req.socket.remoteAddress) || !isLoopbackHostname(requestHost(req)?.hostname) || localAccessMode !== "open" && !hasAiSession(req)) return send(res, 404, "Not found", "text/plain; charset=utf-8");

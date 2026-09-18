@@ -1,0 +1,17 @@
+{
+  "project": "https://github.com/tt-a1i/archify",
+  "version": "2.17",
+  "license": "MIT",
+  "sourceHashes": {
+    "renderers/shared/geometry.mjs": "161785af32241fc96df051c9be4f2bb9c3b897418d708f4a051b63f1c44952cf",
+    "renderers/shared/utils.mjs": "20124265300eb286db184a053561005cc32b6128dc1bc1b3f9520ffa8d43a241",
+    "renderers/shared/i18n.mjs": "0d9e839c3e5346160b0028d07fcf78c86671189e0714ea069dc99913e859fcdb",
+    "renderers/architecture/render-architecture.mjs": "f57077cb9fa64a8412ab0af705cb31e2e7a920114b31852882c04a76840365dc"
+  },
+  "adaptations": [
+    "Browser-safe geometry diagnostic sink; unused helpers tree-shaken.",
+    "SVG painter adapted from architecture renderer: external measured positions/routes, wrapping text, semantic domains, accessible node controls.",
+    "No CLI, viewer, brands, animations, other diagram formats or source-schema validators shipped.",
+    "ELK, not Archify grid placement, supplies automatic layout and orthogonal routing."
+  ]
+}
