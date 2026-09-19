@@ -38,7 +38,7 @@ Windows 生命周期脚本 `scripts/mcp-codex-session-lifecycle.cjs` 默认测�
 
 ## 设计来源映射
 
-来源为 `/Users/heack/workspace/penecho_design/penecho-design-language.html`，通过当前 Canvas 已有组件、样式和行为实现。
+来源为 `penecho_design/penecho-design-language.html`，通过当前 Canvas 已有组件、样式和行为实现。
 
 | 项目区域 | 目录章节或示例 | 应用规则 |
 | --- | --- | --- |

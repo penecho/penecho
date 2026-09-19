@@ -94,7 +94,7 @@ Com MCP, sua IA pode transformar explicações em diagramas e ideias em prévias
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Notificações orientadas a eventos" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Como as solicitações MCP chegam ao Canvas" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Como as solicitações MCP chegam ao Canvas" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@ Com MCP, sua IA pode transformar explicações em diagramas e ideias em prévias
 - **Traga seu próprio agente.** Conecte Codex, Claude Code ou outro cliente compatível com MCP para ler e editar um Canvas explicitamente habilitado.
 - **Guarde e compartilhe seu trabalho.** Organize Canvases em projetos, salve revisões na Cloud, sincronize favoritos e publique pelo Echoes.
 
-## Novidades da versão 1.3.2
+## Novidades da versão 1.3.3
 
-| Atualização | O que acrescenta |
+| Tipo de diagrama | O que você pode desenhar |
 | --- | --- |
-| **Espaço de trabalho MCP** | Descoberta de Canvases, capturas, edição de objetos, Widgets interativos, arquivos-fonte virtuais e feedback do usuário para agentes externos. Suporta navegadores locais, na LAN e na Cloud por um dispositivo vinculado, com autorização explícita. |
-| **Cloud MCP** | Conecte agentes de IA externos diretamente aos seus canvases habilitados no PenEcho Cloud para ler conteúdo, criar e editar resultados e acompanhar comentários manuscritos. Cloud MCP e Local MCP são formas opcionais de conexão. |
-| **PenEcho Cloud Credits API** | Use modelos hospedados pelo PenEcho com créditos da conta, além de suas próprias conexões de API e CLI. Consulte modelos disponíveis, preços e saldo nas configurações. |
-| **Gerenciamento de conexões** | Salve várias conexões de IA e escolha a conexão ativa de cada cliente. |
-| **Canvas e ambiente de trabalho** | Desenho e navegação mais responsivos, controles refinados do Studio, painel adaptável do Agent e atalhos de teclado personalizáveis. |
+| **Diagramas de arquitetura** | Represente serviços, dependências e limites de sistemas aninhados com organização automática e roteamento das conexões. |
+| **Diagramas de sequência** | Mostre participantes e mensagens em ordem, com respostas, chamadas a si mesmo e fragmentos condicionais, repetitivos ou paralelos. |
+| **Fluxos de trabalho** | Organize etapas, decisões, ramificações com condições, ciclos e caminhos paralelos com pontos de bifurcação e junção. |
+
+Descreva os requisitos ao PenEcho Agent ou a um agente conectado por MCP. Confira os detalhes no Canvas, refine o resultado com feedback e exporte em SVG ou PNG.
+
+[Histórico completo de alterações](../../CHANGELOG.md#133)
 
 ## Como funciona
 
@@ -240,6 +242,10 @@ Estas recomendações equilibram a qualidade das respostas e a latência em tare
 Leia [CONTRIBUTING.md](../../CONTRIBUTING.md) para contribuir e execute `npm run check` antes de abrir um pull request. Relate bugs em [Issues](https://github.com/penecho/penecho/issues), discuta ideias em [Discussions](https://github.com/penecho/penecho/discussions) ou participe do [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Licenciado sob [AGPL-3.0-only](../../LICENSE). Há também uma [licença comercial](../../COMMERCIAL-LICENSE.md) alternativa. Consulte a [política de marcas](../../TRADEMARKS.md) e o [acordo de contribuição](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## Agradecimentos
+
+Agradecemos ao projeto [Archify](https://github.com/tt-a1i/archify), de tt-a1i. Os renderizadores de diagramas profissionais do PenEcho usam funções auxiliares de SVG e geometria adaptadas desse projeto sob licença MIT. A [licença MIT e os avisos de direitos autorais](../../src/architecture/vendor/archify/LICENSE) foram preservados; consulte [NOTICE](../../NOTICE) para as atribuições de terceiros.
 
 ## Histórico de estrelas
 

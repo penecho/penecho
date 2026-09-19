@@ -1,9 +1,0 @@
-{
-  "surface":"standalone browser, not MCP Canvas",
-  "viewport":{"width":1939,"height":1134},
-  "method":"read-only DOM getBoundingClientRect; SVG text pairs with intersection >2 CSS px on both axes",
-  "textCount":46,
-  "overlappingTextPairs":[],
-  "semanticAcceptance":"failed: optional Cloud route endpoints still incorrect",
-  "canvasVerification":"pending: MCP browser offline"
-}

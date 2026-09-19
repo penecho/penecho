@@ -2,11 +2,11 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {validateSequence,sequenceHtml}=require('../src/sequence/schema.js');
 const {validateToolArguments}=require('../src/server/mcp/schema.js');
-const fixture=name=>JSON.parse(fs.readFileSync(`testcase/sequence-local/2026-09-18/${name}.semantic.json`));
+const fixture=name=>JSON.parse(fs.readFileSync(`test/fixtures/diagrams/sequence/${name}.json`));
 const simple={version:1,title:'Sequence',participants:[{id:'a',label:'Client'},{id:'b',label:'Server'}],messages:[{id:'one',from:'a',to:'b',label:'Request'},{id:'two',from:'b',to:'a',label:'Reply',kind:'return'}]};
 test('nested fragment labels stay clear of lifelines and long-lived activation bars',async()=>{
  const {layoutSequence}=await import('../src/sequence/layout.mjs'),{measureFallback}=await import('../src/diagrams/text.mjs');
- const data=JSON.parse(fs.readFileSync('testcase/mcp-layout-capture/2026-09-18/seq-05-nested-fragments.json'));
+ const data=JSON.parse(fs.readFileSync('test/fixtures/diagrams/sequence/nested-fragments.json'));
  for(const width of [390,800,2011]){
   const layout=layoutSequence(data,undefined,{width});
   for(const f of layout.fragments){

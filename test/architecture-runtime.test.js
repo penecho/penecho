@@ -19,14 +19,14 @@ test('local routing preserves topology, avoids nodes/labels, wraps long Chinese,
  const ELK=require('elkjs/lib/elk.bundled.js'),{layoutArchitecture}=await import('../src/architecture/layout.mjs');
  const fixtures=[simple,{...simple,direction:'DOWN'}, {...simple,edges:[...simple.edges,{from:'c',to:'a',label:'回传',kind:'return'}]},
   {...simple,nodes:[...simple.nodes,{id:'d',label:'非常长的中文参与实体名称与接口服务',subtitle:'长名称自动换行，不缩小文字'}],edges:[...simple.edges,{from:'b',to:'d',label:'一个需要换行展示的较长关系说明'}]},
-  JSON.parse(fs.readFileSync('testcase/archify-local/2026-09-18/mcp.semantic.json','utf8'))];
+  JSON.parse(fs.readFileSync('test/fixtures/diagrams/architecture/mcp.json','utf8'))];
  const elk=new ELK();
  for(const data of fixtures){const l=await layoutArchitecture(data,elk);assert.deepEqual(l.issues,[],JSON.stringify(l.issues));assert.equal(l.nodes.length,data.nodes.length);assert.equal(l.edges.length,data.edges.length);assert.ok(Number.isFinite(l.width)&&l.width>0);for(const n of l.nodes)assert.ok(n.x>=0&&n.y>=0&&n.x+n.width<=l.width&&n.y+n.height<=l.height);}
  const first=await layoutArchitecture(simple,elk),second=await layoutArchitecture(simple,elk);assert.deepEqual(first.nodes,second.nodes);assert.deepEqual(first.edges,second.edges);
 });
 test('semantic return edges do not reverse the main call chain; words and punctuation stay readable',async()=>{
  const ELK=require('elkjs/lib/elk.bundled.js'),{layoutArchitecture,wrap}=await import('../src/architecture/layout.mjs');
- const data=JSON.parse(fs.readFileSync('testcase/archify-local/2026-09-18/glm-json-reviewed/response.json','utf8'));
+ const data=JSON.parse(fs.readFileSync('test/fixtures/diagrams/architecture/reviewed-mcp.json','utf8'));
  const l=await layoutArchitecture(data,new ELK());assert.deepEqual(l.issues,[]);
  const chain=['aiclient','bridge','https','rpc','service','boundops','runtime','canvas','widgethost'].map(id=>l.nodes.find(n=>n.id===id));
  for(let i=1;i<chain.length;i++)assert.ok(chain[i].x>chain[i-1].x,`${chain[i-1].id} → ${chain[i].id}`);
@@ -36,7 +36,7 @@ test('semantic return edges do not reverse the main call chain; words and punctu
 });
 test('compound edge entry paths avoid frame titles in the accepted UK power regression',async()=>{
  const ELK=require('elkjs/lib/elk.bundled.js'),{layoutArchitecture}=await import('../src/architecture/layout.mjs');
- const data=JSON.parse(fs.readFileSync('testcase/archify-local/2026-09-18/uk-power-regression.json','utf8'));
+ const data=JSON.parse(fs.readFileSync('test/fixtures/diagrams/architecture/uk-power.json','utf8'));
  const layout=await layoutArchitecture(data,new ELK());
  assert.deepEqual(layout.issues,[]);
  assert.ok(layout.groups.every(group=>Number.isFinite(group.titleX)&&group.titleRect));

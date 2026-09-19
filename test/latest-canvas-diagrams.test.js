@@ -1,9 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
-const fixtures=JSON.parse(fs.readFileSync('testcase/mcp-diagram-regression/r2/latest-readback.json','utf8')).map(item=>({...item,widths:[640,1280]}));
-for(const item of JSON.parse(fs.readFileSync('testcase/mcp-diagram-regression/r3/sources.json','utf8'))){
-  const match=item.html.match(/<script[^>]*data-(architecture|sequence|workflow)-source[^>]*>([\s\S]*?)<\/script>/i);
-  fixtures.push({kind:item.kind,title:item.title,model:JSON.parse(match[2]),widths:[640,1960]});
-}
+const fixtures=JSON.parse(fs.readFileSync('test/fixtures/diagrams/regression/latest-models.json','utf8'));
 
 test('latest MCP Canvas samples preserve semantics and valid geometry at narrow and wide widths',async()=>{
   const ELK=require('elkjs/lib/elk.bundled.js');

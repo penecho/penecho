@@ -94,7 +94,7 @@ MCP를 통해 AI는 설명을 다이어그램으로, 아이디어를 대화형 �
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="이벤트 기반 알림" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 요청이 Canvas에 도달하는 과정" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 요청이 Canvas에 도달하는 과정" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@ MCP를 통해 AI는 설명을 다이어그램으로, 아이디어를 대화형 �
 - **자신의 에이전트를 연결하세요.** Codex, Claude Code 등 MCP 호환 클라이언트를 연결해 명시적으로 활성화한 Canvas를 읽고 편집합니다.
 - **작업을 보관하고 공유하세요.** Canvas를 프로젝트로 정리하고, Cloud 버전을 저장하고, 즐겨찾기를 동기화하고, Echoes로 게시합니다.
 
-## 1.3.2의 새로운 기능
+## 1.3.3의 새로운 기능
 
-| 업데이트 | 추가된 기능 |
+| 다이어그램 | 그릴 수 있는 내용 |
 | --- | --- |
-| **MCP 작업 공간** | 외부 에이전트용 Canvas 검색, 캡처, 객체 편집, 대화형 Widgets, 가상 소스 파일, 사용자 피드백. 명시적으로 허용한 로컬, LAN, 연결된 기기를 통한 Cloud 브라우저를 지원합니다. |
-| **Cloud MCP** | 외부 AI 에이전트를 활성화된 PenEcho Cloud 캔버스에 직접 연결해 콘텐츠를 읽고, 결과를 만들고 편집하고, 손글씨 피드백을 확인합니다. Cloud MCP와 Local MCP는 모두 선택적인 연결 방식입니다. |
-| **PenEcho Cloud Credits API** | 자신의 API 및 CLI 연결과 함께 계정 크레딧으로 PenEcho 호스팅 모델을 사용할 수 있습니다. 설정에서 사용 가능한 모델, 요금, 잔액을 확인합니다. |
-| **연결 관리** | 여러 AI 연결을 저장하고 클라이언트마다 사용할 연결을 선택합니다. |
-| **Canvas와 워크벤치** | 향상된 그리기 및 탐색 반응성, 개선된 Studio 컨트롤, 적응형 Agent 패널, 사용자 지정 키보드 단축키. |
+| **아키텍처 다이어그램** | 서비스, 의존 관계, 중첩된 시스템 경계를 자동 배치하고 연결선 경로를 계산합니다. |
+| **시퀀스 다이어그램** | 참여자와 메시지 순서를 표현하며 응답, 자기 호출, 조건·반복·병렬 구간을 지원합니다. |
+| **워크플로** | 단계, 판단, 조건이 표시된 분기, 반복, 분기와 합류가 있는 병렬 흐름을 그립니다. |
+
+PenEcho Agent 또는 MCP로 연결한 에이전트에 요구 사항을 설명하세요. Canvas에서 세부 내용을 확인하고 피드백으로 수정한 뒤 SVG / PNG로 내보낼 수 있습니다.
+
+[전체 변경 기록](../../CHANGELOG.md#133)
 
 ## 작동 방식
 
@@ -240,6 +242,10 @@ npm start
 기여하려면 [CONTRIBUTING.md](../../CONTRIBUTING.md)를 읽고 풀 리퀘스트 전에 `npm run check`를 실행하세요. 버그는 [Issues](https://github.com/penecho/penecho/issues), 아이디어는 [Discussions](https://github.com/penecho/penecho/discussions), 커뮤니티 참여는 [Discord](https://discord.gg/3jrPJ3mXdX)를 이용하세요.
 
 [AGPL-3.0-only](../../LICENSE) 라이선스가 적용됩니다. 별도의 [상용 라이선스](../../COMMERCIAL-LICENSE.md)도 이용할 수 있습니다. [상표 정책](../../TRADEMARKS.md)과 [기여자 계약](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)을 확인하세요.
+
+## 감사의 말
+
+tt-a1i의 [Archify](https://github.com/tt-a1i/archify) 프로젝트에 감사드립니다. PenEcho의 전문 다이어그램 렌더러는 이 MIT 라이선스 프로젝트의 SVG 및 기하 처리 보조 코드를 수정해 사용합니다. [MIT 라이선스와 저작권 고지](../../src/architecture/vendor/archify/LICENSE)를 보존하고 있으며, 제3자 출처는 [NOTICE](../../NOTICE)에서 확인할 수 있습니다.
 
 ## 스타 기록
 

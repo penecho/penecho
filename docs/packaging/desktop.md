@@ -149,4 +149,4 @@ The DMG and Setup executable are the visible installers. PenEcho uses the macOS 
 
 ### Cloud browser branding
 
-After generating icons in 071, synchronize `index.html,penecho-favicon.png` through Cloud's official `tools/sync-public-canvas.mjs --source=/Users/heack/workspace/penecho_071_version --only=index.html,penecho-favicon.png`, then copy Cloud's `public/canvas/penecho-favicon.png` to `public/media/brand-app-icon.png`. Verify the selective sync with `--check`. The older `public/media/brand-icon.png` remains the image used by the existing activity/public-message routes. Text-built site wordmarks and all other residual branding remain unchanged.
+After generating icons in 071, synchronize `index.html,penecho-favicon.png` through Cloud's official `tools/sync-public-canvas.mjs --source=/path/to/penecho --only=index.html,penecho-favicon.png`, then copy Cloud's `public/canvas/penecho-favicon.png` to `public/media/brand-app-icon.png`. Verify the selective sync with `--check`. The older `public/media/brand-icon.png` remains the image used by the existing activity/public-message routes. Text-built site wordmarks and all other residual branding remain unchanged.

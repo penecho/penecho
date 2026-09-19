@@ -2,7 +2,7 @@
 
 User task: continue one external conversation on its own Canvas, keep other work available, and recover from a failed operation without losing input or duplicating output. No Git, save-version history, branches or playback is introduced. Bundle V2 carries optional `penechoDocument` and `penechoWorkspace` extensions; V1/V2 documents without them remain readable.
 
-Design-source map (canonical `/Users/heack/workspace/penecho_design`):
+Design-source map (canonical `penecho_design`):
 
 | Product region | Catalog source | Applied rule |
 | --- | --- | --- |

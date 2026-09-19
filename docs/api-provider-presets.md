@@ -68,10 +68,12 @@ old connection migration or existing protocol parser changes are introduced.
 - Public-catalog verification on 2026-09-18 returned 445 OpenRouter chat entries,
   31 compatible OpenCode Go entries and 32 compatible OpenCode Zen entries.
   Counts are observations, not pinned product constants.
-- `testcase/api-presets/verify-ui.cjs` renders the actual editor markup, CSS and
+- `scripts/verify-api-presets-ui.cjs` renders the actual editor markup, CSS and
   functions in a browser with a mocked model-list response. It checks English,
   Chinese, narrow width and a 640×480 CSS viewport rendered at 2× device scale
-  (the layout equivalent of a 1280×960 window at 200% browser zoom).
+  (the layout equivalent of a 1280×960 window at 200% browser zoom). It uses an
+  installed `playwright` package or `PENECHO_PLAYWRIGHT` module path and writes
+  local screenshots/results to ignored `test-results/api-presets/`.
 - No paid provider inference was performed. A listed model may still require
   account access and model-specific vision, tools or parameter support. These
   presets do not claim to add every provider's optional capability.

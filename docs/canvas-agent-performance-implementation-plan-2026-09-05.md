@@ -17,7 +17,7 @@
 
 ## 2. 样本与证据范围
 
-扫描目录 `/Users/heack/.penecho/logs/requests/`，共 100 份 trace，其中 47 份标记为 `canvas-conversation-turn`。其余包含普通 Canvas 请求；Agent 样本还混有不同模型、不同执行引擎、失败、取消和放弃的请求。统计必须分组，不能用混合平均值承诺加速比例，也不能拿不同任务的耗时作模型速度排名。
+扫描目录 `~/.penecho/logs/requests/`，共 100 份 trace，其中 47 份标记为 `canvas-conversation-turn`。其余包含普通 Canvas 请求；Agent 样本还混有不同模型、不同执行引擎、失败、取消和放弃的请求。统计必须分组，不能用混合平均值承诺加速比例，也不能拿不同任务的耗时作模型速度排名。
 
 重点完整核对的两个最新 Codex native 修改请求：
 

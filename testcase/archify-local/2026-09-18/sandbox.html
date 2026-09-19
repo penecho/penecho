@@ -1,8 +1,0 @@
-<!doctype html><meta charset="utf-8"><title>Architecture sandbox test</title><style>body{margin:0}iframe{width:100%;height:1150px;border:0}#status{font:12px Arial;padding:8px}</style><div id="status">Loading local Widget host…</div><iframe src="/public/widget-host.html" title="architecture test"></iframe><script>
-let sent=false,start=performance.now();const host=document.querySelector('iframe'),params=new URLSearchParams(location.search),mode=params.get('mode'),fixture=params.get('fixture')||'mcp.semantic.json';
-addEventListener('message',async event=>{if(event.source!==host.contentWindow)return;const m=event.data;
- if(m.type==='penecho-widget-host-ready'&&!sent){sent=true;const data=await(await fetch(fixture)).json();const graph='<section data-penecho-architecture><script type="application/json" data-architecture-source>'+JSON.stringify(data).replace(/</g,'\\u003c')+'<'+ '/script></section>';const html='<!doctype html><body style="margin:8px;font:16px Arial">'+(mode==='plain'?'<h1>普通 HTML 验收</h1><p>这份文档不应加载架构运行时。</p>':mode==='mixed'?'<h1>同一 Widget 的普通标题</h1>'+graph+'<footer>普通页脚：图与文字共享一个文档。</footer>':graph);
- host.contentWindow.postMessage({type:'penecho-widget-init',title:data.title,sourceFormat:'penecho-mcp+html',html},location.origin);host.contentWindow.postMessage({type:'penecho-widget-state',selected:true,active:true,interactive:true,scaleX:1,scaleY:1},location.origin);}
- if(m.type==='penecho-widget-capture-ready')document.querySelector('#status').textContent='Document ready after '+Math.round(performance.now()-start)+' ms';
- if(m.type==='penecho-widget-runtime-diagnostics'&&m.errors.length)document.querySelector('#status').textContent=JSON.stringify(m.errors);
-});</script>

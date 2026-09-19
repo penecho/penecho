@@ -94,7 +94,7 @@ Sprechen Sie weiter mit **Codex, Claude, Kimi oder anderen KI-Agenten**. PenEcho
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Ereignisbasierte Mitteilungen" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP-Anfragen bis zum Canvas" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP-Anfragen bis zum Canvas" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@ Sprechen Sie weiter mit **Codex, Claude, Kimi oder anderen KI-Agenten**. PenEcho
 - **Den eigenen Agenten nutzen.** Verbinden Sie Codex, Claude Code oder einen anderen MCP-kompatiblen Client, um einen ausdrücklich freigegebenen Canvas zu lesen und zu bearbeiten.
 - **Arbeit aufbewahren und teilen.** Organisieren Sie Canvases in Projekten, speichern Sie Cloud-Versionen, synchronisieren Sie Favoriten und veröffentlichen Sie über Echoes.
 
-## Neu in 1.3.2
+## Neu in 1.3.3
 
-| Neuerung | Nutzen |
+| Diagrammtyp | Funktionen |
 | --- | --- |
-| **MCP-Arbeitsbereich** | Canvas-Erkennung, Aufnahmen, Objektbearbeitung, interaktive Widgets, virtuelle Quelldateien und Benutzerfeedback für externe Agenten. Unterstützt ausdrücklich freigegebene lokale Browser, LAN-Browser und Cloud-Browser über verknüpfte Geräte. |
-| **Cloud MCP** | Verbinden Sie externe KI-Agenten direkt mit Ihren aktivierten PenEcho-Cloud-Canvases, um Inhalte zu lesen, Ergebnisse zu erstellen und zu bearbeiten sowie handschriftliches Feedback zu berücksichtigen. Cloud MCP und Local MCP sind optionale Verbindungswege. |
-| **PenEcho Cloud Credits API** | Nutzen Sie von PenEcho gehostete Modelle mit Kontoguthaben neben Ihren eigenen API- und CLI-Verbindungen. Verfügbare Modelle, Preise und Guthaben sehen Sie in den Einstellungen. |
-| **Verbindungsverwaltung** | Speichern Sie mehrere KI-Verbindungen und wählen Sie die aktive Verbindung für jeden Client. |
-| **Canvas und Arbeitsumgebung** | Reaktionsschnelleres Zeichnen und Navigieren, verfeinerte Studio-Steuerung, ein anpassungsfähiges Agent-Panel und konfigurierbare Tastenkürzel. |
+| **Architektur** | Dienste, Abhängigkeiten und verschachtelte Systemgrenzen mit automatischem Layout und berechneten Verbindungswegen darstellen. |
+| **Sequenzen** | Teilnehmer und Nachrichtenfolgen mit Antworten, Selbstaufrufen sowie bedingten, wiederholten oder parallelen Fragmenten zeigen. |
+| **Workflows** | Schritte, Entscheidungen, beschriftete Verzweigungen, Schleifen und parallele Abläufe mit Aufteilung und Zusammenführung zeichnen. |
+
+Beschreibe die Anforderungen dem PenEcho Agent oder einem über MCP verbundenen Agenten. Prüfe Details auf dem Canvas, verfeinere das Ergebnis durch Feedback und exportiere es als SVG oder PNG.
+
+[Vollständiges Änderungsprotokoll](../../CHANGELOG.md#133)
 
 ## So funktioniert es
 
@@ -236,6 +238,10 @@ Diese Empfehlungen wägen Antwortqualität und Latenz bei tatsächlichen PenEcho
 Lesen Sie [CONTRIBUTING.md](../../CONTRIBUTING.md), um beizutragen; führen Sie `npm run check` aus, bevor Sie einen Pull Request öffnen. Melden Sie Fehler in den [Issues](https://github.com/penecho/penecho/issues), diskutieren Sie Ideen in den [Discussions](https://github.com/penecho/penecho/discussions) oder kommen Sie zu [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Lizenziert unter [AGPL-3.0-only](../../LICENSE). Eine alternative [kommerzielle Lizenz](../../COMMERCIAL-LICENSE.md) ist verfügbar. Siehe [Markenrichtlinie](../../TRADEMARKS.md) und [Beitragsvereinbarung](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## Danksagung
+
+Vielen Dank an [Archify](https://github.com/tt-a1i/archify) von tt-a1i. Die professionellen Diagrammrenderer von PenEcho verwenden angepasste SVG- und Geometriehilfen aus diesem MIT-lizenzierten Projekt. Die [MIT-Lizenz und Copyright-Hinweise](../../src/architecture/vendor/archify/LICENSE) bleiben erhalten; weitere Angaben zu Drittanbietern stehen in [NOTICE](../../NOTICE).
 
 ## Sterneverlauf
 

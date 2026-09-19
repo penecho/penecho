@@ -6,9 +6,10 @@ MCP and the built-in PenEcho Agent use the same `penecho_get_guidance` loader.
 The current architecture body is R9, evaluated with real GLM-5.3-Flash outputs
 and PenEcho MCP captures. The tested MCP diagram passed after model repairs
 guided by rendered evidence; independent first-pass reliability is not proven.
-Use the rule together with its render/review step. Inputs, failed versions,
-captures and evaluation limits are preserved in
-`testcase/architecture-prompt-eval/2026-09-17-mcp/report.md`.
+Use the rule together with its render/review step. Raw model runs, failed versions
+and captures are local-only evaluation evidence. Deterministic semantic inputs
+for renderer regressions live in `test/fixtures/diagrams/`; automated tests do not
+require the original model requests or browser sessions.
 
 ## Authoring flow
 

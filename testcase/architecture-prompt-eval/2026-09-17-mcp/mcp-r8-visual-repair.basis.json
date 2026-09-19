@@ -1,7 +1,0 @@
-{
-  "kind": "model repair with real MCP screenshot and concrete supervisor feedback",
-  "baseRun": "mcp-r8",
-  "sourceSha256": "964850170061c4ccdb089c294154e5b9dad937247f8fc7a2213f487b7da7513d",
-  "ruleUnchanged": true,
-  "manualHtmlEdits": false
-}

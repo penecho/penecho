@@ -25,4 +25,4 @@
 
 `npm run build:workflow` 生成 runtime 与第三方许可说明；`npm run check:workflow` 校验生成物。`npm run check` 包含新入口、lazy-load 隔离、流程语义、宽度布局及原有渲染器回归。运行进程需要重新加载后才会发布新 schema；旧对话缓存的工具列表可能还需客户端重新连接。
 
-测试源与实际画布证据保留在 `testcase/workflow-local/2026-09-18/`；四个独立示例覆盖线性流程、条件退回、有限重试、并行汇合，不删除旧画布。
+自动测试输入保留在 `test/fixtures/diagrams/workflow/`；四个独立示例覆盖线性流程、条件退回、有限重试、并行汇合。截图、会话记录和实际画布验收产物仅在本机保留，不作为构建或自动测试的依赖，也不提交到仓库。

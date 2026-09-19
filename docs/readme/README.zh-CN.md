@@ -94,7 +94,7 @@
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="事件驱动通知" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 请求如何到达画布" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 请求如何到达画布" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@
 - **接入自己的 Agent。** 通过 MCP，让 Codex、Claude Code 或其他兼容客户端读写你明确开放的 Canvas。
 - **保存与分享。** 用项目组织画布，保存云端版本、同步收藏，通过 Echoes 发布作品。
 
-## 1.3.2 新内容
+## 1.3.3 新内容
 
-| 更新 | 带来的能力 |
+| 图表类型 | 支持的画法 |
 | --- | --- |
-| **MCP 工作空间** | 画布发现、截图、对象编辑、交互 Widget、虚拟源文件和用户反馈；支持明确开放的本机、局域网和关联设备云端浏览器。 |
-| **Cloud MCP** | 外部 AI Agent 可直接连接已启用的 PenEcho Cloud 画布，读取内容、创建和编辑成果，并根据手写批注继续完善。Cloud MCP 与 Local MCP 均为可选连接方式。 |
-| **PenEcho Cloud Credits API** | 使用账号积分调用 PenEcho 托管模型，也可继续使用自己的 API 或 CLI；设置中可查看可用模型、费率和余额。 |
-| **连接管理** | 保存多个 AI 连接，为不同客户端选择各自的活动连接。 |
-| **画布与工作台** | 更流畅的绘写和导航、更简洁的 Studio 控件、自适应 Agent 面板与可自定义的快捷键。 |
+| **架构图** | 绘制服务、依赖关系与多层系统边界，自动布局并规划连线路径。 |
+| **时序图** | 展示参与者与消息先后，支持返回、自调用，以及条件、循环和并行片段。 |
+| **工作流** | 组织步骤、判断、带条件的分支与循环，通过分叉和汇合表达并行流程。 |
+
+向 PenEcho Agent 或通过 MCP 接入的 Agent 描述需求，即可在画布中查看图表细节、反馈修改，并导出 SVG / PNG。
+
+[完整更新记录](../../CHANGELOG.md#133)
 
 ## 工作原理
 
@@ -236,6 +238,10 @@ Agent 可以查看相关内容、编辑对象、创建可视化结果、修改�
 参与贡献请阅读 [CONTRIBUTING.md](../../CONTRIBUTING.md)，提交 PR 前运行 `npm run check`。欢迎在 [Issues](https://github.com/penecho/penecho/issues) 报告问题、在 [Discussions](https://github.com/penecho/penecho/discussions) 交流，或加入 [Discord](https://discord.gg/3jrPJ3mXdX)。
 
 采用 [AGPL-3.0-only](../../LICENSE) 许可，同时提供[商业许可](../../COMMERCIAL-LICENSE.md)。另见[商标政策](../../TRADEMARKS.md)和[贡献者协议](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)。
+
+## 致谢
+
+感谢 tt-a1i 的 [Archify](https://github.com/tt-a1i/archify) 项目。PenEcho 的专业图表渲染器使用了该项目经适配的 SVG 与几何辅助代码，并保留完整的 [MIT 许可及版权声明](../../src/architecture/vendor/archify/LICENSE)。第三方署名详见 [NOTICE](../../NOTICE)。
 
 ## Star 历史
 

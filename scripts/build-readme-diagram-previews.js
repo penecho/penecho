@@ -10,7 +10,7 @@ const files = [
   'kubernetes.webp',
   'migration.webp',
   'notifications.webp',
-  'mcp-request.png',
+  'mcp-request.webp',
   'release.webp',
   'rollout.webp',
 ];

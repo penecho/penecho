@@ -1,10 +1,10 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs');
-const fixture = name => JSON.parse(fs.readFileSync(`testcase/archify-local/2026-09-18/${name}`,'utf8'));
+const fixture = name => JSON.parse(fs.readFileSync(`test/fixtures/diagrams/architecture/${name}`,'utf8'));
 
 test('architecture adapts compound graphs to available width while preserving all semantic content',async () => {
   const ELK = require('elkjs/lib/elk.bundled.js');
   const {layoutArchitecture,MIN_MAP_SCALE} = await import('../src/architecture/layout.mjs');
-  for (const name of ['mcp.semantic.json','glm-json-reviewed/response.json','uk-power-regression.json']) {
+  for (const name of ['mcp.json','reviewed-mcp.json','uk-power.json']) {
     const data = fixture(name), original = structuredClone(data), elk = new ELK();
     const wide = await layoutArchitecture(data,elk,undefined,{width:3200});
     for (const width of [1600,1000,800]) {
@@ -15,7 +15,7 @@ test('architecture adapts compound graphs to available width while preserving al
         // Large diagrams retain useful geometry; the tested SVG camera fits
         // their complete overview and exposes 100% zoom instead of clipping.
         assert.ok(Number.isFinite(narrow.width)&&Number.isFinite(narrow.height));
-      } else if (name==='uk-power-regression.json' && width===800) {
+      } else if (name==='uk-power.json' && width===800) {
         // The natural DOWN layout avoids the compact variant's 13k route length
         // at the cost of <20% overflow. That is an intentional quality tradeoff.
         assert.equal(narrow.mode,'down');
@@ -43,18 +43,18 @@ test('a long call chain wraps into rows, then returns deterministically to wide 
   assert.ok(narrow.width*MIN_MAP_SCALE<=1000); assert.ok(narrow.height>wide.height*2);
   const restored = await layoutArchitecture(data,elk,undefined,{width:3600});
   assert.deepEqual(restored.nodes,wide.nodes); assert.deepEqual(restored.edges,wide.edges);
-  const tiny = await layoutArchitecture(fixture('glm-json-reviewed/response.json'),elk,undefined,{width:240});
-  assert.deepEqual(tiny.issues,[]); assert.equal(tiny.nodes.length,fixture('glm-json-reviewed/response.json').nodes.length);
+  const tiny = await layoutArchitecture(fixture('reviewed-mcp.json'),elk,undefined,{width:240});
+  assert.deepEqual(tiny.issues,[]); assert.equal(tiny.nodes.length,fixture('reviewed-mcp.json').nodes.length);
   assert.ok(tiny.width*MIN_MAP_SCALE>240,'impossible fit retains readable geometry for local scrolling');
 });
 
 test('compound project architecture chooses short downward routes over wrapped detours',async () => {
   const ELK = require('elkjs/lib/elk.bundled.js');
   const {layoutArchitecture} = await import('../src/architecture/layout.mjs');
-  const dir = 'testcase/architecture-routing/2026-09-18/';
-  const data = JSON.parse(fs.readFileSync(`${dir}input.json`,'utf8'));delete data.direction;
+  const dir = 'test/fixtures/diagrams/architecture/';
+  const data = JSON.parse(fs.readFileSync(`${dir}routing-input.json`,'utf8'));delete data.direction;
   const original = structuredClone(data);
-  const baseline = JSON.parse(fs.readFileSync(`${dir}baseline-metrics.json`,'utf8'));
+  const baseline = JSON.parse(fs.readFileSync(`${dir}routing-baseline.json`,'utf8'));
   const lengths = l => l.edges.reduce((sum,e) => sum + e.sections.reduce((n,ps) => n + ps.slice(1).reduce((d,p,i) => d + Math.abs(p[0]-ps[i][0]) + Math.abs(p[1]-ps[i][1]),0),0),0);
   const bends = l => l.edges.reduce((sum,e) => sum + e.sections.reduce((n,ps) => n + Math.max(0,ps.length-2),0),0);
   const elk = new ELK();
@@ -78,7 +78,7 @@ test('compound project architecture chooses short downward routes over wrapped d
 test('downward frame titles reserve room for localized wrapping beside entry routes',async () => {
   const ELK = require('elkjs/lib/elk.bundled.js');
   const {layoutArchitecture} = await import('../src/architecture/layout.mjs');
-  const data = JSON.parse(fs.readFileSync('testcase/architecture-routing/2026-09-18/input.json','utf8'));
+  const data = JSON.parse(fs.readFileSync('test/fixtures/diagrams/architecture/routing-input.json','utf8'));
   const layout = await layoutArchitecture({...data,direction:'DOWN'},new ELK());
   assert.deepEqual(layout.issues,[]);
   const group = layout.groups.find(g=>g.id==='agentrt');

@@ -94,7 +94,7 @@ Grâce à MCP, votre IA peut transformer des explications en schémas et des id�
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Notifications événementielles" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Des requêtes MCP au Canvas" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Des requêtes MCP au Canvas" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@ Grâce à MCP, votre IA peut transformer des explications en schémas et des id�
 - **Utilisez votre propre agent.** Connectez Codex, Claude Code ou un autre client compatible MCP pour lire et modifier un Canvas explicitement activé.
 - **Conservez et partagez votre travail.** Organisez les Canvas en projets, enregistrez des versions Cloud, synchronisez vos favoris et publiez via Echoes.
 
-## Nouveautés de la version 1.3.2
+## Nouveautés de la version 1.3.3
 
-| Mise à jour | Apports |
+| Type de diagramme | Ce que vous pouvez dessiner |
 | --- | --- |
-| **Espace de travail MCP** | Découverte des Canvas, captures, modification d’objets, Widgets interactifs, fichiers sources virtuels et retours utilisateur pour les agents externes. Prend en charge les navigateurs locaux, du réseau local et Cloud via un appareil lié, avec activation explicite. |
-| **Cloud MCP** | Connectez des agents IA externes directement à vos Canvas PenEcho Cloud activés pour lire le contenu, créer et modifier des résultats et suivre vos retours manuscrits. Cloud MCP et Local MCP sont des modes de connexion facultatifs. |
-| **API PenEcho Cloud Credits** | Utilisez les modèles hébergés par PenEcho avec vos crédits de compte, en complément de vos connexions API et CLI. Consultez les modèles disponibles, les tarifs et le solde dans les paramètres. |
-| **Gestion des connexions** | Enregistrez plusieurs connexions IA et choisissez la connexion active pour chaque client. |
-| **Canvas et espace de travail** | Dessin et navigation plus réactifs, commandes Studio affinées, panneau Agent adaptatif et raccourcis clavier personnalisables. |
+| **Diagrammes d’architecture** | Représentez les services, leurs dépendances et les frontières de systèmes imbriquées avec une disposition et un routage des connexions automatiques. |
+| **Diagrammes de séquence** | Montrez les participants et l’ordre des messages, avec réponses, auto-appels et fragments conditionnels, répétitifs ou parallèles. |
+| **Flux de travail** | Organisez les étapes, décisions, branches conditionnelles, boucles et chemins parallèles avec bifurcations et jonctions. |
+
+Décrivez vos besoins à PenEcho Agent ou à un agent connecté par MCP. Consultez les détails sur le Canvas, affinez le résultat par vos retours et exportez en SVG ou PNG.
+
+[Historique complet des modifications](../../CHANGELOG.md#133)
 
 ## Fonctionnement
 
@@ -236,6 +238,10 @@ Ces recommandations équilibrent la qualité des réponses et la latence dans le
 Lisez [CONTRIBUTING.md](../../CONTRIBUTING.md) pour contribuer ; exécutez `npm run check` avant d’ouvrir une pull request. Signalez les bugs dans les [Issues](https://github.com/penecho/penecho/issues), échangez dans les [Discussions](https://github.com/penecho/penecho/discussions) ou rejoignez [Discord](https://discord.gg/3jrPJ3mXdX).
 
 Sous licence [AGPL-3.0-only](../../LICENSE). Une [licence commerciale](../../COMMERCIAL-LICENSE.md) alternative est disponible. Consultez la [politique relative aux marques](../../TRADEMARKS.md) et l’[accord de contribution](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+## Remerciements
+
+Merci à [Archify](https://github.com/tt-a1i/archify), créé par tt-a1i. Les moteurs de rendu de diagrammes professionnels de PenEcho utilisent des fonctions SVG et géométriques adaptées de ce projet sous licence MIT. La [licence MIT et les mentions de droits d’auteur](../../src/architecture/vendor/archify/LICENSE) sont conservées ; les attributions aux tiers figurent dans [NOTICE](../../NOTICE).
 
 ## Historique des étoiles
 

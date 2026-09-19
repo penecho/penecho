@@ -1,6 +1,6 @@
 # Canvas Library pagination and cache
 
-Canvas sources live in `/Users/heack/workspace/penecho_071_version`. Cloud-owned routes and repositories live in `/Users/heack/workspace/penecho_cloud`; generated Canvas assets reach Cloud only through `tools/sync-public-canvas.mjs`.
+Canvas sources live in this repository. Cloud-owned routes and repositories live in the separate PenEcho Cloud repository; generated Canvas assets reach Cloud only through `tools/sync-public-canvas.mjs`.
 
 ## Behavior
 
@@ -15,7 +15,7 @@ Canvas sources live in `/Users/heack/workspace/penecho_071_version`. Cloud-owned
 
 ## Design source
 
-The existing manager shell, project rail, list/grid cards, and scroll ownership are preserved. Sources in `/Users/heack/workspace/penecho_design/penecho-design-language.html`:
+The existing manager shell, project rail, list/grid cards, and scroll ownership are preserved. Sources in `penecho_design/penecho-design-language.html`:
 
 | Library region | Catalog source | Applied rule |
 | --- | --- | --- |

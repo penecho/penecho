@@ -12,6 +12,14 @@ logs/
 debug_logs/
 .opencode/
 .req/
+.sidebar-contract-staging/
+# Keep curated manual scenarios; runtime evidence stays local. Automated inputs
+# belong in test/fixtures/ and must not depend on ignored files here.
+testcase/*
+!testcase/README.md
+!testcase/canvas-agent-visual-explorer-en.md
+!testcase/canvas-agent-visual-explorer-zh.md
+!testcase/professional-diagrams-en.md
 test-results/
 playwright-report/
 coverage/
@@ -49,3 +57,25 @@ tools/mobile/web/penecho-mark.png
 *.swp
 *.swo
 .trash/
+
+# Generated README review output; keep the authored preview and renderer.
+docs/design-previews/readme-diagram-table-20260919/canvas-session.json
+docs/design-previews/readme-diagram-table-20260919/canvas.html
+docs/design-previews/readme-diagram-table-20260919/*-canvas.png
+docs/design-previews/readme-diagram-table-20260919/readme.*.html
+docs/design-previews/readme-diagram-table-20260919/readme-checks.json
+docs/design-previews/readme-diagram-table-20260919/verification.json
+docs/design-previews/readme-20260915/preview.local.html
+
+# Demo videos are hosted externally; commit URLs and metadata only.
+*.[mM][pP]4
+*.[mM][oO][vV]
+*.[wW][eE][bB][mM]
+*.[mM]4[vV]
+*.[aA][vV][iI]
+*.[mM][kK][vV]
+*.[mM][pP][eE][gG]
+*.[mM][pP][gG]
+*.[wW][mM][vV]
+*.[fF][lL][vV]
+*.[oO][gG][vV]

@@ -20,11 +20,11 @@ This is a code-led refinement of the existing prototype; no external approved vi
 
 | Prototype region | Source and application |
 | --- | --- |
-| Page shell | `/Users/heack/workspace/penecho_design/penecho-design-language.html`, Canvas Library manager in `#complete-surfaces`: one navigator and one content scroller. |
+| Page shell | `penecho_design/penecho-design-language.html`, Canvas Library manager in `#complete-surfaces`: one navigator and one content scroller. |
 | Cards and list | `#lists`: equal 16:10 grid media, 13 px / 500 titles, 12 px metadata, one trailing menu, and compact 96 × 64 px media in list mode. |
 | Layout, typography, controls | `penecho-design-language.css` and `#buttons` / `#forms`: established geometry, 30 px text buttons and fields, 28 px icon buttons, and 5 px control corners. |
 | Dialogs | `#dialogs`, M/single: one focused task, opaque content, scrim, and focus restoration. |
-| Proposed palette | `/Users/heack/workspace/penecho_cloud/public/console.css`: warm neutral surfaces and charcoal text with green accents `#3b5034` and `#293f25`. |
+| Proposed palette | `<cloud-root>/public/console.css`: warm neutral surfaces and charcoal text with green accents `#3b5034` and `#293f25`. |
 
 The canonical PenEcho design directory remains the authority for layout, typography, and controls. The requested green palette is a **Canvas-only proposal** inspired by the current Cloud theme. It has not been adopted into the canonical catalog or implemented in the Cloud product. Global product documentation, `DESIGN.md`, and shared design-system files remain unchanged.
 
@@ -61,4 +61,4 @@ The detector ran once and reported one cramped-padding warning on the section/st
 
 This bounded review does not establish every library state, list-mode interaction, 200% zoom, production integration, or canonical design-system acceptance. The Canvas patch and geometry reread establish the saved artifact; the screenshots establish the rendered candidate at the stated viewports.
 
-The formal source directory is `/Users/heack/workspace/penecho_071_version`. The primary agent read `.git/HEAD` as `main`; Git status was unavailable because the installed Git/Xcode command exited with license error `69`, so the full working-tree status could not be verified. This task's changes are local prototype source, documentation, and screenshot evidence. No commit, push, official Cloud synchronization, or deployment was performed.
+The formal source directory is `<repository-root>`. The primary agent read `.git/HEAD` as `main`; Git status was unavailable because the installed Git/Xcode command exited with license error `69`, so the full working-tree status could not be verified. This task's changes are local prototype source, documentation, and screenshot evidence. No commit, push, official Cloud synchronization, or deployment was performed.

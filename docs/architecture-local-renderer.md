@@ -144,8 +144,9 @@ artifacts. It is a local source baseline; it does not represent a pushed release
 or a deployment. Later renderer comparisons should retain these fixtures and
 captures as the reference rather than overwrite them.
 
-Reproducible input, raw model output, layout iterations and captures live in
-`testcase/archify-local/2026-09-18/`. Historical artifacts were retained.
+Curated, reproducible semantic inputs live in
+`test/fixtures/diagrams/architecture/`. Raw model requests/responses, layout
+iterations and captures are local-only evidence, excluded from version control.
 
 - Reference fixture: 13 entities, 12 edges, Node/browser boundaries, independent
   guidance/binding branches, optional Agent and browser-owned storage. No authored
@@ -155,8 +156,8 @@ Reproducible input, raw model output, layout iterations and captures live in
   reasoning request took 227.25 seconds and 11,181 output tokens. With this test's
   `thinking:{type:"disabled"}` setting, the initial JSON took 32.94 seconds and
   1,808 output tokens. A factual review/correction took another 39.56 seconds and
-  2,678 output tokens. All raw requests/responses/usage are retained without keys
-  or reasoning text. The speed difference is not attributed solely to JSON: the
+  2,678 output tokens. Raw requests/responses/usage remain in local evidence, not
+  in the source checkout. The speed difference is not attributed solely to JSON: the
   reasoning setting changed. Application-wide model settings were not changed.
 - Fast raw JSON confused the optional Cloud bridge's ownership/path and a return
   direction. The reviewed JSON corrects those facts. Rendering cannot repair an
@@ -193,6 +194,7 @@ used the actual Widget host/sandbox with the same reference JSON at 2200, 1000 a
 Local reflow took roughly 0.3–0.4 seconds including Worker startup in these runs.
 These are local observations, not a performance guarantee. Resize-then-capture,
 SVG/PNG export, retained node inspector, height/transform stability and a complex
-model-authored graph at 200% browser zoom were checked. New evidence is in
-`testcase/archify-responsive/2026-09-18/`; `baseline1` and earlier captures remain
-unchanged. This follow-up is local source work, not a deployment.
+model-authored graph at 200% browser zoom were checked. Browser captures remain
+local-only. Reflow and routing inputs are retained in
+`test/fixtures/diagrams/architecture/` for reproducible automated checks.
+This follow-up is local source work, not a deployment.

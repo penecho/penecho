@@ -1,4 +1,4 @@
-const { chromium } = require('/Users/heack/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const { chromium } = require(process.env.PENECHO_PLAYWRIGHT || 'playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');

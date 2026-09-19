@@ -1,11 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {validateWorkflow,workflowHtml}=require('../src/workflow/schema.js');
 const {validateToolArguments}=require('../src/server/mcp/schema.js');
-const fixtures=require('../testcase/workflow-local/2026-09-18/fixtures.cjs');
+const fixtures=require('./fixtures/diagrams/workflow/samples.json');
 test('reported retry workflows start before their main chain regardless of input order',async()=>{
  const fs=require('node:fs'),ELK=require('elkjs/lib/elk.bundled.js'),{layoutWorkflow}=await import('../src/workflow/layout.mjs');
  for(const name of ['wf-02-leave-zh','wf-04-order-zh','wf-07-onboarding-groups','wf-09-ml-pipeline']){
-  const data=JSON.parse(fs.readFileSync(`testcase/mcp-layout-capture/2026-09-18/${name}.json`));
+  const data=JSON.parse(fs.readFileSync(`test/fixtures/diagrams/workflow/${name}.json`));
   for(const width of [390,2011])for(const reversed of [false,true]){
    const layout=await layoutWorkflow({...data,nodes:reversed?data.nodes.toReversed():data.nodes},new ELK(),undefined,{width});
    const axis=layout.mode==='down'?'y':'x',start=layout.nodes.find(n=>n.type==='start');

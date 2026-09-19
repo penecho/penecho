@@ -28,7 +28,7 @@
 | Cloud 客户端活动图片响应 | `src/routes/client-activity.mjs:12` | 返回 `public/media/brand-icon.png`；保留旧图与接口行为，新页面图标使用独立文件 |
 | 旧静态素材 | 071 `public/penecho-readme-header.png`；Cloud `public/media/brand-logo.png` | 旧文件仍保留，前者已经退出 README 与 npm 清单；按用户要求保留旧文件 |
 
-以上 Cloud 路径均相对 `/Users/heack/workspace/penecho_cloud`；Canvas 的 `index.html` 和新增 `penecho-favicon.png` 通过官方 `tools/sync-public-canvas.mjs --only=index.html,penecho-favicon.png` 从 071 同步。Cloud 网站图标从同步后的 `public/canvas/penecho-favicon.png` 复制为 `public/media/brand-app-icon.png`；旧的 `brand-icon.png` 和 `penecho-mark.png` 均保留。
+以上 Cloud 路径均相对 `<cloud-root>`；Canvas 的 `index.html` 和新增 `penecho-favicon.png` 通过官方 `tools/sync-public-canvas.mjs --only=index.html,penecho-favicon.png` 从 071 同步。Cloud 网站图标从同步后的 `public/canvas/penecho-favicon.png` 复制为 `public/media/brand-app-icon.png`；旧的 `brand-icon.png` 和 `penecho-mark.png` 均保留。
 
 ## 边界
 

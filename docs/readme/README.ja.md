@@ -94,7 +94,7 @@ MCP を通じて、AI は説明を図に、アイデアをインタラクティ�
       <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="イベント駆動の通知" width="100%"></a>
     </td>
     <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP リクエストが Canvas に届くまで" width="100%"></a>
+      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP リクエストが Canvas に届くまで" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -132,15 +132,17 @@ MCP を通じて、AI は説明を図に、アイデアをインタラクティ�
 - **自分のエージェントを接続。** Codex、Claude Code などの MCP 対応クライアントで、明示的に有効化した Canvas を読み取り、編集できます。
 - **成果を保存・共有。** Canvas をプロジェクトに整理し、Cloud のリビジョンを保存、お気に入りを同期し、Echoes で公開できます。
 
-## 1.3.2 の新機能
+## 1.3.3 の新機能
 
-| 更新 | 追加された機能 |
+| 図の種類 | 描画できる内容 |
 | --- | --- |
-| **MCP ワークスペース** | 外部エージェント向けの Canvas 検出、キャプチャ、オブジェクト編集、インタラクティブな Widgets、仮想ソースファイル、ユーザーフィードバック。明示的に有効化したローカル、LAN、リンク済みデバイス経由の Cloud ブラウザーに対応。 |
-| **Cloud MCP** | 外部 AI エージェントを有効化済みの PenEcho Cloud キャンバスに直接接続し、内容の読み取り、成果の作成・編集、手書きフィードバックの確認ができます。Cloud MCP と Local MCP はどちらも任意の接続方法です。 |
-| **PenEcho Cloud Credits API** | 独自の API・CLI 接続に加え、アカウントのクレジットで PenEcho がホストするモデルを利用できます。設定で利用可能なモデル、料金、残高を確認できます。 |
-| **接続管理** | 複数の AI 接続を保存し、クライアントごとに使用する接続を選択できます。 |
-| **Canvas とワークベンチ** | 描画と移動の応答性向上、Studio の操作改善、適応型 Agent パネル、カスタマイズ可能なキーボードショートカット。 |
+| **アーキテクチャ図** | サービス、依存関係、入れ子のシステム境界を、自動レイアウトと接続線の経路計算で表現します。 |
+| **シーケンス図** | 参加者とメッセージの順序を、応答、自己呼び出し、条件分岐・ループ・並列のフラグメントで表現します。 |
+| **ワークフロー** | 手順、判断、条件付き分岐、ループ、分岐・合流を伴う並列処理を描画します。 |
+
+PenEcho Agent または MCP 接続のエージェントに要件を伝え、Canvas 上で詳細を確認し、フィードバックで修正して SVG / PNG に書き出せます。
+
+[更新履歴](../../CHANGELOG.md#133)
 
 ## 仕組み
 
@@ -240,6 +242,10 @@ npm start
 貢献するには [CONTRIBUTING.md](../../CONTRIBUTING.md) を読み、プルリクエストを作成する前に `npm run check` を実行してください。不具合は [Issues](https://github.com/penecho/penecho/issues)、アイデアは [Discussions](https://github.com/penecho/penecho/discussions)、交流は [Discord](https://discord.gg/3jrPJ3mXdX) へ。
 
 [AGPL-3.0-only](../../LICENSE) ライセンスで提供しています。別途[商用ライセンス](../../COMMERCIAL-LICENSE.md)も利用できます。[商標ポリシー](../../TRADEMARKS.md)と[貢献者契約](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)をご覧ください。
+
+## 謝辞
+
+tt-a1i による [Archify](https://github.com/tt-a1i/archify) に感謝します。PenEcho の専門図レンダラーは、この MIT ライセンスのプロジェクトから SVG・幾何処理の補助コードを適用しています。[MIT ライセンスと著作権表示](../../src/architecture/vendor/archify/LICENSE) を保持しています。第三者への帰属は [NOTICE](../../NOTICE) を参照してください。
 
 ## スター履歴
 

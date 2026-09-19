@@ -17,8 +17,8 @@ Both documents offer Browse / Craft detail, Dashboard / standalone context, and 
 
 | Region | Source | Applied rule |
 | --- | --- | --- |
-| Cloud palette and sidebar | `/Users/heack/workspace/penecho_cloud/public/console.css`, `.console-body` | Forest accent `#3B5034`, warm sidebar `#F7F7EF`, sage selection; latest user correction takes precedence over Desktop's purple accent. |
-| Shell and responsive regions | `/Users/heack/workspace/penecho_design/penecho-design-language.html`, `#architecture` and `#responsive` | One navigation shell; content responds to the available parent width. |
+| Cloud palette and sidebar | `<cloud-root>/public/console.css`, `.console-body` | Forest accent `#3B5034`, warm sidebar `#F7F7EF`, sage selection; latest user correction takes precedence over Desktop's purple accent. |
+| Shell and responsive regions | `penecho_design/penecho-design-language.html`, `#architecture` and `#responsive` | One navigation shell; content responds to the available parent width. |
 | Controls and typography | Canonical catalog `#foundations`, `#buttons`, `#forms`, `#typography` | 30px controls, 5px field radius, 30/24px segmented control with 2px inset; native controls and visible focus. |
 | Browse structure | Canonical catalog `#lists`, library grid and media-list examples | Consistent media/copy/action hierarchy; grid and compact rows preserve searchable data and actions. |
 | Detail structure | Canonical catalog content-preview structure | Preview and supporting actions form distinct regions; narrow widths place the main action before the preview. |
@@ -33,15 +33,11 @@ Warm-neutral surfaces and the editorial heading are review proposals, not new ap
 
 ## Verification
 
-`verify.cjs` uses the installed Playwright runtime and cached Chromium. `validation.json` records checks for 1440px desktop, the 1939px Canvas content width, 768px and 390px layouts. It checks search/type filters, detail navigation, favorites, sharing dialog/Escape, lineage selection, comments, unavailable Echo, state rendering, JavaScript errors, and horizontal overflow. Screenshots sit beside these files.
+`verify.cjs` uses an installed `playwright` package or the module path supplied by `PENECHO_PLAYWRIGHT`, plus cached Chromium. `validation.json` records checks for 1440px desktop, the 1939px Canvas content width, 768px and 390px layouts. It checks search/type filters, detail navigation, favorites, sharing dialog/Escape, lineage selection, comments, unavailable Echo, state rendering, JavaScript errors, and horizontal overflow. Screenshots sit beside these files.
 
 The design detector reported two generic spacing warnings for the segmented track and the vertically centered toolbar. Their measured geometry intentionally follows the catalog's compact control pattern; they are not clipped-text errors.
 
-## Canvas delivery and outstanding annotation question
+## Preview scope
 
-- Echoes document: `doc-712a56869f218c74c5b4e5740ee33cbe92130658282c2b5c760bfc1bde4be29b`.
-- Stable artifacts: `echoes-design-a` / `widget-1` and `echoes-design-b` / `widget-2`.
-- Forest palette and latest English source applied successfully to both existing artifacts, preserving geometry.
-- The separate `Cloud Projects · Redesign` document contains the user's visible circles around its top-left PenEcho / Cloud Projects heading and bottom-left Dark appearance control. The Echoes document has no ink tiles. A scope clarification is pending before changing the separate project-library design.
-
-These files are local, uncommitted design artifacts in the formal 071 project on `main`. They have not been pushed, synced into Cloud product sources, or deployed.
+These files are standalone design artifacts. Preview data uses fictional users;
+opening or rebuilding a preview does not publish or deploy Cloud product code.

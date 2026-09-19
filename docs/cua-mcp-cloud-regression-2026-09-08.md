@@ -2,9 +2,9 @@
 
 ## Scope and baseline
 
-- Canvas workspace: `/Users/heack/workspace/penecho_071_version`, HEAD `e4b87f1`.
+- Canvas workspace: `<repository-root>`, HEAD `e4b87f1`.
 - Verified remote Canvas main: `84d4f8dc45cf5970193895f7d8b084d172f2dd7b`.
-- Cloud workspace: `/Users/heack/workspace/penecho_cloud`; fetched remote main `2a5cb52ac88775f9f6dbb568e701acbc61512220`.
+- Cloud workspace: `<cloud-root>`; fetched remote main `2a5cb52ac88775f9f6dbb568e701acbc61512220`.
 - Both repositories already contained substantial changes. Existing changes were preserved. Diff totals against main include those changes and are not this task's patch size.
 - Reused existing 071 services on ports 3921/3922 and the signed-in Cloud UAT at `internaltest.penecho.ai`. No production deployment or push was performed. Existing services were not restarted.
 - UI interactions used computer use through Edge, native ZCode/Edge accessibility, and the in-app browser. No shell-based browser automation was substituted.

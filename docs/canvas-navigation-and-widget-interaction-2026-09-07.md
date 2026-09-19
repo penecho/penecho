@@ -33,7 +33,7 @@ Widget 交互不重放选中它的那次点击。激活后，地图等内容负�
 - `ui-bootstrap.js` 负责 Pointer Events、手指导航和工具切换；`canvas-runtime.js` 负责对象编辑、iframe 输入权限及层叠命中。
 - `widget-host.js` 向内部文档传递交互状态，交互中不拦截原生手势；保留现有消息来源校验。
 - 切换模式保留 iframe 身份，不通过重新加载 Widget 来改变输入策略。
-- 界面沿用 `/Users/heack/workspace/penecho_design` 的 context-toolbar 和 settings-switch 模式；中英文提示同步更新。移动端触控按钮至少 44px，导航条避开安全区。
+- 界面沿用 `penecho_design` 的 context-toolbar 和 settings-switch 模式；中英文提示同步更新。移动端触控按钮至少 44px，导航条避开安全区。
 - `public/app.js` 由 `scripts/build-client.js` 生成。
 
 ## 验证

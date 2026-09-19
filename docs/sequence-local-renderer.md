@@ -70,7 +70,7 @@ SVG/PNG 按钮导出当前主图，不包含外层标题、详情卡或报告正
 
 ## 构建与验证
 
-在正式目录 `/Users/heack/workspace/penecho_071_version` 执行：
+在本仓库根目录执行：
 
 ```sh
 npm run build:sequence
@@ -86,18 +86,16 @@ npm run check
 
 ## 2026-09-18 验收证据与交付状态
 
-证据统一保存在 `testcase/sequence-local/2026-09-18/`：
+自动测试输入保存在 `test/fixtures/diagrams/sequence/`：
 
 | 证据 | 用途 |
 | --- | --- |
-| `mcp.semantic.json` | MCP 请求路径：规则读取、文档执行、可选截图 |
-| `payment.semantic.json` | 合成支付场景：自调用、返回、loop、alt、激活区间 |
-| `async.semantic.json` | 合成后台任务：异步消息、par 与完成通知 |
-| `generate-previews.mjs`、三个 `*.preview.html` | 从语义输入生成旧 Canvas 可用的自包含展示；`payment.preview-v1.html` 保留早期对照 |
-| `sandbox.html`、`preview-server.cjs` | 本地运行时与混合文档复现入口 |
-| `desktop.png`、`mobile.png`、`zoom200.png`、`mixed.png` | 桌面、窄宽度、200% 缩放和混合报告截图 |
-| `canvas-payment-v2.webp` | 用户已有 Canvas 中的支付预览截图 |
-| `MCP 请求如何到达画布.svg`、同名 `.png` | 已留存的 MCP 示例导出文件 |
+| `mcp.json` | MCP 请求路径：规则读取、文档执行、可选截图 |
+| `payment.json` | 合成支付场景：自调用、返回、loop、alt、激活区间 |
+| `async.json` | 合成后台任务：异步消息、par 与完成通知 |
+| `nested-fragments.json` | 嵌套片段标题与生命线、激活区间的间距回归 |
+
+原始预览、浏览器截图、导出和会话记录仅在本机保留，不提交到仓库，也不作为构建或自动测试的依赖。README 使用的精选示例单独保存在 `docs/assets/professional-diagrams/`。
 
 本轮验收记录：全量 `npm run check` 通过 2013 项测试；最后一次文本换行调整后，时序、架构与重排的 16 项针对性测试通过。测试覆盖语义输入互斥、非法引用与范围、不同宽度的正交线路与换行、透明片段标题、混合就绪屏障、独立规则加载和内部滚动保留。全量结果早于最后一次换行调整，不将其表述为调整后再次全量执行。
 
