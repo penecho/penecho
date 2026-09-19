@@ -1455,7 +1455,9 @@
     if (!artifact || artifact.format !== "penecho-widget" || artifact.formatVersion !== 1 || !artifact.widget) throw Error("The community Widget is invalid.");
     if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
     if (state.widgetEdit) acceptWidgetEdit();
-    const visible = viewportRect(), source = { ...artifact.widget }, favoriteState = options?.favoriteState;
+    // Panning beyond the finite Canvas leaves no visible intersection. Use
+    // the same in-bounds fallback as image imports instead of aborting.
+    const visible = viewportRect() || { x:0, y:0, w:SIZE, h:SIZE }, source = { ...artifact.widget }, favoriteState = options?.favoriteState;
     delete source.id;
     // Favorite membership is private Canvas state. Never trust it from a
     // shareable artifact; only the authenticated Favorites loader may attach
@@ -1760,12 +1762,18 @@
       type:"penecho-widget-init",
       title:widget.title,
       html:widget.html,
+      language:state.language === "zh" ? "zh" : "en",
       imageAssets,
       pluginStyles:manifest.styles || "",
       ...(widget.sourceFormat ? { sourceFormat:widget.sourceFormat } : {}),
       ...(widget.frameworkVersion ? { frameworkVersion:widget.frameworkVersion } : {}),
     }, widget.hostOrigin || location.origin);
   }
+  function syncWidgetHostLanguages(language=state.language) {
+    const widgets=[...state.widgets,...(state.pendingWidget?[state.pendingWidget]:[]),...(typeof mcpRuntime!=="undefined"?[...mcpRuntime.previews.values()]:[])];
+    for(const widget of new Set(widgets))if(widget.hostReady&&widget.frame?.contentWindow)widget.frame.contentWindow.postMessage({type:"penecho-widget-language",language:language==="zh"?"zh":"en"},widget.hostOrigin||location.origin);
+  }
+  window.addEventListener("penecho:languagechange",event=>syncWidgetHostLanguages(event.detail?.language));
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
     if (widget.maximized) {
       const shellStyle = getComputedStyle(widget.shell);
@@ -2018,7 +2026,7 @@
       if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
       if(!finishPending())return;
       if (pending.fullContent) {
-        pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl });
+        pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl, contentWidth:message.contentWidth, contentHeight:message.contentHeight, overflow:message.overflow });
         return;
       }
       widget.snapshotImage = snapshotImage;

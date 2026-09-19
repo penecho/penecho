@@ -1,0 +1,44 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>布局与完整截图验收</title>
+<style>
+body{margin:16px;font:14px/1.6 system-ui;color:#172638;background:#fff}header{display:flex;gap:12px;flex-wrap:wrap;align-items:center}button,select{font:inherit;min-height:32px}#stage{max-width:100%;overflow:auto;margin:16px 0}iframe{display:block;border:1px solid #ccd5df}#images{display:flex;align-items:start;gap:16px}figure{margin:0;min-width:0;flex:1}img{max-width:100%;height:auto;border:1px solid #ccd5df}pre{white-space:pre-wrap;overflow-wrap:anywhere}h1{font-size:18px}
+</style>
+<h1>工作流方向、时序图标题、完整内容截图</h1>
+<header><select id="scene"><option value="wf-02-leave-zh">W02 请假审批</option><option value="wf-04-order-zh">W04 订单</option><option value="wf-07-onboarding-groups">W07 入职</option><option value="wf-09-ml-pipeline">W09 模型训练</option><option value="seq-05-nested-fragments">时序图嵌套片段</option></select>
+<button data-width="2011">宽版</button><button data-width="390">窄版</button><button id="capture">对比截图</button><button id="suite">运行宽窄验收</button><span id="status">加载中</span></header>
+<div id="stage"></div><pre id="report"></pre><div id="images"><figure><figcaption>完整内容</figcaption><img id="full" alt="完整滚动内容截图"></figure><figure><figcaption>实际视口</figcaption><img id="viewport" alt="部件视口截图"></figure></div>
+<script>
+let frame,ready,width=2011,height=600,serial=0;
+const pending=new Map(),byId=id=>document.getElementById(id),status=byId('status'),reports=[];
+function waitMessage(type){return new Promise((resolve,reject)=>{const key=type,timer=setTimeout(()=>{pending.delete(key);reject(Error('Timeout '+type));},20000);pending.set(key,m=>{clearTimeout(timer);resolve(m);});});}
+addEventListener('message',e=>{if(e.source!==frame?.contentWindow)return;const m=e.data;
+ const key=m.requestId||m.type,done=pending.get(key);if(done){pending.delete(key);done(m);}
+});
+async function load(){
+ status.textContent='布局中';frame=document.createElement('iframe');frame.title='真实 Widget 渲染';frame.width=width;frame.height=height;
+ const boot=waitMessage('penecho-widget-host-ready');frame.src='/widget-host.html';byId('stage').replaceChildren(frame);await boot;
+ const id=byId('scene').value,data=await(await fetch('/'+id+'.json')).json(),kind=id.startsWith('wf-')?'workflow':'sequence';
+ const source=JSON.stringify(data).replace(/</g,'\\u003c');
+ ready=waitMessage('penecho-widget-capture-ready');
+ frame.contentWindow.postMessage({type:'penecho-widget-init',title:data.title,sourceFormat:'penecho-mcp+html',html:'<!doctype html><body style="margin:8px"><section data-penecho-'+kind+'><script type="application/json" data-'+kind+'-source>'+source+'<'+ '/script></section>'},location.origin);
+ frame.contentWindow.postMessage({type:'penecho-widget-state',selected:true,active:true,interactive:true,scaleX:1,scaleY:1},location.origin);
+ await ready;status.textContent='就绪';
+}
+async function snapshot(fullContent){
+ const requestId='capture-'+(++serial),promise=waitMessage(requestId);
+ frame.contentWindow.postMessage({type:'penecho-widget-snapshot-request',requestId,width,height,timeoutMs:18000,highResolution:true,fullContent},location.origin);
+ const result=await promise;if(result.error)throw Error(result.error);return result;
+}
+async function capture(){
+ await ready;status.textContent='截图中';const before=[frame.width,frame.height],full=await snapshot(true),viewport=await snapshot(false);
+ const report={id:byId('scene').value,viewport:{width,height},contentSize:{width:full.contentWidth,height:full.contentHeight},fullPixels:{width:full.width,height:full.height},viewportPixels:{width:viewport.width,height:viewport.height},geometryUnchanged:before[0]===frame.width&&before[1]===frame.height,overflow:full.overflow};
+ if(!report.geometryUnchanged||!(full.contentHeight>=height)||!(full.contentWidth>=width))throw Error('Invalid content/geometry');
+ byId('full').src=full.dataUrl;byId('viewport').src=viewport.dataUrl;byId('report').textContent=JSON.stringify(report,null,2);
+ const response=await fetch('/evidence',{method:'POST',body:JSON.stringify({id:report.id+'-'+width,report,full:full.dataUrl,viewport:viewport.dataUrl})});if(!response.ok)throw Error(await response.text());
+ reports.push(report);status.textContent='通过，已保存截图';return report;
+}
+const run=fn=>async()=>{try{await fn();}catch(e){status.textContent='失败：'+e.message;console.error(e);}};
+byId('scene').onchange=run(load);document.querySelectorAll('[data-width]').forEach(b=>b.onclick=run(async()=>{width=Number(b.dataset.width);await load();}));
+byId('capture').onclick=run(capture);
+byId('suite').onclick=run(async()=>{byId('suite').disabled=true;try{for(const option of byId('scene').options)for(const size of [2011,390]){byId('scene').value=option.value;width=size;await load();await capture();}status.textContent='宽窄验收通过：'+reports.length+' 组';}finally{byId('suite').disabled=false;}});
+run(load)();
+</script></html>

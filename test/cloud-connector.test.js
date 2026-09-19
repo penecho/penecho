@@ -18,6 +18,15 @@ async function eventually(predicate, message, timeoutMs = 2000) {
   assert.fail(message);
 }
 
+test("Cloud Library forwards page, full-library search and metadata options",async()=>{
+  const connector=Object.create(CloudConnector.prototype),paths=[];
+  connector.configuration=null;connector.cloudRequest=async pathname=>{paths.push(pathname);return {canvases:[],page:{total:0,nextOffset:null}};};
+  await connector.library(new URLSearchParams({limit:"24",offset:"48",q:"old needle",projectId:"all",sort:"created",locale:"zh",previews:"0",ignored:"value"}));
+  const url=new URL(paths[0],"https://example.test");
+  assert.equal(url.pathname,"/api/v1/device-sync/library");assert.equal(url.searchParams.get("offset"),"48");assert.equal(url.searchParams.get("q"),"old needle");assert.equal(url.searchParams.get("previews"),"0");assert.equal(url.searchParams.has("ignored"),false);
+  await connector.library();assert.equal(paths[1],"/api/v1/device-sync/library");
+});
+
 test("account status drops expired or invalid membership without exposing billing fields", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-membership-status-"));
   try {

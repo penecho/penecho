@@ -17,7 +17,10 @@ Design source map:
   example (`activity-status`, one-line progress): metadata belongs in the existing
   compact session controls, not a large permanent Canvas progress board.
 - Show new content → incumbent MCP control, existing secondary compact action:
-  user navigation pauses following; explicit Show resumes it.
+  user navigation pauses the current pending batch; explicit Show resumes it.
+  Idle navigation does not suppress a later batch. A fresh first-party Agent
+  turn retires that Agent's older pending attention and follows new output;
+  history replay never changes attention.
 - Preview content → existing Canvas Widget document and sandbox contract:
   author typography and product styling belong inside the responsive document.
 - New geometry policy → this document: content footprint sizes and semantic
@@ -62,6 +65,19 @@ Show new content. Already visible readable work does not cause camera movement.
 User navigation and interaction still suspend following.
 
 ## Temporary render inspection
+
+Widget artifact captures (including presentation with `capture:true`) include the
+full rendered document extent at its current layout, without resizing the Widget
+or replacing its Canvas preview cache. The result retains the actual `viewport`
+and adds `capture.scope:"full-content"`, `capture.contentSize`, and
+`capture.overflow:{x,y}`. Image width/height describe compressed output pixels;
+content and viewport sizes describe CSS pixels. A complete image is not evidence
+that the user can see all content without scrolling. Nested scrolling panels
+retain their current layout and clipping; overflow also flags these panels even
+when the document extent itself fits. Captures retain the existing
+quality, pixel, and byte limits. Use object/region/Canvas captures to check actual
+placement and visible content. Inspect remains an exact viewport capture with
+`capture.scope:"viewport"`; neither route changes document geometry.
 
 Inspect creates a bounded, noninteractive offscreen Widget in a session-owned
 transient registry. It uses the same host origin validation, renderer, load wait,

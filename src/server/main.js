@@ -140,7 +140,10 @@ const FAVORITES_FILE = STATE_DIRECTORY
     ? path.join(path.dirname(CONFIG_FILE), "favorites.json")
     : null;
 const MAX_AI_CONNECTIONS = 10;
+const additionalApiPresets = require("../providers/api-presets.js");
+const { discoverPresetModels, presetRequestHeaders } = require("../providers/preset-discovery.js");
 const API_PRESETS = Object.freeze({
+  ...additionalApiPresets.presets,
   "kimi-global-api":Object.freeze({ family:"kimi", format:"openai", url:"https://api.moonshot.ai/v1" }),
   "kimi-china-api":Object.freeze({ family:"kimi", format:"openai", url:"https://api.moonshot.cn/v1" }),
   "kimi-global-coding":Object.freeze({ family:"kimi", format:"openai", url:"https://api.kimi.com/coding/v1" }),
@@ -185,7 +188,6 @@ const SHARED_CANVAS_DIRECTORY = STATE_DIRECTORY
 const SHARED_CANVAS_PROJECTS_FILE = path.join(SHARED_CANVAS_DIRECTORY, "projects.json");
 const MAX_LOG = 2 * 1024 * 1024;
 const MAX_SHARED_CANVAS_BYTES = 96 * 1024 * 1024;
-const MAX_SHARED_CANVASES = 200;
 const CANVAS_SIZE = 20000;
 const MAX_SELECTION_PATH_POINTS = 4096;
 const MAX_PLUGIN_DOCUMENT_BYTES = 12000;
@@ -561,7 +563,7 @@ function writeConnectionsFile(store) {
 
 function inferredApiPreset(format, url) {
   const normalizedFormat = String(format || "").trim().toLowerCase(), normalizedUrl = String(url || "").trim().replace(/\/+$/, "");
-  return Object.entries(API_PRESETS).find(([, preset]) => preset.format === normalizedFormat && preset.url === normalizedUrl)?.[0] || "";
+  return Object.entries(API_PRESETS).find(([id, preset]) => !additionalApiPresets.get(id) && preset.format === normalizedFormat && preset.url === normalizedUrl)?.[0] || "";
 }
 
 function connectionTitle(connection) {
@@ -615,6 +617,7 @@ function connectionEffort(value) {
 
 function normalizeConnection(input, existing = null) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Connection is invalid.");
+  input = additionalApiPresets.route(input);
   const provider = normalizeAiProvider(input.provider), effort = connectionEffort(input.effort);
   if (!provider) throw new Error("Choose an AI provider.");
   const id = existing?.id || crypto.randomUUID(), connection = { id, provider, effort };
@@ -627,6 +630,10 @@ function normalizeConnection(input, existing = null) {
     if (!new Set(["http:", "https:"]).has(url.protocol) || !url.hostname || url.username || url.password) throw new Error("Enter an HTTP(S) API URL without embedded credentials.");
     if (!apiModel || apiModel.length > 200 || /[\r\n\0]/.test(apiModel)) throw new Error("Enter a valid model name.");
     if (!apiKey || apiKey.length > 8192 || /[\r\n\0]/.test(apiKey)) throw new Error("Enter a valid API key.");
+    if (additionalApiPresets.get(requestedPreset) && !enteredKey && existing &&
+        (existing.apiPreset !== requestedPreset || additionalApiPresets.editorUrl(existing) !== additionalApiPresets.editorUrl({ apiPreset:requestedPreset, apiUrl }))) {
+      throw new Error("Enter the API key for the newly selected service or endpoint.");
+    }
     Object.assign(connection, { apiFormat, apiPreset:requestedPreset || inferredApiPreset(apiFormat, apiUrl), apiUrl, apiModel, apiKey });
   } else {
     const cliModel = String(input.cliModel || "").trim(), cliPath = String(input.cliPath || provider.replace("-cli", "")).trim();
@@ -658,7 +665,13 @@ function normalizeModelDiscoveryRequest(input) {
   const apiKey = enteredKey || savedKey;
   if (!apiKey || apiKey.length > 8192 || /[\r\n\0]/.test(apiKey)) throw new Error("Enter an API key, or edit a connection with a saved key.");
   if (!resolveApiConfig(apiUrl, apiFormat)) throw new Error("Enter a valid API base URL for the selected format.");
-  return { apiFormat, apiUrl, apiKey };
+  const apiPreset = String(connection.apiPreset || "");
+  if (apiPreset && !API_PRESET_IDS.has(apiPreset)) throw new Error("Choose a supported API preset.");
+  if (additionalApiPresets.get(apiPreset) && !enteredKey && existing &&
+      (existing.apiPreset !== apiPreset || additionalApiPresets.editorUrl(existing) !== additionalApiPresets.editorUrl({ apiPreset, apiUrl }))) {
+    throw new Error("Enter the API key for the newly selected service or endpoint.");
+  }
+  return { apiFormat, apiUrl, apiKey, apiPreset };
 }
 
 function modelDiscoveryEndpoint(apiUrl, apiFormat) {
@@ -732,6 +745,7 @@ async function readModelDiscoveryResponse(response) {
 }
 
 async function discoverConnectionModels(request) {
+  if (additionalApiPresets.get(request.apiPreset)) return discoverPresetModels(request);
   const endpoint = modelDiscoveryEndpoint(request.apiUrl, request.apiFormat), controller = new AbortController(), timeout = setTimeout(() => controller.abort(), MODEL_DISCOVERY_TIMEOUT_MS);
   try {
     const response = await fetch(endpoint, {
@@ -1030,6 +1044,7 @@ async function requestProviderSnapshot(req) {
 }
 
 function providerRequest(key, model, text, atlasImage = null, effort = API_EFFORT, literalTypeset = false, animationEnabled = false, pluginsEnabled = false, api = API, provider = {}) {
+  const presetHeaders = presetRequestHeaders(provider);
   const reasoning = apiReasoningParameters({ apiFormat:api.format, apiPreset:provider.apiPreset || API_PRESET, apiUrl:provider.apiUrl || API_BASE_URL, model, effort });
   if (api.format === "anthropic") {
     const image = atlasImage ? imageDataUrlParts(atlasImage) : null;
@@ -1043,7 +1058,7 @@ function providerRequest(key, model, text, atlasImage = null, effort = API_EFFOR
       maxTokens = atlasImage ? anthropicResponseMaxTokens(effort, MODEL_MAX_TOKENS) : 10,
       system = atlasImage ? anthropicSystemPrompt(effort, literalTypeset, animationEnabled, pluginsEnabled) : null;
     return {
-      headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", ...(provider.hosted ? { Authorization:`Bearer ${key}` } : {}) },
+      headers: { ...presetHeaders, "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", ...(provider.hosted ? { Authorization:`Bearer ${key}` } : {}) },
       body: JSON.stringify({ model, max_tokens:maxTokens, stream:true, ...effortParameters, ...(system ? { system } : {}), messages: [{ role: "user", content }] }),
     };
   }
@@ -1051,7 +1066,7 @@ function providerRequest(key, model, text, atlasImage = null, effort = API_EFFOR
     ? [{ role: "system", content: activeSystemPrompt(literalTypeset, animationEnabled, pluginsEnabled) }, { role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: atlasImage, detail: "high" } }] }]
     : [{ role: "user", content: text }];
   return {
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    headers: { ...presetHeaders, "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model, stream:true, ...reasoning, ...openAiOutputTokenParameters(provider.apiUrl || API_BASE_URL, atlasImage ? MODEL_MAX_TOKENS : 10), ...(atlasImage ? { response_format: { type: "json_object" } } : {}), messages }),
   };
 }
@@ -1496,6 +1511,18 @@ function sharedCanvasListMetadata(item) {
   const {preview,...metadata}=item;
   return {...metadata,documentId:item.documentId||null,hasPreview:typeof preview==="string"&&preview.length>0};
 }
+function sharedCanvasLibraryPage(params) {
+  const limit=Number(params.get("limit")||24), offset=Number(params.get("offset")||0),
+    query=String(params.get("q")||"").trim().toLocaleLowerCase(), projectId=params.get("projectId"),
+    sort=params.get("sort")||"modified";
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||query.length>160||!["modified","created","name"].includes(sort))throw Object.assign(new Error("Invalid library page."),{status:400});
+  const all=listSharedCanvases(), projectCounts={};
+  for(const item of all)projectCounts[item.projectId]=(projectCounts[item.projectId]||0)+1;
+  const items=all.filter(item=>(!projectId||projectId==="all"||item.projectId===projectId)&&(!query||item.name.toLocaleLowerCase().includes(query)));
+  items.sort((a,b)=>(sort==="name"?a.name.localeCompare(b.name,params.get("locale")==="zh"?"zh-CN":"en",{numeric:true,sensitivity:"base"}):sort==="created"?b.createdAt-a.createdAt:b.updatedAt-a.updatedAt)||a.id.localeCompare(b.id));
+  return {canvases:items.slice(offset,offset+limit).map(sharedCanvasListMetadata),projects:sharedCanvasProjects(),
+    page:{total:items.length,totalAll:all.length,projectCounts,nextOffset:offset+limit<items.length?offset+limit:null}};
+}
 function readSharedCanvasPreview(id) {
   const file=canvasSnapshotPath(id,true);
   if(!file)throw Object.assign(new Error("Invalid canvas id."),{status:400});
@@ -1597,7 +1624,6 @@ function saveSharedCanvas(value, overwriteId = null) {
     exists=fs.existsSync(file);
   if(overwriteId&&!exists)throw Object.assign(new Error("Canvas was not found."),{status:404});
   if(!overwriteId&&exists)throw Object.assign(new Error("A canvas with this id already exists."),{status:409});
-  if(!exists&&sharedCanvasFiles().length>=MAX_SHARED_CANVASES)throw Object.assign(new Error(`The PenEcho server can retain up to ${MAX_SHARED_CANVASES} shared canvases.`),{status:409});
   const serialized=JSON.stringify(snapshot);
   if(Buffer.byteLength(serialized,"utf8")>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Shared canvas is too large."),{status:413});
   const requestedProjectId=typeof value.projectId==="string"?value.projectId:existingMetadata?.projectId||DEFAULT_CANVAS_PROJECT_ID;
@@ -2870,25 +2896,27 @@ function pluginAuthoringRepairPrompt(document, styles, instructions, previous, v
   return `Your previous result failed PenEcho plugin bundle validation: ${short(validationError,240)}\nReturn a corrected JSON object with exactly the document and styles strings. document must start with --- and remain under 12000 UTF-8 bytes; styles must remain under 32000 UTF-8 bytes and cannot use style tags, @import, or url(). Do not add fences, commentary, or an HTML implementation. Preserve the draft's purpose, valid id, and useful CSS.${instructions ? `\n\nRequested changes:\n${instructions}` : ""}\n\n<original-plugin-bundle-json>\n${JSON.stringify({ document:short(document,12000), styles:short(styles,32000) })}\n</original-plugin-bundle-json>\n\n<previous-invalid-output>\n${short(previous,48000)}\n</previous-invalid-output>`;
 }
 function pluginAuthoringProviderRequest(key, model, prompt, effort, api = API, provider = {}) {
+  const presetHeaders = presetRequestHeaders(provider);
   const reasoning = apiReasoningParameters({ apiFormat:api.format, apiPreset:provider.apiPreset || API_PRESET, apiUrl:provider.apiUrl || API_BASE_URL, model, effort });
   if (api.format === "anthropic") return {
-    headers:{ "Content-Type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01", ...(provider.hosted ? { Authorization:`Bearer ${key}` } : {}) },
+    headers:{ ...presetHeaders, "Content-Type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01", ...(provider.hosted ? { Authorization:`Bearer ${key}` } : {}) },
     body:JSON.stringify({ model, max_tokens:MODEL_MAX_TOKENS, stream:true, ...reasoning, system:PLUGIN_AUTHORING_SYSTEM, messages:[{ role:"user", content:prompt }] }),
   };
   return {
-    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${key}` },
+    headers:{ ...presetHeaders, "Content-Type":"application/json", Authorization:`Bearer ${key}` },
     body:JSON.stringify({ model, ...openAiOutputTokenParameters(provider.apiUrl || API_BASE_URL, MODEL_MAX_TOKENS), stream:true, ...reasoning, messages:[{ role:"system", content:PLUGIN_AUTHORING_SYSTEM }, { role:"user", content:prompt }] }),
   };
 }
 function communityMetadataProviderRequest(key,model,prompt,atlasImage,effort,api=API,provider={}) {
+  const presetHeaders = presetRequestHeaders(provider);
   const reasoning=apiReasoningParameters({apiFormat:api.format,apiPreset:provider.apiPreset||API_PRESET,apiUrl:provider.apiUrl||API_BASE_URL,model,effort}),image=imageDataUrlParts(atlasImage);
   if(!image)throw new Error("The generated community screenshot is invalid.");
   if(api.format==="anthropic")return{
-    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01",...(provider.hosted ? {Authorization:`Bearer ${key}`} : {})},
+    headers:{...presetHeaders,"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01",...(provider.hosted ? {Authorization:`Bearer ${key}`} : {})},
     body:JSON.stringify({model,max_tokens:Math.min(MODEL_MAX_TOKENS,2048),stream:true,...reasoning,system:COMMUNITY_METADATA_SYSTEM,messages:[{role:"user",content:[{type:"text",text:prompt},{type:"image",source:{type:"base64",media_type:image.mimeType,data:image.base64}}]}]}),
   };
   return{
-    headers:{"Content-Type":"application/json",Authorization:`Bearer ${key}`},
+    headers:{...presetHeaders,"Content-Type":"application/json",Authorization:`Bearer ${key}`},
     body:JSON.stringify({model,...openAiOutputTokenParameters(provider.apiUrl || API_BASE_URL,Math.min(MODEL_MAX_TOKENS,2048)),stream:true,...reasoning,response_format:{type:"json_object"},messages:[{role:"system",content:COMMUNITY_METADATA_SYSTEM},{role:"user",content:[{type:"text",text:prompt},{type:"image_url",image_url:{url:atlasImage,detail:"high"}}]}]}),
   };
 }
@@ -3247,7 +3275,7 @@ const server = http.createServer(async (req, res) => {
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/enable")return send(res,200,await cloudConnector.enableLinkedDevice());
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/disable")return send(res,200,cloudConnector.disconnect());
       if(req.method==="POST"&&url.pathname==="/api/cloud/device/revoke")return send(res,200,await cloudConnector.revokeDevice());
-      if(req.method==="GET"&&url.pathname==="/api/cloud/library")return send(res,200,await cloudConnector.library());
+      if(req.method==="GET"&&url.pathname==="/api/cloud/library")return send(res,200,await cloudConnector.library(url.searchParams));
       if(req.method==="POST"&&url.pathname==="/api/cloud/projects"){
         const body=await readJson(req,64*1024),name=String(body?.name||"").trim().slice(0,160);
         if(!name)return send(res,400,{error:"Enter a project name."});
@@ -3703,7 +3731,7 @@ const server = http.createServer(async (req, res) => {
       const mutation=req.method!=="GET",
         authorizationError=mutation?browserRequestError(req):sharedCanvasReadError(req);
       if(authorizationError)return send(res,403,{error:authorizationError});
-      if(req.method==="GET"&&url.pathname==="/api/canvases")return send(res,200,{canvases:listSharedCanvases().map(item=>url.searchParams.get("metadataOnly")==="1"?sharedCanvasListMetadata(item):item)});
+      if(req.method==="GET"&&url.pathname==="/api/canvases")return send(res,200,url.searchParams.has("limit")?sharedCanvasLibraryPage(url.searchParams):{canvases:listSharedCanvases().map(item=>url.searchParams.get("metadataOnly")==="1"?sharedCanvasListMetadata(item):item)});
       if(req.method==="GET"&&sharedCanvasPreviewMatch)return send(res,200,readSharedCanvasPreview(sharedCanvasPreviewMatch[1]));
       if(req.method==="GET"&&sharedCanvasMatch)return send(res,200,{canvas:readSharedCanvas(sharedCanvasMatch[1])});
       if(req.method==="POST"&&url.pathname==="/api/canvases") {
@@ -3871,7 +3899,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(VISUAL_EXPLAINER_RUNTIME).pipe(res);
   }
-  if ((req.method === "GET" || req.method === "HEAD") && ["/architecture-runtime.js", "/architecture-worker.js", "/sequence-runtime.js"].includes(url.pathname)) {
+  if ((req.method === "GET" || req.method === "HEAD") && ["/architecture-runtime.js", "/architecture-worker.js", "/sequence-runtime.js", "/workflow-runtime.js"].includes(url.pathname)) {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(path.join(PUBLIC, "vendor", url.pathname.slice(1))).pipe(res);

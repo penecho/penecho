@@ -1008,6 +1008,12 @@
 
   window.PenEchoCloudSettings = {
     api, origin:cloudOrigin,
+    cacheIdentity:()=>{
+      // Cloud status is published by the Remote Canvas gate; local status may
+      // never be initialized there. Scope cached pages to the same authority.
+      const accountId = isCloudRuntime() ? window.PENECHO_REMOTE_CLOUD_STATUS?.accountId : state.status?.account?.id;
+      return accountSignedIn() && accountId ? `${cloudOrigin()}:${accountId}` : "";
+    },
     signInState:()=>({active:state.browserSignIn.active,url:state.browserSignIn.authorizationUrl,message:state.browserSignIn.message}),
     signIn:refresh=>isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
   };
@@ -1015,7 +1021,7 @@
   function devicePanel(render) {
     const panel = el("section", { class:"penecho-cloud-panel cloud-device-panel" });
     panel.append(pageHeading(cloudT("linkThisDevice"), cloudT("linkDeviceHint")));
-    const device = state.status.device || {};
+    const device = state.status?.device || {};
     if (device.configured) {
       const connection = cloudDeviceConnectionStatus();
       panel.append(el("div", { class:"cloud-settings-group" }, [

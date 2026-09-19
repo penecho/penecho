@@ -1,0 +1,24 @@
+{
+  "id": "wf-09-ml-pipeline",
+  "viewport": {
+    "width": 390,
+    "height": 600
+  },
+  "contentSize": {
+    "width": 390,
+    "height": 2297
+  },
+  "fullPixels": {
+    "width": 585,
+    "height": 3445
+  },
+  "viewportPixels": {
+    "width": 585,
+    "height": 900
+  },
+  "geometryUnchanged": true,
+  "overflow": {
+    "x": true,
+    "y": true
+  }
+}

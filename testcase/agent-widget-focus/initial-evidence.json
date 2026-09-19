@@ -1,0 +1,134 @@
+{
+  "originalDocument": "legacy-858a0f4858771ab653bbafd372c8bbd9d27c331a69a9512c31a15bf629dbce44",
+  "originalObjects": {
+    "documentId": "legacy-858a0f4858771ab653bbafd372c8bbd9d27c331a69a9512c31a15bf629dbce44",
+    "path": "objects/index.json",
+    "revision": 7,
+    "contentHash": "c456c831e3ca7414e33e87cc8351e5af60f89e415199082784af407e463b32d7",
+    "content": "[\n  {\n    \"id\": \"widget-2\",\n    \"kind\": \"widget\",\n    \"title\": \"PenEcho MCP 流程图 · 外部 AI ⇄ 桥接 ⇄ 画布\",\n    \"bounds\": {\n      \"x\": 2048,\n      \"y\": 5202,\n      \"w\": 3278,\n      \"h\": 2958\n    },\n    \"path\": \"objects/widget-2/\"\n  },\n  {\n    \"id\": \"widget-1\",\n    \"kind\": \"widget\",\n    \"title\": \"PenEcho 仓库架构图 · v1.3.2\",\n    \"bounds\": {\n      \"x\": 2048,\n      \"y\": 2180,\n      \"w\": 3278,\n      \"h\": 2958\n    },\n    \"path\": \"objects/widget-1/\"\n  },\n  {\n    \"id\": \"widget-3\",\n    \"kind\": \"widget\",\n    \"title\": \"PenEcho 简化架构图 · 15 实体\",\n    \"bounds\": {\n      \"x\": 2048,\n      \"y\": 8291,\n      \"w\": 6690,\n      \"h\": 6037\n    },\n    \"path\": \"objects/widget-3/\"\n  }\n]\n",
+    "lineRange": {
+      "start": 1,
+      "end": 39,
+      "total": 39
+    },
+    "nextLine": null,
+    "truncated": false,
+    "contentFormat": "raw; no line-number prefix",
+    "originalEndsWithNewline": true
+  },
+  "originalViewport": {
+    "documentId": "legacy-858a0f4858771ab653bbafd372c8bbd9d27c331a69a9512c31a15bf629dbce44",
+    "path": "runtime/viewport.json",
+    "revision": 7,
+    "contentHash": "7548c0a7ed4adaa3b4eea9bf69fa90ce418ff76afad04d7156c67dfdcfcc9ffc",
+    "content": "{\n  \"active\": true,\n  \"documentId\": \"legacy-858a0f4858771ab653bbafd372c8bbd9d27c331a69a9512c31a15bf629dbce44\",\n  \"viewport\": {\n    \"x\": 1112.0793515358364,\n    \"y\": 4842.330951365188,\n    \"w\": 8404.65529010239,\n    \"h\": 6502.484641638225\n  },\n  \"viewRevision\": 4,\n  \"region\": {\n    \"x\": 1112.0793515358364,\n    \"y\": 4842.330951365188,\n    \"w\": 8404.65529010239,\n    \"h\": 6502.484641638225\n  },\n  \"zoom\": 0.24498327759197325\n}\n",
+    "lineRange": {
+      "start": 1,
+      "end": 19,
+      "total": 19
+    },
+    "nextLine": null,
+    "truncated": false,
+    "contentFormat": "raw; no line-number prefix",
+    "originalEndsWithNewline": true
+  },
+  "externalBaselineAttention": {
+    "sessionId": "d7d61679-730d-43e2-95d7-6f255330cd27",
+    "canvasId": "44b39ada-3d26-4e72-bd58-d4319a572fb8",
+    "documentId": "doc-b357c82f335e174c58bd432f9526f1de654e410fa3be7fad3946c7fa54eb46a1",
+    "instanceId": "ecbb942c-656c-4003-9e8f-2d62e6fcd54c",
+    "slotIndex": 4,
+    "title": "Agent Widget 视口定位验收",
+    "status": "working",
+    "summary": "",
+    "steps": [],
+    "events": [],
+    "feedbackCursor": 0,
+    "createdAt": 1789788756798,
+    "updatedAt": 1789788756798,
+    "render": {
+      "state": "applied",
+      "applied": true,
+      "pixelVerified": false,
+      "requestedAt": 1789788756188,
+      "completedAt": 1789788756797,
+      "durationMs": 609,
+      "revision": 1
+    },
+    "browser": {
+      "sessionId": "d7d61679-730d-43e2-95d7-6f255330cd27",
+      "boardObjectId": null,
+      "title": "Agent Widget 视口定位验收",
+      "client": "Codex",
+      "status": "working",
+      "statusLabel": "Working",
+      "summary": "",
+      "steps": [],
+      "events": [],
+      "attention": {
+        "pendingObjects": 0,
+        "paused": true,
+        "blockedBy": null,
+        "canvasScale": 0.5
+      },
+      "artifacts": [
+        {
+          "artifactId": "before-first",
+          "title": "修复前 · 第一个 Widget",
+          "presentation": {
+            "intent": "deliver",
+            "role": "primary",
+            "size": "page",
+            "attention": "normal"
+          },
+          "kind": "widget",
+          "objectId": "widget-1",
+          "bounds": {
+            "x": 2048,
+            "y": 2180,
+            "w": 3278,
+            "h": 2958
+          }
+        },
+        {
+          "artifactId": "before-second",
+          "title": "修复前 · 第二个 Widget",
+          "presentation": {
+            "intent": "deliver",
+            "role": "primary",
+            "size": "page",
+            "attention": "normal"
+          },
+          "kind": "widget",
+          "objectId": "widget-2",
+          "bounds": {
+            "x": 2048,
+            "y": 5202,
+            "w": 3278,
+            "h": 2958
+          }
+        }
+      ],
+      "revision": 3,
+      "documentId": "doc-b357c82f335e174c58bd432f9526f1de654e410fa3be7fad3946c7fa54eb46a1",
+      "browserElapsedMs": 1
+    }
+  },
+  "externalBaselineViewport": {
+    "documentId": "doc-b357c82f335e174c58bd432f9526f1de654e410fa3be7fad3946c7fa54eb46a1",
+    "path": "runtime/viewport.json",
+    "revision": 3,
+    "contentHash": "9e8fcb8f0e6f8653ff1f58a4673a9b7d76ac9247700fb0371ae34ff823334583",
+    "content": "{\n  \"active\": true,\n  \"documentId\": \"doc-b357c82f335e174c58bd432f9526f1de654e410fa3be7fad3946c7fa54eb46a1\",\n  \"viewport\": {\n    \"x\": 2000,\n    \"y\": 5022,\n    \"w\": 4118,\n    \"h\": 3186\n  },\n  \"viewRevision\": 6,\n  \"region\": {\n    \"x\": 2000,\n    \"y\": 5022,\n    \"w\": 4118,\n    \"h\": 3186\n  },\n  \"zoom\": 0.5\n}\n",
+    "lineRange": {
+      "start": 1,
+      "end": 19,
+      "total": 19
+    },
+    "nextLine": null,
+    "truncated": false,
+    "contentFormat": "raw; no line-number prefix",
+    "originalEndsWithNewline": true
+  },
+  "acceptanceDocument": "doc-b357c82f335e174c58bd432f9526f1de654e410fa3be7fad3946c7fa54eb46a1"
+}

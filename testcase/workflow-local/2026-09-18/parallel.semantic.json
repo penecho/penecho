@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "title": "发布准备 · 并行与汇合",
+  "description": "并行工作全部完成后再发布；分组表示同一团队的职责。",
+  "domains": [
+    {
+      "id": "user",
+      "label": "申请人",
+      "color": "blue"
+    },
+    {
+      "id": "review",
+      "label": "审核",
+      "color": "orange"
+    },
+    {
+      "id": "system",
+      "label": "自动处理",
+      "color": "teal"
+    },
+    {
+      "id": "result",
+      "label": "结果",
+      "color": "green"
+    }
+  ],
+  "groups": [
+    {
+      "id": "team",
+      "label": "发布团队",
+      "domain": "system"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "开始准备",
+      "type": "start",
+      "domain": "user"
+    },
+    {
+      "id": "fork",
+      "label": "并行准备",
+      "type": "fork",
+      "domain": "system",
+      "group": "team"
+    },
+    {
+      "id": "security",
+      "label": "安全检查与依赖项审核",
+      "type": "process",
+      "domain": "review",
+      "group": "team"
+    },
+    {
+      "id": "tests",
+      "label": "运行回归测试",
+      "type": "process",
+      "domain": "system",
+      "group": "team"
+    },
+    {
+      "id": "docs",
+      "label": "更新发布说明",
+      "type": "process",
+      "domain": "user",
+      "group": "team"
+    },
+    {
+      "id": "join",
+      "label": "全部完成",
+      "type": "join",
+      "domain": "system",
+      "group": "team"
+    },
+    {
+      "id": "release",
+      "label": "发布新版本",
+      "type": "end",
+      "domain": "result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "fork"
+    },
+    {
+      "from": "fork",
+      "to": "security"
+    },
+    {
+      "from": "fork",
+      "to": "tests"
+    },
+    {
+      "from": "fork",
+      "to": "docs"
+    },
+    {
+      "from": "security",
+      "to": "join"
+    },
+    {
+      "from": "tests",
+      "to": "join"
+    },
+    {
+      "from": "docs",
+      "to": "join"
+    },
+    {
+      "from": "join",
+      "to": "release"
+    }
+  ],
+  "details": [
+    {
+      "title": "发布团队",
+      "domain": "system",
+      "items": [
+        "此示例中的三个任务可以并行完成。汇合节点表示全部完成，不表示条件二选一。"
+      ]
+    }
+  ]
+}

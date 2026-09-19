@@ -784,7 +784,7 @@ test("widget host loads generated HTML directly into the opaque sandbox", () => 
     innerLoadRegistration = host.slice(host.indexOf('inner.addEventListener("load"'), host.indexOf("document.body.append(inner)"));
   assert.match(host, /inner\.addEventListener\("load", forwardWidgetState\)/);
   assert.doesNotMatch(innerLoadRegistration, /srcdoc|widgetDocument/);
-  assert.match(host, /const documentSource = widgetDocument\(imageHtml, message\.pluginStyles \|\| "", runtimeVersion, message\.sourceFormat, message\.frameworkVersion\);[\s\S]*?inner\.removeAttribute\("src"\);[\s\S]*?inner\.srcdoc = documentSource/);
+  assert.match(host, /const documentSource = widgetDocument\(imageHtml, message\.pluginStyles \|\| "", runtimeVersion, message\.sourceFormat, message\.frameworkVersion, widgetLanguage\);[\s\S]*?inner\.removeAttribute\("src"\);[\s\S]*?inner\.srcdoc = documentSource/);
   assert.doesNotMatch(host, /innerDocumentUrl|releaseInnerDocumentUrl|URL\.revokeObjectURL\(innerDocumentUrl\)/);
   assert.match(host, /inner\.setAttribute\("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox"\)/);
   assert.doesNotMatch(host, /allow-same-origin/);

@@ -222,6 +222,7 @@ test("Canvas Agent capabilities refresh preserves the browser-only panel and syn
 });
 
 test("Canvas Agent language refresh keeps unavailable status instead of restoring ready or connecting",()=>{
+  let inputResizeCalls=0;
   const names=[
     "canvasAgentSend","canvasAgentStop","canvasAgentInput","canvasAgentInputHint","canvasAgentInkCanvas","canvasAgentClearInkButton","canvasAgentTextMode","canvasAgentInkMode",
     "canvasAgentReference","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceCollapse","canvasAgentSelection",
@@ -234,7 +235,7 @@ test("Canvas Agent language refresh keeps unavailable status instead of restorin
   const context={window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},canvasAgent:{running:false,projectRootApproval:null,projectRemovePending:null,toolRows:new Map(),lastTurnError:null},t:localized,
     canvasAgentSetComposerActionLabel(){},canvasAgentRenderPromptSuggestions(){},canvasAgentUpdateSearchButton(){},canvasAgentUpdateConnectionButton(){},canvasAgentRenderToolRow(){},canvasAgentBlockLabel:key=>key,
     canvasAgentSetAssistantCopyState(){},canvasAgentRenderErrorElement(){},canvasAgentSyncSelection(){},canvasAgentRenderReferencePicker(){},canvasAgentRenderHistoryList(){},canvasAgentRenderProjects(){},canvasAgentRenderEmpty(){},
-    canvasAgentSyncInputHint(){},canvasAgentSyncPromptSuggestions(){},canvasAgentSyncSendAvailability(){},
+    canvasAgentSyncInputHint(){},canvasAgentSyncPromptSuggestions(){},canvasAgentSyncSendAvailability(){},canvasAgentResizeInput(){inputResizeCalls++;},
   };
   for (const name of names) context[name]=element();
   context.canvasAgentTranscript.querySelectorAll=()=>[];
@@ -249,6 +250,7 @@ test("Canvas Agent language refresh keeps unavailable status instead of restorin
   run();
   assert.equal(context.canvasAgentStatus.textContent,"No available connections");
   assert.equal(context.canvasAgentPanel.dataset.status,"unavailable");
+  assert.equal(inputResizeCalls,1,"language changes recalculate the composer height");
 });
 
 test("Canvas Agent connect rejects unavailable execution before project loading, capabilities, or WebSocket creation",async()=>{

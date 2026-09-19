@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>README · 专业图表排版</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-width: 0; margin: 0; }
+    body {
+      background: #fff;
+      color: #1f2328;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    ::selection { background: #dbe9d2; color: #263b20; }
+    :focus-visible { outline: 3px solid #527746; outline-offset: 4px; }
+    main { width: 100%; max-width: 1184px; margin: 0 auto; padding: 32px; }
+    .intro { margin: 0 0 24px; font-size: 22px; font-weight: 400; text-align: center; text-wrap: balance; }
+    .intro strong { font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #d1d9e0; }
+    th, td { border: 1px solid #d1d9e0; }
+    th { padding: 12px 16px; background: #f6f8fa; text-align: left; font-size: 18px; font-weight: 600; }
+    td { width: 50%; padding: 0; vertical-align: top; background: #fff; }
+    .example {
+      display: block;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: zoom-in;
+    }
+    .picture { display: flex; align-items: center; justify-content: center; height: 320px; padding: 16px; }
+    .picture img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+    .caption { display: block; min-height: 48px; padding: 12px 16px; border-top: 1px solid #eef1f4; font-weight: 500; }
+    .example:hover .caption { color: #36532c; background: #f5f8f2; }
+    .hint { margin: 16px 0 0; color: #59636e; font-size: 14px; text-align: center; }
+    dialog {
+      width: calc(100vw - 40px);
+      max-width: 1800px;
+      max-height: calc(100vh - 40px);
+      padding: 0;
+      border: 1px solid #d1d9e0;
+      background: #fff;
+      color: #1f2328;
+    }
+    dialog::backdrop { background: rgb(24 30 23 / 66%); }
+    .viewer-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #d1d9e0; }
+    .viewer-header h2 { margin: 0; font-size: 18px; font-weight: 600; }
+    .close { padding: 8px 16px; border: 1px solid #d1d9e0; border-radius: 4px; background: #f6f8fa; color: #1f2328; font: inherit; cursor: pointer; }
+    .close:hover { background: #e9ede6; }
+    .full-image { display: block; width: 100%; height: auto; }
+    @media (max-width: 680px) {
+      main { padding: 20px 16px; }
+      .intro { font-size: 20px; margin-bottom: 20px; }
+      .picture { height: 240px; padding: 8px; }
+      .caption { font-size: 14px; min-height: 72px; padding: 12px; }
+      th { font-size: 16px; }
+      .viewer-header { padding: 12px; }
+      .viewer-header h2 { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="intro">支持各种<strong>专业图表</strong>的绘制，方便查看和交互。</h1>
+    <table aria-label="专业图表案例：架构图、时序图和工作流，每类两个案例">
+      <tbody>
+        <tr><th colspan="2" scope="colgroup">架构图</th></tr>
+        <tr>
+          <td><button class="example" type="button" aria-label="查看 Kubernetes 生产集群拓扑大图">
+            <span class="picture"><img src="penecho-asset:321e8faa420e2397982fac559a7fb4356d697eb8ba223fc54a85036882f3532e" alt="Kubernetes 生产集群拓扑"></span>
+            <span class="caption">Kubernetes 生产集群拓扑</span>
+          </button></td>
+          <td><button class="example" type="button" aria-label="查看单体到微服务迁移架构大图">
+            <span class="picture"><img src="penecho-asset:b8bbb2a65aece56b3a1f99c250016a904ddd8fcaaaaf62835165abfb9abe7178" alt="单体到微服务迁移架构"></span>
+            <span class="caption">单体到微服务迁移架构</span>
+          </button></td>
+        </tr>
+        <tr><th colspan="2" scope="colgroup">时序图</th></tr>
+        <tr>
+          <td><button class="example" type="button" aria-label="查看事件驱动通知大图">
+            <span class="picture"><img src="penecho-asset:06b24fce6b7b2e6c9a9f84e88c5379dd4d803534f08585e166b7aebbb9f667ef" alt="事件驱动通知：异步消息与重试"></span>
+            <span class="caption">事件驱动通知</span>
+          </button></td>
+          <td><button class="example" type="button" aria-label="查看 MCP 请求如何到达画布大图">
+            <span class="picture"><img src="penecho-asset:0355e7c16ca85edd51aa28edaeb1afd1725f5e0089ede08ba52cde13c801a374" alt="MCP 请求如何到达画布"></span>
+            <span class="caption">MCP 请求如何到达画布</span>
+          </button></td>
+        </tr>
+        <tr><th colspan="2" scope="colgroup">工作流</th></tr>
+        <tr>
+          <td><button class="example" type="button" aria-label="查看发布准备：并行与汇合大图">
+            <span class="picture"><img src="penecho-asset:bc9202559d562e0be614dd5cd4ce76255fc66a4b66c5c43c9413f6d26cc125d6" alt="发布准备：并行与汇合"></span>
+            <span class="caption">发布准备：并行与汇合</span>
+          </button></td>
+          <td><button class="example" type="button" aria-label="查看多区域发布与回滚大图">
+            <span class="picture"><img src="penecho-asset:8df93a688858a9400d955abffee073a7efdff4f40eff725f3d921c4fcefe2ee5" alt="多区域发布与回滚"></span>
+            <span class="caption">多区域发布与回滚</span>
+          </button></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">点击图片查看完整大图</p>
+  </main>
+  <dialog aria-labelledby="viewer-title">
+    <div class="viewer-header">
+      <h2 id="viewer-title"></h2>
+      <button class="close" type="button">关闭</button>
+    </div>
+    <img class="full-image" alt="">
+  </dialog>
+  <script>
+    const dialog = document.querySelector('dialog');
+    const fullImage = document.querySelector('.full-image');
+    const notify = () => window.parent.postMessage({ type: 'penecho-widget-updated' }, '*');
+    document.querySelectorAll('.example').forEach(button => {
+      button.addEventListener('click', () => {
+        const image = button.querySelector('img');
+        fullImage.src = image.src;
+        fullImage.alt = image.alt;
+        document.querySelector('#viewer-title').textContent = image.alt;
+        dialog.showModal();
+        notify();
+      });
+    });
+    document.querySelector('.close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', notify);
+    document.querySelectorAll('img').forEach(image => image.addEventListener('load', notify));
+    notify();
+  </script>
+</body>
+</html>

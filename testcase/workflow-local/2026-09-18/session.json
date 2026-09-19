@@ -1,0 +1,49 @@
+{
+  "sessionId": "b168742c-8036-407d-9d8b-4af80e04b211",
+  "canvasId": "c8b49c3c-b5dc-450d-a9c8-8d9f79e5e7cc",
+  "documentId": "doc-fallback-cd3805eb60671758-63",
+  "instanceId": "4f97dde8-4842-420d-871e-d2905d2c1c27",
+  "slotIndex": 0,
+  "title": "Workflow 流程图 · 四场景验收",
+  "status": "working",
+  "summary": "",
+  "steps": [],
+  "events": [],
+  "feedbackCursor": 0,
+  "createdAt": 1789727146283,
+  "updatedAt": 1789727146283,
+  "render": {
+    "state": "applied",
+    "applied": true,
+    "pixelVerified": false,
+    "requestedAt": 1789727146034,
+    "completedAt": 1789727146281,
+    "durationMs": 247,
+    "revision": 1
+  },
+  "boardObjectId": null,
+  "revision": 1,
+  "guidanceVersion": "2",
+  "imageUpload": {
+    "hostId": "94815576352fc945d501c454651bfa1d6bf5ed62b44838691db5f7926f2d3efe",
+    "canvasId": "c8b49c3c-b5dc-450d-a9c8-8d9f79e5e7cc",
+    "documentId": "doc-fallback-cd3805eb60671758-63",
+    "clientPath": {
+      "windows": "%USERPROFILE%/.penecho/mcp/client.js",
+      "posix": "~/.penecho/mcp/client.js"
+    },
+    "args": [
+      "--host-id",
+      "94815576352fc945d501c454651bfa1d6bf5ed62b44838691db5f7926f2d3efe",
+      "--upload-image",
+      "ABSOLUTE_IMAGE_PATH",
+      "--canvas-id",
+      "c8b49c3c-b5dc-450d-a9c8-8d9f79e5e7cc",
+      "--document-id",
+      "doc-fallback-cd3805eb60671758-63",
+      "--request-id",
+      "UNIQUE_UPLOAD_ID"
+    ],
+    "instructions": "Run the installed client.js on the agent computer with these arguments using its configured Node executable. Expand the fixed clientPath against the local user home. Replace only ABSOLUTE_IMAGE_PATH and UNIQUE_UPLOAD_ID. Use this returned hostId, never a Canvas/session ID. The client resolves the address/port and loads authentication automatically. Keep this document current/open. Reuse the returned source in Widget HTML/CSS or place_image."
+  }
+}

@@ -87,7 +87,10 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  const sequenceMap=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'auto'});
  sequenceMap.scrollWidth=980;sequenceMap.clientWidth=400;
  sequenceMap.closest=selector=>selector.split(', ').includes('[data-penecho-sequence] .pa-map')?sequenceMap:null;
- const nodes=[viewport,minimum,scroller,control,architectureMap,sequenceMap],sheet=stylesheetHarness();
+ const workflowMap=new Element({height:'320px',minHeight:'0px',overflowY:'auto',overflowX:'auto'});
+ workflowMap.scrollWidth=1000;workflowMap.clientWidth=400;
+ workflowMap.closest=selector=>selector.split(', ').includes('[data-penecho-workflow] .pa-map')?workflowMap:null;
+ const nodes=[viewport,minimum,scroller,control,architectureMap,sequenceMap,workflowMap],sheet=stylesheetHarness();
  const authoredStyles=nodes.map(element=>({...element.authored}));
  const ctx={widgetState:{maximized:true},innerHeight:450,HTMLElement:Element,getComputedStyle:element=>element.authored,
   document:{body:{querySelectorAll:()=>nodes},head:{append(){}},createElement:()=>sheet}};
@@ -110,6 +113,7 @@ test('fit layout assigns one root scroll owner, expands ordinary containers, and
  assert.equal(control.getAttribute('data-penecho-fit-scroll'),null);
  assert.equal(architectureMap.getAttribute('data-penecho-fit-scroll'),null,'architecture retains its own width-aware map scroller');
  assert.equal(sequenceMap.getAttribute('data-penecho-fit-scroll'),null,'sequence retains participant-column scrolling');
+ assert.equal(workflowMap.getAttribute('data-penecho-fit-scroll'),null,'workflow owns its map reflow without expanding the whole page');
  ctx.widgetState={maximized:false,fitContent:true};ctx.setFitContentLayout(true,true);
  assert.equal(sheet.disabled,false);
  assert.equal(stylesheetValue(sheet,'html,body','overflow-y'),'visible!important');

@@ -236,10 +236,11 @@ test("Remote Canvas brand doubles as the way back to the console", () => {
 });
 
 test("Remote Canvas publishes the account and device status without adding a duplicate brand badge", async () => {
-  const run = boot({ respond:() => ({ account:{ name:"Remote User" }, device:{ id:SAVED_CANVAS_ID, name:"My PenEcho", platform:"darwin", online:true, ready:true, capabilities:{canvasAgent:true} } }) });
+  const run = boot({ respond:() => ({ accountId:CURRENT_CANVAS_ID, account:{ name:"Remote User" }, device:{ id:SAVED_CANVAS_ID, name:"My PenEcho", platform:"darwin", online:true, ready:true, capabilities:{canvasAgent:true} } }) });
   await flush();
   assert.equal(run.brand.children.some((child) => child.className === "remote-canvas-status"), false);
   assert.equal(run.window.PENECHO_REMOTE_CLOUD_STATUS.accountName, "Remote User");
+  assert.equal(run.window.PENECHO_REMOTE_CLOUD_STATUS.accountId, CURRENT_CANVAS_ID);
   assert.equal(run.window.PENECHO_REMOTE_CLOUD_STATUS.deviceOnline, true);
   assert.doesNotMatch(gateCss, /\.remote-canvas-status/);
 });

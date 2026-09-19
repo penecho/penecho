@@ -1,0 +1,24 @@
+{
+  "sessionId": "b168742c-8036-407d-9d8b-4af80e04b211",
+  "artifactId": "parallel-inspect-r2",
+  "presentation": {
+    "intent": "inspect",
+    "role": "primary",
+    "attention": "quiet"
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 38904
+  },
+  "width": 1331,
+  "height": 1352,
+  "encodedBytes": 38904,
+  "revision": 9,
+  "ephemeral": true,
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1280,
+    "height": 1300
+  }
+}

@@ -448,6 +448,47 @@ test("Remote Canvas registers the public Craft copy for later Echo publication u
   assert.equal(run.statusCalls(), 0, "the Cloud shell must not ask the linked host for a second Cloud login");
 });
 
+test("Cloud history identity is available before local status initialization and follows account changes", async () => {
+  const run = boot({ runtime:"cloud", remoteCloudStatus:{ accountId:"account-1", accountName:"Same Name" } });
+  const identity = () => run.window.PenEchoCloudSettings.cacheIdentity();
+  assert.equal(identity(), "http://127.0.0.1:3888:account-1");
+  run.window.PENECHO_REMOTE_CLOUD_STATUS = { accountId:"account-2", accountName:"Same Name" };
+  await run.window.dispatch("penecho:remote-cloud-status");
+  assert.equal(identity(), "http://127.0.0.1:3888:account-2");
+  run.window.PENECHO_REMOTE_CLOUD_STATUS = { accountName:"Same Name" };
+  assert.equal(identity(), "", "a display name is not a stable cache identity");
+  run.window.PENECHO_REMOTE_CLOUD_STATUS = null;
+  assert.equal(identity(), "");
+  assert.equal(run.statusCalls(), 0, "Cloud identity reuses the existing status response");
+});
+
+test("Cloud history identity tolerates delayed discovery and local signed-out status", async () => {
+  const cloud = boot({ runtime:"cloud" });
+  assert.equal(cloud.window.PenEchoCloudSettings.cacheIdentity(), "");
+  cloud.window.PENECHO_REMOTE_CLOUD_STATUS = { accountId:"late-account", accountName:"Late User" };
+  await cloud.window.dispatch("penecho:remote-cloud-status");
+  assert.equal(cloud.window.PenEchoCloudSettings.cacheIdentity(), "http://127.0.0.1:3888:late-account");
+
+  const status = deviceStatus();
+  status.account.id = "local-account";
+  const local = boot({ status });
+  assert.equal(local.window.PenEchoCloudSettings.cacheIdentity(), "");
+  await local.flush();
+  assert.equal(local.window.PenEchoCloudSettings.cacheIdentity(), "https://internaltest.penecho.ai:local-account");
+  const signedOut = boot({ status:signedOutStatus() });
+  await signedOut.flush();
+  assert.equal(signedOut.window.PenEchoCloudSettings.cacheIdentity(), "");
+});
+
+test("local device panel tolerates opening before account status resolves", async () => {
+  const run = boot({ status:deviceStatus() });
+  run.cloudButton.click();
+  const deviceTab = flatten(run.overlay()).find((node) => node.getAttribute("data-cloud-section") === "device");
+  assert.ok(deviceTab);
+  assert.doesNotThrow(() => deviceTab.click());
+  await run.flush();
+});
+
 test("Remote Canvas shows the Cloud account and online-device state before the Cloud button is clicked", () => {
   const run = boot({
     runtime:"cloud",

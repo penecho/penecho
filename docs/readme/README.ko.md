@@ -20,7 +20,7 @@
 <h1 align="center">AI와 함께 생각하는<br>공간형 작업 환경.</h1>
 <p align="center">내장 Agent 또는 MCP 호환 AI 어시스턴트로 그리고, 탐색하고, 만들어 보세요.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="버전 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="버전 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@ MCP를 통해 AI는 설명을 다이어그램으로, 아이디어를 대화형 �
   </a>
 </p>
 <p align="center"><em>Canvas에 손글씨 주석을 더한 아키텍처 논의.</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">다양한 <strong>전문 다이어그램</strong>을 그리고, 편리하게 살펴보며 상호작용하세요.</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">아키텍처 다이어그램</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 프로덕션 클러스터" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="모놀리스에서 마이크로서비스로" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Kubernetes 프로덕션 클러스터</strong></td>
+    <td valign="top"><strong>모놀리스에서 마이크로서비스로</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">시퀀스 다이어그램</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="이벤트 기반 알림" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 요청이 Canvas에 도달하는 과정" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>이벤트 기반 알림</strong></td>
+    <td valign="top"><strong>MCP 요청이 Canvas에 도달하는 과정</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">워크플로</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="릴리스 준비: 병렬 작업과 합류" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="다중 리전 배포와 롤백" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>릴리스 준비: 병렬 작업과 합류</strong></td>
+    <td valign="top"><strong>다중 리전 배포와 롤백</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>이미지를 클릭하면 원본 크기로 볼 수 있습니다.</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **완성되기 전부터 확인하세요.** AI와 대화하며 결과가 만들어지는 과정을 보고, 직접 사용해 보고, 피드백을 주며 함께 프로젝트를 진행하세요.
 

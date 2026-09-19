@@ -20,7 +20,7 @@
 <h1 align="center">Ein räumlicher Arbeitsbereich,<br>um mit KI zu denken.</h1>
 <p align="center">Zeichnen, erkunden und entwickeln Sie mit dem integrierten Agenten oder Ihrem eigenen MCP-kompatiblen Assistenten.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Version 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@ Sprechen Sie weiter mit **Codex, Claude, Kimi oder anderen KI-Agenten**. PenEcho
   </a>
 </p>
 <p align="center"><em>Eine Architekturdiskussion mit handschriftlichen Anmerkungen auf dem Canvas.</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">Erstelle <strong>professionelle Diagramme</strong>, die sich leicht erkunden lassen und Interaktion ermöglichen.</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">Architektur</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes-Produktionscluster" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="Migration zu Microservices" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Kubernetes-Produktionscluster</strong></td>
+    <td valign="top"><strong>Migration zu Microservices</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Sequenzdiagramme</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Ereignisbasierte Mitteilungen" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP-Anfragen bis zum Canvas" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Ereignisbasierte Mitteilungen</strong></td>
+    <td valign="top"><strong>MCP-Anfragen bis zum Canvas</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Arbeitsabläufe</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="Release-Vorbereitung: parallele Aufgaben" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="Rollout und Rollback über mehrere Regionen" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Release-Vorbereitung: parallele Aufgaben</strong></td>
+    <td valign="top"><strong>Rollout und Rollback über mehrere Regionen</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Klicken Sie auf ein Bild, um das Diagramm in voller Größe zu öffnen.</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **Sehen Sie das Ergebnis, bevor es fertig ist.** Verfolgen Sie, wie die Arbeit im Gespräch mit der KI Gestalt annimmt. Probieren Sie sie aus, geben Sie Feedback und bringen Sie Ihr Projekt gemeinsam voran.
 

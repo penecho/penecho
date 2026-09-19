@@ -261,7 +261,7 @@
       list.replaceChildren(empty);
     }
     function studioNavigatorMetaTime(value) {
-      return canvasAgentHistoryTime(Number(value) || Date.now());
+      return Number(value)>0?canvasAgentHistoryTime(Number(value)):"";
     }
     function studioNavigatorCanvasMeta(current, open, location, updatedAt) {
       return [current ? t("studioNavigatorCurrent") : open ? t("studioNavigatorOpened") : t("studioNavigatorNotOpened"),
@@ -278,6 +278,12 @@
       const location=String(snapshotItemsLocation||"");
       if(!studioNavigatorSourceStates.has(location))return;
       const source=studioNavigatorSourceStates.get(location);
+      if(historyPageInfo){
+        // A searched/project-scoped Library page cannot replace the Navigator's
+        // account-wide catalog or prove that an unlisted Canvas was deleted.
+        source.items=[...new Map([...source.items,...snapshotItems].map(item=>[item.id,item])).values()];
+        return;
+      }
       source.items=snapshotItems.slice();
       source.status=snapshotListInProgress?"loading":"ready";
       source.error="";
@@ -365,6 +371,7 @@
       const key=`${identity.location}:${identity.id}`;
       if(snapshotItemsLocation===identity.location){
         const item=snapshotItems.find(candidate=>candidate.id===identity.id)||null;
+        if(!item&&historyPageInfo)return studioNavigatorCanvasGroupSnapshots.get(key)||null;
         if(item){studioNavigatorCanvasGroupSnapshots.set(key,item);studioNavigatorCanvasGroupSnapshotRetryAt.delete(key);}
         else studioNavigatorCanvasGroupSnapshots.delete(key);
         return item;
@@ -398,7 +405,7 @@
     }
     async function studioNavigatorLoadCanvasGroupSnapshots(location,request) {
       try{
-        const items=snapshotItemsLocation===location?snapshotItems:await snapshotsAt(location),byId=new Map(items.map(item=>[item.id,item]));
+        const items=snapshotItemsLocation===location&&!historyPageInfo?snapshotItems:await snapshotsAt(location),byId=new Map(items.map(item=>[item.id,item]));
         for(const [id,key] of request.ids){
           const item=byId.get(id)||null;
           if(item){studioNavigatorCanvasGroupSnapshots.set(key,item);studioNavigatorCanvasGroupSnapshotRetryAt.delete(key);}
@@ -448,14 +455,14 @@
       }
       if(state.canvasAgentCanvasKey&&!groups.has(state.canvasAgentCanvasKey)){
         const identity=studioNavigatorCanvasIdentity(state.canvasAgentCanvasKey),item=studioNavigatorCanvasGroupSnapshot({canvasKey:state.canvasAgentCanvasKey});
-        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),savedAt:Number(item?.updatedAt||item?.createdAt)||0,updatedAt:Number(item?.updatedAt||item?.createdAt)||Date.now(),conversations:canvasAgentHistoryForCanvas(state.canvasAgentCanvasKey)});
+        groups.set(state.canvasAgentCanvasKey,{canvasKey:state.canvasAgentCanvasKey,location:identity?.location||"",item,name:currentCanvasDisplayName()||t("canvasUntitledName"),savedAt:Number(item?.updatedAt||item?.createdAt)||0,updatedAt:Number(item?.updatedAt||item?.createdAt)||0,conversations:canvasAgentHistoryForCanvas(state.canvasAgentCanvasKey)});
       }
       if(typeof canvasDocuments!=="undefined")for(const [index,doc] of [...canvasDocuments.records.values()].entries()){
         const current=doc.id===canvasDocuments.activeId,
           canvasKey=doc.locator?`${doc.locator.location}:${doc.locator.id}`:current&&state.canvasAgentCanvasKey||`workspace:${doc.id}`,
           previous=groups.get(canvasKey),item=previous?.item||doc.stored?.item||null;
         groups.set(canvasKey,{...previous,canvasKey,documentId:doc.id,location:doc.locator?.location||"",item,
-          name:doc.title||t("canvasUntitledName"),firstSeenAt:Number(doc.firstSeenAt)||index+1,savedAt:Math.max(Number(doc.savedAt)||0,Number(previous?.savedAt)||0),updatedAt:Math.max(Number(previous?.updatedAt)||0,Number(item?.updatedAt||item?.createdAt)||0,...(doc.changes||[]).map(change=>Number(change.at)||0)),
+          name:doc.title||t("canvasUntitledName"),firstSeenAt:Number(doc.firstSeenAt)||index+1,savedAt:Math.max(Number(doc.savedAt)||0,Number(previous?.savedAt)||0),updatedAt:Math.max(Number(previous?.updatedAt)||0,Number(item?.updatedAt||item?.createdAt)||0,...(doc.changes||[]).map(change=>Number(change.at)||0))||Number(doc.firstSeenAt)||0,
           conversations:previous?.conversations||[],current,unseen:doc.unseen>0});
       }
       return [...groups.values()].map((group)=>({...group,current:group.documentId?group.current:group.canvasKey===state.canvasAgentCanvasKey})).sort((a,b)=>(b.savedAt||b.firstSeenAt||0)-(a.savedAt||a.firstSeenAt||0)||String(a.documentId||a.canvasKey).localeCompare(String(b.documentId||b.canvasKey)));

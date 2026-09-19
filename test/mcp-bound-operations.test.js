@@ -8,6 +8,13 @@ function harness(respond,callOptions={}) {
 }
 const widgetArgs={requestId:'widget-1',artifactId:'chart',title:'Chart',html:'<p>chart</p>',capture:true};
 const pixels={dataUrl:'data:image/webp;base64,AQIDBA==',width:480,height:360,encodedBytes:4,revision:7};
+test('full Widget capture metadata reaches MCP in artifact and combined presentation results',async()=>{
+ const viewport={width:800,height:400},capture={scope:'full-content',contentSize:{width:800,height:1600},overflow:{x:false,y:true}};
+ const h=harness(()=>({artifactId:'chart',objectId:'widget',...pixels,viewport,capture}));
+ for(const [name,args] of [['penecho_capture_canvas',{target:'artifact',artifactId:'chart'}],['penecho_present_widget',widgetArgs]]){
+  const r=await h.run(name,args);assert.deepEqual(r.viewport,viewport);assert.deepEqual(r.capture,capture);assert.equal(r.pixelVerified,true);
+ }
+});
 test('bound tools exclude lifecycle and reject retired aliases and wrong bindings',async()=>{
  const h=harness(()=>({}));
  for(const name of ['penecho_list_canvases','penecho_open_canvas','penecho_start_session','penecho_close_session','penecho_read_feedback','penecho_read_messages','penecho_ack_messages','penecho_capture_widget'])assert.ok(!BOUND_CANVAS_TOOL_NAMES.includes(name));
@@ -31,6 +38,23 @@ test('cancellation and session failures remain errors rather than applied result
  const error=Object.assign(new Error('failure'),{code}),h=harness(()=>{throw error;});
  await assert.rejects(h.run('penecho_present_widget',widgetArgs),e=>e===error);assert.equal(h.calls.length,1);
  }
+});
+test('failed artifact creation keeps request identity and corrected arguments need a new requestId',async()=>{
+ const h=harness((operation,args)=>{
+  if(args.presentation.relativeTo==='widget-2')throw Error('Related artifact not found in this session.');
+  return {artifactId:'chart',objectId:'widget-3',revision:15};
+ });
+ const args={...widgetArgs,capture:false,presentation:{relativeTo:'widget-2',relation:'beside'}};
+ await assert.rejects(h.run('penecho_present_widget',args),/Related artifact/);
+ const corrected={...args,presentation:{relativeTo:'existing-chart',relation:'beside'}};
+ await assert.rejects(h.run('penecho_present_widget',corrected),error=>{
+  assert.equal(error.code,'REQUEST_ID_CONFLICT');assert.match(error.message,/new requestId/);assert.match(error.message,/previous attempt failed/);return true;
+ });
+ assert.equal(h.calls.length,1,'conflicting arguments never reach the browser');
+ const retry={...corrected,requestId:'corrected-create'};
+ assert.equal((await h.run('penecho_present_widget',retry)).objectId,'widget-3');
+ assert.equal((await h.run('penecho_present_widget',retry)).reused,true);
+ assert.equal(h.calls.length,2,'identical retry does not create another object');
 });
 test('combined presentation returns pixel evidence, source receipt and completion with detailed timing',async()=>{
  const completion={status:'done',summary:'Ready',handledMessageIds:['m1']};

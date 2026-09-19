@@ -1,0 +1,24 @@
+{
+  "id": "wf-07-onboarding-groups",
+  "viewport": {
+    "width": 2011,
+    "height": 600
+  },
+  "contentSize": {
+    "width": 2011,
+    "height": 1600
+  },
+  "fullPixels": {
+    "width": 3016,
+    "height": 2400
+  },
+  "viewportPixels": {
+    "width": 3016,
+    "height": 900
+  },
+  "geometryUnchanged": true,
+  "overflow": {
+    "x": false,
+    "y": true
+  }
+}

@@ -20,7 +20,7 @@
 <h1 align="center">Un espacio de trabajo espacial<br>para pensar con IA.</h1>
 <p align="center">Dibuja, explora y crea con el Agente integrado o tu propio asistente compatible con MCP.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Version 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Version 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@ A través de MCP, tu IA puede convertir explicaciones en diagramas e ideas en vi
   </a>
 </p>
 <p align="center"><em>Una conversación de arquitectura, anotada a mano en el Canvas.</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">Crea <strong>diagramas profesionales</strong> fáciles de explorar y con los que puedes interactuar.</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">Arquitectura</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Clúster de producción de Kubernetes" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="Migración de monolito a microservicios" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Clúster de producción de Kubernetes</strong></td>
+    <td valign="top"><strong>Migración de monolito a microservicios</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Secuencias</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Notificaciones basadas en eventos" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Cómo llegan las solicitudes MCP al Canvas" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Notificaciones basadas en eventos</strong></td>
+    <td valign="top"><strong>Cómo llegan las solicitudes MCP al Canvas</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Flujos de trabajo</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="Preparación: tareas en paralelo" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="Despliegue y reversión multirregión" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Preparación: tareas en paralelo</strong></td>
+    <td valign="top"><strong>Despliegue y reversión multirregión</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Haz clic en una imagen para ver el diagrama a tamaño completo.</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **Míralo antes de que esté terminado.** Observa cómo toma forma el trabajo mientras hablas con la IA. Pruébalo, aporta comentarios y haz avanzar tu proyecto en colaboración.
 

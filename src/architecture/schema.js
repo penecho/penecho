@@ -81,8 +81,9 @@ function validateArchitecture(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function architectureHtml(value) {
+function architectureHtml(value, options = {}) {
   const data = validateArchitecture(value);
-  return '<!doctype html><html><head><meta charset="utf-8"></head><body><section data-penecho-architecture><script type="application/json" data-architecture-source>' + JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g,"\\u003e").replace(/&/g,"\\u0026") + '</script><p role="status">正在布局架构图…</p></section></body></html>';
+  const language=String(options.language || '').toLowerCase().startsWith('zh')?'zh-CN':'en', loading=language==='zh-CN'?'正在布局架构图…':'Laying out architecture diagram…';
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"></head><body><section data-penecho-architecture><script type="application/json" data-architecture-source>` + JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g,"\\u003e").replace(/&/g,"\\u0026") + `</script><p role="status">${loading}</p></section></body></html>`;
 }
 module.exports = { validateArchitecture, architectureHtml, COLORS };

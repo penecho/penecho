@@ -1,0 +1,24 @@
+{
+  "id": "wf-02-leave-zh",
+  "viewport": {
+    "width": 2011,
+    "height": 600
+  },
+  "contentSize": {
+    "width": 2011,
+    "height": 1573
+  },
+  "fullPixels": {
+    "width": 3016,
+    "height": 2359
+  },
+  "viewportPixels": {
+    "width": 3016,
+    "height": 900
+  },
+  "geometryUnchanged": true,
+  "overflow": {
+    "x": false,
+    "y": true
+  }
+}

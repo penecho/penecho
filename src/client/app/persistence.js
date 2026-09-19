@@ -144,7 +144,7 @@
   function setSnapshotLocation(location, { refresh = true } = {}) {
     if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
       updateSnapshotLocationUi();
-      if (location === "cloud" && snapshotItemsLocation !== "cloud" && restoreCloudHistoryCache()) renderSnapshotList();
+      if (snapshotItemsLocation !== location && restoreHistoryPage()) renderSnapshotList();
       return refresh ? refreshSnapshots() : Promise.resolve(false);
     }
     if (snapshotLoadInProgress) {
@@ -153,6 +153,13 @@
       snapshotLoadingId = null;
     }
     state.snapshotLocation = location;
+    snapshotListGeneration++;
+    historyPageController?.abort();
+    snapshotListInProgress = false;
+    historyPageInfo = null;
+    historyDeviceVisible = HISTORY_PAGE_SIZE;
+    snapshotListFailedLocation = null;
+    serverSnapshotUnavailableKey = "";
     localStorage.setItem("penecho-snapshot-location", location);
     snapshotItems = [];
     snapshotItemsLocation = null;
@@ -160,7 +167,7 @@
     else if (location === "server") serverCanvasProjects = [];
     updateSnapshotLocationUi();
     updateNewCanvasDialog();
-    if (location === "cloud" && restoreCloudHistoryCache()) renderSnapshotList();
+    if (restoreHistoryPage()) renderSnapshotList();
     else renderSnapshotListLoading(location);
     if (!refresh) return Promise.resolve(true);
     const request = refreshSnapshots();
@@ -234,7 +241,7 @@
     if (delay > 0) historyActivityTimer = setTimeout(hide, delay);
     else hide();
   }
-  function historyBusy() { return snapshotSaveInProgress || snapshotListInProgress || snapshotLoadInProgress; }
+  function historyBusy() { return snapshotSaveInProgress || snapshotLoadInProgress; }
   function updateHistoryReadControls() {
     const busy = historyBusy(), cloudBlocked = state.snapshotLocation === "cloud" && cloudHistorySignInRequired,
       currentSaveLocation = state.currentSnapshotLocation || state.snapshotLocation,
@@ -1693,6 +1700,7 @@
     });
   }
   function startBlankCanvas() {
+    const previousDocument=typeof canvasDocuments!=="undefined"?canvasDocuments.records.get(canvasDocuments.activeId):null;
     const dialog = document.querySelector("#newCanvasDialog");
     if (state.selection) cancelSelection(true);
     clearTextEditors();
@@ -1724,7 +1732,7 @@
     state.currentSnapshotBundleExtensions = {};
     state.currentSnapshotManifestExtensions = {};
     state.currentSnapshotPreservedAssets = [];
-    if(typeof canvasDocuments!=="undefined"){canvasDocuments.activeId=null;canvasDocuments.epoch++;canvasDocumentsCurrent();mcpRuntime.feedback=[];mcpRuntime.feedbackSequence=0;canvasDocumentsRender();}
+    if(typeof canvasDocuments!=="undefined"){canvasDocuments.activeId=null;canvasDocuments.epoch++;canvasDocumentsCurrent();mcpRuntime.feedback=[];mcpRuntime.feedbackSequence=0;canvasDocumentsRetireEmptyPlaceholder(previousDocument);canvasDocumentsRender();}
     canvasAgentCanvasDidChange(null,{clearProject:true});
     window.PenEchoStudioNavigator?.renderCanvases?.();
     window.PenEchoStudioNavigator?.updateDocument?.();
@@ -1792,7 +1800,9 @@
       setStatus(typeof canvasDocumentsLimitMessage === "function" ? canvasDocumentsLimitMessage() : "32 Canvases are already open. Close an unused Canvas before opening another.");
       return Promise.resolve(false);
     }
-    if (!canvasHasUnsavedChanges()) return performCanvasTransition(transition);
+    // New and Load park the current document in the workspace. Only closing
+    // removes that document and needs a save/discard decision.
+    if (transition?.type !== "close" || !canvasHasUnsavedChanges()) return performCanvasTransition(transition);
     pendingCanvasTransition = transition;
     const dialog = document.querySelector("#newCanvasDialog");
     document.querySelector("#newSnapshotName").value = transition?.type === "close" ? currentCanvasDisplayName() || "" : "";
@@ -2059,7 +2069,7 @@
       const button = document.createElement("button"), icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"),
         path = document.createElementNS("http://www.w3.org/2000/svg", "path"), label = document.createElement("span"), count = document.createElement("small"),
         isAll = option.value === allProjectId,
-        itemCount = isAll ? snapshotItems.length : snapshotItems.filter((item) => (item.projectId || (isCloud ? "" : SERVER_DEFAULT_PROJECT_ID)) === option.value).length;
+        itemCount = historyPageInfo ? (isAll ? historyPageInfo.totalAll : historyPageInfo.projectCounts[option.value] || 0) : isAll ? snapshotItems.length : snapshotItems.filter((item) => (item.projectId || (isCloud ? "" : SERVER_DEFAULT_PROJECT_ID)) === option.value).length;
       button.className = "history-project-nav-item";
       button.type = "button";
       peButton(button, "menu-item", "");
@@ -2078,7 +2088,7 @@
         select.value = option.value;
         if (isCloud) rememberSelectedCloudProject(option.value);
         else rememberSelectedServerProject(option.value);
-        renderSnapshotList();
+        historyFiltersChanged({immediate:true});
       };
       nav.append(button);
     }
@@ -2304,7 +2314,7 @@
       image.addEventListener("error", revoke);
     }
   }
-  function observeServerHistoryPreview(item, image, fallback) {
+  function observeServerHistoryPreview(item, image, fallback, location = "server") {
     if (!item.hasPreview || typeof IntersectionObserver !== "function") return;
     if (!historyPreviewLoader) {
       const loader = { queue:[], active:0, controllers:new Set(), observer:null };
@@ -2316,11 +2326,13 @@
           loader.controllers.add(controller);
           loader.active++;
           const timer = setTimeout(() => controller.abort(), 12000);
-          void fetch(`/api/canvases/${encodeURIComponent(task.item.id)}/preview`, {
+          const cloud = task.location === "cloud";
+          const cloudPrefix = window.PENECHO_CONFIG?.runtime === "cloud" ? "/api/v1" : "/api/cloud";
+          void fetch(cloud ? `${cloudPrefix}/canvases/${encodeURIComponent(task.item.id)}/thumbnail?revision=${encodeURIComponent(task.item.currentRevisionId || "")}` : `/api/canvases/${encodeURIComponent(task.item.id)}/preview`, {
             credentials:"same-origin", headers:authenticatedApiHeaders(), signal:controller.signal,
-          }).then(snapshotApiResponse).then((body) => {
-            if (historyPreviewLoader !== loader || !task.image.isConnected || !body?.preview) return;
-            const blob = dataUrlBlob(body.preview);
+          }).then(async response => cloud ? (response.ok ? response.blob() : null) : snapshotApiResponse(response)).then((body) => {
+            if (historyPreviewLoader !== loader || !task.image.isConnected || !body) return;
+            const blob = cloud ? body : body.preview ? dataUrlBlob(body.preview) : null;
             if (!blob) return;
             task.item.preview = blob;
             const url = URL.createObjectURL(blob);
@@ -2354,7 +2366,7 @@
       });
       historyPreviewLoader = loader;
     }
-    historyPreviewLoader.tasks.set(image.parentElement, { item, image, fallback });
+    historyPreviewLoader.tasks.set(image.parentElement, { item, image, fallback, location });
     historyPreviewLoader.observer.observe(image.parentElement);
   }
   function releaseHistoryPreviewUrls() {
@@ -2372,17 +2384,19 @@
     });
   }
   function cancelHistoryListRender() {
+    historyPageObserver?.disconnect();
     historyListRenderGeneration++;
     if (historyListRenderFrame) cancelAnimationFrame(historyListRenderFrame);
     historyListRenderFrame = 0;
   }
-  function renderSnapshotList() {
+  function renderSnapshotList(options) {
+    const append = options?.append === true;
     const list = document.querySelector("#historyList"),
       location = state.snapshotLocation,
       scopedItems = snapshotItemsForCurrentView(),
       query = historySearchQuery(),
       filteredItems = query ? scopedItems.filter((item) => snapshotName(item).toLocaleLowerCase(state.language === "zh" ? "zh-CN" : "en").includes(query)) : scopedItems,
-      items = historySortItems(filteredItems);
+      items = historyPageInfo && location !== "device" ? filteredItems : historySortItems(filteredItems);
     if (!list) return;
     cancelHistoryListRender();
     if (!document.querySelector("#historyPanel")?.classList.contains("open")) {
@@ -2392,13 +2406,14 @@
       return;
     }
     renderServerProjectUi();
-    updateHistoryLibrarySummary(items.length, snapshotItems.length);
+    updateHistoryLibrarySummary(historyPageInfo?.total ?? items.length, historyPageInfo?.totalAll ?? snapshotItems.length);
     if (location === "cloud" && cloudHistorySignInRequired) {
       renderCloudHistorySignIn();
       updateHistoryReadControls();
       return;
     }
-    if ((location === "server" && serverSnapshotUnavailableKey) || snapshotListFailedLocation === location) {
+    const retainedError = ((location === "server" && serverSnapshotUnavailableKey) || snapshotListFailedLocation === location) && snapshotItemsLocation === location && snapshotItems.length > 0;
+    if (!retainedError && ((location === "server" && serverSnapshotUnavailableKey) || snapshotListFailedLocation === location)) {
       renderSnapshotListError(location, snapshotItemsLocation === location && snapshotItems.length > 0);
       return;
     }
@@ -2406,15 +2421,16 @@
       renderSnapshotListLoading(location);
       return;
     }
-    releaseHistoryPreviewUrls();
-    list.replaceChildren();
+    if (!append) { releaseHistoryPreviewUrls(); list.replaceChildren(); }
+    else { list.querySelector(".history-pagination")?.remove(); list.querySelector(".history-library-error")?.remove(); }
     if (!items.length) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.textContent = t(query && scopedItems.length ? "historyNoMatch" : (location === "server" || location === "cloud") && snapshotItems.length ? "emptyProjectHistory" : location === "server" ? "emptyServerHistory" : location === "cloud" ? "emptyCloudHistory" : "emptyDeviceHistory");
+      empty.textContent = t(query ? "historyNoMatch" : (location === "server" || location === "cloud") && snapshotItems.length ? "emptyProjectHistory" : location === "server" ? "emptyServerHistory" : location === "cloud" ? "emptyCloudHistory" : "emptyDeviceHistory");
       list.append(empty);
       updateHistorySelectionUi(null);
       renderStudioSnapshotLists();
+      updateHistoryPagination();
       return;
     }
     const selectedItem = ensureHistorySelection(items, location),
@@ -2474,7 +2490,7 @@
         };
       } else image.hidden = true;
       selectButton.append(image, fallback);
-      if (!url && location === "server") observeServerHistoryPreview(item, image, fallback);
+      if (!url && (location === "server" || location === "cloud")) observeServerHistoryPreview(item, image, fallback, location);
       if (isCurrent) {
         currentLabel.className = "history-current-label";
         currentLabel.textContent = t("studioNavigatorCurrent");
@@ -2626,23 +2642,31 @@
       card.append(selectButton, content, advancedActions);
       fragment.append(card);
     };
+    const existing = append ? new Set([...list.querySelectorAll(".history-card")].map(card=>card.dataset.snapshotId)) : new Set(),
+      visibleItems = (location === "device" ? items.slice(0,historyDeviceVisible) : items).filter(item=>!existing.has(item.id));
     let itemIndex = 0;
     const renderBatch = () => {
       historyListRenderFrame = 0;
       if (renderGeneration !== historyListRenderGeneration || !document.querySelector("#historyPanel")?.classList.contains("open")) return;
-      const fragment = document.createDocumentFragment(), startedAt = performance.now(), batchEnd = Math.min(items.length, itemIndex + 12);
-      while (itemIndex < batchEnd && performance.now() - startedAt < 4) appendHistoryCard(items[itemIndex++], fragment);
+      const fragment = document.createDocumentFragment(), startedAt = performance.now(), batchEnd = Math.min(visibleItems.length, itemIndex + 12);
+      while (itemIndex < batchEnd && performance.now() - startedAt < 4) appendHistoryCard(visibleItems[itemIndex++], fragment);
       list.append(fragment);
-      if (itemIndex < items.length) {
+      if (itemIndex < visibleItems.length) {
         historyListRenderFrame = requestAnimationFrame(renderBatch);
         return;
       }
       updateHistorySelectionUi(items);
       renderStudioSnapshotLists();
+      if (retainedError) renderSnapshotListError(location,true);
+      updateHistoryReadControls();
+      updateHistoryPagination();
     };
     renderBatch();
   }
   async function refreshSnapshots() {
+    if (state.snapshotLocation !== "device") return refreshHistoryPage();
+    historyPageInfo = null;
+    historyPageKey = "";
     const generation = ++snapshotListGeneration,
       location = state.snapshotLocation,
       replacingLocation = snapshotItemsLocation !== location,
@@ -2746,6 +2770,7 @@
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     button.setAttribute("aria-expanded", "true");
+    if (snapshotItemsLocation !== state.snapshotLocation) restoreHistoryPage();
     updateSnapshotLocationUi();
     historyGridSelectionActivated = false;
     setHistoryView(localStorage.getItem(HISTORY_VIEW_STORAGE_KEY) === "list" ? "list" : "grid");

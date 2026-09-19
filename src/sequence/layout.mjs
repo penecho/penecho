@@ -20,8 +20,12 @@ export function layoutSequence(input, measure=measureFallback, options={}) {
   for (const f of fragments) {
     f.depth=fragments.filter(p => p!==f && p.start<=f.start && p.end>=f.end).length;
     f.x=12+f.depth*10; f.width=width-2*f.x;
-    f.titleLines=wrap(`${f.kind}  [${f.label}]`,f.width-28,13,measure);
-    f.branches=(f.branches || []).map(b => ({...b,index:indices.get(b.from),lines:wrap(`[${b.label}]`,f.width-28,13,measure)}));
+    // Keep temporal-frame labels in the clear lane beside the first lifeline,
+    // rather than painting them across a long-lived activation bar.
+    f.titleX=Math.max(f.x+12,participants[0].cx+18);
+    f.titleWidth=Math.max(1,Math.min(f.x+f.width-14,participants[1]?.cx-18 || Infinity)-f.titleX);
+    f.titleLines=wrap(`${f.kind}  [${f.label}]`,f.titleWidth,13,measure);
+    f.branches=(f.branches || []).map(b => ({...b,index:indices.get(b.from),lines:wrap(`[${b.label}]`,f.titleWidth,13,measure)}));
   }
   const messages=[]; let cursor=16+headerHeight+32;
   data.messages.forEach((message,index) => {

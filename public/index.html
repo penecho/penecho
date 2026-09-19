@@ -469,6 +469,7 @@
           </section>
         </div>
         <footer class="studio-navigator-foot">
+          <span id="canvasWorkspaceStatus" role="status" aria-live="polite"></span>
           <div id="canvasWorkspace" class="canvas-workspace" hidden>
             <span id="canvasWorkspaceCount" role="status" aria-live="polite">1 open</span>
               <button id="studioMcpMore" type="button" data-pe-button="ghost" data-pe-density="compact" aria-label="MCP canvas actions" aria-haspopup="menu" aria-expanded="false" aria-controls="studioMcpMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
@@ -477,7 +478,6 @@
                 <button id="studioMcpCloseOthers" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard">Close others</button>
                 <button id="studioMcpCloseAll" type="button" role="menuitem" data-pe-button="menu-item" data-pe-density="standard">Close all MCP canvases</button>
               </div>
-            <span id="canvasWorkspaceStatus" role="status" aria-live="polite"></span>
             <button id="canvasWorkspaceRetry" type="button" data-pe-button="secondary" data-pe-density="compact" hidden>Retry</button>
           </div>
           <button id="studioNavigatorManage" type="button" data-i18n-aria="studioNavigatorManageCanvases" aria-label="Manage Canvas Library" data-i18n-title="studioNavigatorManageCanvases" title="Manage Canvas Library" data-pe-button="ghost" data-pe-density="compact">
@@ -681,7 +681,7 @@
             <div id="canvasAgentPromptCategories" class="canvas-agent-prompt-categories" role="tablist" data-pe-control="tab" data-pe-behavior="product" data-i18n-aria="canvasAgentPromptCategories" aria-label="Prompt categories">
               <button id="canvasAgentPromptNotesTab" type="button" role="tab" aria-selected="true" aria-controls="canvasAgentPromptNotesList" tabindex="0" data-prompt-category="notes" data-pe-state="selected" data-i18n="canvasAgentPromptCategoryNotes">Notes</button>
               <button id="canvasAgentPromptFilesTab" type="button" role="tab" aria-selected="false" aria-controls="canvasAgentPromptFilesList" tabindex="-1" data-prompt-category="files" data-pe-state="default" data-i18n="canvasAgentPromptCategoryFiles">Files &amp; Projects</button>
-              <button id="canvasAgentPromptCreateTab" type="button" role="tab" aria-selected="false" aria-controls="canvasAgentPromptCreateList" tabindex="-1" data-prompt-category="create" data-pe-state="default" data-i18n="canvasAgentPromptCategoryCreate">Create</button>
+              <button id="canvasAgentPromptCreateTab" type="button" role="tab" aria-selected="false" aria-controls="canvasAgentPromptCreateList" tabindex="-1" data-prompt-category="create" data-pe-state="default" data-i18n="canvasAgentPromptCategoryCreate">Diagrams &amp; More</button>
             </div>
             <div id="canvasAgentPromptPopup" class="canvas-agent-prompt-popup" data-pe-list="icon-copy" data-pe-material="opaque">
               <section id="canvasAgentPromptNotesList" class="canvas-agent-prompt-group" role="tabpanel" aria-labelledby="canvasAgentPromptNotesTab" data-prompt-category="notes" data-pe-region="group"></section>
@@ -690,7 +690,7 @@
             </div>
           </section>
           <div id="canvasAgentTranscript" class="canvas-agent-transcript" role="log" aria-live="polite" aria-relevant="additions text">
-            <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Understand what is here, then build on it.</strong><span data-i18n="canvasAgentEmptyBody">Use the Canvas, handwriting, Widgets, folders, files, and the web as context. Ask Agent to explain, organize, plan, or update the work directly.</span></div>
+            <div class="canvas-agent-empty"><strong data-i18n="canvasAgentEmptyTitle">Turn your ideas into professional diagrams.</strong><span data-i18n="canvasAgentEmptyBody">Describe your content and include a diagram type, such as architecture diagram, sequence diagram, or workflow diagram. Agent will draw it on Canvas.</span></div>
           </div>
           <div id="canvasAgentSelection" class="canvas-agent-selection" data-i18n-aria="canvasAgentReferences" aria-label="Referenced canvas objects" hidden></div>
           <div id="canvasAgentAttachments" class="canvas-agent-attachments" data-i18n-aria="canvasAgentAttachments" aria-label="Attachments" hidden></div>
@@ -723,7 +723,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
                 </button>
               </div>
-              <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Ask PenEcho Agent…" data-i18n-aria="canvasAgentMessage" aria-label="Message PenEcho Agent" aria-describedby="canvasAgentInputHint"></textarea>
+              <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Try: draw a professional architecture, sequence, or workflow diagram." data-i18n-aria="canvasAgentMessage" aria-label="Message PenEcho Agent" aria-describedby="canvasAgentInputHint"></textarea>
               <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
                 <canvas id="canvasAgentInkCanvas" width="1200" height="1040" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a PenEcho Agent message"></canvas>
                 <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk" data-pe-button="ghost" data-pe-density="compact">Clear</button>
@@ -1276,7 +1276,8 @@
             </div>
             <label class="settings-field settings-provider-field"><span data-i18n="settingsProvider">AI provider</span><select id="settingsProvider" name="provider"><option value="api">API</option><option value="kimi-cli">Kimi CLI</option><option value="codex-cli">Codex CLI</option><option value="claude-cli">Claude CLI</option></select></label>
             <div id="settingsApiFields">
-            <label class="settings-field"><span data-i18n="settingsApiFormat">API format</span><select id="settingsApiFormat" name="apiFormat"><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="kimi">Kimi</option><option value="minimax">MiniMax</option></select></label>
+            <label class="settings-field"><span data-i18n="settingsApiFormat">API service / format</span><select id="settingsApiFormat" name="apiFormat"><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="kimi">Kimi</option><option value="minimax">MiniMax</option><option value="openrouter">OpenRouter</option><option value="opencode-go">OpenCode Go</option><option value="opencode-zen">OpenCode Zen</option><option value="zhipu">智谱 · China</option><option value="zai">Z.AI · Global</option><option value="zhipu-coding">智谱 Coding Plan · China</option><option value="zai-coding">Z.AI Coding Plan · Global</option><option value="qwen-china">Qwen · China (Beijing)</option><option value="qwen-global">Qwen · Singapore</option><option value="qwen-us">Qwen · US (Virginia)</option><option value="deepseek">DeepSeek</option><option value="siliconflow">SiliconFlow · China</option><option value="siliconflow-global">SiliconFlow · Global</option><option value="groq">Groq</option><option value="mistral">Mistral</option><option value="xai">xAI</option></select></label>
+            <p id="settingsApiPresetHint" class="settings-kimi-signup" role="note" hidden></p>
             <div id="settingsApiPresetFields" class="settings-fields two-column settings-preset-fields" hidden>
               <label><span data-i18n="settingsApiRegion">Access region</span><select id="settingsApiRegion" name="apiRegion"><option value="global" data-i18n="settingsApiRegionGlobal">Global</option><option value="china" data-i18n="settingsApiRegionChina">Mainland China</option></select></label>
               <label><span data-i18n="settingsApiService">Service</span><select id="settingsApiService" name="apiService"><option value="api" data-i18n="settingsApiServiceApi">API</option><option value="coding" data-i18n="settingsApiServiceCoding">Coding Plan</option></select></label>

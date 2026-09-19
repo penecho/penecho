@@ -1,0 +1,190 @@
+{
+  "description": "New-hire onboarding across three real responsibility boundaries: HR owns the record, IT provisions tooling, Facilities assigns the workspace; day-1 tasks run in parallel and are chased if incomplete.",
+  "details": [
+    {
+      "domain": "hr",
+      "items": [
+        "Profile fields sync to payroll within 1 business day.",
+        "Escalation list: hiring manager → HRBP."
+      ],
+      "title": "HR"
+    },
+    {
+      "domain": "it",
+      "items": [
+        "Laptop arrives by day 1 for remote hires via courier.",
+        "SSO groups provisioned from the role template."
+      ],
+      "title": "IT"
+    },
+    {
+      "domain": "fac",
+      "items": [
+        "Badge photo submitted during offer stage.",
+        "Desk neighborhood chosen by the hiring manager."
+      ],
+      "title": "Facilities"
+    }
+  ],
+  "domains": [
+    {
+      "color": "purple",
+      "id": "hr",
+      "label": "HR"
+    },
+    {
+      "color": "teal",
+      "id": "it",
+      "label": "IT"
+    },
+    {
+      "color": "orange",
+      "id": "fac",
+      "label": "Facilities"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "profile"
+    },
+    {
+      "from": "profile",
+      "to": "split"
+    },
+    {
+      "from": "split",
+      "to": "accounts"
+    },
+    {
+      "from": "split",
+      "to": "laptop"
+    },
+    {
+      "from": "split",
+      "to": "desk"
+    },
+    {
+      "from": "accounts",
+      "to": "join"
+    },
+    {
+      "from": "laptop",
+      "to": "join"
+    },
+    {
+      "from": "desk",
+      "to": "join"
+    },
+    {
+      "from": "join",
+      "to": "d1"
+    },
+    {
+      "from": "d1",
+      "label": "all tasks done",
+      "to": "end"
+    },
+    {
+      "from": "d1",
+      "label": "items missing",
+      "to": "escalate"
+    },
+    {
+      "from": "escalate",
+      "kind": "loop",
+      "label": "chase owners, re-check daily",
+      "to": "join"
+    }
+  ],
+  "groups": [
+    {
+      "domain": "hr",
+      "id": "g-hr",
+      "label": "Human Resources"
+    },
+    {
+      "domain": "it",
+      "id": "g-it",
+      "label": "IT Services"
+    },
+    {
+      "domain": "fac",
+      "id": "g-fac",
+      "label": "Workplace / Facilities"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "Offer accepted",
+      "type": "start"
+    },
+    {
+      "domain": "hr",
+      "group": "g-hr",
+      "id": "profile",
+      "label": "Create employee profile",
+      "subtitle": "HRIS system of record",
+      "type": "process"
+    },
+    {
+      "id": "split",
+      "label": "Day-1 provisioning",
+      "type": "fork"
+    },
+    {
+      "domain": "it",
+      "group": "g-it",
+      "id": "accounts",
+      "label": "Provision accounts",
+      "subtitle": "SSO, email, Slack",
+      "type": "process"
+    },
+    {
+      "domain": "it",
+      "group": "g-it",
+      "id": "laptop",
+      "label": "Ship laptop",
+      "subtitle": "pre-imaged",
+      "type": "process"
+    },
+    {
+      "domain": "fac",
+      "group": "g-fac",
+      "id": "desk",
+      "label": "Assign desk + badge",
+      "subtitle": "on-site hires",
+      "type": "process"
+    },
+    {
+      "id": "join",
+      "label": "Collect results",
+      "type": "join"
+    },
+    {
+      "id": "d1",
+      "label": "Checklist complete?",
+      "type": "decision"
+    },
+    {
+      "domain": "hr",
+      "group": "g-hr",
+      "id": "escalate",
+      "label": "Chase missing items",
+      "subtitle": "owns the follow-up",
+      "type": "process"
+    },
+    {
+      "id": "end",
+      "label": "Onboarding done",
+      "type": "end"
+    }
+  ],
+  "notes": [
+    "Groups mark responsibility, not swimlanes; sequence within a group does not imply order.",
+    "Contractors skip the badge step (different facility system)."
+  ],
+  "title": "Employee onboarding",
+  "version": 1
+}

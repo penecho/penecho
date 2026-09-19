@@ -20,7 +20,9 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
   if (options.compact) Object.assign(spacing, {'elk.layered.layering.strategy':'COFFMAN_GRAHAM', 'elk.layered.layering.coffmanGraham.layerBound':'1'});
   const graph = { id:'_root', layoutOptions:spacing, children:[], edges:[] };
   const groups = new Map((data.groups || []).map(g => {
-    const headerHeight = direction === 'DOWN' ? Math.max(64, 28 + wrap(g.label,160,14,measure).length*17) : 48;
+    // Downward entry routes can split a small frame's header in half. Reserve
+    // enough height for the title in one side of that slot, not its full width.
+    const headerHeight = direction === 'DOWN' ? Math.max(64, 28 + wrap(g.label,80,14,measure).length*17) : 48;
     return [g.id, {id:`g_${g.id}`, children:[], layoutOptions:{...spacing,
       'elk.padding':`[top=${headerHeight},left=22,bottom=24,right=22]`, 'elk.nodeSize.constraints':'MINIMUM_SIZE',
       'elk.nodeSize.minimum':`(${Math.ceil(measure(g.label,14) + 48)},100)`}, data:{...g,headerHeight,titleWidth:Math.ceil(measure(g.label,14))}}];
@@ -31,7 +33,8 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
     const title = wrap(n.label, width - 30, 16, measure), subtitle = wrap(n.subtitle, width - 24, 12, measure);
     const height = Math.max(76, 26 + title.length * 22 + (subtitle.length ? 5 + subtitle.length * 17 : 0));
     const down=direction==='DOWN';
-    (n.group ? groups.get(n.group) : graph).children.push({id:`n_${n.id}`, width, height, layoutOptions:{'elk.portConstraints':'FIXED_POS'}, ports:[{id:`${n.id}_in`,x:down?width/2:0,y:down?0:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'NORTH':'WEST'}},{id:`${n.id}_out`,x:down?width/2:width,y:down?height:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'SOUTH':'EAST'}}], data:{...n, titleLines:title, subtitleLines:subtitle}});
+    const ports=[{id:`${n.id}_in`,x:down?width/2:0,y:down?0:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'NORTH':'WEST'}},{id:`${n.id}_out`,x:down?width/2:width,y:down?height:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'SOUTH':'EAST'}}];
+    (n.group ? groups.get(n.group) : graph).children.push({id:`n_${n.id}`, width, height, layoutOptions:{'elk.portConstraints':'FIXED_POS'}, ports, data:{...n, titleLines:title, subtitleLines:subtitle}});
   }
   const adjacency = new Map(data.nodes.map(n=>[n.id, []]));
   data.edges.forEach((e,i)=>{ if(!['optional','return','config'].includes(e.kind)) adjacency.get(e.from).push([e.to,i]); });
@@ -43,16 +46,26 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
     memo.set(id,best); return best;
   }
   const primary=new Set(data.nodes.map(n=>chain(n.id)).sort((a,b)=>b.length-a.length)[0]);
+  const feedback=new Set(),visited=new Set(),visiting=new Set(),finished=[];
+  function orient(id){if(visited.has(id))return;visiting.add(id);
+    const outgoing=data.edges.map((edge,index)=>({edge,index})).filter(({edge})=>edge.from===id&&!['return','config'].includes(edge.kind)).sort((a,b)=>Number(primary.has(b.index))-Number(primary.has(a.index)));
+    for(const {edge,index} of outgoing){if(visiting.has(edge.to))feedback.add(index);else orient(edge.to);}
+    visiting.delete(id);visited.add(id);finished.push(id);
+  }
+  if(options.forwardConstraints)data.nodes.forEach(n=>orient(n.id));
+  const order=new Map(finished.reverse().map((id,index)=>[id,index]));
+  if(options.forwardConstraints)data.edges.forEach((e,i)=>{if(order.get(e.from)>=order.get(e.to))feedback.add(i);});
   data.edges.forEach((e, i) => {
     const lines = wrap(e.label, 110, 12, measure);
-    graph.edges.push({id:`e_${i}`, sources:[`${e.from}_out`], targets:[`${e.to}_in`], data:{...e, lines}, layoutOptions:{'elk.layered.priority.straightness':primary.has(i)?'100':'0', 'elk.layered.priority.direction':primary.has(i)?'100':e.kind==='return'?'0':'1'},
+    const reversed=feedback.has(i)&&e.from!==e.to;
+    graph.edges.push({id:`e_${i}`, sources:[`${reversed?e.to:e.from}_out`], targets:[`${reversed?e.from:e.to}_in`], data:{...e, lines,reversed}, layoutOptions:{'elk.layered.priority.straightness':primary.has(i)?'100':'0', 'elk.layered.priority.direction':primary.has(i)?'100':e.kind==='return'?'0':'1'},
       ...(lines.length ? {labels:[{text:e.label, width:Math.ceil(Math.max(...lines.map(s => measure(s,12))) + 12),
         height:lines.length * 17 + 8, layoutOptions:{'elk.edgeLabels.placement':'CENTER','elk.edgeLabels.inline':'false'}}]} : {})});
   });
   return {data, graph};
 }
 
-async function layoutCandidate(input, elk, measure, options) {
+export async function layoutCandidate(input, elk, measure=measureFallback, options={}) {
   const {data, graph} = buildGraph(input, measure, options);
   const start = performance.now();
   const output = await elk.layout(graph);
@@ -71,6 +84,7 @@ async function layoutCandidate(input, elk, measure, options) {
     for (const e of g.edges || []) {
       const [x,y] = origins.get(e.container || g.id) || [0,0];
       const sections = (e.sections || []).map(s => normalizeRoutePoints([s.startPoint,...s.bendPoints || [],s.endPoint].map(p => [p.x+x,p.y+y])));
+      if(e.data.reversed){sections.reverse();sections.forEach(points=>points.reverse());}
       edges.push({...e.data, id:e.id, sections, labels:(e.labels || []).map(l => ({x:x+l.x,y:y+l.y,width:l.width,height:l.height, lines:e.data.lines}))});
     }
     for (const child of g.children || []) if (child.children) collect(child);
@@ -87,10 +101,31 @@ export async function layoutArchitecture(input, elk, measure = measureFallback, 
   const width = Number(options.width), constrained = Number.isFinite(width) && width > 0;
   const budget = width / MIN_MAP_SCALE, candidates = [];
   async function attempt(config, mode) {
-    const layout = await layoutCandidate(input, elk, measure, config);
-    layout.mode = mode; candidates.push(layout); return layout;
+    try {
+      const layout = await layoutCandidate(input, elk, measure, config);
+      layout.mode = mode; candidates.push(layout); return layout;
+    } catch(error) {if(!candidates.length)throw error;return null;}
   }
   const natural = await attempt({direction:preferred}, preferred.toLowerCase());
+  // Overview and zoom no longer require a single narrow column to fit. For
+  // larger graphs compare balanced pages and shorter feedback constraints too.
+  if(constrained&&input.nodes.length>=10&&(natural.width>budget||natural.issues.length)) {
+    await attempt({direction:preferred,forwardConstraints:true},preferred.toLowerCase());
+    if(!input.direction){
+      await attempt({direction:'DOWN',forwardConstraints:true},'down');
+      await attempt({direction:'RIGHT',wrap:true,aspectRatio:1.4,forwardConstraints:true},'wrapped');
+      await attempt({direction:'RIGHT',wrap:true,aspectRatio:.6,forwardConstraints:true},'wrapped');
+    }
+    const distance=c=>c.edges.reduce((s,e)=>s+e.sections.reduce((n,p)=>n+p.slice(1).reduce((d,v,i)=>d+Math.abs(v[0]-p[i][0])+Math.abs(v[1]-p[i][1]),0),0),0);
+    const clean=candidates.filter(c=>!c.issues.length), shortest=Math.min(...clean.map(distance));
+    const valid=clean.filter(c=>distance(c)<=shortest*1.8);
+    if(valid.length){
+      const cost=c=>Math.max(c.width/width,c.height/900)+distance(c)*.00004+(c.width/c.height<.5?.8:0);
+      const result=valid.reduce((a,b)=>cost(b)<cost(a)?b:a);
+      return {...result,layoutMs:performance.now()-start,attempts:candidates.length,availableWidth:width};
+    }
+  }
+  if(input.direction&&!natural.issues.length)return {...natural,layoutMs:performance.now()-start,attempts:candidates.length,availableWidth:constrained?width:null};
   if (constrained && (natural.width > budget || natural.issues.length)) {
     if (preferred === 'RIGHT') {
       // ELK's ratio is a target, not a hard width constraint. Inspect its result
@@ -103,16 +138,22 @@ export async function layoutArchitecture(input, elk, measure = measureFallback, 
     if (!candidates.some(c => !c.issues.length && c.width <= budget)) await attempt({direction:'DOWN',compact:true}, 'compact');
   }
   const valid = candidates.filter(c => !c.issues.length);
+  const routingCost = c => c.edges.reduce((sum,e) => sum + e.sections.reduce((n,points) => {
+    const distance = points.slice(1).reduce((d,p,i) => d + Math.abs(p[0]-points[i][0]) + Math.abs(p[1]-points[i][1]),0);
+    return n + distance*.08 + Math.max(0,points.length-2)*8;
+  },0),0);
   const fitting = constrained ? valid.filter(c => c.width <= budget) : valid;
-  const choices = fitting.length ? fitting : valid.length ? valid : candidates;
-  // Prefer a compact page with short routes over a nominal fit with long wrapped
-  // detours around compound frames. If none fits at readable scale, use the
-  // narrowest valid graph and retain local horizontal scrolling as a fallback.
+  const bestFittingRoutes = Math.min(...fitting.map(routingCost));
+  // Keep a readable fit unless an overflowing alternative removes at least a
+  // quarter of its routing cost. Height alone must not cause horizontal scroll.
+  const choices = constrained && fitting.length ? valid.filter(c => c.width <= budget || routingCost(c) < bestFittingRoutes*.75)
+    : valid.length ? valid : candidates;
+  // A nominal fit can require long wrapped detours or a much taller graph.
+  // Penalize overflow in proportion to its width, while allowing local scrolling
+  // when it substantially shortens routes and the page's reading height.
   const score = c => {
     if (!constrained) return 0;
-    if (!fitting.length) return c.width;
-    const distance = c.edges.reduce((sum,e) => sum + e.sections.reduce((n,points) => n + points.slice(1).reduce((d,p,i) => d + Math.abs(p[0]-points[i][0]) + Math.abs(p[1]-points[i][1]),0),0),0);
-    return (c.height + distance*.08) * Math.min(1,width/c.width);
+    return (c.height + routingCost(c)) * Math.max(1,c.width/budget);
   };
   const result = choices.reduce((best,c) => score(c) < score(best) ? c : best);
   return {...result, layoutMs:performance.now()-start, attempts:candidates.length, availableWidth:constrained ? width : null};

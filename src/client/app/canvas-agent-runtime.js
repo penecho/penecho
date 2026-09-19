@@ -139,6 +139,7 @@
     CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
       simpleDiagram:{category:"notes",prompt:"canvasAgentPromptSimpleDiagram",title:"canvasAgentPromptSimpleDiagramTitle",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
       sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"architecture"},
+      workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
       organize:{category:"notes",prompt:"canvasAgentPromptOrganize",title:"canvasAgentPromptOrganizeTitle",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
       applyAnnotations:{category:"notes",prompt:"canvasAgentPromptApplyAnnotations",title:"canvasAgentPromptApplyAnnotationsTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       followCanvasCues:{category:"notes",prompt:"canvasAgentPromptFollowCanvasCues",title:"canvasAgentPromptFollowCanvasCuesTitle",focus:"canvasAgentPromptFocusFollowCanvasCues",icon:"revise"},
@@ -154,7 +155,7 @@
       interactiveCalculator:{category:"create",prompt:"canvasAgentPromptInteractiveCalculator",title:"canvasAgentPromptInteractiveCalculatorTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
       file:{category:"files",prompt:"canvasAgentPromptFile",title:"canvasAgentPromptFileTitle",focus:"canvasAgentPromptFocusExplain",icon:"file"},
-      architecture:{category:"files",prompt:"canvasAgentPromptArchitecture",title:"canvasAgentPromptArchitectureTitle",focus:"canvasAgentPromptFocusArchitecture",icon:"architecture"},
+      architecture:{category:"create",prompt:"canvasAgentPromptArchitecture",title:"canvasAgentPromptArchitectureTitle",focus:"canvasAgentPromptFocusArchitecture",icon:"architecture"},
       handwriting:{category:"notes",prompt:"canvasAgentPromptHandwriting",title:"canvasAgentPromptHandwritingTitle",focus:"canvasAgentPromptFocusEnhance",icon:"handwriting"},
       imageVisual:{category:"files",prompt:"canvasAgentPromptImageVisual",title:"canvasAgentPromptImageVisualTitle",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
       imageLayer:{category:"files",prompt:"canvasAgentPromptImageLayer",title:"canvasAgentPromptImageLayerTitle",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
@@ -198,7 +199,7 @@
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
       revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["simpleDiagram","sequenceDiagramSource","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactivePrototype","interactiveCalculator","selfCheckQuiz"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactivePrototype","interactiveCalculator","selfCheckQuiz"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -505,7 +506,7 @@
   }
   function canvasAgentPromptSuggestionSet() {
     const context=canvasAgentPromptContext(),primaryIds=CANVAS_AGENT_PROMPT_PRIMARY[context]||CANVAS_AGENT_PROMPT_PRIMARY.blank,
-      ids=[...CANVAS_AGENT_PROMPT_ADDITIONAL.filter(id=>!primaryIds.includes(id)),...primaryIds],suggestions=ids.map(id=>({id,...CANVAS_AGENT_PROMPT_LIBRARY[id]})).filter(item=>item.prompt);
+      ids=[...new Set([...CANVAS_AGENT_PROMPT_ADDITIONAL,...primaryIds])],suggestions=ids.map(id=>({id,...CANVAS_AGENT_PROMPT_LIBRARY[id]})).filter(item=>item.prompt);
     return {key:context,suggestions};
   }
   function canvasAgentPromptHasDraft() {
@@ -544,6 +545,7 @@
     return preview;
   }
   function canvasAgentDefaultPromptCategory(context) {
+    if(context==="blank")return "create";
     return ["image","spreadsheet","presentation","document","code","file","project"].includes(context)?"files":"notes";
   }
   function canvasAgentSelectPromptCategory(category,{focus=false,resetScroll=true}={}) {
@@ -706,6 +708,7 @@
     canvasAgentInputHint.textContent = t("canvasAgentInputHint");
     canvasAgentRenderPromptSuggestions();
     canvasAgentInput.setAttribute("placeholder",t("canvasAgentPlaceholder"));
+    canvasAgentResizeInput();
     canvasAgentInput.setAttribute("aria-label",t("canvasAgentMessage"));
     canvasAgentInkCanvas.setAttribute("aria-label",t("canvasAgentHandwrite"));
     canvasAgentClearInkButton.textContent=t("canvasAgentClearInk");
@@ -3464,6 +3467,7 @@
     if (event.kind === "turn_start") {
       canvasAgent.requestPending = false;
       canvasAgent.lastTurnError = null;
+      if(!replay&&typeof mcpBeginAgentTurn==="function")mcpBeginAgentTurn();
       canvasAgentSetRunning(true);
     }
     else if (event.kind === "user_message" && replay && event.text) canvasAgentRow("user",event.text);
@@ -4000,8 +4004,9 @@
         if(object.kind!=="widget")throw canvasAgentToolError("DETAIL_TARGET_REQUIRED","Detail capture is limited to one Widget or one explicit region.",{objectId:args.objectId,kind:object.kind});
       }else if(args.target!=="region")throw canvasAgentToolError("DETAIL_TARGET_REQUIRED","Detail capture is limited to one Widget or one explicit region.",{target:args.target});
     }
-    const region = canvasAgentTargetRegion(args),
-      policy=quality === "detail" ? CANVAS_AGENT_DETAIL_CAPTURE_POLICY : CANVAS_AGENT_LAYOUT_CAPTURE_POLICY,
+    const region = canvasAgentTargetRegion(args);
+    if (!region) throw canvasAgentToolError("EMPTY_CAPTURE_REGION","The current viewport does not include the Canvas. Move back onto the Canvas, or capture an existing object or explicit region.",{target:args.target});
+    const policy=quality === "detail" ? CANVAS_AGENT_DETAIL_CAPTURE_POLICY : CANVAS_AGENT_LAYOUT_CAPTURE_POLICY,
       scale = Math.min(policy.maxLongEdge/Math.max(region.w,region.h),Math.sqrt(policy.maxPixels/(region.w*region.h))),
       width = Math.max(1,Math.floor(region.w*scale)), height = Math.max(1,Math.floor(region.h*scale)),
       canvas = document.createElement("canvas"), context = canvas.getContext("2d");

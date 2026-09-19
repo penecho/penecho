@@ -1,0 +1,117 @@
+{
+  "sessionId": "386cb328-960d-4684-bba2-9f8bb35106be",
+  "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9",
+  "title": "README · 专业图表排版",
+  "artifactId": "readme-diagram-table",
+  "assets": {
+    "kubernetes": {
+      "assetId": "321e8faa420e2397982fac559a7fb4356d697eb8ba223fc54a85036882f3532e",
+      "source": "penecho-asset:321e8faa420e2397982fac559a7fb4356d697eb8ba223fc54a85036882f3532e",
+      "name": "kubernetes.webp",
+      "mediaType": "image/webp",
+      "bytes": 117022,
+      "width": 1959,
+      "height": 2000,
+      "revision": 2,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    },
+    "migration": {
+      "assetId": "b8bbb2a65aece56b3a1f99c250016a904ddd8fcaaaaf62835165abfb9abe7178",
+      "source": "penecho-asset:b8bbb2a65aece56b3a1f99c250016a904ddd8fcaaaaf62835165abfb9abe7178",
+      "name": "migration.webp",
+      "mediaType": "image/webp",
+      "bytes": 92768,
+      "width": 2000,
+      "height": 1471,
+      "revision": 3,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    },
+    "notifications": {
+      "assetId": "06b24fce6b7b2e6c9a9f84e88c5379dd4d803534f08585e166b7aebbb9f667ef",
+      "source": "penecho-asset:06b24fce6b7b2e6c9a9f84e88c5379dd4d803534f08585e166b7aebbb9f667ef",
+      "name": "notifications.webp",
+      "mediaType": "image/webp",
+      "bytes": 107698,
+      "width": 2000,
+      "height": 1471,
+      "revision": 4,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    },
+    "release": {
+      "assetId": "bc9202559d562e0be614dd5cd4ce76255fc66a4b66c5c43c9413f6d26cc125d6",
+      "source": "penecho-asset:bc9202559d562e0be614dd5cd4ce76255fc66a4b66c5c43c9413f6d26cc125d6",
+      "name": "release.webp",
+      "mediaType": "image/webp",
+      "bytes": 44820,
+      "width": 1512,
+      "height": 1348,
+      "revision": 6,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    },
+    "rollout": {
+      "assetId": "8df93a688858a9400d955abffee073a7efdff4f40eff725f3d921c4fcefe2ee5",
+      "source": "penecho-asset:8df93a688858a9400d955abffee073a7efdff4f40eff725f3d921c4fcefe2ee5",
+      "name": "rollout.webp",
+      "mediaType": "image/webp",
+      "bytes": 87016,
+      "width": 1706,
+      "height": 2000,
+      "revision": 7,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    },
+    "mcp-request": {
+      "assetId": "0355e7c16ca85edd51aa28edaeb1afd1725f5e0089ede08ba52cde13c801a374",
+      "source": "penecho-asset:0355e7c16ca85edd51aa28edaeb1afd1725f5e0089ede08ba52cde13c801a374",
+      "name": "mcp-request.png",
+      "mediaType": "image/png",
+      "bytes": 363206,
+      "width": 2000,
+      "height": 1698,
+      "revision": 10,
+      "applied": true,
+      "inboxSummary": {
+        "messages": [],
+        "hasMore": false,
+        "latestMessageCursor": 0,
+        "latestFeedbackCursor": 0
+      },
+      "documentId": "doc-6af1bf298789a6fcae4d7ba346710b7415dd8a3159e647528fdf49dcc6650ea9"
+    }
+  },
+  "sourcePath": "objects/widget-1/widget.html"
+}

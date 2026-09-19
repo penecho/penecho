@@ -20,7 +20,7 @@
 <h1 align="center">与 AI 一起思考的<br>空间工作台。</h1>
 <p align="center">手写、探索、创作，让内置 Agent 或你自己的 MCP 助手加入同一块画布。</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="版本 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="版本 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@
   </a>
 </p>
 <p align="center"><em>在画布上讨论架构，并用手写标注提出反馈。</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">支持各种<strong>专业图表</strong>的绘制，方便查看和交互。</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">架构图</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 生产集群拓扑" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="单体到微服务迁移架构" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Kubernetes 生产集群拓扑</strong></td>
+    <td valign="top"><strong>单体到微服务迁移架构</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">时序图</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="事件驱动通知" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP 请求如何到达画布" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>事件驱动通知</strong></td>
+    <td valign="top"><strong>MCP 请求如何到达画布</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">工作流</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="发布准备：并行与汇合" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="多区域发布与回滚" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>发布准备：并行与汇合</strong></td>
+    <td valign="top"><strong>多区域发布与回滚</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>点击图片查看完整大图。</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **在完成之前，先看到它的样子。** 在与 AI 的交互中，看见项目逐步成形。先试一试，再给出反馈，一起把项目向前推进。
 

@@ -1,0 +1,134 @@
+{
+  "description": "三天以内主管审批，超过三天需要总监加签，不同意则退回重填。",
+  "domains": [
+    {
+      "color": "blue",
+      "id": "emp",
+      "label": "员工"
+    },
+    {
+      "color": "teal",
+      "id": "mgmt",
+      "label": "管理层"
+    },
+    {
+      "color": "purple",
+      "id": "hr",
+      "label": "人事"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "fill"
+    },
+    {
+      "from": "fill",
+      "to": "d1"
+    },
+    {
+      "from": "d1",
+      "label": "三天以内",
+      "to": "lead"
+    },
+    {
+      "from": "d1",
+      "label": "超过三天",
+      "to": "director"
+    },
+    {
+      "from": "lead",
+      "to": "d2"
+    },
+    {
+      "from": "director",
+      "to": "d2"
+    },
+    {
+      "from": "d2",
+      "label": "同意",
+      "to": "notify"
+    },
+    {
+      "from": "d2",
+      "label": "不同意 / 驳回",
+      "kind": "loop",
+      "to": "fill"
+    },
+    {
+      "from": "notify",
+      "to": "archive"
+    },
+    {
+      "from": "archive",
+      "to": "end"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "开始",
+      "type": "start"
+    },
+    {
+      "id": "fill",
+      "label": "填写请假单",
+      "subtitle": "类型、起止时间、事由",
+      "type": "process"
+    },
+    {
+      "id": "d1",
+      "label": "是否超过三天？",
+      "type": "decision"
+    },
+    {
+      "id": "lead",
+      "label": "直属主管审批",
+      "type": "process",
+      "domain": "mgmt"
+    },
+    {
+      "id": "director",
+      "label": "总监加签",
+      "subtitle": "附部门排班影响评估",
+      "type": "process",
+      "domain": "mgmt"
+    },
+    {
+      "id": "d2",
+      "label": "审批结果？",
+      "type": "decision"
+    },
+    {
+      "id": "notify",
+      "label": "通知项目组交接",
+      "type": "process"
+    },
+    {
+      "id": "archive",
+      "label": "写入考勤档案",
+      "type": "process",
+      "domain": "hr"
+    },
+    {
+      "id": "end",
+      "label": "结束",
+      "type": "end"
+    }
+  ],
+  "notes": [
+    "同一年度内累计病假超过 30 天自动转长病假流程，不在本图范围。"
+  ],
+  "title": "员工请假审批",
+  "version": 1,
+  "details": [
+    {
+      "domain": "mgmt",
+      "items": [
+        "主管 24 小时未审批将升级提醒，48 小时自动抄送 HRBP。",
+        "总监加签支持移动端一键通过。"
+      ],
+      "title": "时效要求"
+    }
+  ]
+}

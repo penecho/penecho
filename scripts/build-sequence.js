@@ -12,5 +12,6 @@ async function main() {
     else { fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,expected); }
     console.log(`${check?'Checked':'Built'} ${file} (${expected.length} bytes)`);
   }
+  require('./stamp-diagram-assets')(ROOT,outputs,check);
 }
 main().catch(error=>{console.error(error.message);process.exitCode=1;});

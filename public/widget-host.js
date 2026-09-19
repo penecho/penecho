@@ -30,9 +30,10 @@
     visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
     authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
-    architectureRuntimeUrl = new URL("architecture-runtime.js?v=5", location.href).href,
-    sequenceRuntimeUrl = new URL("sequence-runtime.js?v=1", location.href).href,
-    architectureWorkerUrl = new URL("architecture-worker.js?v=1", location.href).href,
+    architectureRuntimeUrl = new URL("architecture-runtime.js?v=2f2e6bd30048", location.href).href,
+    workflowRuntimeUrl = new URL("workflow-runtime.js?v=aaa58af15792", location.href).href,
+    sequenceRuntimeUrl = new URL("sequence-runtime.js?v=b06af01842e3", location.href).href,
+    architectureWorkerUrl = new URL("architecture-worker.js?v=07e7dc2773da", location.href).href,
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     snapshotDebugEnabled = remoteCanvas && (() => {
       try {
@@ -46,6 +47,7 @@
     connect = new URL(location.href).searchParams.getAll("connect"),
     inner = document.createElement("iframe");
   let mcpProgressState = null;
+  let widgetLanguage = "en";
   let initialized = false,
     lastUpdate = 0,
     forwardedDragPointer = null,
@@ -1054,6 +1056,24 @@
         URL.revokeObjectURL(url);
       }
     }
+    function snapshotContentOverflow(viewportWidth, viewportHeight, contentWidth, contentHeight) {
+      const overflow = {x:contentWidth > viewportWidth + 1, y:contentHeight > viewportHeight + 1};
+      // A document capture preserves nested scrolling panels (for example a
+      // readable narrow-screen diagram). Report their clipping as well, without
+      // expanding them or disturbing the user's layout and scroll position.
+      for (const element of document.body?.querySelectorAll("*") || []) {
+        if (overflow.x && overflow.y) break;
+        const x = !overflow.x && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1,
+          y = !overflow.y && element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1;
+        if (!x && !y) continue;
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) continue;
+        const style = getComputedStyle(element);
+        if (x && /^(auto|scroll|hidden|clip)$/.test(style.overflowX)) overflow.x = true;
+        if (y && /^(auto|scroll|hidden|clip)$/.test(style.overflowY)) overflow.y = true;
+      }
+      return overflow;
+    }
     async function snapshotDocument(message, requirePresentedFrame = false) {
       let restoreSvgStyles = () => {},
         restoreCompatibleColors = () => {};
@@ -1086,16 +1106,23 @@
           stage = "architecture-layout";
           await withTimeout(globalThis.__penechoArchitectureWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
+        if (typeof globalThis.__penechoWorkflowWhenSettled === "function") {
+          stage = "workflow-layout";
+          await withTimeout(globalThis.__penechoWorkflowWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
+        }
         if (typeof globalThis.__penechoSequenceWhenSettled === "function") {
           stage = "sequence-layout";
           await withTimeout(globalThis.__penechoSequenceWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
+        const viewportWidth = requestedWidth, viewportHeight = requestedHeight;
         if (message.fullContent === true) {
           const root = document.documentElement, body = document.body;
           requestedWidth = Math.ceil(Math.max(requestedWidth, root.scrollWidth, body?.scrollWidth || 0));
           requestedHeight = Math.ceil(Math.max(requestedHeight, root.scrollHeight, body?.scrollHeight || 0));
           if (requestedWidth > 100000 || requestedHeight > 100000) throw Error("Widget content exceeds snapshot size limit");
         }
+        const overflow = message.fullContent === true
+          ? snapshotContentOverflow(viewportWidth, viewportHeight, requestedWidth, requestedHeight) : undefined;
         const scale = Math.min(targetScale, maximumDimension / requestedWidth, maximumDimension / requestedHeight, Math.sqrt(maximumPixels / (requestedWidth * requestedHeight)));
         stage="prepare-styles";
         restoreSvgStyles = inlineSvgComputedStyles();
@@ -1130,10 +1157,13 @@
                 backgroundColor:null,
                 width:requestedWidth,
                 height:requestedHeight,
-                windowWidth:requestedWidth,
-                windowHeight:requestedHeight,
-                scrollX:0,
-                scrollY:0,
+                windowWidth:viewportWidth,
+                windowHeight:viewportHeight,
+                // Direct rendering reads live DOM rectangles. Translate them
+                // back into document coordinates for a full capture, even if
+                // the user has scrolled; viewport captures retain that view.
+                scrollX:message.fullContent === true ? globalThis.scrollX : 0,
+                scrollY:message.fullContent === true ? globalThis.scrollY : 0,
                 scale,
                 logging:false,
                 useCORS:true,
@@ -1170,7 +1200,7 @@
           width:canvas.width,
           height:canvas.height,
         });
-        parent.postMessage({ type:"penecho-widget-snapshot", runtimeVersion, requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), contentWidth:requestedWidth, contentHeight:requestedHeight, width:canvas.width, height:canvas.height }, "*");
+        parent.postMessage({ type:"penecho-widget-snapshot", runtimeVersion, requestId:message.requestId, dataUrl:canvas.toDataURL("image/png"), contentWidth:requestedWidth, contentHeight:requestedHeight, ...(overflow ? {overflow} : {}), width:canvas.width, height:canvas.height }, "*");
         canvas.width = canvas.height = 1;
       } catch (error) {
         snapshotDebugLog("snapshot-capture-error", {
@@ -1223,7 +1253,7 @@
         if (!(element instanceof HTMLElement) || element.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
         // Architecture owns width-aware reflow and its last-resort map scroller.
         // Expanding that scroller would feed the old graph width back into layout.
-        if (element.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map")) continue;
+        if (element.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map, [data-penecho-workflow] .pa-map")) continue;
         const style = getComputedStyle(element);
         const vertical = fitHeight && /^(auto|scroll)$/.test(style.overflowY);
         const horizontal = fitWidth && /^(auto|scroll)$/.test(style.overflowX);
@@ -1282,7 +1312,7 @@
         // viewport-sized document scrollHeight the next iframe height.
         for (const element of body.querySelectorAll("*")) {
           if (element.parentElement?.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
-          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map")) continue;
+          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map, [data-penecho-workflow] .pa-map")) continue;
           const child = element.getBoundingClientRect();
           width = Math.max(width, child.right + scrollX);
           height = Math.max(height, child.bottom + scrollY);
@@ -1500,12 +1530,13 @@
     return html.replace(/penecho-asset:[a-f0-9]{64}/g,ref=>{const source=resolved.get(ref);if((expanded+=source.length-ref.length)>16000000)throw Error("Widget image expansion exceeds the supported limit");return source;});
   }
 
-  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false) {
+  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false, workflowMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
     const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
       .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
       .concat(sequenceMode ? [sequenceRuntimeUrl] : [])
+      .concat(workflowMode ? [workflowRuntimeUrl, architectureWorkerUrl] : [])
       .map(url => url.replace(/[?#].*$/, ""))
       .join(" ");
     return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
@@ -1781,8 +1812,14 @@
     };
   }
 
-  function widgetDocument(html, pluginStyles = "", documentVersion = 0, sourceFormat = "", frameworkVersion = "") {
+  function normalizeWidgetLanguage(value) {
+    return String(value || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  }
+
+  function widgetDocument(html, pluginStyles = "", documentVersion = 0, sourceFormat = "", frameworkVersion = "", language = "en") {
     const parsed = new DOMParser().parseFromString(html, "text/html");
+    language = normalizeWidgetLanguage(language);
+    parsed.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     const mcpPreview = sourceFormat === "penecho-mcp+html";
     parsed.querySelectorAll(mcpPreview ? "base, iframe, object, embed, meta[http-equiv]" : "base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
@@ -1824,11 +1861,19 @@
     const visualPlan = parsed.querySelector("script[type='application/json'][data-penecho-visual-explainer]");
     const architectureMode = !!parsed.querySelector("[data-penecho-architecture] script[type='application/json'][data-architecture-source]");
     const sequenceMode = !!parsed.querySelector("[data-penecho-sequence] script[type='application/json'][data-sequence-source]");
-    const localDiagrams = [architectureMode ? "architecture" : null, sequenceMode ? "sequence" : null].filter(Boolean);
+    const workflowMode = !!parsed.querySelector("[data-penecho-workflow] script[type='application/json'][data-workflow-source]");
+    const localDiagrams = [architectureMode ? "architecture" : null, sequenceMode ? "sequence" : null, workflowMode ? "workflow" : null].filter(Boolean);
+    const loadingCopy = language === "zh"
+      ? {architecture:"正在布局架构图…",sequence:"正在布局时序图…",workflow:"正在布局流程图…"}
+      : {architecture:"Laying out architecture diagram…",sequence:"Laying out sequence diagram…",workflow:"Laying out workflow…"};
+    for (const kind of localDiagrams) {
+      const loading=parsed.querySelector(`[data-penecho-${kind}] > p[role="status"]`);
+      if(loading)loading.textContent=loadingCopy[kind];
+    }
     inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${localDiagrams.length ? " allow-downloads" : ""}`);
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode, sequenceMode);
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode, sequenceMode, workflowMode);
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1847,12 +1892,19 @@
     parsed.head.append(bridgeStyle);
     if (localDiagrams.length) {
       const localReady = parsed.createElement("script");
-      localReady.textContent = `(() => { const pending=new Set(${JSON.stringify(localDiagrams)});let renderer=false,sent=false;const finish=()=>{if(sent||pending.size||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};for(const kind of pending)addEventListener("penecho-"+kind+"-ready",()=>{pending.delete(kind);finish()},{once:true});globalThis.__penechoLocalDiagramsRendererReady=()=>{renderer=true;finish()};globalThis.__penechoLocalDiagramLoadError=kind=>{document.querySelectorAll('[data-penecho-'+kind+']').forEach(root=>{const p=document.createElement('p');p.setAttribute('role','alert');p.textContent=(kind==='sequence'?'时序':'架构')+'渲染模块加载失败，请重新加载。';root.append(p)});pending.delete(kind);finish()};})()`;
+      localReady.textContent = `(() => { const normalize=value=>String(value||"").toLowerCase().startsWith("zh")?"zh":"en",pending=new Set(${JSON.stringify(localDiagrams)});let renderer=false,sent=false;globalThis.__penechoDiagramLanguage=normalize(document.documentElement?.lang);const moduleFailure=(kind,language=globalThis.__penechoDiagramLanguage)=>(language==="zh"?{architecture:"架构渲染模块加载失败，请重新加载。",sequence:"时序渲染模块加载失败，请重新加载。",workflow:"流程渲染模块加载失败，请重新加载。"}:{architecture:"Architecture rendering module failed to load. Reload and try again.",sequence:"Sequence rendering module failed to load. Reload and try again.",workflow:"Workflow rendering module failed to load. Reload and try again."})[kind];const finish=()=>{if(sent||pending.size||!renderer)return;sent=true;parent.postMessage({type:"penecho-widget-document-ready",runtimeVersion:${JSON.stringify(documentVersion)}},"*")};for(const kind of pending)addEventListener("penecho-"+kind+"-ready",()=>{pending.delete(kind);finish()},{once:true});addEventListener("message",event=>{if(event.source!==parent||event.data?.type!=="penecho-diagram-language")return;const language=normalize(event.data.language);globalThis.__penechoDiagramLanguage=language;document.documentElement.lang=language==="zh"?"zh-CN":"en";document.querySelectorAll('[data-penecho-diagram-module-error]').forEach(p=>p.textContent=moduleFailure(p.dataset.penechoDiagramModuleError,language));dispatchEvent(new CustomEvent("penecho-diagram-languagechange",{detail:{language}}));});globalThis.__penechoLocalDiagramsRendererReady=()=>{renderer=true;finish()};globalThis.__penechoLocalDiagramLoadError=kind=>{document.querySelectorAll('[data-penecho-'+kind+']').forEach(root=>{const p=document.createElement('p');p.setAttribute('role','alert');p.dataset.penechoDiagramModuleError=kind;p.textContent=moduleFailure(kind);root.append(p)});pending.delete(kind);finish()};})()`;
       parsed.body.append(localReady);
-      for (const [kind,url] of [...(architectureMode ? [["architecture",architectureWorkerUrl],["architecture",architectureRuntimeUrl]] : []),...(sequenceMode ? [["sequence",sequenceRuntimeUrl]] : [])]) {
+      for (const [kind,url] of [...(architectureMode ? [["architecture",architectureWorkerUrl],["architecture",architectureRuntimeUrl]] : []),...(sequenceMode ? [["sequence",sequenceRuntimeUrl]] : []),...(workflowMode ? [...(!architectureMode ? [["workflow",architectureWorkerUrl]] : []),["workflow",workflowRuntimeUrl]] : [])]) {
         const script=parsed.createElement("script"); script.src=url;
         script.setAttribute("onerror", `globalThis.__penechoLocalDiagramLoadError?.(${JSON.stringify(kind)})`);
         parsed.body.append(script);
+        // Retain the shared source before the architecture runtime consumes it.
+        // Mixed documents fetch/parse ELK once without changing either renderer.
+        if (workflowMode && url === architectureWorkerUrl) {
+          const workerAlias=parsed.createElement("script");
+          workerAlias.textContent="globalThis.__penechoWorkflowWorkerCode=globalThis.__penechoArchitectureWorkerCode;" + (architectureMode ? "" : "delete globalThis.__penechoArchitectureWorkerCode");
+          parsed.body.append(workerAlias);
+        }
       }
     }
     if (visualPlan && !scienceMode) {
@@ -2001,16 +2053,20 @@
         snapshotDebugLog("init-received", { nextRuntimeVersion:runtimeVersion + 1, htmlLength:message.html.length });
         for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot");
         initialized = true;
+        widgetLanguage = normalizeWidgetLanguage(message.language);
         runtimeVersion++;
         innerDocumentReady = false;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
         parent.postMessage({ type:"penecho-widget-runtime-diagnostics", errors:[], truncated:false }, parentOrigin);
         let imageHtml;
         try {imageHtml=resolveImageAssets(message.html,message.imageAssets);} catch(error) {parent.postMessage({type:"penecho-widget-runtime-diagnostics",errors:[{kind:"error",message:error.message}],truncated:false},parentOrigin);return;}
-        const documentSource = widgetDocument(imageHtml, message.pluginStyles || "", runtimeVersion, message.sourceFormat, message.frameworkVersion);
+        const documentSource = widgetDocument(imageHtml, message.pluginStyles || "", runtimeVersion, message.sourceFormat, message.frameworkVersion, widgetLanguage);
         inner.removeAttribute("src");
         inner.srcdoc = documentSource;
         snapshotDebugLog("inner-srcdoc-assigned", { documentLength:documentSource.length });
+      } else if (message?.type === "penecho-widget-language") {
+        widgetLanguage = normalizeWidgetLanguage(message.language);
+        inner.contentWindow?.postMessage({type:"penecho-diagram-language",language:widgetLanguage},"*");
       } else if (message?.type === "penecho-mcp-progress" && message.progress && JSON.stringify(message.progress).length <= 64000) {
         mcpProgressState = message.progress;
         inner.contentWindow?.postMessage({type:"penecho-mcp-progress",progress:message.progress},"*");
@@ -2110,7 +2166,9 @@
           width:message.width,
           height:message.height,
         });
-        parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height }, parentOrigin);
+        parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height,
+          ...(request.fullContent ? {contentWidth:message.contentWidth,contentHeight:message.contentHeight,
+            overflow:{x:message.overflow?.x===true,y:message.overflow?.y===true}} : {}) }, parentOrigin);
       }
     } else if (message.type === "penecho-widget-snapshot-error" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) snapshotError(message.requestId, message.error, message.code, message.details||{});
     else if (validActivateMessage(message)) parent.postMessage({

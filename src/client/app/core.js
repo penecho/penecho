@@ -217,6 +217,7 @@
   const PLUGINS = window.PENECHO_PLUGINS;
   const SUMMON = window.PENECHO_SUMMON;
   const API_PRESETS = Object.freeze({
+    ...PenEchoApiPresets.presets,
     "kimi-global-api":Object.freeze({ family:"kimi", region:"global", service:"api", format:"openai", url:"https://api.moonshot.ai/v1", model:"kimi-k3" }),
     "kimi-china-api":Object.freeze({ family:"kimi", region:"china", service:"api", format:"openai", url:"https://api.moonshot.cn/v1", model:"kimi-k3" }),
     "kimi-global-coding":Object.freeze({ family:"kimi", region:"global", service:"coding", format:"openai", url:"https://api.kimi.com/coding/v1", model:"k3" }),
@@ -684,7 +685,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsSystemDialogTitle: "System settings",
       settingsSystemDialogSubtitle: "Saved changes take effect after PenEcho restarts.",
       settingsKeySaved: "Key saved",
-      settingsApiFormat: "API format",
+      settingsApiFormat: "API service / format",
+      settingsPresetHelp: "Paste your API key, then enter a model ID or fetch models to choose one. The base URL is preset and can be edited if your account requires a different endpoint.",
+      settingsQwenPresetHelp: "Use an API key for the selected region, then enter a model ID or fetch models to choose one. If your account requires a workspace endpoint, replace the base URL with the one shown in Model Studio.",
+      settingsOpenCodePresetHelp: "Enter a compatible Chat or Messages model ID, or fetch models to choose one; Responses and Gemini models are not listed. Go is intended for coding-agent use and requires an active Go subscription; Zen uses API balance.",
+      settingsPresetModelPlaceholder: "Enter or choose a model",
+      settingsPresetModelsFetched: "Found {count} compatible models. Choose one or enter a model ID.",
       settingsApiRegion: "Access region",
       settingsApiRegionGlobal: "Global",
       settingsApiRegionChina: "Mainland China",
@@ -804,6 +810,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       history: "Canvas Library",
       historyTitle: "Canvas Library",
       historySearch: "Search",
+      historyLoadMore: "Load more",
+      historyAutoLoad: "Auto-load on scroll",
+      historyLoadedCount: "{count} of {total} canvases loaded",
+      historyEnd: "All {total} canvases loaded · End of results",
       historySearchLabel: "Search Canvas Library",
       historyLibraryLocation: "Library location",
       historyLibraryNavigation: "Canvas Library navigation",
@@ -1201,10 +1211,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentErrorViewDetails: "View details",
       canvasAgentErrorCode: "Error code",
       canvasAgentErrorMessage: "Original message",
-      canvasAgentEmptyTitle: "Understand what is here, then build on it.",
-      canvasAgentEmptyBody: "Use the Canvas, handwriting, Widgets, folders, files, and the web as context. Ask Agent to explain, organize, plan, or update the work directly.",
+      canvasAgentEmptyTitle: "Turn your ideas into professional diagrams.",
+      canvasAgentEmptyBody: "Describe your content and include a diagram type, such as architecture diagram, sequence diagram, or workflow diagram. Agent will draw it on Canvas.",
       canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
-      canvasAgentPlaceholder: "Ask PenEcho Agent…",
+      canvasAgentPlaceholder: "Try: draw a professional architecture, sequence, or workflow diagram.",
       canvasAgentMessage: "Message PenEcho Agent",
       canvasAgentChooseConnection: "Choose AI connection",
       canvasAgentModel: "AI model",
@@ -1214,7 +1224,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptCategories: "Prompt categories",
       canvasAgentPromptCategoryNotes: "Notes",
       canvasAgentPromptCategoryFiles: "Files & Projects",
-      canvasAgentPromptCategoryCreate: "Create",
+      canvasAgentPromptCategoryCreate: "Diagrams & More",
       canvasAgentPromptDisclosureMore: "More",
       canvasAgentPromptDisclosureLess: "Less",
       canvasAgentPromptMore: "Show suggested prompts",
@@ -1235,7 +1245,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptFocusPublish: "Publish",
       canvasAgentPromptFocusFollowCanvasCues: "Follow canvas cues",
       canvasAgentPromptSimpleDiagramTitle: "Simplify the Core Ideas",
-      canvasAgentPromptSequenceDiagramSourceTitle: "Create Editable Sequence Diagram",
+      canvasAgentPromptSequenceDiagramSourceTitle: "Draw a Professional Sequence Diagram",
+      canvasAgentPromptWorkflowTitle: "Draw a Professional Workflow Diagram",
       canvasAgentPromptOrganizeTitle: "Organize the Current Canvas",
       canvasAgentPromptApplyAnnotationsTitle: "Apply My Canvas Annotations",
       canvasAgentPromptFollowCanvasCuesTitle: "Follow My Canvas Cues",
@@ -1251,7 +1262,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptInteractiveCalculatorTitle: "Create an Interactive Calculator",
       canvasAgentPromptSelfCheckQuizTitle: "Make a Self-Check Quiz",
       canvasAgentPromptFileTitle: "Explain the Current File",
-      canvasAgentPromptArchitectureTitle: "Map the Project Architecture",
+      canvasAgentPromptArchitectureTitle: "Draw a Professional Architecture Diagram",
       canvasAgentPromptHandwritingTitle: "Enhance My Handwritten Notes",
       canvasAgentPromptImageVisualTitle: "Explain the Current Image",
       canvasAgentPromptImageLayerTitle: "Annotate the Image Clearly",
@@ -1281,9 +1292,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptCanvasLayerTitle: "Add a Canvas Overview",
       canvasAgentPromptCanvasPublishTitle: "Publish the Canvas Summary",
       canvasAgentPromptFile: "Do not return only a written explanation. Create and display a visual file overview on Canvas showing its purpose, structure, key relationships, and important details. If there is no file, create a visual overview of the current Canvas instead.",
-      canvasAgentPromptArchitecture: "Do not return only text. Create and display a visual architecture map on Canvas showing the current project's core modules, dependencies, data flow, and key directories.",
+      canvasAgentPromptArchitecture: "Do not return only text. Use my description, the current Canvas, or the selected project to draw and display a professional architecture diagram on Canvas, clearly showing system layers, core modules, dependencies, and data flow.",
       canvasAgentPromptSimpleDiagram: "Do not only describe the content. Create and display a separate, simple visual diagram on Canvas showing the core concepts, relationships, and essential labels.",
-      canvasAgentPromptSequenceDiagramSource: "Do not return only source code. Create and display the rendered sequence diagram on Canvas, then provide its editable Mermaid or PlantUML source in chat—not HTML.",
+      canvasAgentPromptSequenceDiagramSource: "Do not return only text or source code. Use my description or the current content to draw and display a professional sequence diagram on Canvas, clearly showing participants, call order, responses, and exception branches.",
+      canvasAgentPromptWorkflow: "Do not return only text. Use my description or the current content to draw and display a professional workflow diagram on Canvas, clearly showing the start, steps, decision branches, responsible roles, and outcomes.",
       canvasAgentPromptPpt: "Turn the current view into a presentation-ready layout and send the final image in chat.",
       canvasAgentPromptHandwriting: "Keep the current handwriting completely unchanged—do not edit, erase, or move it. Add a transparent explanatory layer over it; overlap is acceptable only if the original strokes remain clearly visible, and use annotations, connectors, links, graphics, or motion where appropriate to make the notes more vivid and intuitive.",
       canvasAgentPromptExcel: "Do not return only a written analysis. Create and display visual charts on Canvas for the attached spreadsheet's key metrics, trends, anomalies, and conclusions, then summarize the findings in chat.",
@@ -1327,7 +1339,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptCanvasLayer: "Keep the canvas meaning and objects, improve layout, and add transparent explanations in open space.",
       canvasAgentPromptCanvasPublish: "Do not return only a copy-ready recap. Create and display a visual summary board on Canvas showing the key conclusions and actions, then send the concise copy-ready recap in chat.",
       canvasAgentPromptSimpleDiagramSummary: "Draw a simple diagram of the core concepts and relationships.",
-      canvasAgentPromptSequenceDiagramSourceSummary: "Convert this diagram to editable Mermaid or PlantUML sequence source.",
+      canvasAgentPromptSequenceDiagramSourceSummary: "Show participants, call order, responses, and exception branches in a sequence diagram.",
+      canvasAgentPromptWorkflowSummary: "Show steps, decision branches, responsible roles, and outcomes in a workflow diagram.",
       canvasAgentPromptOrganizeSummary: "Organize the canvas into clear visual notes and surface gaps.",
       canvasAgentPromptApplyAnnotationsSummary: "Apply only clearly marked Canvas changes; ask if anything is unclear.",
       canvasAgentPromptFollowCanvasCuesSummary: "Continue from the latest cues without changing unmarked content.",
@@ -1343,7 +1356,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptInteractiveCalculatorSummary: "Build and display a visual Canvas calculator with live results and validation.",
       canvasAgentPromptSelfCheckQuizSummary: "Build and display a visual Canvas quiz with explanations, progress, and retry.",
       canvasAgentPromptFileSummary: "Explain this file's purpose, structure, relationships, and details visually.",
-      canvasAgentPromptArchitectureSummary: "Map project modules, dependencies, data flow, and key directories.",
+      canvasAgentPromptArchitectureSummary: "Show system layers, core modules, dependencies, and data flow in an architecture diagram.",
       canvasAgentPromptHandwritingSummary: "Preserve the handwriting and add a transparent visual explanation layer.",
       canvasAgentPromptImageVisualSummary: "Explain the image's subjects, structure, relationships, and key details.",
       canvasAgentPromptImageLayerSummary: "Keep the image unchanged and add a transparent explanation layer.",
@@ -2843,11 +2856,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function apiPresetForConnection(connection = {}) {
     if (connection.apiPreset && API_PRESETS[connection.apiPreset]) return [connection.apiPreset, API_PRESETS[connection.apiPreset]];
     const url = String(connection.apiUrl || "").trim().replace(/\/+$/, ""), format = String(connection.apiFormat || "").trim().toLowerCase();
-    return Object.entries(API_PRESETS).find(([, preset]) => preset.url === url && (!format || preset.format === format)) || null;
+    return Object.entries(API_PRESETS).find(([id, preset]) => !PenEchoApiPresets.get(id) && preset.url === url && (!format || preset.format === format)) || null;
   }
   function selectedApiPreset() {
     const family = settingsApiFormat?.value || "openai";
-    return API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
+    return PenEchoApiPresets.forFamily(family) || API_PRESETS[`${family}-${settingsApiRegion?.value || "global"}-${settingsApiService?.value || "api"}`] || null;
   }
   function updateKimiSignup() {
     if (!settingsKimiSignup || !settingsKimiSignupLink) return;
@@ -2943,6 +2956,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       enabled = presetFamily && settingsProvider?.value === "api" && settings.configurationMode === "api";
     settingsApiPresetFields.hidden = !presetFamily;
     for (const control of settingsApiPresetFields.querySelectorAll("select")) control.disabled = !enabled;
+    const additional = PenEchoApiPresets.forFamily(family), hint = document.getElementById("settingsApiPresetHint");
+    settingsApiModel.readOnly = false;
+    settingsApiModel.placeholder = additional ? t("settingsPresetModelPlaceholder") : "gpt-5.6-sol";
+    if (hint) {
+      hint.hidden = !additional;
+      hint.textContent = additional ? t(PenEchoApiPresets.isOpenCode(additional.id) ? "settingsOpenCodePresetHelp" : family.startsWith("qwen-") ? "settingsQwenPresetHelp" : "settingsPresetHelp") : "";
+    }
     updateKimiSignup();
     if (resetModel) clearFetchedApiModels();
     updateApiModelChoices();
@@ -2959,7 +2979,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsApiRegion.value = preset?.region || "global";
     settingsApiService.value = preset?.service || "api";
     updateApiPresetFields(false);
-    settingsApiUrl.value = connection.apiUrl || API_DEFAULTS[connection.apiFormat === "anthropic" ? "anthropic" : "openai"].url;
+    settingsApiUrl.value = PenEchoApiPresets.editorUrl(connection) || API_DEFAULTS[connection.apiFormat === "anthropic" ? "anthropic" : "openai"].url;
     settingsApiModel.value = connection.apiModel || "";
   }
   function connectionProviderLabel(connection) {
@@ -3075,19 +3095,21 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsSaveStatus.textContent = message;
     settingsSaveStatus.className = `settings-save-status${kind ? ` ${kind}` : ""}`;
   }
-  function connectionEditorPayload() {
+  function connectionEditorPayload({ forModelDiscovery = false } = {}) {
     const provider = settingsProvider.value;
     if (provider !== "api") settings.cli[provider] = { model:settingsCliModel.value, path:settingsCliPath.value };
     const apiPreset = provider === "api" ? selectedApiPreset() : null;
+    const route = !forModelDiscovery && apiPreset && PenEchoApiPresets.isOpenCode(apiPreset.id) && settingsApiModel.value.trim()
+      ? PenEchoApiPresets.route({ apiPreset:apiPreset.id, apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value }) : null;
     return {
-      provider, apiFormat:apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:settingsApiUrl.value, apiModel:settingsApiModel.value,
+      provider, apiFormat:route?.apiFormat || apiPreset?.format || settingsApiFormat.value, apiPreset:apiPreset ? `${apiPreset.family}-${apiPreset.region}-${apiPreset.service}` : "", apiUrl:route?.apiUrl || settingsApiUrl.value, apiModel:settingsApiModel.value,
       apiKey:settingsApiKey.value, effort:settingsEffort.value,
       cliModel:provider === "api" ? "" : settingsCliModel.value, cliPath:provider === "api" ? "" : settingsCliPath.value,
     };
   }
   function connectionModelDiscoverySignature() {
-    const connection = connectionEditorPayload();
-    return JSON.stringify([settings.editingConnectionId || "", connection.provider, connection.apiFormat, connection.apiUrl, connection.apiKey]);
+    const connection = connectionEditorPayload({ forModelDiscovery:true });
+    return JSON.stringify([settings.editingConnectionId || "", connection.provider, connection.apiFormat, connection.apiUrl, connection.apiKey, connection.apiPreset]);
   }
   function updateConnectionModelFetchState() {
     if (!settingsFetchModels) return;
@@ -3206,7 +3228,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     finally { setConnectionTestBusy(false); }
   }
   function normalizeFetchedApiModels(models) {
-    if (!Array.isArray(models) || models.length > 256) throw new Error(t("settingsModelFetchFailed"));
+    if (!Array.isArray(models) || models.length > (PenEchoApiPresets.forFamily(settingsApiFormat?.value) ? PenEchoApiPresets.maxModels : 256)) throw new Error(t("settingsModelFetchFailed"));
     if (models.some(model => typeof model !== "string")) throw new Error(t("settingsModelFetchFailed"));
     const values = models.map(model => model.trim());
     if (values.some(model => model.length > 200 || /[\r\n\0]/.test(model)) || new Set(values).size !== values.length) throw new Error(t("settingsModelFetchFailed"));
@@ -3215,7 +3237,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   async function fetchConnectionModels() {
     if (settingsFetchModels?.disabled || settingsProvider.value !== "api") return;
     if (![settingsApiFormat, settingsApiUrl, settingsApiKey].every(control => control.checkValidity())) return;
-    const connection = connectionEditorPayload(), requestSignature = connectionModelDiscoverySignature();
+    const connection = connectionEditorPayload({ forModelDiscovery:true }), requestSignature = connectionModelDiscoverySignature();
     setConnectionTestBusy(true);
     settings.fetchingApiModels = true;
     updateConnectionModelFetchState();
@@ -3239,7 +3261,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       updateApiModelSelection();
       showApiModelOptions();
       settingsApiModel.focus({ preventScroll:true });
-      setSettingsStatus(t("settingsModelsFetched").replace("{count}", String(settings.fetchedApiModels.length)), "success");
+      setSettingsStatus(t(PenEchoApiPresets.forFamily(settingsApiFormat.value) ? "settingsPresetModelsFetched" : "settingsModelsFetched").replace("{count}", String(settings.fetchedApiModels.length)), "success");
     } catch (error) {
       hideApiModelOptions();
       setSettingsStatus(error?.message || t("settingsModelFetchFailed"), "error");

@@ -329,7 +329,7 @@ test("API connection models can be fetched into an editable dropdown", () => {
   assert.match(html, /id="settingsApiModelOptions"[^>]*role="listbox"[^>]*hidden/);
   assert.match(html, /id="settingsFetchModels"[^>]*aria-busy="false/);
   assert.match(html, /<span data-i18n="settingsFetchModels">Fetch models<\/span>/);
-  assert.match(functionSource(core, "fetchConnectionModels"), /connectionEditorPayload\(\)[\s\S]*?\/api\/settings\/connections\/models[\s\S]*?id:settings\.editingConnectionId/);
+  assert.match(functionSource(core, "fetchConnectionModels"), /connectionEditorPayload\(\{ forModelDiscovery:true \}\)[\s\S]*?\/api\/settings\/connections\/models[\s\S]*?id:settings\.editingConnectionId/);
   assert.match(functionSource(core, "fetchConnectionModels"), /settings\.fetchedApiModels = normalizeFetchedApiModels[\s\S]*?if \(!settingsApiModel\.value\.trim\(\)/);
   assert.match(functionSource(core, "fetchConnectionModels"), /requestSignature[\s\S]*?connectionModelDiscoverySignature\(\)[\s\S]*?setSettingsStatus\(\)[\s\S]*?return/);
   assert.match(functionSource(core, "normalizeFetchedApiModels"), /\.sort\(\(a, b\)/);
@@ -3087,7 +3087,8 @@ test("canvas history clearly separates device, server, and private cross-device 
   }
   for (const id of ["historyActivity", "historyActivityTitle", "historyActivityDetail", "historyActivityProgress"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(app, /function setSnapshotLocation\([\s\S]*?snapshotItems = \[\][\s\S]*?snapshotItemsLocation = null[\s\S]*?renderSnapshotListLoading\(location\)/);
-  assert.match(app, /function setSnapshotLocation\([\s\S]*?restoreCloudHistoryCache\(\)[\s\S]*?renderSnapshotList\(\)/);
+  assert.match(app, /function setSnapshotLocation\([\s\S]*?restoreHistoryPage\(\)[\s\S]*?renderSnapshotList\(\)/);
+  assert.match(functionSource(app, "restoreHistoryPage"), /historyCurrentPageKey\(\)[\s\S]*?snapshotItems=entry\.items\.slice\(\)[\s\S]*?cloudCanvasProjects=entry\.projects\.slice\(\)[\s\S]*?snapshotItemsLocation=state\.snapshotLocation/);
   assert.match(app, /function setSnapshotLocation\([\s\S]*?snapshotLoadInProgress[\s\S]*?state\.snapshotLoadGeneration\+\+[\s\S]*?snapshotLoadInProgress = false/);
   assert.match(functionSource(app, "updateHistoryReadControls"), /input\[name="historyStorageLocation"\][\s\S]*?control\.disabled = snapshotSaveInProgress/);
   assert.match(functionSource(app, "refreshSnapshots"), /snapshotItemsLocation !== location[\s\S]*?renderSnapshotListLoading\(location\)[\s\S]*?snapshotItemsLocation = location/);
@@ -3116,7 +3117,7 @@ test("canvas history clearly separates device, server, and private cross-device 
   assert.match(unsavedGuard, /state\.currentSnapshotId && state\.currentCanvasSuggestedName/);
   assert.match(unsavedGuard, /state\.currentSnapshotId \|\| hasContent/);
   assert.doesNotMatch(unsavedGuard, /state\.dirty/);
-  assert.match(transitionGuard, /canvasHasUnsavedChanges\(\)[\s\S]*?performCanvasTransition\(transition\)[\s\S]*?pendingCanvasTransition = transition[\s\S]*?showModal/);
+  assert.match(transitionGuard, /transition\?\.type !== "close" \|\| !canvasHasUnsavedChanges\(\)[\s\S]*?performCanvasTransition\(transition\)[\s\S]*?pendingCanvasTransition = transition[\s\S]*?showModal/);
   assert.match(functionSource(app, "openNewCanvasDialog"), /requestCanvasTransition\(\{ type:"new" \}\)/);
   assert.match(functionSource(app, "requestLoadSnapshot"), /requestCanvasTransition\(\{ type:"load", id, location \}\)/);
   assert.match(functionSource(app, "performCanvasTransition"), /transition\?\.type === "load"[\s\S]*?loadSnapshot\(transition\.id, transition\.location\)[\s\S]*?startBlankCanvas\(\)/);

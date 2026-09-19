@@ -7,11 +7,13 @@ const path = require("node:path");
 const ROOT = path.resolve(__dirname, "..");
 const TARGET = path.join(ROOT, "public", "app.js");
 const SOURCES = [
+  "src/providers/api-presets.js",
   "src/client/app/client-activity.js",
   "src/client/app/core.js",
   "src/client/app/canvas-runtime.js",
   "src/client/app/visual-explainer.js",
   "src/client/app/persistence.js",
+  "src/client/app/library-pagination.js",
   "src/client/app/ai-runtime.js",
   "src/client/app/canvas-agent-runtime.js",
   "src/client/app/mcp-primitives.js",

@@ -1,11 +1,11 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const host=fs.readFileSync('public/widget-host.js','utf8'),client=fs.readFileSync('src/client/app/canvas-runtime.js','utf8');
-const captureSource=host.slice(host.indexOf('    async function snapshotDocument('),host.indexOf('    // Compatibility for canvases saved'));
+const captureSource=host.slice(host.indexOf('    function snapshotContentOverflow('),host.indexOf('    // Compatibility for canvases saved'));
 for(const fullContent of [false,true])test(`snapshot fullContent=${fullContent} respects document extent independently of presentation zoom`,async()=>{
  for(const scaleX of [.5,1]){
  const messages=[],sizes=[];
- const context={clock:()=>0,widgetState:{maximized:true,scaleX},document:{documentElement:{clientWidth:800,clientHeight:400,scrollWidth:800,scrollHeight:1400},body:{scrollWidth:800,scrollHeight:1400}},
+ const context={clock:()=>0,widgetState:{maximized:true,scaleX},document:{documentElement:{clientWidth:800,clientHeight:400,scrollWidth:800,scrollHeight:1400},body:{scrollWidth:800,scrollHeight:1400,querySelectorAll:()=>[]}},
  HIGH_RESOLUTION_SNAPSHOT_SCALE:1.5,MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION:3600,MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS:10800000,MAX_SNAPSHOT_DIMENSION:2400,MAX_SNAPSHOT_PIXELS:4800000,
  snapshotDebugLog(){},mcpPreviewMode:true,waitForSnapshotViewport:async()=>{},settleSnapshotFrame:async()=>true,
  inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},schedulePresentationSize(){},
@@ -25,9 +25,10 @@ test('full content response leaves every preview cache field intact',async()=>{
  const code=client.slice(start,end).replace(/\n  }\s*$/,'');
  const oldImage={},image={},widget={snapshotImage:oldImage,snapshotDataUrl:'old',snapshotVersion:4,snapshotHighResolution:false,contentVersion:5};
  let result;
- const context={widget,message:{dataUrl:'data:image/png;base64,new'},pending:{fullContent:true,contentVersion:5,resolve:r=>result=r,reject:e=>{throw e;}},finishPending:()=>true,decodeWidgetSnapshot:async()=>image};
+ const context={widget,message:{dataUrl:'data:image/png;base64,new',contentWidth:800,contentHeight:1400,overflow:{x:true,y:true}},pending:{fullContent:true,contentVersion:5,resolve:r=>result=r,reject:e=>{throw e;}},finishPending:()=>true,decodeWidgetSnapshot:async()=>image};
  vm.createContext(context);await vm.runInContext(`(async()=>{${code}})()`,context);
  assert.equal(result.image,image);assert.equal(result.dataUrl,'data:image/png;base64,new');
+ assert.equal(result.contentWidth,800);assert.equal(result.contentHeight,1400);assert.deepEqual(result.overflow,{x:true,y:true});
  assert.equal(widget.snapshotImage,oldImage);assert.equal(widget.snapshotDataUrl,'old');assert.equal(widget.snapshotVersion,4);assert.equal(widget.snapshotHighResolution,false);
 });
 test('download requests complete content and uses its returned PNG instead of cached preview',async()=>{
@@ -37,4 +38,33 @@ test('download requests complete content and uses its returned PNG instead of ca
  requestWidgetSnapshot:async(...args)=>{calls.push(args);return {dataUrl:'data:image/png;base64,full'};},document:{createElement:()=>link,body:{append(){}}},widgetImageFilename:()=> 'widget.png'};
  vm.createContext(context);vm.runInContext(client.slice(start,end),context);
  assert.equal(await context.downloadWidgetImage(widget),true);assert.equal(calls[0][5],true);assert.equal(link.href,'data:image/png;base64,full');assert.equal(widget.downloadBusy,false);
+});
+
+test('full document overflow includes clipped nested panels without changing their scrolling',()=>{
+ const make=(width,overflowX,visible=true)=>({clientWidth:300,scrollWidth:width,clientHeight:200,scrollHeight:200,scrollLeft:72,
+   getBoundingClientRect:()=>({width:visible?300:0,height:visible?200:0}),style:{overflowX,overflowY:'visible'}});
+ const context={document:{body:{querySelectorAll:()=>context.elements}},elements:[],getComputedStyle:e=>e.style};
+ vm.createContext(context);vm.runInContext(captureSource,context);
+ for(const [element,expected] of [[make(700,'auto'),true],[make(700,'hidden'),true],[make(700,'visible'),false],[make(300,'auto'),false],[make(700,'auto',false),false]]){
+  context.elements=[element];
+  const result=context.snapshotContentOverflow(800,400,800,1400);
+  assert.deepEqual({...result},{x:expected,y:true});assert.equal(element.scrollLeft,72);
+ }
+});
+
+test('scrolled full captures use document coordinates while viewport captures keep the current view',async()=>{
+ for(const fullContent of [false,true]){
+  let options;
+  const context={clock:()=>0,scrollX:25,scrollY:500,document:{documentElement:{scrollWidth:900,scrollHeight:1400},body:{scrollWidth:900,scrollHeight:1400,querySelectorAll:()=>[]}},
+   HIGH_RESOLUTION_SNAPSHOT_SCALE:1.5,MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION:3600,MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS:10800000,MAX_SNAPSHOT_DIMENSION:2400,MAX_SNAPSHOT_PIXELS:4800000,
+   snapshotDebugLog(){},mcpPreviewMode:false,settleSnapshotFrame:async()=>true,snapshotPrimarySvg:async()=>null,
+   inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},materializeSnapshotGeneratedContent:()=>()=>{},captureDirectRendererStyleMutations:()=>()=>{},schedulePresentationSize(){},
+   html2canvas:async(element,opts)=>{options=opts;return {width:opts.width,height:opts.height,toDataURL:()=> 'data:image/png;base64,new'};},
+   withTimeout:async p=>p,parent:{postMessage(){}},runtimeVersion:1,activeSnapshotRender:null};
+  vm.createContext(context);vm.runInContext(captureSource,context);
+  await context.snapshotDocument({requestId:'scrolled',width:800,height:400,fullContent});
+  assert.deepEqual([options.scrollX,options.scrollY],fullContent?[25,500]:[0,0]);
+  assert.deepEqual([options.windowWidth,options.windowHeight],[800,400]);
+  assert.deepEqual([context.scrollX,context.scrollY],[25,500]);
+ }
 });

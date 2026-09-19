@@ -1,0 +1,157 @@
+{
+  "description": "下单后并行执行支付与库存预扣，二者都完成后再校验，缺货走补货重试环。",
+  "domains": [
+    {
+      "color": "blue",
+      "id": "trade",
+      "label": "交易"
+    },
+    {
+      "color": "orange",
+      "id": "stock",
+      "label": "库存"
+    },
+    {
+      "color": "purple",
+      "id": "fulfil",
+      "label": "履约"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "create"
+    },
+    {
+      "from": "create",
+      "to": "split"
+    },
+    {
+      "from": "split",
+      "to": "pay"
+    },
+    {
+      "from": "split",
+      "to": "deduct"
+    },
+    {
+      "from": "pay",
+      "to": "join"
+    },
+    {
+      "from": "deduct",
+      "to": "join"
+    },
+    {
+      "from": "join",
+      "to": "d1"
+    },
+    {
+      "from": "d1",
+      "label": "支付成功且库存充足",
+      "to": "ship"
+    },
+    {
+      "from": "d1",
+      "label": "缺货",
+      "to": "restock"
+    },
+    {
+      "from": "restock",
+      "kind": "loop",
+      "label": "到货后重新校验",
+      "to": "d1"
+    },
+    {
+      "from": "ship",
+      "to": "end"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "提交订单",
+      "type": "start"
+    },
+    {
+      "id": "create",
+      "label": "生成订单",
+      "subtitle": "锁价 30 分钟",
+      "type": "process",
+      "domain": "trade"
+    },
+    {
+      "id": "split",
+      "label": "并行分支",
+      "type": "fork"
+    },
+    {
+      "id": "pay",
+      "label": "在线支付",
+      "subtitle": "聚合收银台",
+      "type": "process",
+      "domain": "trade"
+    },
+    {
+      "id": "deduct",
+      "label": "预扣库存",
+      "subtitle": "Redis 预扣 + 异步落库",
+      "type": "process",
+      "domain": "stock"
+    },
+    {
+      "id": "join",
+      "label": "汇合",
+      "subtitle": "等待支付与扣减结果",
+      "type": "join"
+    },
+    {
+      "id": "d1",
+      "label": "校验通过？",
+      "type": "decision"
+    },
+    {
+      "id": "restock",
+      "label": "触发补货",
+      "subtitle": "通知供应商，超时自动换货",
+      "type": "process",
+      "domain": "stock"
+    },
+    {
+      "id": "ship",
+      "label": "创建发货单",
+      "subtitle": "分配最近的前置仓",
+      "type": "process",
+      "domain": "fulfil"
+    },
+    {
+      "id": "end",
+      "label": "订单就绪",
+      "type": "end"
+    }
+  ],
+  "notes": [
+    "支付超时未完成由延迟队列自动关单（见时序图样例，不在本图展开）。",
+    "预扣失败重试 3 次后才进入补货分支。"
+  ],
+  "title": "电商订单处理",
+  "version": 1,
+  "details": [
+    {
+      "domain": "stock",
+      "items": [
+        "热点商品预扣配额单独限流，防止黄牛占坑。",
+        "补货到货预计时间 >48h 时自动转预售。"
+      ],
+      "title": "库存策略"
+    },
+    {
+      "domain": "trade",
+      "items": [
+        "支付与扣减任一失败即释放另一方占用。",
+        "订单超时关单后退还预扣库存。"
+      ],
+      "title": "交易一致性"
+    }
+  ]
+}

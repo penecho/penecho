@@ -8,5 +8,10 @@
     "title": "Sequence diagrams",
     "scope": "Sequence diagrams or sequence regions of mixed documents only",
     "base": "visual-explorer"
+  },
+  "workflow": {
+    "title": "Workflow diagrams",
+    "scope": "Workflow/process diagrams or workflow regions of mixed documents only",
+    "base": "visual-explorer"
   }
 }

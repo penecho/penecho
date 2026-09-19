@@ -42,6 +42,8 @@ import { assertCanvasAgentModelBackend, canvasAgentPrincipalKey } from './model-
 import { createDocumentTools, DOCUMENT_TOOL_INSTRUCTIONS } from './document-tools.mjs'
 
 const require = createRequire(import.meta.url)
+const additionalApiPresets = require('../../providers/api-presets.js')
+const { presetRequestHeaders } = require('../../providers/preset-discovery.js')
 const { commandFromWidgetPatch } = require('../widget-patch.js')
 let packagedRipgrepPath = ''
 const PLUGIN_FORMAT = require('../../../public/plugins.js')
@@ -165,6 +167,7 @@ async function mountRuntimePlugin(ctx, id, plugin, config) {
 }
 
 export const PERSONA = `You are PenEcho Agent inside a visual canvas.
+Introduce yourself as PenEcho Agent without volunteering a model or provider name. Harness and transport names do not identify the underlying model. If asked about the model, use only explicit current runtime model metadata; otherwise say the exact model is unavailable.
 Reason to the depth the task warrants, preserving accuracy, completeness, and necessary verification. Avoid repetitive reasoning that adds no new information. Aim to keep internal reasoning within about 20,000 tokens per response, and use much less for simpler tasks; this is a soft upper bound, not a quota to fill.
 Canvas is authoritative; file reads and captures return current state, never history. After source conflicts, read the changed file.
 initialCanvasState is authoritative. If empty:true: skip initial inspection/capture; use automatic placement. Otherwise reuse its overview and read only the relevant source or geometry.
@@ -1945,14 +1948,16 @@ export function resolveCanvasAgentRequestEffort(connection, value = 'config') {
 }
 
 function requestEffortConnection(session, requestEffort) {
-  if (requestEffort.selected === 'config' || CANVAS_AGENT_HARNESS_REASONING_EFFORTS.has(requestEffort.effective)) return null
+  const openCode = additionalApiPresets.isOpenCode(session.connection.apiPreset)
+  if (!openCode && (requestEffort.selected === 'config' || CANVAS_AGENT_HARNESS_REASONING_EFFORTS.has(requestEffort.effective))) return null
   // Harness validates opaque effort ids against the selected provider profile.
   // Give an arbitrary per-turn value a session-isolated route so concurrent
   // conversations cannot overwrite one another's provider-native mapping.
   return Object.freeze({
     ...session.connection,
     id:`${session.connection.id}:request-effort:${session.id}:${hash(requestEffort.effective).slice(0, 12)}`,
-    effort:requestEffort.effective,
+    effort:requestEffort.effective || session.connection.effort,
+    ...(openCode ? { apiSessionId:session.id } : {}),
   })
 }
 
@@ -2042,6 +2047,7 @@ export function connectionProfile(connection, configuredTimeoutMs) {
       displayName:connection.name || `PenEcho ${model}`,
       api:connection.apiFormat === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
       baseURL:providerBaseURL(connection),
+      ...(additionalApiPresets.isOpenCode(connection.apiPreset) ? { headers:presetRequestHeaders(connection, connection.apiSessionId) } : {}),
       ...(connection.hosted === true ? {
         headers:{ 'x-penecho-request-kind':'agent', ...(connection.apiFormat === 'anthropic' && connection.apiKey ? { Authorization:`Bearer ${connection.apiKey}` } : {}) },
         // An inactivity deadline ends this request. Repeating it five times
@@ -4459,7 +4465,7 @@ export class CanvasHarnessHost {
     })
     await mountRuntimePlugin(ctx, 'llm', LlmRuntime)
     await mountRuntimePlugin(ctx, 'session', SessionStore)
-    await mountRuntimePlugin(ctx, 'system-prompt', SystemPrompt, { includeHarnessIdentity:true, includeRuntimeContext:true, persona:PERSONA })
+    await mountRuntimePlugin(ctx, 'system-prompt', SystemPrompt, { includeHarnessIdentity:false, includeRuntimeContext:true, persona:PERSONA })
     await mountRuntimePlugin(ctx, 'tools', ToolRuntime, { mode:'native' })
     await mountRuntimePlugin(ctx, 'agent', AgentRegistry)
     await mountRuntimePlugin(ctx, 'llm-retry', llmRetry)

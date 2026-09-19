@@ -1,0 +1,24 @@
+{
+  "scope": "README professional-diagram gallery",
+  "sourceRoot": "/Users/heack/workspace/penecho_071_version",
+  "branch": "codex/update-localization",
+  "languages": 9,
+  "originalAndPreviewReferencesVerified": 108,
+  "previewDimensions": [1120, 640],
+  "casesPerLanguage": 6,
+  "replacementSequence": "mcp-request.png",
+  "readmeUsesCustomCssOrJavaScript": false,
+  "visualReview": {
+    "stylesheet": "docs/design-previews/readme-20260915/github-markdown.css",
+    "wideChineseImageDimensions": [532.5, 304.28125],
+    "narrowViewportWidth": 390,
+    "allNineLocalesCheckedForOverflow": true,
+    "germanNarrowImageWidthsAfterCopyAdjustment": [151.5, 151.5],
+    "nativeBrowserZoomPercent": 200,
+    "germanZoomedTableClientAndScrollWidths": [1082, 1082],
+    "originalLinkOpened": "mcp-request.png",
+    "originalImageDimensions": [2398, 2036],
+    "viewportAndZoomRestored": true
+  },
+  "delivery": "Local formal project files only; no commit or push. README-only change needs no Canvas mirror synchronization or deployment."
+}

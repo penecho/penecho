@@ -4,6 +4,21 @@ const {validateSequence,sequenceHtml}=require('../src/sequence/schema.js');
 const {validateToolArguments}=require('../src/server/mcp/schema.js');
 const fixture=name=>JSON.parse(fs.readFileSync(`testcase/sequence-local/2026-09-18/${name}.semantic.json`));
 const simple={version:1,title:'Sequence',participants:[{id:'a',label:'Client'},{id:'b',label:'Server'}],messages:[{id:'one',from:'a',to:'b',label:'Request'},{id:'two',from:'b',to:'a',label:'Reply',kind:'return'}]};
+test('nested fragment labels stay clear of lifelines and long-lived activation bars',async()=>{
+ const {layoutSequence}=await import('../src/sequence/layout.mjs'),{measureFallback}=await import('../src/diagrams/text.mjs');
+ const data=JSON.parse(fs.readFileSync('testcase/mcp-layout-capture/2026-09-18/seq-05-nested-fragments.json'));
+ for(const width of [390,800,2011]){
+  const layout=layoutSequence(data,undefined,{width});
+  for(const f of layout.fragments){
+   assert.ok(f.titleX>layout.participants[0].cx+12);
+   for(const line of [...f.titleLines,...f.branches.flatMap(b=>b.lines)]){
+    const right=f.titleX+measureFallback(line,13);
+    assert.ok(right<layout.participants[1].cx-12);
+    assert.ok(layout.activations.every(a=>right<a.x || f.titleX>a.x+a.width));
+   }
+  }
+ }
+});
 test('sequence accepts semantic JSON only and preserves existing MCP formats',()=>{
  const base={sessionId:'s',artifactId:'seq',title:'T',requestId:'idempotent'};
  assert.match(validateToolArguments('penecho_present_widget',{...base,sequence:simple}).html,/data-sequence-source/);
@@ -11,6 +26,7 @@ test('sequence accepts semantic JSON only and preserves existing MCP formats',()
  for(const extra of [{html:'old'},{architecture:{}},{html:'old',architecture:{}}])assert.throws(()=>validateToolArguments('penecho_present_widget',{...base,sequence:simple,...extra}),/exactly one/);
  for(const bad of [null,'text',{}, {...simple,messages:[]},{...simple,participants:[]},{...simple,participants:[...simple.participants,simple.participants[0]]},{...simple,messages:[{...simple.messages[0],to:'missing'}]},{...simple,messages:[{...simple.messages[0],y:180}]},{...simple,participants:[{id:'a',label:'Client',x:80}]},{...simple,sessionId:'wrong'}])assert.throws(()=>validateSequence(bad),/Sequence:/);
  const html=sequenceHtml({...simple,title:'</script><img onerror=alert(1)>'});assert.equal((html.match(/<script/g)||[]).length,1);assert.ok(!html.includes('<img'));
+ assert.match(html,/lang="en"/);assert.match(html,/Laying out sequence diagram/);assert.match(sequenceHtml(simple,{language:'zh'}),/正在布局时序图/);
 });
 test('sequence ranges reject unknown, reversed, crossing and cross-branch references',()=>{
  const base={...simple,messages:[...simple.messages,{id:'three',from:'a',to:'a',label:'Self'},{id:'four',from:'b',to:'a',label:'Done'}]};

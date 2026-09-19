@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>读链路为什么不让客户端直连数据库</title>
+<style>
+html,body{margin:0;padding:0;background:transparent}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,sans-serif;color:#1f2937;width:100%;min-width:0}
+.wrap{padding:20px 22px 24px;background:#fff;border:1px solid #e5e7eb;border-radius:14px}
+h1{font-size:20px;line-height:1.3;margin:0 0 5px;font-weight:700}
+.sub{color:#6b7280;font-size:12.5px;line-height:1.6;margin:0 0 16px}
+.note{font-size:12.5px;line-height:1.75;color:#374151;margin:0 0 14px}
+.grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.card{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;background:#fcfcfd}
+.card h2{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0 0 9px;font-weight:700}
+ul{margin:0;padding-left:16px;font-size:12.5px;line-height:1.8}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{border-bottom:1px solid #eef0f3;padding:6px 8px;text-align:left}
+th{color:#374151;font-weight:600;background:#f9fafb}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body><pre id="r2-report" style="box-sizing:border-box;height:200px;overflow:auto;margin:0;font:13px/1.4 Arial;padding:12px;background:#ecfdf5;color:#166534;white-space:pre-wrap">检查中…</pre>
+<div class="wrap">
+  <h1>读链路为什么不让客户端直连数据库</h1>
+  <p class="sub">混合文档测试样本 A6：普通 HTML 讲解 + 内嵌 architecture 语义图形（同文档、无 iframe）</p>
+  <p class="note">下面的图不是图片，而是内嵌在 HTML 里的 <code>data-penecho-architecture</code> 语义 JSON，由浏览器端本地渲染器布局。正文与图形共享同一套 domain 配色，读者可以按颜色把讲解和图对上。</p>
+  <section data-penecho-architecture>
+    <script type="application/json" data-architecture-source>{"version":1,"title":"读请求链路","description":"来自 HTML 讲解中的内嵌架构图","domains":[{"id":"c","label":"客户端","color":"blue"},{"id":"s","label":"服务","color":"orange"},{"id":"d","label":"缓存与存储","color":"purple"}],"nodes":[{"id":"browser","label":"浏览器","subtitle":"页面渲染","type":"frontend","domain":"c"},{"id":"edge","label":"CDN 边缘","subtitle":"静态资源与就近缓存","type":"cloud","domain":"c"},{"id":"api","label":"读接口服务","subtitle":"REST / gRPC","domain":"s"},{"id":"redis","label":"Redis 缓存","subtitle":"热点键","type":"database","domain":"d"},{"id":"pg","label":"Postgres 只读副本","subtitle":"复杂查询回落","type":"database","domain":"d"}],"edges":[{"from":"browser","to":"edge","label":"静态资源"},{"from":"browser","to":"api","label":"GET /feed"},{"from":"api","to":"redis","label":"先查缓存","kind":"data"},{"from":"api","to":"pg","label":"未命中回落","kind":"optional"},{"from":"redis","to":"api","label":"缓存命中","kind":"return"},{"from":"pg","to":"api","label":"行结果","kind":"return"}],"details":[{"title":"要点","domain":"d","items":["客户端不持有数据库凭据。","缓存命中率决定实际落库 QPS。"]}],"notes":["对应正文中的“为什么不让客户端直连数据库”。"]}</script>
+  </section>
+  <div class="grid">
+    <div class="card">
+      <h2>为什么这么设计</h2>
+      <ul>
+        <li>凭据只存在于服务端，客户端被攻破不会直连数据库。</li>
+        <li>缓存层吸收突发流量，落库 QPS 与入口 QPS 解耦。</li>
+        <li>读副本承担复杂查询，主库只服务写入。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>代价与约束</h2>
+      <table>
+        <tr><th>项目</th><th>取值</th></tr>
+        <tr><td>缓存 TTL</td><td>60 s</td></tr>
+        <tr><td>副本延迟预算</td><td>&lt; 200 ms</td></tr>
+        <tr><td>缓存命中率目标</td><td>&ge; 92%</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<script>addEventListener('penecho-architecture-ready',()=>{
+    const originalSettled=globalThis['__penechoArchitectureWhenSettled'];
+    const inspection=(async()=>{
+    await new Promise(resolve=>setTimeout(resolve,250));await originalSettled();
+    const root=document.querySelector('[data-penecho-architecture]'),map=root.querySelector('.pa-map'),svg=map.querySelector('svg'),source=root.querySelector('[data-architecture-source]').textContent;
+    const overview={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    const nodes=[...svg.querySelectorAll('[data-node-id]')],select=root.querySelector('.pa-view-controls select');
+    let allNodesReachable=true;const failures=[];
+    for(const node of nodes){select.value=node.dataset.nodeId;select.dispatchEvent(new Event('change'));const b=node.getBoundingClientRect(),m=map.getBoundingClientRect(),x=m.left+map.clientLeft,y=m.top+map.clientTop;const ok=b.left>=x-1&&b.top>=y-1&&b.right<=x+map.clientWidth+1&&b.bottom<=y+map.clientHeight+1;allNodesReachable&&=ok;if(!ok)failures.push(node.dataset.nodeId);}
+    root.querySelector('[data-view="actual"]').click();
+    const at100={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    map.scrollLeft=map.scrollTop=0;map.scrollBy({left:500,top:500,behavior:'instant'});
+    const scrollMoved=(at100.scrollWidth<=at100.width||map.scrollLeft>0)&&(at100.scrollHeight<=at100.height||map.scrollTop>0);
+    const wheel=new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});map.dispatchEvent(wheel);
+    map.scrollLeft=map.scrollWidth;map.scrollTop=map.scrollHeight;
+    const reachedEnd=map.scrollLeft+map.clientWidth>=map.scrollWidth-1&&map.scrollTop+map.clientHeight>=map.scrollHeight-1;
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const zoomRetained=root.querySelector('.pa-view-controls output')?.textContent==='100%';
+    const report=document.getElementById('r2-report');
+    report.textContent=JSON.stringify({test:"A6",nodes:nodes.length,noArrowButtons:!root.querySelector('[data-pan]'),overview,at100,containerHeightStable:overview.outerHeight===at100.outerHeight,zoomRetained,nativeScrollMoved:scrollMoved,reachedEnd,wheelDefaultNotPrevented:!wheel.defaultPrevented,allNodesReachable,failures,fullViewBox:svg.getAttribute('viewBox'),sourceUnchanged:source===root.querySelector('[data-architecture-source]').textContent});
+    root.querySelector('[data-view="fit"]').click();
+    })();
+    globalThis['__penechoArchitectureWhenSettled']=async()=>{await originalSettled();await inspection;};
+  },{once:true});</script></body>
+</html>

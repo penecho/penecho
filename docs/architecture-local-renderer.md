@@ -92,10 +92,16 @@ the current layout.
 The semantic direction is a preference. If the natural layout cannot fit at a
 minimum scale of 0.9, ELK tries multi-row wrapping, downward placement and, where
 needed, compact downward placement (at most four candidates). Only geometry-valid
-candidates are preferred; scoring considers height and route length to avoid
-large detours around compound groups. Group titles reserve header space and wrap
-within clear slots. A topology that cannot fit at a readable scale retains a local
-map scroller instead of shrinking indefinitely or losing nodes/relationships.
+candidates are preferred; scoring considers height, route length, bends and width
+overflow, including when none of the candidates fits. A readable fit normally
+wins; an overflowing candidate may compete only if its routing cost is at least
+25% lower than the best fitting candidate. This allows a shorter downward graph
+to beat a heavily wrapped or excessively tall graph without making ordinary
+diagrams scroll just to reduce their height. Group titles reserve enough header
+height to wrap beside downward entry routes. A topology that cannot fit at a
+readable scale retains a local map scroller instead of shrinking indefinitely or
+losing nodes/relationships. Wide layouts keep the requested direction (RIGHT by
+default); this is adaptive selection, not a new global DOWN default.
 
 Reflow replaces only the map SVG. The mixed HTML document, detail cards, open node
 inspector and selected node survive. Snapshot and SVG/PNG export wait for the
@@ -107,11 +113,21 @@ professional diagrams do not receive this layout controller.
 ## Lazy prompting
 
 The full semantic contract remains in
-`src/server/canvas-agent/visual-rules/architecture.md` (3,702 characters in this
-iteration). The general Visual Explorer contract is unchanged. Its catalog links
+`src/server/canvas-agent/visual-rules/architecture.md`. The general Visual Explorer
+contract is unchanged. Its catalog links
 to the architecture rule; no layout algorithms or renderer code enter the prompt.
 The MCP tool schema adds only the small optional `architecture` field and the
 mutual-exclusion constraint. The same server schema is used by Agent tools.
+
+The shared Agent/MCP rule sets a soft ceiling of 20 entity nodes in the main
+architecture view, counted across groups. Models choose a viewpoint first and
+aggregate subordinate files, helpers and implementation mechanics into node
+details or shared detail cards. Essential paths and boundaries remain explicit.
+User-requested detail or accuracy can justify more nodes, with a short explanation
+in notes; the schema's 60-node safety limit is unchanged. The guideline neither
+truncates valid input nor removes required content from existing diagrams during
+unrelated edits. Guidance hashes change with the document; a running server that
+already cached the rule needs a restart before it returns the updated text.
 
 A new MCP server must be released with the matching Widget host and assets. Old
 HTML widgets continue working. An old client cannot render the new semantic

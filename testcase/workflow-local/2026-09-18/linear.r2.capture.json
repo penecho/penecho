@@ -1,0 +1,24 @@
+{
+  "sessionId": "b168742c-8036-407d-9d8b-4af80e04b211",
+  "artifactId": "linear-inspect-r2",
+  "presentation": {
+    "intent": "inspect",
+    "role": "primary",
+    "attention": "quiet"
+  },
+  "image": {
+    "mimeType": "image/webp",
+    "bytes": 24186
+  },
+  "width": 1440,
+  "height": 562,
+  "encodedBytes": 24186,
+  "revision": 9,
+  "ephemeral": true,
+  "applied": true,
+  "pixelVerified": true,
+  "viewport": {
+    "width": 1280,
+    "height": 500
+  }
+}

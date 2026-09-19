@@ -1,0 +1,24 @@
+{
+  "id": "seq-05-nested-fragments",
+  "viewport": {
+    "width": 390,
+    "height": 600
+  },
+  "contentSize": {
+    "width": 390,
+    "height": 1747
+  },
+  "fullPixels": {
+    "width": 585,
+    "height": 2620
+  },
+  "viewportPixels": {
+    "width": 585,
+    "height": 900
+  },
+  "geometryUnchanged": true,
+  "overflow": {
+    "x": true,
+    "y": true
+  }
+}

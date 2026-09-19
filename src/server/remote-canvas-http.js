@@ -31,6 +31,20 @@ function validCanvasAgentEntriesQuery(searchParams) {
   return !value.split("/").some(part => part === "." || part === "..");
 }
 
+function validLibraryPageQuery(params, method, cloud = false) {
+  if (method !== "GET") return false;
+  if (!cloud && params.size === 1 && params.get("metadataOnly") === "1") return true;
+  const allowed = ["limit", "offset", "q", "projectId", "sort", "locale", "previews"];
+  if ([...params.keys()].some(key => !allowed.includes(key) || params.getAll(key).length !== 1)) return false;
+  const limit = Number(params.get("limit")), offset = Number(params.get("offset") || 0), project = params.get("projectId");
+  return Number.isSafeInteger(limit) && limit >= 1 && limit <= 100 && Number.isSafeInteger(offset) && offset >= 0
+    && (params.get("q") || "").length <= 160
+    && (!project || project === "all" || new RegExp(cloud ? `^${UUID}$` : `^(?:uncategorized|${PROJECT_ID})$`, "i").test(project))
+    && (!params.has("sort") || ["modified", "created", "name"].includes(params.get("sort")))
+    && (!params.has("locale") || ["en", "zh"].includes(params.get("locale")))
+    && (!params.has("previews") || params.get("previews") === "0");
+}
+
 const ROUTES = [
   { pattern:/^\/api\/settings$/, methods:new Set(["GET", "POST"]) },
   { pattern:/^\/api\/settings\/search\/test$/, methods:new Set(["POST"]) },
@@ -51,7 +65,7 @@ const ROUTES = [
   { pattern:new RegExp(`^/api/canvas-projects/${PROJECT_ID}$`), methods:new Set(["DELETE"]) },
   { pattern:new RegExp(`^/api/canvases/${CANVAS_ID}/project$`), methods:new Set(["PUT"]) },
   { pattern:new RegExp(`^/api/canvases/${CANVAS_ID}/preview$`), methods:new Set(["GET"]) },
-  { pattern:/^\/api\/canvases$/, methods:new Set(["GET", "POST"]), query:(params, method) => method === "GET" && params.size === 1 && params.get("metadataOnly") === "1" },
+  { pattern:/^\/api\/canvases$/, methods:new Set(["GET", "POST"]), query:validLibraryPageQuery },
   { pattern:new RegExp(`^/api/canvases/${CANVAS_ID}$`), methods:new Set(["GET", "PUT", "PATCH", "DELETE"]) },
   { pattern:/^\/api\/ai\/command$/, methods:new Set(["POST"]) },
   { pattern:/^\/api\/plugins\/improve$/, methods:new Set(["POST"]) },
@@ -66,12 +80,14 @@ const ROUTES = [
   { pattern:/^\/api\/cloud\/favorites$/, methods:new Set(["GET", "POST"]), query:true },
   { pattern:/^\/api\/cloud\/favorites\/feed$/, methods:new Set(["GET"]), query:true },
   { pattern:new RegExp(`^/api/cloud/favorites/${UUID}$`, "i"), methods:new Set(["GET", "DELETE"]) },
-  { pattern:/^\/api\/cloud\/(?:status|account|library)$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/cloud\/(?:status|account)$/, methods:new Set(["GET"]) },
+  { pattern:/^\/api\/cloud\/library$/, methods:new Set(["GET"]), query:(params,method) => validLibraryPageQuery(params,method,true) },
   { pattern:/^\/api\/cloud\/projects$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/projects/${UUID}$`, "i"), methods:new Set(["POST", "DELETE"]) },
   { pattern:new RegExp(`^/api/cloud/projects/${UUID}/save$`, "i"), methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/canvases/${UUID}$`, "i"), methods:new Set(["GET", "POST", "PATCH", "DELETE"]) },
-  { pattern:new RegExp(`^/api/cloud/canvases/${UUID}/(?:save|thumbnail)$`, "i"), methods:new Set(["GET", "POST"]) },
+  { pattern:new RegExp(`^/api/cloud/canvases/${UUID}/thumbnail$`, "i"), methods:new Set(["GET"]), query:(params,method) => method === "GET" && params.size === 1 && new RegExp(`^${UUID}$`, "i").test(params.get("revision") || "") },
+  { pattern:new RegExp(`^/api/cloud/canvases/${UUID}/save$`, "i"), methods:new Set(["GET", "POST"]) },
   { pattern:/^\/api\/cloud\/community$/, methods:new Set(["GET"]), query:true },
   { pattern:/^\/api\/cloud\/community\/share$/, methods:new Set(["POST"]) },
   { pattern:new RegExp(`^/api/cloud/community/${UUID}$`, "i"), methods:new Set(["GET"]) },

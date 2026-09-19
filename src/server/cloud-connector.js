@@ -726,9 +726,11 @@ class CloudConnector {
     return this.status();
   }
 
-  async library() {
+  async library(params = null) {
     const requestedWithToken = accountToken(this.configuration);
-    const payload = await this.cloudRequest("/api/v1/device-sync/library");
+    const query = new URLSearchParams();
+    for (const key of ["limit", "offset", "q", "projectId", "sort", "locale", "previews"]) if (params?.has(key)) query.set(key, params.get(key));
+    const payload = await this.cloudRequest(`/api/v1/device-sync/library${query.size ? `?${query}` : ""}`);
     if (payload?.account && requestedWithToken && accountToken(this.configuration) === requestedWithToken) {
       this.account = publicAccount(payload.account);
       this.accountUpdatedAt = Date.now();

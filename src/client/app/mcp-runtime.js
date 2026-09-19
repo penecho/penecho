@@ -1,5 +1,5 @@
   // External MCP sessions share Canvas primitives, but never an Agent conversation.
-  var mcpRuntime = { socket:null, browserId:null, wanted:false, reconnectTimer:0, reconnectStatusTimer:0, reconnectAt:0, reconnecting:false, reconnectDelay:1000, generation:0, sessions:new Map(), previews:new Map(), controllers:new Map(), queue:Promise.resolve(), queued:0, status:null, loading:null, loadError:null, configuring:false, configureResult:null, feedbackSequence:0, feedback:[], ready:false, connectionLost:false, authRequired:false, heartbeatTimer:0, heartbeatSupported:false, catalogSupported:false, catalogSignature:"", lastPong:0, activeMutation:null, mutationDocumentId:null, glowTimer:0, glowing:false, pendingView:new Map(), viewSequence:0, layoutTimer:0, layoutSince:0, viewPaused:false, exampleStatusTimer:0 };
+  var mcpRuntime = { socket:null, browserId:null, wanted:false, pageHidden:false, reconnectTimer:0, reconnectStatusTimer:0, reconnectAt:0, reconnecting:false, reconnectDelay:1000, generation:0, sessions:new Map(), previews:new Map(), controllers:new Map(), queue:Promise.resolve(), queued:0, status:null, loading:null, loadError:null, configuring:false, configureResult:null, feedbackSequence:0, feedback:[], ready:false, connectionLost:false, authRequired:false, heartbeatTimer:0, heartbeatSupported:false, catalogSupported:false, catalogSignature:"", lastPong:0, activeMutation:null, mutationDocumentId:null, glowTimer:0, glowing:false, pendingView:new Map(), viewSequence:0, layoutTimer:0, layoutSince:0, viewPaused:false, exampleStatusTimer:0 };
   const mcpCopy = {
     keepAwake:["Keep awake while MCP is connected","MCP 连接时保持唤醒"],
     keepAwakeHelp:["Optional. In a browser, keep this tab visible. Your device may still suspend.","可选。浏览器中请保持此标签页可见；设备仍可能进入休眠。"],
@@ -223,7 +223,7 @@
     for(const [id,session] of mcpRuntime.sessions)if(!session.internalAgent)mcpRuntime.sessions.delete(id);
     if(!mcpRuntime.sessions.size)mcpRuntime.feedback=[];
     if(mcpRuntime.pendingView.size&&!mcpRuntime.viewPaused)mcpRuntime.layoutTimer=setTimeout(()=>mcpFlushView(false),900);
-    if(lost&&mcpRuntime.wanted){const delay=mcpRuntime.reconnectDelay||1000,generation=mcpRuntime.generation;mcpRuntime.reconnectDelay=Math.min(delay*2,10000);mcpRuntime.reconnecting=true;mcpRuntime.reconnectAt=Date.now()+delay;mcpRuntime.reconnectTimer=setTimeout(()=>{if(generation!==mcpRuntime.generation)return;mcpRuntime.reconnectTimer=0;if(mcpRuntime.wanted){try{mcpConnect(true);}catch{mcpDisconnect(true);}}},delay);}
+    if(lost&&mcpRuntime.wanted&&!mcpRuntime.pageHidden){const delay=mcpRuntime.reconnectDelay||1000,generation=mcpRuntime.generation;mcpRuntime.reconnectDelay=Math.min(delay*2,10000);mcpRuntime.reconnecting=true;mcpRuntime.reconnectAt=Date.now()+delay;mcpRuntime.reconnectTimer=setTimeout(()=>{if(generation!==mcpRuntime.generation)return;mcpRuntime.reconnectTimer=0;if(mcpRuntime.wanted){try{mcpConnect(true);}catch{mcpDisconnect(true);}}},delay);}
     mcpRenderSettings();
     if(mcpRuntime.toolbarManaged&&(!mcpRuntime.toolbarPending||lost))setStatus(mcpText(lost?(mcpRuntime.wanted?"toolbarCancelRetry":"toolbarRetry"):"disconnected"));
   }
@@ -338,7 +338,11 @@
   function mcpArrange(width,height,session,presentation,view,boundsFor,collisions) {
     const gap=32/(view?.scale||1),p= presentation||{},owned=[...(session?.artifacts.values()||[])],
       anchor=p.relativeTo?session?.artifacts.get(p.relativeTo):null;
-    if(p.relativeTo&&!anchor)throw Error("Related artifact not found in this session. Use an existing artifactId.");
+    if(p.relativeTo&&!anchor){
+      const matches=[...(session?.artifacts||[])].filter(([,a])=>a.objectId===p.relativeTo||a.objectIds?.includes(p.relativeTo)),
+        hint=matches.length===1?` Use presentation.relativeTo=${JSON.stringify(matches[0][0])} for objectId=${JSON.stringify(p.relativeTo)}.`:" Use an existing artifactId from this session.";
+      throw Error(`Related artifact not found in this session. presentation.relativeTo requires an artifactId, not an objectId.${hint} Retry corrected arguments with a new requestId.`);
+    }
     const reference=anchor?boundsFor(anchor):null;
     if(anchor&&!reference)throw Error("Related artifact was removed. Choose an existing artifact.");
     const primary=owned.find(a=>a.presentation?.role!=="supporting"&&a.presentation?.role!=="alternative"),
@@ -412,9 +416,22 @@
     if(!mcpRuntime.socket&&!mcpHasInternalSession())return;
     mcpRuntime.viewPaused=true;clearTimeout(mcpRuntime.layoutTimer);mcpRuntime.layoutTimer=0;mcpRenderCanvasStatus();
   }
+  function mcpBeginAgentTurn() {
+    // A new user request renews attention. Retire the previous turn's pending
+    // results without moving the camera or replaying an older review request.
+    for(const [id] of mcpRuntime.pendingView){const session=mcpRuntime.sessions.get(id);if(session?.internalAgent&&mcpSessionVisible(session))mcpRuntime.pendingView.delete(id);}
+    mcpRuntime.viewPaused=false;mcpRuntime.layoutSince=0;
+    clearTimeout(mcpRuntime.layoutTimer);mcpRuntime.layoutTimer=0;mcpRenderCanvasStatus();
+  }
   function mcpQueueView(session,widget,presentation=null) {
     if(presentation?.attention==="quiet"||presentation?.intent==="inspect")return;
     if(!mcpSessionTransportActive(session))return;
+    // Navigation suspends the current delivery batch, not all future work.
+    // In particular, switching Canvas must not pause the destination's first
+    // result because a different document still has pending attention.
+    if(mcpSessionVisible(session)&&![...mcpRuntime.pendingView].some(([id,ids])=>ids.size&&mcpSessionVisible(mcpRuntime.sessions.get(id))&&mcpSessionTransportActive(mcpRuntime.sessions.get(id)))){
+      mcpRuntime.viewPaused=false;mcpRuntime.layoutSince=0;
+    }
     let pending=mcpRuntime.pendingView.get(session.sessionId);
     if(!pending){pending=new Set();mcpRuntime.pendingView.set(session.sessionId,pending);}
     pending.add(widget.id);
@@ -756,7 +773,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
     return "";
   }
   function mcpConnect(reconnecting=false) {
-    if(!mcpLocal())return;
+    if(!mcpLocal()||mcpRuntime.pageHidden)return;
     mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.wanted=true;mcpRuntime.reconnecting=reconnecting;
     mcpRuntime.browserId=mcpRuntime.browserId||canvasClientId();
     const generation=mcpRuntime.generation;
@@ -771,7 +788,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(socket!==mcpRuntime.socket)return;let message;try{message=JSON.parse(event.data);}catch{return;}
       if(message.type==="dispose-session"){mcpDisposeSession(message.sessionId);return;}
       if(message.type==="lan-status-changed"){void mcpLanRefresh();return;}
-      if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();void mcpSyncWakeLock();return;}
+      if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.reconnecting=false;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();void mcpSyncWakeLock();return;}
       if(message.type==="pong"){mcpRuntime.lastPong=Date.now();return;}
       if(message.type==="cancel"){mcpRuntime.controllers.get(message.requestId)?.abort(Object.assign(Error("The MCP request was cancelled."),{code:"REQUEST_CANCELLED"}));return;}
       if(message.type!=="call")return;
@@ -915,14 +932,22 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       try {
       await mcpWaitForWidgetLoad(widget,execution);
       const quality=args.quality||"basic",policy=quality==="detail"?CANVAS_AGENT_DETAIL_CAPTURE_POLICY:CANVAS_AGENT_LAYOUT_CAPTURE_POLICY,
-        started=performance.now(),snapshot=await requestWidgetSnapshot(widget,WIDGET_SNAPSHOT_TIMEOUT_MS,true,execution.controller.signal,quality==="detail");
+        fullContent=widget.mcpEphemeral!==true,started=performance.now(),
+        captured=await requestWidgetSnapshot(widget,WIDGET_SNAPSHOT_TIMEOUT_MS,true,execution.controller.signal,quality==="detail",fullContent),
+        snapshot=fullContent?captured.image:captured;
       canvasAgentAssertToolExecution(execution);
+      if(fullContent&&![captured.contentWidth,captured.contentHeight].every(n=>Number.isFinite(n)&&n>0&&n<=100000))throw Error("Widget full content dimensions are unavailable. Reload the Canvas and retry capture.");
       const rasterMs=Math.round(performance.now()-started),scale=Math.min(1,policy.maxLongEdge/Math.max(snapshot.width,snapshot.height),Math.sqrt(policy.maxPixels/(snapshot.width*snapshot.height))),canvas=document.createElement("canvas");
       canvas.width=Math.max(1,Math.floor(snapshot.width*scale));canvas.height=Math.max(1,Math.floor(snapshot.height*scale));canvas.getContext("2d").drawImage(snapshot,0,0,canvas.width,canvas.height);
       const encoded=await canvasAgentCompressedCanvas(canvas,policy,execution),dataUrl=await canvasAgentReadDataUrl(encoded.blob,execution);
       canvasAgentAssertToolExecution(execution);
       const result={dataUrl,mediaType:encoded.blob.type,width:encoded.canvas.width,height:encoded.canvas.height,encodedBytes:encoded.blob.size,quality,
         artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,viewport:{width:widget.contentW,height:widget.contentH},rasterMs,
+        capture:{scope:fullContent?"full-content":"viewport",...(fullContent?{
+          contentSize:{width:captured.contentWidth,height:captured.contentHeight},
+          overflow:{x:captured.overflow?.x===true||captured.contentWidth>widget.contentW+1,
+            y:captured.overflow?.y===true||captured.contentHeight>widget.contentH+1},
+        }:{})},
         runtimeDiagnostics:widget.runtimeDiagnostics||null};
       canvas.width=canvas.height=1;if(encoded.canvas!==canvas)encoded.canvas.width=encoded.canvas.height=1;
       return result;
@@ -1075,4 +1100,10 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   });
   addEventListener("visibilitychange",()=>{void mcpSyncWakeLock();if(!document.hidden&&mcpRuntime.socket){mcpRuntime.lastPong=Date.now();clearTimeout(mcpRuntime.heartbeatTimer);mcpHeartbeat(mcpRuntime.socket);}});
   addEventListener("offline",()=>{if(mcpRuntime.socket)mcpDisconnect(true);});
-  addEventListener("pagehide",()=>mcpDisconnect());
+  // A bfcache suspension releases transport resources without revoking the
+  // user's opt-in. Only the restored page may resume that connection.
+  addEventListener("pagehide",event=>{mcpRuntime.pageHidden=true;mcpDisconnect(Boolean(event.persisted&&mcpRuntime.wanted));});
+  addEventListener("pageshow",event=>{
+    mcpRuntime.pageHidden=false;
+    if(event.persisted&&mcpRuntime.wanted&&!mcpRuntime.socket){try{mcpConnect(true);}catch{mcpDisconnect(true);}}
+  });

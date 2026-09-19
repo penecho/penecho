@@ -1,0 +1,436 @@
+[
+  {
+    "name": "auto-natural",
+    "mode": "right",
+    "width": 2881,
+    "height": 1285,
+    "issues": [],
+    "totalLength": 15892,
+    "bends": 44,
+    "worst": [
+      {
+        "from": "mcp-server",
+        "to": "canvas-docs",
+        "length": 3158,
+        "direct": 3010,
+        "ratio": 1.05,
+        "bends": 4
+      },
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 301,
+        "direct": 301,
+        "ratio": 1,
+        "bends": 4
+      },
+      {
+        "from": "canvas-app",
+        "to": "http-server",
+        "length": 582,
+        "direct": 582,
+        "ratio": 1,
+        "bends": 0
+      },
+      {
+        "from": "canvas-app",
+        "to": "idb",
+        "length": 903,
+        "direct": 903,
+        "ratio": 1,
+        "bends": 2
+      }
+    ]
+  },
+  {
+    "name": "auto-1450",
+    "mode": "wrapped",
+    "width": 1709,
+    "height": 2068,
+    "issues": [],
+    "totalLength": 39492,
+    "bends": 144,
+    "worst": [
+      {
+        "from": "ext-agent",
+        "to": "mcp-server",
+        "length": 2477,
+        "direct": 478,
+        "ratio": 5.19,
+        "bends": 4
+      },
+      {
+        "from": "ext-agent",
+        "to": "cloud-mcp",
+        "length": 2580,
+        "direct": 582,
+        "ratio": 4.43,
+        "bends": 6
+      },
+      {
+        "from": "cloud-mcp",
+        "to": "cloud",
+        "length": 3728,
+        "direct": 1001,
+        "ratio": 3.73,
+        "bends": 10
+      },
+      {
+        "from": "cloud",
+        "to": "http-server",
+        "length": 1707,
+        "direct": 543,
+        "ratio": 3.15,
+        "bends": 6
+      }
+    ]
+  },
+  {
+    "name": "auto-900",
+    "mode": "wrapped",
+    "width": 1907,
+    "height": 2254,
+    "issues": [],
+    "totalLength": 41954,
+    "bends": 138,
+    "worst": [
+      {
+        "from": "ext-agent",
+        "to": "cloud-mcp",
+        "length": 2889,
+        "direct": 495,
+        "ratio": 5.84,
+        "bends": 4
+      },
+      {
+        "from": "cloud-mcp",
+        "to": "cloud",
+        "length": 3968,
+        "direct": 767,
+        "ratio": 5.18,
+        "bends": 10
+      },
+      {
+        "from": "ext-agent",
+        "to": "mcp-server",
+        "length": 2994,
+        "direct": 599,
+        "ratio": 5,
+        "bends": 6
+      },
+      {
+        "from": "http-server",
+        "to": "ai-pipeline",
+        "length": 1433,
+        "direct": 399,
+        "ratio": 3.59,
+        "bends": 4
+      }
+    ]
+  },
+  {
+    "name": "auto-390",
+    "mode": "wrapped",
+    "width": 1907,
+    "height": 2254,
+    "issues": [],
+    "totalLength": 41954,
+    "bends": 138,
+    "worst": [
+      {
+        "from": "ext-agent",
+        "to": "cloud-mcp",
+        "length": 2889,
+        "direct": 495,
+        "ratio": 5.84,
+        "bends": 4
+      },
+      {
+        "from": "cloud-mcp",
+        "to": "cloud",
+        "length": 3968,
+        "direct": 767,
+        "ratio": 5.18,
+        "bends": 10
+      },
+      {
+        "from": "ext-agent",
+        "to": "mcp-server",
+        "length": 2994,
+        "direct": 599,
+        "ratio": 5,
+        "bends": 6
+      },
+      {
+        "from": "http-server",
+        "to": "ai-pipeline",
+        "length": 1433,
+        "direct": 399,
+        "ratio": 3.59,
+        "bends": 4
+      }
+    ]
+  },
+  {
+    "name": "right",
+    "mode": "right",
+    "width": 2881,
+    "height": 1285,
+    "issues": [],
+    "totalLength": 15892,
+    "bends": 44,
+    "worst": [
+      {
+        "from": "mcp-server",
+        "to": "canvas-docs",
+        "length": 3158,
+        "direct": 3010,
+        "ratio": 1.05,
+        "bends": 4
+      },
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 301,
+        "direct": 301,
+        "ratio": 1,
+        "bends": 4
+      },
+      {
+        "from": "canvas-app",
+        "to": "http-server",
+        "length": 582,
+        "direct": 582,
+        "ratio": 1,
+        "bends": 0
+      },
+      {
+        "from": "canvas-app",
+        "to": "idb",
+        "length": 903,
+        "direct": 903,
+        "ratio": 1,
+        "bends": 2
+      }
+    ]
+  },
+  {
+    "name": "wrapped",
+    "mode": "right",
+    "width": 1759,
+    "height": 2711,
+    "issues": [],
+    "totalLength": 54335,
+    "bends": 156,
+    "worst": [
+      {
+        "from": "agent-runtime",
+        "to": "canvas-docs",
+        "length": 3997,
+        "direct": 960,
+        "ratio": 4.17,
+        "bends": 12
+      },
+      {
+        "from": "agent-runtime",
+        "to": "conn-store",
+        "length": 4041,
+        "direct": 1064,
+        "ratio": 3.8,
+        "bends": 12
+      },
+      {
+        "from": "agent-runtime",
+        "to": "llm-apis",
+        "length": 3841,
+        "direct": 1174,
+        "ratio": 3.27,
+        "bends": 10
+      },
+      {
+        "from": "http-server",
+        "to": "canvas-docs",
+        "length": 5012,
+        "direct": 1746,
+        "ratio": 2.87,
+        "bends": 12
+      }
+    ]
+  },
+  {
+    "name": "down",
+    "mode": "down",
+    "width": 2023,
+    "height": 1730,
+    "issues": [
+      "Route crosses frame title: e_4/agentrt"
+    ],
+    "totalLength": 16099,
+    "bends": 42,
+    "worst": [
+      {
+        "from": "mcp-server",
+        "to": "canvas-docs",
+        "length": 3070,
+        "direct": 2804,
+        "ratio": 1.09,
+        "bends": 4
+      },
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 322,
+        "direct": 322,
+        "ratio": 1,
+        "bends": 4
+      },
+      {
+        "from": "canvas-app",
+        "to": "http-server",
+        "length": 383,
+        "direct": 383,
+        "ratio": 1,
+        "bends": 0
+      },
+      {
+        "from": "canvas-app",
+        "to": "idb",
+        "length": 939,
+        "direct": 939,
+        "ratio": 1,
+        "bends": 2
+      }
+    ]
+  },
+  {
+    "name": "compact",
+    "mode": "down",
+    "width": 1087,
+    "height": 3311,
+    "issues": [
+      "Route crosses frame title: e_4/agentrt"
+    ],
+    "totalLength": 26031,
+    "bends": 66,
+    "worst": [
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 2701,
+        "direct": 1921,
+        "ratio": 1.41,
+        "bends": 4
+      },
+      {
+        "from": "ai-pipeline",
+        "to": "widget-patch",
+        "length": 498,
+        "direct": 452,
+        "ratio": 1.1,
+        "bends": 4
+      },
+      {
+        "from": "agent-runtime",
+        "to": "llm-apis",
+        "length": 2323,
+        "direct": 2149,
+        "ratio": 1.08,
+        "bends": 4
+      },
+      {
+        "from": "electron",
+        "to": "conn-store",
+        "length": 3057,
+        "direct": 2891,
+        "ratio": 1.06,
+        "bends": 8
+      }
+    ]
+  },
+  {
+    "name": "down-clear-title",
+    "mode": "down",
+    "width": 2023,
+    "height": 1858,
+    "issues": [],
+    "totalLength": 16614,
+    "bends": 42,
+    "worst": [
+      {
+        "from": "mcp-server",
+        "to": "canvas-docs",
+        "length": 3166,
+        "direct": 2900,
+        "ratio": 1.09,
+        "bends": 4
+      },
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 354,
+        "direct": 354,
+        "ratio": 1,
+        "bends": 4
+      },
+      {
+        "from": "canvas-app",
+        "to": "http-server",
+        "length": 415,
+        "direct": 415,
+        "ratio": 1,
+        "bends": 0
+      },
+      {
+        "from": "canvas-app",
+        "to": "idb",
+        "length": 939,
+        "direct": 939,
+        "ratio": 1,
+        "bends": 2
+      }
+    ]
+  },
+  {
+    "name": "compact-clear-title",
+    "mode": "down",
+    "width": 1087,
+    "height": 3472,
+    "issues": [],
+    "totalLength": 26936,
+    "bends": 66,
+    "worst": [
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "length": 2798,
+        "direct": 2018,
+        "ratio": 1.39,
+        "bends": 4
+      },
+      {
+        "from": "ai-pipeline",
+        "to": "widget-patch",
+        "length": 530,
+        "direct": 484,
+        "ratio": 1.1,
+        "bends": 4
+      },
+      {
+        "from": "agent-runtime",
+        "to": "llm-apis",
+        "length": 2388,
+        "direct": 2214,
+        "ratio": 1.08,
+        "bends": 4
+      },
+      {
+        "from": "electron",
+        "to": "conn-store",
+        "length": 3154,
+        "direct": 2988,
+        "ratio": 1.06,
+        "bends": 8
+      }
+    ]
+  }
+]

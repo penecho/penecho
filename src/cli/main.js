@@ -2,6 +2,7 @@
 "use strict";
 
 const fs = require("fs");
+const { presetRequestHeaders } = require("../providers/preset-discovery.js");
 const net = require("net");
 const os = require("os");
 const path = require("path");
@@ -279,6 +280,7 @@ async function testApiConnection(env, options = {}) {
         headers: { "Content-Type":"application/json", Authorization:`Bearer ${key}` },
         body: JSON.stringify({ model, stream:true, messages:[{ role:"user", content:[{ type:"text", text:"Inspect the attached test image and reply with OK only." }, { type:"image_url", image_url:{ url:testImage } }] }], ...reasoning }),
       };
+  Object.assign(request.headers, presetRequestHeaders({ apiPreset:env.PENECHO_API_PRESET, apiUrl }));
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new Error("This Node.js version does not provide fetch().");
   const timeoutMs = options.timeoutMs || configuredTimeoutSeconds(env) * 1000, controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);

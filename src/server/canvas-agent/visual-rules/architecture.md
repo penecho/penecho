@@ -4,6 +4,12 @@ Scope: architecture diagrams only. Other visual types and mixed-document regions
 
 Call `penecho_present_widget` with `architecture:{...}` instead of `html`, plus the normal sessionId, artifactId, title and requestId. Existing HTML widgets remain supported.
 
+Choose the viewpoint and abstraction level before extracting entities:
+- Default to no more than 20 entity nodes in the main architecture view. This is a soft ceiling, never a target; use fewer when sufficient. Count nodes across all groups, not separately per group. Frames, labels and detail text are not entity nodes.
+- Keep nodes at a consistent level of responsibility: major actors, applications, services, data stores and external systems relevant to the user's question. A file, class, function, endpoint, helper or configuration item is not automatically a node; fold subordinate implementation facts into the owning node's `details` or a shared detail card unless that item is essential to the requested viewpoint.
+- Preserve the main control/data paths and meaningful responsibility, deployment and trust boundaries. Keep distinct components when merging would misrepresent those relationships. Show relevant dependencies and branches; omit repetitive incidental calls and explain material omissions once in `notes`. Do not replace a dense graph with a vague chain or merely hide dozens of small nodes inside groups.
+- Exceed 20 only when the user explicitly requests that level of detail or when additional entities are necessary to answer accurately. First try coherent aggregation; if more nodes remain necessary, briefly state why in `notes`. Professional appearance alone does not require exhaustive extraction. Do not split one topic into extra diagrams merely to meet the count, or remove required entities from an existing diagram during an unrelated edit.
+
 Required fields inside architecture:
 - `version:1`, `title:string`, `nodes:Node[]`, `edges:Edge[]`.
 - Node: `{id,label}`; optional `subtitle`, `domain`, `group`, `type`, `details:string[]`. Types: `frontend|backend|database|cloud|security|messagebus|external`; default backend. Use a short name and role line; put mechanics and evidence in details.

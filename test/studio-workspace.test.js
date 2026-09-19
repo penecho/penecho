@@ -84,7 +84,9 @@ test("MCP connection opens its tab once, preserves Follow latest and clears pend
   assert.equal(context.studioMcpPendingDocumentId,null);assert.equal(context.studioMcpPendingRegion,null);
   context.syncStudioNavigatorMcp(true);assert.equal(actions.length,5,"heartbeat/status renders must not reopen navigation");
   context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,true);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(context.studioMcpFollowLatest,true);
-  const before=actions.length;context.syncStudioNavigatorMcp(true,{reveal:false});assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(actions.length,before,"automatic recovery must not open sidebar, switch tool or close Agent");
+  const before=actions.length;context.syncStudioNavigatorMcp(true);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");
+  assert.deepEqual(actions.slice(before),[["tool","hand"],["close",false],["tab","mcp"],["open",true],["follow",true]],"a recovered connection reveals the MCP sidebar again");
+  context.syncStudioNavigatorMcp(true);assert.equal(actions.length,before+5,"connected status refreshes must not reopen navigation");
 });
 test("MCP list contains every open Canvas in saved order independent of catalog selection",()=>{
   const docs=[{id:"ordinary"},{id:"bound",bindings:[{}]},{id:"retained",sessions:[{}]},{id:"live"}];
@@ -194,6 +196,17 @@ test("recently viewed Canvas does not precede a more recently saved Canvas",()=>
   });
   assert.deepEqual(Array.from(groups,g=>g.canvasKey),["server:new","server:old"]);
   assert.equal(items[0].updatedAt,1);
+});
+
+test("empty draft timestamps use their stable first appearance rather than sidebar render time",()=>{
+  const doc={id:"draft",title:"Untitled Canvas",firstSeenAt:12345,changes:[]};
+  const context=vm.createContext({canvasDocuments:{records:new Map([[doc.id,doc]]),activeId:doc.id},state:{canvasAgentCanvasKey:"draft:initial"},
+    canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>[],studioNavigatorCanvasIdentity:()=>null,studioNavigatorCanvasGroupSnapshot:()=>null,
+    currentCanvasDisplayName:()=>"",t:key=>key,canvasAgentHistoryForCanvas:()=>[],canvasAgentHistoryTime:value=>String(value)});
+  vm.runInContext(extract("studioNavigatorWorkGroups")+extract("studioNavigatorMetaTime"),context);
+  assert.equal(context.studioNavigatorWorkGroups()[0].updatedAt,12345);
+  assert.equal(context.studioNavigatorMetaTime(12345),"12345");
+  assert.equal(context.studioNavigatorMetaTime(0),"","unknown timestamps must not pretend that old documents were just created");
 });
 
  test("drafts and saved canvases share descending effective time order when the selected draft is inserted first into groups",()=>{

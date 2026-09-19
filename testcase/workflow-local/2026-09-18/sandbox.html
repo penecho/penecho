@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Workflow Widget acceptance</title>
+<style>body{margin:0;background:#f5f7fa;font:14px Arial}header{display:flex;gap:12px;align-items:center;padding:12px;flex-wrap:wrap}iframe{display:block;width:100%;height:2300px;border:0;background:white}#stage{width:1280px;max-width:100%;margin:auto}button{padding:8px}#status{font-size:12px}</style>
+<header><label>场景 <select id="fixture"><option value="linear">简单流程</option><option value="approval">审批退回</option><option value="retry">失败重试</option><option value="parallel">并行汇合</option><option value="mixed">三图共存</option><option value="plain">普通 HTML</option><option value="long">长中文</option></select></label><button data-width="1280">宽版 1280</button><button data-width="760">中版 760</button><button data-width="390">窄版 390</button><span id="status">加载中</span></header><div id="stage"><iframe id="host" src="/public/widget-host.html" title="Workflow 验收"></iframe></div>
+<script>
+const host=document.querySelector('iframe'),status=document.querySelector('#status'),selector=document.querySelector('#fixture');
+let ready=false;
+const region=(kind,data)=>'<section data-penecho-'+kind+'><script type="application/json" data-'+kind+'-source>'+JSON.stringify(data).replace(/</g,'\\u003c')+'<'+ '/script></section>';
+document.querySelectorAll('[data-width]').forEach(button=>button.onclick=()=>document.querySelector('#stage').style.width=button.dataset.width+'px');
+async function load(){
+ const name=selector.value,data=await(await fetch('/fixture.json?id='+(['mixed','plain','long'].includes(name)?'approval':name))).json();
+ if(name==='long') {data.title='企业信息提交与跨部门联合审核流程';data.nodes.find(n=>n.id==='review').label='是否已经提交全部必需的申请材料与有效证明文件？';data.nodes.find(n=>n.id==='edit').subtitle='补充说明与证明文件，保留当前申请记录';}
+ let graph=region('workflow',data);
+ if(name==='mixed')graph+='<h2>独立的架构区域</h2>'+region('architecture',{version:1,title:'架构图回归',nodes:[{id:'a',label:'客户端'},{id:'b',label:'API'}],edges:[{from:'a',to:'b',label:'调用'}]})+'<h2>独立的时序区域</h2>'+region('sequence',{version:1,title:'时序图回归',participants:[{id:'a',label:'客户端'},{id:'b',label:'API'}],messages:[{from:'a',to:'b',label:'请求'},{from:'b',to:'a',label:'响应',kind:'return'}]});
+ if(name==='plain')graph='<h1>普通 HTML</h1><p>这里不应加载三种图表运行时。</p>';
+ status.textContent='布局中';
+ host.contentWindow.postMessage({type:'penecho-widget-init',title:data.title,sourceFormat:'penecho-mcp+html',html:'<!doctype html><body style="margin:8px;font:16px Arial">'+graph},location.origin);
+ host.contentWindow.postMessage({type:'penecho-widget-state',selected:true,active:true,interactive:true,scaleX:1,scaleY:1},location.origin);
+}
+selector.onchange=()=>{if(ready)void load();};
+addEventListener('message',event=>{if(event.source!==host.contentWindow)return;const m=event.data;
+ if(m.type==='penecho-widget-host-ready'&&!ready){ready=true;void load();}
+ if(m.type==='penecho-widget-capture-ready')status.textContent='就绪';
+ if(m.type==='penecho-widget-runtime-diagnostics'&&m.errors.length)status.textContent=JSON.stringify(m.errors);
+});
+</script></html>

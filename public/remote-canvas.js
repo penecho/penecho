@@ -428,6 +428,7 @@
 
   function publishCloudHeaderStatus(result) {
     const detail = Object.freeze({
+      accountId:String(result.accountId || ""),
       accountName:String(result.account?.name || "").slice(0, 100),
       credits:Number.isFinite(result.account?.credits) ? result.account.credits : null,
       deviceOnline:Boolean(result.device?.online),
@@ -505,6 +506,7 @@
   }
 
   window.PenEchoLinkedDevice = Object.freeze({
+    cacheIdentity:()=>bridgeDeviceId || "",
     invalidate:invalidateLinkedDevice,
     refresh({ ifNeeded = false, automatic = false } = {}) {
       if (!automatic) deviceRetrySuspended = false;

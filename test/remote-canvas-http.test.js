@@ -196,3 +196,14 @@ test("server canvas previews allow only exact GET paths", () => {
   for(const suffix of ["?extra=1","?metadataOnly=1","/","/nested"])assert.throws(()=>remoteCanvasTarget("GET",path+suffix));
   assert.throws(()=>remoteCanvasTarget("GET","/api/canvases/invalid/preview"));
 });
+
+
+test("Library pagination crosses the pinned device bridge with bounded read-only parameters",()=>{
+  for(const prefix of ["/api/canvases","/api/cloud/library"]){
+    const target=prefix+"?limit=24&offset=48&q=old%20needle&projectId=all&sort=modified&locale=zh&previews=0";
+    assert.equal(remoteCanvasTarget("GET",target),target);
+    assert.throws(()=>remoteCanvasTarget("POST",target));
+    for(const suffix of ["&extra=1","&limit=24","&offset=-1"] )assert.throws(()=>remoteCanvasTarget("GET",target+suffix));
+    for(const query of ["limit=0","limit=101","limit=24&offset=-1","limit=24&sort=invalid","limit=24&previews=1","limit=24&projectId=invalid"])assert.throws(()=>remoteCanvasTarget("GET",prefix+"?"+query));
+  }
+});

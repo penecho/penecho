@@ -91,7 +91,7 @@ function browserMetadata(result) {
   const output = {};
   if (typeof result?.browserElapsedMs === "number" && Number.isFinite(result.browserElapsedMs) && result.browserElapsedMs >= 0 && result.browserElapsedMs <= 600_000) output.browserElapsedMs = result.browserElapsedMs;
   let remaining = 64 * 1024;
-  for (const key of ["runtimeDiagnostics", "viewport", "mapping", "sourcePath", "contentHash", "completion", "completionFailure", "inboxSummary"]) {
+  for (const key of ["runtimeDiagnostics", "viewport", "capture", "mapping", "sourcePath", "contentHash", "completion", "completionFailure", "inboxSummary"]) {
     if (result?.[key] === undefined) continue;
     try {
       const json = JSON.stringify(result[key]);
@@ -499,7 +499,7 @@ async function executeBoundCanvasTool(options) {
   const artifactMutation=["penecho_present_widget","penecho_draw","penecho_plot"].includes(options.name);
   if(artifactMutation) {
     const signature=mutationSignature({tool:options.name,...args}),cache=options.session.mutationRequests,prior=cache.get(args.requestId);
-    if(prior&&prior.signature!==signature)throw bridgeError("REQUEST_ID_CONFLICT","requestId already has different arguments.",409);
+    if(prior&&prior.signature!==signature)throw bridgeError("REQUEST_ID_CONFLICT","requestId already has different arguments. Use a new requestId for corrected arguments, even if the previous attempt failed; retain the artifactId for the same content.",409);
     if(prior?.response)result={...prior.response,reused:true};
     else {
       if(prior?.running)throw bridgeError("REQUEST_IN_PROGRESS","Retry the same requestId shortly.",409);

@@ -5,6 +5,7 @@ const simple={version:1,title:'Architecture',nodes:[{id:'a',label:'Client'},{id:
 test('architecture input rejects bad references, cycles, duplicate IDs, geometry and executable markup',()=>{
  for(const data of [{...simple,nodes:[...simple.nodes,simple.nodes[0]]},{...simple,edges:[{from:'a',to:'missing'}]},{...simple,groups:[{id:'g',label:'G',parent:'g'}]},{...simple,nodes:[{id:'a',label:'A',x:40}]},{...simple,version:undefined}])assert.throws(()=>validateArchitecture(data),/Architecture:/);
  const data={...simple,title:'</script><img src=x onerror=alert(1)>'};const html=architectureHtml(data);assert.equal((html.match(/<script/g)||[]).length,1);assert.ok(!html.includes('<img'));assert.match(html,/\\u003c/);
+ assert.match(html,/lang="en"/);assert.match(html,/Laying out architecture diagram/);assert.match(architectureHtml(simple,{language:'zh'}),/正在布局架构图/);
  assert.throws(()=>validateArchitecture({...simple,artifactId:'wrong-level'}),/belong beside architecture/);
 });
 test('MCP accepts semantic architecture and preserves existing HTML-only requests',()=>{

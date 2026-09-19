@@ -1,23 +1,32 @@
 import { esc } from './vendor/archify/utils.mjs';
 import { tone } from './render.mjs';
+import { diagramError, diagramErrorMessage } from './i18n.mjs';
+import { bindDiagramViewport } from '../diagrams/viewport.mjs';
 
-export function bindInteractions(root, data) {
+export function bindInteractions(root, data, copyFor) {
+  const viewport=bindDiagramViewport(root);
   const popover=root.querySelector('.pa-popover');
   const nodes=data.nodes || data.participants, edges=data.edges || data.messages;
   const selector='[data-node-id],[data-message-id]';
   let selected=null;
   function close() { popover.hidden=true; selected?.removeAttribute('data-selected'); selected=null; }
-  function open(nodeElement) {
+  function renderPopover(nodeElement, focus=true) {
+    const copy=copyFor();
     const message=nodeElement.dataset.messageId ? data.messages?.[Number(nodeElement.dataset.messageId.replace('message-',''))] : null;
     const node=message ? {...message,subtitle:`${nodes.find(n=>n.id===message.from).label} → ${nodes.find(n=>n.id===message.to).label}`,domain:nodes.find(n=>n.id===message.from).domain,details:[...(message.note?[message.note]:[]),...(message.details || [])]} : nodes.find(n=>n.id===nodeElement.dataset.nodeId); if(!node)return;
-    popover.setAttribute('aria-label',message?'消息详情':data.participants?'参与者详情':'节点详情');
-    close(); selected=nodeElement; nodeElement.setAttribute('data-selected','');
+    const detailKind=message?'message':data.participants?'participant':'node';
+    popover.dataset.detailKind=detailKind;
+    popover.setAttribute('aria-label',detailKind==='message'?copy.messageDetails:detailKind==='participant'?copy.participantDetails:copy.nodeDetails);
     const related=message?[]:edges.filter(e=>e.from===node.id || e.to===node.id);
     popover.style.setProperty('--tone',tone(data,node.domain)[0]);
-    popover.innerHTML=`<button aria-label="关闭详情" data-close>×</button><h2>${esc(node.label)}</h2>${node.subtitle?`<p>${esc(node.subtitle)}</p>`:''}<ul>${(node.details || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>${related.length?'<hr><p>相关关系</p>':''}<ul>${related.map(e=>`<li>${esc(nodes.find(n=>n.id===e.from).label)} ${e.bidirectional?'↔':'→'} ${esc(nodes.find(n=>n.id===e.to).label)}${e.label?` · ${esc(e.label)}`:''}</li>`).join('')}</ul>`;
+    popover.innerHTML=`<button aria-label="${esc(copy.closeDetails)}" data-close>×</button><h2>${esc(node.label)}</h2>${node.subtitle?`<p>${esc(node.subtitle)}</p>`:''}<ul>${(node.details || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>${related.length?`<hr><p>${esc(copy.related)}</p>`:''}<ul>${related.map(e=>`<li>${esc(nodes.find(n=>n.id===e.from).label)} ${e.bidirectional?'↔':'→'} ${esc(nodes.find(n=>n.id===e.to).label)}${e.label?` · ${esc(e.label)}`:''}</li>`).join('')}</ul>`;
     popover.hidden=false;
     position();
-    popover.querySelector('button').focus();
+    if(focus)popover.querySelector('button').focus();
+  }
+  function open(nodeElement) {
+    close(); selected=nodeElement; nodeElement.setAttribute('data-selected','');
+    renderPopover(nodeElement);
   }
   function position() {
     if (!selected || popover.hidden) return;
@@ -42,23 +51,26 @@ export function bindInteractions(root, data) {
   async function exportDiagram(format) {
     const status=root.querySelector('.pa-status');
     try {
-      await Promise.all([globalThis.__penechoArchitectureWhenSettled?.(),globalThis.__penechoSequenceWhenSettled?.()]);
+      await Promise.all([globalThis.__penechoArchitectureWhenSettled?.(),globalThis.__penechoSequenceWhenSettled?.(),globalThis.__penechoWorkflowWhenSettled?.()]);
       const svg=root.querySelector('svg');
       const clone=svg.cloneNode(true);clone.querySelectorAll('[data-selected]').forEach(n=>n.removeAttribute('data-selected'));
+      if(clone.dataset.fullViewBox)clone.setAttribute('viewBox',clone.dataset.fullViewBox);
+      clone.style.removeProperty('width');clone.style.removeProperty('height');
       const xml=new XMLSerializer().serializeToString(clone), blob=new Blob([xml],{type:'image/svg+xml;charset=utf-8'});
       if(format==='svg'){download(blob,'svg');return;}
       const url=URL.createObjectURL(blob);
       try {
-        const img=new Image(); await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('无法编码 SVG'));img.src=url;});
+        const img=new Image(); await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(diagramError('svgEncodeFailed'));img.src=url;});
         const canvas=document.createElement('canvas'), scale=Math.min(2,4096/img.width,4096/img.height,Math.sqrt(12e6/(img.width*img.height)));
         canvas.width=Math.ceil(img.width*scale);canvas.height=Math.ceil(img.height*scale);
         const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(img,0,0,canvas.width,canvas.height);
-        const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!png)throw new Error('PNG 编码失败');download(png,'png');
+        const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!png)throw diagramError('pngEncodeFailed');download(png,'png');
       } finally {URL.revokeObjectURL(url);}
       status.textContent='';
-    } catch(error){status.textContent=`导出失败：${error.message}`;}
+    } catch(error){const copy=copyFor();status.textContent=copy.exportFailed(diagramErrorMessage(error,copy));}
   }
-  return {refresh() {
+  return {refreshCopy(){if(selected)renderPopover(selected,false);},refresh() {
+    viewport.refresh();
     if(selected) {
       const attribute=selected.hasAttribute("data-message-id")?"data-message-id":"data-node-id";
       selected=root.querySelector(`[${attribute}="${selected.getAttribute(attribute)}"]`);

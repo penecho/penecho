@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "title": "费用审批 · 条件与退回",
+  "description": "条件写在箭头旁；退回后修订并重新进入审核。",
+  "domains": [
+    {
+      "id": "user",
+      "label": "申请人",
+      "color": "blue"
+    },
+    {
+      "id": "review",
+      "label": "审核",
+      "color": "orange"
+    },
+    {
+      "id": "system",
+      "label": "自动处理",
+      "color": "teal"
+    },
+    {
+      "id": "result",
+      "label": "结果",
+      "color": "green"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "提交费用单",
+      "type": "start",
+      "domain": "user"
+    },
+    {
+      "id": "review",
+      "label": "材料完整？",
+      "type": "decision",
+      "domain": "review",
+      "details": [
+        "检查发票、金额和申请理由。"
+      ]
+    },
+    {
+      "id": "edit",
+      "label": "补充材料",
+      "type": "process",
+      "domain": "user"
+    },
+    {
+      "id": "approve",
+      "label": "负责人批准？",
+      "type": "decision",
+      "domain": "review"
+    },
+    {
+      "id": "pay",
+      "label": "安排付款",
+      "type": "process",
+      "domain": "system"
+    },
+    {
+      "id": "done",
+      "label": "付款完成",
+      "type": "end",
+      "domain": "result"
+    },
+    {
+      "id": "reject",
+      "label": "申请终止",
+      "type": "end",
+      "domain": "result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "edit",
+      "label": "不完整"
+    },
+    {
+      "from": "edit",
+      "to": "review",
+      "label": "补齐后重审",
+      "kind": "loop"
+    },
+    {
+      "from": "review",
+      "to": "approve",
+      "label": "完整"
+    },
+    {
+      "from": "approve",
+      "to": "pay",
+      "label": "批准"
+    },
+    {
+      "from": "approve",
+      "to": "reject",
+      "label": "拒绝"
+    },
+    {
+      "from": "pay",
+      "to": "done"
+    }
+  ],
+  "details": [
+    {
+      "title": "申请人",
+      "domain": "user",
+      "items": [
+        "材料不足时只补充缺失内容，不重复创建申请。"
+      ]
+    },
+    {
+      "title": "审核规则",
+      "domain": "review",
+      "items": [
+        "材料完整性与是否批准是两个独立判断。"
+      ]
+    }
+  ]
+}

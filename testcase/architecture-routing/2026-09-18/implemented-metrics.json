@@ -1,0 +1,56 @@
+[
+  {
+    "availableWidth": 3200,
+    "mode": "right",
+    "width": 2881,
+    "height": 1285,
+    "issues": [],
+    "totalLength": 15888,
+    "bends": 44
+  },
+  {
+    "availableWidth": 1600,
+    "mode": "down",
+    "width": 2023,
+    "height": 1745,
+    "issues": [],
+    "totalLength": 16098,
+    "bends": 42
+  },
+  {
+    "availableWidth": 1450,
+    "mode": "down",
+    "width": 2023,
+    "height": 1745,
+    "issues": [],
+    "totalLength": 16098,
+    "bends": 42
+  },
+  {
+    "availableWidth": 1248,
+    "mode": "down",
+    "width": 2023,
+    "height": 1745,
+    "issues": [],
+    "totalLength": 16098,
+    "bends": 42
+  },
+  {
+    "availableWidth": 800,
+    "mode": "compact",
+    "width": 1087,
+    "height": 3326,
+    "issues": [],
+    "totalLength": 26001,
+    "bends": 66
+  },
+  {
+    "availableWidth": 390,
+    "mode": "compact",
+    "width": 1087,
+    "height": 3326,
+    "issues": [],
+    "totalLength": 26001,
+    "bends": 66
+  }
+]

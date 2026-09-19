@@ -20,7 +20,7 @@
 <h1 align="center">AI と考えるための<br>空間ワークスペース。</h1>
 <p align="center">内蔵 Agent や MCP 対応の AI アシスタントで、描き、探究し、形にしましょう。</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="バージョン 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="バージョン 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@ MCP を通じて、AI は説明を図に、アイデアをインタラクティ�
   </a>
 </p>
 <p align="center"><em>Canvas に手書きで注釈を加えたアーキテクチャの検討。</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">さまざまな<strong>専門的な図表</strong>を作成し、見やすく、操作しやすく。</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">アーキテクチャ図</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 本番クラスタ" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="モノリスからマイクロサービスへ" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Kubernetes 本番クラスタ</strong></td>
+    <td valign="top"><strong>モノリスからマイクロサービスへ</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">シーケンス図</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="イベント駆動の通知" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP リクエストが Canvas に届くまで" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>イベント駆動の通知</strong></td>
+    <td valign="top"><strong>MCP リクエストが Canvas に届くまで</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">ワークフロー</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="リリース準備：並列処理と合流" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="複数リージョンへの展開とロールバック" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>リリース準備：並列処理と合流</strong></td>
+    <td valign="top"><strong>複数リージョンへの展開とロールバック</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>画像をクリックすると、元のサイズで表示できます。</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **完成する前から確認できます。** AI と話しながら成果が形になる様子を確認し、試してフィードバックを伝え、一緒にプロジェクトを進めましょう。
 

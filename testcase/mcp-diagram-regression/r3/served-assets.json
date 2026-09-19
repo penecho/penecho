@@ -1,0 +1,30 @@
+[
+  {
+    "file": "widget-host.js",
+    "matches": true,
+    "servedSha256": "9973eefd7c44f90f77e2dcfbb66a317f73813b71b4d116e9f18d80e785a6bb1c",
+    "bytes": 118736,
+    "cacheControl": "public, max-age=0, must-revalidate"
+  },
+  {
+    "file": "vendor/architecture-runtime.js",
+    "matches": true,
+    "servedSha256": "f01d8b14f1b4436f1098be078596d372ae78d94a4c654b8f205f1e397ed33c04",
+    "bytes": 41345,
+    "cacheControl": "public, max-age=0, must-revalidate"
+  },
+  {
+    "file": "vendor/sequence-runtime.js",
+    "matches": true,
+    "servedSha256": "ce0114e0c575890a25ce844dcbda1929641a33a3d2616f59fc26d860e8c4582d",
+    "bytes": 32598,
+    "cacheControl": "public, max-age=0, must-revalidate"
+  },
+  {
+    "file": "vendor/workflow-runtime.js",
+    "matches": true,
+    "servedSha256": "85880e67af3ab87f2c27f3a88373fd8faf80de391b860aa543b56fa052e1a37d",
+    "bytes": 40298,
+    "cacheControl": "public, max-age=0, must-revalidate"
+  }
+]

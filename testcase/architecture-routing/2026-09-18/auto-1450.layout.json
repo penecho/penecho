@@ -1,0 +1,2313 @@
+{
+  "data": {
+    "version": 1,
+    "title": "PenEcho 项目架构",
+    "description": "PenEcho：AI 驱动的可视化 Canvas 工作区——浏览器客户端、Node.js 服务、内置/外部 Agent、模型执行器与云端协同。",
+    "direction": "RIGHT",
+    "domains": [
+      {
+        "id": "client",
+        "label": "浏览器客户端"
+      },
+      {
+        "id": "desktop",
+        "label": "桌面端"
+      },
+      {
+        "id": "server",
+        "label": "Node.js 服务"
+      },
+      {
+        "id": "ai",
+        "label": "AI / 模型"
+      },
+      {
+        "id": "mcp",
+        "label": "MCP / 外部 Agent"
+      },
+      {
+        "id": "cloud",
+        "label": "云服务"
+      }
+    ],
+    "groups": [
+      {
+        "id": "browser",
+        "label": "浏览器客户端 · public/",
+        "domain": "client"
+      },
+      {
+        "id": "desktop-shell",
+        "label": "桌面外壳",
+        "domain": "desktop"
+      },
+      {
+        "id": "serverproc",
+        "label": "Node.js 服务进程",
+        "domain": "server"
+      },
+      {
+        "id": "model-exec",
+        "label": "模型执行器",
+        "domain": "ai",
+        "parent": "serverproc"
+      },
+      {
+        "id": "agentrt",
+        "label": "内置 PenEcho Agent",
+        "domain": "ai"
+      },
+      {
+        "id": "mcpsvc",
+        "label": "MCP 服务",
+        "domain": "mcp"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "canvas-app",
+        "label": "Canvas 运行时",
+        "subtitle": "public/app.js",
+        "domain": "client",
+        "group": "browser",
+        "type": "frontend",
+        "details": [
+          "20000×20000 逻辑坐标 + 稀疏 512px 瓦片",
+          "压感墨迹 / 套索选区 / 撤销重做",
+          "draw.js 统一绘图协议 · animation.js 声明式动画",
+          "AI 截图 atlas 生成与草稿确认层"
+        ]
+      },
+      {
+        "id": "widget-host",
+        "label": "Widget 宿主",
+        "subtitle": "widget-host.html/js · 沙箱 iframe",
+        "domain": "client",
+        "group": "browser",
+        "type": "frontend",
+        "details": [
+          "HTML / 交互 Widget 与 Visual Explorer 结果",
+          "源码虚拟文件 + unified diff 精修",
+          "按需并行截图：AI / 保存 / 导出共用入口"
+        ]
+      },
+      {
+        "id": "agent-panel",
+        "label": "Agent 面板",
+        "subtitle": "canvas-agent-activity.js",
+        "domain": "client",
+        "group": "browser",
+        "type": "frontend",
+        "details": [
+          "内置 Agent 会话 UI 与活动流",
+          "与 Auto AI 请求互斥协作"
+        ]
+      },
+      {
+        "id": "access-ui",
+        "label": "设置 / Cloud Center",
+        "subtitle": "access.js · cloud-connect.js · mcp-settings.js",
+        "domain": "client",
+        "group": "browser",
+        "type": "frontend",
+        "details": [
+          "六位访问码 / 可信网络开放访问",
+          "连接管理（模型 API / CLI）",
+          "MCP 服务开关",
+          "账户 / 积分 / 设备关联"
+        ]
+      },
+      {
+        "id": "idb",
+        "label": "IndexedDB 快照",
+        "subtitle": "penecho-canvas-history",
+        "domain": "client",
+        "type": "database",
+        "details": [
+          "snapshots：元数据 / 预览 / 动画 JSON",
+          "snapshot-tiles：每瓦片 PNG blob"
+        ]
+      },
+      {
+        "id": "http-server",
+        "label": "HTTP 服务",
+        "subtitle": "server.js · src/server/main.js",
+        "domain": "server",
+        "group": "serverproc",
+        "details": [
+          "静态资源 public/ 与访问控制",
+          "/api/ai/command（NDJSON 流式）",
+          "LAN / 关联设备远程访问",
+          "localhost 调试端点 + 请求 traces"
+        ]
+      },
+      {
+        "id": "ai-pipeline",
+        "label": "AI 请求管线",
+        "subtitle": "api-config.js · api-stream.js",
+        "domain": "server",
+        "group": "serverproc",
+        "details": [
+          "几何 / 图像 / 插件严格校验",
+          "Sharp：PNG → 无损 WebP 编码",
+          "上游 SSE 增量解析与重试",
+          "超时默认 180s，xhigh/max ×2"
+        ]
+      },
+      {
+        "id": "widget-patch",
+        "label": "Widget Refine",
+        "subtitle": "widget-patch.js · jsdiff",
+        "domain": "server",
+        "group": "serverproc",
+        "details": [
+          "统一 diff 零容差校验",
+          "多文件事务式应用",
+          "重建完整 Widget 命令后复验"
+        ]
+      },
+      {
+        "id": "providers",
+        "label": "模型执行器",
+        "subtitle": "src/providers/*",
+        "domain": "ai",
+        "group": "model-exec",
+        "details": [
+          "API：OpenAI / Anthropic 兼容 + 力度映射",
+          "Codex CLI：codex exec --json 隔离运行",
+          "Claude CLI：print 模式禁用工具",
+          "Kimi CLI / ACP",
+          "reasoning-effort.js 力度映射"
+        ]
+      },
+      {
+        "id": "agent-runtime",
+        "label": "Agent 运行时",
+        "subtitle": "src/server/canvas-agent/*",
+        "domain": "ai",
+        "group": "agentrt",
+        "details": [
+          "runtime / protocol / host-router 工具循环",
+          "文档与 SQLite 读取器",
+          "视觉规则与技能契约",
+          "公共 API 发现",
+          "DSH 工具循环 (@deepseek-ai/dsh-*)"
+        ]
+      },
+      {
+        "id": "mcp-server",
+        "label": "Local MCP",
+        "subtitle": "src/server/mcp/*",
+        "domain": "mcp",
+        "group": "mcpsvc",
+        "details": [
+          "stdio + HTTP 传输，LAN 发现",
+          "仅显式启用的 Canvas 可被发现",
+          "读取 / 补丁源 / 截图 / 图像上传 / 反馈"
+        ]
+      },
+      {
+        "id": "cloud-mcp",
+        "label": "Cloud MCP 桥",
+        "subtitle": "cloud-mcp-bridge.js",
+        "domain": "mcp",
+        "group": "mcpsvc",
+        "type": "cloud",
+        "details": [
+          "HTTPS 连接云端 Canvas",
+          "外部 Agent 的第二条可选路径"
+        ]
+      },
+      {
+        "id": "canvas-docs",
+        "label": "Canvas 文档",
+        "subtitle": "虚拟源 + 内容哈希",
+        "domain": "server",
+        "type": "database",
+        "details": [
+          "canvas.json 与 Widget 源文件",
+          "补丁基于 contentHash 严格应用",
+          "截图与手写反馈记录"
+        ]
+      },
+      {
+        "id": "conn-store",
+        "label": "本地配置",
+        "subtitle": "~/.penecho/*",
+        "domain": "server",
+        "type": "database",
+        "details": [
+          "connections.json：API / CLI 连接",
+          "config.env：常规设置",
+          "logs/requests：请求 traces"
+        ]
+      },
+      {
+        "id": "electron",
+        "label": "Electron 桌面端",
+        "subtitle": "desktop/main.js · forge.config.js",
+        "domain": "desktop",
+        "group": "desktop-shell",
+        "type": "frontend",
+        "details": [
+          "内嵌本地服务，状态目录 = userData",
+          "设置契约 / 密钥存储 / 自动更新",
+          "受限 preload 桥与 CLI 安装器",
+          "tools/electron 打包 · tools/mobile 移动构建"
+        ]
+      },
+      {
+        "id": "cloud",
+        "label": "PenEcho Cloud",
+        "subtitle": "penecho.ai",
+        "domain": "cloud",
+        "type": "cloud",
+        "details": [
+          "托管模型与 Credits API",
+          "项目 / 收藏 / Echoes 公开分享",
+          "关联设备远程访问中继"
+        ]
+      },
+      {
+        "id": "ext-agent",
+        "label": "外部 AI Agent",
+        "subtitle": "Codex · Claude Code · MCP 客户端",
+        "domain": "mcp",
+        "type": "external",
+        "details": [
+          "读取 Canvas 内容与截图",
+          "创建 / 编辑对象、补丁源文件",
+          "接收手写反馈进入下一轮"
+        ]
+      },
+      {
+        "id": "llm-apis",
+        "label": "上游模型服务",
+        "subtitle": "OpenAI / Anthropic / Kimi 兼容",
+        "domain": "ai",
+        "type": "external",
+        "details": [
+          "API 走 SSE 流式",
+          "CLI 由本机适配器隔离子进程调用",
+          "不设置 temperature，力度按能力映射"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": "access-ui",
+        "to": "http-server",
+        "label": "加载应用",
+        "kind": "call"
+      },
+      {
+        "from": "canvas-app",
+        "to": "http-server",
+        "label": "/api/ai/command · NDJSON",
+        "kind": "call"
+      },
+      {
+        "from": "canvas-app",
+        "to": "idb",
+        "label": "快照与瓦片",
+        "kind": "data"
+      },
+      {
+        "from": "canvas-app",
+        "to": "widget-host",
+        "label": "挂载 / 消息",
+        "kind": "call",
+        "bidirectional": true
+      },
+      {
+        "from": "agent-panel",
+        "to": "agent-runtime",
+        "label": "Agent 会话流",
+        "kind": "call"
+      },
+      {
+        "from": "http-server",
+        "to": "ai-pipeline",
+        "label": "校验与编排",
+        "kind": "call"
+      },
+      {
+        "from": "ai-pipeline",
+        "to": "providers",
+        "label": "分发执行",
+        "kind": "call"
+      },
+      {
+        "from": "ai-pipeline",
+        "to": "widget-patch",
+        "label": "widget_patch 应用",
+        "kind": "data"
+      },
+      {
+        "from": "providers",
+        "to": "llm-apis",
+        "label": "SSE / CLI 调用",
+        "kind": "call"
+      },
+      {
+        "from": "agent-runtime",
+        "to": "llm-apis",
+        "label": "模型后端",
+        "kind": "call"
+      },
+      {
+        "from": "providers",
+        "to": "conn-store",
+        "label": "读取连接凭据",
+        "kind": "data"
+      },
+      {
+        "from": "agent-runtime",
+        "to": "conn-store",
+        "label": "读取连接凭据",
+        "kind": "data"
+      },
+      {
+        "from": "agent-runtime",
+        "to": "canvas-docs",
+        "label": "文档工具读写",
+        "kind": "data",
+        "bidirectional": true
+      },
+      {
+        "from": "mcp-server",
+        "to": "canvas-docs",
+        "label": "读 / 补丁 / 截图",
+        "kind": "data"
+      },
+      {
+        "from": "ext-agent",
+        "to": "mcp-server",
+        "label": "stdio / HTTP MCP",
+        "kind": "call"
+      },
+      {
+        "from": "ext-agent",
+        "to": "cloud-mcp",
+        "label": "Cloud MCP",
+        "kind": "optional"
+      },
+      {
+        "from": "cloud-mcp",
+        "to": "cloud",
+        "label": "访问云端 Canvas",
+        "kind": "data"
+      },
+      {
+        "from": "http-server",
+        "to": "canvas-docs",
+        "label": "保存 / 虚拟源",
+        "kind": "data"
+      },
+      {
+        "from": "electron",
+        "to": "http-server",
+        "label": "内嵌启动",
+        "kind": "config"
+      },
+      {
+        "from": "electron",
+        "to": "conn-store",
+        "label": "userData 状态目录",
+        "kind": "config"
+      },
+      {
+        "from": "cloud",
+        "to": "http-server",
+        "label": "关联设备远程访问",
+        "kind": "optional"
+      }
+    ],
+    "details": [
+      {
+        "title": "Canvas AI 一次请求",
+        "domain": "server",
+        "items": [
+          "脏区 bbox + 8×8 热点网格 + 焦点放大",
+          "服务端校验几何 / 图像 / 插件 / Origin / Cookie",
+          "Sharp 无损 WebP，API 拒绝时回退 PNG",
+          "NDJSON 进度：打包 → 提交 → 模型 → 校验，可随时停止"
+        ]
+      },
+      {
+        "title": "模型执行与安全边界",
+        "domain": "ai",
+        "items": [
+          "API 凭据只存在于 Node 进程",
+          "CLI 子进程使用独立临时 HOME，不含 PenEcho 密钥",
+          "CLI 模式需 Host / Origin / Cookie 校验后才启动",
+          "停止按钮把取消传播到上游请求"
+        ]
+      },
+      {
+        "title": "两条 Agent 通路",
+        "domain": "mcp",
+        "items": [
+          "内置 Agent：Agent 面板 ↔ canvas-agent 运行时",
+          "外部 Agent：Local MCP（stdio/HTTP）或 Cloud MCP（HTTPS）",
+          "仅显式启用的 Canvas 可被发现",
+          "能力：读取、截图、编辑对象、补丁源、接收反馈"
+        ]
+      },
+      {
+        "title": "状态与数据",
+        "domain": "client",
+        "items": [
+          "IndexedDB：snapshots + snapshot-tiles（瓦片 PNG）",
+          "~/.penecho：connections.json、config.env、请求 traces",
+          "Canvas 虚拟源以 contentHash 严格补丁",
+          "桌面端状态目录 = Electron userData"
+        ]
+      }
+    ],
+    "notes": [
+      "拓扑依据 docs/architecture.md 与源码目录（src/、public/、desktop/）",
+      "Cloud 与外部 MCP 连接均为可选路径",
+      "省略辅助模块：tour / viewer / summon 等 UI 扩展与构建脚本"
+    ]
+  },
+  "width": 1709,
+  "height": 2068,
+  "nodes": [
+    {
+      "id": "canvas-app",
+      "label": "Canvas 运行时",
+      "subtitle": "public/app.js",
+      "domain": "client",
+      "group": "browser",
+      "type": "frontend",
+      "details": [
+        "20000×20000 逻辑坐标 + 稀疏 512px 瓦片",
+        "压感墨迹 / 套索选区 / 撤销重做",
+        "draw.js 统一绘图协议 · animation.js 声明式动画",
+        "AI 截图 atlas 生成与草稿确认层"
+      ],
+      "titleLines": [
+        "Canvas 运行时"
+      ],
+      "subtitleLines": [
+        "public/app.js"
+      ],
+      "x": 186,
+      "y": 655,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "widget-host",
+      "label": "Widget 宿主",
+      "subtitle": "widget-host.html/js · 沙箱 iframe",
+      "domain": "client",
+      "group": "browser",
+      "type": "frontend",
+      "details": [
+        "HTML / 交互 Widget 与 Visual Explorer 结果",
+        "源码虚拟文件 + unified diff 精修",
+        "按需并行截图：AI / 保存 / 导出共用入口"
+      ],
+      "titleLines": [
+        "Widget 宿主"
+      ],
+      "subtitleLines": [
+        "widget-host.html/js · 沙箱",
+        "iframe"
+      ],
+      "x": 134,
+      "y": 793,
+      "width": 208,
+      "height": 87
+    },
+    {
+      "id": "agent-panel",
+      "label": "Agent 面板",
+      "subtitle": "canvas-agent-activity.js",
+      "domain": "client",
+      "group": "browser",
+      "type": "frontend",
+      "details": [
+        "内置 Agent 会话 UI 与活动流",
+        "与 Auto AI 请求互斥协作"
+      ],
+      "titleLines": [
+        "Agent 面板"
+      ],
+      "subtitleLines": [
+        "canvas-agent-activity.js"
+      ],
+      "x": 150,
+      "y": 1037,
+      "width": 192,
+      "height": 76
+    },
+    {
+      "id": "access-ui",
+      "label": "设置 / Cloud Center",
+      "subtitle": "access.js · cloud-connect.js · mcp-settings.js",
+      "domain": "client",
+      "group": "browser",
+      "type": "frontend",
+      "details": [
+        "六位访问码 / 可信网络开放访问",
+        "连接管理（模型 API / CLI）",
+        "MCP 服务开关",
+        "账户 / 积分 / 设备关联"
+      ],
+      "titleLines": [
+        "设置 / Cloud Center"
+      ],
+      "subtitleLines": [
+        "access.js ·",
+        "cloud-connect.js ·",
+        "mcp-settings.js"
+      ],
+      "x": 134,
+      "y": 908,
+      "width": 208,
+      "height": 104
+    },
+    {
+      "id": "electron",
+      "label": "Electron 桌面端",
+      "subtitle": "desktop/main.js · forge.config.js",
+      "domain": "desktop",
+      "group": "desktop-shell",
+      "type": "frontend",
+      "details": [
+        "内嵌本地服务，状态目录 = userData",
+        "设置契约 / 密钥存储 / 自动更新",
+        "受限 preload 桥与 CLI 安装器",
+        "tools/electron 打包 · tools/mobile 移动构建"
+      ],
+      "titleLines": [
+        "Electron 桌面端"
+      ],
+      "subtitleLines": [
+        "desktop/main.js ·",
+        "forge.config.js"
+      ],
+      "x": 247,
+      "y": 1866,
+      "width": 208,
+      "height": 87
+    },
+    {
+      "id": "providers",
+      "label": "模型执行器",
+      "subtitle": "src/providers/*",
+      "domain": "ai",
+      "group": "model-exec",
+      "details": [
+        "API：OpenAI / Anthropic 兼容 + 力度映射",
+        "Codex CLI：codex exec --json 隔离运行",
+        "Claude CLI：print 模式禁用工具",
+        "Kimi CLI / ACP",
+        "reasoning-effort.js 力度映射"
+      ],
+      "titleLines": [
+        "模型执行器"
+      ],
+      "subtitleLines": [
+        "src/providers/*"
+      ],
+      "x": 862,
+      "y": 1463,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "http-server",
+      "label": "HTTP 服务",
+      "subtitle": "server.js · src/server/main.js",
+      "domain": "server",
+      "group": "serverproc",
+      "details": [
+        "静态资源 public/ 与访问控制",
+        "/api/ai/command（NDJSON 流式）",
+        "LAN / 关联设备远程访问",
+        "localhost 调试端点 + 请求 traces"
+      ],
+      "titleLines": [
+        "HTTP 服务"
+      ],
+      "subtitleLines": [
+        "server.js ·",
+        "src/server/main.js"
+      ],
+      "x": 824,
+      "y": 1069,
+      "width": 208,
+      "height": 87
+    },
+    {
+      "id": "ai-pipeline",
+      "label": "AI 请求管线",
+      "subtitle": "api-config.js · api-stream.js",
+      "domain": "server",
+      "group": "serverproc",
+      "details": [
+        "几何 / 图像 / 插件严格校验",
+        "Sharp：PNG → 无损 WebP 编码",
+        "上游 SSE 增量解析与重试",
+        "超时默认 180s，xhigh/max ×2"
+      ],
+      "titleLines": [
+        "AI 请求管线"
+      ],
+      "subtitleLines": [
+        "api-config.js ·",
+        "api-stream.js"
+      ],
+      "x": 824,
+      "y": 1218,
+      "width": 208,
+      "height": 87
+    },
+    {
+      "id": "widget-patch",
+      "label": "Widget Refine",
+      "subtitle": "widget-patch.js · jsdiff",
+      "domain": "server",
+      "group": "serverproc",
+      "details": [
+        "统一 diff 零容差校验",
+        "多文件事务式应用",
+        "重建完整 Widget 命令后复验"
+      ],
+      "titleLines": [
+        "Widget Refine"
+      ],
+      "subtitleLines": [
+        "widget-patch.js · jsdiff"
+      ],
+      "x": 782,
+      "y": 1636,
+      "width": 192,
+      "height": 76
+    },
+    {
+      "id": "agent-runtime",
+      "label": "Agent 运行时",
+      "subtitle": "src/server/canvas-agent/*",
+      "domain": "ai",
+      "group": "agentrt",
+      "details": [
+        "runtime / protocol / host-router 工具循环",
+        "文档与 SQLite 读取器",
+        "视觉规则与技能契约",
+        "公共 API 发现",
+        "DSH 工具循环 (@deepseek-ai/dsh-*)"
+      ],
+      "titleLines": [
+        "Agent 运行时"
+      ],
+      "subtitleLines": [
+        "src/server/canvas-agent/*"
+      ],
+      "x": 906.5,
+      "y": 1825,
+      "width": 198,
+      "height": 76
+    },
+    {
+      "id": "mcp-server",
+      "label": "Local MCP",
+      "subtitle": "src/server/mcp/*",
+      "domain": "mcp",
+      "group": "mcpsvc",
+      "details": [
+        "stdio + HTTP 传输，LAN 发现",
+        "仅显式启用的 Canvas 可被发现",
+        "读取 / 补丁源 / 截图 / 图像上传 / 反馈"
+      ],
+      "titleLines": [
+        "Local MCP"
+      ],
+      "subtitleLines": [
+        "src/server/mcp/*"
+      ],
+      "x": 227.5,
+      "y": 229,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "cloud-mcp",
+      "label": "Cloud MCP 桥",
+      "subtitle": "cloud-mcp-bridge.js",
+      "domain": "mcp",
+      "group": "mcpsvc",
+      "type": "cloud",
+      "details": [
+        "HTTPS 连接云端 Canvas",
+        "外部 Agent 的第二条可选路径"
+      ],
+      "titleLines": [
+        "Cloud MCP 桥"
+      ],
+      "subtitleLines": [
+        "cloud-mcp-bridge.js"
+      ],
+      "x": 227,
+      "y": 333,
+      "width": 157,
+      "height": 76
+    },
+    {
+      "id": "idb",
+      "label": "IndexedDB 快照",
+      "subtitle": "penecho-canvas-history",
+      "domain": "client",
+      "type": "database",
+      "details": [
+        "snapshots：元数据 / 预览 / 动画 JSON",
+        "snapshot-tiles：每瓦片 PNG blob"
+      ],
+      "titleLines": [
+        "IndexedDB 快照"
+      ],
+      "subtitleLines": [
+        "penecho-canvas-history"
+      ],
+      "x": 698,
+      "y": 872,
+      "width": 178,
+      "height": 76
+    },
+    {
+      "id": "canvas-docs",
+      "label": "Canvas 文档",
+      "subtitle": "虚拟源 + 内容哈希",
+      "domain": "server",
+      "type": "database",
+      "details": [
+        "canvas.json 与 Widget 源文件",
+        "补丁基于 contentHash 严格应用",
+        "截图与手写反馈记录"
+      ],
+      "titleLines": [
+        "Canvas 文档"
+      ],
+      "subtitleLines": [
+        "虚拟源 + 内容哈希"
+      ],
+      "x": 1477,
+      "y": 1436,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "conn-store",
+      "label": "本地配置",
+      "subtitle": "~/.penecho/*",
+      "domain": "server",
+      "type": "database",
+      "details": [
+        "connections.json：API / CLI 连接",
+        "config.env：常规设置",
+        "logs/requests：请求 traces"
+      ],
+      "titleLines": [
+        "本地配置"
+      ],
+      "subtitleLines": [
+        "~/.penecho/*"
+      ],
+      "x": 1477,
+      "y": 1818,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "cloud",
+      "label": "PenEcho Cloud",
+      "subtitle": "penecho.ai",
+      "domain": "cloud",
+      "type": "cloud",
+      "details": [
+        "托管模型与 Credits API",
+        "项目 / 收藏 / Echoes 公开分享",
+        "关联设备远程访问中继"
+      ],
+      "titleLines": [
+        "PenEcho Cloud"
+      ],
+      "subtitleLines": [
+        "penecho.ai"
+      ],
+      "x": 215.5,
+      "y": 1165,
+      "width": 156,
+      "height": 76
+    },
+    {
+      "id": "ext-agent",
+      "label": "外部 AI Agent",
+      "subtitle": "Codex · Claude Code · MCP 客户端",
+      "domain": "mcp",
+      "type": "external",
+      "details": [
+        "读取 Canvas 内容与截图",
+        "创建 / 编辑对象、补丁源文件",
+        "接收手写反馈进入下一轮"
+      ],
+      "titleLines": [
+        "外部 AI Agent"
+      ],
+      "subtitleLines": [
+        "Codex · Claude Code · MCP",
+        "客户端"
+      ],
+      "x": 303,
+      "y": 29,
+      "width": 208,
+      "height": 87
+    },
+    {
+      "id": "llm-apis",
+      "label": "上游模型服务",
+      "subtitle": "OpenAI / Anthropic / Kimi 兼容",
+      "domain": "ai",
+      "type": "external",
+      "details": [
+        "API 走 SSE 流式",
+        "CLI 由本机适配器隔离子进程调用",
+        "不设置 temperature，力度按能力映射"
+      ],
+      "titleLines": [
+        "上游模型服务"
+      ],
+      "subtitleLines": [
+        "OpenAI / Anthropic / Kimi",
+        "兼容"
+      ],
+      "x": 1477,
+      "y": 1540,
+      "width": 208,
+      "height": 87
+    }
+  ],
+  "groups": [
+    {
+      "id": "browser",
+      "label": "浏览器客户端 · public/",
+      "domain": "client",
+      "headerHeight": 48,
+      "titleWidth": 179,
+      "x": 68,
+      "y": 607,
+      "width": 443,
+      "height": 530,
+      "titleX": 82,
+      "titleLines": [
+        "浏览器客户端 · public/"
+      ],
+      "titleRect": {
+        "x": 78,
+        "y": 615,
+        "width": 186.64,
+        "height": 22
+      }
+    },
+    {
+      "id": "desktop-shell",
+      "label": "桌面外壳",
+      "domain": "desktop",
+      "headerHeight": 48,
+      "titleWidth": 65,
+      "x": 191,
+      "y": 1818,
+      "width": 320,
+      "height": 204,
+      "titleX": 205,
+      "titleLines": [
+        "桌面外壳"
+      ],
+      "titleRect": {
+        "x": 201,
+        "y": 1826,
+        "width": 72.96,
+        "height": 22
+      }
+    },
+    {
+      "id": "serverproc",
+      "label": "Node.js 服务进程",
+      "domain": "server",
+      "headerHeight": 48,
+      "titleWidth": 130,
+      "x": 698,
+      "y": 976,
+      "width": 591,
+      "height": 773,
+      "titleX": 712,
+      "titleLines": [
+        "Node.js 服务进程"
+      ],
+      "titleRect": {
+        "x": 708,
+        "y": 984,
+        "width": 137.92,
+        "height": 22
+      }
+    },
+    {
+      "id": "model-exec",
+      "label": "模型执行器",
+      "domain": "ai",
+      "parent": "serverproc",
+      "headerHeight": 48,
+      "titleWidth": 82,
+      "x": 782,
+      "y": 1415,
+      "width": 292,
+      "height": 193,
+      "titleX": 796,
+      "titleLines": [
+        "模型执行器"
+      ],
+      "titleRect": {
+        "x": 792,
+        "y": 1423,
+        "width": 89.19999999999999,
+        "height": 22
+      }
+    },
+    {
+      "id": "agentrt",
+      "label": "内置 PenEcho Agent",
+      "domain": "ai",
+      "headerHeight": 48,
+      "titleWidth": 147,
+      "x": 826.5,
+      "y": 1777,
+      "width": 334,
+      "height": 193,
+      "titleX": 840.5,
+      "titleLines": [
+        "内置 PenEcho Agent"
+      ],
+      "titleRect": {
+        "x": 836.5,
+        "y": 1785,
+        "width": 154.16,
+        "height": 22
+      }
+    },
+    {
+      "id": "mcpsvc",
+      "label": "MCP 服务",
+      "domain": "mcp",
+      "headerHeight": 48,
+      "titleWidth": 65,
+      "x": 137,
+      "y": 181,
+      "width": 313,
+      "height": 330,
+      "titleX": 151,
+      "titleLines": [
+        "MCP 服务"
+      ],
+      "titleRect": {
+        "x": 147,
+        "y": 189,
+        "width": 72.96,
+        "height": 22
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "access-ui",
+      "to": "http-server",
+      "label": "加载应用",
+      "kind": "call",
+      "lines": [
+        "加载应用"
+      ],
+      "id": "e_0",
+      "sections": [
+        [
+          [
+            342,
+            960
+          ],
+          [
+            529,
+            960
+          ],
+          [
+            529,
+            934
+          ],
+          [
+            670,
+            934
+          ],
+          [
+            670,
+            1024
+          ],
+          [
+            1233,
+            1024
+          ],
+          [
+            1233,
+            1046
+          ],
+          [
+            740,
+            1046
+          ],
+          [
+            740,
+            1113
+          ],
+          [
+            824,
+            1113
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 567.5,
+          "y": 937,
+          "width": 68,
+          "height": 25,
+          "lines": [
+            "加载应用"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "canvas-app",
+      "to": "http-server",
+      "label": "/api/ai/command · NDJSON",
+      "kind": "call",
+      "lines": [
+        "/api/ai/command",
+        "· NDJSON"
+      ],
+      "id": "e_1",
+      "sections": [
+        [
+          [
+            342,
+            693
+          ],
+          [
+            352,
+            693
+          ],
+          [
+            352,
+            706
+          ],
+          [
+            465,
+            706
+          ],
+          [
+            465,
+            753
+          ],
+          [
+            90,
+            753
+          ],
+          [
+            90,
+            1024
+          ],
+          [
+            1233,
+            1024
+          ],
+          [
+            1233,
+            1046
+          ],
+          [
+            740,
+            1046
+          ],
+          [
+            740,
+            1113
+          ],
+          [
+            824,
+            1113
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 543,
+          "y": 1027,
+          "width": 117,
+          "height": 42,
+          "lines": [
+            "/api/ai/command",
+            "· NDJSON"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "canvas-app",
+      "to": "idb",
+      "label": "快照与瓦片",
+      "kind": "data",
+      "lines": [
+        "快照与瓦片"
+      ],
+      "id": "e_2",
+      "sections": [
+        [
+          [
+            342,
+            693
+          ],
+          [
+            352,
+            693
+          ],
+          [
+            352,
+            706
+          ],
+          [
+            465,
+            706
+          ],
+          [
+            465,
+            753
+          ],
+          [
+            90,
+            753
+          ],
+          [
+            90,
+            1024
+          ],
+          [
+            529,
+            1024
+          ],
+          [
+            529,
+            979
+          ],
+          [
+            680,
+            979
+          ],
+          [
+            680,
+            910
+          ],
+          [
+            698,
+            910
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 560.5,
+          "y": 982,
+          "width": 82,
+          "height": 25,
+          "lines": [
+            "快照与瓦片"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "canvas-app",
+      "to": "widget-host",
+      "label": "挂载 / 消息",
+      "kind": "call",
+      "bidirectional": true,
+      "lines": [
+        "挂载 / 消息"
+      ],
+      "id": "e_3",
+      "sections": [
+        [
+          [
+            342,
+            693
+          ],
+          [
+            489,
+            693
+          ],
+          [
+            489,
+            770
+          ],
+          [
+            100,
+            770
+          ],
+          [
+            100,
+            837
+          ],
+          [
+            134,
+            837
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 366,
+          "y": 665,
+          "width": 89,
+          "height": 25,
+          "lines": [
+            "挂载 / 消息"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "agent-panel",
+      "to": "agent-runtime",
+      "label": "Agent 会话流",
+      "kind": "call",
+      "lines": [
+        "Agent 会话流"
+      ],
+      "id": "e_4",
+      "sections": [
+        [
+          [
+            342,
+            1075
+          ],
+          [
+            529,
+            1075
+          ],
+          [
+            529,
+            1086
+          ],
+          [
+            680,
+            1086
+          ],
+          [
+            680,
+            1863
+          ],
+          [
+            906.5,
+            1863
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 553.5,
+          "y": 1089,
+          "width": 96,
+          "height": 25,
+          "lines": [
+            "Agent 会话流"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "http-server",
+      "to": "ai-pipeline",
+      "label": "校验与编排",
+      "kind": "call",
+      "lines": [
+        "校验与编排"
+      ],
+      "id": "e_5",
+      "sections": [
+        [
+          [
+            1032,
+            1113
+          ],
+          [
+            1257,
+            1113
+          ],
+          [
+            1257,
+            1195
+          ],
+          [
+            740,
+            1195
+          ],
+          [
+            740,
+            1262
+          ],
+          [
+            824,
+            1262
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1123.5,
+          "y": 1116,
+          "width": 82,
+          "height": 25,
+          "lines": [
+            "校验与编排"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "ai-pipeline",
+      "to": "providers",
+      "label": "分发执行",
+      "kind": "call",
+      "lines": [
+        "分发执行"
+      ],
+      "id": "e_6",
+      "sections": [
+        [
+          [
+            1032,
+            1262
+          ],
+          [
+            1267,
+            1262
+          ],
+          [
+            1267,
+            1392
+          ],
+          [
+            740,
+            1392
+          ],
+          [
+            740,
+            1501
+          ],
+          [
+            862,
+            1501
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1130.5,
+          "y": 1265,
+          "width": 68,
+          "height": 25,
+          "lines": [
+            "分发执行"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "ai-pipeline",
+      "to": "widget-patch",
+      "label": "widget_patch 应用",
+      "kind": "data",
+      "lines": [
+        "widget_patch 应",
+        "用"
+      ],
+      "id": "e_7",
+      "sections": [
+        [
+          [
+            1032,
+            1262
+          ],
+          [
+            1092,
+            1262
+          ],
+          [
+            1092,
+            1307
+          ],
+          [
+            1257,
+            1307
+          ],
+          [
+            1257,
+            1375
+          ],
+          [
+            730,
+            1375
+          ],
+          [
+            730,
+            1674
+          ],
+          [
+            782,
+            1674
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1106,
+          "y": 1310,
+          "width": 117,
+          "height": 42,
+          "lines": [
+            "widget_patch 应",
+            "用"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "providers",
+      "to": "llm-apis",
+      "label": "SSE / CLI 调用",
+      "kind": "call",
+      "lines": [
+        "SSE / CLI 调用"
+      ],
+      "id": "e_8",
+      "sections": [
+        [
+          [
+            1018,
+            1501
+          ],
+          [
+            1052,
+            1501
+          ],
+          [
+            1052,
+            1561
+          ],
+          [
+            804,
+            1561
+          ],
+          [
+            804,
+            1584
+          ],
+          [
+            1477,
+            1584
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1327,
+          "y": 1587,
+          "width": 110,
+          "height": 25,
+          "lines": [
+            "SSE / CLI 调用"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "agent-runtime",
+      "to": "llm-apis",
+      "label": "模型后端",
+      "kind": "call",
+      "lines": [
+        "模型后端"
+      ],
+      "id": "e_9",
+      "sections": [
+        [
+          [
+            1104.5,
+            1863
+          ],
+          [
+            1138.5,
+            1863
+          ],
+          [
+            1138.5,
+            1923
+          ],
+          [
+            848.5,
+            1923
+          ],
+          [
+            848.5,
+            1946
+          ],
+          [
+            1307,
+            1946
+          ],
+          [
+            1307,
+            1901
+          ],
+          [
+            1457,
+            1901
+          ],
+          [
+            1457,
+            1584
+          ],
+          [
+            1477,
+            1584
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1348,
+          "y": 1904,
+          "width": 68,
+          "height": 25,
+          "lines": [
+            "模型后端"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "providers",
+      "to": "conn-store",
+      "label": "读取连接凭据",
+      "kind": "data",
+      "lines": [
+        "读取连接凭据"
+      ],
+      "id": "e_10",
+      "sections": [
+        [
+          [
+            1018,
+            1501
+          ],
+          [
+            1052,
+            1501
+          ],
+          [
+            1052,
+            1561
+          ],
+          [
+            804,
+            1561
+          ],
+          [
+            804,
+            1584
+          ],
+          [
+            1307,
+            1584
+          ],
+          [
+            1307,
+            1539
+          ],
+          [
+            1467,
+            1539
+          ],
+          [
+            1467,
+            1856
+          ],
+          [
+            1477,
+            1856
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1334,
+          "y": 1542,
+          "width": 96,
+          "height": 25,
+          "lines": [
+            "读取连接凭据"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "agent-runtime",
+      "to": "conn-store",
+      "label": "读取连接凭据",
+      "kind": "data",
+      "lines": [
+        "读取连接凭据"
+      ],
+      "id": "e_11",
+      "sections": [
+        [
+          [
+            1104.5,
+            1863
+          ],
+          [
+            1138.5,
+            1863
+          ],
+          [
+            1138.5,
+            1923
+          ],
+          [
+            848.5,
+            1923
+          ],
+          [
+            848.5,
+            1946
+          ],
+          [
+            1307,
+            1946
+          ],
+          [
+            1307,
+            1856
+          ],
+          [
+            1477,
+            1856
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1334,
+          "y": 1859,
+          "width": 96,
+          "height": 25,
+          "lines": [
+            "读取连接凭据"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "agent-runtime",
+      "to": "canvas-docs",
+      "label": "文档工具读写",
+      "kind": "data",
+      "bidirectional": true,
+      "lines": [
+        "文档工具读写"
+      ],
+      "id": "e_12",
+      "sections": [
+        [
+          [
+            1104.5,
+            1863
+          ],
+          [
+            1138.5,
+            1863
+          ],
+          [
+            1138.5,
+            1923
+          ],
+          [
+            848.5,
+            1923
+          ],
+          [
+            848.5,
+            1946
+          ],
+          [
+            1447,
+            1946
+          ],
+          [
+            1447,
+            1474
+          ],
+          [
+            1477,
+            1474
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1334,
+          "y": 1949,
+          "width": 96,
+          "height": 25,
+          "lines": [
+            "文档工具读写"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "mcp-server",
+      "to": "canvas-docs",
+      "label": "读 / 补丁 / 截图",
+      "kind": "data",
+      "lines": [
+        "读 / 补丁 / 截",
+        "图"
+      ],
+      "id": "e_13",
+      "sections": [
+        [
+          [
+            383.5,
+            267
+          ],
+          [
+            428,
+            267
+          ],
+          [
+            428,
+            448
+          ],
+          [
+            169,
+            448
+          ],
+          [
+            169,
+            471
+          ],
+          [
+            1317,
+            471
+          ],
+          [
+            1317,
+            837
+          ],
+          [
+            680,
+            837
+          ],
+          [
+            680,
+            860
+          ],
+          [
+            1447,
+            860
+          ],
+          [
+            1447,
+            1474
+          ],
+          [
+            1477,
+            1474
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 546.5,
+          "y": 474,
+          "width": 110,
+          "height": 42,
+          "lines": [
+            "读 / 补丁 / 截",
+            "图"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "ext-agent",
+      "to": "mcp-server",
+      "label": "stdio / HTTP MCP",
+      "kind": "call",
+      "lines": [
+        "stdio / HTTP",
+        "MCP"
+      ],
+      "id": "e_14",
+      "sections": [
+        [
+          [
+            511,
+            73
+          ],
+          [
+            1317,
+            73
+          ],
+          [
+            1317,
+            158
+          ],
+          [
+            34,
+            158
+          ],
+          [
+            34,
+            267
+          ],
+          [
+            227.5,
+            267
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 553.5,
+          "y": 28,
+          "width": 96,
+          "height": 42,
+          "lines": [
+            "stdio / HTTP",
+            "MCP"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "ext-agent",
+      "to": "cloud-mcp",
+      "label": "Cloud MCP",
+      "kind": "optional",
+      "lines": [
+        "Cloud MCP"
+      ],
+      "id": "e_15",
+      "sections": [
+        [
+          [
+            511,
+            73
+          ],
+          [
+            529,
+            73
+          ],
+          [
+            529,
+            90
+          ],
+          [
+            1307,
+            90
+          ],
+          [
+            1307,
+            141
+          ],
+          [
+            24,
+            141
+          ],
+          [
+            24,
+            371
+          ],
+          [
+            227,
+            371
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 564,
+          "y": 93,
+          "width": 75,
+          "height": 25,
+          "lines": [
+            "Cloud MCP"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "cloud-mcp",
+      "to": "cloud",
+      "label": "访问云端 Canvas",
+      "kind": "data",
+      "lines": [
+        "访问云端 Canvas"
+      ],
+      "id": "e_16",
+      "sections": [
+        [
+          [
+            384,
+            371
+          ],
+          [
+            418,
+            371
+          ],
+          [
+            418,
+            431
+          ],
+          [
+            159,
+            431
+          ],
+          [
+            159,
+            487
+          ],
+          [
+            529,
+            487
+          ],
+          [
+            529,
+            533
+          ],
+          [
+            1307,
+            533
+          ],
+          [
+            1307,
+            584
+          ],
+          [
+            34,
+            584
+          ],
+          [
+            34,
+            1203
+          ],
+          [
+            215.5,
+            1203
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 543,
+          "y": 536,
+          "width": 117,
+          "height": 25,
+          "lines": [
+            "访问云端 Canvas"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "http-server",
+      "to": "canvas-docs",
+      "label": "保存 / 虚拟源",
+      "kind": "data",
+      "lines": [
+        "保存 / 虚拟源"
+      ],
+      "id": "e_17",
+      "sections": [
+        [
+          [
+            1032,
+            1113
+          ],
+          [
+            1092,
+            1113
+          ],
+          [
+            1092,
+            1154
+          ],
+          [
+            1233,
+            1154
+          ],
+          [
+            1233,
+            1178
+          ],
+          [
+            720,
+            1178
+          ],
+          [
+            720,
+            1724
+          ],
+          [
+            1447,
+            1724
+          ],
+          [
+            1447,
+            1474
+          ],
+          [
+            1477,
+            1474
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 1330.5,
+          "y": 1727,
+          "width": 103,
+          "height": 25,
+          "lines": [
+            "保存 / 虚拟源"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "electron",
+      "to": "http-server",
+      "label": "内嵌启动",
+      "kind": "config",
+      "lines": [
+        "内嵌启动"
+      ],
+      "id": "e_18",
+      "sections": [
+        [
+          [
+            455,
+            1910
+          ],
+          [
+            489,
+            1910
+          ],
+          [
+            489,
+            1975
+          ],
+          [
+            213,
+            1975
+          ],
+          [
+            213,
+            1998
+          ],
+          [
+            529,
+            1998
+          ],
+          [
+            529,
+            1957
+          ],
+          [
+            670,
+            1957
+          ],
+          [
+            670,
+            1024
+          ],
+          [
+            1233,
+            1024
+          ],
+          [
+            1233,
+            1046
+          ],
+          [
+            740,
+            1046
+          ],
+          [
+            740,
+            1113
+          ],
+          [
+            824,
+            1113
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 567.5,
+          "y": 1960,
+          "width": 68,
+          "height": 25,
+          "lines": [
+            "内嵌启动"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "electron",
+      "to": "conn-store",
+      "label": "userData 状态目录",
+      "kind": "config",
+      "lines": [
+        "userData 状态目",
+        "录"
+      ],
+      "id": "e_19",
+      "sections": [
+        [
+          [
+            455,
+            1910
+          ],
+          [
+            489,
+            1910
+          ],
+          [
+            489,
+            1975
+          ],
+          [
+            213,
+            1975
+          ],
+          [
+            213,
+            1998
+          ],
+          [
+            1467,
+            1998
+          ],
+          [
+            1467,
+            1856
+          ],
+          [
+            1477,
+            1856
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 935,
+          "y": 2001,
+          "width": 117,
+          "height": 42,
+          "lines": [
+            "userData 状态目",
+            "录"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "cloud",
+      "to": "http-server",
+      "label": "关联设备远程访问",
+      "kind": "optional",
+      "lines": [
+        "关联设备远程访",
+        "问"
+      ],
+      "id": "e_20",
+      "sections": [
+        [
+          [
+            371.5,
+            1203
+          ],
+          [
+            670,
+            1203
+          ],
+          [
+            670,
+            1024
+          ],
+          [
+            1233,
+            1024
+          ],
+          [
+            1233,
+            1046
+          ],
+          [
+            740,
+            1046
+          ],
+          [
+            740,
+            1113
+          ],
+          [
+            824,
+            1113
+          ]
+        ]
+      ],
+      "labels": [
+        {
+          "x": 546.5,
+          "y": 1206,
+          "width": 110,
+          "height": 42,
+          "lines": [
+            "关联设备远程访",
+            "问"
+          ]
+        }
+      ]
+    }
+  ],
+  "layoutMs": 182.690292,
+  "issues": [],
+  "mode": "wrapped",
+  "attempts": 4,
+  "availableWidth": 1450
+}

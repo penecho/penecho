@@ -1,0 +1,187 @@
+{
+  "description": "Train two candidates in parallel, gate on offline metric and shadow evaluation; failures feed back into hyperparameter tuning (two distinct retry loops).",
+  "details": [
+    {
+      "items": [
+        "Candidates share the prepared dataset; only seeds and architecture differ.",
+        "Shadow traffic is 5% mirrored, never returned to the caller."
+      ],
+      "title": "Experiment setup"
+    },
+    {
+      "items": [
+        "Target: recall ≥ 0.86 at precision 0.90 on the holdout week.",
+        "Shadow runs 3 days; rollback SLO breach aborts promotion."
+      ],
+      "title": "Gates"
+    }
+  ],
+  "domains": [
+    {
+      "color": "blue",
+      "id": "data",
+      "label": "Data"
+    },
+    {
+      "color": "orange",
+      "id": "train",
+      "label": "Training"
+    },
+    {
+      "color": "teal",
+      "id": "eval",
+      "label": "Evaluation"
+    },
+    {
+      "color": "purple",
+      "id": "ops",
+      "label": "Release"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "prepare"
+    },
+    {
+      "from": "prepare",
+      "to": "split"
+    },
+    {
+      "from": "split",
+      "to": "candA"
+    },
+    {
+      "from": "split",
+      "to": "candB"
+    },
+    {
+      "from": "candA",
+      "to": "join"
+    },
+    {
+      "from": "candB",
+      "to": "join"
+    },
+    {
+      "from": "join",
+      "to": "d1"
+    },
+    {
+      "from": "d1",
+      "label": "recall ≥ target",
+      "to": "register"
+    },
+    {
+      "from": "d1",
+      "label": "below target",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "kind": "loop",
+      "label": "next hyperparameter round",
+      "to": "split"
+    },
+    {
+      "from": "register",
+      "to": "d2"
+    },
+    {
+      "from": "d2",
+      "label": "shadow metrics hold",
+      "to": "deploy"
+    },
+    {
+      "from": "d2",
+      "label": "regression vs champion",
+      "kind": "loop",
+      "to": "tune"
+    },
+    {
+      "from": "deploy",
+      "to": "end"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "label": "New labeled data",
+      "type": "start"
+    },
+    {
+      "domain": "data",
+      "id": "prepare",
+      "label": "Prepare dataset",
+      "subtitle": "dedupe + split v42",
+      "type": "process"
+    },
+    {
+      "id": "split",
+      "label": "Launch candidates",
+      "type": "fork"
+    },
+    {
+      "domain": "train",
+      "id": "candA",
+      "label": "Train candidate A",
+      "subtitle": "transformer-small",
+      "type": "process"
+    },
+    {
+      "domain": "train",
+      "id": "candB",
+      "label": "Train candidate B",
+      "subtitle": "gradient boosting",
+      "type": "process"
+    },
+    {
+      "id": "join",
+      "label": "Await runs",
+      "type": "join"
+    },
+    {
+      "domain": "eval",
+      "id": "d1",
+      "label": "Offline gate passed?",
+      "type": "decision"
+    },
+    {
+      "domain": "train",
+      "id": "tune",
+      "label": "Tune hyperparameters",
+      "subtitle": "Optuna, 20 trials",
+      "type": "process"
+    },
+    {
+      "domain": "ops",
+      "id": "register",
+      "label": "Register challenger",
+      "type": "process"
+    },
+    {
+      "domain": "eval",
+      "id": "d2",
+      "label": "Shadow eval passed?",
+      "type": "decision"
+    },
+    {
+      "domain": "ops",
+      "id": "deploy",
+      "label": "Promote to champion",
+      "subtitle": "flip traffic 0 → 100%",
+      "type": "process"
+    },
+    {
+      "id": "end",
+      "label": "Model live",
+      "type": "end"
+    }
+  ],
+  "notes": [
+    "Tuning budget capped at 3 rounds; beyond that a human reviews the feature set.",
+    "Both candidates always train; no early stopping between branches."
+  ],
+  "title": "Model training and promotion",
+  "version": 1
+}

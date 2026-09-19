@@ -77,9 +77,10 @@ function validateSequence(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function sequenceHtml(value) {
+function sequenceHtml(value, options = {}) {
   const data=validateSequence(value);
   const json=JSON.stringify(data).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026');
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body><section data-penecho-sequence><script type="application/json" data-sequence-source>${json}</script><p role="status">正在布局时序图…</p></section></body></html>`;
+  const language=String(options.language || '').toLowerCase().startsWith('zh')?'zh-CN':'en',loading=language==='zh-CN'?'正在布局时序图…':'Laying out sequence diagram…';
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"></head><body><section data-penecho-sequence><script type="application/json" data-sequence-source>${json}</script><p role="status">${loading}</p></section></body></html>`;
 }
 module.exports = { validateSequence, sequenceHtml };

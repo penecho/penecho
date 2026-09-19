@@ -1,0 +1,36 @@
+{
+  "fixture": "Actual settings markup, CSS and functions; mocked models endpoint; no PenEcho service started",
+  "reports": [
+    {
+      "label": "wide-en",
+      "cssViewport": {
+        "width": 1280,
+        "height": 960
+      },
+      "deviceScaleFactor": 1,
+      "systemColorScheme": "light",
+      "overflow": []
+    },
+    {
+      "label": "narrow-zh",
+      "cssViewport": {
+        "width": 390,
+        "height": 844
+      },
+      "deviceScaleFactor": 1,
+      "systemColorScheme": "light",
+      "overflow": []
+    },
+    {
+      "label": "zoom200-zh-dark",
+      "cssViewport": {
+        "width": 640,
+        "height": 480
+      },
+      "deviceScaleFactor": 2,
+      "systemColorScheme": "dark",
+      "overflow": []
+    }
+  ],
+  "errors": []
+}

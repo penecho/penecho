@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><pre id="r2-report" style="box-sizing:border-box;height:200px;overflow:auto;margin:0;font:13px/1.4 Arial;padding:12px;background:#ecfdf5;color:#166534;white-space:pre-wrap">检查中…</pre><section data-penecho-sequence><script type="application/json" data-sequence-source>{"description":"登录鉴权：成功与失败两个分支（alt 片段）","details":[{"domain":"sec","items":["密码使用 Argon2id 校验。","连续失败 5 次锁定账号 15 分钟。"],"title":"安全策略"},{"domain":"data","items":["session 写入 Redis，TTL 30 分钟。","JWT 有效期内不再回查数据库。"],"title":"会话存储"}],"domains":[{"color":"blue","id":"c","label":"客户端"},{"color":"orange","id":"s","label":"服务端"},{"color":"purple","id":"data","label":"存储"},{"color":"slate","id":"sec","label":"安全"}],"fragments":[{"branches":[{"from":"m9","label":"凭据错误"}],"from":"m1","kind":"alt","label":"凭据正确","to":"m10"}],"messages":[{"from":"app","id":"m1","label":"POST /login（账号 + 密码）","to":"gw"},{"from":"gw","id":"m2","label":"校验凭据","to":"auth"},{"from":"auth","id":"m3","label":"查询用户","to":"db"},{"from":"db","id":"m4","kind":"return","label":"用户记录 + 密码哈希","to":"auth"},{"from":"auth","id":"m5","label":"写入 session","to":"redis"},{"from":"redis","id":"m6","kind":"return","label":"OK","to":"auth"},{"from":"auth","id":"m7","kind":"return","label":"签发 JWT","to":"gw"},{"from":"gw","id":"m8","kind":"return","label":"200 OK + token","to":"app"},{"from":"auth","id":"m9","kind":"return","label":"401 凭据无效","to":"gw"},{"from":"gw","id":"m10","kind":"return","label":"401 Unauthorized","to":"app"}],"notes":["alt 片段内两个操作数互斥，垂直距离不代表耗时。"],"participants":[{"domain":"c","id":"app","label":"前端应用","subtitle":"浏览器 / App","type":"frontend"},{"domain":"s","id":"gw","label":"API 网关","subtitle":"路由与限流"},{"domain":"sec","id":"auth","label":"鉴权服务","subtitle":"Argon2id + JWT"},{"domain":"data","id":"db","label":"用户库","subtitle":"PostgreSQL","type":"database"},{"domain":"data","id":"redis","label":"会话缓存","subtitle":"Redis","type":"database"}],"title":"登录鉴权（含失败分支）","version":1}</script><p role="status">正在布局时序图…</p></section><script>addEventListener('penecho-sequence-ready',()=>{
+    const originalSettled=globalThis['__penechoSequenceWhenSettled'];
+    const inspection=(async()=>{
+    await new Promise(resolve=>setTimeout(resolve,250));await originalSettled();
+    const root=document.querySelector('[data-penecho-sequence]'),map=root.querySelector('.pa-map'),svg=map.querySelector('svg'),source=root.querySelector('[data-sequence-source]').textContent;
+    const overview={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    const nodes=[...svg.querySelectorAll('[data-node-id]')],select=root.querySelector('.pa-view-controls select');
+    let allNodesReachable=true;const failures=[];
+    for(const node of nodes){select.value=node.dataset.nodeId;select.dispatchEvent(new Event('change'));const b=node.getBoundingClientRect(),m=map.getBoundingClientRect(),x=m.left+map.clientLeft,y=m.top+map.clientTop;const ok=b.left>=x-1&&b.top>=y-1&&b.right<=x+map.clientWidth+1&&b.bottom<=y+map.clientHeight+1;allNodesReachable&&=ok;if(!ok)failures.push(node.dataset.nodeId);}
+    root.querySelector('[data-view="actual"]').click();
+    const at100={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    map.scrollLeft=map.scrollTop=0;map.scrollBy({left:500,top:500,behavior:'instant'});
+    const scrollMoved=(at100.scrollWidth<=at100.width||map.scrollLeft>0)&&(at100.scrollHeight<=at100.height||map.scrollTop>0);
+    const wheel=new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});map.dispatchEvent(wheel);
+    map.scrollLeft=map.scrollWidth;map.scrollTop=map.scrollHeight;
+    const reachedEnd=map.scrollLeft+map.clientWidth>=map.scrollWidth-1&&map.scrollTop+map.clientHeight>=map.scrollHeight-1;
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const zoomRetained=root.querySelector('.pa-view-controls output')?.textContent==='100%';
+    const report=document.getElementById('r2-report');
+    report.textContent=JSON.stringify({test:"S3",nodes:nodes.length,noArrowButtons:!root.querySelector('[data-pan]'),overview,at100,containerHeightStable:overview.outerHeight===at100.outerHeight,zoomRetained,nativeScrollMoved:scrollMoved,reachedEnd,wheelDefaultNotPrevented:!wheel.defaultPrevented,allNodesReachable,failures,fullViewBox:svg.getAttribute('viewBox'),sourceUnchanged:source===root.querySelector('[data-sequence-source]').textContent});
+    root.querySelector('[data-view="fit"]').click();
+    })();
+    globalThis['__penechoSequenceWhenSettled']=async()=>{await originalSettled();await inspection;};
+  },{once:true});</script></body></html>

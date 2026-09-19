@@ -106,10 +106,15 @@
   function canvasDocumentsId() { return canvasClientId(); }
   function canvasDocumentsObjectId(doc,kind) {
     const prefix=kind==="text"?"text-box":kind,indexKey=kind==="text"?"nextTextBoxId":kind==="image"?"nextImageId":"nextWidgetId";
-    if(canvasDocumentsIsActive(doc))return `${prefix}-${state[indexKey]++}`;
     doc.nextIds||={};
-    if(!doc.nextIds[kind])doc.nextIds[kind]=canvasDocumentsObjects(doc).filter(o=>o.kind===kind).reduce((maximum,o)=>Math.max(maximum,Number(o.item.id.split("-").at(-1))||0),0)+1;
-    return `${prefix}-${doc.nextIds[kind]++}`;
+    // Visible and parked documents have separate counters. Reconcile against
+    // canonical objects on every allocation, including after activation/Undo.
+    const active=canvasDocumentsIsActive(doc),existing=canvasDocumentsObjects(doc).filter(o=>o.kind===kind);
+    const next=Math.max(active?state[indexKey]||1:1,doc.nextIds[kind]||1,
+      ...existing.map(o=>(Number(o.item.id.split("-").at(-1))||0)+1));
+    doc.nextIds[kind]=next+1;
+    if(active)state[indexKey]=next+1;
+    return `${prefix}-${next}`;
   }
   function canvasDocumentsWidgetRecord(value) {
     const input={...value};if(!input.copyText)delete input.copyText;if(!input.copyLabel)delete input.copyLabel;
@@ -179,6 +184,22 @@
     const normalized=canvasDocumentIdentity.normalizeWorkspace(value,canvasDocumentsMetadata(doc));if(!normalized)return;
     for(const field of ["feedback","messages","changes","sessions","internalSessions","feedbackSequence","messageSequence","changeSequence"])doc[field]=normalized[field];
   }
+  function canvasDocumentsIsEmptyPlaceholder(doc) {
+    const meta=doc.metadata||doc,item=doc.stored?.item,workspace=doc.workspace||(doc.metadata?item?.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]||{}:canvasDocumentsWorkspaceData(doc));
+    // Only positively identified, unused blank pages are disposable. Saved,
+    // named, bound, edited or partially recovered documents remain open.
+    if(!item||!Array.isArray(doc.stored.tileEntries)||doc.stored.tileEntries.length)return false;
+    if(doc.locator||doc.savedAt||item.id||item.projectId||item.currentRevisionId||meta.locators?.length||meta.bindings?.length||meta.context||doc.agentDraft||doc.hasUserHistory||doc.undo?.length||doc.redo?.length)return false;
+    if([meta.title,item.name].some(title=>title&&!/^(untitled canvas|未命名画布)$/i.test(String(title).trim())))return false;
+    if(["widgets","images","textBoxes","animations","preservedAssets"].some(key=>item[key]!=null&&(!Array.isArray(item[key])||item[key].length)))return false;
+    if(["sessions","internalSessions","messages","feedback","changes"].some(key=>workspace[key]?.length))return false;
+    if([...mcpRuntime.sessions.values()].some(session=>!session.closed&&session.documentId===doc.id))return false;
+    if(Object.keys(item.manifestExtensions||{}).length||Object.keys(item.bundleExtensions||{}).some(key=>![CANVAS_DOCUMENT_EXTENSION,CANVAS_WORKSPACE_EXTENSION,"penechoObjectOrder"].includes(key)))return false;
+    return true;
+  }
+  function canvasDocumentsRetireEmptyPlaceholder(doc) {
+    if(doc&&!canvasDocumentsIsActive(doc)&&canvasDocumentsIsEmptyPlaceholder(doc))canvasDocuments.records.delete(doc.id);
+  }
   async function canvasDocumentsDb() {
     if(canvasDocuments.db)return canvasDocuments.db;
     const request=indexedDB.open("penecho-workspace-documents",1);
@@ -189,16 +210,18 @@
     canvasDocumentsCurrent();
     if(!canvasDocuments.ready)canvasDocuments.ready=(async()=>{
       const db=await canvasDocumentsDb(),items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
+      const conversationKeys=new Set(typeof canvasAgentStoredHistoryGroups==="function"?canvasAgentStoredHistoryGroups().map(group=>group.canvasKey):[]);
       const candidates=new Map();
       for(const item of items) {
         const meta=!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata);
         if(meta&&canvasDocuments.records.has(meta.documentId))canvasDocumentsRestoreFirstSeenAt(canvasDocuments.records.get(meta.documentId),item);
-        if(meta&&!canvasDocuments.records.has(meta.documentId))candidates.set(meta.documentId,{item,meta});
+        if(meta&&!canvasDocuments.records.has(meta.documentId)&&(!canvasDocumentsIsEmptyPlaceholder(item)||conversationKeys.has(`workspace:${meta.documentId}`)))candidates.set(meta.documentId,{item,meta});
       }
       const available=Math.max(0,CANVAS_DOCUMENT_LIMIT-canvasDocuments.records.size);
       for(const {item,meta} of available?[...candidates.values()].slice(-available):[]) {
         const doc=canvasDocumentsRecord(meta,item.stored);canvasDocumentsRestoreFirstSeenAt(doc,item);canvasDocumentsRestoreWorkspace(doc,item.workspace);
         doc.revision=item.revision||1;doc.savedRevision=item.savedRevision||0;doc.unseen=canvasDocumentsUnseen(item.unseen);doc.locator=item.locator||null;doc.savedAt=canvasDocumentsSavedAt(item.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(item.stored?.item):0);doc.agentDraft=typeof item.agentDraft==="string"?item.agentDraft.slice(0,16000):"";
+        doc.hasUserHistory=Boolean(item.hasUserHistory||conversationKeys.has(`workspace:${doc.id}`));
         canvasDocuments.records.set(doc.id,doc);
       }
       canvasDocumentsRender();
@@ -209,7 +232,7 @@
     const db=await canvasDocumentsAwait(()=>canvasDocumentsDb(),execution);
     if(execution)canvasAgentAssertToolExecution(execution);
     beforeWrite?.();
-    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),closed};
+    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed};
     if(execution?.kind!=="mcp") {
       await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(payload);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
       return;
@@ -242,7 +265,9 @@
       projectId:state.currentSnapshotProjectId,currentRevisionId:state.currentSnapshotRevisionId,bundleExtensions:snapshotCanvasObjectExtensions(),manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),preservedAssets:snapshotPreservedAssets(state.currentSnapshotPreservedAssets)};
   }
   function canvasDocumentsSavedView() {
-    const view=viewportRect();return {scale:state.scale,panX:state.panX,panY:state.panY,readingStage:mcpReadingScreenStage(),navigationLocked:state.navigationLocked,region:{x:view.x,y:view.y,w:view.w,h:view.h}};
+    // A camera outside the finite Canvas has no visible Canvas intersection.
+    // Preserve its exact camera without requiring a nonempty clipped region.
+    const view=viewportRect();return {scale:state.scale,panX:state.panX,panY:state.panY,readingStage:mcpReadingScreenStage(),navigationLocked:state.navigationLocked,region:view?{x:view.x,y:view.y,w:view.w,h:view.h}:null};
   }
   async function canvasDocumentsPark(execution=null) {
     const doc=canvasDocumentsCurrent();
@@ -259,6 +284,8 @@
     if(execution)canvasAgentAssertToolExecution(execution);
     doc.stored={item,tileEntries};doc.revision=revision;doc.savedRevision=state.snapshotSavedRevision;doc.undo=state.history;doc.redo=state.future;doc.agentDraft=typeof canvasAgentInput!=="undefined"?canvasAgentInput.value:"";
     doc.feedback=mcpRuntime.feedback;doc.feedbackSequence=mcpRuntime.feedbackSequence;
+    doc.hasUserHistory=Boolean(doc.hasUserHistory||doc.undo?.length||doc.redo?.length||canvasAgent.currentConversation?.items?.length||(typeof canvasAgentHistoryForCanvas==="function"&&canvasAgentHistoryForCanvas().length));
+    if(canvasDocumentsIsEmptyPlaceholder(doc))return doc;
     await canvasDocumentsPersist(doc,false,execution);return doc;
   }
   async function canvasDocumentsShow(id,execution=null,options={}) {
@@ -275,7 +302,7 @@
     canvasDocuments.switching=true;canvasDocumentsRender();
     let decoded=null;
     try {
-      await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
+      const previous=await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
       if(execution)canvasAgentAssertToolExecution(execution);
       const revision=state.userRevision,targetRevision=doc.revision,epoch=canvasDocuments.epoch,stored=doc.stored||{item:{widgets:[],images:[],textBoxes:[],animations:[],theme:state.theme},tileEntries:[]};
       const current=()=>epoch===canvasDocuments.epoch&&revision===state.userRevision&&targetRevision===doc.revision&&!execution?.controller?.signal.aborted;
@@ -327,6 +354,7 @@
       canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
+      canvasDocumentsRetireEmptyPlaceholder(previous);
       window.PenEchoStudioNavigator?.updateDocument?.();await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
   }
@@ -337,11 +365,13 @@
     setCanvasNavigationLocked(view?.navigationLocked===true);
   }
   async function canvasDocumentsAdopt(item,location) {
+    const previous=canvasDocuments.records.get(canvasDocuments.activeId);
     const locator={location,id:item.id},meta=canvasDocumentIdentity.normalizeMetadata(item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:item.name||""};
     const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta,{item});
     doc.title=item.name||doc.title;doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(item);doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
     canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
     canvasDocuments.records.set(doc.id,doc);canvasDocuments.activeId=doc.id;canvasDocuments.epoch++;
+    canvasDocumentsRetireEmptyPlaceholder(previous);
     mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;doc.revision=state.userRevision;doc.savedRevision=state.snapshotSavedRevision;
     canvasDocumentsSyncExtension(doc);canvasDocumentsRender();
   }
@@ -626,15 +656,16 @@
       const open=[...canvasDocuments.records.values()].filter(d=>(!args.documentId||d.id===args.documentId)&&(!args.locator||d.locator?.location===args.locator.location&&d.locator?.id===args.locator.id));
       if(open.length===1)doc=open[0];
       else {
-        // Closing a conversation Canvas hides it; its recoverable workspace is
-        // still addressable by documentId without opening every closed Canvas.
+        // Closed canvases and skipped empty startup pages remain recoverable
+        // by their exact documentId without opening the entire stored workspace.
         const db=await canvasDocumentsDb(),saved=args.documentId&&!args.locator?await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").get(args.documentId))):null;
-        if(saved?.closed&&saved.metadata?.documentId===args.documentId) {
+        if(saved&&saved.metadata?.documentId===args.documentId) {
           if(canvasDocuments.records.size>=CANVAS_DOCUMENT_LIMIT)throw canvasDocumentsError("DOCUMENT_LIMIT",canvasDocumentsLimitMessage());
           const meta=canvasDocumentIdentity.normalizeMetadata(saved.metadata);
           if(!meta)throw canvasDocumentsError("DOCUMENT_CONFLICT","The saved workspace identity is invalid.");
           doc=canvasDocumentsRecord(meta,saved.stored);canvasDocumentsRestoreFirstSeenAt(doc,saved);canvasDocumentsRestoreWorkspace(doc,saved.workspace);
           doc.revision=saved.revision||1;doc.savedRevision=saved.savedRevision||0;doc.locator=saved.locator||null;doc.savedAt=canvasDocumentsSavedAt(saved.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(saved.stored?.item):0);doc.unseen=canvasDocumentsUnseen(saved.unseen);doc.agentDraft=typeof saved.agentDraft==="string"?saved.agentDraft.slice(0,16000):"";
+          doc.hasUserHistory=Boolean(saved.hasUserHistory);
           canvasAgentAssertToolExecution(execution);canvasDocuments.records.set(doc.id,doc);
         }
         if(!doc) {
@@ -959,6 +990,9 @@
     if(name==="mcp_present_widget"&&args.presentation?.intent==="inspect")return {...await mcpInspectHtml(args,execution),revision:canvasDocumentsIsActive(doc)?state.userRevision:doc.revision,documentId:doc.id};
     if(name==="mcp_present_widget") {
       const artifact=session.artifacts.get(args.artifactId),object=artifact&&canvasDocumentsObject(doc,artifact.objectId);
+      const objects=canvasDocumentsObjects(doc),ids=objects.map(o=>o.item.id);
+      if(new Set(ids).size!==ids.length)throw canvasDocumentsError("OBJECT_ID_CONFLICT","This Canvas contains duplicate object identities. Preserve its source and repair the identities before writing.");
+      if(object&&[...session.artifacts].some(([id,value])=>id!==args.artifactId&&value.objectId===object.item.id))throw canvasDocumentsError("OBJECT_ID_CONFLICT","Two artifacts refer to the same object. Use a new artifact identity to preserve the existing content.");
       if(object&&!canvasDocumentsSourceEditable(object))throw canvasDocumentsError("READ_ONLY_FILE","Professional Diagram and private plugin source editing is unavailable. Existing content is preserved.");
     }
     const work=async()=>{
@@ -1003,7 +1037,9 @@
         result={...result,applied:true};
         if(name==="mcp_present_widget"&&result.objectId) {
           const sourcePath=`objects/${result.objectId}/widget.html`;
-          result={...result,sourcePath,contentHash:await canvasAgentHash(canvasDocumentsFile(doc,sourcePath))};
+          const source=canvasDocumentsFile(doc,sourcePath);
+          if(source!==args.html||canvasDocumentsObjects(doc).filter(o=>o.item.id===result.objectId).length!==1)throw canvasDocumentsError("WRITE_VERIFICATION_FAILED","The stored Widget does not match this write. Read its source before retrying.");
+          result={...result,sourcePath,contentHash:await canvasAgentHash(source)};
         }
         if(args.capture===true) {
           try {

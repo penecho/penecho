@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><pre id="r2-report" style="box-sizing:border-box;height:200px;overflow:auto;margin:0;font:13px/1.4 Arial;padding:12px;background:#ecfdf5;color:#166534;white-space:pre-wrap">检查中…</pre><section data-penecho-architecture><script type="application/json" data-architecture-source>{"description":"Deeply nested groups, isolated node, minimal node, unlabeled edge, DOWN direction.","details":[{"items":["Three nested frames draw without overlapping labels.","The minimal node has no subtitle, type or domain.","The isolated node stays unconnected.","DOWN direction is honored."],"title":"What to check"}],"direction":"DOWN","domains":[{"color":"teal","id":"a","label":"Level A"},{"color":"purple","id":"b","label":"Level B"},{"color":"green","id":"c","label":"Level C"}],"edges":[{"from":"outer","to":"mid"},{"from":"mid","label":"in-frame call","to":"inner"},{"from":"inner","label":"leaves every frame","to":"min"}],"groups":[{"domain":"a","id":"g1","label":"Outer boundary"},{"domain":"b","id":"g2","label":"Middle boundary","parent":"g1"},{"domain":"c","id":"g3","label":"Inner boundary","parent":"g2"}],"nodes":[{"domain":"a","id":"outer","label":"Outer Service","subtitle":"outside all frames"},{"domain":"b","group":"g2","id":"mid","label":"Middle Service"},{"domain":"c","group":"g3","id":"inner","label":"Inner Service"},{"id":"min","label":"Minimal"},{"id":"iso","label":"Isolated Node","subtitle":"no edges at all"}],"notes":["One edge intentionally has no label."],"title":"Structural Edge Cases","version":1}</script><p role="status">正在布局架构图…</p></section><script>addEventListener('penecho-architecture-ready',()=>{
+    const originalSettled=globalThis['__penechoArchitectureWhenSettled'];
+    const inspection=(async()=>{
+    await new Promise(resolve=>setTimeout(resolve,250));await originalSettled();
+    const root=document.querySelector('[data-penecho-architecture]'),map=root.querySelector('.pa-map'),svg=map.querySelector('svg'),source=root.querySelector('[data-architecture-source]').textContent;
+    const overview={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    const nodes=[...svg.querySelectorAll('[data-node-id]')],select=root.querySelector('.pa-view-controls select');
+    let allNodesReachable=true;const failures=[];
+    for(const node of nodes){select.value=node.dataset.nodeId;select.dispatchEvent(new Event('change'));const b=node.getBoundingClientRect(),m=map.getBoundingClientRect(),x=m.left+map.clientLeft,y=m.top+map.clientTop;const ok=b.left>=x-1&&b.top>=y-1&&b.right<=x+map.clientWidth+1&&b.bottom<=y+map.clientHeight+1;allNodesReachable&&=ok;if(!ok)failures.push(node.dataset.nodeId);}
+    root.querySelector('[data-view="actual"]').click();
+    const at100={width:map.clientWidth,height:map.clientHeight,outerHeight:map.getBoundingClientRect().height,scrollWidth:map.scrollWidth,scrollHeight:map.scrollHeight};
+    map.scrollLeft=map.scrollTop=0;map.scrollBy({left:500,top:500,behavior:'instant'});
+    const scrollMoved=(at100.scrollWidth<=at100.width||map.scrollLeft>0)&&(at100.scrollHeight<=at100.height||map.scrollTop>0);
+    const wheel=new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});map.dispatchEvent(wheel);
+    map.scrollLeft=map.scrollWidth;map.scrollTop=map.scrollHeight;
+    const reachedEnd=map.scrollLeft+map.clientWidth>=map.scrollWidth-1&&map.scrollTop+map.clientHeight>=map.scrollHeight-1;
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const zoomRetained=root.querySelector('.pa-view-controls output')?.textContent==='100%';
+    const report=document.getElementById('r2-report');
+    report.textContent=JSON.stringify({test:"A9",nodes:nodes.length,noArrowButtons:!root.querySelector('[data-pan]'),overview,at100,containerHeightStable:overview.outerHeight===at100.outerHeight,zoomRetained,nativeScrollMoved:scrollMoved,reachedEnd,wheelDefaultNotPrevented:!wheel.defaultPrevented,allNodesReachable,failures,fullViewBox:svg.getAttribute('viewBox'),sourceUnchanged:source===root.querySelector('[data-architecture-source]').textContent});
+    root.querySelector('[data-view="fit"]').click();
+    })();
+    globalThis['__penechoArchitectureWhenSettled']=async()=>{await originalSettled();await inspection;};
+  },{once:true});</script></body></html>

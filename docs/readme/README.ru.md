@@ -20,7 +20,7 @@
 <h1 align="center">Пространство для работы<br>и размышлений с ИИ.</h1>
 <p align="center">Рисуйте, исследуйте и создавайте со встроенным Agent или своим ИИ-ассистентом с поддержкой MCP.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-087f83" alt="Версия 1.3.2">
+  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Версия 1.3.3">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">
@@ -66,6 +66,60 @@
   </a>
 </p>
 <p align="center"><em>Обсуждение архитектуры с рукописными пометками на Canvas.</em></p>
+
+<!-- professional-diagram-gallery -->
+<p align="center">Создавайте <strong>профессиональные диаграммы</strong>, которые удобно изучать и с которыми легко взаимодействовать.</p>
+
+<table width="100%">
+  <tr>
+    <th colspan="2" align="left">Архитектура</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Кластер Kubernetes в продакшене" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="Миграция к микросервисам" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Кластер Kubernetes в продакшене</strong></td>
+    <td valign="top"><strong>Миграция к микросервисам</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Диаграммы последовательностей</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Событийные уведомления" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/mcp-request.png"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Как запросы MCP достигают Canvas" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Событийные уведомления</strong></td>
+    <td valign="top"><strong>Как запросы MCP достигают Canvas</strong></td>
+  </tr>
+  <tr>
+    <th colspan="2" align="left">Рабочие процессы</th>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="Подготовка релиза: параллельные задачи" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="middle">
+      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="Развёртывание и откат в нескольких регионах" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Подготовка релиза: параллельные задачи</strong></td>
+    <td valign="top"><strong>Развёртывание и откат в нескольких регионах</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Нажмите на изображение, чтобы открыть диаграмму в полном размере.</sub></p>
+<!-- /professional-diagram-gallery -->
 
 **Смотрите на результат ещё до завершения.** Наблюдайте, как он складывается в ходе разговора с ИИ. Пробуйте, оставляйте обратную связь и вместе продвигайте проект.
 

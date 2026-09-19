@@ -1,0 +1,26 @@
+{
+  "sessionId": "b168742c-8036-407d-9d8b-4af80e04b211",
+  "artifactId": "retry-preview-r2",
+  "objectId": "widget-7",
+  "revision": 8,
+  "feedbackCursor": 0,
+  "presentation": {
+    "intent": "review",
+    "role": "primary",
+    "attention": "request"
+  },
+  "applied": true,
+  "pixelVerified": false,
+  "viewport": {
+    "width": 1280,
+    "height": 950
+  },
+  "sourcePath": "objects/widget-7/widget.html",
+  "contentHash": "fallback-eda6f6201cdf6ca5-18496",
+  "inboxSummary": {
+    "messages": [],
+    "hasMore": false,
+    "latestMessageCursor": 0,
+    "latestFeedbackCursor": 0
+  }
+}

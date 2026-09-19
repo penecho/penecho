@@ -243,6 +243,41 @@ test("History loads legacy canvases without Web Crypto and permits retry after a
   }
 });
 
+test("New and Load retain the dirty document and Undo history without opening the save dialog",async()=>{
+  for(const location of [null,"device","server","cloud"]){
+    const target={id:"target",name:"Target",version:2,widgets:[],textBoxes:[],images:[],animations:[]};
+    const h=harness({saved:new Map([[`${location}:target`,{item:target,tileEntries:[]}]])});
+    const original=h.canvasDocumentsCurrent();
+    h.state.widgets.push({id:"widget-1",html:"<p>Unsaved original</p>",x:0,y:0,w:640,h:400});
+    h.state.userRevision=4;h.state.snapshotSavedRevision=2;h.state.history=[{type:"drawing"}];
+    h.state.snapshotLoadGeneration=0;
+    const dialog={open:false,value:"",classList:{contains:()=>false},showModal(){throw Error("unexpected save dialog");}};
+    Object.assign(h.context,{
+      document:{getElementById:()=>null,querySelector:()=>dialog},pendingCanvasTransition:null,
+      snapshotItems:[target],snapshotLoadingId:null,snapshotName:item=>item.name,
+      t:key=>key,setStatusKey(){},fit(){},updateHistoryReadControls(){},setHistoryActivity(){},
+      refreshVisibleTextBoxQuality(){},closeHistoryPanel(){},
+    });
+    for(const name of ["canvasHasUnsavedChanges","requestCanvasTransition","startBlankCanvas","performCanvasTransition","loadSnapshot"]){
+      vm.runInContext(`${["performCanvasTransition","loadSnapshot"].includes(name)?"async ":""}${clientFunction("persistence.js",name)}`,h.context);
+    }
+    const transition=location?{type:"load",id:target.id,location}:{type:"new"};
+    h.control.persistFailures=1;
+    await assert.rejects(h.context.requestCanvasTransition(transition),/simulated persistence failure/);
+    assert.equal(h.canvasDocuments.activeId,original.id);
+    assert.equal(h.state.widgets[0].html,"<p>Unsaved original</p>");
+    assert.equal(await h.context.requestCanvasTransition(transition),true);
+    assert.notEqual(h.canvasDocuments.activeId,original.id);
+    assert.equal(h.records.get(original.id).stored.item.widgets[0].html,"<p>Unsaved original</p>");
+    assert.equal(dialog.open,false);
+    await h.context.canvasDocumentsShow(original.id);
+    assert.equal(h.state.widgets[0].html,"<p>Unsaved original</p>");
+    assert.equal(h.state.history[0].type,"drawing");
+    assert.equal(h.state.userRevision,4);assert.equal(h.state.snapshotSavedRevision,2);
+    assert.equal(h.context.canvasHasUnsavedChanges(),true);
+  }
+});
+
 test("MCP finds only open workspace records, excludes closed provider copies, and filters documentId", async () => {
   const records = new Map(), first = harness({records});
   await first.canvasDocumentsReady();
@@ -384,6 +419,32 @@ test("two documents route hidden sessions without changing or mounting the visib
   assert.equal(h.canvasDocuments.activeId, initial);
   assert.equal(h.control.mounts, 0);
   assert.equal(h.control.frames, 0);
+});
+
+test("hidden writes after visible additions allocate fresh identities and persist the exact acknowledged source", async () => {
+  const h = harness(), initial = h.canvasDocumentsCurrent().id;
+  const opened = await createHidden(h, "identity-create", "Identity regression");
+  await startHidden(h, opened.documentId, "identity-session");
+  const present = (artifactId, html) => h.canvasDocumentsExecute("mcp_present_widget", {
+    sessionId: "identity-session", artifactId, requestId: `identity-${artifactId}`, title: artifactId, html,
+  }, {});
+  const one = await present("one", "<p>one</p>");
+  await h.context.canvasDocumentsShow(opened.documentId);
+  // Match restoreWidgets' numeric counter reconciliation when activating a document.
+  h.state.nextWidgetId = 2;
+  const two = await present("two", "<p>two</p>");
+  await h.context.canvasDocumentsShow(initial);
+  const three = await present("three", "<p>three</p>");
+  assert.equal(new Set([one.objectId, two.objectId, three.objectId]).size, 3);
+  assert.equal(three.contentHash, crypto.createHash("sha256").update("<p>three</p>").digest("hex"));
+  assert.equal((await present("three", "<p>three</p>")).objectId, three.objectId);
+  const stored = h.records.get(opened.documentId).stored.item.widgets;
+  assert.deepEqual(stored.map(w => w.html), ["<p>one</p>", "<p>two</p>", "<p>three</p>"]);
+  const reopened = harness({records:h.records,activeId:"new-visible"});
+  await reopened.canvasDocumentsReady();
+  await reopened.context.canvasDocumentsShow(opened.documentId);
+  assert.equal(reopened.state.widgets.length, 3);
+  assert.deepEqual(Array.from(reopened.state.widgets,w=>w.id), [one.objectId,two.objectId,three.objectId]);
 });
 
 test("creating another Canvas stops at the open limit with a localized close-first hint", async () => {
@@ -758,6 +819,27 @@ test("closing a Canvas does not block on inbox and revokes its session", async (
   assert.equal(h.mcpRuntime.sessions.get("closed-session").closed,true);
   await assert.rejects(h.canvasDocumentsExecute("mcp_update_session",{sessionId:"closed-session",summary:"late"},{}),{code:"SESSION_EXPIRED"});
   assert.equal(h.state.widgets.length,0);
+});
+
+test("switching away from an off-canvas viewport preserves content and camera on every side", async () => {
+  for(const camera of [{panX:1600,panY:0},{panX:-11000,panY:0},{panX:0,panY:1600},{panX:-1739.5,panY:-11133.5}]) {
+    const h=harness();await h.canvasDocumentsReady();const original=h.canvasDocumentsCurrent();
+    const other=await createHidden(h,"outside-switch","Other");
+    h.state.widgets.push({id:"widget-1",title:"Keep me",html:"<p>Original content</p>",x:200,y:200,w:400,h:300});
+    Object.assign(h.state,{scale:0.5,...camera});
+    Object.assign(h.context,{SIZE:20000,canvasViewportMetrics:()=>({width:1200,height:800})});
+    vm.runInContext(clientFunction("ai-runtime.js","viewportRect"),h.context);
+    assert.equal(h.context.viewportRect(),null,"real viewport geometry is fully outside the finite Canvas");
+    await h.context.canvasDocumentsShow(other.documentId);
+    const saved=h.records.get(original.id).stored.item;
+    assert.equal(saved.widgets[0].html,"<p>Original content</p>");
+    assert.equal(saved.view.region,null);assert.equal(saved.view.scale,0.5);
+    assert.equal(saved.view.panX,camera.panX);assert.equal(saved.view.panY,camera.panY);
+    await h.context.canvasDocumentsShow(original.id);
+    assert.equal(h.state.widgets[0].html,"<p>Original content</p>");
+    assert.equal(h.state.scale,0.5);assert.equal(h.state.panX,camera.panX);assert.equal(h.state.panY,camera.panY);
+    assert.equal(h.canvasDocuments.switching,false);
+  }
 });
 
 test("failed close preserves the original Canvas and its session", async () => {
@@ -1716,4 +1798,101 @@ test("legacy drafts retain observed restore order and saved creation metadata se
   assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),["legacy-a","legacy-z"]);
   h.canvasDocuments.activeId="legacy-a";
   assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),["legacy-a","legacy-z"]);
+});
+
+test("unused startup canvases do not accumulate when switching and restarting", async () => {
+  const records=new Map();
+  for(let attempt=0;attempt<3;attempt++){
+    const h=harness({records,activeId:`startup-${attempt}`});
+    h.state.currentSnapshotName="";h.state.currentSnapshotBundleExtensions={};
+    const blank=h.canvasDocumentsCurrent();
+    const target=await createHidden(h,"real-work","My work");
+    await h.context.canvasDocumentsShow(target.documentId);
+    assert.equal(h.canvasDocuments.records.has(blank.id),false,"successful switching retires only the unused placeholder");
+    assert.equal(records.has(blank.id),false,"an unused startup page must not become a durable draft");
+  }
+  assert.equal(records.size,1);
+});
+
+test("legacy empty placeholders do not fill startup capacity and remain explicitly recoverable", async () => {
+  const records=new Map(),seed=harness({records});
+  const empty=await createHidden(seed,"legacy-empty","Untitled Canvas");
+  const template=structuredClone(records.get(empty.documentId));
+  for(let i=0;i<80;i++){
+    const id=`empty-${i}`;records.set(id,{...structuredClone(template),id,metadata:{...template.metadata,documentId:id}});
+  }
+  const work=await createHidden(seed,"real-preserved-work","Real work");
+  const h=harness({records});await h.canvasDocumentsReady();
+  assert.equal(h.canvasDocuments.records.size,2,"empty legacy entries must not consume the 64-document limit");
+  assert.ok(h.canvasDocuments.records.has(work.documentId));
+  assert.equal(records.size,82,"startup does not delete stored records");
+  const opened=await h.canvasDocumentsExecute("mcp_open_canvas",{documentId:empty.documentId,requestId:"reopen-empty"},{});
+  assert.equal(opened.documentId,empty.documentId);
+});
+
+test("empty-looking documents with saved work, drafts, bindings, or metadata remain available", async () => {
+  const variants=[
+    item=>{item.locator={location:"device",id:"saved"};},
+    item=>{item.stored.item.id="saved";},
+    item=>{item.metadata.title="Named empty canvas";},
+    item=>{item.agentDraft="Please help with this";},
+    item=>{item.hasUserHistory=true;},
+    item=>{item.metadata.bindings=[{key:"conversation",client:"Codex"}];},
+    item=>{item.workspace.sessions=[{sessionKey:"conversation",client:"Codex",title:"AI",status:"working",artifacts:[]}];},
+    item=>{item.metadata.context="Notes";},
+    item=>{item.stored.item.preservedAssets=[{kind:"resource"}];},
+    item=>{item.stored.item.manifestExtensions={custom:{value:1}};},
+    item=>{item.stored.item.bundleExtensions.custom={value:1};},
+    item=>{item.stored.tileEntries=[{k:"0,0",blob:new Blob(["ink"])}];},
+    ...["widgets","images","textBoxes","animations"].map(field=>item=>{item.stored.item[field]=[{id:`${field}-1`}];}),
+  ];
+  for(const [index,alter] of variants.entries()){
+    const records=new Map(),seed=harness({records}),opened=await createHidden(seed,`protected-${index}`,"Untitled Canvas");
+    alter(records.get(opened.documentId));
+    const h=harness({records});await h.canvasDocumentsReady();
+    assert.ok(h.canvasDocuments.records.has(opened.documentId),`preserve variant ${index}`);
+  }
+});
+
+test("failed switches keep the active empty page and user history protects an empty page", async () => {
+  const h=harness();h.state.currentSnapshotName="";h.state.currentSnapshotBundleExtensions={};
+  const blank=h.canvasDocumentsCurrent(),target=await createHidden(h,"failed-switch","Work");
+  h.context.decodeSnapshotImagesInBatches=async()=>{throw Error("decode failed");};
+  await assert.rejects(h.context.canvasDocumentsShow(target.documentId),/decode failed/);
+  assert.equal(h.canvasDocuments.activeId,blank.id);assert.ok(h.canvasDocuments.records.has(blank.id));
+  h.context.decodeSnapshotImagesInBatches=async()=>[];
+  h.state.future=[{type:"drawing"}];
+  await h.context.canvasDocumentsShow(target.documentId);
+  assert.ok(h.canvasDocuments.records.has(blank.id));
+  const restarted=harness({records:h.records});await restarted.canvasDocumentsReady();
+  assert.ok(restarted.canvasDocuments.records.has(blank.id));
+});
+
+test("loading a saved Canvas and creating a new blank both retire unused placeholders", async () => {
+  const loaded=harness();loaded.state.currentSnapshotName="";loaded.state.currentSnapshotBundleExtensions={};
+  const old=loaded.canvasDocumentsCurrent();await loaded.context.canvasDocumentsPark();
+  await loaded.context.canvasDocumentsAdopt({id:"saved",name:"Saved work",widgets:[]},"device");
+  assert.equal(loaded.canvasDocuments.records.has(old.id),false);
+  assert.equal(loaded.canvasDocumentsCurrent().locator.id,"saved");
+
+  const h=harness();h.state.currentSnapshotName="";h.state.currentSnapshotBundleExtensions={};
+  const blank=h.canvasDocumentsCurrent();await h.context.canvasDocumentsPark();
+  const dialog={open:false,classList:{contains:()=>false}};
+  Object.assign(h.context,{document:{getElementById:()=>null,querySelector:()=>dialog},setStatusKey(){},fit(){}});
+  vm.runInContext(clientFunction("persistence.js","startBlankCanvas"),h.context);
+  h.context.startBlankCanvas();
+  assert.equal(h.canvasDocuments.records.has(blank.id),false);assert.equal(h.canvasDocuments.records.size,1);
+});
+
+test("legacy conversation history and incomplete snapshots are not treated as disposable blank pages", async () => {
+  for(const mode of ["conversation","incomplete","missing-workspace"]){
+    const records=new Map(),seed=harness({records}),opened=await createHidden(seed,`legacy-${mode}`,"Untitled Canvas");
+    const stored=records.get(opened.documentId),h=harness({records});
+    if(mode==="conversation")h.context.canvasAgentStoredHistoryGroups=()=>[{canvasKey:`workspace:${opened.documentId}`,conversations:[{items:[{}]}]}];
+    if(mode==="incomplete")delete stored.stored.tileEntries;
+    if(mode==="missing-workspace")delete stored.workspace;
+    await h.canvasDocumentsReady();
+    assert.equal(h.canvasDocuments.records.has(opened.documentId),mode!=="missing-workspace");
+    assert.ok(records.has(opened.documentId));
+  }
 });

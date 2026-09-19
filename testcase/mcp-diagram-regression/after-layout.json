@@ -1,0 +1,277 @@
+[
+  {
+    "kind": "architecture",
+    "index": 1,
+    "width": 1200,
+    "height": 377,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "architecture",
+    "index": 2,
+    "width": 2040,
+    "height": 440,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "architecture",
+    "index": 3,
+    "width": 1115,
+    "height": 1351,
+    "mode": "down",
+    "issues": [],
+    "backwards": [
+      "e_3",
+      "e_7"
+    ]
+  },
+  {
+    "kind": "architecture",
+    "index": 4,
+    "width": 1208,
+    "height": 252,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "architecture",
+    "index": 5,
+    "width": 815,
+    "height": 1594,
+    "mode": "down",
+    "issues": [],
+    "backwards": [
+      "e_14"
+    ]
+  },
+  {
+    "kind": "architecture",
+    "index": 6,
+    "width": 1940,
+    "height": 1249,
+    "mode": "down",
+    "issues": [],
+    "backwards": [
+      "e_21"
+    ]
+  },
+  {
+    "kind": "architecture",
+    "index": 7,
+    "width": 1378,
+    "height": 574,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "architecture",
+    "index": 8,
+    "width": 1214,
+    "height": 1763,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "architecture",
+    "index": 9,
+    "width": 3415,
+    "height": 329,
+    "mode": "right",
+    "issues": [],
+    "backwards": [
+      "e_7"
+    ]
+  },
+  {
+    "kind": "architecture",
+    "index": 10,
+    "width": 2670,
+    "height": 3679,
+    "mode": "down",
+    "issues": [],
+    "backwards": [
+      "e_21",
+      "e_33",
+      "e_34",
+      "e_43",
+      "e_47"
+    ]
+  },
+  {
+    "kind": "sequence",
+    "index": 1,
+    "width": 796,
+    "height": 559,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 2,
+    "width": 1279,
+    "height": 1161,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 3,
+    "width": 1279,
+    "height": 1132,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 4,
+    "width": 1276,
+    "height": 998,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 5,
+    "width": 1279,
+    "height": 814,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 6,
+    "width": 1192,
+    "height": 1150,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 7,
+    "width": 1276,
+    "height": 1521,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 8,
+    "width": 1276,
+    "height": 1192,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 9,
+    "width": 400,
+    "height": 618,
+    "mode": "fit",
+    "backwards": []
+  },
+  {
+    "kind": "sequence",
+    "index": 10,
+    "width": 2356,
+    "height": 3329,
+    "mode": "scroll",
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 1,
+    "width": 592,
+    "height": 1039,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 2,
+    "width": 587,
+    "height": 826,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 3,
+    "width": 602,
+    "height": 2173,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 4,
+    "width": 708,
+    "height": 1877,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 5,
+    "width": 2677,
+    "height": 402,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 6,
+    "width": 775,
+    "height": 2401,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 7,
+    "width": 741,
+    "height": 2226,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 8,
+    "width": 712,
+    "height": 1984,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 9,
+    "width": 614,
+    "height": 134,
+    "mode": "right",
+    "issues": [],
+    "backwards": []
+  },
+  {
+    "kind": "workflow",
+    "index": 10,
+    "width": 1600,
+    "height": 6440,
+    "mode": "down",
+    "issues": [],
+    "backwards": []
+  }
+]

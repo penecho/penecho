@@ -1377,7 +1377,7 @@
       if (pointerActivated) requestAnimationFrame(() => fullscreenButton.blur());
     }
   };
-  document.querySelector("#newCanvasBtn").onclick = openNewCanvasDialog;
+  document.querySelector("#newCanvasBtn").onclick = () => canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvas;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
@@ -1391,8 +1391,10 @@
     closeHistorySavePanel();
     void saveSnapshotFromHistory();
   };
-  document.querySelector("#historySearch").addEventListener("input", renderSnapshotList);
-  document.querySelector("#historySort").addEventListener("change", renderSnapshotList);
+  document.querySelector("#historySearch").addEventListener("input", () => historyFiltersChanged());
+  window.addEventListener("penecho:cloud-account-changed", reconcileHistoryIdentity);
+  window.addEventListener("penecho:remote-cloud-status", reconcileHistoryIdentity);
+  document.querySelector("#historySort").addEventListener("change", () => historyFiltersChanged({immediate:true}));
   document.querySelectorAll("[data-history-view]").forEach((button) => {
     button.addEventListener("click", () => setHistoryView(button.dataset.historyView));
   });
@@ -1419,7 +1421,7 @@
   document.querySelector("#historyProjectSelect").onchange = (event) => {
     if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
     else rememberSelectedServerProject(event.target.value);
-    renderSnapshotList();
+    historyFiltersChanged({immediate:true});
   };
   document.querySelector("#newCanvasProjectSelect").onchange = (event) => {
     if (state.snapshotLocation === "cloud") rememberSelectedCloudProject(event.target.value);
@@ -1645,6 +1647,9 @@
   settingsApiUrl?.addEventListener("input", clearFetchedApiModels);
   settingsApiKey?.addEventListener("input", clearFetchedApiModels);
   settingsApiModel?.addEventListener("input", updateApiModelSelection);
+  settingsApiModel?.addEventListener("click", () => {
+    if (PenEchoApiPresets.forFamily(settingsApiFormat?.value)) showApiModelOptions();
+  });
   settingsApiModel?.addEventListener("keydown", handleApiModelKeydown);
   settingsApiModelOptions?.addEventListener("click", (event) => {
     const option = event.target.closest("[data-api-model-value]");

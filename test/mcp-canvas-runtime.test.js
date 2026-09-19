@@ -105,14 +105,81 @@ test("ordinary work flows down and comparisons stay related without moving user 
   const old={x:wb.x,y:wb.y};wa.x+=25;await create("d");assert.deepEqual({x:wb.x,y:wb.y},old);
   await assert.rejects(create("bad",{relativeTo:"missing",relation:"below"}),/Related artifact/);
 });
+test("placement errors identify only unambiguous artifact IDs owned by the current session",async()=>{
+  const h=harness();await h.mcpExecute("mcp_start_session",{sessionId:"one",title:"Design"},{});
+  const create=(artifactId,relativeTo)=>h.mcpExecute("mcp_present_widget",{sessionId:"one",artifactId,title:artifactId,html:"<p>Preview</p>",...(relativeTo?{presentation:{relativeTo,relation:"beside"}}:{})},{});
+  const original=await create("existing-chart"),revision=h.state.userRevision;
+  await assert.rejects(create("simple-chart",original.objectId),error=>{
+    assert.match(error.message,/presentation.relativeTo="existing-chart"/);assert.match(error.message,/not an objectId/);assert.match(error.message,/new requestId/);return true;
+  });
+  assert.equal(h.widgets.size,1);assert.equal(h.state.userRevision,revision);
+  await create("simple-chart","existing-chart");assert.equal(h.widgets.size,2);
+  await h.mcpExecute("mcp_start_session",{sessionId:"other",title:"Other"},{});
+  h.mcpRuntime.sessions.get("other").artifacts.set("foreign-artifact",{objectId:"foreign-object"});
+  await assert.rejects(create("bad","foreign-object"),error=>{
+    assert.match(error.message,/Use an existing artifactId from this session/);assert.doesNotMatch(error.message,/foreign-artifact/);return true;
+  });
+  const session=h.mcpRuntime.sessions.get("one");
+  session.artifacts.set("alias",{objectIds:[original.objectId]});
+  await assert.rejects(create("ambiguous",original.objectId),/Use an existing artifactId from this session/);
+  session.artifacts.delete("alias");session.artifacts.set("native-group",{objectIds:["native-member"]});
+  await assert.rejects(create("native","native-member"),/presentation.relativeTo="native-group"/);
+});
 test("new previews frame once as a batch, user navigation pauses following, disconnect clears it",async()=>{
   const h=harness();await h.mcpExecute("mcp_start_session",{sessionId:"one",title:"Design"},{});
   h.mcpRuntime.ready=true;h.mcpRuntime.socket={readyState:1,close(){}};
   for(const id of ["a","b","c"])await h.mcpExecute("mcp_present_widget",{sessionId:"one",artifactId:id,title:id,html:"<p>Preview</p>"},{});
   assert.equal(h.context.frames.length,0);h.mcpFlushView();assert.equal(h.context.frames.length,1);assert.equal(h.context.frames[0].w,1200);assert.equal(h.context.frames[0].h,2464);
-  h.mcpPauseView();await h.mcpExecute("mcp_present_widget",{sessionId:"one",artifactId:"d",title:"D",html:"<p>D</p>"},{});h.mcpFlushView();assert.equal(h.context.frames.length,1);assert.equal(h.mcpRuntime.pendingView.size,1);
+  await h.mcpExecute("mcp_present_widget",{sessionId:"one",artifactId:"d",title:"D",html:"<p>D</p>"},{});h.mcpPauseView();h.mcpFlushView();assert.equal(h.context.frames.length,1);assert.equal(h.mcpRuntime.pendingView.size,1);
   h.mcpFlushView(true);assert.equal(h.context.frames.length,2);assert.equal(h.mcpRuntime.pendingView.size,0);
   h.mcpQueueView(h.mcpRuntime.sessions.get("one"),h.widgets.values().next().value);h.mcpDisconnect();assert.equal(h.mcpRuntime.pendingView.size,0);assert.equal(h.mcpRuntime.layoutTimer,0);
+});
+
+test('idle navigation and a paused different Canvas do not suppress a new batch',async()=>{
+  const h=harness();
+  await h.mcpExecute('mcp_start_session',{sessionId:'old',title:'Old'},{});
+  await h.mcpExecute('mcp_start_session',{sessionId:'new',title:'New'},{});
+  h.mcpRuntime.sessions.get('old').internalAgent=true;h.mcpRuntime.sessions.get('new').internalAgent=true;
+  h.context.mcpSessionVisible=session=>session.sessionId==='new';
+  h.mcpRuntime.pendingView.set('old',new Set(['old-result']));h.mcpPauseView();
+  await h.mcpExecute('mcp_present_widget',{sessionId:'new',artifactId:'first',title:'First',html:'<p>First</p>'},{});
+  h.mcpFlushView();
+  assert.equal(h.context.frames.length,1);assert.equal(h.mcpRuntime.pendingView.has('new'),false);
+  assert.equal(h.mcpRuntime.pendingView.get('old').size,1,'other Canvas retains its pending content');
+  h.mcpPauseView();
+  await h.mcpExecute('mcp_present_widget',{sessionId:'new',artifactId:'second',title:'Second',html:'<p>Second</p>'},{});
+  h.mcpFlushView();assert.equal(h.context.frames.length,2,'idle interaction does not opt out of future deliveries');
+  clearTimeout(h.mcpRuntime.layoutTimer);
+});
+
+test('a fresh Agent turn follows its newest Widget without replaying older attention',async()=>{
+  const h=harness();await h.mcpExecute('mcp_start_session',{sessionId:'internal',title:'Agent'},{});
+  const session=h.mcpRuntime.sessions.get('internal');session.internalAgent=true;
+  Object.assign(h.state,{scale:.25,panX:0,panY:0});
+  h.context.canvasAgentFramePlan=()=>({scale:.8,stage:{x:0,y:0,w:1200,h:900}});
+  h.context.viewportRect=()=>({x:-h.state.panX/.25,y:-h.state.panY/.25,w:4800,h:3600});
+  const present=(id,presentation)=>h.mcpExecute('mcp_present_widget',{sessionId:'internal',artifactId:id,title:id,html:`<p>${id}</p>`,presentation},{});
+  await present('previous',{attention:'request'});h.mcpPauseView();
+  const source=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-agent-runtime.js'),'utf8');
+  const start=source.indexOf('  function canvasAgentHandleEvent('),end=source.indexOf('  async function canvasAgentHandleMessage(',start);
+  h.context.canvasAgent={};h.context.canvasAgentSetRunning=()=>{};
+  vm.runInContext(source.slice(start,end),h.context);
+  h.context.canvasAgentHandleEvent({kind:'turn_start'},{replay:true});
+  assert.equal(h.mcpRuntime.viewPaused,true,'history replay must not resume the camera');
+  assert.equal(h.mcpRuntime.pendingView.get('internal').size,1);
+  h.context.canvasAgentHandleEvent({kind:'turn_start'});
+  assert.equal(h.mcpRuntime.pendingView.has('internal'),false,'a fresh request retires older turn attention only');
+  assert.deepEqual([h.state.panX,h.state.panY],[0,0],'starting a turn does not itself move the camera');
+  await present('first');const latest=await present('second'),widget=h.widgets.get(latest.objectId);
+  h.mcpFlushView();
+  assert.equal(h.state.scale,.25,'follow preserves Canvas zoom');
+  assert.equal(h.state.panY,48-widget.y*.25,'latest Widget starts inside the reading viewport');
+  assert.equal(h.mcpRuntime.pendingView.size,0);
+  const pan=h.state.panY;h.mcpFlushView();assert.equal(h.state.panY,pan,'older output never pulls the camera back');
+  await present('third');h.state.drawing=true;h.mcpFlushView();
+  assert.equal(h.state.panY,pan,'active drawing still blocks automatic movement');
+  assert.equal(h.mcpRuntime.pendingView.get('internal').size,1);
+  clearTimeout(h.mcpRuntime.layoutTimer);
 });
 
 test('native artifact bounds include every owned object and capture reuses bounded Canvas path',async()=>{
@@ -375,4 +442,25 @@ test('interleaved sessions reveal the most recently queued result',async()=>{
  assert.ok(Math.abs(h.state.panY+(latest.y+latest.h/2)*h.state.scale-362)<.01);
  assert.equal(h.mcpRuntime.pendingView.size,0);
  h.mcpDisconnect();
+});
+
+test('Widget artifact captures include full content and overflow while inspect keeps its viewport',async()=>{
+ for(const ephemeral of [false,true]){
+  const h=harness(),requests=[],draws=[],image={width:1200,height:2400};
+  const widget={id:'long',contentW:800,contentH:400,w:1600,h:800,mcpEphemeral:ephemeral,frame:{contentWindow:{}}};
+  h.context.mcpWaitForWidgetLoad=async()=>{};
+  h.context.WIDGET_SNAPSHOT_TIMEOUT_MS=18000;
+  h.context.CANVAS_AGENT_LAYOUT_CAPTURE_POLICY={maxLongEdge:1024,maxPixels:520000};
+  h.context.requestWidgetSnapshot=async(...args)=>{requests.push(args);return args[5]?{image,contentWidth:800,contentHeight:1600,overflow:{x:true,y:true}}:{width:800,height:400};};
+  h.context.document.createElement=()=>({width:0,height:0,getContext:()=>({drawImage:(...args)=>draws.push(args)})});
+  h.context.canvasAgentCompressedCanvas=async canvas=>({canvas,blob:{type:'image/webp',size:12}});
+  h.context.canvasAgentReadDataUrl=async()=> 'data:image/webp;base64,AQ==';
+  const result=await h.context.mcpCaptureWidget(widget,{artifactId:'long'},{controller:new AbortController()});
+  assert.equal(requests[0][5],!ephemeral);
+  assert.deepEqual({...result.viewport},{width:800,height:400});
+  assert.equal(result.capture.scope,ephemeral?'viewport':'full-content');
+  if(!ephemeral){assert.deepEqual({...result.capture.contentSize},{width:800,height:1600});assert.deepEqual({...result.capture.overflow},{x:true,y:true});}
+  assert.ok(result.width<=1024&&result.height<=1024&&result.width*result.height<=520000);
+  assert.equal(draws.length,1);assert.deepEqual([widget.w,widget.h,widget.contentW,widget.contentH],[1600,800,800,400]);
+ }
 });

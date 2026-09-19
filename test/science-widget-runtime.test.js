@@ -76,6 +76,7 @@ test("Widget initialization carries its authored source identity", () => {
     send = vm.runInNewContext(`(${functionSource(canvas, "sendWidgetInit")})`, {
       pluginManifests:new Map([["general", { styles:"/* plugin */" }]]),
       location:{ origin:"https://parent.example" },
+      state:{language:"en"},
     });
   send(widget);
   assert.equal(sent.length, 1);
@@ -85,6 +86,7 @@ test("Widget initialization carries its authored source identity", () => {
     imageAssets:{},
     title:"Fields",
     html:"<main></main>",
+    language:"en",
     pluginStyles:"/* plugin */",
     sourceFormat:"penecho-visual-explorer+html",
     frameworkVersion:"penecho-visual-explorer/1",
@@ -109,7 +111,7 @@ test("shared and legacy science modes require supported init metadata and one ex
   assert.equal(gate(parsedFor([meta("math-2d", "PENECHO-VISUAL-SKILL")]), "penecho-visual-explorer+html", "penecho-visual-explorer/1"), false);
   assert.equal(gate(parsedFor([meta("math-2d"), meta("math-3d")]), "penecho-visual-explorer+html", "penecho-visual-explorer/1"), false);
   assert.equal(gate(parsedFor([]), "penecho-visual-explorer+html", "penecho-visual-explorer/1"), false);
-  assert.match(host, /widgetDocument\(imageHtml, message\.pluginStyles \|\| "", runtimeVersion, message\.sourceFormat, message\.frameworkVersion\)/);
+  assert.match(host, /widgetDocument\(imageHtml, message\.pluginStyles \|\| "", runtimeVersion, message\.sourceFormat, message\.frameworkVersion, widgetLanguage\)/);
 });
 
 test("science mode rewrites only exact Manim-Web static and dynamic module imports", () => {

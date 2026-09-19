@@ -3599,6 +3599,27 @@ test("PenEcho Agent validates capture delivery and browser target errors without
   assert.match(functionSource(source,"canvasAgentCapture"),/object\.kind!=="widget"[\s\S]*?DETAIL_TARGET_REQUIRED/);
 });
 
+test("PenEcho Agent reports an empty off-canvas capture without dereferencing or allocating a bitmap",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js");
+  let viewport=null,content=null,allocations=0;
+  const context={
+    viewportRect:()=>viewport,canvasAgentContentBounds:()=>content,
+    canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
+    document:{createElement(){allocations++;throw Error("unexpected bitmap allocation");}},
+    CANVAS_AGENT_LAYOUT_CAPTURE_POLICY:{maxLongEdge:1600,maxPixels:2560000},
+  };
+  const capture=vm.runInNewContext(`(()=>{${functionSource(source,"canvasAgentTargetRegion")} ${functionSource(source,"canvasAgentCapture").replace(/^function /,"async function ")} return canvasAgentCapture;})()`,context);
+  for(const target of ["viewport","canvas"]){
+    await assert.rejects(capture({target},{}),error=>error.code==="EMPTY_CAPTURE_REGION"&&error.details.target===target);
+  }
+  assert.equal(allocations,0);
+  content={x:100,y:200,w:300,h:400};
+  const region=vm.runInNewContext(`(${functionSource(source,"canvasAgentTargetRegion")})`,context);
+  assert.strictEqual(region({target:"canvas"}),content,"off-screen content remains capturable by canvas target");
+  viewport={x:0,y:0,w:100,h:80};
+  assert.strictEqual(region({target:"viewport"}),viewport);
+});
+
 test("PenEcho Agent aborts stale Widget snapshot requests before they can update capture cache",async()=>{
   const source=read("src/client/app/canvas-runtime.js"),widgetSnapshotRequests=new Map();
   let requestId="";
