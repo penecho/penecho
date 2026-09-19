@@ -151,7 +151,26 @@
         || spec.config && typeof spec.config === "object" && Object.prototype.hasOwnProperty.call(spec.config, "background");
       return hasBackground ? spec : { ...spec, background:"transparent" };
     }
-    function frameRuntime(config, responsiveDotSource, vegaLiteSpecWithDefaultBackground) {
+    // Saved Mermaid widgets keep their renderer, independently of the formats
+    // offered for new diagrams. This function is embedded only in legacy frames.
+    async function renderLegacyMermaid(stage, source) {
+      const { default:mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs");
+      mermaid.initialize({ startOnLoad:false, securityLevel:"strict", theme:"base", themeVariables:{ background:"transparent", lineColor:"#64748b" } });
+      const rendered = await mermaid.render(`penecho-${Math.random().toString(36).slice(2)}`, source);
+      stage.innerHTML = rendered.svg;
+      rendered.bindFunctions?.(stage);
+      const svg = stage.querySelector("svg");
+      if (svg) {
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.style.maxWidth = "100%";
+        svg.style.maxHeight = "100%";
+      }
+    }
+    function frameRuntime(config, responsiveDotSource, vegaLiteSpecWithDefaultBackground, legacyRenderer) {
       const stage = document.querySelector("#diagram-stage"),
         status = document.querySelector("#diagram-status"),
         root = document.querySelector(".pd-root"),
@@ -441,7 +460,8 @@
         resizeRender = () => { cy.resize(); cy.fit(undefined, 36); };
       }
       async function render() {
-        if (format === "dot") await renderDot();
+        if (format === "mermaid" && legacyRenderer) await legacyRenderer(stage, source);
+        else if (format === "dot") await renderDot();
         else if (format === "bpmn-xml") await renderBpmn();
         else if (format === "vega-lite") await renderVegaLite();
         else if (format === "geojson") await renderGeoJson();
@@ -471,10 +491,8 @@
       }
     }
     function documentFor({ sourceFormat, source, title, diagramKind }) {
-      // Preserve saved Mermaid source without loading the retired renderer.
-      if (String(sourceFormat).trim().toLowerCase() === "mermaid" && typeof source === "string" && new TextEncoder().encode(source).length <= 100 * 1024)
-        return `<!doctype html><meta charset="utf-8"><main><h2>${escapeHtml(title || "Diagram")}</h2><p>Mermaid rendering has been removed. The original source is preserved. Use Visual Explorer or a supported professional format to create a replacement.</p><pre style="white-space:pre-wrap">${escapeHtml(source)}</pre></main>`;
-      const format = formatRecord(sourceFormat);
+      const legacyMermaid = String(sourceFormat).trim().toLowerCase() === "mermaid",
+        format = formatRecord(sourceFormat) || (legacyMermaid ? { id:"mermaid", label:"Mermaid" } : null);
       if (!format || typeof source !== "string" || !source.trim() || new TextEncoder().encode(source).length > 100 * 1024) return "";
       const config = {
         sourceFormat:format.id,
@@ -509,7 +527,7 @@
       <p id="diagram-status" class="pd-status">Rendering ${escapeHtml(format.label)}...</p>
     </section>
   </main>
-  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveDotSource.toString()},${vegaLiteSpecWithDefaultBackground.toString()});</script>
+  <script type="module">(${frameRuntime.toString()})(${scriptValue(config)},${responsiveDotSource.toString()},${vegaLiteSpecWithDefaultBackground.toString()},${legacyMermaid ? renderLegacyMermaid.toString() : "null"});</script>
 </body>
 </html>`;
     }

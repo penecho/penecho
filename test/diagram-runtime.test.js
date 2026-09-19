@@ -32,12 +32,57 @@ test("diagram runtime generates an isolated lazy renderer document", () => {
   assert.doesNotMatch(html, /mermaid@|renderMermaid/);
 });
 
-test("retired Mermaid sources remain readable without loading a renderer", () => {
+test("saved Mermaid sources render without reopening the new-diagram capability", () => {
   assert.equal(runtime.supports("mermaid"),false);
-  const html=runtime.documentFor({sourceFormat:"mermaid",source:'flowchart LR\nA[<script>bad()</script>] --> B',title:"Old source"});
-  assert.match(html,/Original source|original source/);
-  assert.match(html,/&lt;script&gt;bad/);
-  assert.doesNotMatch(html,/<script|mermaid@|renderMermaid/);
+  assert.equal(runtime.normalizeFormat("mermaid"), "");
+  const source = 'flowchart LR\nA[<script>bad()</script>] --> B',
+    html=runtime.documentFor({sourceFormat:"mermaid",source,title:"Old <source>"});
+  assert.match(html,/mermaid@10\.9\.1/);
+  assert.match(html,/securityLevel:"strict"/);
+  assert.match(html,/Old &lt;source&gt;/);
+  assert.ok(html.includes(Buffer.from(source).toString("base64")));
+  assert.doesNotMatch(html,/<script>bad\(\)<\/script>|rendering has been removed/);
+  for (const source of ["", "   ", "x".repeat(100 * 1024 + 1), "图".repeat(35000)])
+    assert.equal(runtime.documentFor({sourceFormat:"mermaid",source}), "");
+});
+
+test("legacy Mermaid paints SVG in the existing frame and reports renderer failure", async () => {
+  const source = "sequenceDiagram\nAlice->>Bob: Hello", importUrl = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs",
+    html = runtime.documentFor({sourceFormat:"mermaid",source,title:"Saved sequence"}),
+    script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  for (const failure of [false, true]) {
+    const classes = { toggle(){}, remove(){} }, svg = { style:{}, removeAttribute(){}, setAttribute(name,value){this[name]=value;} },
+      stage = { innerHTML:"", querySelector:selector=>selector === "svg" && stage.innerHTML ? svg : null },
+      status = { isConnected:true, hidden:false, classList:classes }, root = { classList:classes }, timers = new Set();
+    let initialization, receivedSource, boundStage, loads=0;
+    const mermaid = {
+      initialize:options=>{initialization=options;},
+      render:async (_id,value)=>{receivedSource=value;return { svg:'<svg viewBox="0 0 100 60"></svg>',bindFunctions:element=>{boundStage=element;} };},
+    };
+    const execute = new Function("document", "parent", "loadMermaid", "setTimeout", "clearTimeout", "ResizeObserver",
+      script.replace(`import("${importUrl}")`, "loadMermaid()"));
+    execute({querySelector:selector=>({"#diagram-stage":stage,"#diagram-status":status,".pd-root":root})[selector]},
+      {postMessage(){}}, async ()=>{loads++;if(failure)throw Error("renderer unavailable");return {default:mermaid};},
+      callback=>{timers.add(callback);return callback;}, timer=>timers.delete(timer), undefined);
+    await new Promise(setImmediate);
+    assert.equal(loads, 1);
+    assert.equal(timers.size, 0);
+    if (failure) {
+      assert.equal(status.hidden, false);
+      assert.match(status.textContent, /Mermaid could not be rendered.*renderer unavailable/);
+    } else {
+      assert.equal(initialization.securityLevel, "strict");
+      assert.equal(initialization.startOnLoad, false);
+      assert.equal(initialization.themeVariables.lineColor, "#64748b");
+      assert.equal(receivedSource, source);
+      assert.equal(boundStage, stage);
+      assert.match(stage.innerHTML, /<svg/);
+      assert.equal(svg.preserveAspectRatio, "xMidYMid meet");
+      assert.equal(svg.style.width, "100%");
+      assert.equal(svg.style.height, "100%");
+      assert.equal(status.hidden, true);
+    }
+  }
 });
 
 test("each local format maps to one fixed on-demand renderer and unknown formats stay unsupported", () => {
