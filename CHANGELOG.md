@@ -14,6 +14,14 @@ The README includes two examples of each diagram type, with aligned WebP preview
 
 Implementation notes: [architecture](docs/architecture-local-renderer.md), [sequences](docs/sequence-local-renderer.md), and [workflows](docs/workflow-local-renderer.md).
 
+### Other improvements and fixes
+
+- **Canvas Library:** browse large libraries with pagination, search, project filters, and sorting; load previews as cards become visible.
+- **AI connections:** choose from additional API provider presets, fetch available models, and keep custom endpoints and model IDs editable.
+- **Desktop updates:** keep the update window and its menu entry in sync with the Canvas language.
+- **Existing diagrams:** restore rendering for saved Mermaid diagrams while retaining their source.
+- **Documentation:** refresh multilingual README galleries with aligned WebP examples and document the diagram implementation and attribution.
+
 ## 1.3.2
 
 | Update | What it adds |
