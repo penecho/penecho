@@ -50,24 +50,24 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
   min-width: 44px;
   min-height: 36px;
-  padding: 5px 10px 5px 7px;
+  padding: 5px 13px;
   border: 1px solid #e4e4e7;
   border-radius: 13px;
   background: #ffffff;
-  color: #18181b;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: normal;
+  color: #30372d;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: -0.7px;
   text-decoration: none;
   cursor: pointer;
   box-shadow: 0 4px 14px rgb(24 24 27 / .1);
   opacity: .5;
   transition: opacity .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
-.viewer-brand img { width: 26px; height: 26px; object-fit: contain; }
+/* Site wordmark: "Pen" regular + "Echo" bold, matching the public header. */
+.viewer-brand strong { font-weight: 700; }
 .viewer-brand:hover { opacity: 1; border-color: #d4d4d8; background: #fafafa; box-shadow: 0 6px 20px rgb(24 24 27 / .13); }
 .viewer-brand:focus-visible { outline: 3px solid rgb(37 99 235 / .32); outline-offset: 2px; }
 .viewer-brand:focus-visible { opacity: 1; }
@@ -146,9 +146,9 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
     left: max(8px, env(safe-area-inset-left));
     gap: 8px;
   }
-  .viewer-brand { width: 44px; padding: 7px; }
-  .viewer-brand span { display: none; }
-  .viewer-actions { max-width: calc(100% - 52px); gap: 2px; }
+  .viewer-brand { padding: 6px 11px; font-size: 15px; }
+  .viewer-actions { max-width: calc(100% - 108px); gap: 2px; }
+  .viewer-primary { flex: 0 1 auto; }
   .viewer-chip,
   .viewer-primary { min-height: 44px; padding-inline: 12px; }
   .viewer-account-action { max-width: min(28vw, 136px); }
@@ -192,3 +192,5 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 .viewer-status img { max-width: min(920px, 92vw); max-height: 62vh; border-radius: 12px; box-shadow: 0 18px 60px rgba(0, 0, 0, .5); }
 .viewer-status .spinner { width: 22px; height: 22px; margin: 0 auto 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: viewer-spin 1s linear infinite; }
 @keyframes viewer-spin { to { transform: rotate(360deg); } }
+
+.viewer-copy-error { max-width: 240px; font: inherit; white-space: normal; }
