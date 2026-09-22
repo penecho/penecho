@@ -18,12 +18,12 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
     'elk.layered.nodePlacement.strategy':'NETWORK_SIMPLEX', 'elk.layered.nodePlacement.bk.fixedAlignment':'BALANCED', 'elk.layered.nodePlacement.favorStraightEdges':'true', 'elk.layered.unnecessaryBendpoints':'true' };
   if (options.wrap) Object.assign(spacing, {'elk.layered.wrapping.strategy':'MULTI_EDGE', 'elk.aspectRatio':String(options.aspectRatio)});
   if (options.compact) Object.assign(spacing, {'elk.layered.layering.strategy':'COFFMAN_GRAHAM', 'elk.layered.layering.coffmanGraham.layerBound':'1'});
-  const graph = { id:'_root', layoutOptions:spacing, children:[], edges:[] };
+  const graph = { id:'arch:root', layoutOptions:spacing, children:[], edges:[] };
   const groups = new Map((data.groups || []).map(g => {
     // Downward entry routes can split a small frame's header in half. Reserve
     // enough height for the title in one side of that slot, not its full width.
     const headerHeight = direction === 'DOWN' ? Math.max(64, 28 + wrap(g.label,80,14,measure).length*17) : 48;
-    return [g.id, {id:`g_${g.id}`, children:[], layoutOptions:{...spacing,
+    return [g.id, {id:`arch:group:${g.id}`, children:[], layoutOptions:{...spacing,
       'elk.padding':`[top=${headerHeight},left=22,bottom=24,right=22]`, 'elk.nodeSize.constraints':'MINIMUM_SIZE',
       'elk.nodeSize.minimum':`(${Math.ceil(measure(g.label,14) + 48)},100)`}, data:{...g,headerHeight,titleWidth:Math.ceil(measure(g.label,14))}}];
   }));
@@ -33,8 +33,8 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
     const title = wrap(n.label, width - 30, 16, measure), subtitle = wrap(n.subtitle, width - 24, 12, measure);
     const height = Math.max(76, 26 + title.length * 22 + (subtitle.length ? 5 + subtitle.length * 17 : 0));
     const down=direction==='DOWN';
-    const ports=[{id:`${n.id}_in`,x:down?width/2:0,y:down?0:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'NORTH':'WEST'}},{id:`${n.id}_out`,x:down?width/2:width,y:down?height:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'SOUTH':'EAST'}}];
-    (n.group ? groups.get(n.group) : graph).children.push({id:`n_${n.id}`, width, height, layoutOptions:{'elk.portConstraints':'FIXED_POS'}, ports, data:{...n, titleLines:title, subtitleLines:subtitle}});
+    const ports=[{id:`arch:port:${n.id}:in`,x:down?width/2:0,y:down?0:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'NORTH':'WEST'}},{id:`arch:port:${n.id}:out`,x:down?width/2:width,y:down?height:height/2,width:0,height:0,layoutOptions:{'elk.port.side':down?'SOUTH':'EAST'}}];
+    (n.group ? groups.get(n.group) : graph).children.push({id:`arch:node:${n.id}`, width, height, layoutOptions:{'elk.portConstraints':'FIXED_POS'}, ports, data:{...n, titleLines:title, subtitleLines:subtitle}});
   }
   const adjacency = new Map(data.nodes.map(n=>[n.id, []]));
   data.edges.forEach((e,i)=>{ if(!['optional','return','config'].includes(e.kind)) adjacency.get(e.from).push([e.to,i]); });
@@ -58,7 +58,7 @@ export function buildGraph(input, measure = measureFallback, options = {}) {
   data.edges.forEach((e, i) => {
     const lines = wrap(e.label, 110, 12, measure);
     const reversed=feedback.has(i)&&e.from!==e.to;
-    graph.edges.push({id:`e_${i}`, sources:[`${reversed?e.to:e.from}_out`], targets:[`${reversed?e.from:e.to}_in`], data:{...e, lines,reversed}, layoutOptions:{'elk.layered.priority.straightness':primary.has(i)?'100':'0', 'elk.layered.priority.direction':primary.has(i)?'100':e.kind==='return'?'0':'1'},
+    graph.edges.push({id:`arch:edge:${i}`, sources:[`arch:port:${reversed?e.to:e.from}:out`], targets:[`arch:port:${reversed?e.from:e.to}:in`], data:{...e, lines,reversed}, layoutOptions:{'elk.layered.priority.straightness':primary.has(i)?'100':'0', 'elk.layered.priority.direction':primary.has(i)?'100':e.kind==='return'?'0':'1'},
       ...(lines.length ? {labels:[{text:e.label, width:Math.ceil(Math.max(...lines.map(s => measure(s,12))) + 12),
         height:lines.length * 17 + 8, layoutOptions:{'elk.edgeLabels.placement':'CENTER','elk.edgeLabels.inline':'false'}}]} : {})});
   });

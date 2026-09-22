@@ -30,7 +30,7 @@
     visualExplorerManimMathJaxUrl = new URL("visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24", location.href).href,
     authoredManimWebUrl = "https://cdn.jsdelivr.net/npm/manim-web@0.3.24/dist/manim-web.browser.js",
     visualExplainerRuntimeUrl = new URL("visual-explainer-runtime.js?v=3", location.href).href,
-    architectureRuntimeUrl = new URL("architecture-runtime.js?v=2f2e6bd30048", location.href).href,
+    architectureRuntimeUrl = new URL("architecture-runtime.js?v=da3fa8133c52", location.href).href,
     workflowRuntimeUrl = new URL("workflow-runtime.js?v=aaa58af15792", location.href).href,
     sequenceRuntimeUrl = new URL("sequence-runtime.js?v=b06af01842e3", location.href).href,
     architectureWorkerUrl = new URL("architecture-worker.js?v=07e7dc2773da", location.href).href,
