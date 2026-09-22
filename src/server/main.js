@@ -3252,6 +3252,10 @@ const server = http.createServer(async (req, res) => {
         if(req.method==='GET'&&url.pathname==='/api/cloud/mcp')result.local={cloudMcpEnabled:cloudConnector.status().cloudMcpEnabled,device:cloudConnector.status().device};
         return send(res,req.method==="POST"?201:200,result);
       }
+      if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(url.pathname) && ["GET","POST","DELETE"].includes(req.method)) {
+        const path=url.pathname.replace("/api/cloud/","/api/v1/")+(req.method==="GET"?url.search:"");
+        return send(res,200,await cloudConnector.cloudRequest(path,{method:req.method,...(req.method!=="GET"?{body:await readJson(req,4096)}:{})}));
+      }
       if(req.method==="GET"&&url.pathname==="/api/cloud/status")return send(res,200,cloudConnector.status());
       if(req.method==="GET"&&url.pathname==="/api/cloud/account")return send(res,200,await cloudConnector.refreshAccount({force:true}));
       if(req.method==="GET"&&url.pathname==="/api/cloud/models")return send(res,200,await cloudConnector.hostedModels());

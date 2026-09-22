@@ -1896,3 +1896,20 @@ test("legacy conversation history and incomplete snapshots are not treated as di
     assert.ok(records.has(opened.documentId));
   }
 });
+
+
+test('browser draft MCP cannot borrow a later Cloud login to open or rename saved documents',async()=>{
+ const h=harness();await h.canvasDocumentsReady();
+ h.context.window.PENECHO_CONFIG.browserDraftId='isolated-draft';
+ h.context.fetch=async()=>{throw Error('Cloud must not be accessed by a draft MCP capability');};
+ const execution=cancellableMcp(h),doc=h.canvasDocumentsCurrent();
+ for(const args of [{locator:{location:'cloud',id:'private-cloud-document'}},{documentId:'outside-draft'}]){
+  await assert.rejects(h.canvasDocumentsExecute('mcp_open_canvas',{...args,requestId:JSON.stringify(args)},execution),{code:'BROWSER_DRAFT_SCOPE'});
+ }
+ // The user saved this draft manually. MCP can rename its local working copy only.
+ doc.locator={location:'cloud',id:'explicitly-saved-copy'};
+ const renamed=await h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Local draft name'),execution);
+ assert.equal(renamed.saved,false);assert.equal(doc.title,'Local draft name');
+ const reopened=await h.canvasDocumentsExecute('mcp_open_canvas',{documentId:doc.id,requestId:'own-local-draft'},execution);
+ assert.equal(reopened.documentId,doc.id);
+});

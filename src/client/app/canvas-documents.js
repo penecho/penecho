@@ -202,7 +202,7 @@
   }
   async function canvasDocumentsDb() {
     if(canvasDocuments.db)return canvasDocuments.db;
-    const request=indexedDB.open("penecho-workspace-documents",1);
+    const request=indexedDB.open("penecho-workspace-documents"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),1);
     request.onupgradeneeded=()=>request.result.createObjectStore("documents",{keyPath:"id"});
     canvasDocuments.db=await canvasDocumentsBound(requestResult(request));return canvasDocuments.db;
   }
@@ -628,7 +628,10 @@
     };
     current();let saved=false;
     try {
-      saved=await canvasDocumentsRenameSaved(doc,title,execution);current();
+      // A browser-draft MCP capability never inherits the browser's Cloud login.
+      // The user can explicitly save the renamed local draft through the UI.
+      if(!(execution?.kind==="mcp"&&window.PENECHO_CONFIG?.browserDraftId))saved=await canvasDocumentsRenameSaved(doc,title,execution);
+      current();
       const metadata={...canvasDocumentsMetadata(doc),title};
       const stored=doc.stored?{...doc.stored,item:{...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:metadata}}}:null;
       await canvasDocumentsPersist({...doc,title,stored},false,execution,current);current();
@@ -645,6 +648,8 @@
   async function canvasDocumentsOpen(args,execution) {
     await canvasDocumentsAwait(()=>canvasDocumentsReady(),execution);
     canvasAgentAssertToolExecution(execution);
+    const draftScope=execution?.kind==="mcp"&&window.PENECHO_CONFIG?.browserDraftId;
+    if(draftScope&&args.locator)throw canvasDocumentsError("BROWSER_DRAFT_SCOPE","This connection can open only documents in its browser draft. Open saved Cloud documents yourself through the Cloud menu.");
     let doc;
     if(args.create) {
       const id=`doc-${await canvasDocumentsAwait(()=>canvasAgentHash(args.requestId),execution)}`;
@@ -669,6 +674,7 @@
           canvasAgentAssertToolExecution(execution);canvasDocuments.records.set(doc.id,doc);
         }
         if(!doc) {
+        if(draftScope)throw canvasDocumentsError("BROWSER_DRAFT_SCOPE","This document is outside the connected browser draft. Create a new draft document or use an existing document ID from this workspace.");
         let locator=args.locator;
         if(!locator) {
           const found=await canvasDocumentsFindSaved(args),resolved=canvasDocumentIdentity.resolveCandidates({documentId:args.documentId,candidates:found.canvases,active:[],providers:found.providers});
@@ -1156,3 +1162,37 @@
   }
   document.getElementById("canvasWorkspaceClose")?.addEventListener("click",()=>{const documentId=canvasDocumentsCurrent().id;canvasDocumentsUiAction(()=>requestCanvasTransition({type:"close",documentId}));});
   document.getElementById("canvasWorkspaceRetry")?.addEventListener("click",()=>{const retry=canvasDocuments.retry;if(retry)canvasDocumentsUiAction(retry);});
+
+  // Each automatically opened workspace has its own browser draft collection.
+  // Signing in changes Cloud capabilities, never this storage namespace.
+  if(window.PENECHO_CONFIG?.browserDraftId) {
+    let draftReady=false,writing=null,lastRevision=-1,draftLock=false;
+    const flush=async()=>{
+      if(writing)return writing;
+      if(!draftReady||canvasDocuments.switching||snapshotLoadInProgress)return;
+      const revision=state.userRevision;
+      if(revision===lastRevision)return;
+      writing=canvasDocumentsPark().then(()=>{lastRevision=revision;}).finally(()=>{writing=null;});
+      return writing;
+    };
+    window.PenEchoBrowserDraft={
+      async open(){
+        if(window.navigator?.locks&&!draftLock){
+          await new Promise((resolve,reject)=>{
+            void navigator.locks.request(`penecho-draft:${window.PENECHO_CONFIG.browserDraftId}`,{ifAvailable:true},async lock=>{
+              if(!lock){reject(Error(canvasDocumentsCopy("This draft is already open in another window. Close that window, then reload here.","此草稿已在另一个窗口打开。关闭那个窗口后，在这里刷新即可。")));return;}
+              draftLock=true;resolve();await new Promise(()=>{});
+            }).catch(reject);
+          });
+        }
+        await canvasDocumentsReady();
+        const saved=[...canvasDocuments.records.values()].filter(doc=>doc.stored&&!canvasDocumentsIsEmptyPlaceholder(doc)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
+        if(saved)await canvasDocumentsShow(saved.id);
+        draftReady=true;
+      },
+      flush,
+      async signIn(){await flush();location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname+location.search)}`);}
+    };
+    setInterval(()=>{void flush().catch(error=>canvasDocumentsReport(error,flush));},3000);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)void flush().catch(error=>canvasDocumentsReport(error,flush));});
+  }

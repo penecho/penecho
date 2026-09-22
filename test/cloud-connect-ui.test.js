@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { createHash, randomUUID } = require("node:crypto");
 const { test } = require("node:test");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -210,6 +211,7 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
   label.className = "cloud-account-label";
   const cloudButton = new FakeElement("button", document);
   cloudButton.append(label);
+  const echoButton = new FakeElement("button", document);
   const shareButton = new FakeElement("button", document);
   const craftsButton = withCrafts ? new FakeElement("button", document) : null,
     craftsPopover = withCrafts ? new FakeElement("section", document) : null,
@@ -239,7 +241,7 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
     craftsPopover.append(craftsFilters, craftsEchoesLink, craftsSearch, craftsCount, craftsRefreshStatus, craftsViewSwitch, craftsClose, craftsList);
     document.body.append(craftsButton, craftsPopover);
   }
-  document.getElementById = (id) => ({ cloudAccountBtn:cloudButton, shareCanvasBtn:shareButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink })[id] || null;
+  document.getElementById = (id) => ({ cloudAccountBtn:cloudButton, shareCanvasBtn:shareButton, echoCanvasBtn:echoButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink })[id] || null;
 
   let statusPayload = status;
   let statusError = null;
@@ -334,6 +336,9 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
       if (holdCommunityFavorites) return new Promise((resolve) => communityFavoriteResolvers.push(() => resolve(jsonResponse({ items:communityFavoritesPayload }))));
       return Promise.resolve(jsonResponse({ items:communityFavoritesPayload }));
     }
+    if (target === "/api/v1/community/items" && options.method === "POST" && publishItem) return Promise.resolve(jsonResponse({ item:{ ...publishItem, status:"uploading" }, upload:{ url:"https://storage.test/community-upload", headers:{ "content-type":"application/json" } } }, 201));
+    if (target === "https://storage.test/community-upload" && options.method === "PUT") return Promise.resolve(jsonResponse({}, 204));
+    if (target === `/api/v1/community/items/${publishItem?.id}/complete` && options.method === "POST") return Promise.resolve(jsonResponse({ item:publishItem }));
     if (target === "/api/cloud/community/share" && publishItem) return Promise.resolve(jsonResponse({ item:publishItem }));
     if (communityItem && target === `/api/cloud/community/${communityItem.id}/artifact`) return Promise.resolve(jsonResponse({ item:communityItem, artifact:communityArtifact }));
     if (communityItem && target === `/api/v1/community/items/${communityItem.id}`) return Promise.resolve(jsonResponse({ item:communityItem }));
@@ -394,14 +399,17 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
       getItem:(key) => Object.hasOwn(sessionStorageEntries, key) ? sessionStorageEntries[key] : null,
       setItem:(key, value) => { sessionStorageEntries[key] = String(value); },
       removeItem:(key) => { delete sessionStorageEntries[key]; },
-    }, crypto:{},
+    }, crypto:{ randomUUID, subtle:{ digest:async (_algorithm, data) => {
+      const digest=createHash("sha256").update(Buffer.from(data)).digest();
+      return digest.buffer.slice(digest.byteOffset,digest.byteOffset+digest.byteLength);
+    } } }, TextEncoder, Uint8Array, ArrayBuffer,
     fetch, setTimeout:timers.setTimeout, clearTimeout:timers.clearTimeout, queueMicrotask, IntersectionObserver:FakeIntersectionObserver,
     URL, URLSearchParams, Date, console, Blob, File:FakeFile, Image:FakeImage,
   };
   vm.runInNewContext(cloudScript, context, { filename:"public/cloud-connect.js" });
   const statusCalls = () => fetchCalls.filter((call) => call.url === "/api/cloud/status").length;
   return {
-    document, cloudButton, shareButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink, timers, fetchCalls, statusCalls, alerts, clipboardWrites, imported, opened, openedLocal, favoriteStates, favoriteReferences, window:windowObject,
+    document, cloudButton, shareButton, echoButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink, timers, fetchCalls, statusCalls, alerts, clipboardWrites, imported, opened, openedLocal, favoriteStates, favoriteReferences, window:windowObject,
     overlay:() => document.querySelector(".penecho-cloud-overlay"),
     setStatus(next) { statusPayload = next; },
     setStatusError(error) { statusError = error; },
@@ -576,8 +584,8 @@ function selectCloudSection(overlay, section) {
 }
 
 async function publishCraftFromShareDialog(run, kind, { continuationText="Continue with the next useful detail.", beforePublish = null } = {}) {
-  if (kind === "canvas") run.shareButton.click();
-  else await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"share", widgetId:"widget-1" } });
+  if (kind === "canvas") run.echoButton.click();
+  else await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"echo", widgetId:"widget-1" } });
   await run.flush();
   const overlay = run.overlay();
   assert.ok(overlay?.isConnected, `expected the ${kind} share dialog to open`);
@@ -626,7 +634,7 @@ test("the next-Crafter Echo prompt is optional in English and Chinese", async ()
 
   const zh = boot({ status:deviceStatus(), language:"zh-CN" });
   await zh.flush();
-  zh.shareButton.click();
+  zh.echoButton.click();
   await zh.flush();
   assert.ok(zh.overlay().textContent.includes("下一位创作者应该 Echo 什么？（可选）"));
 });
@@ -647,6 +655,33 @@ test("a continuation contribution is optional but its parent lineage is preserve
   assert.ok(publicationForm.textContent.includes("Your contribution to this Craft (optional)"));
 });
 
+test("Cloud runtime publishes an Echo through reserve, artifact upload, and completion", async () => {
+  const item={id:"123e4567-e89b-42d3-a456-426614174092",kind:"canvas",name:"Cloud protocol"};
+  const artifact={bundleVersion:2,mode:"snapshot",formatVersion:1,manifest:{format:"penecho-raster-tiles"},assets:[],communityPreview:{contentType:"image/webp",dataBase64:"AA==",width:800,height:500}};
+  const run=boot({
+    runtime:"cloud",
+    remoteCloudStatus:{accountId:"account-1",accountName:"Remote User",deviceOnline:false,deviceReady:false},
+    publishItem:item,
+    canvasShareArtifact:artifact,
+  });
+  await publishCraftFromShareDialog(run,"canvas");
+
+  const legacy=run.fetchCalls.find((call)=>call.url==="/api/cloud/community/share");
+  const reservation=run.fetchCalls.find((call)=>call.url==="/api/v1/community/items"&&call.options.method==="POST");
+  const upload=run.fetchCalls.find((call)=>call.url==="https://storage.test/community-upload"&&call.options.method==="PUT");
+  const completion=run.fetchCalls.find((call)=>call.url===`/api/v1/community/items/${item.id}/complete`&&call.options.method==="POST");
+  assert.equal(legacy,undefined,"Cloud publication must not call the local-only aggregate endpoint");
+  assert.ok(reservation);assert.ok(upload);assert.ok(completion);
+  const bytes=Buffer.from(JSON.stringify(artifact)),body=JSON.parse(reservation.options.body);
+  assert.equal(body.priceCredits,0);
+  assert.equal(body.formatVersion,1);
+  assert.equal(body.artifact.sizeBytes,bytes.length);
+  assert.equal(body.artifact.contentType,"application/json");
+  assert.equal(body.artifact.sha256,createHash("sha256").update(bytes).digest("hex"));
+  assert.deepEqual(Buffer.from(upload.options.body),bytes);
+  assert.deepEqual(plain(upload.options.headers),{"content-type":"application/json"});
+});
+
 test("the optional next-Crafter Echo prompt always opens empty", async () => {
   const draftKey = "penecho.community.publish.canvas.Draft identity";
   const sessionStorageEntries = {
@@ -664,7 +699,7 @@ test("the optional next-Crafter Echo prompt always opens empty", async () => {
     sessionStorageEntries,
   });
   await run.flush();
-  run.shareButton.click();
+  run.echoButton.click();
   await run.flush();
 
   const controls = flatten(run.overlay());
@@ -685,7 +720,7 @@ test("new publication forms keep title and description empty and block incomplet
     canvasShareArtifact:{ name:"Artifact title must not prefill", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
   });
   await run.flush();
-  run.shareButton.click();
+  run.echoButton.click();
   await run.flush();
 
   const overlay=run.overlay(),controls=flatten(overlay);
@@ -768,7 +803,7 @@ test("sharing while signed out explains the requirement and opens Cloud sign-in"
   const run = boot({ status:signedOutStatus() });
   await run.flush();
 
-  run.shareButton.click();
+  run.echoButton.click();
   await run.flush();
 
   const overlay = run.overlay();
@@ -785,7 +820,7 @@ test("publication uses one consolidated PenEcho agreement link in browsers and d
   ]) {
     const run = boot({ status:deviceStatus(), ...options });
     await run.flush();
-    run.shareButton.click();
+    run.echoButton.click();
     await run.flush();
 
     const overlay = run.overlay();
@@ -1880,7 +1915,7 @@ test("stale repeat favorite requests stay selected and never turn an existing Wi
 test("share dialog and all category labels use the Chinese Cloud copy", async () => {
   const run = boot({ status:deviceStatus(), language:"zh-CN" });
   await run.flush();
-  run.shareButton.click();
+  run.echoButton.click();
   await run.flush();
 
   const overlay = run.overlay();
@@ -1965,7 +2000,7 @@ test("published Widget exposes the same bilingual link and image actions", async
   const item = { id:"123e4567-e89b-42d3-a456-426614174022", kind:"widget", name:"计时器" };
   const run = boot({ status:deviceStatus(), language:"zh-CN", publishItem:item, widgetShareArtifact:{ widget:{ id:"widget-1", title:"计时器" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } } });
   await run.flush();
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"share", widgetId:"widget-1" } });
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"echo", widgetId:"widget-1" } });
   await run.flush();
   const form = run.overlay(), controls = flatten(form);
   const title = controls.find((node) => node.tagName === "INPUT" && node.getAttribute("placeholder") === "组件名称");

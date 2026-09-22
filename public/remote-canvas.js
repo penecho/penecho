@@ -1,9 +1,10 @@
 "use strict";
 
 (() => {
+  const isBrowserDraft = Boolean(window.PENECHO_CONFIG?.browserDraftId);
   const canvasMatch = location.pathname.match(/^\/canvas\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
   const communityMatch = location.pathname.match(/^\/canvas\/community\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch)) return;
+  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch && !isBrowserDraft)) return;
   const requestedCanvasId = canvasMatch?.[1] || null;
   const requestedCommunityItemId = communityMatch?.[1] || null;
   const isCommunityCraft = Boolean(requestedCommunityItemId);
@@ -270,6 +271,7 @@
     const inputHeaders = input instanceof Request ? input.headers : undefined;
     const headers = csrfHeaders(options.headers || inputHeaders);
     if (cloudRuntime && sourceUrl.pathname === "/api/mcp/status") {
+      if(isBrowserDraft)return nativeFetch(`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/status`,{...options,method:'GET',body:undefined,headers,credentials:'same-origin'});
       if(window.PenEchoCloudMcpSocket)return nativeFetch('/api/v1/mcp/canvas/status',{...options,method:'GET',body:undefined,headers,credentials:'same-origin'});
       return bridgeGate.then(() => bridgeState?.online && bridgeDeviceId
         ? nativeFetch(`/api/v1/remote-canvas/mcp/status?deviceId=${encodeURIComponent(bridgeDeviceId)}`, { ...options, method:"GET", body:undefined, headers, credentials:"same-origin" })
@@ -442,6 +444,12 @@
   }
 
   async function openRequestedCanvas() {
+    if(isBrowserDraft){
+      if(window.PENECHO_CONFIG.browserDraftBlocked)throw Error(zh?"此 MCP 连接属于另一个账号。请切换到授权账号后重新打开。":"This MCP connection belongs to another account. Switch to the authorized account and reopen it.");
+      const deadline=Date.now()+15000;
+      while(!window.PenEchoBrowserDraft){if(Date.now()>deadline)throw Error("Canvas did not finish loading");await new Promise(resolve=>setTimeout(resolve,50));}
+      return window.PenEchoBrowserDraft.open();
+    }
     const deadline = Date.now() + 15_000;
     while (isCommunityCraft ? !window.PenEchoCommunityUI?.takeFurther : !window.PenEchoCloudProjects?.openCanvas) {
       if (Date.now() >= deadline) throw new Error("PenEcho Canvas did not finish loading.");
@@ -568,6 +576,10 @@
       try {
         await openRequestedCanvas();
         await waitForVisibleWidgets();
+        if(isBrowserDraft){
+          const renew=()=>nativeFetch(`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/heartbeat`,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:"{}"}).catch(()=>{});
+          void renew();setInterval(renew,300000);
+        }
         if(new URLSearchParams(location.search).get('mcp')==='1')window.dispatchEvent(new CustomEvent('penecho:open-cloud-mcp'));
         gate.hidden = true;
       } catch (error) {

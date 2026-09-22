@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "penecho-cloud": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.1.38",
+        "https://penecho.ai/mcp",
+        "--transport",
+        "http-only",
+        "--resource",
+        "https://penecho.ai/mcp"
+      ]
+    }
+  }
+}

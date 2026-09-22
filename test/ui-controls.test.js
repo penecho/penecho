@@ -3575,7 +3575,7 @@ test("PenEcho Agent launcher stays clickable while its status shell shows work",
   assert.deepEqual(triggerState,{className:"is-busy",busy:true,attribute:"aria-busy",ariaBusy:"true"});
   const toggle = html.match(/<button id="canvasAgentToggle"[^>]*>/)?.[0] || "";
   assert.doesNotMatch(toggle, /(?:disabled|aria-disabled|aria-busy)=/);
-  assert.match(agent, /canvasAgentToggle\.addEventListener\("click",\(\)=>canvasAgentPanel\.hidden\|\|!document\.body\.classList\.contains\("canvas-agent-open"\) \? openCanvasAgent\(\{focus:false\}\) : closeCanvasAgent\(\)\)/);
+  assert.match(agent, /canvasAgentToggle\.addEventListener\("click",\(\)=>window\.PENECHO_CONFIG\?\.guestCanvas \? window\.PenEchoBrowserDraft\?\.signIn\(\) : canvasAgentPanel\.hidden\|\|!document\.body\.classList\.contains\("canvas-agent-open"\) \? openCanvasAgent\(\{focus:false\}\) : closeCanvasAgent\(\)\)/);
   assert.match(css, /\[data-pe-button\]\)\[aria-busy="true"\][^}]*pointer-events:\s*none/);
   assert.match(css, /@property --canvas-agent-busy-angle\s*\{[^}]*syntax:\s*"<angle>"[^}]*initial-value:\s*0deg/);
   assert.match(css, /\.canvas-agent-control\.is-busy > #canvasAgentToggle::after\s*\{[^}]*inset:\s*0[^}]*padding:\s*2px[^}]*background:\s*conic-gradient\(from var\(--canvas-agent-busy-angle\)[^}]*mask-composite:\s*exclude[^}]*animation:\s*canvas-agent-trigger-busy 1\.4s linear infinite/);

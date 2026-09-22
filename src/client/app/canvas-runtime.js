@@ -1291,6 +1291,7 @@
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       favoriteSourceId: widget.favoriteSourceId,
+      shareSourceId: widget.shareSourceId,
       ...(widget.favorite ? { favorite:true } : {}),
       ...(widget.favoriteArtifactSha256 ? { favoriteArtifactSha256:widget.favoriteArtifactSha256 } : {}),
       ...(widget.favoriteCloudId ? { favoriteCloudId:widget.favoriteCloudId } : {}),
@@ -1378,6 +1379,7 @@
       communityRootItemId,
       communityOriginName,
       communityOriginGeneration,
+      shareSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.shareSourceId || "")) ? item.shareSourceId : newPrivateWidgetFavoriteId(),
       favoriteSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.favoriteSourceId || "")) ? item.favoriteSourceId : newPrivateWidgetFavoriteId(),
       favorite: item.favorite === true,
       favoriteArtifactSha256: /^[0-9a-f]{64}$/i.test(String(item.favoriteArtifactSha256 || "")) ? item.favoriteArtifactSha256.toLowerCase() : "",
@@ -1425,6 +1427,7 @@
     const publicWidget = { ...serialized };
     delete publicWidget.favorite;
     delete publicWidget.favoriteSourceId;
+    delete publicWidget.shareSourceId;
     delete publicWidget.favoriteArtifactSha256;
     delete publicWidget.favoriteCloudId;
     delete publicWidget.favoriteCommunityItemId;
@@ -1464,6 +1467,7 @@
     // the stable logical source identity and the current storage references.
     delete source.favorite;
     delete source.favoriteSourceId;
+    delete source.shareSourceId;
     delete source.favoriteArtifactSha256;
     delete source.favoriteCloudId;
     delete source.favoriteCommunityItemId;
@@ -4203,6 +4207,7 @@
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
     favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
+    echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
   });
@@ -4277,6 +4282,10 @@
             favoriteCommunityItemId:widget.favoriteCommunityItemId || null,
           } }));
         },
+      });
+      items.push({
+        key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
+        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
       });
       items.push({
         key:`widget:${widget.id}:tool-share`,

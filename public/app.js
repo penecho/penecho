@@ -1880,8 +1880,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
       tourFavoritesTitle: "Add something from Favorites",
       tourFavoritesBody: "Use the star button to open your Echoes favorites. Add a favorite Widget to the current Canvas, or open a favorite Canvas here as a new Canvas.",
-      tourShareCanvasTitle: "Publish this Canvas to Echoes",
-      tourShareCanvasBody: "Share opens a preview and publishing form for the current Canvas. After signing in, review its details before making it public in Echoes, then copy its link or share it as an image. Use Cloud instead for private saves.",
+      tourShareCanvasTitle: "Share this Canvas",
+      tourShareCanvasBody: "Share creates a read-only link to the latest Cloud Canvas. Anyone with the link can see future saved changes. Use Echo to publish a separate Craft to Echoes.",
       tourCloudTitle: "Keep private work in PenEcho Cloud",
       tourCloudBody: "Open Cloud to sign in, save and reopen private versioned Canvases by project, and use favorite Canvases or Widgets from Echoes in your current Canvas.",
       tourManualAITitle: "Run Auto AI on demand",
@@ -2486,7 +2486,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedErrorOpen: "This Canvas could not be opened.",
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
       closeSavedCrafts: "Close Favorites",
-      shareCanvasCloud: "Share Canvas to PenEcho Cloud",
+      shareCanvasCloud: "Share Canvas",
       shareWidget: "Share widget",
       openInNewPage: "Open in a new page",
       openCanvas: "Open Canvas",
@@ -3093,7 +3093,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // The public viewer shares the Cloud origin (and therefore localStorage)
     // with editable Cloud Canvases. Never inherit their last-selected Cloud
     // history location: the read-only shell has no /api/cloud/library route.
-    initialSnapshotLocation = window.PENECHO_CONFIG?.runtime === "viewer"
+    initialSnapshotLocation = window.PENECHO_CONFIG?.browserDraftId ? "device" : window.PENECHO_CONFIG?.runtime === "viewer"
       ? "device"
       : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
     initialAiEffort = storedAiEffort || configuredAiEffort || "config",
@@ -3865,6 +3865,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function maybeStartFeatureTour(retry = false) {
+    if(window.PENECHO_CONFIG?.browserDraftId)return false;
     if (featureTour.active || changelog.active || (featureTour.autoChecked && !retry)) return false;
     featureTour.autoChecked = true;
     const progress = readFeatureTourProgress(),
@@ -3919,6 +3920,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } catch {}
   }
   function maybeShowChangelog(force = false) {
+    if(window.PENECHO_CONFIG?.browserDraftId&&!force)return false;
     if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
     hideAutoDelayControl();
     hideEffortControl();
@@ -7589,6 +7591,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       favoriteSourceId: widget.favoriteSourceId,
+      shareSourceId: widget.shareSourceId,
       ...(widget.favorite ? { favorite:true } : {}),
       ...(widget.favoriteArtifactSha256 ? { favoriteArtifactSha256:widget.favoriteArtifactSha256 } : {}),
       ...(widget.favoriteCloudId ? { favoriteCloudId:widget.favoriteCloudId } : {}),
@@ -7676,6 +7679,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       communityRootItemId,
       communityOriginName,
       communityOriginGeneration,
+      shareSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.shareSourceId || "")) ? item.shareSourceId : newPrivateWidgetFavoriteId(),
       favoriteSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.favoriteSourceId || "")) ? item.favoriteSourceId : newPrivateWidgetFavoriteId(),
       favorite: item.favorite === true,
       favoriteArtifactSha256: /^[0-9a-f]{64}$/i.test(String(item.favoriteArtifactSha256 || "")) ? item.favoriteArtifactSha256.toLowerCase() : "",
@@ -7723,6 +7727,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const publicWidget = { ...serialized };
     delete publicWidget.favorite;
     delete publicWidget.favoriteSourceId;
+    delete publicWidget.shareSourceId;
     delete publicWidget.favoriteArtifactSha256;
     delete publicWidget.favoriteCloudId;
     delete publicWidget.favoriteCommunityItemId;
@@ -7762,6 +7767,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // the stable logical source identity and the current storage references.
     delete source.favorite;
     delete source.favoriteSourceId;
+    delete source.shareSourceId;
     delete source.favoriteArtifactSha256;
     delete source.favoriteCloudId;
     delete source.favoriteCommunityItemId;
@@ -10501,6 +10507,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
     favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
+    echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
   });
@@ -10575,6 +10582,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             favoriteCommunityItemId:widget.favoriteCommunityItemId || null,
           } }));
         },
+      });
+      items.push({
+        key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
+        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
       });
       items.push({
         key:`widget:${widget.id}:tool-share`,
@@ -12660,7 +12671,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return new Promise(resolve=>{let settled=false;const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);widget.visualDiagnosticWaiters?.delete(finish);resolve(value?structuredClone(value):null);},timer=setTimeout(()=>finish(null),Math.max(500,Math.min(5000,Number(timeoutMs)||3800)));widget.visualDiagnosticWaiters.add(finish);});
   }
 // Canvas snapshots, export, drawing history, strokes, and lasso selection.
-  const SNAPSHOT_DB = "penecho-canvas-history",
+  const SNAPSHOT_DB = "penecho-canvas-history"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
     SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
@@ -12980,6 +12991,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
     const location = state.currentSnapshotLocation || (window.PENECHO_CONFIG?.browserCanvasEditing ? "cloud" : state.snapshotLocation),
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
@@ -14488,6 +14500,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // used to surface a misleading 502 after an otherwise successful load.
     openHistoryPanel(false);
     return true;
+  }
+  async function saveLiveShareToCloud(widgetId = null) {
+    const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
+    if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
+    setSnapshotLocation("cloud", { refresh:false });
+    await cloudSnapshotItems();
+    const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
+    if (!id) throw Error("The Canvas could not be saved to Cloud.");
+    return id;
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");
@@ -21147,7 +21168,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } else canvasAgentDropSessionIdentity();
     canvasAgentSyncPromptSuggestions();
     if (!window.PenEchoStudioNavigator?.isMcpDocked?.()) {
-      if (state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
+      if (!window.PENECHO_CONFIG?.guestCanvas && state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
     }
   }
   function canvasAgentDidStartUserConversation() {
@@ -24173,6 +24194,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function openCanvasAgent({focus=false}={}) {
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
+    if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
     if (!canvasAgentAvailable()) return;
     restoreCanvasAgentAfterNavigation();
     restoreCanvasChromeMaterial();
@@ -24275,6 +24297,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       renderConnectionLists();
     }
     canvasAgentToggle.hidden = !canvasAgentAvailable();
+    if(window.PENECHO_CONFIG?.guestCanvas)canvasAgentToggle.title=state.language==="zh"?"登录后使用 PenEcho Agent":"Sign in to use PenEcho Agent";
     if (!canvasAgentAvailable() && !canvasAgentPanel.hidden) closeCanvasAgent({ focus:false, animate:false });
     canvasAgentUpdateConnectionButton();
     canvasAgentSyncSendAvailability();
@@ -24291,7 +24314,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   canvasAgentSyncRuntimeAvailability();
   window.addEventListener("penecho:capabilities-changed", canvasAgentSyncRuntimeAvailability);
-  canvasAgentToggle.addEventListener("click",()=>canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
+  canvasAgentToggle.addEventListener("click",()=>window.PENECHO_CONFIG?.guestCanvas ? window.PenEchoBrowserDraft?.signIn() : canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
   canvasAgentClose.addEventListener("click",closeCanvasAgent);
   canvasAgentProjectButton.addEventListener("click",()=>{
     if(canvasAgentProjectDialogOpen()){canvasAgentHideProjectPopover({restoreFocus:true});return;}
@@ -25537,7 +25560,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   function mcpConnect(reconnecting=false) {
     if(!mcpLocal()||mcpRuntime.pageHidden)return;
     mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.wanted=true;mcpRuntime.reconnecting=reconnecting;
-    mcpRuntime.browserId=mcpRuntime.browserId||canvasClientId();
+    mcpRuntime.browserId=mcpRuntime.browserId||window.PENECHO_CONFIG?.browserDraftId||canvasClientId();
     const generation=mcpRuntime.generation;
     if(!reconnecting&&typeof canvasDocumentsReady==="function")void canvasDocumentsReady().then(()=>{if(generation!==mcpRuntime.generation||!mcpRuntime.wanted)return;const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocumentsRender();}).catch(error=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted)canvasDocumentsReport(error,()=>canvasDocumentsReady());});
     const socket=window.PenEchoCloudMcpSocket
@@ -25605,7 +25628,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(message.name==="mcp_find_canvases")void run();
       else mcpRuntime.queue=mcpRuntime.queue.catch(()=>{}).then(run);
     });
-    socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
+    socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.browserDraftId&&event?.code===4001){mcpDisconnect();mcpRuntime.connectionLost=true;setStatus(state.language==="zh"?"此画布已在另一个窗口中连接。":"This Canvas is connected in another window.");mcpRenderSettings();return;}if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
     socket.addEventListener("error",()=>{if(socket===mcpRuntime.socket)mcpDisconnect(true);});
     mcpRenderSettings();
   }
@@ -26966,7 +26989,7 @@ var canvasDocumentIdentity = (() => {
   }
   async function canvasDocumentsDb() {
     if(canvasDocuments.db)return canvasDocuments.db;
-    const request=indexedDB.open("penecho-workspace-documents",1);
+    const request=indexedDB.open("penecho-workspace-documents"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),1);
     request.onupgradeneeded=()=>request.result.createObjectStore("documents",{keyPath:"id"});
     canvasDocuments.db=await canvasDocumentsBound(requestResult(request));return canvasDocuments.db;
   }
@@ -27392,7 +27415,10 @@ var canvasDocumentIdentity = (() => {
     };
     current();let saved=false;
     try {
-      saved=await canvasDocumentsRenameSaved(doc,title,execution);current();
+      // A browser-draft MCP capability never inherits the browser's Cloud login.
+      // The user can explicitly save the renamed local draft through the UI.
+      if(!(execution?.kind==="mcp"&&window.PENECHO_CONFIG?.browserDraftId))saved=await canvasDocumentsRenameSaved(doc,title,execution);
+      current();
       const metadata={...canvasDocumentsMetadata(doc),title};
       const stored=doc.stored?{...doc.stored,item:{...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:metadata}}}:null;
       await canvasDocumentsPersist({...doc,title,stored},false,execution,current);current();
@@ -27409,6 +27435,8 @@ var canvasDocumentIdentity = (() => {
   async function canvasDocumentsOpen(args,execution) {
     await canvasDocumentsAwait(()=>canvasDocumentsReady(),execution);
     canvasAgentAssertToolExecution(execution);
+    const draftScope=execution?.kind==="mcp"&&window.PENECHO_CONFIG?.browserDraftId;
+    if(draftScope&&args.locator)throw canvasDocumentsError("BROWSER_DRAFT_SCOPE","This connection can open only documents in its browser draft. Open saved Cloud documents yourself through the Cloud menu.");
     let doc;
     if(args.create) {
       const id=`doc-${await canvasDocumentsAwait(()=>canvasAgentHash(args.requestId),execution)}`;
@@ -27433,6 +27461,7 @@ var canvasDocumentIdentity = (() => {
           canvasAgentAssertToolExecution(execution);canvasDocuments.records.set(doc.id,doc);
         }
         if(!doc) {
+        if(draftScope)throw canvasDocumentsError("BROWSER_DRAFT_SCOPE","This document is outside the connected browser draft. Create a new draft document or use an existing document ID from this workspace.");
         let locator=args.locator;
         if(!locator) {
           const found=await canvasDocumentsFindSaved(args),resolved=canvasDocumentIdentity.resolveCandidates({documentId:args.documentId,candidates:found.canvases,active:[],providers:found.providers});
@@ -27920,6 +27949,40 @@ var canvasDocumentIdentity = (() => {
   }
   document.getElementById("canvasWorkspaceClose")?.addEventListener("click",()=>{const documentId=canvasDocumentsCurrent().id;canvasDocumentsUiAction(()=>requestCanvasTransition({type:"close",documentId}));});
   document.getElementById("canvasWorkspaceRetry")?.addEventListener("click",()=>{const retry=canvasDocuments.retry;if(retry)canvasDocumentsUiAction(retry);});
+
+  // Each automatically opened workspace has its own browser draft collection.
+  // Signing in changes Cloud capabilities, never this storage namespace.
+  if(window.PENECHO_CONFIG?.browserDraftId) {
+    let draftReady=false,writing=null,lastRevision=-1,draftLock=false;
+    const flush=async()=>{
+      if(writing)return writing;
+      if(!draftReady||canvasDocuments.switching||snapshotLoadInProgress)return;
+      const revision=state.userRevision;
+      if(revision===lastRevision)return;
+      writing=canvasDocumentsPark().then(()=>{lastRevision=revision;}).finally(()=>{writing=null;});
+      return writing;
+    };
+    window.PenEchoBrowserDraft={
+      async open(){
+        if(window.navigator?.locks&&!draftLock){
+          await new Promise((resolve,reject)=>{
+            void navigator.locks.request(`penecho-draft:${window.PENECHO_CONFIG.browserDraftId}`,{ifAvailable:true},async lock=>{
+              if(!lock){reject(Error(canvasDocumentsCopy("This draft is already open in another window. Close that window, then reload here.","此草稿已在另一个窗口打开。关闭那个窗口后，在这里刷新即可。")));return;}
+              draftLock=true;resolve();await new Promise(()=>{});
+            }).catch(reject);
+          });
+        }
+        await canvasDocumentsReady();
+        const saved=[...canvasDocuments.records.values()].filter(doc=>doc.stored&&!canvasDocumentsIsEmptyPlaceholder(doc)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
+        if(saved)await canvasDocumentsShow(saved.id);
+        draftReady=true;
+      },
+      flush,
+      async signIn(){await flush();location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname+location.search)}`);}
+    };
+    setInterval(()=>{void flush().catch(error=>canvasDocumentsReport(error,flush));},3000);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)void flush().catch(error=>canvasDocumentsReport(error,flush));});
+  }
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
@@ -31628,6 +31691,8 @@ var canvasDocumentIdentity = (() => {
     currentExecutionScope:canvasAgentCloudExecutionScope,
     currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
+    saveForShare:saveLiveShareToCloud,
+    shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,

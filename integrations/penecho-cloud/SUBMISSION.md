@@ -1,3 +1,7 @@
+# Historical submission record (1.0.0)
+
+This file records the earlier account-required release. For the current 1.1.0 guest and automatic-workspace release, use [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). Historical statuses below have not been re-verified as current approvals.
+
 # Marketplace submission material
 
 Prepared 2026-09-16. This file is a submission packet, not evidence of approval.

@@ -228,6 +228,8 @@
       shareImageEmbedFailed:"Could not copy the image embed code.",
       nativeShareText:"View and Echo this {kind} on PenEcho.",
       shareFailed:"Could not share this item.",
+      secureUploadUnavailable:"Secure upload checksums are unavailable in this browser.",
+      artifactUploadFailed:"Artifact upload failed (HTTP {status}).",
       cancel:"Cancel",
       askingAi:"Asking your current AI to improve the listing…",
       listingOptimized:"Listing optimized. Review it, then publish.",
@@ -440,6 +442,8 @@
       shareImageEmbedFailed:"无法复制图片嵌入代码。",
       nativeShareText:"在 PenEcho 查看并 Echo 此{kind}。",
       shareFailed:"无法分享此内容。",
+      secureUploadUnavailable:"此浏览器无法生成安全的上传校验值。",
+      artifactUploadFailed:"作品上传失败（HTTP {status}）。",
       cancel:"取消",
       askingAi:"正在请当前 AI 优化发布信息…",
       listingOptimized:"发布信息已优化，请检查后发布。",
@@ -492,6 +496,7 @@
   function runtimeApiPath(path, method = "GET") {
     if (!isCloudRuntime()) return path;
     const source = new URL(path, `${location.origin}/`), requestMethod = String(method || "GET").toUpperCase();
+    if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(source.pathname)) return source.pathname.replace("/api/cloud/", "/api/v1/") + source.search;
     if (/^\/api\/cloud\/mcp(?:\/|$)/.test(source.pathname)) return source.pathname.replace("/api/cloud/mcp","/api/v1/mcp") + source.search;
     if (requestMethod === "GET" && source.pathname === "/api/cloud/library") return `/api/v1/library${source.search ? `${source.search}&` : "?"}previews=0`;
     if (requestMethod === "POST" && source.pathname === "/api/cloud/projects") return "/api/v1/projects";
@@ -568,6 +573,45 @@
       payload.sync = { bundleVersion:2, conflictPolicy:"base-revision-required" };
     }
     return payload;
+  }
+
+  async function sha256Hex(bytes) {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle?.digest) throw new Error(cloudT("secureUploadUnavailable"));
+    const digest = await subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function publishCommunityArtifact(payload) {
+    if (!isCloudRuntime()) return api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
+    const artifactBytes = new TextEncoder().encode(JSON.stringify(payload.artifact));
+    const artifactSha256 = await sha256Hex(artifactBytes);
+    const { artifact, ...metadata } = payload;
+    const reservation = await api("/api/v1/community/items", {
+      method:"POST",
+      body:JSON.stringify({
+        ...metadata,
+        priceCredits:0,
+        formatVersion:Number(artifact?.formatVersion || 1),
+        artifact:{
+          sha256:artifactSha256,
+          sizeBytes:artifactBytes.byteLength,
+          contentType:"application/json",
+        },
+      }),
+    });
+    const itemId = reservation.item?.id, upload = reservation.upload;
+    if (!itemId || !upload?.url) throw new Error(cloudT("publishedCraftMissing"));
+    const uploadResponse = await fetch(upload.url, {
+      method:"PUT",
+      headers:{ ...(upload.headers || {}) },
+      body:artifactBytes,
+    });
+    if (!uploadResponse.ok) {
+      const failure = await uploadResponse.json().catch(() => ({}));
+      throw new Error(failure.error_description || failure.message || failure.error || cloudT("artifactUploadFailed", { status:uploadResponse.status }));
+    }
+    return api(`/api/v1/community/items/${encodeURIComponent(itemId)}/complete`, { method:"POST", body:"{}" });
   }
 
   function el(tag, attributes = {}, children = []) {
@@ -1015,7 +1059,7 @@
       return accountSignedIn() && accountId ? `${cloudOrigin()}:${accountId}` : "";
     },
     signInState:()=>({active:state.browserSignIn.active,url:state.browserSignIn.authorizationUrl,message:state.browserSignIn.message}),
-    signIn:refresh=>isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
+    signIn:refresh=>window.PENECHO_CONFIG?.browserDraftId ? window.PenEchoBrowserDraft.signIn() : isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
   };
 
   function devicePanel(render) {
@@ -1406,6 +1450,7 @@
   }
 
   async function openCloud() {
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
     cloudButton.setAttribute("aria-expanded", "true");
     const shell = dialogShell({ title:"PenEcho Cloud", subtitle:cloudT("cloudSubtitle"), variant:"cloud-center" });
     shell.dialog.dataset.peSurface = "manager";
@@ -1611,6 +1656,55 @@
     return shell;
   }
 
+  async function liveShareDialog({ kind, widgetId = null }) {
+    const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
+    const bridge = window.PenEchoCloudProjects;
+    const sourceId = widgetId ? bridge?.shareWidgetId(widgetId) : null;
+    if (widgetId && !sourceId) return;
+    let canvasId = bridge?.currentCanvasId(), currentShare = null, busy = false;
+    const shell = dialogShell({ title:text(`Share ${kind === "widget" ? "Widget" : "Canvas"}`, `分享 ${kind === "widget" ? "Widget" : "Canvas"}`) });
+    // Canonical #dialogs M / single sequential form; existing shell owns focus.
+    shell.dialog.className = "penecho-live-share-dialog";
+    shell.dialog.querySelector(".cloud-dialog-mark")?.remove();
+    Object.assign(shell.dialog.dataset, {peSurface:"form",peSize:"m",peLayout:"single",pePresentation:"modal",peMaterial:"opaque"});
+    const header = shell.dialog.querySelector("header"); header.className=""; header.dataset.peRegion = "header";
+    shell.dialog.querySelector(".cloud-dialog-identity").className="";
+    shell.dialog.querySelector(".cloud-dialog-heading").className="";
+    shell.body.className = ""; shell.body.dataset.peRegion = "body";
+    const note = el("p", {text:text("Anyone with the link can view this content and future changes saved to Cloud, with no expiry. Visitors can copy it to their own space to edit. Sharing does not publish to Echoes or keep a separate snapshot.", "任何持有链接的人都能查看此内容及之后保存到云端的改动，链接没有有效期。访客可复制到自己的空间编辑。分享不会发布到 Echoes，也不保留独立快照。")});
+    const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
+    const status = el("p", {role:"status","aria-live":"polite"});
+    const field = el("label", {"data-pe-region":"field"}, [el("span",{text:text("Share link","分享链接")})]);
+    const link = el("input", {readonly:"","data-pe-control":"input","aria-label":text("Share link","分享链接")}); field.append(link); field.hidden=true;
+    const enable = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
+    const revoke = el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"standard",text:text("Turn off sharing","关闭分享")});
+    const footer = el("footer", {"data-pe-region":"footer"}, [revoke,enable]);
+    shell.body.append(note,storageNote,field,status); shell.dialog.append(footer);
+    const selection = sourceId ? {widgetId:sourceId} : {};
+    const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
+    function render() {
+      field.hidden=!currentShare; revoke.hidden=!currentShare;
+      storageNote.hidden=Boolean(canvasId);
+      link.value=currentShare ? new URL(currentShare.url,cloudOrigin()).href : "";
+      enable.textContent=currentShare ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
+      enable.disabled=revoke.disabled=busy;
+    }
+    async function run(action) { if(busy)return; busy=true;status.textContent=text("Working…","正在处理…");render();try{await action();}catch(error){status.textContent=error.message;}finally{busy=false;render();} }
+    enable.addEventListener("click",()=>run(async()=>{
+      if(!accountSignedIn()){closeOverlay(shell.overlay);state.cloudSection="account";await openCloud();return;}
+      if(currentShare){await copyText(link.value);status.textContent=text("Link copied.","链接已复制。");return;}
+      canvasId=await bridge.saveForShare(widgetId);
+      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify(selection)})).share;
+      status.textContent=text("Sharing is on.","已开启分享。");
+    }));
+    revoke.addEventListener("click",()=>run(async()=>{
+      await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;
+      status.textContent=text("Sharing is off. The old link no longer works. Copies already saved by visitors remain theirs.","已关闭分享，旧链接已失效。访客之前保存的副本仍归访客所有。");
+    }));
+    render();
+    if(canvasId && accountSignedIn()) await run(async()=>{currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;status.textContent="";});
+  }
+
   function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {
     if (!accountSignedIn()) {
       browserSignInMessage(cloudT("shareSignInRequired"));
@@ -1695,7 +1789,7 @@
         if (tagIssue()) throw new Error(tagIssue());
         if (!permission.checked) throw new Error(cloudT("publishAgreementRequired"));
         status.textContent = cloudT(lineage ? "addingLineage" : "publishingFirstStep");
-        const result=await api("/api/cloud/community/share", { method:"POST", body:JSON.stringify(payload) });
+        const result=await publishCommunityArtifact(payload);
         if (!result.item?.id) throw new Error(cloudT("publishedCraftMissing"));
         clearDraft();
         let originError=null,favoriteError=null;
@@ -2575,14 +2669,16 @@
     state.cloudSection = "account";
     void openCloud();
   });
-  shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); shareDialog({ kind:"canvas" }); });
+  shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); await liveShareDialog({ kind:"canvas" }); });
+  document.getElementById("echoCanvasBtn")?.addEventListener("click", async () => { await refreshStatus(); shareDialog({kind:"canvas"}); });
   window.addEventListener("penecho:community-widget-action", async (event) => {
     const actionName = event.detail?.action;
     const widgetId = event.detail?.widgetId;
-    if (!widgetId || !["favorite", "share"].includes(actionName)) return;
-    if (actionName === "share") {
+    if (!widgetId || !["favorite", "share", "echo"].includes(actionName)) return;
+    if (actionName === "share" || actionName === "echo") {
       await refreshStatus();
-      shareDialog({ kind:"widget", widgetId });
+      if (actionName === "echo") shareDialog({ kind:"widget", widgetId });
+      else await liveShareDialog({ kind:"widget", widgetId });
       return;
     }
     if (state.favoriteWidgetOperations.has(widgetId)) return;

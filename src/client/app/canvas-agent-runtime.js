@@ -1750,7 +1750,7 @@
     } else canvasAgentDropSessionIdentity();
     canvasAgentSyncPromptSuggestions();
     if (!window.PenEchoStudioNavigator?.isMcpDocked?.()) {
-      if (state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
+      if (!window.PENECHO_CONFIG?.guestCanvas && state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
     }
   }
   function canvasAgentDidStartUserConversation() {
@@ -4776,6 +4776,7 @@
   }
   function openCanvasAgent({focus=false}={}) {
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
+    if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
     if (!canvasAgentAvailable()) return;
     restoreCanvasAgentAfterNavigation();
     restoreCanvasChromeMaterial();
@@ -4878,6 +4879,7 @@
       renderConnectionLists();
     }
     canvasAgentToggle.hidden = !canvasAgentAvailable();
+    if(window.PENECHO_CONFIG?.guestCanvas)canvasAgentToggle.title=state.language==="zh"?"登录后使用 PenEcho Agent":"Sign in to use PenEcho Agent";
     if (!canvasAgentAvailable() && !canvasAgentPanel.hidden) closeCanvasAgent({ focus:false, animate:false });
     canvasAgentUpdateConnectionButton();
     canvasAgentSyncSendAvailability();
@@ -4894,7 +4896,7 @@
   }
   canvasAgentSyncRuntimeAvailability();
   window.addEventListener("penecho:capabilities-changed", canvasAgentSyncRuntimeAvailability);
-  canvasAgentToggle.addEventListener("click",()=>canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
+  canvasAgentToggle.addEventListener("click",()=>window.PENECHO_CONFIG?.guestCanvas ? window.PenEchoBrowserDraft?.signIn() : canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
   canvasAgentClose.addEventListener("click",closeCanvasAgent);
   canvasAgentProjectButton.addEventListener("click",()=>{
     if(canvasAgentProjectDialogOpen()){canvasAgentHideProjectPopover({restoreFocus:true});return;}

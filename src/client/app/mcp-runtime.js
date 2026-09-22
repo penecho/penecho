@@ -775,7 +775,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   function mcpConnect(reconnecting=false) {
     if(!mcpLocal()||mcpRuntime.pageHidden)return;
     mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.wanted=true;mcpRuntime.reconnecting=reconnecting;
-    mcpRuntime.browserId=mcpRuntime.browserId||canvasClientId();
+    mcpRuntime.browserId=mcpRuntime.browserId||window.PENECHO_CONFIG?.browserDraftId||canvasClientId();
     const generation=mcpRuntime.generation;
     if(!reconnecting&&typeof canvasDocumentsReady==="function")void canvasDocumentsReady().then(()=>{if(generation!==mcpRuntime.generation||!mcpRuntime.wanted)return;const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocumentsRender();}).catch(error=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted)canvasDocumentsReport(error,()=>canvasDocumentsReady());});
     const socket=window.PenEchoCloudMcpSocket
@@ -843,7 +843,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(message.name==="mcp_find_canvases")void run();
       else mcpRuntime.queue=mcpRuntime.queue.catch(()=>{}).then(run);
     });
-    socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
+    socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.browserDraftId&&event?.code===4001){mcpDisconnect();mcpRuntime.connectionLost=true;setStatus(state.language==="zh"?"此画布已在另一个窗口中连接。":"This Canvas is connected in another window.");mcpRenderSettings();return;}if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
     socket.addEventListener("error",()=>{if(socket===mcpRuntime.socket)mcpDisconnect(true);});
     mcpRenderSettings();
   }

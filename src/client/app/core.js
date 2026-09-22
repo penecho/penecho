@@ -494,8 +494,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
       tourFavoritesTitle: "Add something from Favorites",
       tourFavoritesBody: "Use the star button to open your Echoes favorites. Add a favorite Widget to the current Canvas, or open a favorite Canvas here as a new Canvas.",
-      tourShareCanvasTitle: "Publish this Canvas to Echoes",
-      tourShareCanvasBody: "Share opens a preview and publishing form for the current Canvas. After signing in, review its details before making it public in Echoes, then copy its link or share it as an image. Use Cloud instead for private saves.",
+      tourShareCanvasTitle: "Share this Canvas",
+      tourShareCanvasBody: "Share creates a read-only link to the latest Cloud Canvas. Anyone with the link can see future saved changes. Use Echo to publish a separate Craft to Echoes.",
       tourCloudTitle: "Keep private work in PenEcho Cloud",
       tourCloudBody: "Open Cloud to sign in, save and reopen private versioned Canvases by project, and use favorite Canvases or Widgets from Echoes in your current Canvas.",
       tourManualAITitle: "Run Auto AI on demand",
@@ -1100,7 +1100,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedErrorOpen: "This Canvas could not be opened.",
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
       closeSavedCrafts: "Close Favorites",
-      shareCanvasCloud: "Share Canvas to PenEcho Cloud",
+      shareCanvasCloud: "Share Canvas",
       shareWidget: "Share widget",
       openInNewPage: "Open in a new page",
       openCanvas: "Open Canvas",
@@ -1707,7 +1707,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // The public viewer shares the Cloud origin (and therefore localStorage)
     // with editable Cloud Canvases. Never inherit their last-selected Cloud
     // history location: the read-only shell has no /api/cloud/library route.
-    initialSnapshotLocation = window.PENECHO_CONFIG?.runtime === "viewer"
+    initialSnapshotLocation = window.PENECHO_CONFIG?.browserDraftId ? "device" : window.PENECHO_CONFIG?.runtime === "viewer"
       ? "device"
       : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
     initialAiEffort = storedAiEffort || configuredAiEffort || "config",
@@ -2479,6 +2479,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function maybeStartFeatureTour(retry = false) {
+    if(window.PENECHO_CONFIG?.browserDraftId)return false;
     if (featureTour.active || changelog.active || (featureTour.autoChecked && !retry)) return false;
     featureTour.autoChecked = true;
     const progress = readFeatureTourProgress(),
@@ -2533,6 +2534,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } catch {}
   }
   function maybeShowChangelog(force = false) {
+    if(window.PENECHO_CONFIG?.browserDraftId&&!force)return false;
     if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
     hideAutoDelayControl();
     hideEffortControl();

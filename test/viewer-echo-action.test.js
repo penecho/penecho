@@ -148,9 +148,10 @@ function response(status, payload) {
   };
 }
 
-function createHarness({ session = "anonymous", artifact = "ok", language = "en" } = {}) {
+function createHarness({ session = "anonymous", artifact = "ok", language = "en", live = false, payload = null, copyStatus = 200 } = {}) {
   const document = new MockDocument();
-  const requests = [];
+  document.cookie = "penecho_csrf=test-csrf";
+  const requests = [], viewed = [];
   const eventListeners = new Map();
   let currentLanguage = language;
   let resolveSession;
@@ -161,10 +162,11 @@ function createHarness({ session = "anonymous", artifact = "ok", language = "en"
     : response(200, { account: null });
   const artifactResponse = artifact === "forbidden"
     ? response(403)
-    : response(200, { format: "penecho-canvas", items: [] });
+    : response(200, payload || { format: "penecho-canvas", items: [] });
 
   function fetch(url, options) {
     requests.push({ url, options });
+    if (url.endsWith("/copy")) return Promise.resolve(response(copyStatus, {url:"/canvas/copied",message:"The service could not complete the request."}));
     if (url === "/api/v1/auth/session") {
       if (session === "failure") return Promise.reject(new Error("session unavailable"));
       if (session === "pending") return new Promise((resolve) => { resolveSession = resolve; });
@@ -175,9 +177,9 @@ function createHarness({ session = "anonymous", artifact = "ok", language = "en"
   }
 
   const window = {
-    PenEchoI18n: { currentLanguage: () => currentLanguage },
+    PenEchoI18n: { currentLanguage: () => "zh" },
     PenEchoCommunityCanvas: {
-      viewCanvas: async () => {},
+      viewCanvas: async artifact => {viewed.push(artifact);},
       importWidget: async () => {},
     },
     addEventListener(type, listener) {
@@ -194,9 +196,10 @@ function createHarness({ session = "anonymous", artifact = "ok", language = "en"
   const context = {
     document,
     window,
-    location: { pathname: `/canvas/view/${itemId}` },
+    location: { pathname: `/canvas/${live ? "share" : "view"}/${itemId}`, search:"" },
+    URLSearchParams,
     navigator: { language: "en-US" },
-    localStorage: { getItem: () => null },
+    localStorage: { getItem: key => key === "penecho-site-language" ? currentLanguage : "zh" },
     fetch,
     setTimeout,
     clearTimeout,
@@ -206,7 +209,7 @@ function createHarness({ session = "anonymous", artifact = "ok", language = "en"
 
   return {
     document,
-    requests,
+    requests, viewed,
     resolveSession: (value = sessionResponse) => resolveSession?.(value),
     resolveArtifact: (value = artifactResponse) => resolveArtifact?.(value),
     setLanguage(value) { currentLanguage = value; },
@@ -287,4 +290,51 @@ test("language changes preserve the Echo route", async () => {
 
   assert.equal(primaryAction(harness).href, authHref);
   assert.equal(primaryAction(harness).children[0].textContent, "Echo");
+});
+
+test("live Canvas viewer unwraps bundle payloads and retains login return route", async () => {
+  const bundle={bundleVersion:2,formatVersion:1,mode:"snapshot",manifest:{},assets:[]};
+  const run=createHarness({live:true,payload:{artifact:bundle}});
+  await run.settle();
+  const brand = run.document.querySelector(".viewer-brand");
+  assert.ok(run.document.documentElement.classList.contains("viewer-live-share"));
+  assert.equal(brand.href, "/?public=1");
+  assert.equal(brand.getAttribute("aria-label"), "PenEcho home");
+  assert.equal(run.viewed[0],bundle);
+  assert.equal(primaryAction(run).children[0].textContent,"Edit in my space");
+  assert.match(primaryAction(run).href,/returnTo=.*share.*edit/);
+  assert.ok(run.requests.some(r=>r.url===`/api/v1/shares/${itemId}`&&r.options.cache==="no-store"));
+});
+
+
+test("live copy sends explicit JSON and preserves the view after a failed request", async () => {
+  const run = createHarness({live:true,session:"signed-in",copyStatus:415,language:"zh"});
+  await run.settle();
+  primaryAction(run).dispatchEvent({type:"click",preventDefault(){}});
+  await run.settle();
+  const request = run.requests.find(r => r.url.endsWith("/copy"));
+  assert.equal(request.options.headers["content-type"], "application/json");
+  assert.equal(request.options.headers["x-penecho-csrf"], "test-csrf");
+  assert.deepEqual(JSON.parse(request.options.body), {});
+  assert.equal(run.document.querySelector(".viewer-status").hidden, true);
+  assert.equal(run.document.querySelector(".viewer-copy-error").textContent, "暂时无法保存到你的空间，请重试。");
+  assert.ok(primaryAction(run));
+});
+
+
+test("anonymous viewers default to English despite Chinese Canvas and site preferences", async () => {
+  const run = createHarness({live:true,language:"zh"});
+  await run.settle();
+  assert.equal(primaryAction(run).children[0].textContent,"Edit in my space");
+  assert.equal(run.document.documentElement.lang,"en");
+});
+
+test("signed-in viewers follow the Dashboard preference instead of the Canvas preference", async () => {
+  const run = createHarness({live:true,session:"signed-in",language:"en"});
+  await run.settle();
+  assert.equal(primaryAction(run).children[0].textContent,"Edit in my space");
+  run.setLanguage("zh");
+  run.dispatchLanguageChange();
+  assert.equal(primaryAction(run).children[0].textContent,"在我的空间编辑");
+  assert.equal(run.document.documentElement.lang,"zh");
 });

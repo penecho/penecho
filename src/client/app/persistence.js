@@ -1,5 +1,5 @@
 // Canvas snapshots, export, drawing history, strokes, and lasso selection.
-  const SNAPSHOT_DB = "penecho-canvas-history",
+  const SNAPSHOT_DB = "penecho-canvas-history"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
     SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
@@ -319,6 +319,7 @@
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
     const location = state.currentSnapshotLocation || (window.PENECHO_CONFIG?.browserCanvasEditing ? "cloud" : state.snapshotLocation),
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
@@ -1827,6 +1828,15 @@
     // used to surface a misleading 502 after an otherwise successful load.
     openHistoryPanel(false);
     return true;
+  }
+  async function saveLiveShareToCloud(widgetId = null) {
+    const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
+    if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
+    setSnapshotLocation("cloud", { refresh:false });
+    await cloudSnapshotItems();
+    const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
+    if (!id) throw Error("The Canvas could not be saved to Cloud.");
+    return id;
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");

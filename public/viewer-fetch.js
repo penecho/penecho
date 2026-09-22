@@ -6,7 +6,7 @@
   const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
   const MAX_URL_LENGTH = 16 * 1024;
   window.PenEchoViewerFetch = {
-    install({ itemId, fetch: fetchData = window.fetch.bind(window) }) {
+    install({ itemId, live = false, fetch: fetchData = window.fetch.bind(window) }) {
       const requests = new Map(), controllers = new Set();
       let stopped = false;
       function owns(source) {
@@ -24,7 +24,7 @@
         // Covers the canonical server's 30-second queue plus 12-second fetch.
         const timer = setTimeout(() => controller.abort(), 45_000);
         try {
-          const response = await fetchData(`/api/v1/community/items/${itemId}/widget-fetch?url=${encodeURIComponent(url)}`, {
+          const response = await fetchData(`${live ? `/api/v1/shares/${itemId}` : `/api/v1/community/items/${itemId}`}/widget-fetch?url=${encodeURIComponent(url)}`, {
             method:"GET", credentials:"omit", cache:"no-store", signal:controller.signal,
           });
           if (!response.ok) throw Error(`Public data is temporarily unavailable (${response.status}).`);

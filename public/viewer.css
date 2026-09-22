@@ -43,6 +43,10 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 }
 .viewer-topbar > * { pointer-events: auto; }
 
+/* Live-share failures use a full-screen status surface. Keep the homepage
+   wordmark above it so an unavailable share never becomes a dead end. */
+html.viewer-live-share .viewer-topbar { z-index: 600; }
+
 /* Swiss-minimal viewer controls: one quiet brand surface and discrete actions.
    The action row is layout-only so each button paints exactly one border. */
 .viewer-brand {
@@ -71,6 +75,25 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
 .viewer-brand:hover { opacity: 1; border-color: #d4d4d8; background: #fafafa; box-shadow: 0 6px 20px rgb(24 24 27 / .13); }
 .viewer-brand:focus-visible { outline: 3px solid rgb(37 99 235 / .32); outline-offset: 2px; }
 .viewer-brand:focus-visible { opacity: 1; }
+
+/* Live shares use the public-site wordmark from the 404 header: the mark is
+   the link itself, without a second card or image treatment around it. */
+html.viewer-live-share .viewer-brand {
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #30372d;
+  font-size: 25px;
+  letter-spacing: -1.15px;
+  line-height: 1;
+  box-shadow: none;
+  opacity: 1;
+  transition: color .15s ease;
+}
+html.viewer-live-share .viewer-brand:hover { border-color: transparent; background: transparent; color: #3b5034; box-shadow: none; }
+html.viewer-live-share .viewer-brand:focus-visible { outline: 2px solid #3b5034; outline-offset: 4px; }
 
 .viewer-actions {
   flex: 0 1 auto;
@@ -147,6 +170,7 @@ html.viewer-mode, html.viewer-mode body { height: 100%; overflow: hidden; }
     gap: 8px;
   }
   .viewer-brand { padding: 6px 11px; font-size: 15px; }
+  html.viewer-live-share .viewer-brand { padding: 8px 4px; font-size: 23px; }
   .viewer-actions { max-width: calc(100% - 108px); gap: 2px; }
   .viewer-primary { flex: 0 1 auto; }
   .viewer-chip,

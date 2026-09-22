@@ -62,6 +62,7 @@
   let copy = COPY[viewerLanguage()];
 
   document.documentElement.classList.add("viewer-mode");
+  if (live) document.documentElement.classList.add("viewer-live-share");
   window.PenEchoViewerFetch?.install({ itemId, live });
 
   const topbar = document.createElement("div");
@@ -138,7 +139,10 @@
 
   function renderActions() {
     actions.replaceChildren();
-    if (!live || contentReady) actions.append(primaryAction());
+    // The live-share brand remains available while loading or unavailable,
+    // but account and edit actions only make sense after content is ready.
+    if (live && !contentReady) return;
+    actions.append(primaryAction());
     if (copyFailed && contentReady) {
       const message = document.createElement("span");
       message.className = "viewer-copy-error";

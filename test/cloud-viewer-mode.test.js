@@ -71,7 +71,7 @@ test("the viewer localizes its actions and responsively frames Widgets and compl
   assert.equal((js.match(/takeFurther:"Echo"/g) || []).length, 2);
   assert.match(js, /backTitle:"Back to Echoes"/);
   assert.match(js, /backTitle:"返回 Echoes"/);
-  assert.match(js, /PenEchoI18n\?\.currentLanguage/);
+  assert.match(js, /penecho-site-language/);
   assert.match(js, /penecho:languagechange/);
   assert.match(js, /fitViewport:true/);
   assert.match(js, /if \(artifact\?\.format === "penecho-widget"\) await bridge\.importWidget\(artifact, null, \{ fitViewport:true \}\);/);
@@ -122,6 +122,22 @@ test("the viewer controls stay quiet until hovered or focused", () => {
   assert.match(css, /\.viewer-actions\s*\{[\s\S]*?opacity:\s*\.5/);
   assert.match(css, /\.viewer-brand:hover\s*\{\s*opacity:\s*1/);
   assert.match(css, /\.viewer-actions:hover,[\s\S]*?\.viewer-actions:focus-within\s*\{\s*opacity:\s*1/);
+});
+
+test("an unavailable live share keeps its homepage link above the status surface", () => {
+  const js = read("public/viewer.js"), css = read("public/viewer.css"),
+    liveTopbar = css.match(/html\.viewer-live-share \.viewer-topbar\s*\{[^}]*z-index:\s*(\d+)/),
+    status = css.match(/\.viewer-status\s*\{[^}]*z-index:\s*(\d+)/);
+
+  assert.match(js, /if \(live\) document\.documentElement\.classList\.add\("viewer-live-share"\)/);
+  assert.ok(liveTopbar, "live shares must define an explicit topbar layer");
+  assert.ok(status, "the full-screen status surface must define its layer");
+  assert.ok(Number(liveTopbar[1]) > Number(status[1]), "the live-share homepage link must stay above the status surface");
+  assert.match(js, /if \(live && !contentReady\) return;/);
+  assert.match(
+    css,
+    /html\.viewer-live-share \.viewer-brand\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*color:\s*#30372d;[^}]*font-size:\s*25px;[^}]*letter-spacing:\s*-1\.15px;[^}]*opacity:\s*1;/,
+  );
 });
 
 test("the viewer removes edit guidance, the canvas seam, and the duplicate action border", () => {

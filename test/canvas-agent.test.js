@@ -3267,7 +3267,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(persistence,"loadSnapshot"),/wantsConversationForCanvas\?\.\(\{ id:item\.id, location \}\)[\s\S]*?canvasAgentCanvasDidChange\(\{ id:item\.id, location \},\{clearProject:true,deferConversationStart:restoreStudioConversation\}\)/);
   assert.match(functionSource(persistence,"startBlankCanvas"),/canvasAgentCanvasDidChange\(null,\{clearProject:true\}\)/);
   assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/clearProject[\s\S]*projectSelectionRevision\+\+[\s\S]*projectId=""[\s\S]*projectHistoryLoaded=true[\s\S]*localStorage\.removeItem\(CANVAS_AGENT_PROJECT_KEY\)[\s\S]*canvasAgentRenderProjects\(\)[\s\S]*canvasAgentHideProjectPopover\(\)/);
-  assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/if \(state\.canvasAgentAutoOpen && \(canvasAgentPanel\.hidden \|\| !document\.body\.classList\.contains\("canvas-agent-open"\)\)\) openCanvasAgent\(\{focus:false\}\)/);
+  assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/if \(!window\.PENECHO_CONFIG\?\.guestCanvas && state\.canvasAgentAutoOpen && \(canvasAgentPanel\.hidden \|\| !document\.body\.classList\.contains\("canvas-agent-open"\)\)\) openCanvasAgent\(\{focus:false\}\)/);
   assert.match(core,/canvasAgentNoProject: "No project"/);
   assert.match(zh,/canvasAgentNoProject: "无项目"/);
   assert.match(source,/function openCanvasAgent\(\{focus=false\}=\{\}\)[\s\S]*canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput/);

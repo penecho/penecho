@@ -305,8 +305,8 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /不会参考画布其他部分/);
   assert.match(app, /tourFavoritesBody:[^\n]*Echoes favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
   assert.match(zh, /tourFavoritesBody:[^\n]*Echoes[^\n]*收藏组件[^\n]*收藏画布/);
-  assert.match(app, /tourShareCanvasBody:[^\n]*public in Echoes[^\n]*Use Cloud instead for private saves/);
-  assert.match(zh, /tourShareCanvasBody:[^\n]*公开发布到 Echoes[^\n]*私密保存请使用 Cloud/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*separate Craft to Echoes/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*独立的 Echo 按钮[^\n]*Echoes/);
   assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or Widgets/);
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);
