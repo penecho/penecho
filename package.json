@@ -100,7 +100,7 @@
   "scripts": {
     "start": "node cli.js",
     "dev": "node server.js",
-    "build:client": "node scripts/build-client.js",
+    "build:client": "npm run build:playground && node scripts/build-client.js",
     "build:visual-explainer-vendor": "node scripts/build-visual-explainer-vendor.js",
     "build:harness-backports": "node scripts/build-harness-backports.cjs",
     "check:harness-backports": "node scripts/build-harness-backports.cjs --check",
@@ -127,7 +127,9 @@
     "build:sequence": "node scripts/build-sequence.js",
     "check:sequence": "node scripts/build-sequence.js --check",
     "build:workflow": "node scripts/build-workflow.js",
-    "check:workflow": "node scripts/build-workflow.js --check"
+    "check:workflow": "node scripts/build-workflow.js --check",
+    "build:playground": "node scripts/build-playground.cjs",
+    "check:playground": "node scripts/build-playground.cjs --check"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -184,7 +186,8 @@
     "pdf-parse": "2.4.5",
     "read-excel-file": "9.3.10",
     "sharp": "0.35.4",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "three": "0.184.0"
   },
   "devDependencies": {
     "elkjs": "0.12.0",

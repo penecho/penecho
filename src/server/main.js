@@ -3126,6 +3126,12 @@ function resolveCanvasAgentWidgetCapabilities(value = {}) {
 const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
+  if (req.method === "POST" && url.pathname === "/api/playground/liveclay") {
+    const error=browserRequestError(req);if(error)return send(res,403,{error});
+    try{const body=await readJson(req,2048);if(typeof body.text!=="string"||body.text.length>180)return send(res,400,{error:"Use at most 180 characters."});return send(res,200,await cloudConnector.cloudRequest("/api/playground/liveclay",{method:"POST",body:{text:body.text}}));}
+    catch(error){return send(res,error.status||502,{error:String(error.message||"Sign in to PenEcho Cloud to use Live Clay.")});}
+  }
+  if(req.method==="GET"&&url.pathname==="/play/liveclay"){res.writeHead(302,{Location:"/?playground=liveclay"});return res.end();}
   if (req.method === "POST" && ["/api/mcp/skill","/api/mcp/guide"].includes(url.pathname)) {
     const error=browserRequestError(req);if(error)return send(res,403,{error});
     const file=url.pathname.endsWith("/skill")?"skills/penecho-mcp/SKILL.md":"docs/mcp-setup.md";
@@ -3886,6 +3892,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(WIDGET_RENDERER).pipe(res);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/playground/liveclay-v1.js") {
+    res.writeHead(200,{"Content-Type":"application/javascript; charset=utf-8","Cache-Control":"public, max-age=300","Access-Control-Allow-Origin":"*","Cross-Origin-Resource-Policy":"cross-origin","X-Content-Type-Options":"nosniff"});
+    if(req.method==="HEAD")return res.end();return fs.createReadStream(path.join(PUBLIC,"playground/liveclay-v1.js")).pipe(res);
   }
   if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/visual-explainer-vendor.js") {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });

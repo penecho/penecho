@@ -271,7 +271,7 @@
     const inputHeaders = input instanceof Request ? input.headers : undefined;
     const headers = csrfHeaders(options.headers || inputHeaders);
     if (cloudRuntime && sourceUrl.pathname === "/api/mcp/status") {
-      if(isBrowserDraft)return nativeFetch(`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/status`,{...options,method:'GET',body:undefined,headers,credentials:'same-origin'});
+      if(isBrowserDraft&&window.PENECHO_CONFIG?.playground!=="liveclay")return nativeFetch(`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/status`,{...options,method:'GET',body:undefined,headers,credentials:'same-origin'});
       if(window.PenEchoCloudMcpSocket)return nativeFetch('/api/v1/mcp/canvas/status',{...options,method:'GET',body:undefined,headers,credentials:'same-origin'});
       return bridgeGate.then(() => bridgeState?.online && bridgeDeviceId
         ? nativeFetch(`/api/v1/remote-canvas/mcp/status?deviceId=${encodeURIComponent(bridgeDeviceId)}`, { ...options, method:"GET", body:undefined, headers, credentials:"same-origin" })
@@ -576,11 +576,12 @@
       try {
         await openRequestedCanvas();
         await waitForVisibleWidgets();
-        if(isBrowserDraft){
+        if(isBrowserDraft&&window.PENECHO_CONFIG?.playground!=="liveclay"){
           const renew=()=>nativeFetch(`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/heartbeat`,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:"{}"}).catch(()=>{});
           void renew();setInterval(renew,300000);
         }
         if(new URLSearchParams(location.search).get('mcp')==='1')window.dispatchEvent(new CustomEvent('penecho:open-cloud-mcp'));
+        await window.PenEchoPlayground?.start();
         gate.hidden = true;
       } catch (error) {
         gate.dataset.state = "error";

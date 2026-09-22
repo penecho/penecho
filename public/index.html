@@ -20,6 +20,7 @@
     src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"
     integrity="sha384-KKWa9jJ1MZvssLeOoXG6FiOAZfAgmzsIIfw8BXwI9+kYm0lPCbC6yTQPBC00F1/L"
     crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="playground.css">
 </head>
 <body data-theme="studio" data-studio-palette="teal" data-canvas-mode="pen">
   <main>
@@ -226,6 +227,7 @@
             <button id="mcpToolbarToggle" class="canvas-agent-trigger" data-pe-button="secondary" data-pe-density="compact" type="button" aria-pressed="false" aria-label="Set up MCP Server" title="Set up MCP Server" data-state="off">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></svg><i class="mcp-toolbar-dot" aria-hidden="true"></i><span>MCP</span>
             </button>
+            <button id="playgroundToggle" class="canvas-agent-trigger" data-pe-button="toolbar" data-pe-density="compact" type="button" aria-expanded="false" aria-controls="playgroundPanel" title="Playground"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9c0-5 12-6 14 0s-2 11-7 10S3 15 5 9Z"/></svg><span>Playground</span></button>
             <button id="canvasAgentToggle" class="canvas-agent-trigger" data-pe-button="toolbar" data-pe-density="compact" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentPanel" data-i18n-aria="openCanvasAgent" aria-label="Open PenEcho Agent" data-i18n-title="canvasAgent" title="PenEcho Agent">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5l-4.5 3v-3H7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3Z"/><path d="M8 10h8M8 13h5"/></svg>
               <span data-i18n="canvasAgent">PenEcho Agent</span>

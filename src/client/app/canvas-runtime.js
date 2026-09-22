@@ -1715,19 +1715,24 @@
   }
   function positionWidget(widget) {
     if (!widget.shell) return;
-    const localX = widget.x * state.scale,
-      localY = widget.y * state.scale,
+    // Entry presentation resizes the existing iframe without rewriting Canvas geometry.
+    const liveClayEntry = document.body.classList.contains("playground-entry") && widget.sourceFormat === "penecho-liveclay+json" && state.interactingWidgetId === widget.id,
+      entryMetrics = liveClayEntry ? canvasViewportMetrics() : null,
+      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : widget.contentW,
+      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : widget.contentH;
+    const localX = entryMetrics ? 12 - state.panX : widget.x * state.scale,
+      localY = entryMetrics ? 64 - state.panY : widget.y * state.scale,
       screenX = state.panX + localX,
       screenY = state.panY + localY,
-      scaleX = state.scale * widget.w / widget.contentW,
-      scaleY = state.scale * widget.h / widget.contentH,
+      scaleX = entryMetrics ? 1 : state.scale * widget.w / widget.contentW,
+      scaleY = entryMetrics ? 1 : state.scale * widget.h / widget.contentH,
       declaration = widget.styleRule?.style;
     if (!declaration) return;
-    const sizeKey = `${widget.contentW}x${widget.contentH}`;
+    const sizeKey = `${displayW}x${displayH}`;
     if (widget.styleSizeKey !== sizeKey) {
       widget.styleSizeKey = sizeKey;
-      declaration.width = `${widget.contentW}px`;
-      declaration.height = `${widget.contentH}px`;
+      declaration.width = `${displayW}px`;
+      declaration.height = `${displayH}px`;
       declaration.setProperty("--widget-natural-width", `${widget.contentW}px`);
       declaration.setProperty("--widget-natural-height", `${widget.contentH}px`);
     }

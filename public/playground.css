@@ -1,0 +1,23 @@
+/* Layout extends the PenEcho workbench; controls use the shared design language. */
+.playground-panel{position:fixed;z-index:160;left:50%;bottom:max(80px,calc(env(safe-area-inset-bottom) + 72px));transform:translateX(-50%);width:min(620px,calc(100vw - 32px));padding:16px;background:var(--panel,#fff);color:var(--ink,#202124);border-radius:12px;box-shadow:0 8px 32px #0002;box-sizing:border-box}
+.playground-panel[hidden],.playground-header[hidden]{display:none}
+.playground-panel header,.playground-panel footer,.playground-header,.playground-header nav{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.playground-panel header{margin-bottom:8px}.playground-panel label{font-size:13px;font-weight:500}
+.playground-panel textarea{display:block;box-sizing:border-box;width:100%;resize:none;min-height:64px;border:0;background:transparent;color:inherit;font:16px/1.6 system-ui;outline-offset:3px}
+.playground-panel footer{min-height:28px;font-size:12px;line-height:1.5}.playground-examples{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.playground-panel svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5}
+.playground-header{position:fixed;inset:max(16px,env(safe-area-inset-top)) 24px auto;z-index:150;pointer-events:none}.playground-header>*{pointer-events:auto}
+.playground-brand{display:flex;align-items:center;gap:8px;color:var(--ink,#202124);font:500 18px system-ui;text-decoration:none}.playground-brand img{width:28px;height:28px;object-fit:contain}
+.playground-entry .topbar,.playground-entry #studioNavigator,.playground-entry .canvas-agent-panel,.playground-entry #canvasAgentPanel{display:none!important}
+.playground-entry .toolbar>:not(#canvasAgentToolbarHome){display:none!important}.playground-entry #mcpToolbarToggle,.playground-entry #canvasAgentToggle{display:none!important}
+.playground-entry .toolbar{left:50%!important;right:auto!important;transform:translateX(-50%);width:max-content!important}
+.playground-entry #viewport{--studio-navigator-width:0px}
+@media(max-width:700px){.playground-header{inset:max(12px,env(safe-area-inset-top)) 16px auto;gap:8px}.playground-header nav{gap:6px}.playground-brand span{display:none}.playground-panel{bottom:max(70px,calc(env(safe-area-inset-bottom) + 64px));padding:12px}.playground-examples{gap:6px}.playground-panel textarea{font-size:16px}}
+@media(prefers-reduced-motion:reduce){#playgroundToggle,.playground-panel{animation:none!important;transition:none!important}}
+
+.playground-dock{position:fixed;z-index:161;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%)}
+.playground-dock:empty{display:none}
+.playground-entry #viewport .canvas-widget.is-interacting::after{display:none}
+.playground-entry .widget-interaction-status,.playground-entry #canvasWidgetExit,.playground-entry .canvas-navigation-lock,.playground-entry .ai-embodiment{display:none!important}
+
+.playground-entry main>footer,.playground-entry #canvasFit{display:none!important}

@@ -1532,7 +1532,7 @@
 
   function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false, workflowMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
-    const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
+    const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl, new URL("playground/liveclay-v1.js", location.href).href]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
       .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
       .concat(sequenceMode ? [sequenceRuntimeUrl] : [])
@@ -1823,6 +1823,7 @@
     const mcpPreview = sourceFormat === "penecho-mcp+html";
     parsed.querySelectorAll(mcpPreview ? "base, iframe, object, embed, meta[http-equiv]" : "base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
+      if(element.getAttribute("src")==="https://penecho.ai/canvas/playground/liveclay-v1.js"){element.src=new URL("playground/liveclay-v1.js",location.href).href;return;}
       if (!safeHttpsResource(element, "src")) element.remove();
     });
     parsed.querySelectorAll("link").forEach((element) => {
@@ -2064,6 +2065,8 @@
         inner.removeAttribute("src");
         inner.srcdoc = documentSource;
         snapshotDebugLog("inner-srcdoc-assigned", { documentLength:documentSource.length });
+      } else if (message?.type === "penecho-liveclay-update" && message.document?.version === 1 && JSON.stringify(message.document).length <= 100000) {
+        inner.contentWindow?.postMessage(message,"*");
       } else if (message?.type === "penecho-widget-language") {
         widgetLanguage = normalizeWidgetLanguage(message.language);
         inner.contentWindow?.postMessage({type:"penecho-diagram-language",language:widgetLanguage},"*");

@@ -1834,6 +1834,7 @@
   if (window.PENECHO_CONFIG?.runtime !== "viewer"
     && !(window.PENECHO_CONFIG?.runtime === "cloud" && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true)) refreshSnapshots().catch(() => {});
   fit();
+  if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
   if(window.PENECHO_CONFIG?.runtime!=="viewer")void canvasDocumentsReady().catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsReady()));
