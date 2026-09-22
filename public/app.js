@@ -27128,12 +27128,12 @@ var canvasDocumentIdentity = (() => {
     else if(view){state.scale=Math.max(.03,Math.min(2,Number(view.scale)||1));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
     setCanvasNavigationLocked(view?.navigationLocked===true);
   }
-  async function canvasDocumentsAdopt(item,location) {
+  async function canvasDocumentsAdopt(item,location,{preserveWorkspace=false}={}) {
     const previous=canvasDocuments.records.get(canvasDocuments.activeId);
     const locator={location,id:item.id},meta=canvasDocumentIdentity.normalizeMetadata(item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:item.name||""};
     const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta,{item});
     doc.title=item.name||doc.title;doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(item);doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
-    canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
+    if(!preserveWorkspace||doc!==previous)canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
     canvasDocuments.records.set(doc.id,doc);canvasDocuments.activeId=doc.id;canvasDocuments.epoch++;
     canvasDocumentsRetireEmptyPlaceholder(previous);
     mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;doc.revision=state.userRevision;doc.savedRevision=state.snapshotSavedRevision;
@@ -27152,7 +27152,7 @@ var canvasDocumentIdentity = (() => {
       // An independent copy starts with its own Undo stack and external bindings.
       state.history=[];state.future=[];
     }
-    await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location);
+    await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location,{preserveWorkspace:nextId===previous.id});
     const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId},tileEntries};canvasDocumentsSyncExtension(doc);
   }
   function canvasDocumentsObjects(doc) {

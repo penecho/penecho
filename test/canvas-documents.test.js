@@ -1896,3 +1896,40 @@ test("legacy conversation history and incomplete snapshots are not treated as di
     assert.ok(records.has(opened.documentId));
   }
 });
+
+test("saving the current document preserves instructions queued after the snapshot was captured", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const doc = h.canvasDocumentsCurrent();
+  await startHidden(h, doc.id, "save-session", "save-binding", "Test");
+  doc.processor = { kind:"external", bindingKey:"save-binding", client:"Test" };
+  const item = { ...h.context.canvasDocumentsActiveSnapshot(), createdAt:Date.now(), updatedAt:Date.now(), bundleExtensions:h.canvasDocumentsSaveMetadata() };
+  await h.canvasDocumentsQueueMessage({ textOverride:"Instruction received during the save" });
+  const message = doc.messages[0], sequence = doc.messageSequence;
+  await h.canvasDocumentsDidSave(item, "device", "saved-current", []);
+  assert.equal(h.canvasDocumentsCurrent(), doc);
+  assert.equal(doc.messages[0], message);
+  assert.equal(doc.messageSequence, sequence);
+  assert.equal(doc.locator.id, "saved-current");
+  assert.equal(h.state.currentSnapshotBundleExtensions.penechoWorkspace.messages[0].text, message.text);
+});
+
+test("loading a snapshot still restores its workspace and Save as starts an independent inbox", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const doc = h.canvasDocumentsCurrent();
+  await startHidden(h, doc.id, "load-session", "load-binding", "Test");
+  doc.processor = { kind:"external", bindingKey:"load-binding", client:"Test" };
+  await h.canvasDocumentsQueueMessage({ textOverride:"Saved instruction" });
+  const item = { ...h.context.canvasDocumentsActiveSnapshot(), id:"saved-load", bundleExtensions:structuredClone(h.canvasDocumentsSaveMetadata()) };
+  doc.messages = []; doc.messageSequence = 0;
+  await h.context.canvasDocumentsAdopt(item, "device");
+  assert.equal(doc.messages[0].text, "Saved instruction");
+  assert.equal(doc.messageSequence, 1);
+  const copy = { ...item, bundleExtensions:h.canvasDocumentsSaveMetadata({ copy:true }) };
+  await h.canvasDocumentsDidSave(copy, "device", "independent-copy", []);
+  assert.notEqual(h.canvasDocumentsCurrent().id, doc.id);
+  assert.equal(h.canvasDocumentsCurrent().messages.length, 0);
+  assert.equal(h.canvasDocumentsCurrent().bindings.length, 0);
+  assert.equal(doc.messages[0].text, "Saved instruction");
+});
