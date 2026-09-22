@@ -1328,12 +1328,16 @@ function canonicalSharedCanvasV1(value) {
     if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<80||image.h<80||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
     if(image.plotExpression!==undefined&&(typeof image.plotExpression!=="string"||!image.plotExpression.trim()||image.plotExpression.trim().length>180))return null;
   }
-  const canonicalTextBoxes=[];
+  const canonicalTextBoxes=[],
+    supportedTextFonts=new Set(["ui-rounded, system-ui, sans-serif","Bradley Hand, Segoe Print, Comic Sans MS, cursive","Georgia, serif","system-ui, sans-serif"]);
   for(const item of textBoxes) {
     if(!item||typeof item!=="object"||typeof item.id!=="string"||!/^text-box-\d+$/.test(item.id)||typeof item.text!=="string"||!item.text.trim()||item.text.length>2000)return null;
     if(![item.x,item.y,item.w,item.h,item.maxWidth,item.fontSize].every(Number.isFinite)||item.x<0||item.y<0||item.w<=0||item.h<=0||item.x+item.w>CANVAS_SIZE||item.y+item.h>CANVAS_SIZE||item.maxWidth<item.fontSize*3||item.maxWidth>CANVAS_SIZE||item.fontSize<1||item.fontSize>2000)return null;
+    let fontFamily=typeof item.fontFamily==="string"?item.fontFamily.trim():"";
+    if(fontFamily==="Segoe Print, Comic Sans MS, cursive")fontFamily="Bradley Hand, Segoe Print, Comic Sans MS, cursive";
     canonicalTextBoxes.push({
       id:item.id,x:item.x,y:item.y,w:item.w,h:item.h,maxWidth:item.maxWidth,fontSize:item.fontSize,
+      ...(supportedTextFonts.has(fontFamily)?{fontFamily}:{}),
       color:typeof item.color==="string"?item.color.slice(0,40):"#1f2937",text:item.text,
     });
   }
