@@ -525,3 +525,16 @@ test("internal restoration cache is bounded and never consumes external authorit
     }
   }
 });
+
+test("workspace messages preserve textarea whitespace without relaxing identity or size checks", () => {
+  const api = loadApi(), metadata = { version:1, documentId:"doc-1", bindings:[{ key:"binding-1", client:"desktop", documentId:"doc-1" }] };
+  const message = { id:"message-1", cursor:1, bindingKey:"binding-1", client:"desktop", text:"First line\n\tIndented line\r\nLast line", createdAt:1 };
+  const restore = overrides => api.normalizeWorkspace({ version:1, messages:[{ ...message, ...overrides }] }, metadata).messages;
+  assert.equal(restore()[0]?.text, message.text);
+  assert.equal(restore({ text:"Single line" })[0]?.text, "Single line");
+  assert.equal(restore({ text:"x".repeat(16000) })[0]?.text.length, 16000);
+  for (const overrides of [
+    { text:"x".repeat(16001) }, { text:"" }, { text:"Hidden\0control" }, { text:"Escape\u001bcontrol" },
+    { id:"bad\nidentity" }, { bindingKey:"binding-1\n" }, { client:"desktop\n" },
+  ]) assert.equal(restore(overrides).length, 0, JSON.stringify(overrides));
+});

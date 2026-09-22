@@ -26562,7 +26562,8 @@ var canvasDocumentIdentity = (() => {
     const cursor = safeTimestamp(ownValue(value, "cursor"));
     const text = ownValue(value, "text");
     const createdAt = safeTimestamp(ownValue(value, "createdAt"));
-    if (!validId(id) || cursor === null || createdAt === null || !boundedString(text, 1, MAX_WORKSPACE_MESSAGE_LENGTH)) return null;
+    if (!validId(id) || cursor === null || createdAt === null || !boundedString(text, 1, MAX_WORKSPACE_MESSAGE_LENGTH, false)
+      || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text)) return null;
     const bindingKey = ownValue(value, "bindingKey");
     const client = ownValue(value, "client");
     const message = {
