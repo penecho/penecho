@@ -635,9 +635,7 @@
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawAnimationsToContext(q, bounds, captureTime);
-    drawWidgetsToContext(q, bounds);
-    drawImagesToContext(q, bounds);
-    drawTextBoxesToContext(q, bounds);
+    drawWidgetsAndImagesToContext(q, bounds);
     q.restore();
     for (const [k, canvas] of tiles) {
       const [tx, ty] = k.split(",").map(Number),
@@ -649,6 +647,7 @@
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawSharpOverlays(q, bounds);
+    drawTextBoxesToContext(q, bounds);
     q.restore();
     return preview;
   }
@@ -704,9 +703,7 @@
     context.setTransform(scale, 0, 0, scale, -region.x * scale, -region.y * scale);
     if (state.gridVisible) drawCanvasLineGrid(context, region, scale);
     drawAnimationsToContext(context, region, captureTime);
-    drawWidgetsToContext(context, region);
-    drawImagesToContext(context, region);
-    drawTextBoxesToContext(context, region);
+    drawWidgetsAndImagesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -714,6 +711,7 @@
       if (intersection({ x, y, w: TILE, h: TILE }, region)) context.drawImage(tileCanvas, x, y);
     }
     drawSharpOverlays(context, region);
+    drawTextBoxesToContext(context, region);
     const selection = state.selection;
     if (selection?.phase === "active")
       for (const fragment of selection.fragments) {

@@ -453,9 +453,8 @@ test("canvas photos and function plots use editable image records, unified top t
   assert.match(loadSnapshot, /restoreImages\(images\)/);
   assert.match(startBlankCanvas, /restoreImages\(\[\]\)/);
   assert.match(save, /imagesBefore[\s\S]*?imagesAfter[\s\S]*?const entry = \{[^}]*imagesBefore, imagesAfter[^}]*\}[\s\S]*?state\.history\.push\(entry\)/);
-  assert.match(renderExportCanvas, /drawImagesToContext\(context, region\)/);
-  assert.ok(renderExportCanvas.indexOf("drawWidgetsToContext(context, region)") < renderExportCanvas.indexOf("drawImagesToContext(context, region)"));
-  assert.ok(snapshotPreview.indexOf("drawWidgetsToContext(q, bounds)") < snapshotPreview.indexOf("drawImagesToContext(q, bounds)"));
+  assert.match(renderExportCanvas, /drawWidgetsAndImagesToContext\(context, region\)/);
+  assert.match(snapshotPreview, /drawWidgetsAndImagesToContext\(q, bounds\)/);
   assert.doesNotMatch(end, /imageTouchHold|cancelImageTouchHold/);
   assert.ok(end.indexOf("state.imageGesture") < end.indexOf("state.pendingGesture"));
   assert.equal((app.match(/imagePickerButton\.addEventListener\("click"/g) || []).length, 1);
@@ -4395,8 +4394,7 @@ test("clicking the magic orb sends the Auto AI prompt with the current viewport"
   assert.match(plan, /left = useFullViewport \? captureRect\.x/);
   assert.match(plan, /right = useFullViewport \? captureRect\.x \+ captureRect\.w/);
   assert.match(plan, /latestVisible = latestBox \? intersection\(latestBox, sourceRect\) \|\| \{ \.\.\.sourceRect \}/);
-  assert.match(build, /globalAlpha = 0\.42[\s\S]*?drawWidgetsToContext\(q, sourceRect\)[\s\S]*?drawWidgetsToContext\(q, latestVisible\)/);
-  assert.ok(build.indexOf("drawWidgetsToContext(q, sourceRect)") < build.indexOf("drawImagesToContext(q, sourceRect)"));
+  assert.match(build, /globalAlpha = 0\.42[\s\S]*?drawWidgetsAndImagesToContext\(q, sourceRect\)[\s\S]*?drawWidgetsAndImagesToContext\(q, latestVisible\)/);
   assert.match(build, /scope: captureCurrentViewport \? "current-viewport" : "visible-content"/);
   assert.match(request, /typedInput = !isolatedSelection[\s\S]*?containsRect\(packed\?\.sourceRect, state\.latestTypedInput\.box\)/);
   assert.match(request, /state\.dirty = null;[\s\S]*?state\.hotspotTrail\.splice\(0, hotspotCount\);[\s\S]*?state\.latestTypedInput = null/);

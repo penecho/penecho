@@ -4028,11 +4028,11 @@
     context.scale(scale,scale);
     context.translate(-region.x,-region.y);
     drawAnimationsToContext(context,region);
-    drawWidgetsToContext(context,region);
-    drawImagesToContext(context,region,false);
-    for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
+    drawWidgetsAndImagesToContext(context,region);
     forTiles(region.x,region.y,region.w,region.h,(tileCanvas,tx,ty)=>context.drawImage(tileCanvas,tx*TILE,ty*TILE),false);
     drawSharpOverlays(context,region);
+    // Captures retain stored text while its live editor is open.
+    for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
     context.restore();
     const coordinates=["metadata","none"].includes(args.coordinates) ? args.coordinates : "grid", gridStep=coordinates === "grid" ? canvasAgentDrawCoordinateGrid(context,region,width,height) : canvasAgentGridStep(Math.max(region.w,region.h)),
       encoded=await canvasAgentCompressedCanvas(canvas,policy,execution);

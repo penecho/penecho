@@ -2631,6 +2631,15 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
+  function drawWidgetsAndImagesToContext(context, region = null) {
+    if (state.frontCanvasObjectKind === "widget") {
+      drawImagesToContext(context, region);
+      drawWidgetsToContext(context, region);
+    } else {
+      drawWidgetsToContext(context, region);
+      drawImagesToContext(context, region);
+    }
+  }
   async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
     let widgets = [];
     try {

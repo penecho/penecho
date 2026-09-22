@@ -8929,6 +8929,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
+  function drawWidgetsAndImagesToContext(context, region = null) {
+    if (state.frontCanvasObjectKind === "widget") {
+      drawImagesToContext(context, region);
+      drawWidgetsToContext(context, region);
+    } else {
+      drawWidgetsToContext(context, region);
+      drawImagesToContext(context, region);
+    }
+  }
   async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
     let widgets = [];
     try {
@@ -13296,9 +13305,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawAnimationsToContext(q, bounds, captureTime);
-    drawWidgetsToContext(q, bounds);
-    drawImagesToContext(q, bounds);
-    drawTextBoxesToContext(q, bounds);
+    drawWidgetsAndImagesToContext(q, bounds);
     q.restore();
     for (const [k, canvas] of tiles) {
       const [tx, ty] = k.split(",").map(Number),
@@ -13310,6 +13317,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.save();
     q.setTransform(scale, 0, 0, scale, dx - bounds.x * scale, dy - bounds.y * scale);
     drawSharpOverlays(q, bounds);
+    drawTextBoxesToContext(q, bounds);
     q.restore();
     return preview;
   }
@@ -13365,9 +13373,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.setTransform(scale, 0, 0, scale, -region.x * scale, -region.y * scale);
     if (state.gridVisible) drawCanvasLineGrid(context, region, scale);
     drawAnimationsToContext(context, region, captureTime);
-    drawWidgetsToContext(context, region);
-    drawImagesToContext(context, region);
-    drawTextBoxesToContext(context, region);
+    drawWidgetsAndImagesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -13375,6 +13381,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (intersection({ x, y, w: TILE, h: TILE }, region)) context.drawImage(tileCanvas, x, y);
     }
     drawSharpOverlays(context, region);
+    drawTextBoxesToContext(context, region);
     const selection = state.selection;
     if (selection?.phase === "active")
       for (const fragment of selection.fragments) {
@@ -17091,22 +17098,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     q.setTransform(imageScale, 0, 0, imageScale, -sourceRect.x * imageScale, -sourceRect.y * imageScale);
     q.globalAlpha = 0.42;
     drawAnimationsToContext(q, sourceRect, captureTime);
-    drawWidgetsToContext(q, sourceRect);
-    drawImagesToContext(q, sourceRect);
-    drawTextBoxesToContext(q, sourceRect);
+    drawWidgetsAndImagesToContext(q, sourceRect);
     forTiles(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, sourceRect);
+    drawTextBoxesToContext(q, sourceRect);
     q.globalAlpha = 1;
     q.save();
     q.beginPath();
     q.rect(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h);
     q.clip();
     drawAnimationsToContext(q, latestVisible, captureTime);
-    drawWidgetsToContext(q, latestVisible);
-    drawImagesToContext(q, latestVisible);
-    drawTextBoxesToContext(q, latestVisible);
+    drawWidgetsAndImagesToContext(q, latestVisible);
     forTiles(latestVisible.x, latestVisible.y, latestVisible.w, latestVisible.h, (c, tx, ty) => q.drawImage(c, tx * TILE, ty * TILE), false);
     drawSharpOverlays(q, latestVisible);
+    drawTextBoxesToContext(q, latestVisible);
     q.restore();
     const focusInset = FOCUS_INSET_ENABLED ? drawFocusInset(out, latestVisible, sourceRect, imageScale, captureTime) : null,
       hotspotGrid = mapHotspots(sourceRect, imageSize, hotspotPoints);
@@ -23425,11 +23430,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     context.scale(scale,scale);
     context.translate(-region.x,-region.y);
     drawAnimationsToContext(context,region);
-    drawWidgetsToContext(context,region);
-    drawImagesToContext(context,region,false);
-    for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
+    drawWidgetsAndImagesToContext(context,region);
     forTiles(region.x,region.y,region.w,region.h,(tileCanvas,tx,ty)=>context.drawImage(tileCanvas,tx*TILE,ty*TILE),false);
     drawSharpOverlays(context,region);
+    // Captures retain stored text while its live editor is open.
+    for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
     context.restore();
     const coordinates=["metadata","none"].includes(args.coordinates) ? args.coordinates : "grid", gridStep=coordinates === "grid" ? canvasAgentDrawCoordinateGrid(context,region,width,height) : canvasAgentGridStep(Math.max(region.w,region.h)),
       encoded=await canvasAgentCompressedCanvas(canvas,policy,execution);
