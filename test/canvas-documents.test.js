@@ -1896,3 +1896,35 @@ test("legacy conversation history and incomplete snapshots are not treated as di
     assert.ok(records.has(opened.documentId));
   }
 });
+
+test('text patches reject a record replaced by confirming a resized editor',async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent(),ctx=h.context;
+ const item={id:'text-box-1',x:100,y:100,w:200,h:40,maxWidth:200,fontSize:20,fontFamily:'Georgia, serif',color:'#111111',text:'Original'};h.state.textBoxes.push(item);h.state.textEditors=new Map();h.state.dirtyTextBoxIds=new Set();h.state.scale=1;h.state.mode='hand';
+ let release,entered;const pendingRaster=new Promise(resolve=>entered=resolve);ctx.renderedTextBoxRecord=async value=>{if(value.text==='Patched'){const captured={...value};entered();await new Promise(resolve=>release=resolve);return captured;}return {...value};};
+ const noop=()=>{};Object.assign(ctx,{TEXT_INPUT_GUARD_MS:500,TEXT_INPUT_MAX_LENGTH:2000,cancelTextEditorPreview:noop,blockCanvasInput:noop,supersedeActiveAI:noop,textEditorContentMetrics:()=>({width:300,height:60}),fittedTextBoxContent:async(text,fontSize,color,maxWidth,fontFamily)=>({image:{width:300,height:60},mixedFallback:false,width:300,height:60,fontSize,maxWidth,fontFamily}),textImageContentInset:()=>({x:0,y:0}),textBoxOriginFromEditor:()=>({x:100,y:100}),recordTextBoxesBefore:noop,mcpRecordFeedback:noop,textBoxBox:i=>({x:i.x,y:i.y,w:i.w,h:i.h}),recomputeDirtyBounds:noop,latchWidgetRefineCandidate:()=>null,removeTextEditor:editor=>h.state.textEditors.delete(editor.id),restoreTextEditorMode:noop,saveUserCanvasChange:noop,setStatusKey:noop,showHandStatusHint:noop});
+ Object.assign(ctx,{aiPreparationGeneration:0,aiPreparation:null,canvasAgentToolError:(code,message)=>Object.assign(Error(message),{code})});
+ for(const name of ['canvasAgentToolExecutionCurrent','canvasAgentAssertToolExecution','canvasAgentMutationIdle'])vm.runInContext(clientFunction('canvas-agent-runtime.js',name),ctx);
+ vm.runInContext(clientFunction('ai-runtime.js','supersedeActiveAI')+'\nasync '+clientFunction('canvas-runtime.js','confirmTextEditor'),ctx);
+ const socket={readyState:1};h.mcpRuntime.socket=socket;const execution={kind:'mcp',socket,generation:h.mcpRuntime.generation,controller:new AbortController()};
+ const before=ctx.canvasDocumentsFile(doc,'objects/text-box-1/content.txt'),hash=await ctx.canvasAgentHash(before);
+ const patch=ctx.canvasDocumentsApplyFile(doc,{path:'objects/text-box-1/content.txt',expectedHash:hash,content:'Patched',requestId:'source-patch'},execution);await pendingRaster;
+ // This is the production confirm handler's normal edit-existing branch. A
+ // resized editor keeps the same text, changes geometry, and replaces the record.
+ const editor={id:1,textarea:{value:'Original'},sourceTextBoxId:item.id,sourceX:100,sourceY:100,sourceMaxWidth:200,sourceFontSize:20,fontCss:30,fontFamily:item.fontFamily,color:item.color,resized:true,moved:false,returnMode:'hand',element:{classList:{add:noop},querySelectorAll:()=>[]}};h.state.textEditors.set(editor.id,editor);
+ await ctx.confirmTextEditor(editor);assert.notEqual(h.state.textBoxes[0],item);assert.equal(h.state.textBoxes[0].fontSize,30);assert.equal(h.state.textBoxes[0].text,'Original');
+ release();await assert.rejects(patch,{code:'SOURCE_CONFLICT'});
+ assert.equal(h.state.textBoxes[0].text,'Original');assert.equal(h.state.textBoxes[0].fontSize,30);assert.equal(item.text,'Original','a stale patch must not mutate a detached record');
+});
+
+for(const changed of [false,true])test(`text source patch ${changed?"rejects a concurrent content edit":"applies when its record is current"}`,async()=>{
+ const h=harness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent(),ctx=h.context;
+ const item={id:"text-box-1",x:100,y:100,w:240,h:40,maxWidth:240,fontSize:20,color:"#111",text:"Original"};h.state.textBoxes.push(item);
+ let entered,release;const ready=new Promise(resolve=>{entered=resolve;});
+ ctx.renderedTextBoxRecord=async value=>{const record={...value};if(value.text==="Patched"){entered();await new Promise(resolve=>{release=resolve;});}return record;};
+ const path="objects/text-box-1/content.txt",expectedHash=await ctx.canvasAgentHash(ctx.canvasDocumentsFile(doc,path));
+ const pending=ctx.canvasDocumentsApplyFile(doc,{path,expectedHash,content:"Patched",requestId:"patch-control"},{});await ready;
+ if(changed)item.text="User edit";
+ release();
+ if(changed){await assert.rejects(pending,{code:"SOURCE_CONFLICT"});assert.equal(item.text,"User edit");}
+ else{assert.equal((await pending).applied,true);assert.equal(h.state.textBoxes[0],item);assert.equal(item.text,"Patched");}
+});

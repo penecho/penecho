@@ -27301,7 +27301,7 @@ var canvasDocumentIdentity = (() => {
       }
     } else throw canvasDocumentsError("READ_ONLY_FILE","This file is read-only. Use replace_image or a Canvas action.");
     canvasAgentAssertToolExecution(execution);
-    if(canvasDocumentsFile(doc,path)!==before)throw canvasDocumentsError("SOURCE_CONFLICT","Content changed before applying. Read it again and retry.");
+    if(canvasDocumentsObject(doc,item.id)?.item!==item||canvasDocumentsFile(doc,path)!==before)throw canvasDocumentsError("SOURCE_CONFLICT","Content changed before applying. Read it again and retry.");
     canvasDocumentsBeginEdit(doc);Object.assign(item,replacement);
     if(!canvasDocumentsIsActive(doc)&&object.kind==="text")delete item.image;
     if(canvasDocumentsIsActive(doc)&&object.kind==="widget")positionWidget(item);
