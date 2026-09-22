@@ -1002,6 +1002,7 @@
         preview,
         bundleExtensions:snapshotCanvasObjectExtensions(),
         manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
+        preservedAssets:snapshotPreservedAssets(state.currentSnapshotPreservedAssets),
     };
     return { ...(await serverSnapshotPayload(item, tileEntries)), ...communityImages };
   }

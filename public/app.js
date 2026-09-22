@@ -13663,6 +13663,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         preview,
         bundleExtensions:snapshotCanvasObjectExtensions(),
         manifestExtensions:snapshotExtensionObject(state.currentSnapshotManifestExtensions),
+        preservedAssets:snapshotPreservedAssets(state.currentSnapshotPreservedAssets),
     };
     return { ...(await serverSnapshotPayload(item, tileEntries)), ...communityImages };
   }
