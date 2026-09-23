@@ -1628,13 +1628,38 @@ function saveSharedCanvas(value, overwriteId = null) {
   if(Buffer.byteLength(serialized,"utf8")>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Shared canvas is too large."),{status:413});
   const requestedProjectId=typeof value.projectId==="string"?value.projectId:existingMetadata?.projectId||DEFAULT_CANVAS_PROJECT_ID;
   if(!sharedCanvasProject(requestedProjectId))throw Object.assign(new Error("Canvas project was not found."),{status:404});
-  atomicJsonWrite(file,snapshot);
-  try{atomicJsonWrite(metadataFile,sharedCanvasMetadata(snapshot,requestedProjectId,identity))}
-  catch(error){
-    if(!exists)try{fs.unlinkSync(file)}catch{}
-    throw error;
+  const metadata=sharedCanvasMetadata(snapshot,requestedProjectId,identity),
+    recoveryFile=exists?`${file}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.recovery`:null;
+  if(recoveryFile) {
+    const previous=fs.statSync(file);
+    if(!previous.isFile()||previous.size>MAX_SHARED_CANVAS_BYTES)throw Object.assign(new Error("Stored canvas is invalid."),{status:500});
+    try{fs.copyFileSync(file,recoveryFile,fs.constants.COPYFILE_EXCL)}
+    catch(error){
+      try{fs.unlinkSync(recoveryFile)}catch(cleanupError){
+        if(cleanupError.code!=="ENOENT")log({event:"canvas_recovery_cleanup_failed",canvasId:logical.id,recoveryFile,error:String(cleanupError?.message||cleanupError)});
+      }
+      throw error;
+    }
   }
-  return sharedCanvasMetadata(snapshot,requestedProjectId,identity);
+  let preserveRecovery=false;
+  try {
+    atomicJsonWrite(file,snapshot);
+    try{atomicJsonWrite(metadataFile,metadata)}
+    catch(error){
+      if(!exists)try{fs.unlinkSync(file)}catch{}
+      else try{fs.renameSync(recoveryFile,file)}catch(rollbackError){
+        preserveRecovery=true;
+        log({event:"canvas_overwrite_recovery_required",canvasId:logical.id,recoveryFile,error:String(rollbackError?.message||rollbackError)});
+        throw Object.assign(new Error("Canvas save failed and previous content could not be restored. A recovery copy was retained.",{cause:error}),{status:500,code:"CANVAS_RECOVERY_REQUIRED"});
+      }
+      throw error;
+    }
+    return metadata;
+  } finally {
+    if(recoveryFile&&!preserveRecovery)try{fs.unlinkSync(recoveryFile)}catch(error){
+      if(error.code!=="ENOENT")log({event:"canvas_recovery_cleanup_failed",canvasId:logical.id,recoveryFile,error:String(error?.message||error)});
+    }
+  }
 }
 function deleteSharedCanvas(id) {
   const file=canvasSnapshotPath(id),metadataFile=canvasSnapshotPath(id,true);

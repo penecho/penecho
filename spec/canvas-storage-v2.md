@@ -60,6 +60,12 @@ Future portable data should use a namespaced entry in `manifest.extensions`, or 
 - v2 writers keep Widget and image identities stable and update the external modification timestamp.
 - The history index is not authoritative canvas content. It contains project membership, counts, modification time, and the preview for fast listing.
 
+## Local overwrite failure handling
+
+Before replacing an existing local Canvas, the server stages a copy of its previous content file (bounded by the 96 MiB Canvas limit). If the metadata replacement reports an I/O failure, it restores the previous content bytes and reports the save failure. If restoration itself fails, the server retains the recovery copy, logs its path, and reports a distinct recovery error. A failure to remove the recovery copy after a completed save is logged without changing that save to a failure.
+
+This covers handled I/O errors during one synchronous save. It does not provide atomicity across process termination or power loss, and it does not change Cloud revisions, deletion, or project moves.
+
 ## Projects and sharing
 
 Projects exist only in PenEcho server storage. `uncategorized` is permanent. Creating, moving, or deleting a project updates external metadata; deleting a project immediately moves its canvases to `uncategorized` and does not rewrite Bundle content. Device-only IndexedDB snapshots do not expose project organization.
