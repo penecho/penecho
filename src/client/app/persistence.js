@@ -1440,6 +1440,7 @@
     updateHistoryReadControls();
     setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadRequesting"), 4);
     const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision,
+      loadIsApplying = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision+1,
       requireCurrent = () => { if (!loadIsCurrent()) throw Error(t("snapshotLoadChanged")); };
     let decodedTiles = null;
     try {
@@ -1496,7 +1497,8 @@
       restoreWidgets(item.widgets);
       applyTheme(item.theme);
       restoreImages(images);
-      await restoreTextBoxes(item.textBoxes, 1);
+      const textRestored=await restoreTextBoxes(item.textBoxes, 1, loadIsApplying);
+      if(textRestored===false||!loadIsApplying()) throw Error(t("snapshotLoadChanged"));
       if(typeof canvasDocumentsApplyView==="function")canvasDocumentsApplyView(item.view);
       else if (item.view) {
         state.scale = Math.max(0.03, Math.min(2, item.view.scale));
@@ -1516,7 +1518,8 @@
       restoreSnapshotCanvasObjectOrder(item.bundleExtensions);
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.snapshotSavedRevision = state.userRevision;
-      if(typeof canvasDocumentsAdopt==="function")await canvasDocumentsAdopt(item,location);
+      if(typeof canvasDocumentsAdopt==="function"&&!await canvasDocumentsAdopt(item,location,loadIsApplying))throw Error(t("snapshotLoadChanged"));
+      if(!loadIsApplying())throw Error(t("snapshotLoadChanged"));
       resetCanvasDefaultMode();
       const restoreStudioConversation=window.PenEchoStudioNavigator?.wantsConversationForCanvas?.({ id:item.id, location })===true;
       canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true,deferConversationStart:restoreStudioConversation});
@@ -1530,7 +1533,7 @@
       setStatusKey("snapshotLoaded");
       return true;
     } catch (error) {
-      window.PenEchoStudioNavigator?.cancelPendingConversation?.();
+      if(loadGeneration===state.snapshotLoadGeneration)window.PenEchoStudioNavigator?.cancelPendingConversation?.();
       if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
       if (loadGeneration !== state.snapshotLoadGeneration) return false;
       const message = t("snapshotLoadFailed").replace("{message}", String(error?.message || error));
@@ -1705,6 +1708,9 @@
     if (state.selection) cancelSelection(true);
     clearTextEditors();
     state.snapshotLoadGeneration++;
+    snapshotLoadInProgress = false;
+    snapshotLoadingId = null;
+    if(typeof updateHistoryReadControls==="function")updateHistoryReadControls();
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();

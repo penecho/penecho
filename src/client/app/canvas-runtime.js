@@ -303,7 +303,8 @@
       return prepared;
     }catch(error){for(const item of prepared)if(!items.some(original=>original.image===item.image))releaseTextRaster(item.image);throw error;}
   }
-  async function restoreTextBoxes(items, pixelRatio = 1) {
+  async function restoreTextBoxes(items, pixelRatio = 1, isCurrent = () => true) {
+    if (!isCurrent()) return false;
     canvasTextQualityGeneration++;
     clearHandToolbarTargets("text-box");
     clearTextEditors();
@@ -322,9 +323,14 @@
             Object.assign(record,{x:item.x,y:item.y,w:item.w,h:item.h});
         }
       } catch {
+        if (!isCurrent()) return false;
         // One invalid or unsupported text box must not make an otherwise valid
         // saved Canvas impossible to restore.
         continue;
+      }
+      if (!isCurrent()) {
+        if (record?.image && record.image !== item?.image) releaseTextRaster(record.image);
+        return false;
       }
       if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
       const numbered = /^text-box-(\d+)$/.exec(record.id);
@@ -334,6 +340,7 @@
     positionTextEditors();
     requestRender();
     void refreshVisibleTextBoxQuality();
+    return true;
   }
 
   function imageBox(item) {
