@@ -1343,7 +1343,8 @@ function canonicalSharedCanvasV1(value) {
     version:1,id:value.id,createdAt,updatedAt,name,theme,view,
     animations,widgets,textBoxes:canonicalTextBoxes,
     images:images.map(image=>({
-      id:image.id,x:Math.round(image.x),y:Math.round(image.y),w:Math.round(image.w),h:Math.round(image.h),
+      id:image.id,x:Math.min(Math.round(image.x),CANVAS_SIZE-Math.round(image.w)),
+      y:Math.min(Math.round(image.y),CANVAS_SIZE-Math.round(image.h)),w:Math.round(image.w),h:Math.round(image.h),
       naturalW:Math.round(image.naturalW),naturalH:Math.round(image.naturalH),
       sourceName:typeof image.sourceName==="string"?image.sourceName.trim().slice(0,160):"",
       ...(typeof image.plotExpression==="string"?{plotExpression:image.plotExpression.trim()}:{}),
