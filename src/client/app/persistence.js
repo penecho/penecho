@@ -1868,32 +1868,53 @@
     const name = String(value || "").trim().slice(0, 48);
     if (!name) throw Error(t("canvasNameRequired"));
     if (historyBusy()) throw Error(t("snapshotSaving"));
-    setHistorySaveBusy(true);
-    try {
-      if (location === "device") await renameDeviceSnapshot(id, name);
-      else {
-        const response = await fetch(location === "cloud" ? `/api/cloud/canvases/${encodeURIComponent(id)}` : `/api/canvases/${encodeURIComponent(id)}`, {
-          method:"PATCH",
-          credentials:"same-origin",
-          headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-          body:JSON.stringify({ name }),
-        });
-        await snapshotApiResponse(response);
-      }
-      if (state.currentSnapshotId === id && state.currentSnapshotLocation === location) {
-        state.currentSnapshotName = name;
-        state.currentSnapshotHasExplicitName = true;
-        state.currentCanvasSuggestedName = "";
-        canvasAgentCanvasDidPersist(location, id);
-        if(typeof canvasDocumentsSyncExtension==="function"){canvasDocumentsSyncExtension();canvasDocumentsRender();}
-        window.PenEchoStudioNavigator?.updateDocument?.();
-      }
-      await refreshSnapshots();
-      showHistoryNoticeKey("canvasRenamed", "success");
-      return true;
-    } finally {
-      setHistorySaveBusy(false);
-    }
+    const open=typeof canvasDocuments!=="undefined"?[...canvasDocuments.records.values()].find(doc=>doc.locator?.id===id&&doc.locator?.location===location):null;
+    const rename=async renameOwner=>{
+      if(historyBusy())throw Error(t("snapshotSaving"));
+      setHistorySaveBusy(true);
+      try {
+        if(open&&(canvasDocuments.records.get(open.id)!==open||open.locator?.id!==id||open.locator?.location!==location))throw Error("The open Canvas changed. Retry the rename.");
+        const previousTitle=open?.title;
+        if (location === "device") await renameDeviceSnapshot(id, name);
+        else {
+          const response = await fetch(location === "cloud" ? `/api/cloud/canvases/${encodeURIComponent(id)}` : `/api/canvases/${encodeURIComponent(id)}`, {
+            method:"PATCH",
+            credentials:"same-origin",
+            headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
+            body:JSON.stringify({ name }),
+          });
+          await snapshotApiResponse(response);
+        }
+        if (state.currentSnapshotId === id && state.currentSnapshotLocation === location) {
+          state.currentSnapshotName = name;
+          state.currentSnapshotHasExplicitName = true;
+          state.currentCanvasSuggestedName = "";
+          canvasAgentCanvasDidPersist(location, id);
+          if(typeof canvasDocumentsSyncExtension==="function"){canvasDocumentsSyncExtension();canvasDocumentsRender();}
+          window.PenEchoStudioNavigator?.updateDocument?.();
+        } else if(open&&open.id!==canvasDocuments.activeId) {
+          const current=()=>{
+            if(canvasDocuments.records.get(open.id)!==open||open.title!==previousTitle||open.locator?.id!==id||open.locator?.location!==location||open.id===canvasDocuments.activeId)throw Error("The open Canvas changed. Retry the rename.");
+          };
+          const candidate={...open,title:name};
+          const prepare=()=>{
+            current();
+            const metadata={...canvasDocumentsMetadata(open),title:name};
+            const stored=open.stored?.item?{...open.stored,item:{...open.stored.item,name,bundleExtensions:{...open.stored.item.bundleExtensions,penechoDocument:metadata}}}:open.stored;
+            Object.assign(candidate,open,{title:name,stored});
+          };
+          try{await canvasDocumentsPersist(candidate,false,null,prepare,renameOwner);current()}
+          catch(error){throw new Error(`${error?.message||error} The saved Canvas was renamed; retry to update the open workspace.`,{cause:error})}
+          open.title=name;
+          if(open.stored?.item)open.stored.item={...open.stored.item,name,bundleExtensions:{...open.stored.item.bundleExtensions,penechoDocument:{...canvasDocumentsMetadata(open),title:name}}};
+          canvasDocumentsRender();
+        }
+        await refreshSnapshots();
+        showHistoryNoticeKey("canvasRenamed", "success");
+        return true;
+      }finally{setHistorySaveBusy(false)}
+    };
+    return await (open&&typeof canvasDocumentsSerializeRename==="function"?canvasDocumentsSerializeRename(open,rename):rename());
   }
   function beginSnapshotRename(item, location, titleRow, title, renameButton) {
     if (historyBusy()) return;

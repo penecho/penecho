@@ -1708,7 +1708,7 @@ test('MCP rename checks durable-write validity after database wait and preserves
  h.context.canvasDocumentsDb=async()=>{if(calls++===0)await new Promise(resolve=>{resume=resolve;});return db;};
  const pending=h.canvasDocumentsExecute('mcp_rename_canvas',renameArgs(doc.id,'Stale MCP'),cancellableMcp(h));
  await nextTask();doc.title='Manual newer';h.state.currentSnapshotName='Manual newer';
- await h.context.canvasDocumentsPersist(doc);resume();await assert.rejects(pending,{code:'CANVAS_CHANGED'});
+ const manualPersist=h.context.canvasDocumentsPersist(doc);resume();await assert.rejects(pending,{code:'CANVAS_CHANGED'});await manualPersist;
  assert.equal(doc.title,'Manual newer');assert.equal(h.records.get(doc.id).metadata.title,'Manual newer');
 });
 

@@ -1,6 +1,6 @@
   // One visible Canvas; inactive documents contain data, never hidden iframe trees.
   // Ordinary saves carry this extension in bundle V2. This is not version history.
-  var canvasDocuments = { records:new Map(), activeId:null, ready:null, db:null, switching:false, epoch:0, firstSeenClock:0, error:null, retry:null, receipts:new Map(), write:Promise.resolve() };
+  var canvasDocuments = { records:new Map(), activeId:null, ready:null, db:null, switching:false, epoch:0, firstSeenClock:0, error:null, retry:null, receipts:new Map(), renameWrites:new Map(), write:Promise.resolve() };
   const CANVAS_DOCUMENT_EXTENSION = "penechoDocument", CANVAS_WORKSPACE_EXTENSION = "penechoWorkspace", CANVAS_DOCUMENT_LIMIT = 64;
   const CANVAS_IMAGE_ASSET_TYPE="image-attachment", CANVAS_IMAGE_ASSET_LIMIT=64, CANVAS_IMAGE_ASSET_BYTES=16000000;
   function canvasImageAssets(doc=canvasDocumentsCurrent()) {
@@ -228,27 +228,50 @@
     })().catch(error=>{canvasDocuments.ready=null;throw error;});
     return canvasDocuments.ready;
   }
-  async function canvasDocumentsPersist(doc,closed=false,execution=null,beforeWrite=null) {
+  async function canvasDocumentsPersist(doc,closed=false,execution=null,beforeWrite=null,renameOwner=null) {
     const db=await canvasDocumentsAwait(()=>canvasDocumentsDb(),execution);
     if(execution)canvasAgentAssertToolExecution(execution);
-    beforeWrite?.();
-    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed};
-    if(execution?.kind!=="mcp") {
-      await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(payload);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
-      return;
-    }
-    await canvasDocumentsAwait(()=>new Promise((resolve,reject)=>{
+    const payload=()=>({id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed});
+    const deadline=Date.now()+15000;
+    const write=()=>{
+      // A later background write must see the title committed by an in-flight rename.
+      const rename=canvasDocuments.renameWrites?.get(doc.id);
+      if(rename&&rename.active!==renameOwner){
+        const remaining=deadline-Date.now();
+        if(remaining<=0)throw canvasDocumentsError("STORAGE_TIMEOUT","A Canvas rename is still finishing. Retry the workspace save.");
+        return canvasDocumentsBound(rename.tail,remaining).catch(error=>{if(error?.code==="STORAGE_TIMEOUT")throw canvasDocumentsError("STORAGE_TIMEOUT","A Canvas rename is still finishing. Retry the workspace save.");throw error;}).then(write);
+      }
+      if(execution)canvasAgentAssertToolExecution(execution);
       beforeWrite?.();
-      const tx=db.transaction("documents","readwrite"),signal=execution.controller.signal;
-      const abort=()=>{try{tx.abort();}catch{}};
-      const timer=setTimeout(()=>{execution.controller.abort(canvasDocumentsError("STORAGE_TIMEOUT","The MCP workspace save timed out."));abort();},15_000);
-      const finish=error=>{clearTimeout(timer);signal.removeEventListener("abort",abort);error?reject(error):resolve();};
-      signal.addEventListener("abort",abort,{once:true});
-      if(signal.aborted){abort();finish(canvasDocumentsError("REQUEST_CANCELLED","The MCP save was cancelled."));return;}
-      tx.objectStore("documents").put(payload);
-      tx.oncomplete=()=>finish(signal.aborted?signal.reason:null);
-      tx.onabort=tx.onerror=()=>finish(signal.reason||tx.error||Error("Could not save the workspace."));
-    }),execution);
+      const record=payload();
+      if(execution?.kind!=="mcp")return canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(record);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction("documents","readwrite"),signal=execution.controller.signal;
+        const abort=()=>{try{tx.abort();}catch{}};
+        const timer=setTimeout(()=>{execution.controller.abort(canvasDocumentsError("STORAGE_TIMEOUT","The MCP workspace save timed out."));abort();},15_000);
+        const finish=error=>{clearTimeout(timer);signal.removeEventListener("abort",abort);error?reject(error):resolve();};
+        signal.addEventListener("abort",abort,{once:true});
+        if(signal.aborted){abort();finish(canvasDocumentsError("REQUEST_CANCELLED","The MCP save was cancelled."));return;}
+        tx.objectStore("documents").put(record);
+        tx.oncomplete=()=>finish(signal.aborted?signal.reason:null);
+        tx.onabort=tx.onerror=()=>finish(signal.reason||tx.error||Error("Could not save the workspace."));
+      });
+    };
+    return execution?.kind==="mcp"?canvasDocumentsAwait(write,execution):write();
+  }
+  // Keep saved-name updates and their workspace writes ordered per open document.
+  function canvasDocumentsSerializeRename(doc,work,execution=null) {
+    let entry=canvasDocuments.renameWrites.get(doc.id);
+    if(!entry){entry={tail:Promise.resolve(),active:null};canvasDocuments.renameWrites.set(doc.id,entry);}
+    const owner={},operation=entry.tail.then(async()=>{
+      if(execution)canvasAgentAssertToolExecution(execution);
+      entry.active=owner;
+      try{return await work(owner)}finally{entry.active=null}
+    });
+    const settled=operation.then(()=>{},()=>{});
+    entry.tail=settled;
+    settled.then(()=>{if(canvasDocuments.renameWrites.get(doc.id)===entry&&entry.tail===settled)canvasDocuments.renameWrites.delete(doc.id);});
+    return execution?canvasDocumentsAwait(()=>operation,execution):operation;
   }
   function canvasDocumentsReport(error,retry=null) {
     canvasDocuments.error=String(error?.message||error);canvasDocuments.retry=retry;canvasDocumentsRender();
@@ -620,27 +643,34 @@
     await canvasDocumentsAwait(()=>canvasDocumentsReady(),execution);canvasAgentAssertToolExecution(execution);
     const doc=canvasDocuments.records.get(args.documentId);
     if(!doc)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","This Canvas is not open. List the open documents and retry.");
-    const before=doc.title,locator=JSON.stringify(doc.locator||null),title=args.title.trim();
-    const current=()=>{
-      canvasAgentAssertToolExecution(execution);
-      if(canvasDocuments.records.get(doc.id)!==doc||doc.title!==before||JSON.stringify(doc.locator||null)!==locator)throw canvasDocumentsError("CANVAS_CHANGED","The Canvas name or save location changed. Read its current state and retry.");
-      if(canvasDocuments.switching||snapshotLoadInProgress||canvasDocumentsIsActive(doc)&&typeof snapshotSaveInProgress!=="undefined"&&snapshotSaveInProgress)throw canvasDocumentsError("CANVAS_BUSY","A Canvas is opening or saving. Retry after it finishes.");
-    };
-    current();let saved=false;
-    try {
-      saved=await canvasDocumentsRenameSaved(doc,title,execution);current();
-      const metadata={...canvasDocumentsMetadata(doc),title};
-      const stored=doc.stored?{...doc.stored,item:{...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:metadata}}}:null;
-      await canvasDocumentsPersist({...doc,title,stored},false,execution,current);current();
-      // No content/Agent revision, history entry, view change, or full save.
-      doc.title=title;if(doc.stored)doc.stored.item={...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:metadata}};
-      if(canvasDocumentsIsActive(doc)){
-        state.currentSnapshotName=title;state.currentSnapshotHasExplicitName=true;state.currentCanvasSuggestedName="";
-        canvasDocumentsSyncExtension(doc);window.PenEchoStudioNavigator?.updateDocument?.();
-      }
-      canvasDocumentsRender();
-      return {documentId:doc.id,title,active:canvasDocumentsIsActive(doc),applied:true,saved};
-    }catch(error){if(saved){error.details={...error.details,savedNameUpdated:true};error.message+=" The saved copy name was updated; retry to reconcile the workspace name.";}throw error;}
+    return canvasDocumentsSerializeRename(doc,async renameOwner=>{
+      const before=doc.title,locator=JSON.stringify(doc.locator||null),title=args.title.trim();
+      const current=()=>{
+        canvasAgentAssertToolExecution(execution);
+        if(canvasDocuments.records.get(doc.id)!==doc||doc.title!==before||JSON.stringify(doc.locator||null)!==locator)throw canvasDocumentsError("CANVAS_CHANGED","The Canvas name or save location changed. Read its current state and retry.");
+        if(canvasDocuments.switching||snapshotLoadInProgress||canvasDocumentsIsActive(doc)&&typeof snapshotSaveInProgress!=="undefined"&&snapshotSaveInProgress)throw canvasDocumentsError("CANVAS_BUSY","A Canvas is opening or saving. Retry after it finishes.");
+      };
+      current();let saved=false;
+      try {
+        saved=await canvasDocumentsRenameSaved(doc,title,execution);current();
+        const candidate={...doc,title};
+        const prepare=()=>{
+          current();
+          const metadata={...canvasDocumentsMetadata(doc),title};
+          const stored=doc.stored?{...doc.stored,item:{...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:metadata}}}:null;
+          Object.assign(candidate,doc,{title,stored});
+        };
+        await canvasDocumentsPersist(candidate,false,execution,prepare,renameOwner);current();
+        // No content/Agent revision, history entry, view change, or full save.
+        doc.title=title;if(doc.stored)doc.stored.item={...doc.stored.item,name:title,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:{...canvasDocumentsMetadata(doc),title}}};
+        if(canvasDocumentsIsActive(doc)){
+          state.currentSnapshotName=title;state.currentSnapshotHasExplicitName=true;state.currentCanvasSuggestedName="";
+          canvasDocumentsSyncExtension(doc);window.PenEchoStudioNavigator?.updateDocument?.();
+        }
+        canvasDocumentsRender();
+        return {documentId:doc.id,title,active:canvasDocumentsIsActive(doc),applied:true,saved};
+      }catch(error){if(saved){const partial=new Error(`${error?.message||error} The saved copy name was updated; retry to reconcile the workspace name.`,{cause:error});if(error?.code)partial.code=error.code;partial.details={...error?.details,savedNameUpdated:true};throw partial;}throw error;}
+    },execution);
   }
   async function canvasDocumentsOpen(args,execution) {
     await canvasDocumentsAwait(()=>canvasDocumentsReady(),execution);
