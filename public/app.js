@@ -27587,14 +27587,20 @@ var canvasDocumentIdentity = (() => {
       canvasDocumentsCapacity(doc,"text");
       const record=await renderedTextBoxRecord({id:canvasDocumentsObjectId(doc,"text"),text:args.text,x:0,y:0,fontSize:20,maxWidth:args.width||400,fontFamily:state.aiFont,color:state.inkColor});
       if(!record)throw canvasDocumentsError("INVALID_TEXT","Text could not be rendered. Shorten it and retry.");
-      if(!args.region){const scale=mcpPresentationViewport(doc).scale;record.w/=scale;record.h/=scale;}
-      const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,record.w,record.h,session,null,true).placement;
-      record.x=placement.x;record.y=placement.y;canvasDocumentsValidateGeometry(doc,canvasDocumentsBounds({item:record}));
-      canvasAgentAssertToolExecution(execution);canvasDocumentsBeginEdit(doc);
-      if(canvasDocumentsIsActive(doc))state.textBoxes.push(record);else {const {image,...stored}=record;doc.stored.item.textBoxes.push(stored);}
-      canvasDocumentsEndEdit(doc,"create_text",record.id);
-      if(!args.region&&session&&canvasDocumentsIsActive(doc))mcpQueueView(session,record);
-      return {applied:true,objectId:record.id,revision:doc.revision};
+      let retained=false;
+      try {
+        if(!args.region){const scale=mcpPresentationViewport(doc).scale;record.w/=scale;record.h/=scale;}
+        const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,record.w,record.h,session,null,true).placement;
+        record.x=placement.x;record.y=placement.y;canvasDocumentsValidateGeometry(doc,canvasDocumentsBounds({item:record}));
+        canvasAgentAssertToolExecution(execution);
+        if(canvasDocumentsIsActive(doc))canvasAgentMutationIdle(execution);
+        canvasDocumentsCapacity(doc,"text");
+        canvasDocumentsBeginEdit(doc);
+        if(canvasDocumentsIsActive(doc)){state.textBoxes.push(record);retained=true;}else {const {image,...stored}=record;doc.stored.item.textBoxes.push(stored);}
+        canvasDocumentsEndEdit(doc,"create_text",record.id);
+        if(!args.region&&session&&canvasDocumentsIsActive(doc))mcpQueueView(session,record);
+        return {applied:true,objectId:record.id,revision:doc.revision};
+      } finally {if(!retained&&typeof releaseTextRaster==="function")releaseTextRaster(record.image);}
     }
     if(args.action==="draw_ink") {
       // Validate the browser boundary too: linked clients must not bypass resource limits.

@@ -1896,3 +1896,47 @@ test("legacy conversation history and incomplete snapshots are not treated as di
     assert.ok(records.has(opened.documentId));
   }
 });
+
+test("MCP text creation respects the limit when a user confirms during rendering", async () => {
+  for (const initialCount of [0, 49]) {
+    const h = harness();
+    await h.canvasDocumentsReady();
+    const c = h.context, noop = () => {}, base = { x:100, y:100, w:200, h:40,
+      maxWidth:200, fontSize:20, fontFamily:"sans-serif", color:"#111111", text:"Existing" };
+    h.state.textBoxes = Array.from({length:initialCount}, (_, index) => ({...base,id:`text-box-${index+1}`}));
+    Object.assign(h.state, {nextTextBoxId:initialCount+1,textEditors:new Map(),dirtyTextBoxIds:new Set(),scale:1,mode:"hand"});
+    Object.assign(c, {TEXT_INPUT_GUARD_MS:500,TEXT_INPUT_MAX_LENGTH:2000,aiPreparationGeneration:0,aiPreparation:null,
+      canvasAgentToolError:(code,message)=>Object.assign(Error(message),{code}),cancelTextEditorPreview:noop,blockCanvasInput:noop,
+      textEditorContentMetrics:()=>({width:300,height:60}),
+      fittedTextBoxContent:async()=>({image:{width:300,height:60},mixedFallback:false,width:300,height:60,fontSize:20,maxWidth:200,fontFamily:"sans-serif"}),
+      textImageContentInset:()=>({x:0,y:0}),textBoxOriginFromEditor:()=>({x:100,y:100}),recordTextBoxesBefore:noop,mcpRecordFeedback:noop,
+      textBoxBox:item=>({x:item.x,y:item.y,w:item.w,h:item.h}),recomputeDirtyBounds:noop,latchWidgetRefineCandidate:()=>null,
+      removeTextEditor:editor=>h.state.textEditors.delete(editor.id),restoreTextEditorMode:noop,saveUserCanvasChange:noop,
+      setStatusKey:noop,showHandStatusHint:noop,releaseTextRaster:image=>{if(image?.tagName==="CANVAS")image.width=image.height=0;}});
+    vm.runInContext(`${["canvasAgentToolExecutionCurrent","canvasAgentAssertToolExecution","canvasAgentMutationIdle"].map(name=>clientFunction("canvas-agent-runtime.js",name)).join("\n")}\n${clientFunction("ai-runtime.js","supersedeActiveAI")}\nasync ${clientFunction("canvas-runtime.js","confirmTextEditor")}`,c);
+    const socket = {readyState:1};h.mcpRuntime.socket=socket;
+    const execution = () => ({kind:"mcp",socket,generation:h.mcpRuntime.generation,controller:new AbortController()});
+    await h.canvasDocumentsExecute("mcp_start_session",{sessionId:"capacity",sessionKey:"capacity",client:"Review",target:"current"},execution());
+    let release, entered;
+    const started = new Promise(resolve => {entered=resolve;});
+    const raster = {tagName:"CANVAS",width:400,height:48};
+    c.renderedTextBoxRecord = async item => {entered();await new Promise(resolve=>{release=resolve;});return {...item,w:400,h:48,image:raster};};
+    const pending=h.canvasDocumentsExecute("mcp_edit_canvas",{sessionId:"capacity",action:"create_text",text:"Async MCP label",region:{x:1000,y:1000},requestId:"capacity-create"},execution());
+    await started;
+    assert.ok(h.state.textBoxes.length<50);
+    const editor={id:1,textarea:{value:"User label"},fontCss:20,fontFamily:"sans-serif",color:"#111111",returnMode:"hand",element:{classList:{add:noop},querySelectorAll:()=>[]}};
+    h.state.textEditors.set(editor.id,editor);
+    await c.confirmTextEditor(editor);
+    release();
+    if(initialCount===49) {
+      await assert.rejects(pending,{code:"OBJECT_LIMIT"});
+      assert.equal(raster.width,0,"discarded raster is released");
+      assert.equal(h.state.textBoxes.length,50);
+    } else {
+      assert.equal((await pending).applied,true);
+      assert.equal(h.state.textBoxes.length,2);
+      assert.equal(raster.width,400);
+    }
+    assert.equal(h.state.textBoxes.filter(item=>item.text==="User label").length,1);
+  }
+});
