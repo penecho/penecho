@@ -20,7 +20,7 @@
 <h1 align="center">与 AI 一起思考的<br>空间工作台。</h1>
 <p align="center">手写、探索、创作，让内置 Agent 或你自己的 MCP 助手加入同一块画布。</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="版本 1.3.3">
+  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="版本 1.3.4">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

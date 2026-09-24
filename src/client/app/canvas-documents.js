@@ -355,7 +355,7 @@
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       canvasDocumentsRetireEmptyPlaceholder(previous);
-      window.PenEchoStudioNavigator?.updateDocument?.();await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
+      window.PenEchoStudioNavigator?.updateDocument?.();window.dispatchEvent(new Event("penecho:live-share-context-changed"));await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
   }
   function canvasDocumentsApplyView(view) {

@@ -5,6 +5,11 @@
 const page = (style, body, script = "") => `<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#243246;font:18px/1.7 system-ui}main{padding:24px}h1{font-size:28px;margin:0 0 16px}button,input{font:inherit;padding:8px 12px}button{cursor:pointer}footer{padding:24px;background:#d8eee4} ${style}</style>${body}${script ? `<script>${script}</script>` : ""}</html>`;
 const scenarios = [
   {
+    name: "回归 · 百分比定位原始画布",
+    html: require('node:fs').readFileSync(require('node:path').join(__dirname, 'widget-presentation-positioned.html'), 'utf8'),
+    contentW:1939,contentH:1134,
+  },
+  {
     name: "验收 1 · 正常长文档与异步内容",
     html: page("article{height:2400px;background:linear-gradient(#e1e8f1,#f7f8fa)}#extra{background:#eadff5}",
       '<main><h1>正常长文档 · 高度与内容保持一致</h1><button id="grow">延迟添加 600px 内容</button> <button id="shrink">移除新增内容</button><p>输入状态：<input aria-label="测试输入" value="保持这段输入"></p><article>正文开始 · 向下滚动验证末尾</article><div id="extra"></div></main><footer id="end">文档末尾 · 应能完整滚动到这里</footer>',
@@ -24,6 +29,11 @@ const scenarios = [
     name: "验收 4 · 宽高同时循环增长",
     html: page("#extent{position:absolute;left:0;top:0;width:200vw;height:200vh;background:linear-gradient(120deg,#e4eaf3,#e4f2e9);z-index:-1}footer{position:absolute;top:calc(200vh - 90px);left:0}",
       '<div id="extent"></div><main><h1>宽高循环测试 · 200vw × 200vh</h1><p>恢复原始布局后，iframe 应保持 900 × 600，滚动由 widget 自己处理。</p></main><footer id="end">宽高循环样例末尾</footer>'),
+  },
+  {
+    name: "验收 5 · 流式视口高度循环",
+    html: page("article{height:200vh;background:linear-gradient(#e4eaf3,#e4f2e9)}",
+      '<main><h1>普通流中的 200vh 内容</h1><article>没有绝对定位；连续扩张仍应被中止。</article></main><footer id="end">流式循环末尾 · 原始滚动可达</footer>'),
   },
 ];
 

@@ -20,7 +20,7 @@
 <h1 align="center">AI と考えるための<br>空間ワークスペース。</h1>
 <p align="center">内蔵 Agent や MCP 対応の AI アシスタントで、描き、探究し、形にしましょう。</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="バージョン 1.3.3">
+  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="バージョン 1.3.4">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

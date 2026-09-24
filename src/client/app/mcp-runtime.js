@@ -363,10 +363,18 @@
       return null;
     };
     const below=findSlot(x,y);if(below)return below;
-    // Near the finite Canvas bottom, find another clear column instead of
-    // falling back onto the previous result or rejecting an otherwise empty Canvas.
-    const columns=new Set([x,48,SIZE-width]);
+    // Near the finite Canvas bottom, continue into the adjacent column. Use
+    // the widest occupied edge in each column so mixed-width work stays clear.
+    for(let column=x;column+width<=SIZE;){
+      const slot=findSlot(column,0);if(slot)return slot;
+      const occupied=collisions({x:column-gap/2,y:0,w:width+gap,h:SIZE});
+      column=Math.max(column+width,...occupied.map(b=>b.x+b.w))+gap;
+    }
+    // If there is no room to the right, search the remaining Canvas before
+    // rejecting the placement. The far edge is only a final fallback.
+    const columns=new Set([48]);
     for(let column=0;column+width<=SIZE;column+=width+gap)columns.add(column);
+    columns.add(SIZE-width);
     for(const column of columns){const slot=findSlot(column,0);if(slot)return slot;}
     throw Error("No clear space remains for this work. Move the group or use another Canvas.");
   }

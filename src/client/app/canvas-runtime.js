@@ -1785,11 +1785,8 @@
   }
   window.addEventListener("penecho:languagechange",event=>syncWidgetHostLanguages(event.detail?.language));
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
-    if (widget.maximized) {
-      const shellStyle = getComputedStyle(widget.shell);
-      const available = widget.shell.clientWidth - parseFloat(shellStyle.paddingLeft) - parseFloat(shellStyle.paddingRight);
-      scaleX = scaleY = available / Math.max(widget.contentW, widget.presentationWidth || 0) * (widget.presentationZoom || 100) / 100;
-    }
+    // Presentation fits the saved page width, independently of Canvas zoom.
+    if (widget.maximized) scaleX = scaleY = widgetPresentationScale(widget);
     const interactive = canvasWidgetInteractive(widget),
       selectable = canvasWidgetSelectionEnabled(),
       selected = !state.viewMode && ["hand", "select"].includes(state.mode) && !interactive && (widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id)),
@@ -1803,12 +1800,11 @@
     }
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const active = widget.renderActive !== false,
-      viewportWidth = widget.maximized ? Math.max(widget.contentW, widget.presentationWidth || 0) : undefined,
-      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}:${viewportWidth || ""}`;
+      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}`;
     syncMcpWidgetProgress(widget);
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, viewportWidth, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function markWidgetHostReady(widget) {
     widget.hostReady = true;
@@ -1918,20 +1914,6 @@
       }
     }
   }
-  function applyWidgetPresentationSize(widget, message) {
-    if (!widget.maximized || !widget.styleRule?.style) return false;
-    const width = Number(message.width), height = Number(message.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 100000 || height > 100000) return false;
-    const nextWidth = Math.max(widget.contentW, Math.ceil(width));
-    const nextHeight = Math.max(widget.contentH, Math.ceil(height));
-    if (widget.presentationWidth === nextWidth && widget.presentationHeight === nextHeight) return false;
-    widget.presentationWidth = nextWidth;
-    widget.presentationHeight = nextHeight;
-    widget.styleRule.style.setProperty("--widget-presentation-width", `${nextWidth}px`);
-    widget.styleRule.style.setProperty("--widget-presentation-height", `${nextHeight}px`);
-    sendWidgetHostState(widget);
-    return true;
-  }
   async function handleWidgetMessage(event) {
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : []), ...(typeof mcpRuntime!=="undefined"?[...(mcpRuntime?.previews?.values()||[])]:[])].find((item) => item.frame?.contentWindow === event.source);
     if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
@@ -1941,7 +1923,25 @@
       canvasDocumentsWidgetAction(widget,message);return;
     }
     if (message.type === "penecho-widget-presentation-size") {
-      applyWidgetPresentationSize(widget, message);
+      // Ignore reports from an older host: page content must not resize its viewport.
+      return;
+    }
+    if (message.type === "penecho-widget-presentation-scroll") {
+      if (!widget.maximized) return;
+      if (message.action === "extent" && [message.width, message.height, message.viewportWidth, message.viewportHeight].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) {
+        widget.presentationScrollContent = message;
+        updateWidgetPresentationScroll(widget);
+      } else if (message.action === "wheel" && [message.dx, message.dy].every(value => Number.isFinite(value) && Math.abs(value) <= 100000)) {
+        const scale = widget.presentationScrollMetrics?.scale || 1;
+        widget.shell.scrollBy(message.dx * scale, message.dy * scale);
+      } else if (message.action === "position" && [message.left, message.top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
+        const metrics = widget.presentationScrollMetrics;
+        if (metrics) widget.shell.scrollTo(message.left * metrics.scale, metrics.outside + message.top * metrics.scale);
+      } else if (message.action === "key" && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(message.key)) {
+        const shell = widget.shell;
+        if (message.key === "Home" || message.key === "End") shell.scrollTo(shell.scrollLeft, message.key === "Home" ? 0 : shell.scrollHeight);
+        else shell.scrollBy(0, (message.key.startsWith("Arrow") ? 40 : shell.clientHeight * .8) * (["ArrowUp", "PageUp"].includes(message.key) || message.key === " " && message.shift ? -1 : 1));
+      }
       return;
     }
     if (message.type === "penecho-widget-fit-result") {
@@ -3195,6 +3195,7 @@
       renderInteractionLayer();
     });
   }
+  window.addEventListener("penecho:live-share-status-changed", requestInteractionLayerRender);
   function forTiles(x, y, w, h, fn, create = true) {
     if (w <= 0 || h <= 0) return;
     const x0 = Math.max(0, Math.floor(x / TILE)),
@@ -4296,10 +4297,14 @@
         key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
       });
+      const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,
         kind:"share",
-        label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        label:liveShared
+          ? t("sharedWidget")
+          : window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        shared:liveShared,
         baseWidth:28,
         iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
@@ -4960,6 +4965,11 @@
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
       button.classList.toggle("is-favorite", Boolean(spec.kind === "favorite" && spec.pressed));
+      if (spec.kind === "share") {
+        button.dataset.peState = "default";
+        button.classList.remove("active");
+        button.classList.toggle("is-shared", Boolean(spec.shared));
+      }
       button.classList.toggle("loading", Boolean(spec.busy));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));

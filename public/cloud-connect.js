@@ -147,6 +147,8 @@
       incompatibleCraft:"This Craft is not compatible with this PenEcho version.",
       signInTakeFurther:"Sign in to Echo this Craft.",
       shareTitle:"Preserve this moment",
+      shareCanvasCloud:"Share Canvas",
+      sharedCanvasCloud:"Canvas shared",
       shareSubtitle:"It does not need to be finished. It only needs to invite understanding or an Echo.",
       widgetKind:"Widget",
       canvasKind:"Canvas",
@@ -361,6 +363,8 @@
       incompatibleCraft:"此创作与当前 PenEcho 版本不兼容。",
       signInTakeFurther:"请先登录，再 Echo 此创作。",
       shareTitle:"保存这一刻",
+      shareCanvasCloud:"分享 Canvas",
+      sharedCanvasCloud:"Canvas 已分享",
       shareSubtitle:"它不必已经完成，只需值得理解或 Echo。",
       widgetKind:"组件",
       canvasKind:"画布",
@@ -735,6 +739,76 @@
       : Boolean(state.status?.accountSession?.signedIn);
   }
 
+  const liveShareStates = new Map();
+  const canvasViewShareButton = document.getElementById("canvasViewShareBtn");
+  let activeLiveShareContextKey = "";
+  function liveShareKey(canvasId, widgetId = "") {
+    const accountId = isCloudRuntime() ? window.PENECHO_REMOTE_CLOUD_STATUS?.accountId : state.status?.account?.id;
+    return `${cloudOrigin()}:${accountId || "signed-in"}:${canvasId}:${widgetId}`;
+  }
+  function currentLiveShareCanvasId() {
+    return accountSignedIn() ? window.PenEchoCloudProjects?.currentCanvasId?.() || null : null;
+  }
+  function notifyLiveShareChange() {
+    renderCanvasShareStatus();
+    if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("penecho:live-share-status-changed"));
+  }
+  function renderCanvasShareStatus() {
+    const canvasId = currentLiveShareCanvasId();
+    const shared = Boolean(canvasId && liveShareStates.get(liveShareKey(canvasId))?.shared);
+    const label = cloudT(shared ? "sharedCanvasCloud" : "shareCanvasCloud");
+    for (const button of [shareCanvasButton, canvasViewShareButton]) {
+      if (!button) continue;
+      button.dataset.liveShared = String(shared);
+      button.dataset.peState = "default";
+      button.classList.remove("active");
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    }
+  }
+  function rememberLiveShare(canvasId, widgetId, share) {
+    const key = liveShareKey(canvasId, widgetId);
+    liveShareStates.set(key, { shared:Boolean(share) });
+    notifyLiveShareChange();
+  }
+  function requestLiveShareStatus(canvasId, widgetId = "") {
+    if (!canvasId || !accountSignedIn()) return;
+    const key = liveShareKey(canvasId, widgetId);
+    if (liveShareStates.has(key)) return;
+    const entry = { shared:false };
+    liveShareStates.set(key, entry);
+    const suffix = widgetId ? `?widgetId=${encodeURIComponent(widgetId)}` : "";
+    void api(`/api/cloud/canvases/${canvasId}/share${suffix}`).then(({ share }) => {
+      if (liveShareStates.get(key) !== entry) return;
+      entry.shared = Boolean(share);
+      notifyLiveShareChange();
+    }).catch(() => { entry.failed = true; });
+  }
+  function refreshCanvasShareStatus() {
+    const canvasId = currentLiveShareCanvasId();
+    const contextKey = canvasId ? liveShareKey(canvasId) : "";
+    if (contextKey !== activeLiveShareContextKey) {
+      if (!contextKey) liveShareStates.clear();
+      activeLiveShareContextKey = contextKey;
+      if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("penecho:live-share-status-changed"));
+    }
+    renderCanvasShareStatus();
+    if (canvasId) {
+      const key = liveShareKey(canvasId);
+      if (liveShareStates.get(key)?.failed) liveShareStates.delete(key);
+      requestLiveShareStatus(canvasId);
+    }
+  }
+  window.PenEchoLiveShareStatus = Object.freeze({
+    widgetShared:(_widgetId, sourceId) => {
+      const canvasId = currentLiveShareCanvasId();
+      if (!canvasId || !sourceId) return false;
+      requestLiveShareStatus(canvasId, sourceId);
+      return liveShareStates.get(liveShareKey(canvasId, sourceId))?.shared === true;
+    },
+  });
+  window.addEventListener("penecho:live-share-context-changed", refreshCanvasShareStatus);
+
   function cloudDeviceConnectionStatus(status = state.status) {
     const device = status?.device || {};
     if (state.statusUnavailable) return { state:"failed", label:cloudT("statusUnavailable") };
@@ -776,6 +850,7 @@
         device:{ ...(state.status?.device || {}), connected:Boolean(remote.deviceReady) },
       };
       updateCloudButton();
+      refreshCanvasShareStatus();
       return state.status;
     }
     const seq = ++statusRequestSeq;
@@ -795,6 +870,7 @@
       }
       if (previouslySignedIn && !accountSignedIn()) browserSignInMessage("", "");
       updateCloudButton();
+      refreshCanvasShareStatus();
       return state.status;
     } catch (error) {
       if (seq !== statusRequestSeq) return state.status;
@@ -1661,6 +1737,7 @@
     const bridge = window.PenEchoCloudProjects;
     const sourceId = widgetId ? bridge?.shareWidgetId(widgetId) : null;
     if (widgetId && !sourceId) return;
+    const emptyCanvas = kind === "canvas" && bridge?.hasShareableContent?.() === false;
     let canvasId = bridge?.currentCanvasId(), currentShare = null, busy = false;
     const shell = dialogShell({ title:text(`Share ${kind === "widget" ? "Widget" : "Canvas"}`, `分享 ${kind === "widget" ? "Widget" : "Canvas"}`) });
     // Canonical #dialogs M / single sequential form; existing shell owns focus.
@@ -1673,7 +1750,8 @@
     shell.body.className = ""; shell.body.dataset.peRegion = "body";
     const note = el("p", {text:text("Anyone with the link can view this content and future changes saved to Cloud, with no expiry. Visitors can copy it to their own space to edit. Sharing does not publish to Echoes or keep a separate snapshot.", "任何持有链接的人都能查看此内容及之后保存到云端的改动，链接没有有效期。访客可复制到自己的空间编辑。分享不会发布到 Echoes，也不保留独立快照。")});
     const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
-    const status = el("p", {role:"status","aria-live":"polite"});
+    const emptyMessage = text("Add content to the Canvas before sharing.","请先在画布上添加内容，再开启分享。");
+    const status = el("p", {role:"status","aria-live":"polite",text:emptyCanvas ? emptyMessage : ""});
     const field = el("label", {"data-pe-region":"field"}, [el("span",{text:text("Share link","分享链接")})]);
     const link = el("input", {readonly:"","data-pe-control":"input","aria-label":text("Share link","分享链接")}); field.append(link); field.hidden=true;
     const enable = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
@@ -1687,7 +1765,7 @@
       storageNote.hidden=Boolean(canvasId);
       link.value=currentShare ? new URL(currentShare.url,cloudOrigin()).href : "";
       enable.textContent=currentShare ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
-      enable.disabled=revoke.disabled=busy;
+      enable.disabled=busy || emptyCanvas; revoke.disabled=busy;
     }
     async function run(action) { if(busy)return; busy=true;status.textContent=text("Working…","正在处理…");render();try{await action();}catch(error){status.textContent=error.message;}finally{busy=false;render();} }
     enable.addEventListener("click",()=>run(async()=>{
@@ -1695,14 +1773,16 @@
       if(currentShare){await copyText(link.value);status.textContent=text("Link copied.","链接已复制。");return;}
       canvasId=await bridge.saveForShare(widgetId);
       currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify(selection)})).share;
+      rememberLiveShare(canvasId, sourceId || "", currentShare);
       status.textContent=text("Sharing is on.","已开启分享。");
     }));
     revoke.addEventListener("click",()=>run(async()=>{
       await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;
+      rememberLiveShare(canvasId, sourceId || "", null);
       status.textContent=text("Sharing is off. The old link no longer works. Copies already saved by visitors remain theirs.","已关闭分享，旧链接已失效。访客之前保存的副本仍归访客所有。");
     }));
     render();
-    if(canvasId && accountSignedIn()) await run(async()=>{currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;status.textContent="";});
+    if(canvasId && accountSignedIn()) await run(async()=>{currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;rememberLiveShare(canvasId, sourceId || "", currentShare);status.textContent=emptyCanvas ? emptyMessage : "";});
   }
 
   function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {
@@ -2651,6 +2731,7 @@
   });
   window.addEventListener("penecho:languagechange", () => {
     updateCloudButton();
+    renderCanvasShareStatus();
     const overlay = document.querySelector(".penecho-cloud-overlay");
     if (overlay?._cloudRender) {
       const subtitle = overlay.querySelector("header p"), close = overlay.querySelector(".cloud-dialog-close");
@@ -2660,7 +2741,7 @@
     }
     if (craftsPopover && !craftsPopover.hidden) void openCrafts();
   });
-  window.addEventListener("penecho:remote-cloud-status", updateCloudButton);
+  window.addEventListener("penecho:remote-cloud-status", () => { updateCloudButton(); refreshCanvasShareStatus(); });
 
   cloudButton.addEventListener("click", openCloud);
   document.getElementById("settingsCloudSetupLink")?.addEventListener("click", (event) => {

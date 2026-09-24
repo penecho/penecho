@@ -1316,6 +1316,7 @@
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     return storedId;
   }
   async function readDeviceSnapshot(id) {
@@ -1524,6 +1525,7 @@
       window.PenEchoStudioNavigator?.canvasDidLoad?.({ id:item.id, location });
       window.PenEchoStudioNavigator?.renderCanvases?.();
       window.PenEchoStudioNavigator?.updateDocument?.();
+      window.dispatchEvent(new Event("penecho:live-share-context-changed"));
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       void refreshVisibleTextBoxQuality();
@@ -1590,6 +1592,7 @@
     await refreshSnapshots();
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     setStatusKey("snapshotDeleted");
   }
   function requestSnapshotDelete(item, location = state.snapshotLocation) {
@@ -1737,6 +1740,7 @@
     canvasAgentCanvasDidChange(null,{clearProject:true});
     window.PenEchoStudioNavigator?.renderCanvases?.();
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -1830,6 +1834,8 @@
     return true;
   }
   async function saveLiveShareToCloud(widgetId = null) {
+    await finalizeCanvasForSnapshot();
+    if (!widgetId && !canvasHasShareableContent()) throw Error(t("emptyCanvas"));
     const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
     if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
     setSnapshotLocation("cloud", { refresh:false });
@@ -1837,6 +1843,9 @@
     const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
     if (!id) throw Error("The Canvas could not be saved to Cloud.");
     return id;
+  }
+  function canvasHasShareableContent() {
+    return Boolean(tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length);
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");

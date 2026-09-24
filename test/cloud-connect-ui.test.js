@@ -20,6 +20,60 @@ test("Cloud storage help stays concise in both languages", () => {
   assert.doesNotMatch(cloudScript, /Every successful save creates an immutable revision|每次成功保存都会创建不可变版本/);
 });
 
+test("an empty Canvas shows why live sharing is unavailable", async () => {
+  const run=boot({status:deviceStatus()});
+  run.window.PenEchoCloudProjects.hasShareableContent=() => false;
+  run.window.PenEchoCloudProjects.currentCanvasId=() => null;
+  run.window.PenEchoCloudProjects.saveForShare=async () => { throw Error("empty Canvas must not be saved"); };
+  await run.flush();
+  run.shareButton.click();
+  await run.flush();
+  const dialog=run.overlay();
+  assert.ok(dialog);
+  const enable=flatten(dialog).find(node => node.textContent === "Save to Cloud and share");
+  assert.equal(enable?.disabled,true);
+  assert.match(dialog.textContent,/Add content to the Canvas before sharing\./);
+  assert.equal(run.fetchCalls.some(call => call.url.includes("/share")),false);
+});
+
+test("Canvas and Widget share icons follow confirmed live share state", async () => {
+  const canvasId = "123e4567-e89b-42d3-a456-426614174051";
+  const otherCanvasId = "123e4567-e89b-42d3-a456-426614174052";
+  const widgetId = "123e4567-e89b-42d3-a456-426614174053";
+  const liveShares = new Map([
+    [`${canvasId}:`, { url:"/canvas/share/canvas-token" }],
+    [`${canvasId}:${widgetId}`, { url:"/canvas/share/widget-token" }],
+  ]);
+  const run = boot({ status:deviceStatus(), liveShares });
+  let currentCanvasId = canvasId;
+  run.window.PenEchoCloudProjects.currentCanvasId = () => currentCanvasId;
+  run.window.PenEchoCloudProjects.shareWidgetId = () => widgetId;
+  await run.flush();
+  assert.equal(run.shareButton.dataset.liveShared, "true");
+  assert.equal(run.shareButton.dataset.peState, "default");
+  assert.equal(run.shareButton.classList.contains("active"), false);
+  assert.equal(run.window.PenEchoLiveShareStatus.widgetShared("widget-local", widgetId), false);
+  await run.flush();
+  assert.equal(run.window.PenEchoLiveShareStatus.widgetShared("widget-local", widgetId), true);
+
+  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"share", widgetId:"widget-local" } });
+  await run.flush();
+  const revoke = flatten(run.overlay()).find(node => node.tagName === "BUTTON" && node.textContent === "Turn off sharing");
+  assert.ok(revoke);
+  revoke.click();
+  await run.flush();
+  assert.equal(run.window.PenEchoLiveShareStatus.widgetShared("widget-local", widgetId), false);
+  assert.equal(run.shareButton.dataset.liveShared, "true", "Widget revocation does not change Canvas sharing");
+
+  currentCanvasId = otherCanvasId;
+  await run.window.dispatch("penecho:live-share-context-changed");
+  await run.flush();
+  assert.equal(run.shareButton.dataset.liveShared, "false");
+  assert.equal(run.shareButton.dataset.peState, "default");
+  assert.equal(run.shareButton.classList.contains("active"), false);
+  assert.equal(run.window.PenEchoLiveShareStatus.widgetShared("widget-local", widgetId), false);
+});
+
 test("the toolbar Favorites retry is vertically centered in a full status row", () => {
   assert.match(studioCss, /\.crafts-retry-row\s*\{[^}]*display:\s*flex[^}]*min-height:\s*80px[^}]*align-items:\s*center[^}]*justify-content:\s*center/);
   assert.match(studioCss, /\.crafts-retry\s*\{[^}]*box-sizing:\s*border-box[^}]*height:\s*30px[^}]*min-height:\s*30px[^}]*padding:\s*0 10px[^}]*line-height:\s*1/);
@@ -132,12 +186,13 @@ class FakeFile extends Blob {
 }
 
 function matches(node, selector) {
+  if (/^[a-z]+$/i.test(selector)) return node.tagName?.toLowerCase() === selector.toLowerCase();
   if (!node.className || !selector.startsWith(".") || /[\s#[,:]/.test(selector)) return false;
   return node.className.split(/\s+/).includes(selector.slice(1));
 }
 
 function queryAll(root, selector) {
-  if (!selector.startsWith(".") || /[\s#[,:]/.test(selector)) return [];
+  if (!/^[a-z]+$/i.test(selector) && (!selector.startsWith(".") || /[\s#[,:]/.test(selector))) return [];
   const out = [];
   const walk = (node) => { if (matches(node, selector)) out.push(node); for (const child of node.children || []) if (child instanceof FakeElement) walk(child); };
   walk(root);
@@ -181,7 +236,7 @@ const signedOutStatus = (device = {}) => ({
   browserSignIn:{ pending:false },
 });
 
-function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, lineage = null, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], cloudFavoriteSaveError = null, cloudFavoriteFeedError = null, serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, widgetArtifactPromise = null, widgetArtifactError = null, navigatorOverrides = {}, withCrafts = false, sessionStorageEntries = {} } = {}) {
+function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, lineage = null, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], cloudFavoriteSaveError = null, cloudFavoriteFeedError = null, serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, widgetArtifactPromise = null, widgetArtifactError = null, navigatorOverrides = {}, withCrafts = false, sessionStorageEntries = {}, liveShares = new Map() } = {}) {
   const timers = makeTimers();
   const documentListeners = new Map();
   const document = {
@@ -277,6 +332,13 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
       return new Promise((resolve, reject) => { releaseAccountError = () => reject(deferredAccountError); });
     }
     if (target === "/api/cloud/account") return Promise.resolve(jsonResponse(statusPayload));
+    const liveShareMatch = target.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})\/share(?:\?widgetId=([0-9a-f-]{36}))?$/i);
+    if (liveShareMatch) {
+      const key = `${liveShareMatch[1]}:${liveShareMatch[2] || (options.body ? JSON.parse(options.body).widgetId : "") || ""}`;
+      if (options.method === "POST") liveShares.set(key, { url:`/canvas/share/${randomUUID()}` });
+      if (options.method === "DELETE") liveShares.delete(key);
+      return Promise.resolve(jsonResponse({ share:liveShares.get(key) || null }));
+    }
     if (target === "/api/cloud/sign-in/start") return Promise.resolve(jsonResponse({ authorizationUrl:`${cloudOrigin}/auth/local`, expiresAt:Date.now() + 60_000 }));
     if (target === "/api/cloud/pair") return Promise.resolve(jsonResponse(statusPayload));
     if (target === "/api/cloud/device/enable") return Promise.resolve(jsonResponse(statusPayload));

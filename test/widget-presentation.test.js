@@ -15,10 +15,12 @@ class FakeElement {
   this.className='';
   this.disabled=false;
   this.textContent='';
+  this.style={};this.offsetHeight=52;
  }
  setAttribute(name,value){this.attributes.set(name,String(value));}
  getAttribute(name){return this.attributes.get(name)??null;}
  removeAttribute(name){this.attributes.delete(name);}
+ remove() { if(this.parentNode?.children)this.parentNode.children=this.parentNode.children.filter(x=>x!==this);this.parentNode=null; }
  addEventListener(type,listener,options={}){
   const entries=this.listeners.get(type)||[];
   entries.push({listener,once:options.once===true});
@@ -43,6 +45,10 @@ function harness({stored=null,failGet=false,failSet=false,downloadImpl=()=>Promi
   setItem(key,value){if(failSet)throw new Error('storage write failed');storage.set(key,value);writes.push([key,value]);}
  };
  const ctx={
+  state:{scale:1.5},
+  location:{origin:'https://canvas.test'},
+  getComputedStyle:()=>({paddingLeft:'20',paddingRight:'20',paddingBottom:'20'}),
+  ResizeObserver:class{observe(){}disconnect(){}},
   localStorage,
   requestInteractionLayerRender(){renders.push(true);},
   positionWidget(widget){positions.push(widget);},
@@ -53,15 +59,17 @@ function harness({stored=null,failGet=false,failSet=false,downloadImpl=()=>Promi
   sendWidgetHostState(widget){hostStateCalls.push(widget);},
   setWidgetInteraction(){}
  };
- const api=vm.runInNewContext(`${helperSource};({widgetInteractionPresentation,switchWidgetPresentation,setWidgetPresentationZoom,setWidgetMaximized})`,ctx);
+ const api=vm.runInNewContext(`${helperSource};({widgetInteractionPresentation,switchWidgetPresentation,setWidgetPresentationZoom,setWidgetMaximized,updateWidgetPresentationScroll,syncWidgetPresentationScroll})`,ctx);
  return {api,downloads,hostStateCalls,storage,writes,renders,positions};
 }
 
-function widgetFixture({presentationToolbar={id:'existing-toolbar'}}={}) {
+function widgetFixture({presentationToolbar={id:'existing-toolbar',offsetHeight:52}}={}) {
  const parent={id:'canvas-layer'};
  const classChanges=[];
  const shell={
   parentNode:parent,
+  clientWidth:1440,clientHeight:900,scrollTop:0,scrollLeft:0,
+  append(){},addEventListener(){},removeEventListener(){},
   classList:{add(name){classChanges.push(['add',name]);},remove(name){classChanges.push(['remove',name]);}},
   attributes:new Map(),
   popoverOpen:false,
@@ -75,8 +83,8 @@ function widgetFixture({presentationToolbar={id:'existing-toolbar'}}={}) {
   prependCalls:0,
   prepend(...children){this.prependCalls++;this.prepended=children[0];children[0].parentNode=this;}
  };
- const frame={focusCalls:0,focus(){this.focusCalls++;}};
- const widget={id:'widget-1',title:'Widget',shell,frame,presentationToolbar,maximized:false,w:240,h:160,contentW:480,contentH:320,presentationWidth:null,presentationHeight:null};
+ const frame={contentWindow:{postMessage(){}},focusCalls:0,focus(){this.focusCalls++;}};
+ const widget={id:'widget-1',title:'Widget',shell,frame,presentationToolbar,styleRule:{style:{setProperty(){},removeProperty(){}}},maximized:false,w:240,h:160,contentW:480,contentH:320,presentationWidth:null,presentationHeight:null};
  return {widget,parent,shell,frame,toolbar:presentationToolbar,classChanges};
 }
 
@@ -226,4 +234,38 @@ test('Widget download button restores itself after success and failure without t
  await assert.rejects(failureButton.dispatch('click'),/download failed/);
  assert.equal(failureButton.disabled,false);
  assert.deepEqual(failure.downloads,[failureFixture.widget]);
+});
+
+test('presentation fits width on entry and resize, with manual zoom and cleanup',()=>{
+ const h=harness(),{widget}=widgetFixture();
+ const properties=new Map();
+ widget.styleRule={style:{setProperty:(k,v)=>properties.set(k,v),removeProperty:k=>properties.delete(k)}};
+ h.api.setWidgetMaximized(widget,true);
+ assert.equal(Number(properties.get('--widget-page-scale')),1400/480);
+ h.api.setWidgetPresentationZoom(widget,50);
+ assert.equal(Number(properties.get('--widget-page-scale')),1400/480*.5);
+ widget.shell.clientWidth=520;
+ h.api.updateWidgetPresentationScroll(widget);
+ assert.equal(Number(properties.get('--widget-page-scale')),.5);
+ h.api.setWidgetMaximized(widget,false);
+ assert.equal(properties.has('--widget-page-scale'),false);
+});
+
+test('content changes grow the scroll track without resizing the layout viewport',()=>{
+ const h=harness(),{widget}=widgetFixture();
+ widget.h=widget.contentH=1100;widget.w=widget.contentW=900;
+ h.api.setWidgetMaximized(widget,true);
+ const properties=new Map(),messages=[];
+ widget.styleRule.style.setProperty=(k,v)=>properties.set(k,v);
+ widget.frame.contentWindow.postMessage=m=>messages.push(m);
+ widget.presentationScrollContent={height:2200,viewportHeight:1100,width:900,viewportWidth:900};
+ h.api.updateWidgetPresentationScroll(widget);
+ const height=properties.get('--widget-presentation-frame-height');
+ assert.equal(height,'1100px');assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2200*1400/900)<1e-9);
+ widget.presentationScrollContent.height=2800;h.api.updateWidgetPresentationScroll(widget);
+ assert.equal(properties.get('--widget-presentation-frame-height'),height);
+ assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-2800*1400/900)<1e-9);
+ widget.shell.scrollTop=widget.presentationScrollMetrics.outside+200*widget.presentationScrollMetrics.scale;h.api.syncWidgetPresentationScroll(widget);
+ assert.ok(Math.abs(messages.at(-1).top-200)<1e-9);
+ assert.equal(widget.contentH,1100);
 });

@@ -20,7 +20,7 @@
 <h1 align="center">A spatial workspace<br>for thinking with AI.</h1>
 <p align="center">Draw, explore, and build with the built-in Agent or your own MCP-compatible assistant.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Version 1.3.3">
+  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="Version 1.3.4">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

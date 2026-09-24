@@ -7826,7 +7826,8 @@ body[data-theme="studio"] .studio-navigator-tabs > [role="tab"][aria-selected="t
   width: var(--penecho-canvas-page-viewport-width, 100vw) !important;
   height: var(--penecho-canvas-page-dynamic-height, 100dvh) !important; max-width: none; max-height: none;
   transform: none !important; contain: none; visibility: visible;
-  padding: 0 20px 20px; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; border: 0; border-radius: 0;
+  padding: 0 20px 20px; overflow: auto; border: 0; border-radius: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: start;
   background: rgba(230, 233, 237, .28); box-shadow: none;
   -webkit-backdrop-filter: blur(20px) saturate(1.12); backdrop-filter: blur(20px) saturate(1.12);
   pointer-events: auto;
@@ -7834,14 +7835,21 @@ body[data-theme="studio"] .studio-navigator-tabs > [role="tab"][aria-selected="t
 #viewport .canvas-widget.widget-maximized::backdrop { background: transparent; }
 #viewport .canvas-widget.widget-maximized::after,
 #viewport .canvas-widget.widget-maximized .canvas-widget-resize-handle { display: none; }
+/* Fit the saved page width to the browser area; long pages scroll vertically.
+   Toolbar zoom scales the whole page without changing its authored width. */
 #viewport .canvas-widget.widget-maximized .canvas-widget-frame {
-  width: var(--widget-presentation-width, var(--widget-natural-width)); height: var(--widget-presentation-height, var(--widget-natural-height)); border-radius: 7px; pointer-events: auto;
-  display: block; margin-inline: auto;
-  zoom: calc(100cqw / var(--widget-presentation-width, var(--widget-natural-width)) * var(--widget-presentation-zoom, 1));
+  width: var(--widget-natural-width);
+  height: var(--widget-presentation-frame-height, var(--widget-natural-height));
+  min-width: 0; min-height: var(--widget-natural-height); border-radius: 7px; pointer-events: auto;
+  display: block; margin: 0 auto;
+  zoom: var(--widget-page-scale);
+  grid-area: 2 / 1; align-self: start;
+  position: sticky; top: var(--widget-presentation-frame-top, 0px); left: 0;
 }
+.widget-presentation-scroll-extent { grid-area: 2 / 1; pointer-events: none; visibility: hidden; }
 .widget-presentation-toolbar { display: none; }
 .widget-maximized .widget-presentation-toolbar {
-  position: sticky; top: 0; z-index: 2;
+  position: sticky; top: 0; left: 0; z-index: 2;
   display: flex; align-items: center; gap: 8px; height: 52px;
   background: rgba(235, 237, 240, .72);
   -webkit-backdrop-filter: blur(14px) saturate(1.12); backdrop-filter: blur(14px) saturate(1.12);

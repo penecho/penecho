@@ -1,4 +1,4 @@
-# Instructions for configuring PenEcho MCP / 让 AI 配置 PenEcho MCP
+# Instructions for configuring PenEcho MCP
 
 Give the following prompt to the AI responsible for setup. Supply the private trust bundle through a secure file, not the conversation transcript. The current tool schemas and live guidance remain the authority for operations; detailed presentation and feedback contracts are in [MCP setup](mcp-setup.md).
 
@@ -31,10 +31,10 @@ Work and visual contracts:
 Existing penecho mcp / stdio.js and LAN pairing configurations are legacy compatibility only. Migrate the existing entry to client.js without adding duplicate transports. Report only what changed, actual verification, and remaining trust/reload/user opt-in requirements.
 ```
 
-## 中文交付要求
+## Delivery requirements
 
-按上述提示词配置轻量 stdio CLI，直连主机 HTTPS。发现与 AI 配置分开；共享 .penecho 缓存，重连不改 AI 配置。去掉旧的 --idle-exit-ms 参数；空闲 30 分钟只释放 HTTP，保留 stdin。闲置后旧地址重连失败，也继续读取新缓存和自动发现。必须分别验证 AI 是否重启子进程、是否恢复同一 Canvas，不能把手动重载算成自动恢复。
+Use the prompt above to configure the lightweight stdio CLI with a direct HTTPS connection to the host. Keep discovery separate from AI configuration; share the .penecho cache and do not change AI configuration on reconnect. Remove the old --idle-exit-ms option. After 30 minutes of idle time, release only HTTP and retain stdin. If reconnection to the old address fails after idle release, still check the fresh cache and automatic discovery. Verify separately whether the AI host respawns the child process and whether it restores the same Canvas; do not count a manual reload as automatic recovery.
 
-对话使用稳定的 `client + sessionKey`，保留 `documentId`；只有新对话默认选择最近注册浏览器。旧对话恢复原文档，关闭的文档可以后台打开。`title` 必填，`instanceId/canvasId` 可省，`restore` 默认 true；仅 `DOCUMENT_NOT_FOUND` 可以新建替代文档，权限/存储错误必须保留。需要查看当前画布时使用 `target:"current"` 并保持原有句柄隔离。
+Use a stable `client + sessionKey` for each conversation and retain `documentId`. Only new conversations default to the most recently registered browser. Existing conversations restore their original document; closed documents may open in the background. `title` is required, `instanceId/canvasId` is optional, and `restore` defaults to true. Only `DOCUMENT_NOT_FOUND` permits creating a replacement document; preserve permission and storage errors. Use `target:"current"` when the current Canvas is requested, while keeping existing handles isolated.
 
-验收应区分“配置已写入”“CLI 已加载正确 CA”“实际工具连接成功”和“浏览器已授权”。不要把任何一项当成其他项的证明。保留所有无关服务、项目配置、现有作品与反馈游标。
+Distinguish configuration written, correct CA loaded by the CLI, successful live tool connection, and browser authorization during acceptance checks. None of these proves the others. Preserve all unrelated services, project configuration, existing work, and feedback cursors.

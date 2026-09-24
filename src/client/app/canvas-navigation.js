@@ -24,6 +24,65 @@
       controls.zoomIn.disabled = zoom === 100;
     }
     if (notifyHost) sendWidgetHostState(widget);
+    if (widget.maximized) updateWidgetPresentationScroll(widget);
+  }
+  function widgetPresentationScale(widget) {
+    const style = getComputedStyle(widget.shell),
+      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+    // Match Cloud's width-fit presentation, independent of Canvas zoom.
+    return width / widget.contentW * ((widget.presentationZoom || 100) / 100);
+  }
+  function syncWidgetPresentationScroll(widget) {
+    if (!widget.maximized || !widget.presentationScrollMetrics) return;
+    const { scale, outside } = widget.presentationScrollMetrics;
+    widget.frame.contentWindow?.postMessage({ type:"penecho-widget-presentation-scroll-to",
+      left:widget.shell.scrollLeft / scale, top:Math.max(0, widget.shell.scrollTop - outside) / scale }, widget.hostOrigin || location.origin);
+  }
+  function updateWidgetPresentationScroll(widget) {
+    if (!widget.maximized || !widget.presentationScrollExtent) return;
+    const shell = widget.shell, style = getComputedStyle(shell),
+      scale = widgetPresentationScale(widget),
+      toolbar = widget.presentationToolbar.offsetHeight,
+      available = Math.max(1, shell.clientHeight - toolbar - parseFloat(style.paddingBottom)),
+      height = Math.max(widget.contentH, available / scale),
+      outside = Math.max(0, height * scale - available),
+      content = widget.presentationScrollContent,
+      extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
+      extraX = content ? Math.max(0, content.width - content.viewportWidth) : 0,
+      width = Math.max(1, shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+    widget.presentationScrollMetrics = { scale, outside };
+    const declaration = widget.styleRule.style;
+    declaration.setProperty("--widget-page-scale", String(scale));
+    declaration.setProperty("--widget-presentation-frame-height", `${height}px`);
+    declaration.setProperty("--widget-presentation-frame-top", `${(toolbar - outside) / scale}px`);
+    // Only the scroll track grows. The iframe viewport depends on the window
+    // and saved height, never on measured content (including vh/percentage CSS).
+    widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
+    widget.presentationScrollExtent.style.width = `${width + extraX * scale + (extraX ? parseFloat(style.paddingRight) : 0)}px`;
+    syncWidgetPresentationScroll(widget);
+    sendWidgetHostState(widget);
+  }
+  function setWidgetPresentationScrolling(widget, enabled) {
+    if (!enabled) {
+      widget.presentationScrollObserver?.disconnect();
+      widget.presentationScrollObserver = null;
+      widget.shell.removeEventListener("scroll", widget.presentationScrollListener);
+      widget.presentationScrollExtent?.remove();
+      widget.presentationScrollExtent = widget.presentationScrollContent = widget.presentationScrollMetrics = null;
+      for (const name of ["frame-height", "frame-top"]) widget.styleRule?.style?.removeProperty(`--widget-presentation-${name}`);
+      widget.styleRule?.style?.removeProperty("--widget-page-scale");
+      return;
+    }
+    const extent = document.createElement("div");
+    extent.className = "widget-presentation-scroll-extent";
+    extent.setAttribute("aria-hidden", "true");
+    widget.shell.append(extent);
+    widget.presentationScrollExtent = extent;
+    widget.presentationScrollListener = () => syncWidgetPresentationScroll(widget);
+    widget.shell.addEventListener("scroll", widget.presentationScrollListener, { passive:true });
+    widget.presentationScrollObserver = new ResizeObserver(() => updateWidgetPresentationScroll(widget));
+    widget.presentationScrollObserver.observe(widget.shell);
+    updateWidgetPresentationScroll(widget);
   }
   function setWidgetMaximized(widget, maximized) {
     const shell = widget?.shell;
@@ -79,15 +138,14 @@
       shell.setAttribute("popover", "manual");
       shell.classList.add("widget-maximized");
       shell.showPopover();
+      setWidgetPresentationScrolling(widget, true);
     } else {
+      setWidgetPresentationScrolling(widget, false);
       if (shell.matches(":popover-open")) shell.hidePopover();
       shell.removeAttribute("popover");
       shell.classList.remove("widget-maximized");
       shell.removeAttribute("data-presentation-zoom");
       widget.presentationZoom = 100;
-      widget.presentationWidth = widget.presentationHeight = null;
-      widget.styleRule?.style?.removeProperty("--widget-presentation-width");
-      widget.styleRule?.style?.removeProperty("--widget-presentation-height");
     }
     positionWidget(widget);
     widget.frame?.focus({ preventScroll:true });

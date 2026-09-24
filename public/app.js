@@ -2487,7 +2487,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
       closeSavedCrafts: "Close Favorites",
       shareCanvasCloud: "Share Canvas",
+      sharedCanvasCloud: "Canvas shared",
       shareWidget: "Share widget",
+      sharedWidget: "Widget shared",
       openInNewPage: "Open in a new page",
       openCanvas: "Open Canvas",
       addToCanvas: "Add to Canvas",
@@ -8085,11 +8087,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   window.addEventListener("penecho:languagechange",event=>syncWidgetHostLanguages(event.detail?.language));
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
-    if (widget.maximized) {
-      const shellStyle = getComputedStyle(widget.shell);
-      const available = widget.shell.clientWidth - parseFloat(shellStyle.paddingLeft) - parseFloat(shellStyle.paddingRight);
-      scaleX = scaleY = available / Math.max(widget.contentW, widget.presentationWidth || 0) * (widget.presentationZoom || 100) / 100;
-    }
+    // Presentation fits the saved page width, independently of Canvas zoom.
+    if (widget.maximized) scaleX = scaleY = widgetPresentationScale(widget);
     const interactive = canvasWidgetInteractive(widget),
       selectable = canvasWidgetSelectionEnabled(),
       selected = !state.viewMode && ["hand", "select"].includes(state.mode) && !interactive && (widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id)),
@@ -8103,12 +8102,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const active = widget.renderActive !== false,
-      viewportWidth = widget.maximized ? Math.max(widget.contentW, widget.presentationWidth || 0) : undefined,
-      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}:${viewportWidth || ""}`;
+      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}`;
     syncMcpWidgetProgress(widget);
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, viewportWidth, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function markWidgetHostReady(widget) {
     widget.hostReady = true;
@@ -8218,20 +8216,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       }
     }
   }
-  function applyWidgetPresentationSize(widget, message) {
-    if (!widget.maximized || !widget.styleRule?.style) return false;
-    const width = Number(message.width), height = Number(message.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 100000 || height > 100000) return false;
-    const nextWidth = Math.max(widget.contentW, Math.ceil(width));
-    const nextHeight = Math.max(widget.contentH, Math.ceil(height));
-    if (widget.presentationWidth === nextWidth && widget.presentationHeight === nextHeight) return false;
-    widget.presentationWidth = nextWidth;
-    widget.presentationHeight = nextHeight;
-    widget.styleRule.style.setProperty("--widget-presentation-width", `${nextWidth}px`);
-    widget.styleRule.style.setProperty("--widget-presentation-height", `${nextHeight}px`);
-    sendWidgetHostState(widget);
-    return true;
-  }
   async function handleWidgetMessage(event) {
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : []), ...(typeof mcpRuntime!=="undefined"?[...(mcpRuntime?.previews?.values()||[])]:[])].find((item) => item.frame?.contentWindow === event.source);
     if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
@@ -8241,7 +8225,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasDocumentsWidgetAction(widget,message);return;
     }
     if (message.type === "penecho-widget-presentation-size") {
-      applyWidgetPresentationSize(widget, message);
+      // Ignore reports from an older host: page content must not resize its viewport.
+      return;
+    }
+    if (message.type === "penecho-widget-presentation-scroll") {
+      if (!widget.maximized) return;
+      if (message.action === "extent" && [message.width, message.height, message.viewportWidth, message.viewportHeight].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) {
+        widget.presentationScrollContent = message;
+        updateWidgetPresentationScroll(widget);
+      } else if (message.action === "wheel" && [message.dx, message.dy].every(value => Number.isFinite(value) && Math.abs(value) <= 100000)) {
+        const scale = widget.presentationScrollMetrics?.scale || 1;
+        widget.shell.scrollBy(message.dx * scale, message.dy * scale);
+      } else if (message.action === "position" && [message.left, message.top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
+        const metrics = widget.presentationScrollMetrics;
+        if (metrics) widget.shell.scrollTo(message.left * metrics.scale, metrics.outside + message.top * metrics.scale);
+      } else if (message.action === "key" && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(message.key)) {
+        const shell = widget.shell;
+        if (message.key === "Home" || message.key === "End") shell.scrollTo(shell.scrollLeft, message.key === "Home" ? 0 : shell.scrollHeight);
+        else shell.scrollBy(0, (message.key.startsWith("Arrow") ? 40 : shell.clientHeight * .8) * (["ArrowUp", "PageUp"].includes(message.key) || message.key === " " && message.shift ? -1 : 1));
+      }
       return;
     }
     if (message.type === "penecho-widget-fit-result") {
@@ -9495,6 +9497,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       renderInteractionLayer();
     });
   }
+  window.addEventListener("penecho:live-share-status-changed", requestInteractionLayerRender);
   function forTiles(x, y, w, h, fn, create = true) {
     if (w <= 0 || h <= 0) return;
     const x0 = Math.max(0, Math.floor(x / TILE)),
@@ -10596,10 +10599,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
       });
+      const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,
         kind:"share",
-        label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        label:liveShared
+          ? t("sharedWidget")
+          : window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        shared:liveShared,
         baseWidth:28,
         iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
@@ -11260,6 +11267,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
       button.classList.toggle("is-favorite", Boolean(spec.kind === "favorite" && spec.pressed));
+      if (spec.kind === "share") {
+        button.dataset.peState = "default";
+        button.classList.remove("active");
+        button.classList.toggle("is-shared", Boolean(spec.shared));
+      }
       button.classList.toggle("loading", Boolean(spec.busy));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
@@ -13997,6 +14009,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     return storedId;
   }
   async function readDeviceSnapshot(id) {
@@ -14205,6 +14218,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       window.PenEchoStudioNavigator?.canvasDidLoad?.({ id:item.id, location });
       window.PenEchoStudioNavigator?.renderCanvases?.();
       window.PenEchoStudioNavigator?.updateDocument?.();
+      window.dispatchEvent(new Event("penecho:live-share-context-changed"));
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       void refreshVisibleTextBoxQuality();
@@ -14271,6 +14285,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     await refreshSnapshots();
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     setStatusKey("snapshotDeleted");
   }
   function requestSnapshotDelete(item, location = state.snapshotLocation) {
@@ -14418,6 +14433,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentCanvasDidChange(null,{clearProject:true});
     window.PenEchoStudioNavigator?.renderCanvases?.();
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -14511,6 +14527,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   async function saveLiveShareToCloud(widgetId = null) {
+    await finalizeCanvasForSnapshot();
+    if (!widgetId && !canvasHasShareableContent()) throw Error(t("emptyCanvas"));
     const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
     if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
     setSnapshotLocation("cloud", { refresh:false });
@@ -14518,6 +14536,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
     if (!id) throw Error("The Canvas could not be saved to Cloud.");
     return id;
+  }
+  function canvasHasShareableContent() {
+    return Boolean(tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length);
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");
@@ -25169,10 +25190,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return null;
     };
     const below=findSlot(x,y);if(below)return below;
-    // Near the finite Canvas bottom, find another clear column instead of
-    // falling back onto the previous result or rejecting an otherwise empty Canvas.
-    const columns=new Set([x,48,SIZE-width]);
+    // Near the finite Canvas bottom, continue into the adjacent column. Use
+    // the widest occupied edge in each column so mixed-width work stays clear.
+    for(let column=x;column+width<=SIZE;){
+      const slot=findSlot(column,0);if(slot)return slot;
+      const occupied=collisions({x:column-gap/2,y:0,w:width+gap,h:SIZE});
+      column=Math.max(column+width,...occupied.map(b=>b.x+b.w))+gap;
+    }
+    // If there is no room to the right, search the remaining Canvas before
+    // rejecting the placement. The far edge is only a final fallback.
+    const columns=new Set([48]);
     for(let column=0;column+width<=SIZE;column+=width+gap)columns.add(column);
+    columns.add(SIZE-width);
     for(const column of columns){const slot=findSlot(column,0);if(slot)return slot;}
     throw Error("No clear space remains for this work. Move the group or use another Canvas.");
   }
@@ -27163,7 +27192,7 @@ var canvasDocumentIdentity = (() => {
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       canvasDocumentsRetireEmptyPlaceholder(previous);
-      window.PenEchoStudioNavigator?.updateDocument?.();await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
+      window.PenEchoStudioNavigator?.updateDocument?.();window.dispatchEvent(new Event("penecho:live-share-context-changed"));await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
   }
   function canvasDocumentsApplyView(view) {
@@ -29509,6 +29538,65 @@ var canvasDocumentIdentity = (() => {
       controls.zoomIn.disabled = zoom === 100;
     }
     if (notifyHost) sendWidgetHostState(widget);
+    if (widget.maximized) updateWidgetPresentationScroll(widget);
+  }
+  function widgetPresentationScale(widget) {
+    const style = getComputedStyle(widget.shell),
+      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+    // Match Cloud's width-fit presentation, independent of Canvas zoom.
+    return width / widget.contentW * ((widget.presentationZoom || 100) / 100);
+  }
+  function syncWidgetPresentationScroll(widget) {
+    if (!widget.maximized || !widget.presentationScrollMetrics) return;
+    const { scale, outside } = widget.presentationScrollMetrics;
+    widget.frame.contentWindow?.postMessage({ type:"penecho-widget-presentation-scroll-to",
+      left:widget.shell.scrollLeft / scale, top:Math.max(0, widget.shell.scrollTop - outside) / scale }, widget.hostOrigin || location.origin);
+  }
+  function updateWidgetPresentationScroll(widget) {
+    if (!widget.maximized || !widget.presentationScrollExtent) return;
+    const shell = widget.shell, style = getComputedStyle(shell),
+      scale = widgetPresentationScale(widget),
+      toolbar = widget.presentationToolbar.offsetHeight,
+      available = Math.max(1, shell.clientHeight - toolbar - parseFloat(style.paddingBottom)),
+      height = Math.max(widget.contentH, available / scale),
+      outside = Math.max(0, height * scale - available),
+      content = widget.presentationScrollContent,
+      extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
+      extraX = content ? Math.max(0, content.width - content.viewportWidth) : 0,
+      width = Math.max(1, shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+    widget.presentationScrollMetrics = { scale, outside };
+    const declaration = widget.styleRule.style;
+    declaration.setProperty("--widget-page-scale", String(scale));
+    declaration.setProperty("--widget-presentation-frame-height", `${height}px`);
+    declaration.setProperty("--widget-presentation-frame-top", `${(toolbar - outside) / scale}px`);
+    // Only the scroll track grows. The iframe viewport depends on the window
+    // and saved height, never on measured content (including vh/percentage CSS).
+    widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
+    widget.presentationScrollExtent.style.width = `${width + extraX * scale + (extraX ? parseFloat(style.paddingRight) : 0)}px`;
+    syncWidgetPresentationScroll(widget);
+    sendWidgetHostState(widget);
+  }
+  function setWidgetPresentationScrolling(widget, enabled) {
+    if (!enabled) {
+      widget.presentationScrollObserver?.disconnect();
+      widget.presentationScrollObserver = null;
+      widget.shell.removeEventListener("scroll", widget.presentationScrollListener);
+      widget.presentationScrollExtent?.remove();
+      widget.presentationScrollExtent = widget.presentationScrollContent = widget.presentationScrollMetrics = null;
+      for (const name of ["frame-height", "frame-top"]) widget.styleRule?.style?.removeProperty(`--widget-presentation-${name}`);
+      widget.styleRule?.style?.removeProperty("--widget-page-scale");
+      return;
+    }
+    const extent = document.createElement("div");
+    extent.className = "widget-presentation-scroll-extent";
+    extent.setAttribute("aria-hidden", "true");
+    widget.shell.append(extent);
+    widget.presentationScrollExtent = extent;
+    widget.presentationScrollListener = () => syncWidgetPresentationScroll(widget);
+    widget.shell.addEventListener("scroll", widget.presentationScrollListener, { passive:true });
+    widget.presentationScrollObserver = new ResizeObserver(() => updateWidgetPresentationScroll(widget));
+    widget.presentationScrollObserver.observe(widget.shell);
+    updateWidgetPresentationScroll(widget);
   }
   function setWidgetMaximized(widget, maximized) {
     const shell = widget?.shell;
@@ -29564,15 +29652,14 @@ var canvasDocumentIdentity = (() => {
       shell.setAttribute("popover", "manual");
       shell.classList.add("widget-maximized");
       shell.showPopover();
+      setWidgetPresentationScrolling(widget, true);
     } else {
+      setWidgetPresentationScrolling(widget, false);
       if (shell.matches(":popover-open")) shell.hidePopover();
       shell.removeAttribute("popover");
       shell.classList.remove("widget-maximized");
       shell.removeAttribute("data-presentation-zoom");
       widget.presentationZoom = 100;
-      widget.presentationWidth = widget.presentationHeight = null;
-      widget.styleRule?.style?.removeProperty("--widget-presentation-width");
-      widget.styleRule?.style?.removeProperty("--widget-presentation-height");
     }
     positionWidget(widget);
     widget.frame?.focus({ preventScroll:true });
@@ -31884,6 +31971,7 @@ var canvasDocumentIdentity = (() => {
     currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
     saveForShare:saveLiveShareToCloud,
+    hasShareableContent:canvasHasShareableContent,
     shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,

@@ -428,6 +428,37 @@ test('append at the Canvas bottom falls back to clear space without covering the
  assert.equal(h.context.intersection({...plan.placement,w:1800,h:2000},previous),false);
 });
 
+test('overflow fills adjacent columns from left to right with the zoom-adjusted gap',()=>{
+ for(const scale of [.5,1,2]){
+  const h=harness(),gap=32/scale,boxes=[],session={artifacts:new Map()},view={x:3400,y:4800,w:6000,h:5000,scale};
+  for(let i=0;i<18;i++){
+   const plan=h.context.mcpArrange(6000,5000,session,{},view,a=>boxes[a.index],box=>boxes.filter(b=>h.context.intersection(box,b))),
+    box={...plan.placement,w:6000,h:5000};
+   assert.ok(boxes.every(b=>!h.context.intersection(box,b)));
+   assert.ok(box.x>=0&&box.x+box.w<=32768&&box.y>=0&&box.y+box.h<=32768);
+   boxes.push(box);session.artifacts.set(String(i),{index:i});
+  }
+  for(let i=0;i<5;i++)assert.deepEqual([boxes[i].x,boxes[i].y],[3400,4800+i*(5000+gap)],'first column stays unchanged');
+  for(let i=5;i<11;i++)assert.deepEqual([boxes[i].x,boxes[i].y],[3400+6000+gap,(i-5)*(5000+gap)]);
+  assert.deepEqual([boxes[11].x,boxes[11].y],[3400+2*(6000+gap),0]);
+ }
+});
+
+test('overflow clears the widest object in the current column and obstacles in the next',()=>{
+ const h=harness(),first={x:3400,y:0,w:7000,h:16000},last={x:3400,y:16032,w:5000,h:16000},
+  obstacle={x:10432,y:0,w:1000,h:1000},boxes=[first,last,obstacle],session={artifacts:new Map([['first',{box:first}],['last',{box:last}]])},
+  plan=h.context.mcpArrange(5000,5000,session,{},null,a=>a.box,box=>boxes.filter(b=>h.context.intersection(box,b)));
+ assert.deepEqual([plan.placement.x,plan.placement.y],[10432,1032]);
+ assert.ok(boxes.every(b=>!h.context.intersection({...plan.placement,w:5000,h:5000},b)));
+});
+
+test('overflow still finds space to the left when the current column reaches the right edge',()=>{
+ const h=harness(),previous={x:26768,y:0,w:6000,h:32768},session={artifacts:new Map([['last',{box:previous}]])},
+  plan=h.context.mcpArrange(6000,5000,session,{},null,a=>a.box,box=>h.context.intersection(box,previous)?[previous]:[]);
+ assert.ok(plan.placement.x<previous.x);
+ assert.equal(h.context.intersection({...plan.placement,w:6000,h:5000},previous),false);
+});
+
 
 test('interleaved sessions reveal the most recently queued result',async()=>{
  const h=harness();h.state.scale=.5;h.mcpRuntime.socket={readyState:1,close(){}};h.mcpRuntime.ready=true;

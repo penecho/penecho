@@ -292,7 +292,7 @@ test("science snapshot hooks are bounded and failures do not displace the ordina
       scienceMode:false,activeSnapshot:null,activeSnapshotRender:null,
       globalThis:{ __penechoScienceSnapshotHooks:{ beforeSnapshot() { throw Error("collision"); } } },
       snapshotDebugLog() {},
-      schedulePresentationSize() {},
+      reportPresentationScrollExtent() {},
       snapshotDocument: async (message, requirePresentedFrame) => {
         snapshotCalls.push(requirePresentedFrame);
         return "ordinary";

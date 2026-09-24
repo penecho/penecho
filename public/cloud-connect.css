@@ -24,6 +24,9 @@
 .cloud-account-dot { background: #8b94a1; border: 2px solid var(--panel, #fff); border-radius: 50%; height: .55rem; width: .55rem; }
 .cloud-account-button[data-state="connected"] .cloud-account-dot { background: #10b981; }
 .cloud-share-canvas { color: var(--studio-accent-strong, #4338ca); }
+#shareCanvasBtn[data-live-shared="true"] svg circle,
+#canvasViewShareBtn[data-live-shared="true"] svg circle,
+.object-chrome-button.share.is-shared svg circle { fill: currentColor; }
 
 .object-chrome-button.favorite { color: #9b611e; }
 .object-chrome-button.share { color: var(--studio-accent-strong, #4338ca); }

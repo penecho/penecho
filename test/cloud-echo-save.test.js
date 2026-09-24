@@ -40,6 +40,8 @@ function harness(overrides = {}) {
     setHistorySaveBusy:(busy) => { events.push({ type:"busy", busy }); },
     showHistoryNoticeKey:(key, tone, duration) => { events.push({ type:"notice-key", key, tone, duration }); },
     selectionAIBusy:() => false,
+    finalizeCanvasForSnapshot:async () => { events.push({ type:"finalize" }); },
+    canvasHasShareableContent:() => true,
     canvasHasUnsavedChanges:() => true,
     selectionAIStatusKey:() => "selectionBusy",
     setStatus:(message) => { events.push({ type:"status", message }); },
@@ -119,19 +121,25 @@ test("saveCurrentCanvas reports a Cloud save failure without showing a success n
 test("live sharing saves local content to Cloud without requiring a linked device", async () => {
   const run = harness({window:{PENECHO_CONFIG:{runtime:"local"}}});
   assert.equal(await run.saveLiveShareToCloud(), SAVED_CANVAS_ID);
-  assert.deepEqual(run.events.map(event => event.type), ["location", "cloud-projects", "save"]);
-  assert.equal(run.events[2].options.overwriteId,null);
+  assert.deepEqual(run.events.map(event => event.type), ["finalize", "location", "cloud-projects", "save"]);
+  assert.equal(run.events[3].options.overwriteId,null);
 });
 
 test("live sharing keeps the existing Cloud Canvas identity", async () => {
   const run = harness({state:{currentSnapshotLocation:"cloud",currentSnapshotId:SAVED_CANVAS_ID}});
   await run.saveLiveShareToCloud();
-  assert.equal(run.events[2].options.overwriteId,SAVED_CANVAS_ID);
+  assert.equal(run.events[3].options.overwriteId,SAVED_CANVAS_ID);
 });
 
 
 test("sharing an unchanged Cloud Canvas does not create another revision", async () => {
   const run=harness({state:{currentSnapshotLocation:"cloud",currentSnapshotId:SAVED_CANVAS_ID},canvasHasUnsavedChanges:()=>false});
   assert.equal(await run.saveLiveShareToCloud(),SAVED_CANVAS_ID);
-  assert.deepEqual(run.events,[]);
+  assert.deepEqual(run.events,[{type:"finalize"}]);
+});
+
+test("empty Canvas sharing stops before Cloud save or share request", async () => {
+  const run=harness({canvasHasShareableContent:() => false});
+  await assert.rejects(run.saveLiveShareToCloud(), /emptyCanvas/);
+  assert.deepEqual(run.events,[{type:"finalize"}]);
 });

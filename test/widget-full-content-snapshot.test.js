@@ -8,7 +8,7 @@ for(const fullContent of [false,true])test(`snapshot fullContent=${fullContent} 
  const context={clock:()=>0,widgetState:{maximized:true,scaleX},document:{documentElement:{clientWidth:800,clientHeight:400,scrollWidth:800,scrollHeight:1400},body:{scrollWidth:800,scrollHeight:1400,querySelectorAll:()=>[]}},
  HIGH_RESOLUTION_SNAPSHOT_SCALE:1.5,MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION:3600,MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS:10800000,MAX_SNAPSHOT_DIMENSION:2400,MAX_SNAPSHOT_PIXELS:4800000,
  snapshotDebugLog(){},mcpPreviewMode:true,waitForSnapshotViewport:async()=>{},settleSnapshotFrame:async()=>true,
- inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},schedulePresentationSize(){},
+ inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},reportPresentationScrollExtent(){},
  snapshotPrimarySvg:async(w,h,scale)=>{sizes.push([w,h]);return {width:Math.floor(w*scale),height:Math.floor(h*scale),toDataURL:()=> 'data:image/png;base64,new'};},
  withTimeout:async p=>p,parent:{postMessage:m=>messages.push(m)},runtimeVersion:1,activeSnapshotRender:null};
  vm.createContext(context);vm.runInContext(captureSource,context);
@@ -58,7 +58,7 @@ test('scrolled full captures use document coordinates while viewport captures ke
   const context={clock:()=>0,scrollX:25,scrollY:500,document:{documentElement:{scrollWidth:900,scrollHeight:1400},body:{scrollWidth:900,scrollHeight:1400,querySelectorAll:()=>[]}},
    HIGH_RESOLUTION_SNAPSHOT_SCALE:1.5,MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION:3600,MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS:10800000,MAX_SNAPSHOT_DIMENSION:2400,MAX_SNAPSHOT_PIXELS:4800000,
    snapshotDebugLog(){},mcpPreviewMode:false,settleSnapshotFrame:async()=>true,snapshotPrimarySvg:async()=>null,
-   inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},materializeSnapshotGeneratedContent:()=>()=>{},captureDirectRendererStyleMutations:()=>()=>{},schedulePresentationSize(){},
+   inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},materializeSnapshotGeneratedContent:()=>()=>{},captureDirectRendererStyleMutations:()=>()=>{},reportPresentationScrollExtent(){},
    html2canvas:async(element,opts)=>{options=opts;return {width:opts.width,height:opts.height,toDataURL:()=> 'data:image/png;base64,new'};},
    withTimeout:async p=>p,parent:{postMessage(){}},runtimeVersion:1,activeSnapshotRender:null};
   vm.createContext(context);vm.runInContext(captureSource,context);

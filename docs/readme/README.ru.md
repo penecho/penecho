@@ -20,7 +20,7 @@
 <h1 align="center">Пространство для работы<br>и размышлений с ИИ.</h1>
 <p align="center">Рисуйте, исследуйте и создавайте со встроенным Agent или своим ИИ-ассистентом с поддержкой MCP.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Версия 1.3.3">
+  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="Версия 1.3.4">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

@@ -20,7 +20,7 @@
 <h1 align="center">Um espaço de trabalho visual<br>para pensar com IA.</h1>
 <p align="center">Desenhe, explore e crie com o Agent integrado ou seu próprio assistente compatível com MCP.</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.3-087f83" alt="Versão 1.3.3">
+  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="Versão 1.3.4">
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
 </p>
 <p align="center">

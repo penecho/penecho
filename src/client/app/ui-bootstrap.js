@@ -1809,6 +1809,7 @@
     currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
     saveForShare:saveLiveShareToCloud,
+    hasShareableContent:canvasHasShareableContent,
     shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
