@@ -1,7 +1,6 @@
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
-      STUDIO_NAVIGATOR_OPEN_KEY = "penecho-studio-navigator-open",
       STUDIO_EDGE_SWIPE_START_PX = 28,
       STUDIO_EDGE_SWIPE_COMMIT_PX = 56,
       STUDIO_EDGE_SWIPE_CANCEL_PX = 36,
@@ -40,7 +39,7 @@
       saveCanvasLabel = document.querySelector("#saveCanvasLabel"),
       canvasWelcome = document.querySelector("#canvasWelcome"),
       studioNavigatorCompactMedia = window.matchMedia?.("(max-width: 1100px)");
-    let studioNavigatorOpenPreference = storedStudioNavigatorOpen(),
+    let studioNavigatorOpenPreference = false,
       studioNavigatorMcpEnabled = false,
       studioNavigatorActiveTab = storedStudioNavigatorTab(),
       studioNavigatorWorkPreviewUrls = new Map(),
@@ -63,12 +62,6 @@
       studioEdgeSwipe = null;
     const studioNavigatorExpandedGroups = new Map();
     let studioNavigatorOpenExpanded=false,studioNavigatorOpenCollapsed=false,studioNavigatorCanvasLocation="all",studioNavigatorCanvasSort="modified",studioNavigatorMcpExpanded=false,studioNavigatorMcpSignature="";
-
-    function storedStudioNavigatorOpen() {
-      if (studioNavigatorCompactMedia?.matches) return false;
-      try { return localStorage.getItem(STUDIO_NAVIGATOR_OPEN_KEY) !== "false"; }
-      catch { return true; }
-    }
 
     function storedStudioNavigatorTab() {
       try {
@@ -243,10 +236,9 @@
       studioNavigator.addEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
-    function setStudioNavigatorOpen(open, { restoreAgent = true, persist = false } = {}) {
+    function setStudioNavigatorOpen(open, { restoreAgent = true } = {}) {
       const motion=window.PenEchoShellMotion?.capture();
       studioNavigatorOpenPreference = Boolean(open);
-      if (persist) { try { localStorage.setItem(STUDIO_NAVIGATOR_OPEN_KEY, String(Boolean(open))); } catch {} }
       if (open) restoreCanvasChromeMaterial();
       document.body.classList.toggle("studio-navigator-open", studioNavigatorIsStudio() && studioNavigatorOpenPreference);
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
@@ -1238,10 +1230,10 @@
       if(opening&&studioNavigatorToggle.dataset.workspaceUpdates==="true"){
         studioNavigatorSearch.value="";setStudioNavigatorTab(studioNavigatorMcpEnabled?"mcp":"all");
       }
-      setStudioNavigatorOpen(opening, { persist:true });
+      setStudioNavigatorOpen(opening);
     }
     studioNavigatorToggle.addEventListener("click", toggleStudioWorkspaceNavigator);
-    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false, { persist:true }));
+    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false));
     studioNavigatorScrim.addEventListener("click", () => setStudioNavigatorOpen(false));
     studioNavigatorSearch.addEventListener("input", renderActiveStudioNavigatorHistory);
     studioNavigatorSearch.addEventListener("keydown", event => {
@@ -1310,7 +1302,7 @@
     window.addEventListener("penecho:languagechange", renderStudioNavigator);
     window.PenEchoStudioNavigator = Object.freeze({
       render:renderStudioNavigator,
-      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false,persist:true});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
+      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
       renderMcpStatus:syncStudioNavigatorMcpPresentation,
       renderWork:()=>{if(studioNavigatorActiveTab==="all")renderStudioWorkHistory();},
       renderAgent:()=>{studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();},

@@ -4347,10 +4347,8 @@
       activate:() => void downloadWidgetImage(widget),
     });
     if (options.objectToolbarKey && !widget.pending) {
-      items.unshift({key:`widget:${widget.id}:ask-agent`, kind:"askagent", label:t("widgetAskAgent"), baseWidth:108, iconOnly:false,
-        activate:() => { openCanvasAgent({focus:false}); canvasAgentToggleReference(widget.id,true); canvasAgentInput.focus(); }});
       items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
-      const order = ["askagent", "interact", "favorite", "copy", "echo", "share", "download", "delete"];
+      const order = ["interact", "favorite", "copy", "echo", "share", "download", "delete"];
       items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
     }
     if (!items.length) return;

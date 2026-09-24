@@ -28,9 +28,11 @@
   }
   function widgetPresentationScale(widget) {
     const style = getComputedStyle(widget.shell),
-      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
-    // Match Cloud's width-fit presentation, independent of Canvas zoom.
-    return width / widget.contentW * ((widget.presentationZoom || 100) / 100);
+      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+      contentWidth = widget.presentationScrollContent?.width;
+    // Fit the full page, including horizontal overflow reported by its host.
+    const pageWidth = Math.max(widget.contentW, Number.isFinite(contentWidth) ? contentWidth : 0);
+    return width / pageWidth * ((widget.presentationZoom || 100) / 100);
   }
   function syncWidgetPresentationScroll(widget) {
     if (!widget.maximized || !widget.presentationScrollMetrics) return;
@@ -48,7 +50,6 @@
       outside = Math.max(0, height * scale - available),
       content = widget.presentationScrollContent,
       extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
-      extraX = content ? Math.max(0, content.width - content.viewportWidth) : 0,
       width = Math.max(1, shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
     widget.presentationScrollMetrics = { scale, outside };
     const declaration = widget.styleRule.style;
@@ -58,7 +59,7 @@
     // Only the scroll track grows. The iframe viewport depends on the window
     // and saved height, never on measured content (including vh/percentage CSS).
     widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
-    widget.presentationScrollExtent.style.width = `${width + extraX * scale + (extraX ? parseFloat(style.paddingRight) : 0)}px`;
+    widget.presentationScrollExtent.style.width = `${Math.max(width, (content?.width || 0) * scale)}px`;
     syncWidgetPresentationScroll(widget);
     sendWidgetHostState(widget);
   }

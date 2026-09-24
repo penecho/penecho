@@ -202,21 +202,22 @@
   // Root :has([hidden]) rules invalidate thousands of unrelated descendants
   // when a preview or panel toggles visibility. Mirror only the hint/chrome
   // state at its actual consumers instead.
-  const hintSlot=document.querySelector("#pageHintSlot"),textHint=document.querySelector(".text-input-hint"),mcpNotice=document.querySelector("#mcpCanvasNotice");
+  const hintSlot=document.querySelector("#pageHintSlot"),textHint=document.querySelector(".text-input-hint"),toolHint=document.querySelector("#canvasHint");
   const lightweightTargets=[sidebarToolbar,...motionPanels].filter(Boolean),pausedNotice=document.querySelector("#canvasAutoPausedNotice"),pausedTools=document.querySelector("#aiToolsSection");
   function syncNavigationChrome() {
     if(!motionViewport)return;
     const classes=motionViewport.classList;
     const paused=Boolean(pausedNotice&&!pausedNotice.hidden);if(pausedTools&&pausedTools.classList.contains("studio-auto-paused")!==paused)pausedTools.classList.toggle("studio-auto-paused",paused);
-    const mode=textHint&&!textHint.hidden?"text":classes.contains("navigation-locked")?"locked":classes.contains("is-navigating")&&(!mcpNotice||mcpNotice.hidden)?"pan":"none";
+    const hasToolHint=Boolean(toolHint&&!toolHint.hidden);
+    const mode=textHint&&!textHint.hidden?"text":classes.contains("navigation-locked")?"locked":classes.contains("is-navigating")&&!hasToolHint?"pan":"none";
     if(hintSlot&&hintSlot.dataset.navigationHint!==mode)hintSlot.dataset.navigationHint=mode;
-    const navigating=String(classes.contains("is-navigating")||classes.contains("navigation-locked"));if(hintSlot&&hintSlot.dataset.navigationActive!==navigating)hintSlot.dataset.navigationActive=navigating;
+    const navigating=String((classes.contains("is-navigating")&&!hasToolHint)||classes.contains("navigation-locked"));if(hintSlot&&hintSlot.dataset.navigationActive!==navigating)hintSlot.dataset.navigationActive=navigating;
     const light=classes.contains("canvas-chrome-lightweight")||classes.contains("is-drawing");
     for(const target of lightweightTargets)if(target.classList.contains("studio-chrome-lightweight")!==light)target.classList.toggle("studio-chrome-lightweight",light);
   }
   const navigationChromeObserver=new MutationObserver(syncNavigationChrome);
   if(motionViewport)navigationChromeObserver.observe(motionViewport,{attributes:true,attributeFilter:["class"]});
-  for(const target of [textHint,mcpNotice,pausedNotice])if(target)navigationChromeObserver.observe(target,{attributes:true,attributeFilter:["hidden"]});
+  for(const target of [textHint,toolHint,pausedNotice])if(target)navigationChromeObserver.observe(target,{attributes:true,attributeFilter:["hidden"]});
   syncNavigationChrome();
 
   const viewControls = document.querySelector("#canvasZoomControls");
@@ -309,6 +310,7 @@
       const values = {
         "view-x": available.left,
         "tools-x": toolsX,
+        "tools-width": measure(dock).width,
         "ai-x": aiX,
         "tools-max": available.width,
         "canvas-width": available.width,

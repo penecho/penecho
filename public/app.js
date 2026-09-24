@@ -1653,7 +1653,7 @@ if (typeof module === "object" && module.exports) module.exports = PenEchoApiPre
     MIXED_FORMULA_MAX_LENGTH = 512,
     AI_TEXT_MAX_LENGTH = 1000,
     COPY_STATUS_MS = 1600,
-    NAVIGATION_HINT_VISIBLE_MS = 10000,
+    NAVIGATION_HINT_VISIBLE_MS = 5000,
     CANVAS_CHROME_MATERIAL_RESTORE_MS = 1000,
     CANVAS_AGENT_NAVIGATION_RESTORE_MS = 500,
     ANIMATION_CONTROLS_VISIBLE_MS = 10000;
@@ -2459,16 +2459,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintWidgetAdded: "Mark a widget with Pen, then choose AI Refine.",
       canvasHintWidgetFullscreen: "Double-click a widget to maximize it.",
       canvasHintWidgetInline: "Double-click a widget to interact.",
-      canvasHintShortcutAgent: "{shortcut}: open or close Agent.",
-      canvasHintShortcutSave: "{shortcut}: save canvas.",
-      canvasHintShortcutUndoRedo: "{undo}: undo · {redo}: redo.",
-      canvasHintShortcutLibrary: "{shortcut}: open Canvas Library.",
-      canvasHintShortcutFullscreen: "{shortcut}: toggle fullscreen.",
-      canvasHintShortcutSettings: "{shortcut}: open Settings.",
+      canvasHintShortcutAgent: "{shortcut} Open or close Agent",
+      canvasHintShortcutSave: "{shortcut} Save canvas",
+      canvasHintShortcutUndoRedo: "{undo} Undo · {redo} Redo",
+      canvasHintShortcutLibrary: "{shortcut} Open Canvas Library",
+      canvasHintShortcutFullscreen: "{shortcut} Toggle fullscreen",
+      canvasHintShortcutSettings: "{shortcut} Open Settings",
       canvasHintMcp: "Settings → MCP: connect an AI client.",
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
-      canvasHintHand: "Drag to pan; click an object to select.",
-      canvasHintHandAlt: "Hold Space to pan temporarily.",
+      canvasHintHand: "Drag to pan · click an object to select",
+      canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
       canvasHintWidgetTouchHand: "Select → Interact: use widget content.",
       canvasHintLasso: "Click an object to move or resize; drag empty canvas to lasso.",
       canvasHintLassoAlt: "Double-click a widget to interact.",
@@ -3594,16 +3594,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     t,
     currentLanguage:() => state.language,
   });
+  let canvasHintTimer = null;
   function renderCanvasHint(restart = false) {
     if (!canvasHint || !state.canvasHintKey) return;
-    let message = t(state.canvasHintKey);
-    for (const [key, value] of Object.entries(state.canvasHintValues || {})) message = message.replaceAll(`{${key}}`, String(value));
-    canvasHint.textContent = `${t("hintPrefix")}: ${message}`;
-    canvasHint.hidden = false;
+    const values = state.canvasHintValues || (state.canvasHintKey === "canvasHintHandAlt" ? { shortcut:"Space" } : {}),
+      content = document.createDocumentFragment();
+    for (const part of t(state.canvasHintKey).split(/(\{\w+\})/g)) {
+      const key = /^\{(\w+)\}$/.exec(part)?.[1] || "";
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        const keycap = document.createElement(["shortcut", "undo", "redo"].includes(key) ? "kbd" : "span");
+        keycap.textContent = String(values[key]);
+        content.append(keycap);
+      } else content.append(part);
+    }
+    canvasHint.replaceChildren(content);
     if (!restart) return;
-    canvasHint.classList.remove("is-new");
-    void canvasHint.offsetWidth;
-    canvasHint.classList.add("is-new");
+    clearTimeout(canvasHintTimer);
+    canvasHint.hidden = false;
+    canvasHintTimer = setTimeout(() => {
+      canvasHint.hidden = true;
+      canvasHintTimer = null;
+    }, 5000);
   }
   function showCanvasHint(keys) {
     const candidates = (Array.isArray(keys) ? keys : [keys])
@@ -10743,10 +10754,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       activate:() => void downloadWidgetImage(widget),
     });
     if (options.objectToolbarKey && !widget.pending) {
-      items.unshift({key:`widget:${widget.id}:ask-agent`, kind:"askagent", label:t("widgetAskAgent"), baseWidth:108, iconOnly:false,
-        activate:() => { openCanvasAgent({focus:false}); canvasAgentToggleReference(widget.id,true); canvasAgentInput.focus(); }});
       items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
-      const order = ["askagent", "interact", "favorite", "copy", "echo", "share", "download", "delete"];
+      const order = ["interact", "favorite", "copy", "echo", "share", "download", "delete"];
       items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
     }
     if (!items.length) return;
@@ -25376,8 +25385,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const panel=mcpEl("mcpStatusPopover"),button=mcpEl("mcpToolbarToggle");if(!panel||!button)return;
     const rect=button.getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
   }
-  async function mcpOpenStatus() {
+  let mcpStatusOpenAtPointerDown=false;
+  async function mcpOpenStatus(event) {
     const panel=mcpEl("mcpStatusPopover");if(!panel)return mcpToolbarClick();
+    const closingPointerClick=event?.detail>0&&mcpStatusOpenAtPointerDown;
+    mcpStatusOpenAtPointerDown=false;
+    // An auto popover may light-dismiss on pointer release before the button's click.
+    if(closingPointerClick){if(panel.matches(":popover-open"))panel.hidePopover();mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded","false");return;}
     if(panel.matches(":popover-open")){panel.hidePopover();return;}
     if(!mcpRuntime.wanted&&!mcpRuntime.socket&&!mcpRuntime.connectionLost&&!mcpRuntime.authRequired)void mcpToolbarClick();
     mcpRenderStatusPopover();mcpPositionStatusPopover();panel.showPopover();
@@ -26210,6 +26224,9 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   addEventListener("penecho:open-cloud-mcp",()=>{if(!mcpRuntime.wanted)mcpConnect();});
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});
+  addEventListener("pointerdown",event=>{
+    if(mcpEl("mcpToolbarToggle")?.contains(event.target))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
+  },true);
   mcpEl("mcpToolbarToggle")?.addEventListener("click",mcpOpenStatus);
   mcpEl("mcpStatusPopover")?.addEventListener("toggle",event=>mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded",String(event.newState==="open")));
   addEventListener("resize",()=>{if(mcpEl("mcpStatusPopover")?.matches(":popover-open"))mcpPositionStatusPopover();});
@@ -28382,7 +28399,6 @@ var canvasDocumentIdentity = (() => {
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
-      STUDIO_NAVIGATOR_OPEN_KEY = "penecho-studio-navigator-open",
       STUDIO_EDGE_SWIPE_START_PX = 28,
       STUDIO_EDGE_SWIPE_COMMIT_PX = 56,
       STUDIO_EDGE_SWIPE_CANCEL_PX = 36,
@@ -28421,7 +28437,7 @@ var canvasDocumentIdentity = (() => {
       saveCanvasLabel = document.querySelector("#saveCanvasLabel"),
       canvasWelcome = document.querySelector("#canvasWelcome"),
       studioNavigatorCompactMedia = window.matchMedia?.("(max-width: 1100px)");
-    let studioNavigatorOpenPreference = storedStudioNavigatorOpen(),
+    let studioNavigatorOpenPreference = false,
       studioNavigatorMcpEnabled = false,
       studioNavigatorActiveTab = storedStudioNavigatorTab(),
       studioNavigatorWorkPreviewUrls = new Map(),
@@ -28444,12 +28460,6 @@ var canvasDocumentIdentity = (() => {
       studioEdgeSwipe = null;
     const studioNavigatorExpandedGroups = new Map();
     let studioNavigatorOpenExpanded=false,studioNavigatorOpenCollapsed=false,studioNavigatorCanvasLocation="all",studioNavigatorCanvasSort="modified",studioNavigatorMcpExpanded=false,studioNavigatorMcpSignature="";
-
-    function storedStudioNavigatorOpen() {
-      if (studioNavigatorCompactMedia?.matches) return false;
-      try { return localStorage.getItem(STUDIO_NAVIGATOR_OPEN_KEY) !== "false"; }
-      catch { return true; }
-    }
 
     function storedStudioNavigatorTab() {
       try {
@@ -28624,10 +28634,9 @@ var canvasDocumentIdentity = (() => {
       studioNavigator.addEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
-    function setStudioNavigatorOpen(open, { restoreAgent = true, persist = false } = {}) {
+    function setStudioNavigatorOpen(open, { restoreAgent = true } = {}) {
       const motion=window.PenEchoShellMotion?.capture();
       studioNavigatorOpenPreference = Boolean(open);
-      if (persist) { try { localStorage.setItem(STUDIO_NAVIGATOR_OPEN_KEY, String(Boolean(open))); } catch {} }
       if (open) restoreCanvasChromeMaterial();
       document.body.classList.toggle("studio-navigator-open", studioNavigatorIsStudio() && studioNavigatorOpenPreference);
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
@@ -29619,10 +29628,10 @@ var canvasDocumentIdentity = (() => {
       if(opening&&studioNavigatorToggle.dataset.workspaceUpdates==="true"){
         studioNavigatorSearch.value="";setStudioNavigatorTab(studioNavigatorMcpEnabled?"mcp":"all");
       }
-      setStudioNavigatorOpen(opening, { persist:true });
+      setStudioNavigatorOpen(opening);
     }
     studioNavigatorToggle.addEventListener("click", toggleStudioWorkspaceNavigator);
-    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false, { persist:true }));
+    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false));
     studioNavigatorScrim.addEventListener("click", () => setStudioNavigatorOpen(false));
     studioNavigatorSearch.addEventListener("input", renderActiveStudioNavigatorHistory);
     studioNavigatorSearch.addEventListener("keydown", event => {
@@ -29691,7 +29700,7 @@ var canvasDocumentIdentity = (() => {
     window.addEventListener("penecho:languagechange", renderStudioNavigator);
     window.PenEchoStudioNavigator = Object.freeze({
       render:renderStudioNavigator,
-      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false,persist:true});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
+      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
       renderMcpStatus:syncStudioNavigatorMcpPresentation,
       renderWork:()=>{if(studioNavigatorActiveTab==="all")renderStudioWorkHistory();},
       renderAgent:()=>{studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();},
@@ -30102,9 +30111,11 @@ var canvasDocumentIdentity = (() => {
   }
   function widgetPresentationScale(widget) {
     const style = getComputedStyle(widget.shell),
-      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
-    // Match Cloud's width-fit presentation, independent of Canvas zoom.
-    return width / widget.contentW * ((widget.presentationZoom || 100) / 100);
+      width = Math.max(1, widget.shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+      contentWidth = widget.presentationScrollContent?.width;
+    // Fit the full page, including horizontal overflow reported by its host.
+    const pageWidth = Math.max(widget.contentW, Number.isFinite(contentWidth) ? contentWidth : 0);
+    return width / pageWidth * ((widget.presentationZoom || 100) / 100);
   }
   function syncWidgetPresentationScroll(widget) {
     if (!widget.maximized || !widget.presentationScrollMetrics) return;
@@ -30122,7 +30133,6 @@ var canvasDocumentIdentity = (() => {
       outside = Math.max(0, height * scale - available),
       content = widget.presentationScrollContent,
       extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
-      extraX = content ? Math.max(0, content.width - content.viewportWidth) : 0,
       width = Math.max(1, shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
     widget.presentationScrollMetrics = { scale, outside };
     const declaration = widget.styleRule.style;
@@ -30132,7 +30142,7 @@ var canvasDocumentIdentity = (() => {
     // Only the scroll track grows. The iframe viewport depends on the window
     // and saved height, never on measured content (including vh/percentage CSS).
     widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
-    widget.presentationScrollExtent.style.width = `${width + extraX * scale + (extraX ? parseFloat(style.paddingRight) : 0)}px`;
+    widget.presentationScrollExtent.style.width = `${Math.max(width, (content?.width || 0) * scale)}px`;
     syncWidgetPresentationScroll(widget);
     sendWidgetHostState(widget);
   }

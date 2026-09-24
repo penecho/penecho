@@ -251,6 +251,21 @@ test('presentation fits width on entry and resize, with manual zoom and cleanup'
  assert.equal(properties.has('--widget-page-scale'),false);
 });
 
+test('maximized wide pages fit their full width without an outer horizontal scroll track',()=>{
+ const h=harness(),{widget}=widgetFixture();
+ const properties=new Map();
+ widget.styleRule={style:{setProperty:(k,v)=>properties.set(k,v),removeProperty:k=>properties.delete(k)}};
+ h.api.setWidgetMaximized(widget,true);
+ widget.presentationScrollContent={width:1800,viewportWidth:480,height:1200,viewportHeight:320};
+ h.api.updateWidgetPresentationScroll(widget);
+ assert.equal(Number(properties.get('--widget-page-scale')),1400/1800);
+ assert.equal(widget.presentationScrollExtent.style.width,'1400px');
+ assert.ok(parseFloat(widget.presentationScrollExtent.style.height)>widget.shell.clientHeight);
+ h.api.setWidgetPresentationZoom(widget,50);
+ assert.equal(Number(properties.get('--widget-page-scale')),700/1800);
+ assert.equal(widget.presentationScrollExtent.style.width,'1400px');
+});
+
 test('content changes grow the scroll track without resizing the layout viewport',()=>{
  const h=harness(),{widget}=widgetFixture();
  widget.h=widget.contentH=1100;widget.w=widget.contentW=900;

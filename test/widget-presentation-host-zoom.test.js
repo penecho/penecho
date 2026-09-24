@@ -101,6 +101,15 @@ test("toolbar zoom scales the width-fit view and exit restores Canvas scale", ()
   assert.equal(h.messages.at(-1).message.scaleX,1);
 });
 
+test("reported page overflow reduces the host scale to fit the whole page", () => {
+  const h=harness({maximized:true});
+  h.widget.presentationScrollContent={width:1200,viewportWidth:320};
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,.8);
+  assert.equal(h.messages.at(-1).message.scaleY,.8);
+  assert.equal(h.widget.contentW,320);
+});
+
 test("the host keeps its existing inner iframe at native full size", () => {
   const host=fs.readFileSync(path.join(__dirname,'../public/widget-host.js'),'utf8');
   const messages=[],inner={style:{},contentWindow:{postMessage:m=>messages.push(m)}};

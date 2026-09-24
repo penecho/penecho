@@ -693,7 +693,8 @@ test("contextual Canvas hints share one quiet application-footer line by priorit
     acceptWidget = functionSource(app, "acceptPendingWidget");
   assert.match(html, /id="canvasHint" class="canvas-hint" role="status" aria-live="polite" hidden/);
   assert.doesNotMatch(html, /data-i18n="footerTip"|AI drafts: move the whole group/);
-  assert.match(renderHint, /Object\.entries\(state\.canvasHintValues \|\| \{\}\)[\s\S]*?replaceAll\(`[\s\S]*?canvasHint\.textContent = `\$\{t\("hintPrefix"\)\}: \$\{message\}`[\s\S]*?canvasHint\.hidden = false/);
+  assert.match(renderHint, /document\.createDocumentFragment\(\)[\s\S]*?keycap\.textContent = String\(values\[key\]\)[\s\S]*?canvasHint\.replaceChildren\(content\)/);
+  assert.doesNotMatch(renderHint, /hintPrefix|innerHTML/);
   assert.match(app, /hintPrefix:\s*"Hint"/);
   assert.match(zh, /hintPrefix:\s*"提示"/);
   assert.match(zh, /pluginPreview:\s*"预览"/);
@@ -957,7 +958,7 @@ test("clicking eraser switches its current mode and shows two auto-closing choic
   }
 });
 
-test("canvas navigation guidance emphasizes middle-mouse panning for at least ten seconds", () => {
+test("canvas navigation guidance disappears after five seconds without navigation", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -965,7 +966,7 @@ test("canvas navigation guidance emphasizes middle-mouse panning for at least te
     navigating = functionSource(app, "setNavigating");
 
   assert.match(html, /id="tip"[^>]*data-i18n="tip"/);
-  assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
+  assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*5000/);
   assert.match(navigating, /view\.classList\.add\("is-navigating"\)[\s\S]*?NAVIGATION_HINT_VISIBLE_MS/);
   assert.match(functionSource(app, "wheelNavigating"), /setNavigating\(true\)/);
   assert.match(app, /fit\(\);\s*if\(window\.PENECHO_CONFIG\?\.runtime!=="cloud"\)void window\.PenEchoPlayground\?\.start\(\)[^;]*;\s*setNavigating\(true\)/);
@@ -1179,7 +1180,7 @@ test("Canvas chrome uses one drawing and navigation cooldown before restoring st
   const navigationTimers = [], navigationClasses = new Set(),
     navigationState = { navigationTimer:0, navigationDeadline:0 },
     runNavigation = vm.runInNewContext(`(${navigating})`, {
-      NAVIGATION_HINT_VISIBLE_MS:10000,
+      NAVIGATION_HINT_VISIBLE_MS:5000,
       performance:{ now:() => navigationNow }, navigationState,
       state:navigationState,
       noteCanvasChromeInteraction() {},
@@ -1193,19 +1194,19 @@ test("Canvas chrome uses one drawing and navigation cooldown before restoring st
     });
   runNavigation(true);
   assert.equal(navigationTimers.length, 1, "navigation starts one hint timer");
-  assert.equal(navigationState.navigationDeadline, 10100);
+  assert.equal(navigationState.navigationDeadline, 5100);
   assert.ok(navigationClasses.has("is-navigating"));
   navigationNow = 900;
   runNavigation(true);
   assert.equal(navigationTimers.length, 1, "wheel events only extend the navigation deadline");
-  assert.equal(navigationState.navigationDeadline, 10900);
-  navigationNow = 10100;
+  assert.equal(navigationState.navigationDeadline, 5900);
+  navigationNow = 5100;
   navigationTimers[0].callback();
   assert.equal(navigationTimers.length, 2);
   assert.equal(navigationTimers[1].delay, 800);
   assert.ok(navigationClasses.has("is-navigating"));
   assert.equal(followFlushes, 0, "follow latest waits for the full navigation deadline");
-  navigationNow = 10901;
+  navigationNow = 5901;
   navigationTimers[1].callback();
   assert.equal(navigationState.navigationTimer, 0);
   assert.equal(navigationState.navigationDeadline, 0);
@@ -1244,7 +1245,7 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.match(css, /#viewport\.is-navigating \.canvas-fit-contents[^}]*opacity:\s*\.58/);
   assert.match(css, /\.canvas-navigation-lock-hint\s*\{[^}]*max-width:\s*min\(440px, 100%\)[^}]*visibility:\s*hidden[^}]*opacity:\s*0[^}]*white-space:\s*nowrap/);
   assert.match(css, /\.page-hint-slot\[data-navigation-hint="locked"\] \.canvas-navigation-lock-hint\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
-  assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
+  assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*5000/);
   assert.match(toggle, /state\.navigationLocked = Boolean\(locked\)[\s\S]*?view\.classList\.toggle\("navigation-locked"[\s\S]*?syncWidgetHostStates\(\)[\s\S]*?setNavigating\(true\)/);
   assert.match(move, /if \(state\.navigationLocked\)[\s\S]*?return false[\s\S]*?canvasClientDelta\(dx, dy\)[\s\S]*?state\.panX \+= delta\.x/);
   assert.match(zoom, /if \(state\.navigationLocked\)[\s\S]*?return false[\s\S]*?state\.scale = next/);
@@ -3639,8 +3640,8 @@ test("Studio navigator groups recent Agent sessions by canvas and opens the boun
   assert.match(html, /id="studioNavigator"[^>]*aria-labelledby="studioNavigatorTitle"[\s\S]*?id="studioNavigatorAllPanel"[\s\S]*?id="studioNavigatorAgentPanel"[\s\S]*?id="studioNavigatorCanvasPanel"/);
   assert.match(html, /id="studioNavigatorSearch"[^>]*type="search"/);
   assert.match(build, /src\/client\/app\/studio-navigator\.js/);
-  assert.match(navigator, /let studioNavigatorOpenPreference = storedStudioNavigatorOpen\(\)/);
-  assert.match(navigator, /STUDIO_NAVIGATOR_OPEN_KEY = "penecho-studio-navigator-open"/);
+  assert.match(navigator, /let studioNavigatorOpenPreference = false/);
+  assert.doesNotMatch(navigator, /STUDIO_NAVIGATOR_OPEN_KEY|storedStudioNavigatorOpen/);
   assert.match(functionSource(navigator, "studioNavigatorWorkGroups"), /sort\(\(a,b\)=>\(b\.savedAt\|\|b\.firstSeenAt\|\|0\)-\(a\.savedAt\|\|a\.firstSeenAt\|\|0\)/);
   assert.match(navigator, /className="studio-navigator-group"[\s\S]*?className="studio-navigator-group-conversations"/);
   assert.match(functionSource(navigator, "studioNavigatorCanvasGroupSnapshot"), /snapshotItemsLocation===identity\.location[\s\S]*?snapshotItems\.find\(candidate=>candidate\.id===identity\.id\)[\s\S]*?studioNavigatorCanvasGroupSnapshots\.set\(key,item\)/);

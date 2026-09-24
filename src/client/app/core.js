@@ -267,7 +267,7 @@
     MIXED_FORMULA_MAX_LENGTH = 512,
     AI_TEXT_MAX_LENGTH = 1000,
     COPY_STATUS_MS = 1600,
-    NAVIGATION_HINT_VISIBLE_MS = 10000,
+    NAVIGATION_HINT_VISIBLE_MS = 5000,
     CANVAS_CHROME_MATERIAL_RESTORE_MS = 1000,
     CANVAS_AGENT_NAVIGATION_RESTORE_MS = 500,
     ANIMATION_CONTROLS_VISIBLE_MS = 10000;
@@ -1073,16 +1073,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintWidgetAdded: "Mark a widget with Pen, then choose AI Refine.",
       canvasHintWidgetFullscreen: "Double-click a widget to maximize it.",
       canvasHintWidgetInline: "Double-click a widget to interact.",
-      canvasHintShortcutAgent: "{shortcut}: open or close Agent.",
-      canvasHintShortcutSave: "{shortcut}: save canvas.",
-      canvasHintShortcutUndoRedo: "{undo}: undo · {redo}: redo.",
-      canvasHintShortcutLibrary: "{shortcut}: open Canvas Library.",
-      canvasHintShortcutFullscreen: "{shortcut}: toggle fullscreen.",
-      canvasHintShortcutSettings: "{shortcut}: open Settings.",
+      canvasHintShortcutAgent: "{shortcut} Open or close Agent",
+      canvasHintShortcutSave: "{shortcut} Save canvas",
+      canvasHintShortcutUndoRedo: "{undo} Undo · {redo} Redo",
+      canvasHintShortcutLibrary: "{shortcut} Open Canvas Library",
+      canvasHintShortcutFullscreen: "{shortcut} Toggle fullscreen",
+      canvasHintShortcutSettings: "{shortcut} Open Settings",
       canvasHintMcp: "Settings → MCP: connect an AI client.",
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
-      canvasHintHand: "Drag to pan; click an object to select.",
-      canvasHintHandAlt: "Hold Space to pan temporarily.",
+      canvasHintHand: "Drag to pan · click an object to select",
+      canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
       canvasHintWidgetTouchHand: "Select → Interact: use widget content.",
       canvasHintLasso: "Click an object to move or resize; drag empty canvas to lasso.",
       canvasHintLassoAlt: "Double-click a widget to interact.",
@@ -2208,16 +2208,27 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     t,
     currentLanguage:() => state.language,
   });
+  let canvasHintTimer = null;
   function renderCanvasHint(restart = false) {
     if (!canvasHint || !state.canvasHintKey) return;
-    let message = t(state.canvasHintKey);
-    for (const [key, value] of Object.entries(state.canvasHintValues || {})) message = message.replaceAll(`{${key}}`, String(value));
-    canvasHint.textContent = `${t("hintPrefix")}: ${message}`;
-    canvasHint.hidden = false;
+    const values = state.canvasHintValues || (state.canvasHintKey === "canvasHintHandAlt" ? { shortcut:"Space" } : {}),
+      content = document.createDocumentFragment();
+    for (const part of t(state.canvasHintKey).split(/(\{\w+\})/g)) {
+      const key = /^\{(\w+)\}$/.exec(part)?.[1] || "";
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        const keycap = document.createElement(["shortcut", "undo", "redo"].includes(key) ? "kbd" : "span");
+        keycap.textContent = String(values[key]);
+        content.append(keycap);
+      } else content.append(part);
+    }
+    canvasHint.replaceChildren(content);
     if (!restart) return;
-    canvasHint.classList.remove("is-new");
-    void canvasHint.offsetWidth;
-    canvasHint.classList.add("is-new");
+    clearTimeout(canvasHintTimer);
+    canvasHint.hidden = false;
+    canvasHintTimer = setTimeout(() => {
+      canvasHint.hidden = true;
+      canvasHintTimer = null;
+    }, 5000);
   }
   function showCanvasHint(keys) {
     const candidates = (Array.isArray(keys) ? keys : [keys])
