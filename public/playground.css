@@ -1,4 +1,5 @@
 /* Layout extends the PenEcho workbench; controls use the shared design language. */
+#playgroundToggle[hidden]{display:none!important}
 .playground-panel{position:fixed;z-index:160;left:50%;bottom:max(80px,calc(env(safe-area-inset-bottom) + 72px));transform:translateX(-50%);width:min(620px,calc(100vw - 32px));padding:16px;background:var(--panel,#fff);color:var(--ink,#202124);border-radius:12px;box-shadow:0 8px 32px #0002;box-sizing:border-box}
 .playground-panel[hidden],.playground-header[hidden]{display:none}
 .playground-panel header,.playground-panel footer,.playground-header,.playground-header nav{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -7,12 +8,15 @@
 .playground-panel footer{min-height:28px;font-size:12px;line-height:1.5}.playground-examples{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
 .playground-panel svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5}
 .playground-header{position:fixed;inset:max(16px,env(safe-area-inset-top)) 24px auto;z-index:150;pointer-events:none}.playground-header>*{pointer-events:auto}
-.playground-brand{display:flex;align-items:center;gap:8px;color:var(--ink,#202124);font:500 18px system-ui;text-decoration:none}.playground-brand img{width:28px;height:28px;object-fit:contain}
+.playground-brand{display:inline-flex;align-items:baseline;color:var(--ink,#202124);font:400 25px/1 system-ui,-apple-system,sans-serif;letter-spacing:-1.15px;text-decoration:none;white-space:nowrap}.playground-brand strong{font-weight:700}
+.playground-tools .top-row>#playgroundToggle{height:30px;min-height:30px;flex:0 0 auto;margin-inline:16px 14px;padding-inline:9px;border:1px solid var(--line,#d8dce0);border-radius:7px;background:var(--panel-raised,#fff);box-shadow:none;white-space:nowrap}
+.playground-tools .top-row>#playgroundToggle span::before{content:"← ";font-size:16px;font-weight:400}
 .playground-entry .topbar,.playground-entry #studioNavigator,.playground-entry .canvas-agent-panel,.playground-entry #canvasAgentPanel{display:none!important}
 .playground-entry .toolbar>:not(#canvasAgentToolbarHome){display:none!important}.playground-entry #mcpToolbarToggle,.playground-entry #canvasAgentToggle{display:none!important}
 .playground-entry .toolbar{left:50%!important;right:auto!important;transform:translateX(-50%);width:max-content!important}
 .playground-entry #viewport{--studio-navigator-width:0px}
-@media(max-width:700px){.playground-header{inset:max(12px,env(safe-area-inset-top)) 16px auto;gap:8px}.playground-header nav{gap:6px}.playground-brand span{display:none}.playground-panel{bottom:max(70px,calc(env(safe-area-inset-bottom) + 64px));padding:12px}.playground-examples{gap:6px}.playground-panel textarea{font-size:16px}}
+@media(max-width:700px){.playground-header{inset:max(12px,env(safe-area-inset-top)) 16px auto;gap:8px}.playground-header nav{gap:6px}.playground-brand{font-size:20px}.playground-panel{bottom:max(70px,calc(env(safe-area-inset-bottom) + 64px));padding:12px}.playground-examples{gap:6px}.playground-panel textarea{font-size:16px}}
+@media(max-width:700px){.playground-tools .top-row>#playgroundToggle{position:fixed;z-index:160;top:calc(112px + env(safe-area-inset-top));left:54px;margin:0;padding-inline:8px}.playground-tools .top-row>#playgroundToggle span{display:inline}}
 @media(prefers-reduced-motion:reduce){#playgroundToggle,.playground-panel{animation:none!important;transition:none!important}}
 
 .playground-dock{position:fixed;z-index:161;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%)}

@@ -4012,16 +4012,28 @@
       canvas = document.createElement("canvas"), context = canvas.getContext("2d");
     canvas.width = width;
     canvas.height = height;
-    await prepareVisibleWidgetSnapshots(region,false,signal);
-    assertCurrent?.();
-    const unavailableWidgetIds=capturableWidgets(region)
-      .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion)
-      .map(widget=>widget.id);
-    if(unavailableWidgetIds.length)throw canvasAgentToolError(
-      "WIDGET_CAPTURE_UNAVAILABLE",
-      "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
-      {objectIds:unavailableWidgetIds},
-    );
+    const widgetCaptureDeadline=performance.now()+WIDGET_SNAPSHOT_TIMEOUT_MS;
+    for(let attempt=0;attempt<3;attempt++){
+      const remaining=widgetCaptureDeadline-performance.now();
+      if(remaining<1000)throw canvasAgentToolError("WIDGET_CAPTURE_TIMEOUT","Canvas capture could not finish while Widgets were loading.");
+      try{
+        await prepareVisibleWidgetSnapshots(region,false,signal,false,remaining);
+      }catch(error){
+        assertCurrent?.();
+        if(error?.code==="WIDGET_CONTENT_CHANGED"&&attempt<2)continue;
+        throw error;
+      }
+      assertCurrent?.();
+      const unavailable=capturableWidgets(region)
+        .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion);
+      if(!unavailable.length)break;
+      if(attempt<2&&unavailable.every(widget=>widget.snapshotImage&&widget.snapshotVersion<widget.contentVersion))continue;
+      throw canvasAgentToolError(
+        "WIDGET_CAPTURE_UNAVAILABLE",
+        "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
+        {objectIds:unavailable.map(widget=>widget.id)},
+      );
+    }
     context.fillStyle = state.paint.paper;
     context.fillRect(0,0,width,height);
     context.save();

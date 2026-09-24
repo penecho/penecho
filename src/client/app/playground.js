@@ -1,8 +1,13 @@
   // Live Clay owns scene edits; the normal Canvas owns history, drafts and sharing.
   const playground = { ready:false, open:false, widgetId:null, revision:0, timer:null, controller:null, composing:false, request:null };
+  // Set this to true when the Playground UI is ready to be shown again.
+  const playgroundUiEnabled = false;
+  if (playgroundUiEnabled) {
   const playgroundCopy = (en,zh) => state.language === "zh" ? zh : en;
   const playgroundTrigger = document.getElementById("playgroundToggle");
+  if (playgroundTrigger) playgroundTrigger.hidden = false;
   const playgroundTriggerHome=playgroundTrigger?.parentElement;
+  const playgroundToolsHome=document.querySelector(".top-row");
   const playgroundDock=document.createElement("div");playgroundDock.className="playground-dock";document.body.append(playgroundDock);
   const playgroundPanel = document.createElement("section");
   playgroundPanel.id="playgroundPanel"; playgroundPanel.hidden=true; playgroundPanel.className="playground-panel";
@@ -11,8 +16,14 @@
   document.body.append(playgroundPanel);
   const playgroundPrompt=document.getElementById("playgroundPrompt"),playgroundStatus=document.getElementById("playgroundStatus");
   const playgroundHeader=document.createElement("header");playgroundHeader.className="playground-header";playgroundHeader.hidden=true;
-  playgroundHeader.innerHTML=`<a href="/" class="playground-brand" aria-label="PenEcho"><img src="${canvasAssetUrl("penecho-mark.png")}" alt=""><span>PenEcho</span></a><nav aria-label="Playground"><button id="playgroundCanvas" type="button" data-pe-button="ghost" data-pe-density="compact"></button><button id="playgroundShare" type="button" data-pe-button="secondary" data-pe-density="compact"></button><button id="playgroundSave" type="button" data-pe-button="primary" data-pe-density="compact"></button></nav>`;document.body.append(playgroundHeader);
+  playgroundHeader.innerHTML=`<a href="/" class="playground-brand" aria-label="PenEcho">Pen<strong>Echo</strong></a><nav aria-label="Playground"><button id="playgroundCanvas" type="button" data-pe-button="ghost" data-pe-density="compact"></button><button id="playgroundShare" type="button" data-pe-button="secondary" data-pe-density="compact"></button><button id="playgroundSave" type="button" data-pe-button="primary" data-pe-density="compact"></button></nav>`;document.body.append(playgroundHeader);
   function playgroundLabels(){
+    if(playgroundTrigger){
+      const tools=document.body.classList.contains("playground-tools");
+      playgroundTrigger.querySelector("span").textContent=tools?playgroundCopy("Live Clay","Live Clay"):playgroundCopy("Playground","Playground");
+      playgroundTrigger.setAttribute("aria-label",tools?playgroundCopy("Back to Live Clay","返回 Live Clay"):playgroundCopy("Open Playground","打开 Playground"));
+      playgroundTrigger.title=playgroundTrigger.getAttribute("aria-label");
+    }
     playgroundPrompt.placeholder=playgroundCopy("Describe a little world…","写一句话，让小世界动起来…");
     playgroundPrompt.setAttribute("aria-describedby","playgroundStatus");
     document.getElementById("playgroundRetry").textContent=playgroundCopy("Retry","重试");
@@ -48,6 +59,7 @@
   }
   async function playgroundGenerate(){
     const text=playgroundPrompt.value.trim(),revision=++playground.revision,documentId=canvasDocumentsCurrent().id;
+    const restorePromptFocus=document.activeElement===playgroundPrompt;
     playground.controller?.abort();clearTimeout(playground.timer);
     const controller=playground.controller=new AbortController();
     const run=async()=>{
@@ -58,6 +70,7 @@
       if(!response.ok)throw Error(result.message||result.error||"Live Clay unavailable");
       if(controller.signal.aborted||revision!==playground.revision||documentId!==canvasDocumentsCurrent().id)return;
       await playgroundApply({version:1,description:text,world:result.world});
+      if(restorePromptFocus&&playground.open&&revision===playground.revision)playgroundPrompt.focus({preventScroll:true});
       playgroundNotice(playgroundCopy("Drag to rotate · Your scene stays on this Canvas","拖动旋转 · 场景会保留在这张画布上"));
     };
     playground.request=run().catch(error=>{if(!controller.signal.aborted&&revision===playground.revision)playgroundNotice(String(error.message||error),true);}).finally(()=>{if(revision===playground.revision)playground.request=null;});
@@ -76,7 +89,8 @@
     if(!widget)widget=await playgroundApply({version:1,description:"",world:{entities:[],mood:"day",abstract:false}});
     playground.widgetId=widget.id;playgroundPrompt.value=playgroundDocument(widget)?.description||"";
     try{const pending=sessionStorage.getItem("penecho-playground-input:"+canvasDocumentsCurrent().id);if(pending!==null)playgroundPrompt.value=pending;}catch{}
-    playgroundInteract(widget);if(document.body.classList.contains("playground-entry"))fit();playgroundNotice(playgroundCopy("Type to shape your world. No Enter needed.","随输入变化，无需回车。"));
+    playgroundInteract(widget);if(document.body.classList.contains("playground-entry"))fit();playgroundNotice(playgroundDocument(widget)?.description?playgroundCopy("Drag to rotate · Your scene stays on this Canvas","拖动旋转 · 场景会保留在这张画布上"):playgroundCopy("Type to shape your world. No Enter needed.","随输入变化，无需回车。"));
+    playgroundPrompt.focus({preventScroll:true});
   }
   function playgroundClose(){
     playground.open=false;playgroundTrigger?.setAttribute("aria-expanded","false");
@@ -107,12 +121,38 @@
   playgroundPrompt.addEventListener("compositionstart",()=>{playground.composing=true;clearTimeout(playground.timer);playground.controller?.abort();playground.revision++;});
   playgroundPrompt.addEventListener("compositionend",()=>{playground.composing=false;playgroundInput();});
   playgroundPanel.querySelectorAll("[data-example]").forEach(button=>button.addEventListener("click",()=>{playgroundPrompt.value=button.dataset.example;playgroundInput();playgroundPrompt.focus();}));
-  playgroundTrigger?.addEventListener("click",()=>{if(playground.open)playgroundClose();else void playgroundOpen().catch(error=>playgroundNotice(error.message,true));});
+  function playgroundEntry(enabled){
+    document.body.classList.toggle("playground-entry",enabled);
+    document.body.classList.toggle("playground-tools",!enabled);
+    if(playgroundTrigger){
+      if(enabled)playgroundDock.append(playgroundTrigger);
+      else if(playgroundToolsHome)playgroundToolsHome.insertBefore(playgroundTrigger,document.getElementById("canvasDocumentMeta"));
+      else playgroundTriggerHome?.append(playgroundTrigger);
+    }
+    playgroundHeader.hidden=!enabled;
+    playgroundLabels();
+    if(!enabled)playgroundFitTools();
+    if(location.pathname==="/play/liveclay"){
+      const url=new URL(location.href);
+      if(enabled)url.searchParams.delete("tools");else url.searchParams.set("tools","1");
+      history.replaceState(history.state,"",url);
+    }
+  }
+  let playgroundToolFitFrame=0;
+  function playgroundFitTools(){
+    cancelAnimationFrame(playgroundToolFitFrame);
+    playgroundToolFitFrame=requestAnimationFrame(()=>{
+      if(!document.body.classList.contains("playground-tools"))return;
+      fit();fitCanvasContents();
+    });
+  }
+  window.addEventListener("resize",()=>{if(document.body.classList.contains("playground-tools"))playgroundFitTools();});
+  playgroundTrigger?.addEventListener("click",()=>{if(document.body.classList.contains("playground-tools"))playgroundEntry(true);if(playground.open)playgroundClose();else void playgroundOpen().catch(error=>playgroundNotice(error.message,true));});
   document.getElementById("playgroundClose").onclick=playgroundClose;
   document.getElementById("playgroundRetry").onclick=()=>void playgroundGenerate();
   document.getElementById("playgroundSave").onclick=()=>void playgroundAction("save");
   document.getElementById("playgroundShare").onclick=()=>void playgroundAction("share");
-  document.getElementById("playgroundCanvas").onclick=()=>{document.body.classList.remove("playground-entry");if(playgroundTriggerHome&&playgroundTrigger)playgroundTriggerHome.append(playgroundTrigger);playgroundHeader.hidden=true;playgroundClose();setWidgetInteraction(null);};
+  document.getElementById("playgroundCanvas").onclick=()=>{playgroundEntry(false);playgroundClose();setWidgetInteraction(null);};
   playgroundPanel.addEventListener("keydown",event=>{if(event.key==="Escape"){event.stopPropagation();playgroundClose();}});
   window.addEventListener("penecho:languagechange",playgroundLabels);
   window.PenEchoPlayground={
@@ -120,10 +160,12 @@
       if(playground.ready||window.PENECHO_CONFIG?.runtime==="viewer")return;playground.ready=true;
       const entry=window.PENECHO_CONFIG?.playground==="liveclay"||new URLSearchParams(location.search).get("playground")==="liveclay";
       if(!entry)return;
-      document.body.classList.add("playground-entry");if(playgroundTrigger)playgroundDock.append(playgroundTrigger);playgroundHeader.hidden=false;
+      if(new URLSearchParams(location.search).get("tools")==="1"){playgroundEntry(false);return;}
+      playgroundEntry(true);
       await playgroundOpen();
       const key="penecho-playground-action:"+window.PENECHO_CONFIG?.browserDraftId,action=sessionStorage.getItem(key);
       if(action&&!window.PENECHO_CONFIG?.guestCanvas){sessionStorage.removeItem(key);await playgroundAction(action);}
     },
     open:playgroundOpen,
   };
+  }

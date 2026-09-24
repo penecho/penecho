@@ -1,6 +1,8 @@
 'use strict';
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../public/widget-host.js'),'utf8');
+const parentSource=fs.readFileSync(require('node:path').join(__dirname,'../src/client/app/canvas-runtime.js'),'utf8');
+const applyPresentationSize=vm.runInNewContext(parentSource.slice(parentSource.indexOf('  function applyWidgetPresentationSize('),parentSource.indexOf('  async function handleWidgetMessage('))+';applyWidgetPresentationSize',{sendWidgetHostState(){}});
 const start=source.indexOf('    // One presentation owner:');
 const end=source.indexOf('    addEventListener("message", (event) => {',start);
 function harness(){
@@ -11,7 +13,13 @@ function harness(){
  ResizeObserver:class{constructor(callback){this.callback=callback;observers.push(this);}observe(node){this.node=node;}disconnect(){this.disconnected=true;}},
  MutationObserver:class{constructor(callback){this.callback=callback;mutations.push(this);}observe(){}disconnect(){this.disconnected=true;}}};
  vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);
- return {ctx,frames,messages,layouts,observers,mutations,listeners,body,emit(type){listeners.get(type)?.();},flush(){const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn());}};
+ const widget={maximized:true,contentW:ctx.innerWidth,contentH:ctx.innerHeight,styleRule:{style:{setProperty(){}}}};
+ return {ctx,frames,messages,layouts,observers,mutations,listeners,body,widget,emit(type){listeners.get(type)?.();},flush(){const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn());},applyReport(){
+  if(!applyPresentationSize(widget,messages.at(-1)))return;
+  const changed=ctx.innerWidth!==widget.presentationWidth||ctx.innerHeight!==widget.presentationHeight;
+  ctx.innerWidth=widget.presentationWidth;ctx.innerHeight=widget.presentationHeight;
+  if(changed)listeners.get('resize')?.();
+ }};
 }
 function stylesheetHarness(){
  let textContent='';
@@ -189,4 +197,134 @@ test('presentation exit resets the width cache and reentry initializes the curre
  const reentryLayouts=h.layouts.length;
  h.emit('resize');h.flush();
  assert.equal(h.layouts.length,reentryLayouts);
+});
+
+function measuredDocument(h,extent){
+ h.body.scrollWidth=0;
+ h.body.querySelectorAll=()=>[];
+ h.body.getBoundingClientRect=()=>{const [right,bottom]=extent();return {right,bottom};};
+}
+for(const [name,extent] of [
+ ['height doubling',h=>[720,h.ctx.innerHeight*2]],
+ ['coupled width and height doubling',h=>[h.ctx.innerWidth*2,h.ctx.innerHeight*2]],
+ ['viewport plus padding',h=>[720,h.ctx.innerHeight+16]],
+ ['one pixel feedback',h=>[720,h.ctx.innerHeight+1]],
+ ['oscillating heights',h=>[720,h.ctx.innerHeight===900?1200:900]],
+])test(`presentation restores authored geometry after repeated ${name}`,()=>{
+ const h=harness();measuredDocument(h,()=>extent(h));h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<3;i++){h.applyReport();h.flush();}
+ h.applyReport();assert.equal(h.ctx.innerWidth,1024);assert.equal(h.ctx.innerHeight,900);
+ assert.equal(h.layouts.at(-1)[0],false,'restore authored scrolling instead of clipping measured content');
+ assert.equal(h.observers[0].disconnected,true);assert.equal(h.mutations[0].disconnected,true);
+ const reports=h.messages.length;h.applyReport();h.observers[0].callback();h.mutations[0].callback([{target:h.body,attributeName:'style'}]);h.flush();
+ assert.equal(h.frames.size,0);assert.equal(h.messages.length,reports,'the recovery resize must not restart measurement');
+});
+
+test('normal long documents, late content and shrinkage retain their measured height',()=>{
+ const h=harness();let height=2400;measuredDocument(h,()=>[720,height]);h.ctx.setPresentationLayout();h.flush();
+ assert.equal(h.messages.at(-1).height,2400);
+ height=2700;h.applyReport();h.flush();
+ assert.equal(h.messages.at(-1).height,2700,'content arriving during the resize must not be subtracted');
+ h.applyReport();h.flush();
+ for(height of [4800,9600,1800,60000]){
+  h.mutations[0].callback([{target:h.body,attributeName:'style'}]);h.flush();
+  assert.equal(h.messages.at(-1).height,height);
+  h.applyReport();h.flush();
+ }
+ assert.notEqual(h.layouts.at(-1)[0],false);assert.notEqual(h.observers[0].disconnected,true);
+});
+
+test('presentation allows slowly converging reflow to finish',()=>{
+ const h=harness();measuredDocument(h,()=>[720,Math.floor((h.ctx.innerHeight+2400)/2)]);
+ h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<12;i++){h.applyReport();h.flush();}
+ assert.equal(h.messages.at(-1).height,2399);assert.notEqual(h.layouts.at(-1)[0],false);
+});
+
+test('duplicate observer frames do not count as extra resize cycles',()=>{
+ const h=harness();measuredDocument(h,()=>[720,h.ctx.innerHeight*2]);h.ctx.setPresentationLayout();h.flush();
+ h.applyReport();h.flush();
+ for(let i=0;i<8;i++){h.observers[0].callback();h.flush();}
+ assert.equal(h.messages.length,2);assert.notEqual(h.layouts.at(-1)[0],false);
+ h.applyReport();h.flush();assert.notEqual(h.layouts.at(-1)[0],false);
+ h.applyReport();h.flush();assert.equal(h.layouts.at(-1)[0],false);
+});
+
+test('external viewport changes reset the feedback streak',()=>{
+ const h=harness();measuredDocument(h,()=>[720,h.ctx.innerHeight+16]);h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<2;i++){h.applyReport();h.flush();}
+ h.ctx.innerHeight=1100;h.emit('resize');h.flush();
+ h.applyReport();h.flush();assert.notEqual(h.layouts.at(-1)[0],false);
+});
+
+test('unbounded resize feedback recovers before remaining at the dimension cap',()=>{
+ const h=harness();measuredDocument(h,()=>[720,h.ctx.innerHeight*100]);h.ctx.setPresentationLayout();h.flush();
+ h.applyReport();h.flush();h.applyReport();assert.equal(h.ctx.innerHeight,900);assert.equal(h.layouts.at(-1)[0],false);
+});
+
+test('a stable document beyond the dimension cap is not misclassified as a resize loop',()=>{
+ const h=harness();measuredDocument(h,()=>[720,150000]);h.ctx.setPresentationLayout();h.flush();
+ h.applyReport();h.flush();
+ for(let i=0;i<4;i++){h.observers[0].callback();h.flush();}
+ assert.equal(h.messages.at(-1).height,100000);assert.notEqual(h.layouts.at(-1)[0],false);
+});
+
+test('recovery survives reentry, preserves saved fit preferences on exit and resets with a new document',()=>{
+ const h=harness();measuredDocument(h,()=>[720,h.ctx.innerHeight*2]);h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<3;i++){h.applyReport();h.flush();}
+ h.applyReport();h.ctx.widgetState={maximized:false,fitContent:true};h.ctx.setPresentationLayout();
+ assert.equal(h.layouts.at(-1)[0],true);
+ h.ctx.widgetState.maximized=true;h.ctx.setPresentationLayout();h.flush();
+ assert.equal(h.layouts.at(-1)[0],false);assert.equal(h.observers.length,1);assert.equal(h.frames.size,0);
+ const fresh=harness();fresh.ctx.setPresentationLayout();fresh.flush();assert.equal(fresh.messages[0].height,1200);
+});
+
+test('snapshot capture defers feedback recovery until measurement resumes',()=>{
+ const h=harness();measuredDocument(h,()=>[720,h.ctx.innerHeight*2]);h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<2;i++){h.applyReport();h.flush();}
+ h.ctx.activeSnapshotRender={};h.applyReport();h.flush();assert.notEqual(h.layouts.at(-1)[0],false);
+ h.ctx.activeSnapshotRender=null;h.ctx.schedulePresentationSize();h.flush();assert.equal(h.layouts.at(-1)[0],false);
+});
+
+test('a replacement document recovers to saved geometry rather than the previous document viewport',()=>{
+ const h=harness();h.ctx.innerHeight=10000;
+ measuredDocument(h,()=>[720,h.ctx.innerHeight*2]);h.ctx.setPresentationLayout();h.flush();
+ for(let i=0;i<3;i++){h.applyReport();h.flush();}
+ h.applyReport();assert.equal(h.ctx.innerHeight,900);assert.equal(h.ctx.innerWidth,1024);
+ assert.equal(h.widget.contentH,900);assert.equal(h.widget.contentW,1024);
+});
+
+test('zoom transitions cannot promote a temporary browser viewport into content width',()=>{
+ const h=harness();h.ctx.innerWidth=900;h.ctx.widgetState.viewportWidth=900;h.ctx.widgetState.scaleX=1.361111;
+ measuredDocument(h,()=>[h.ctx.innerWidth,2855]);h.ctx.setPresentationLayout();h.flush();
+ assert.equal(h.messages.at(-1).width,900);
+ const layouts=h.layouts.length;
+ h.ctx.innerWidth=3071;h.ctx.innerHeight=9742;h.emit('resize');h.flush();
+ assert.equal(h.messages.length,1);assert.equal(h.layouts.length,layouts,'do not classify authored layout using the transient viewport');
+ h.ctx.widgetState.scaleX=.398888;h.ctx.innerWidth=900;h.ctx.innerHeight=2855;h.emit('resize');h.flush();
+ assert.equal(h.messages.length,1);assert.equal(h.layouts.length,layouts+1);
+ // The reverse zoom transition briefly reports a narrower viewport too.
+ h.ctx.innerWidth=263;h.emit('resize');h.flush();assert.equal(h.messages.length,1);
+ h.ctx.innerWidth=900;h.ctx.widgetState.scaleX=1.361111;h.emit('resize');h.flush();
+ assert.equal(h.messages.length,1);assert.notEqual(h.layouts.at(-1)[0],false);
+});
+
+test('authoritative viewport widths still permit real horizontal content overflow',()=>{
+ const h=harness();h.ctx.widgetState.viewportWidth=1024;h.ctx.widgetState.scaleX=.4;
+ measuredDocument(h,()=>[1800,2400]);h.ctx.setPresentationLayout();h.flush();
+ assert.equal(h.messages.at(-1).width,1800);
+ h.ctx.widgetState.viewportWidth=1800;h.applyReport();h.flush();
+ assert.equal(h.ctx.innerWidth,1800);assert.notEqual(h.layouts.at(-1)[0],false);
+});
+
+test('parent scale updates resume a deferred measurement without another observer',()=>{
+ const h=harness();h.ctx.widgetState={maximized:true,fitContent:false,scaleX:1,viewportWidth:900};h.ctx.innerWidth=3071;
+ h.ctx.setPresentationLayout();h.flush();assert.equal(h.messages.length,0);
+ Object.assign(h.ctx,{widgetStateReceived:true,setControlCursor(){},setRuntimeActive(){},notifyVisibleViewport(){}});
+ const begin=source.indexOf('        const becameVisible = event.data.active');
+ const finish=source.indexOf('        if (becameVisible) notifyVisibleViewport();',begin)+'        if (becameVisible) notifyVisibleViewport();'.length;
+ const stateUpdate=vm.runInContext('(function(event){'+source.slice(begin,finish)+'})',h.ctx);
+ h.ctx.innerWidth=900;
+ stateUpdate({data:{maximized:true,fitContent:false,viewportWidth:900,scaleX:.4,scaleY:.4,active:true,selected:false}});
+ assert.equal(h.frames.size,1);h.flush();assert.equal(h.messages.length,1);assert.equal(h.observers.length,1);
 });

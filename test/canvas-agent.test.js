@@ -3144,7 +3144,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentBeginSubmitExecution\(selectedAiConnectionId\(\)\)[\s\S]*canvasAgentBindSubmitExecution\(submitExecution\)[\s\S]*canvasAgentInitialTurnState\(submitExecution\)[\s\S]*canvasAgentAssertSubmitExecution\(submitExecution\)[\s\S]*canvasAgentSendRequest/);
   assert.match(functionSource(source,"canvasAgentExecuteTool"),/canvasAgentCapture\(args,\{signal:execution\.controller\.signal,assertCurrent:\(\)=>canvasAgentAssertToolExecution\(execution\)\}\)/);
   assert.match(functionSource(canvasRuntime,"requestWidgetSnapshot"),/signal\?\.aborted[\s\S]*pending=\{ widget, resolve, reject, timer, contentVersion:widget\.contentVersion, signal, abort, highResolution, fullContent \}[\s\S]*signal\?\.addEventListener\("abort",abort/);
-  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution\)/);
+  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/requestWidgetSnapshot\(widget, timeoutMs, true, signal, highResolution\)/);
   assert.match(peer,/if \(!envelope\.canvasSessionId \|\| envelope\.canvasSessionId !== state\.session\.id\) return/);
   assert.match(peer,/const generation = state\.sessionGeneration, session = state\.session/);
   assert.match(peer,/sendForGeneration\(generation\)\('error', \{ message:String\(error\?\.message \|\| error \|\| 'PenEcho Agent failed\.'\), fatal:false \}, session\)/);
@@ -3559,7 +3559,7 @@ test("PenEcho Agent validates capture delivery and browser target errors without
   assert.match(functionSource(source,"canvasAgentAssertToolKeys"),/canvas_read:\["objectId","artifactId","resource","startLine","endLine"\]/);
   assert.match(functionSource(source,"canvasAgentAssertToolKeys"),/canvas_capture:\["target","objectId","region","quality","coordinates","deliverToUser"\]/);
   const browserCaptureSource=functionSource(source,"canvasAgentCapture");
-  assert.match(browserCaptureSource,/prepareVisibleWidgetSnapshots\(region,false,signal\)/);
+  assert.match(browserCaptureSource,/prepareVisibleWidgetSnapshots\(region,false,signal,false,remaining\)/);
   assert.match(browserCaptureSource,/snapshotVersion<widget\.contentVersion[\s\S]*?WIDGET_CAPTURE_UNAVAILABLE/);
   const unavailableCapture=vm.runInNewContext(`(${browserCaptureSource.replace(/^function /,"async function ")})`,{
     CANVAS_AGENT_DETAIL_CAPTURE_POLICY:{maxLongEdge:1600,maxPixels:1600*1600},
@@ -3567,6 +3567,7 @@ test("PenEcho Agent validates capture delivery and browser target errors without
     canvasAgentObject:()=>({kind:"widget"}),
     canvasAgentTargetRegion:()=>({x:0,y:0,w:100,h:100}),
     document:{createElement:()=>({getContext:()=>({})})},
+    performance:{now:()=>0},WIDGET_SNAPSHOT_TIMEOUT_MS:20000,
     prepareVisibleWidgetSnapshots:async()=>({total:1,captured:0,missing:1}),
     capturableWidgets:()=>[{id:"widget-unready",snapshotImage:null,snapshotVersion:-1,contentVersion:0}],
     canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
@@ -3618,6 +3619,40 @@ test("PenEcho Agent reports an empty off-canvas capture without dereferencing or
   assert.strictEqual(region({target:"canvas"}),content,"off-screen content remains capturable by canvas target");
   viewport={x:0,y:0,w:100,h:80};
   assert.strictEqual(region({target:"viewport"}),viewport);
+});
+
+test("PenEcho Agent completes the first capture when Widget load changes its snapshot version",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),widget={id:"cold-widget",x:0,y:0,w:100,h:100,contentVersion:0,snapshotVersion:-1,snapshotImage:null},
+    context2d={fillRect(){},save(){},scale(){},translate(){},restore(){},drawImage(){}},
+    canvas={width:0,height:0,getContext:()=>context2d},
+    policy={id:"basic",maxLongEdge:1600,maxPixels:2560000,maxBytes:1000000},
+    transient=Object.assign(new Error("Widget changed while loading"),{code:"WIDGET_CONTENT_CHANGED"});
+  let attempts=0;
+  const context={
+    performance:{now:()=>0},WIDGET_SNAPSHOT_TIMEOUT_MS:20000,
+    CANVAS_AGENT_LAYOUT_CAPTURE_POLICY:policy,
+    canvasAgentTargetRegion:()=>({x:0,y:0,w:100,h:100}),
+    document:{createElement:()=>canvas},
+    prepareVisibleWidgetSnapshots:async(_region,_bestEffort,_signal,_highResolution,remaining)=>{
+      assert.equal(remaining,20000);
+      attempts++;
+      if(attempts===1){widget.contentVersion++;throw transient;}
+      widget.snapshotImage={};widget.snapshotVersion=widget.contentVersion;
+    },
+    capturableWidgets:()=>[widget],
+    canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
+    state:{paint:{paper:"#fff"},textBoxes:[],userRevision:1},
+    drawAnimationsToContext(){},drawWidgetsToContext(){},drawImagesToContext(){},forTiles(){},drawSharpOverlays(){},
+    canvasAgentGridStep:()=>20,
+    canvasAgentCompressedCanvas:async()=>({canvas,blob:{type:"image/webp",size:3},mediaType:"image/webp",encodeQuality:.8}),
+    canvasAgentReadDataUrl:async()=>"data:image/webp;base64,YQ==",
+    canvasAgentViewFacts:()=>({viewRevision:1}),
+  };
+  const capture=vm.runInNewContext(`(async ${functionSource(source,"canvasAgentCapture")})`,context);
+  const result=await capture({target:"canvas",quality:"basic",coordinates:"none"},{});
+  assert.equal(attempts,2);
+  assert.equal(result.dataUrl,"data:image/webp;base64,YQ==");
+  assert.equal(widget.snapshotVersion,widget.contentVersion);
 });
 
 test("PenEcho Agent aborts stale Widget snapshot requests before they can update capture cache",async()=>{

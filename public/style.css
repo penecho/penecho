@@ -7823,7 +7823,8 @@ body[data-theme="studio"] .studio-navigator-tabs > [role="tab"][aria-selected="t
    gray frost is the explicitly requested presentation surface. */
 #viewport .canvas-widget.widget-maximized {
   position: fixed; inset: 0; margin: 0; box-sizing: border-box;
-  width: 100vw !important; height: 100dvh !important; max-width: none; max-height: none;
+  width: var(--penecho-canvas-page-viewport-width, 100vw) !important;
+  height: var(--penecho-canvas-page-dynamic-height, 100dvh) !important; max-width: none; max-height: none;
   transform: none !important; contain: none; visibility: visible;
   padding: 0 20px 20px; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; border: 0; border-radius: 0;
   background: rgba(230, 233, 237, .28); box-shadow: none;

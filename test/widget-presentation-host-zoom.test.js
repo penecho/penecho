@@ -101,6 +101,7 @@ test("maximized Widget host scale applies available width, presentation width, a
   const message = h.messages[0].message;
   assert.equal(message.type, "penecho-widget-state");
   assert.equal(message.maximized, true);
+  assert.equal(message.viewportWidth, 640);
   assert.equal(message.fitContent, false);
   assert.equal(message.fitContentAxes, null);
   assert.equal(message.selected, false);
@@ -126,6 +127,18 @@ test("leaving maximized mode restores the normal Canvas zoom scale", () => {
   assert.equal(h.messages[0].message.scaleX, 0.75);
   assert.equal(h.messages[0].message.scaleY, 0.75);
   assert.equal(h.messages[1].message.maximized, false);
+  assert.equal(h.messages[1].message.viewportWidth, undefined);
   assert.equal(h.messages[1].message.scaleX, 1);
   assert.equal(h.messages[1].message.scaleY, 1);
+});
+
+test("a logical viewport width change is sent even when the display scale stays the same", () => {
+  const h = harness({ maximized:true, presentationWidth:640 });
+  h.sendWidgetHostState(h.widget);
+  h.widget.presentationWidth = 1280;
+  h.shell.clientWidth = 1960;
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.length, 2);
+  assert.equal(h.messages[0].message.scaleX, h.messages[1].message.scaleX);
+  assert.equal(h.messages[1].message.viewportWidth, 1280);
 });

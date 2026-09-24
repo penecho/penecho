@@ -1290,13 +1290,30 @@
     // then measure their natural extent without using the iframe viewport height.
     let presentationFrame = 0, presentationObserver = null, presentationMutations = null;
     let presentationLayoutDirty = false, lastPresentationSize = "", presentationViewportWidth = 0;
+    let presentationMeasurement = null, presentationResizeCycles = 0;
+    // Sticky only for this authored document (a source update creates a new runtime).
+    let presentationNativeLayout = false;
+    function stopPresentationObservation() {
+      if (presentationFrame) nativeCancelAnimationFrame(presentationFrame);
+      presentationFrame = 0;
+      presentationObserver?.disconnect();
+      presentationMutations?.disconnect();
+      presentationObserver = presentationMutations = null;
+      presentationLayoutDirty = false;
+    }
     function schedulePresentationSize(refresh = false) {
-      if (!widgetState.maximized) return;
+      if (!widgetState.maximized || presentationNativeLayout) return;
       presentationLayoutDirty ||= refresh;
       if (presentationFrame) return;
       presentationFrame = nativeRequestAnimationFrame(() => {
         presentationFrame = 0;
         if (!widgetState.maximized || !document.body || activeSnapshot || activeSnapshotRender) return;
+        // CSS zoom and iframe layout can settle in different frames. During that
+        // transition the browser can expose the old physical width divided by
+        // the new zoom. Wait for the width assigned by our parent before reading
+        // content or reclassifying scrollers; resize/state events resume this owner.
+        const viewportTolerance = Math.max(1, Math.ceil(1 / (widgetState.scaleX || 1)));
+        if (Number.isFinite(widgetState.viewportWidth) && Math.abs(innerWidth - widgetState.viewportWidth) > viewportTolerance) return;
         if (presentationLayoutDirty) {
           presentationLayoutDirty = false;
           setFitContentLayout(true, true);
@@ -1317,9 +1334,41 @@
           width = Math.max(width, child.right + scrollX);
           height = Math.max(height, child.bottom + scrollY);
         }
-        width = Math.min(100000, Math.ceil(width));
-        height = Math.min(100000, Math.ceil(height));
+        width = Math.ceil(width);
+        height = Math.ceil(height);
         if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+        const previous = presentationMeasurement;
+        // Count only viewport changes that followed our last measurement. Ordinary
+        // content updates and external resizes are not themselves feedback cycles.
+        // Compare the remaining resize distance so converging reflows can finish.
+        if (previous) {
+          const widthChanged = innerWidth !== previous.viewportWidth;
+          const heightChanged = innerHeight !== previous.viewportHeight;
+          if (widthChanged || heightChanged) {
+            const followsReport = (!widthChanged || Math.abs(innerWidth - Math.min(100000, previous.width)) <= 1)
+              && (!heightChanged || Math.abs(innerHeight - Math.min(100000, previous.height)) <= 1);
+            const distance = Math.max(widthChanged ? Math.abs(width - innerWidth) : 0,
+              heightChanged ? Math.abs(height - innerHeight) : 0);
+            const previousDistance = Math.max(widthChanged ? Math.abs(previous.width - previous.viewportWidth) : 0,
+              heightChanged ? Math.abs(previous.height - previous.viewportHeight) : 0);
+            presentationResizeCycles = followsReport && distance >= 1 && distance >= previousDistance
+              ? presentationResizeCycles + 1 : 0;
+            if (presentationResizeCycles >= 3 || (presentationResizeCycles > 0 && (width > 100000 || height > 100000))) {
+              // Never subtract a guessed overflow: that can clip newly loaded
+              // content. Restore this widget's authored layout and scrolling.
+              presentationNativeLayout = true;
+              stopPresentationObservation();
+              setFitContentLayout(false);
+              // The parent clamps these minimum extents to the saved dimensions.
+              // The current viewport may already belong to an older, taller source.
+              parent.postMessage({ type:"penecho-widget-presentation-size", runtimeVersion, width:1, height:1 }, "*");
+              return;
+            }
+          }
+        }
+        presentationMeasurement = { viewportWidth:innerWidth, viewportHeight:innerHeight, width, height };
+        width = Math.min(100000, width);
+        height = Math.min(100000, height);
         const key = width + ":" + height;
         if (key === lastPresentationSize) return;
         lastPresentationSize = key;
@@ -1329,14 +1378,15 @@
     function setPresentationLayout(refresh = true) {
       if (!widgetState.maximized) {
         setFitContentLayout(Boolean(widgetState.fitContent || widgetState.fitContentAxes), refresh);
-        if (presentationFrame) nativeCancelAnimationFrame(presentationFrame);
-        presentationFrame = 0;
-        presentationObserver?.disconnect();
-        presentationMutations?.disconnect();
-        presentationObserver = presentationMutations = null;
+        stopPresentationObservation();
         lastPresentationSize = "";
         presentationViewportWidth = 0;
-        presentationLayoutDirty = false;
+        presentationMeasurement = null;
+        presentationResizeCycles = 0;
+        return;
+      }
+      if (presentationNativeLayout) {
+        setFitContentLayout(false);
         return;
       }
       if (document.body && !presentationObserver && typeof ResizeObserver === "function") {
@@ -1399,8 +1449,11 @@
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
         const becameVisible = event.data.active && (!widgetStateReceived || !widgetState.active);
         const layoutChanged = widgetState.maximized !== (event.data.maximized === true) || widgetState.fitContent !== (event.data.fitContent === true) || widgetState.fitContentAxes !== event.data.fitContentAxes;
-        widgetState = { fitContent:event.data.fitContent === true, fitContentAxes:event.data.fitContentAxes, maximized:event.data.maximized === true, selected:event.data.selected, interactive:Boolean(event.data.interactive), active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
+        const viewportWidth = Number.isFinite(event.data.viewportWidth) && event.data.viewportWidth > 0 && event.data.viewportWidth <= 100000 ? event.data.viewportWidth : undefined;
+        const viewportChanged = widgetState.viewportWidth !== viewportWidth || widgetState.scaleX !== event.data.scaleX;
+        widgetState = { fitContent:event.data.fitContent === true, fitContentAxes:event.data.fitContentAxes, maximized:event.data.maximized === true, viewportWidth, selected:event.data.selected, interactive:Boolean(event.data.interactive), active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
         setPresentationLayout(layoutChanged);
+        if (viewportChanged && !layoutChanged) schedulePresentationSize();
         widgetStateReceived = true;
         if (!widgetState.selected) setControlCursor();
         setRuntimeActive(widgetState.active);
@@ -2052,7 +2105,7 @@
         if (typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         snapshotDebugLog("init-received", { nextRuntimeVersion:runtimeVersion + 1, htmlLength:message.html.length });
-        for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot");
+        for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot", "WIDGET_CONTENT_CHANGED");
         initialized = true;
         widgetLanguage = normalizeWidgetLanguage(message.language);
         runtimeVersion++;
@@ -2075,7 +2128,8 @@
         inner.contentWindow?.postMessage({type:"penecho-mcp-progress",progress:message.progress},"*");
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
-        widgetState = { fitContent:message.fitContent === true, fitContentAxes:message.fitContentAxes, maximized:message.maximized === true, selected:message.selected, interactive:Boolean(message.interactive), active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
+        const viewportWidth = Number.isFinite(message.viewportWidth) && message.viewportWidth > 0 && message.viewportWidth <= 100000 ? message.viewportWidth : undefined;
+        widgetState = { fitContent:message.fitContent === true, fitContentAxes:message.fitContentAxes, maximized:message.maximized === true, viewportWidth, selected:message.selected, interactive:Boolean(message.interactive), active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-fit-request") {
         if (typeof message.requestId !== "string" || message.requestId.length > 128 || !["width", "height", "resize"].includes(message.hit)) return;

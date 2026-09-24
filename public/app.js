@@ -8015,17 +8015,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function positionWidget(widget) {
     if (!widget.shell) return;
-    // Entry presentation resizes the existing iframe without rewriting Canvas geometry.
+    // Entry and read-only Live Clay presentation resize the existing iframe without rewriting Canvas geometry.
     const liveClayEntry = document.body.classList.contains("playground-entry") && widget.sourceFormat === "penecho-liveclay+json" && state.interactingWidgetId === widget.id,
+      liveClayViewer = window.PENECHO_CONFIG?.runtime === "viewer" && widget.sourceFormat === "penecho-liveclay+json",
       entryMetrics = liveClayEntry ? canvasViewportMetrics() : null,
-      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : widget.contentW,
-      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : widget.contentH;
+      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : liveClayViewer ? Math.max(1, widget.w * state.scale) : widget.contentW,
+      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : liveClayViewer ? Math.max(1, widget.h * state.scale) : widget.contentH;
     const localX = entryMetrics ? 12 - state.panX : widget.x * state.scale,
       localY = entryMetrics ? 64 - state.panY : widget.y * state.scale,
       screenX = state.panX + localX,
       screenY = state.panY + localY,
-      scaleX = entryMetrics ? 1 : state.scale * widget.w / widget.contentW,
-      scaleY = entryMetrics ? 1 : state.scale * widget.h / widget.contentH,
+      scaleX = entryMetrics || liveClayViewer ? 1 : state.scale * widget.w / widget.contentW,
+      scaleY = entryMetrics || liveClayViewer ? 1 : state.scale * widget.h / widget.contentH,
       declaration = widget.styleRule?.style;
     if (!declaration) return;
     const sizeKey = `${displayW}x${displayH}`;
@@ -8102,11 +8103,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const active = widget.renderActive !== false,
-      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}`;
+      viewportWidth = widget.maximized ? Math.max(widget.contentW, widget.presentationWidth || 0) : undefined,
+      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}:${viewportWidth || ""}`;
     syncMcpWidgetProgress(widget);
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, viewportWidth, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function markWidgetHostReady(widget) {
     widget.hostReady = true;
@@ -8332,7 +8334,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     try {
       const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
       if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
-      if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      if(widget.contentVersion!==pending.contentVersion)throw Object.assign(Error(t("widgetExportFailed")),{
+        code:"WIDGET_CONTENT_CHANGED",details:{widgetId:widget.id,stage:"content-version"},
+      });
       if(!finishPending())return;
       if (pending.fullContent) {
         pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl, contentWidth:message.contentWidth, contentHeight:message.contentHeight, overflow:message.overflow });
@@ -8940,14 +8944,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
           if(signal?.aborted)throw widgetSnapshotAbortError(signal);
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution);
+          const request = requestWidgetSnapshot(widget, timeoutMs, true, signal, highResolution);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
@@ -23435,16 +23439,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvas = document.createElement("canvas"), context = canvas.getContext("2d");
     canvas.width = width;
     canvas.height = height;
-    await prepareVisibleWidgetSnapshots(region,false,signal);
-    assertCurrent?.();
-    const unavailableWidgetIds=capturableWidgets(region)
-      .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion)
-      .map(widget=>widget.id);
-    if(unavailableWidgetIds.length)throw canvasAgentToolError(
-      "WIDGET_CAPTURE_UNAVAILABLE",
-      "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
-      {objectIds:unavailableWidgetIds},
-    );
+    const widgetCaptureDeadline=performance.now()+WIDGET_SNAPSHOT_TIMEOUT_MS;
+    for(let attempt=0;attempt<3;attempt++){
+      const remaining=widgetCaptureDeadline-performance.now();
+      if(remaining<1000)throw canvasAgentToolError("WIDGET_CAPTURE_TIMEOUT","Canvas capture could not finish while Widgets were loading.");
+      try{
+        await prepareVisibleWidgetSnapshots(region,false,signal,false,remaining);
+      }catch(error){
+        assertCurrent?.();
+        if(error?.code==="WIDGET_CONTENT_CHANGED"&&attempt<2)continue;
+        throw error;
+      }
+      assertCurrent?.();
+      const unavailable=capturableWidgets(region)
+        .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion);
+      if(!unavailable.length)break;
+      if(attempt<2&&unavailable.every(widget=>widget.snapshotImage&&widget.snapshotVersion<widget.contentVersion))continue;
+      throw canvasAgentToolError(
+        "WIDGET_CAPTURE_UNAVAILABLE",
+        "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
+        {objectIds:unavailable.map(widget=>widget.id)},
+      );
+    }
     context.fillStyle = state.paint.paper;
     context.fillRect(0,0,width,height);
     context.save();
@@ -29888,9 +29904,14 @@ var canvasDocumentIdentity = (() => {
   window.addEventListener('blur', () => { setSpacePan(false); state.trackpadGesture = null; state.widgetActivationTap = null; });
   // Live Clay owns scene edits; the normal Canvas owns history, drafts and sharing.
   const playground = { ready:false, open:false, widgetId:null, revision:0, timer:null, controller:null, composing:false, request:null };
+  // Set this to true when the Playground UI is ready to be shown again.
+  const playgroundUiEnabled = false;
+  if (playgroundUiEnabled) {
   const playgroundCopy = (en,zh) => state.language === "zh" ? zh : en;
   const playgroundTrigger = document.getElementById("playgroundToggle");
+  if (playgroundTrigger) playgroundTrigger.hidden = false;
   const playgroundTriggerHome=playgroundTrigger?.parentElement;
+  const playgroundToolsHome=document.querySelector(".top-row");
   const playgroundDock=document.createElement("div");playgroundDock.className="playground-dock";document.body.append(playgroundDock);
   const playgroundPanel = document.createElement("section");
   playgroundPanel.id="playgroundPanel"; playgroundPanel.hidden=true; playgroundPanel.className="playground-panel";
@@ -29899,8 +29920,14 @@ var canvasDocumentIdentity = (() => {
   document.body.append(playgroundPanel);
   const playgroundPrompt=document.getElementById("playgroundPrompt"),playgroundStatus=document.getElementById("playgroundStatus");
   const playgroundHeader=document.createElement("header");playgroundHeader.className="playground-header";playgroundHeader.hidden=true;
-  playgroundHeader.innerHTML=`<a href="/" class="playground-brand" aria-label="PenEcho"><img src="${canvasAssetUrl("penecho-mark.png")}" alt=""><span>PenEcho</span></a><nav aria-label="Playground"><button id="playgroundCanvas" type="button" data-pe-button="ghost" data-pe-density="compact"></button><button id="playgroundShare" type="button" data-pe-button="secondary" data-pe-density="compact"></button><button id="playgroundSave" type="button" data-pe-button="primary" data-pe-density="compact"></button></nav>`;document.body.append(playgroundHeader);
+  playgroundHeader.innerHTML=`<a href="/" class="playground-brand" aria-label="PenEcho">Pen<strong>Echo</strong></a><nav aria-label="Playground"><button id="playgroundCanvas" type="button" data-pe-button="ghost" data-pe-density="compact"></button><button id="playgroundShare" type="button" data-pe-button="secondary" data-pe-density="compact"></button><button id="playgroundSave" type="button" data-pe-button="primary" data-pe-density="compact"></button></nav>`;document.body.append(playgroundHeader);
   function playgroundLabels(){
+    if(playgroundTrigger){
+      const tools=document.body.classList.contains("playground-tools");
+      playgroundTrigger.querySelector("span").textContent=tools?playgroundCopy("Live Clay","Live Clay"):playgroundCopy("Playground","Playground");
+      playgroundTrigger.setAttribute("aria-label",tools?playgroundCopy("Back to Live Clay","返回 Live Clay"):playgroundCopy("Open Playground","打开 Playground"));
+      playgroundTrigger.title=playgroundTrigger.getAttribute("aria-label");
+    }
     playgroundPrompt.placeholder=playgroundCopy("Describe a little world…","写一句话，让小世界动起来…");
     playgroundPrompt.setAttribute("aria-describedby","playgroundStatus");
     document.getElementById("playgroundRetry").textContent=playgroundCopy("Retry","重试");
@@ -29936,6 +29963,7 @@ var canvasDocumentIdentity = (() => {
   }
   async function playgroundGenerate(){
     const text=playgroundPrompt.value.trim(),revision=++playground.revision,documentId=canvasDocumentsCurrent().id;
+    const restorePromptFocus=document.activeElement===playgroundPrompt;
     playground.controller?.abort();clearTimeout(playground.timer);
     const controller=playground.controller=new AbortController();
     const run=async()=>{
@@ -29946,6 +29974,7 @@ var canvasDocumentIdentity = (() => {
       if(!response.ok)throw Error(result.message||result.error||"Live Clay unavailable");
       if(controller.signal.aborted||revision!==playground.revision||documentId!==canvasDocumentsCurrent().id)return;
       await playgroundApply({version:1,description:text,world:result.world});
+      if(restorePromptFocus&&playground.open&&revision===playground.revision)playgroundPrompt.focus({preventScroll:true});
       playgroundNotice(playgroundCopy("Drag to rotate · Your scene stays on this Canvas","拖动旋转 · 场景会保留在这张画布上"));
     };
     playground.request=run().catch(error=>{if(!controller.signal.aborted&&revision===playground.revision)playgroundNotice(String(error.message||error),true);}).finally(()=>{if(revision===playground.revision)playground.request=null;});
@@ -29964,7 +29993,8 @@ var canvasDocumentIdentity = (() => {
     if(!widget)widget=await playgroundApply({version:1,description:"",world:{entities:[],mood:"day",abstract:false}});
     playground.widgetId=widget.id;playgroundPrompt.value=playgroundDocument(widget)?.description||"";
     try{const pending=sessionStorage.getItem("penecho-playground-input:"+canvasDocumentsCurrent().id);if(pending!==null)playgroundPrompt.value=pending;}catch{}
-    playgroundInteract(widget);if(document.body.classList.contains("playground-entry"))fit();playgroundNotice(playgroundCopy("Type to shape your world. No Enter needed.","随输入变化，无需回车。"));
+    playgroundInteract(widget);if(document.body.classList.contains("playground-entry"))fit();playgroundNotice(playgroundDocument(widget)?.description?playgroundCopy("Drag to rotate · Your scene stays on this Canvas","拖动旋转 · 场景会保留在这张画布上"):playgroundCopy("Type to shape your world. No Enter needed.","随输入变化，无需回车。"));
+    playgroundPrompt.focus({preventScroll:true});
   }
   function playgroundClose(){
     playground.open=false;playgroundTrigger?.setAttribute("aria-expanded","false");
@@ -29995,12 +30025,38 @@ var canvasDocumentIdentity = (() => {
   playgroundPrompt.addEventListener("compositionstart",()=>{playground.composing=true;clearTimeout(playground.timer);playground.controller?.abort();playground.revision++;});
   playgroundPrompt.addEventListener("compositionend",()=>{playground.composing=false;playgroundInput();});
   playgroundPanel.querySelectorAll("[data-example]").forEach(button=>button.addEventListener("click",()=>{playgroundPrompt.value=button.dataset.example;playgroundInput();playgroundPrompt.focus();}));
-  playgroundTrigger?.addEventListener("click",()=>{if(playground.open)playgroundClose();else void playgroundOpen().catch(error=>playgroundNotice(error.message,true));});
+  function playgroundEntry(enabled){
+    document.body.classList.toggle("playground-entry",enabled);
+    document.body.classList.toggle("playground-tools",!enabled);
+    if(playgroundTrigger){
+      if(enabled)playgroundDock.append(playgroundTrigger);
+      else if(playgroundToolsHome)playgroundToolsHome.insertBefore(playgroundTrigger,document.getElementById("canvasDocumentMeta"));
+      else playgroundTriggerHome?.append(playgroundTrigger);
+    }
+    playgroundHeader.hidden=!enabled;
+    playgroundLabels();
+    if(!enabled)playgroundFitTools();
+    if(location.pathname==="/play/liveclay"){
+      const url=new URL(location.href);
+      if(enabled)url.searchParams.delete("tools");else url.searchParams.set("tools","1");
+      history.replaceState(history.state,"",url);
+    }
+  }
+  let playgroundToolFitFrame=0;
+  function playgroundFitTools(){
+    cancelAnimationFrame(playgroundToolFitFrame);
+    playgroundToolFitFrame=requestAnimationFrame(()=>{
+      if(!document.body.classList.contains("playground-tools"))return;
+      fit();fitCanvasContents();
+    });
+  }
+  window.addEventListener("resize",()=>{if(document.body.classList.contains("playground-tools"))playgroundFitTools();});
+  playgroundTrigger?.addEventListener("click",()=>{if(document.body.classList.contains("playground-tools"))playgroundEntry(true);if(playground.open)playgroundClose();else void playgroundOpen().catch(error=>playgroundNotice(error.message,true));});
   document.getElementById("playgroundClose").onclick=playgroundClose;
   document.getElementById("playgroundRetry").onclick=()=>void playgroundGenerate();
   document.getElementById("playgroundSave").onclick=()=>void playgroundAction("save");
   document.getElementById("playgroundShare").onclick=()=>void playgroundAction("share");
-  document.getElementById("playgroundCanvas").onclick=()=>{document.body.classList.remove("playground-entry");if(playgroundTriggerHome&&playgroundTrigger)playgroundTriggerHome.append(playgroundTrigger);playgroundHeader.hidden=true;playgroundClose();setWidgetInteraction(null);};
+  document.getElementById("playgroundCanvas").onclick=()=>{playgroundEntry(false);playgroundClose();setWidgetInteraction(null);};
   playgroundPanel.addEventListener("keydown",event=>{if(event.key==="Escape"){event.stopPropagation();playgroundClose();}});
   window.addEventListener("penecho:languagechange",playgroundLabels);
   window.PenEchoPlayground={
@@ -30008,13 +30064,15 @@ var canvasDocumentIdentity = (() => {
       if(playground.ready||window.PENECHO_CONFIG?.runtime==="viewer")return;playground.ready=true;
       const entry=window.PENECHO_CONFIG?.playground==="liveclay"||new URLSearchParams(location.search).get("playground")==="liveclay";
       if(!entry)return;
-      document.body.classList.add("playground-entry");if(playgroundTrigger)playgroundDock.append(playgroundTrigger);playgroundHeader.hidden=false;
+      if(new URLSearchParams(location.search).get("tools")==="1"){playgroundEntry(false);return;}
+      playgroundEntry(true);
       await playgroundOpen();
       const key="penecho-playground-action:"+window.PENECHO_CONFIG?.browserDraftId,action=sessionStorage.getItem(key);
       if(action&&!window.PENECHO_CONFIG?.guestCanvas){sessionStorage.removeItem(key);await playgroundAction(action);}
     },
     open:playgroundOpen,
   };
+  }
 // Pointer and control bindings, portable snapshots, and application startup.
   document.addEventListener("pointerdown", unselectTextEditorsOutside, true);
   document.addEventListener("focusin", unselectTextEditorsOutside, true);

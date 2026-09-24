@@ -52,7 +52,17 @@ test("ordinary content updates still reject an in-flight stale snapshot",async()
   h.requests.set("capture",{widget:h.widget,contentVersion:0,resolve:()=>{resolved=true;},reject:error=>{rejected=error;}});
   await h.message({type:"penecho-widget-updated"});
   await h.message({type:"penecho-widget-snapshot",requestId:"capture",dataUrl:"data:image/png;base64,AQ==",width:100,height:50});
-  assert.equal(resolved,false);assert.equal(rejected.message,"Widget export failed");assert.equal(h.widget.snapshotDataUrl,"");assert.equal(h.requests.size,0);
+  assert.equal(resolved,false);assert.equal(rejected.message,"Widget export failed");assert.equal(rejected.code,"WIDGET_CONTENT_CHANGED");assert.equal(h.widget.snapshotDataUrl,"");assert.equal(h.requests.size,0);
+});
+test("first-load notification marks an in-flight snapshot as retryable",async()=>{
+  const h=harness();let rejected;
+  h.requests.set("capture",{widget:h.widget,contentVersion:0,resolve:()=>assert.fail("stale pixels must not be used"),reject:error=>{rejected=error;}});
+  await h.message({type:"penecho-widget-updated",loaded:true});
+  await h.message({type:"penecho-widget-snapshot",requestId:"capture",dataUrl:"data:image/png;base64,AQ==",width:100,height:50});
+  assert.equal(h.widget.mcpDocumentLoaded,true);
+  assert.equal(rejected.code,"WIDGET_CONTENT_CHANGED");
+  assert.equal(rejected.details.stage,"content-version");
+  assert.equal(h.requests.size,0);
 });
 test("snapshot deadline remains active while the returned PNG is decoding",async()=>{
   const h=harness();let rejectRequest;

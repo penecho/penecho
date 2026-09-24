@@ -1715,17 +1715,18 @@
   }
   function positionWidget(widget) {
     if (!widget.shell) return;
-    // Entry presentation resizes the existing iframe without rewriting Canvas geometry.
+    // Entry and read-only Live Clay presentation resize the existing iframe without rewriting Canvas geometry.
     const liveClayEntry = document.body.classList.contains("playground-entry") && widget.sourceFormat === "penecho-liveclay+json" && state.interactingWidgetId === widget.id,
+      liveClayViewer = window.PENECHO_CONFIG?.runtime === "viewer" && widget.sourceFormat === "penecho-liveclay+json",
       entryMetrics = liveClayEntry ? canvasViewportMetrics() : null,
-      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : widget.contentW,
-      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : widget.contentH;
+      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : liveClayViewer ? Math.max(1, widget.w * state.scale) : widget.contentW,
+      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : liveClayViewer ? Math.max(1, widget.h * state.scale) : widget.contentH;
     const localX = entryMetrics ? 12 - state.panX : widget.x * state.scale,
       localY = entryMetrics ? 64 - state.panY : widget.y * state.scale,
       screenX = state.panX + localX,
       screenY = state.panY + localY,
-      scaleX = entryMetrics ? 1 : state.scale * widget.w / widget.contentW,
-      scaleY = entryMetrics ? 1 : state.scale * widget.h / widget.contentH,
+      scaleX = entryMetrics || liveClayViewer ? 1 : state.scale * widget.w / widget.contentW,
+      scaleY = entryMetrics || liveClayViewer ? 1 : state.scale * widget.h / widget.contentH,
       declaration = widget.styleRule?.style;
     if (!declaration) return;
     const sizeKey = `${displayW}x${displayH}`;
@@ -1802,11 +1803,12 @@
     }
     if (!widget.frame?.contentWindow || !widget.hostReady || !Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) return;
     const active = widget.renderActive !== false,
-      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}`;
+      viewportWidth = widget.maximized ? Math.max(widget.contentW, widget.presentationWidth || 0) : undefined,
+      key = `${interactive ? 1 : 0}:${selected ? 1 : 0}:${active ? 1 : 0}:${state.navigationLocked ? 1 : 0}:${scaleX.toFixed(6)}:${scaleY.toFixed(6)}:${widget.fitContent ? 1 : 0}:${widget.fitContentAxes || ""}:${widget.maximized ? 1 : 0}:${viewportWidth || ""}`;
     syncMcpWidgetProgress(widget);
     if (!force && widget.hostStateKey === key) return;
     widget.hostStateKey = key;
-    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
+    widget.frame.contentWindow.postMessage({ type:"penecho-widget-state", maximized:widget.maximized === true, viewportWidth, fitContent:widget.fitContent === true, fitContentAxes:widget.fitContentAxes || null, selected, interactive, active, navigationLocked:state.navigationLocked, scaleX, scaleY }, widget.hostOrigin || location.origin);
   }
   function markWidgetHostReady(widget) {
     widget.hostReady = true;
@@ -2032,7 +2034,9 @@
     try {
       const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
       if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
-      if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      if(widget.contentVersion!==pending.contentVersion)throw Object.assign(Error(t("widgetExportFailed")),{
+        code:"WIDGET_CONTENT_CHANGED",details:{widgetId:widget.id,stage:"content-version"},
+      });
       if(!finishPending())return;
       if (pending.fullContent) {
         pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl, contentWidth:message.contentWidth, contentHeight:message.contentHeight, overflow:message.overflow });
@@ -2640,14 +2644,14 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
           if(signal?.aborted)throw widgetSnapshotAbortError(signal);
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution);
+          const request = requestWidgetSnapshot(widget, timeoutMs, true, signal, highResolution);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),

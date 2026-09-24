@@ -1,6 +1,6 @@
 # Live Clay Playground
 
-入口 `/play/liveclay`（071 本地入口转到 `/?playground=liveclay`），普通画布 Agent 旁边的 Playground 按钮也可以打开。
+当前前端入口暂时隐藏：普通画布 Agent 旁边的 Playground 按钮不显示，`/play/liveclay`（071 本地转到 `/?playground=liveclay`）也不会自动打开窗口或创建 Widget。已有场景 Widget 的数据与渲染代码仍保留。以后启用时，将 `src/client/app/playground.js` 中的 `playgroundUiEnabled` 设为 `true`，运行 `npm run build:client`，再按官方流程同步 Cloud 前端镜像。
 
 源代码在 `src/playground/liveclay/`；`scripts/build-playground.cjs` 用项目自己的 Three.js 与 esbuild 打包为 `public/playground/liveclay-v1.js`。构建不读取 Demo 项目。客户端接入在 `src/client/app/playground.js`，Cloud 从本仓库官方同步公开资源和经审查的场景规划代码。
 

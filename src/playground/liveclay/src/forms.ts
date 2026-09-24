@@ -26,8 +26,8 @@ export function buildForm(e: Entity): Part[] {
     } else {
       for (const x of [-.46, .46]) add([x, f === 'dog' ? 1.35 : 1.77, 0], [f === 'dog' ? .19 : .22, f === 'dog' ? .39 : .23, .16]);
     }
-    add([0, 1.27, .44], [f === 'pig' ? .25 : .2, .16, .15], f === 'pig' ? '#c28a85' : cream);
-    add([0, 1.35, .585], [.067, .046, .035], f === 'pig' ? '#ad7773' : '#785f56');
+    add([0, 1.27, .55], [f === 'pig' ? .25 : .2, .16, .15], f === 'pig' ? '#c28a85' : cream, 'sphere', [0, 0, 0], 'muzzle');
+    add([0, 1.35, .695], [.067, .046, .035], f === 'pig' ? '#ad7773' : '#785f56', 'sphere', [0, 0, 0], 'nose');
     eyes(1.5, .488, .215);
     if (['cat', 'fox', 'dog', 'creature'].includes(f)) {
       for (let i = 0; i < 4; i++) add([.46 + Math.sin(i * .55) * .4, .35 + i * .19, -.23 - i * .04], [.15 - i * .018, .22, .16 - i * .02], c, 'sphere', [0, 0, -.5 + i * .3], 'tail');

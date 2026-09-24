@@ -95,6 +95,9 @@ class ClayPart {
   }
   set(def?: Part) {
     this.definition = def;
+    // A muzzle sits partly over the head; its own shadow map creates a dark
+    // seam above the mouth. It still casts onto the ground with the figure.
+    this.mesh.receiveShadow = def?.role !== 'muzzle';
     const key = [def?.shape, def?.bend, def?.taper, def?.twist, JSON.stringify(def?.path), def?.radius, def?.endRadius].join(':');
     if (key === this.geometryKey) return;
     this.geometryKey = key; this.customGeometry?.dispose(); this.customGeometry = undefined;

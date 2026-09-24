@@ -322,6 +322,7 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
       viewerAutoFitWidgetId:null,
       viewerAutoFitCanvas:true,
       state,
+      window:{ PENECHO_CONFIG:{ runtime:"viewer" } },
       view,
       screen:{},
       animationLayer:{},
@@ -339,7 +340,7 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
       animationBounds:() => null,
       widgetBounds,
       unionLocalBounds,
-      document:{ querySelector:() => ({ getBoundingClientRect:() => ({ bottom:56 }) }) },
+      document:{ body:{classList:{contains:() => false}}, querySelector:() => ({ getBoundingClientRect:() => ({ bottom:56 }) }) },
       scheduleLiveInkLayerWarmup() {},
       updateCoordinates() {},
       requestRender() {},
@@ -372,6 +373,29 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
 
   const catalogLoad = functionSource(core, "loadPluginDocuments");
   assert.ok(catalogLoad.indexOf("syncWidgetRuntime();") < catalogLoad.indexOf("if (pluginEnabled(widget.pluginId)) mountWidget(widget)"));
+});
+
+test("Live Clay viewer reflows the iframe at screen size so its playback controls remain usable", () => {
+  const canvas = read("src/client/app/canvas-runtime.js"),
+    style = { setProperty(name, value) { this[name] = value; } },
+    widget = {
+      id:"live-clay", sourceFormat:"penecho-liveclay+json", shell:{},
+      x:100, y:200, w:1200, h:720, contentW:1200, contentH:720,
+      styleRule:{ style },
+    },
+    hostScales = [],
+    positionWidget = vm.runInNewContext(`(${functionSource(canvas, "positionWidget")})`, {
+      state:{ panX:20, panY:30, scale:.3 },
+      window:{ PENECHO_CONFIG:{ runtime:"viewer" } },
+      document:{ body:{ classList:{ contains:() => false } } },
+      updateWidgetRenderVisibility() {},
+      sendWidgetHostState:(_widget, scaleX, scaleY) => hostScales.push([scaleX, scaleY]),
+    });
+  positionWidget(widget);
+  assert.equal(style.width, "360px");
+  assert.equal(style.height, "216px");
+  assert.equal(style.transform, "translate3d(30px,60px,0) scale(1,1)");
+  assert.deepEqual(hostScales, [[1, 1]]);
 });
 
 test("Viewer skips onboarding observers and hidden plugin preview hosts, with a real-Node observer guard", () => {

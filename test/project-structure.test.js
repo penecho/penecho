@@ -35,6 +35,7 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/studio-navigator.js",
     "src/client/app/keyboard-shortcuts.js",
     "src/client/app/canvas-navigation.js",
+    "src/client/app/playground.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
@@ -69,4 +70,15 @@ test("desktop packaging unpacks the bundled project-search executable", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.equal(packageJson.dependencies["@vscode/ripgrep"], "1.18.0");
   assert.match(forge, /asar:\{ unpack:"\*\*\/node_modules\/\{sharp,@img,@vscode\}\/\*\*\/\*" \}/);
+});
+
+test("the npm package includes the generated Live Clay runtime and its build inputs", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  for (const file of [
+    "public/playground.css",
+    "public/playground/liveclay-v1.js",
+    "public/playground/three-LICENSE.txt",
+    "scripts/build-playground.cjs",
+  ]) assert.ok(packageJson.files.includes(file), `${file} must ship in the npm package`);
+  assert.match(packageJson.scripts.check, /npm run check:playground/);
 });

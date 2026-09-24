@@ -968,7 +968,7 @@ test("canvas navigation guidance emphasizes middle-mouse panning for at least te
   assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
   assert.match(navigating, /view\.classList\.add\("is-navigating"\)[\s\S]*?NAVIGATION_HINT_VISIBLE_MS/);
   assert.match(functionSource(app, "wheelNavigating"), /setNavigating\(true\)/);
-  assert.match(app, /fit\(\);\s*setNavigating\(true\)/);
+  assert.match(app, /fit\(\);\s*if\(window\.PENECHO_CONFIG\?\.runtime!=="cloud"\)void window\.PenEchoPlayground\?\.start\(\)[^;]*;\s*setNavigating\(true\)/);
   assert.match(app, /tip:\s*"Pan: two-finger scroll, Hand, or Space \+ drag · Zoom: pinch or Ctrl\/Cmd \+ scroll"/);
   assert.match(zh, /tip:\s*"移动：双指滑动、小手或空格＋拖动 · 缩放：捏合或 Ctrl\/Cmd＋滚动"/);
   assert.match(css, /#tip\s*\{[^}]*max-width:\s*min\(440px, 100%\)[^}]*visibility:\s*hidden[^}]*opacity:\s*0/);
@@ -1950,6 +1950,8 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
     }),
     positionWidget = vm.runInNewContext(`(${functionSource(app, "positionWidget")})`, {
       state:{ panX:10, panY:20, scale:0.2 },
+      window:{ PENECHO_CONFIG:{ runtime:"device" } },
+      document:{body:{classList:{contains:() => false}}},
       updateWidgetRenderVisibility() {},
       sendWidgetHostState() {},
     }),
@@ -2046,7 +2048,7 @@ test("live widgets use native canvas chrome, state-aware iframe gestures, and th
   assert.doesNotMatch(messageHandler, /penecho-widget-snapshot-ready/);
   assert.match(messageHandler, /const snapshotImage=await decodeWidgetSnapshot[\s\S]*?pending\.signal\?\.aborted[\s\S]*?widget\.contentVersion!==pending\.contentVersion[\s\S]*?widget\.snapshotImage = snapshotImage[\s\S]*?widget\.snapshotHighResolution = pending\.highResolution[\s\S]*?widget\.snapshotVersion = pending\.contentVersion[\s\S]*?pending\.resolve\(widget\.snapshotImage\)/);
   assert.match(capturableWidgets, /visibleWidgets\(region\)[\s\S]*?state\.pendingWidget[\s\S]*?pending\.shell[\s\S]*?return \[\.\.\.widgets, pending\]/);
-  assert.match(prepareSnapshots, /highResolution = false[\s\S]*?capturableWidgets\(region\)[\s\S]*?requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution\)[\s\S]*?Promise\.race\([\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS[\s\S]*?Boolean\(widget\.snapshotImage\)/);
+  assert.match(prepareSnapshots, /highResolution = false[\s\S]*?timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS[\s\S]*?capturableWidgets\(region\)[\s\S]*?requestWidgetSnapshot\(widget, timeoutMs, true, signal, highResolution\)[\s\S]*?Promise\.race\([\s\S]*?WIDGET_HISTORY_SNAPSHOT_WAIT_MS[\s\S]*?Boolean\(widget\.snapshotImage\)/);
   assert.match(prepareSnapshots, /bestEffort = true[\s\S]*?if \(bestEffort\) await Promise\.race[\s\S]*?else await request/);
   assert.match(functionSource(app, "widgetBounds"), /capturableWidgets\(region\)/);
   assert.match(functionSource(app, "drawWidgetsToContext"), /capturableWidgets\(region\)/);

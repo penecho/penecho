@@ -696,7 +696,7 @@ test("widget host keeps generated HTML in an opaque inner frame and snapshots it
   assert.match(host, /withTimeout\(rendering, remainingMs,[\s\S]*?captureExpired = true/);
   assert.match(host, /penecho-widget-document-ready" && message\.runtimeVersion === runtimeVersion[\s\S]*?innerDocumentReady = true;[\s\S]*?penecho-widget-capture-ready[\s\S]*?forwardSnapshotRequest/);
   assert.match(snapshot, /penecho-widget-snapshot", runtimeVersion/);
-  assert.match(host, /for \(const requestId of \[\.\.\.pendingSnapshots\.keys\(\)\]\) snapshotError\(requestId, "Widget changed during snapshot"\)/);
+  assert.match(host, /for \(const requestId of \[\.\.\.pendingSnapshots\.keys\(\)\]\) snapshotError\(requestId, "Widget changed during snapshot", "WIDGET_CONTENT_CHANGED"\)/);
   assert.match(host, /globalThis\.penechoFetchPublic/);
   assert.match(host, /response = await nativeFetch\(input, init\)[\s\S]*?if \(response\.ok\) return response[\s\S]*?globalThis\.penechoFetchPublic\(url\)/);
   assert.match(host, /function beginImageFallback\(event\)[\s\S]*?proxyImageFallback\(image, sourceUrl\)/);

@@ -15,7 +15,13 @@ export class Simulation {
   duration = 12;
   labels: { entity: Entity; element: HTMLSpanElement; guide: SVGLineElement; offset: number }[] = [];
   private overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  constructor(private scene: THREE.Scene, private container: HTMLElement) { scene.add(this.group); this.overlay.classList.add('object-leaders'); this.overlay.setAttribute('aria-hidden','true'); container.append(this.overlay); }
+  constructor(private scene: THREE.Scene, private container: HTMLElement) {
+    scene.add(this.group);
+    this.overlay.classList.add('object-leaders');
+    this.overlay.setAttribute('aria-hidden','true');
+    Object.assign(this.overlay.style, { position:'absolute', inset:'0', width:'100%', height:'100%', pointerEvents:'none' });
+    container.append(this.overlay);
+  }
   setWorld(world: World, placements: Placement[], now: number) {
     const old = this.tracks;
     this.clearGuides(); this.tracks = new Map();
@@ -38,6 +44,7 @@ export class Simulation {
       const stable = previous && JSON.stringify(previous.e.physics) === JSON.stringify(e.physics) && previous.e.target === e.target;
       this.tracks.set(e.id, { e, placement, parent, radius, start: stable ? previous.start : now, floor: floorHeight });
       const label = document.createElement('span'); label.className = 'object-label'; label.textContent = e.label;
+      Object.assign(label.style, { position:'absolute', left:'0', top:'0', pointerEvents:'none' });
       const guide = document.createElementNS('http://www.w3.org/2000/svg','line'); guide.setAttribute('stroke','#a1aa97'); guide.setAttribute('stroke-width','1'); this.overlay.append(guide);
       this.container.append(label); this.labels.push({ entity: e, element: label, guide, offset: 0 });
       if (parent) {
