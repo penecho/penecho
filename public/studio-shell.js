@@ -140,6 +140,21 @@
     syncAIAction();
   }
 
+  // Mobile drawing controls sit below the title bar. Reserve their measured
+  // height so the sidebar search remains visible, including an OS scrollbar.
+  const sidebarFrame=document.querySelector(".canvas-frame"), sidebarToolbar=document.querySelector(".topbar .toolbar");
+  function syncSidebarToolbarInset() {
+    if(!sidebarFrame||!sidebarToolbar)return;
+    const frame=sidebarFrame.getBoundingClientRect(),bar=sidebarToolbar.getBoundingClientRect(),scale=frame.width/Math.max(1,sidebarFrame.offsetWidth);
+    const inset=document.body.dataset.theme==="studio"&&matchMedia("(max-width: 700px)").matches?Math.max(0,(bar.bottom-frame.top)/scale):0;
+    const value=`${Math.ceil(inset)}px`;
+    if(sidebarFrame.style.getPropertyValue("--studio-navigator-toolbar-inset")!==value)sidebarFrame.style.setProperty("--studio-navigator-toolbar-inset",value);
+  }
+  if(sidebarFrame&&sidebarToolbar){
+    const observer=new ResizeObserver(syncSidebarToolbarInset);observer.observe(sidebarToolbar);observer.observe(document.querySelector(".topbar"));
+    window.addEventListener("resize",syncSidebarToolbarInset);syncSidebarToolbarInset();
+  }
+
   const viewControls = document.querySelector("#canvasZoomControls");
   const fitButton = document.querySelector("#canvasFitContents");
   const lockButton = document.querySelector("#canvasNavigationLock");

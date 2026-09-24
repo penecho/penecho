@@ -38,7 +38,7 @@ test("shortcut defaults cover Agent focus, save, history, editing, and workspace
   const source = read("src/client/app/keyboard-shortcuts.js"), build = read("scripts/build-client.js");
   assert.match(build, /src\/client\/app\/keyboard-shortcuts\.js/);
   for (const [id, chord] of [
-    ["focus-agent", "Mod+k"], ["pen-tool", "p"], ["save-canvas", "Mod+s"], ["undo", "Mod+z"],
+    ["search-work", "Mod+k"], ["focus-agent", "Tab"], ["pen-tool", "p"], ["save-canvas", "Mod+s"], ["undo", "Mod+z"],
     ["redo", "Mod+Shift+z"], ["canvas-library", "Mod+o"],
     ["toggle-fullscreen", "Mod+Shift+f"], ["open-settings", "Mod+,"],
   ]) assert.match(source, new RegExp(`id:\\"${id}\\"[^\\n]*defaultChord:\\"${chord.replace(/[+]/g, "\\+")}\\"`));
@@ -192,4 +192,13 @@ test("Canvas cancellation yields to editing and modal contexts and consumes only
   assert.equal(cancellations,1);
   assert.equal(event.prevented,true);
   assert.equal(event.stopped,true);
+});
+
+test('sidebar search shortcut migrates the old default without overwriting custom shortcuts',()=>{
+  const source=read('src/client/app/keyboard-shortcuts.js');
+  const commands=[{id:'search-work',defaultChord:'Mod+k'},{id:'focus-agent',defaultChord:'Tab'},{id:'save-canvas',defaultChord:'Mod+s'}];
+  const load=(saved)=>Function('KEYBOARD_SHORTCUT_COMMANDS','localStorage','KEYBOARD_SHORTCUT_STORAGE_KEY',`${functionSource(source,'keyboardShortcutDefaults')}\n${functionSource(source,'keyboardShortcutLoadBindings')}\nreturn keyboardShortcutLoadBindings();`)(commands,{getItem:()=>JSON.stringify(saved)},'test');
+  assert.deepEqual(load({'focus-agent':'Mod+k'}),{'search-work':'Mod+k','focus-agent':'Tab','save-canvas':'Mod+s'});
+  assert.deepEqual(load({'focus-agent':'Mod+j','save-canvas':'Mod+k'}),{'search-work':'','focus-agent':'Mod+j','save-canvas':'Mod+k'});
+  assert.deepEqual(load({'search-work':'Mod+f','focus-agent':'Mod+j'}),{'search-work':'Mod+f','focus-agent':'Mod+j','save-canvas':'Mod+s'});
 });

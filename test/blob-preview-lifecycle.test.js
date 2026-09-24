@@ -46,7 +46,7 @@ function verifyDeferredLifecycle(source, helperName, releaseName, mapName) {
     URL = { revokeObjectURL:(url) => revoked.push(url) },
     controller = new AbortController(),
     loader = { observer:{ disconnect(){ this.disconnected = true; } }, queue:["pending"], controllers:new Set([controller]) },
-    context = vm.createContext({ URL, [mapName]:urls, historyPreviewLoader:loader, queueMicrotask:callback=>callback() });
+    context = vm.createContext({ URL, [mapName]:urls, historyPreviewLoader:loader, studioNavigatorPreviewLoaders:new WeakMap([[urls,loader]]), queueMicrotask:callback=>callback() });
   vm.runInContext(`${functionSource(source, helperName)}\n${functionSource(source, releaseName)}`, context);
   const release = context[releaseName];
 
@@ -56,6 +56,11 @@ function verifyDeferredLifecycle(source, helperName, releaseName, mapName) {
     assert.equal(context.historyPreviewLoader, null);
     assert.equal(loader.observer.disconnected, true);
     assert.equal(loader.queue.length, 0);
+    assert.equal(controller.signal.aborted, true);
+  }
+  if (releaseName === "releaseStudioNavigatorPreviewUrls") {
+    assert.equal(context.studioNavigatorPreviewLoaders.has(urls), false);
+    assert.equal(loader.observer.disconnected, true);
     assert.equal(controller.signal.aborted, true);
   }
   assert.deepEqual(revoked, ["blob:complete"]);

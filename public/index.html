@@ -484,19 +484,21 @@
           <label class="studio-navigator-search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
             <span class="sr-only" data-i18n="studioNavigatorSearch">Search work</span>
-            <input id="studioNavigatorSearch" type="search" autocomplete="off" data-i18n-placeholder="studioNavigatorSearch" placeholder="Search work" data-i18n-aria="studioNavigatorSearch" aria-label="Search work">
+            <input id="studioNavigatorSearch" type="search" autocomplete="off" data-i18n-placeholder="studioNavigatorSearch" placeholder="Search work" data-i18n-aria="studioNavigatorSearch" aria-label="Search work"><kbd id="studioNavigatorSearchShortcut" aria-hidden="true">⌘K</kbd>
           </label>
           <button class="studio-navigator-new" type="button" data-shell-forward="#newCanvasBtn" data-i18n-aria="historyNewCanvas" aria-label="New canvas" data-i18n-title="historyNewCanvas" title="New canvas" data-pe-button="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           </div>
-          <nav class="studio-navigator-destinations" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
-            <button id="studioNavigatorManage" type="button" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span data-i18n="studioNavigatorLibrary">Canvas Library</span></button>
-            <button type="button" data-shell-forward="#historyBtn,#historyFavoritesNav" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span data-i18n="libraryFavorites">Favorites</span></button>
-            <a href="https://penecho.ai/community.html" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg><span data-i18n="explore">Echoes</span><span aria-hidden="true">↗</span></a>
-          </nav>
+
+          <div class="studio-navigator-tabs" data-pe-control="tab" role="tablist" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
+            <button id="studioNavigatorAllTab" type="button" role="tab" aria-selected="true" aria-controls="studioNavigatorAllPanel" data-studio-navigator-tab="all" data-i18n="studioNavigatorAll">All</button>
+            <button id="studioNavigatorCanvasTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorCanvasPanel" data-studio-navigator-tab="canvas" data-i18n="studioNavigatorCanvases">Canvases</button>
+            <button id="studioNavigatorAgentTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorAgentPanel" data-studio-navigator-tab="agent" data-i18n="studioNavigatorAgents">Agent</button>
+            <button id="studioNavigatorMcpTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorMcpPanel" data-studio-navigator-tab="mcp" tabindex="-1">MCP</button>
+          </div>
         </header>
         <div class="studio-navigator-body">
           <section id="studioNavigatorOpenSection" class="studio-navigator-open-section" aria-labelledby="studioNavigatorOpenTitle">
-            <h3 id="studioNavigatorOpenTitle" class="studio-navigator-section-label" data-i18n="studioNavigatorOpened">Open</h3>
+            <div class="studio-navigator-open-heading"><h3 id="studioNavigatorOpenTitle" class="studio-navigator-section-label" data-i18n="studioNavigatorOpened">Open</h3><button id="studioNavigatorOpenToggle" type="button" aria-expanded="true" aria-controls="studioNavigatorOpenList" aria-label="Collapse open canvases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button></div>
           <div id="canvasWorkspace" class="canvas-workspace" hidden>
             <span id="canvasWorkspaceCount" role="status" aria-live="polite">1 open</span>
               <button id="studioMcpMore" type="button" data-pe-button="ghost" data-pe-density="compact" aria-label="MCP canvas actions" aria-haspopup="menu" aria-expanded="false" aria-controls="studioMcpMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
@@ -507,34 +509,38 @@
               </div>
             <button id="canvasWorkspaceRetry" type="button" data-pe-button="secondary" data-pe-density="compact" hidden>Retry</button>
           </div>
-            <div id="studioNavigatorOpenList" class="studio-navigator-list"></div>
+            <div id="studioNavigatorOpenList" class="studio-navigator-list"></div><button id="studioNavigatorOpenMore" class="studio-navigator-show-more" type="button" hidden></button>
           </section>
           <div class="studio-navigator-recent-heading"><h3 class="studio-navigator-section-label" data-i18n="studioNavigatorRecent">Recent</h3>
-          <div class="studio-navigator-tabs" data-pe-control="tab" role="tablist" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
-            <button id="studioNavigatorAllTab" type="button" role="tab" aria-selected="true" aria-controls="studioNavigatorAllPanel" data-studio-navigator-tab="all" data-i18n="studioNavigatorAll">All</button>
-            <button id="studioNavigatorMcpTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorMcpPanel" data-studio-navigator-tab="mcp" tabindex="-1" hidden>MCP</button>
-            <button id="studioNavigatorCanvasTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorCanvasPanel" data-studio-navigator-tab="canvas" data-i18n="studioNavigatorCanvases">Canvases</button>
-            <button id="studioNavigatorAgentTab" type="button" role="tab" aria-selected="false" aria-controls="studioNavigatorAgentPanel" data-studio-navigator-tab="agent" data-i18n="studioNavigatorAgents">Agent</button>
-          </div>
+
           </div>
           <section id="studioNavigatorAllPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorAllTab">
             <div id="studioWorkRecentList" class="studio-navigator-list"></div>
           </section>
           <section id="studioNavigatorMcpPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorMcpTab" hidden>
+            <div id="studioNavigatorMcpConnection" class="studio-navigator-mcp-connection"><div id="studioNavigatorMcpStatus"></div>
             <div class="studio-mcp-actions" role="group" aria-label="MCP canvas actions" id="studioMcpActions">
               <div class="studio-mcp-follow"><span class="studio-mcp-follow-copy"><span id="studioMcpFollowLabel">Follow latest</span><small id="studioMcpFollowDescription">Auto-focus new content</small></span><button id="studioMcpFollowLatest" type="button" role="switch" data-pe-control="switch" aria-labelledby="studioMcpFollowLabel" aria-describedby="studioMcpFollowDescription" aria-checked="false"></button></div>
 
             </div>
+            </div><div class="studio-navigator-ai-heading"><h3 id="studioNavigatorAiTitle" class="studio-navigator-section-label"></h3><span id="studioNavigatorMcpMenuHost"></span></div>
             <div id="studioMcpRecentList" class="studio-navigator-list"></div>
           </section>
           <section id="studioNavigatorAgentPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorAgentTab" hidden>
+            <button id="studioNavigatorNewChat" class="studio-navigator-new-chat" type="button"><span aria-hidden="true">＋</span><span data-i18n="studioNavigatorNewChat">New chat on this canvas</span></button>
             <div id="studioAgentRecentList" class="studio-navigator-list"></div>
           </section>
           <section id="studioNavigatorCanvasPanel" class="studio-navigator-panel" role="tabpanel" aria-labelledby="studioNavigatorCanvasTab" hidden>
+            <div id="studioNavigatorLocations" class="studio-navigator-locations" role="group" data-i18n-aria="studioNavigatorLocation" aria-label="Canvas location"></div><label class="studio-navigator-sort"><select id="studioNavigatorSort" data-i18n-aria="studioNavigatorSort" aria-label="Sort canvases"><option value="modified" data-i18n="studioNavigatorLastModified">Last modified</option><option value="created" data-i18n="studioNavigatorNewest">Newest first</option><option value="name" data-i18n="studioNavigatorName">Name</option></select></label>
             <div id="studioCanvasRecentList" class="studio-navigator-list"></div>
           </section>
         </div>
         <footer class="studio-navigator-foot">
+          <nav class="studio-navigator-destinations" data-i18n-aria="studioNavigatorTitle" aria-label="Recent work">
+            <button id="studioNavigatorManage" type="button" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg><span data-i18n="studioNavigatorLibraryShort">Library</span></button>
+            <button type="button" data-shell-forward="#historyBtn,#historyFavoritesNav" data-pe-button="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span data-i18n="libraryFavorites">Favorites</span></button>
+            <a href="https://penecho.ai/community.html" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg><span data-i18n="explore">Echoes</span><span aria-hidden="true">↗</span></a>
+          </nav>
           <span id="canvasWorkspaceStatus" role="status" aria-live="polite"></span>
           <div class="studio-navigator-save-row"><span id="studioNavigatorSaveStatus" role="status"></span>
             <button id="studioNavigatorClose" class="studio-navigator-close" type="button" data-i18n-aria="studioNavigatorClose" aria-label="Collapse sidebar" data-i18n-title="studioNavigatorClose" title="Collapse sidebar" data-pe-button="icon" data-pe-density="compact"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 4v16m7-12-4 4 4 4"/></svg></button>
@@ -615,7 +621,7 @@
             </button>
             <button id="canvasWelcomeAgent" type="button" data-shell-forward="#canvasAgentToggle">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v13H9l-4 4V4Z"/></svg>
-              <strong data-i18n="canvasWelcomeAgent">Ask PenEcho Agent</strong><span data-i18n="canvasWelcomeAgentBody">Describe a diagram, plan, prototype or quiz.</span><kbd data-welcome-shortcut="focusAgent">⌘ K</kbd>
+              <strong data-i18n="canvasWelcomeAgent">Ask PenEcho Agent</strong><span data-i18n="canvasWelcomeAgentBody">Describe a diagram, plan, prototype or quiz.</span><kbd data-welcome-shortcut="focusAgent">Tab</kbd>
             </button>
             <button id="canvasWelcomeMcp" type="button" data-shell-forward="#mcpToolbarToggle">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></svg>

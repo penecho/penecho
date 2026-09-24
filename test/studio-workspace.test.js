@@ -70,7 +70,7 @@ test("background MCP activity does not highlight the visible Canvas",()=>{
 });
 
 test("MCP connection opens its tab once, preserves Follow latest and clears pending on disconnect",()=>{
-  const actions=[],search={value:"stale"},tab={hidden:true};
+  const actions=[],search={value:"stale"},tab={hidden:true,dataset:{}};
   const context=vm.createContext({studioNavigatorMcpEnabled:false,studioNavigatorSuspendedAgent:true,studioNavigatorActiveTab:"agent",studioNavigatorMcpTab:tab,studioNavigatorSearch:search,
     studioMcpFollowLatest:true,studioMcpLatestDocumentId:null,studioMcpLatestRegion:null,studioMcpPendingDocumentId:"stale",studioMcpPendingRegion:{x:1,y:2,w:3,h:4},
     syncStudioMcpActions:()=>actions.push(["follow",context.studioMcpFollowLatest]),
@@ -83,25 +83,26 @@ test("MCP connection opens its tab once, preserves Follow latest and clears pend
   assert.equal(context.studioMcpFollowLatest,true,"Follow latest is on by default for a live MCP connection");
   assert.equal(context.studioMcpPendingDocumentId,null);assert.equal(context.studioMcpPendingRegion,null);
   context.syncStudioNavigatorMcp(true);assert.equal(actions.length,5,"heartbeat/status renders must not reopen navigation");
-  context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,true);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(context.studioMcpFollowLatest,true);
+  context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");assert.equal(context.studioMcpFollowLatest,true);
   const before=actions.length;context.syncStudioNavigatorMcp(true);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");
   assert.deepEqual(actions.slice(before),[["tool","hand"],["close",false],["tab","mcp"],["open",true],["follow",true]],"a recovered connection reveals the MCP sidebar again");
   context.syncStudioNavigatorMcp(true);assert.equal(actions.length,before+5,"connected status refreshes must not reopen navigation");
 });
-test("MCP list contains every open Canvas in saved order independent of catalog selection",()=>{
+test("MCP list contains AI canvases only in saved order independent of catalog selection",()=>{
   const docs=[{id:"ordinary"},{id:"bound",bindings:[{}]},{id:"retained",sessions:[{}]},{id:"live"}];
-  const result=vm.runInNewContext(`(${extract("studioNavigatorMcpGroups")})()`,{
+  const result=vm.runInNewContext(`${extract("studioMcpOpenDocumentIds")}\n(${extract("studioNavigatorMcpGroups")})()`,{
+    canvasDocuments:{records:new Map(docs.map(doc=>[doc.id,doc]))},mcpRuntime:{sessions:new Map([["live-session",{documentId:"live"}]])},
     studioNavigatorWorkGroups:()=>[...docs.map(doc=>({documentId:doc.id})),{canvasKey:"server:unrelated"}],
     canvasDocumentsCatalog:()=>[{documentId:"retained",active:true},...docs.filter(doc=>doc.id!=="retained").map(doc=>({documentId:doc.id,active:false}))],
   });
-  assert.deepEqual(Array.from(result,group=>group.documentId),["ordinary","bound","retained","live"]);
+  assert.deepEqual(Array.from(result,group=>group.documentId),["bound","retained","live"]);
 });
-test("tab keyboard navigation includes MCP only while enabled",()=>{
+test("tab keyboard navigation always follows All, Canvases, Chats, MCP",()=>{
   for(const enabled of [false,true]){
     let selected;
     const context={studioNavigatorMcpEnabled:enabled,studioNavigatorActiveTab:"all",setStudioNavigatorTab:tab=>{selected=tab;}};
     const handle=vm.runInNewContext(`(${extract("handleStudioNavigatorTabKeydown")})`,context);
-    handle({key:"ArrowRight",preventDefault(){}});assert.equal(selected,enabled?"mcp":"canvas");
+    handle({key:"ArrowRight",preventDefault(){}});assert.equal(selected,"canvas");
   }
 });
 
@@ -172,7 +173,7 @@ test("canvas metadata distinguishes current, background open and closed saved ca
   const context=vm.createContext({canvasDocuments:{records,activeId:"new"},state:{canvasAgentCanvasKey:""},
     studioCanvasOpenedAt:()=>0,canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>[],t:key=>key,mcpRuntime:{sessions:new Map()}});
   context.canvasDocumentsCatalog=()=>[...records.values()].sort((a,b)=>Number(b.id===context.canvasDocuments.activeId)-Number(a.id===context.canvasDocuments.activeId)).map(doc=>({documentId:doc.id,title:doc.title,active:doc.id===context.canvasDocuments.activeId}));
-  vm.runInContext(extract("studioNavigatorWorkGroups")+"\n"+extract("studioNavigatorMcpGroups"),context);
+  vm.runInContext(extract("studioNavigatorWorkGroups")+"\n"+extract("studioMcpOpenDocumentIds")+"\n"+extract("studioNavigatorMcpGroups"),context);
   assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old"]);
   assert.equal(context.studioNavigatorMcpGroups()[1].updatedAt,300);
   records.get("new").changes.push({at:400});

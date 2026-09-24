@@ -2255,6 +2255,34 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioNavigatorMcpEmpty: "Canvases connected through MCP will appear here.",
       studioNavigatorOpen: "Open recent work",
       studioNavigatorClose: "Close recent work",
+      studioNavigatorDevice: "Device",
+      studioNavigatorOneMessage: "1 message",
+      studioNavigatorRetrySource: "Couldn’t load. Click to retry.",
+      studioNavigatorNewChat: "New chat on this canvas",
+      studioNavigatorLastModified: "Last modified",
+      studioNavigatorNewest: "Newest first",
+      studioNavigatorName: "Name",
+      studioNavigatorExpandOpen: "Expand open canvases",
+      studioNavigatorCollapseOpen: "Collapse open canvases",
+      studioNavigatorShowLess: "Show less",
+      studioNavigatorShowMore: "Show {count} more",
+      studioNavigatorLocal: "Local",
+      studioNavigatorUpdating: "Updating",
+      studioNavigatorIdle: "Idle",
+      studioNavigatorWaitingAI: "Ready for your AI to connect.",
+      studioNavigatorMcpOffline: "Connect your AI to create and update canvases here.",
+      studioNavigatorConnectAI: "Connect your AI",
+      studioNavigatorFromAI: "Canvases from AI",
+      studioNavigatorUpdatingNow: "Updating now",
+      studioNavigatorNewForYou: "New for you",
+      studioNavigatorNewCount: "{count} new updates",
+      studioNavigatorSearchCanvases: "Search canvases…",
+      studioNavigatorSearchChats: "Search chats…",
+      studioNavigatorSearchAI: "Search AI canvases…",
+      studioNavigatorLocation: "Canvas location",
+      studioNavigatorSort: "Sort canvases",
+      shortcutSearchWork: "Search canvases and chats",
+      shortcutSearchWorkHelp: "Open sidebar search.",
       studioNavigatorSearch: "Search canvases, chats…",
       studioNavigatorAll: "All",
       studioNavigatorAgents: "Chats",
@@ -25363,6 +25391,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function mcpRenderCanvasStatus() {
+    window.PenEchoStudioNavigator?.renderMcpStatus?.();
     const ui=mcpUiState(),mutationVisible=!mcpRuntime.mutationDocumentId||typeof canvasDocuments==="undefined"||mcpRuntime.mutationDocumentId===canvasDocuments.activeId;
     const pending=[...mcpRuntime.pendingView].filter(([id,ids])=>ids.size&&mcpSessionTransportActive(mcpRuntime.sessions.get(id)));
     if(ui.connected&&typeof canvasDocuments!=="undefined")for(const session of mcpLiveSessions()){
@@ -28409,6 +28438,7 @@ var canvasDocumentIdentity = (() => {
       studioNavigatorHistoryDirty = true,
       studioEdgeSwipe = null;
     const studioNavigatorExpandedGroups = new Map();
+    let studioNavigatorOpenExpanded=false,studioNavigatorOpenCollapsed=false,studioNavigatorCanvasLocation="all",studioNavigatorCanvasSort="modified",studioNavigatorMcpExpanded=false,studioNavigatorMcpSignature="";
 
     function storedStudioNavigatorOpen() {
       if (studioNavigatorCompactMedia?.matches) return false;
@@ -28419,7 +28449,7 @@ var canvasDocumentIdentity = (() => {
     function storedStudioNavigatorTab() {
       try {
         const stored=localStorage.getItem(STUDIO_NAVIGATOR_TAB_KEY);
-        return ["all","canvas","agent"].includes(stored)?stored:"all";
+        return ["all","canvas","agent","mcp"].includes(stored)?stored:"all";
       }
       catch { return "all"; }
     }
@@ -28462,7 +28492,7 @@ var canvasDocumentIdentity = (() => {
       const sidebarStatus = document.getElementById("studioNavigatorSaveStatus");
       if (sidebarStatus) {
         sidebarStatus.dataset.state = stateKey;
-        sidebarStatus.textContent = [saved ? snapshotLocationLabel(state.snapshotLocation) : "", t(copyKey)].filter(Boolean).join(" · ");
+        sidebarStatus.textContent = [saved ? snapshotLocationLabel(state.currentSnapshotLocation||state.snapshotLocation) : "", t(copyKey)].filter(Boolean).join(" · ");
       }
       saveCanvasLabel.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveCurrentSnapshot");
       canvasWelcome.hidden = !active || state.viewMode || studioCanvasHasContent();
@@ -28622,6 +28652,7 @@ var canvasDocumentIdentity = (() => {
       empty.textContent = t(key);
       list.replaceChildren(empty);
     }
+    function studioNavigatorLocationLabel(location) { return location==="device"?t("studioNavigatorDevice"):snapshotLocationLabel(location); }
     function studioNavigatorMetaTime(value) {
       if(!(Number(value)>0))return "";
       const date=new Date(Number(value)),today=new Date();today.setHours(0,0,0,0);
@@ -28636,7 +28667,12 @@ var canvasDocumentIdentity = (() => {
       meta.title = label;
       meta.setAttribute("aria-label", label);
       // Selection, unread content, and save order are independent states.
-      meta.textContent = [current ? t("studioNavigatorCurrent") : "", location ? snapshotLocationLabel(location) : "", studioNavigatorMetaTime(updatedAt)].filter(Boolean).join(" · ");
+      meta.replaceChildren();
+      if(current){const currentLabel=document.createElement("span");currentLabel.className="studio-navigator-meta-current";currentLabel.textContent=t("studioNavigatorCurrent");meta.append(currentLabel," · ");}
+      if(location){const source=document.createElement("span");source.className="studio-navigator-meta-location";
+        const paths={device:'<rect x="3" y="3" width="18" height="13" rx="1"/><path d="M2 20h20"/>',server:'<rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/><path d="M6 6h1m-1 11h1"/>',cloud:'<path d="M7 18h11a4 4 0 0 0 .2-8A6 6 0 0 0 6 8a5 5 0 0 0 1 10Z"/>'};
+        source.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${paths[location]||paths.device}</svg>`;source.append(studioNavigatorLocationLabel(location));meta.append(source);}
+      const time=studioNavigatorMetaTime(updatedAt);if(time)meta.append(location?" · ":"",time);
     }
     function syncStudioNavigatorCurrentSource() {
       const location=String(snapshotItemsLocation||"");
@@ -28691,9 +28727,10 @@ var canvasDocumentIdentity = (() => {
         return {...item,location:source.location};
       }));
     }
-    function renderStudioNavigatorSourceStates(list,query) {
+    function renderStudioNavigatorSourceStates(list,query,location="all") {
       if(query)return;
       for(const source of studioNavigatorSourceStates.values()){
+        if(location!=="all"&&source.location!==location)continue;
         if(source.status!=="loading"&&source.status!=="error")continue;
         const control=document.createElement("button"),label=document.createElement("strong"),detail=document.createElement("small");
         control.type="button";
@@ -28701,7 +28738,7 @@ var canvasDocumentIdentity = (() => {
         control.className="studio-navigator-source-state";
         control.dataset.tone=source.signIn?"signin":source.status;
         label.textContent=snapshotLocationLabel(source.location);
-        detail.textContent=source.signIn?t("snapshotCloudSignInRequired"):t(source.status==="loading"?"snapshotLibraryLoading":"snapshotLibraryLoadFailed").replace("{location}",snapshotLocationLabel(source.location));
+        detail.textContent=source.signIn?t("snapshotCloudSignInRequired"):t(source.status==="loading"?"snapshotLibraryLoading":"studioNavigatorRetrySource").replace("{location}",snapshotLocationLabel(source.location));
         control.append(label,detail);
         if(source.signIn)control.addEventListener("click",()=>document.querySelector("#cloudAccountBtn")?.click());
         else if(source.status==="error")control.addEventListener("click",()=>void refreshStudioNavigatorSource(source.location,{force:true}));
@@ -28843,7 +28880,8 @@ var canvasDocumentIdentity = (() => {
       label.textContent=t(key);
       return label;
     }
-    function studioNavigatorConversationEntry(group,conversation) {
+    function studioNavigatorConversationEntry(group,conversation,options) {
+      const standalone=Boolean(options?.standalone);
       const entry=document.createElement("div"),row=document.createElement("button"),remove=document.createElement("button"),body=document.createElement("span"),title=document.createElement("strong"),current=Boolean(group.current&&conversation.id===canvasAgent.currentConversation?.id),conversationName=conversation.title||t("canvasAgentHistoryUntitled"),deleteLabel=t("studioNavigatorDeleteSession").replace("{name}",conversationName);
       entry.className="studio-navigator-conversation-entry";
       row.type="button";row.className="studio-navigator-item studio-navigator-conversation";row.dataset.conversationId=conversation.id;row.classList.toggle("current",current);
@@ -28859,6 +28897,15 @@ var canvasDocumentIdentity = (() => {
       time.className="studio-navigator-chat-time";
       time.textContent=studioNavigatorMetaTime(conversation.updatedAt||conversation.createdAt);
       body.append(title);row.append(icon,body,time);
+      if(standalone){
+        entry.classList.add("studio-navigator-chat-card");
+        const summary=document.createElement("span"),context=document.createElement("span"),preview=studioNavigatorCanvasPreview(group.item||studioNavigatorCanvasGroupSnapshot(group),studioNavigatorAgentPreviewUrls,group.location),label=document.createElement("span");
+        summary.className="studio-navigator-chat-summary";summary.textContent=studioNavigatorConversationSummary(conversation);
+        context.className="studio-navigator-chat-context";
+        const count=(conversation.items||[]).filter(item=>item.type==="message").length;
+        label.textContent=`${group.name} · ${t(count===1?"studioNavigatorOneMessage":"studioNavigatorMessageCount").replace("{count}",String(count))}`;
+        label.title=label.textContent;context.append(preview,label);body.append(summary,context);icon.remove();
+      }
       row.addEventListener("click",()=>void openStudioConversation(group,conversation,row));
       remove.type="button";remove.className="studio-navigator-session-delete";remove.setAttribute("aria-label",deleteLabel);remove.title=deleteLabel;
       peButton(remove,"toolbar","compact");
@@ -28868,7 +28915,7 @@ var canvasDocumentIdentity = (() => {
       return entry;
     }
     function studioNavigatorGroupSection(group,{includeConversations=true,previewUrls=studioNavigatorWorkPreviewUrls}={}) {
-      const section=document.createElement("section"),heading=document.createElement("button"),canvasPreview=studioNavigatorCanvasPreview(group.item||studioNavigatorCanvasGroupSnapshot(group),previewUrls),headingBody=document.createElement("span"),name=document.createElement("strong"),meta=document.createElement("small"),identity=studioNavigatorCanvasIdentity(group.canvasKey);
+      const section=document.createElement("section"),heading=document.createElement("button"),canvasPreview=studioNavigatorCanvasPreview(group.item||studioNavigatorCanvasGroupSnapshot(group),previewUrls,group.location),headingBody=document.createElement("span"),name=document.createElement("strong"),meta=document.createElement("small"),identity=studioNavigatorCanvasIdentity(group.canvasKey);
       section.className="studio-navigator-group";
       section.dataset.canvasKey=group.canvasKey;
       heading.type="button";
@@ -29022,15 +29069,18 @@ var canvasDocumentIdentity = (() => {
       }
       studioNavigatorHistoryDirty = false;
       releaseStudioNavigatorPreviewUrls(studioNavigatorAgentPreviewUrls);
-      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().map((group)=>({...group,conversations:query?group.conversations.filter((conversation)=>`${group.name} ${conversation.title||t("canvasAgentHistoryUntitled")} ${studioNavigatorConversationSummary(conversation)}`.toLocaleLowerCase(state.language==="zh"?"zh-CN":"en").includes(query)):group.conversations})).filter((group)=>group.conversations.length);
+      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups(),entries=groups.flatMap(group=>group.conversations.map(conversation=>({group,conversation,updatedAt:Number(conversation.updatedAt||conversation.createdAt)||0}))).filter(({group,conversation})=>!query||`${group.name} ${conversation.title||""} ${studioNavigatorConversationSummary(conversation)}`.toLocaleLowerCase(state.language==="zh"?"zh-CN":"en").includes(query)).sort((a,b)=>b.updatedAt-a.updatedAt);
       studioNavigatorQueueCanvasGroupSnapshots(groups);
       studioAgentRecentList.replaceChildren();
-      if (!groups.length) {
-        studioNavigatorEmpty(studioAgentRecentList, query ? "studioNavigatorAgentNoMatch" : "studioNavigatorAgentEmpty");
-        return;
+      let previous="";
+      for(const entry of entries){
+        const key=studioNavigatorDateKey(entry.updatedAt);
+        if(!query&&key!==previous){const label=studioNavigatorSectionLabel(key);label.classList.add("studio-navigator-date");studioAgentRecentList.append(label);previous=key;}
+        studioAgentRecentList.append(studioNavigatorConversationEntry(entry.group,entry.conversation,{standalone:true}));
       }
-      appendStudioNavigatorRecentGroups(studioAgentRecentList,groups,{previewUrls:studioNavigatorAgentPreviewUrls});
+      if(!entries.length)studioNavigatorEmpty(studioAgentRecentList,query?"studioNavigatorAgentNoMatch":"studioNavigatorAgentEmpty");
     }
+
     function revokeStudioNavigatorPreviewUrlWhenSettled(url, image) {
       const revoke = () => {
         image.removeEventListener("load", revoke);
@@ -29043,14 +29093,40 @@ var canvasDocumentIdentity = (() => {
         image.addEventListener("error", revoke);
       }
     }
+    const studioNavigatorPreviewLoaders=new WeakMap(),studioNavigatorPreviewCache=new Map();
+    function studioNavigatorObservePreview(item,image,fallback,urls,location) {
+      if(!item?.hasPreview||!["server","cloud"].includes(location)||typeof IntersectionObserver!=="function")return;
+      const key=`${location}:${item.id}:${item.currentRevisionId||item.updatedAt||item.createdAt||0}`;
+      const show=(blob)=>{if(!image.isConnected)return;const url=URL.createObjectURL(blob);urls.set(url,image);image.src=url;image.hidden=false;fallback.hidden=true;};
+      if(studioNavigatorPreviewCache.has(key)){queueMicrotask(()=>show(studioNavigatorPreviewCache.get(key)));return;}
+      let loader=studioNavigatorPreviewLoaders.get(urls);
+      if(!loader){
+        loader={queue:[],active:0,controllers:new Set(),tasks:new WeakMap(),observer:null};
+        const pump=()=>{while(studioNavigatorPreviewLoaders.get(urls)===loader&&loader.active<2&&loader.queue.length){
+          const task=loader.queue.shift();if(!task.image.isConnected)continue;
+          const controller=new AbortController();loader.controllers.add(controller);loader.active++;
+          const timer=setTimeout(()=>controller.abort(),12000),cloud=task.location==="cloud",prefix=window.PENECHO_CONFIG?.runtime==="cloud"?"/api/v1":"/api/cloud";
+          const endpoint=cloud?`${prefix}/canvases/${encodeURIComponent(task.item.id)}/thumbnail?revision=${encodeURIComponent(task.item.currentRevisionId||"")}`:`/api/canvases/${encodeURIComponent(task.item.id)}/preview`;
+          void fetch(endpoint,{credentials:"same-origin",headers:authenticatedApiHeaders(),signal:controller.signal})
+            .then(response=>cloud?(response.ok?response.blob():null):snapshotApiResponse(response))
+            .then(body=>{if(studioNavigatorPreviewLoaders.get(urls)!==loader||!body)return;const blob=cloud?body:body.preview?dataUrlBlob(body.preview):null;if(!blob)return;
+              studioNavigatorPreviewCache.set(task.key,blob);if(studioNavigatorPreviewCache.size>100)studioNavigatorPreviewCache.delete(studioNavigatorPreviewCache.keys().next().value);task.show(blob);})
+            .catch(()=>{}).finally(()=>{clearTimeout(timer);loader.controllers.delete(controller);loader.active--;pump();});
+        }};
+        loader.observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;loader.observer.unobserve(entry.target);const task=loader.tasks.get(entry.target);if(task)loader.queue.push(task);}pump();},{root:studioNavigator.querySelector(".studio-navigator-body"),rootMargin:"80px"});
+        studioNavigatorPreviewLoaders.set(urls,loader);
+      }
+      loader.tasks.set(image.parentElement,{item,image,location,key,show});loader.observer.observe(image.parentElement);
+    }
     function releaseStudioNavigatorPreviewUrls(urls) {
+      const loader=studioNavigatorPreviewLoaders.get(urls);if(loader){studioNavigatorPreviewLoaders.delete(urls);loader.observer.disconnect();for(const controller of loader.controllers)controller.abort();}
       const entries = [...urls];
       urls.clear();
       queueMicrotask(() => {
         for (const [url, image] of entries) revokeStudioNavigatorPreviewUrlWhenSettled(url, image);
       });
     }
-    function studioNavigatorCanvasPreview(item, urls = studioNavigatorCanvasPreviewUrls) {
+    function studioNavigatorCanvasPreview(item, urls = studioNavigatorCanvasPreviewUrls, location = "") {
       const preview = document.createElement("span"), image = document.createElement("img");
       preview.className = "studio-navigator-item-icon canvas";
       image.alt = "";
@@ -29062,18 +29138,28 @@ var canvasDocumentIdentity = (() => {
           if (urls.delete(url)) URL.revokeObjectURL(url);
         };
       }
-      preview.append(image);
+      if(image.getAttribute("src"))preview.append(image);
+      else {
+        preview.classList.add("studio-navigator-preview-empty");
+        const fallback=document.createElement("span");fallback.className="studio-navigator-preview-fallback";fallback.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 16-1 4 4-1L20 7l-3-3Z M14 7l3 3"/></svg>';
+        image.hidden=true;image.onerror=()=>{image.hidden=true;fallback.hidden=false;};preview.append(image,fallback);
+        studioNavigatorObservePreview(item,image,fallback,urls,location);
+      }
+
       return preview;
     }
     function renderStudioNavigatorOpenCanvases() {
       const list=document.getElementById("studioNavigatorOpenList"),section=document.getElementById("studioNavigatorOpenSection");
       if(!list||!section)return;
-      section.hidden=Boolean(studioNavigatorSearchQuery());
+      section.hidden=studioNavigatorActiveTab!=="all"||Boolean(studioNavigatorSearchQuery());
       if(section.hidden)return;
       list.replaceChildren();
       const groups=studioNavigatorWorkGroups().filter(group=>group.documentId);
       document.getElementById("studioNavigatorOpenTitle").textContent=`${t("studioNavigatorOpened")} · ${groups.length}`;
-      for(const group of groups){
+      const toggle=document.getElementById("studioNavigatorOpenToggle"),more=document.getElementById("studioNavigatorOpenMore");
+      list.hidden=studioNavigatorOpenCollapsed;toggle.setAttribute("aria-expanded",String(!studioNavigatorOpenCollapsed));toggle.setAttribute("aria-label",t(studioNavigatorOpenCollapsed?"studioNavigatorExpandOpen":"studioNavigatorCollapseOpen"));
+      more.hidden=studioNavigatorOpenCollapsed||groups.length<=4;more.textContent=studioNavigatorOpenExpanded?t("studioNavigatorShowLess"):t("studioNavigatorShowMore").replace("{count}",String(Math.max(0,groups.length-4)));more.setAttribute("aria-expanded",String(studioNavigatorOpenExpanded));
+      for(const group of studioNavigatorOpenExpanded?groups:groups.slice(0,4)){
         const entry=document.createElement("section"),row=document.createElement("button"),name=document.createElement("strong"),status=document.createElement("small"),dot=document.createElement("span");
         entry.className="studio-navigator-open-item";
         row.type="button";row.className="studio-navigator-open-canvas";peChoice(row);
@@ -29131,12 +29217,29 @@ var canvasDocumentIdentity = (() => {
       studioNavigatorHistoryDirty = false;
       renderStudioNavigatorOpenCanvases();
       releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
-      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter(group=>group.documentId||group.location);
+      const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter(group=>group.location&&group.item),locations=document.getElementById("studioNavigatorLocations");
+      locations.replaceChildren();
+      for(const location of ["all","device","server","cloud"]){
+        const button=document.createElement("button"),count=groups.filter(group=>location==="all"||group.location===location).length;
+        button.type="button";button.dataset.location=location;button.setAttribute("aria-pressed",String(location===studioNavigatorCanvasLocation));
+        const label=document.createElement("span"),number=document.createElement("small");label.textContent=location==="all"?t("studioNavigatorAll"):studioNavigatorLocationLabel(location);number.textContent=String(count);button.append(label,number);
+        button.addEventListener("click",()=>{studioNavigatorCanvasLocation=location;renderStudioCanvasHistory();});locations.append(button);
+      }
+      document.getElementById("studioNavigatorSort").value=studioNavigatorCanvasSort;
+      const filtered=groups.filter(group=>(studioNavigatorCanvasLocation==="all"||group.location===studioNavigatorCanvasLocation)&&studioNavigatorGroupMatches(group,query));
+      filtered.sort((a,b)=>studioNavigatorCanvasSort==="name"?a.name.localeCompare(b.name,state.language==="zh"?"zh-CN":"en"):studioNavigatorCanvasSort==="created"?(Number(b.item.createdAt)||0)-(Number(a.item.createdAt)||0):(b.savedAt||0)-(a.savedAt||0));
+      studioNavigatorQueueCanvasGroupSnapshots(filtered);
       studioCanvasRecentList.replaceChildren();
-      appendStudioNavigatorRecentGroups(studioCanvasRecentList,groups.filter(group=>studioNavigatorGroupMatches(group,query)),{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});
-      if(!studioCanvasRecentList.childElementCount)studioNavigatorEmpty(studioCanvasRecentList,groups.length?"studioNavigatorCanvasNoMatch":"studioNavigatorCanvasEmpty");
-      renderStudioNavigatorSourceStates(studioCanvasRecentList,query);
+      for(const group of filtered){
+        const section=studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-canvas-card");
+        studioNavigatorRenderCanvasMeta(section.querySelector("small"),false,Boolean(group.documentId),group.location,group.savedAt);
+        if(group.current||group.documentId){const badge=document.createElement("span");badge.className="studio-navigator-canvas-state";badge.dataset.current=String(Boolean(group.current));badge.textContent=t(group.current?"studioNavigatorCurrent":"studioNavigatorOpened");section.querySelector(".studio-navigator-item-icon").append(badge);}
+        studioCanvasRecentList.append(section);
+      }
+      if(!filtered.length)studioNavigatorEmpty(studioCanvasRecentList,query?"studioNavigatorCanvasNoMatch":"studioNavigatorCanvasEmpty");
+      renderStudioNavigatorSourceStates(studioCanvasRecentList,query,studioNavigatorCanvasLocation);
     }
+
     let studioMcpFollowLatest=true,studioMcpLatestDocumentId=null,studioMcpPendingDocumentId=null,studioMcpFollowing=false,studioMcpCloseQueue=null;
     let studioMcpLatestRegion=null,studioMcpPendingRegion=null,studioMcpUpdateRevision=0;
     function studioMcpOpenDocumentIds() {
@@ -29161,7 +29264,7 @@ var canvasDocumentIdentity = (() => {
       const followLabel=document.getElementById("studioMcpFollowLabel");
       if(followLabel)followLabel.textContent=canvasDocumentsCopy("Follow latest","跟随最新");
       const description=document.getElementById("studioMcpFollowDescription");
-      if(description)description.textContent=canvasDocumentsCopy("Auto-focus new content","自动定位到最新内容");
+      if(description)description.textContent=canvasDocumentsCopy("Jump to new AI content. Pauses while you draw.","自动定位 AI 新内容，绘画时暂停。");
       follow.setAttribute("aria-checked",String(studioMcpFollowLatest));follow.disabled=busy;
       follow.title=canvasDocumentsCopy("Follow the latest updated content, switching canvases when needed. Pauses while you edit or navigate.","跟随最新更新的内容，必要时切换画布；编辑或移动视野时暂停。");
       close.textContent=canvasDocumentsCopy("Close all","关闭全部画布");close.disabled=busy||!actionIds.length;
@@ -29258,26 +29361,63 @@ var canvasDocumentIdentity = (() => {
       }
     }
     function studioNavigatorMcpGroups() {
-      return studioNavigatorWorkGroups().filter(group=>group.documentId);
+      const ids=new Set(studioMcpOpenDocumentIds());
+      return studioNavigatorWorkGroups().filter(group=>group.documentId&&ids.has(group.documentId));
+    }
+    function studioNavigatorDateKey(value) {
+      const today=new Date();today.setHours(0,0,0,0);const week=new Date(today);week.setDate(week.getDate()-6);
+      return Number(value)>=+today?"studioNavigatorToday":Number(value)>=+week?"studioNavigatorThisWeek":"studioNavigatorEarlier";
+    }
+    function studioNavigatorMcpUpdating(documentId) { return Boolean(mcpRuntime.ready&&mcpRuntime.activeMutation&&mcpRuntime.mutationDocumentId===documentId); }
+    function studioNavigatorMcpClient(group) {
+      const doc=canvasDocuments.records.get(group.documentId),session=[...mcpRuntime.sessions.values()].find(session=>session.documentId===group.documentId&&!session.closed);
+      return session?.client||doc?.sessions?.find?.(session=>session.client)?.client||"AI";
+    }
+    function renderStudioNavigatorMcpStatus() {
+      const host=document.getElementById("studioNavigatorMcpStatus"),ui=mcpUiState(),sessions=ui.connected?mcpLiveSessions():[];
+      if(!host)return;host.replaceChildren();
+      const header=document.createElement("div"),title=document.createElement("strong"),channels=document.createElement("span");header.className="studio-navigator-mcp-status-heading";title.textContent=`MCP · ${ui.connected?mcpUiText("Online","在线"):ui.label}`;
+      const availability=mcpRuntime.socket?.availability||{local:ui.connected&&window.PENECHO_CONFIG?.runtime!=="cloud",cloud:ui.connected&&window.PENECHO_CONFIG?.runtime==="cloud"};
+      channels.textContent=[availability.local?t("studioNavigatorLocal"):"",availability.cloud?"Cloud":""].filter(Boolean).join(" + ");header.append(title,channels);host.append(header);
+      for(const session of sessions){
+        const row=document.createElement("button"),avatar=document.createElement("span"),copy=document.createElement("span"),name=document.createElement("strong"),canvas=document.createElement("small"),status=document.createElement("span");
+        row.type="button";row.className="studio-navigator-mcp-session";avatar.className="studio-navigator-client-avatar";avatar.dataset.client=(session.client||"").toLowerCase().includes("claude")?"claude":"other";avatar.textContent=session.client==="Codex"?"CX":(session.client||"AI").split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
+        name.textContent=session.client||"AI";canvas.textContent=mcpDocumentTitle(session);copy.append(name,canvas);status.className="studio-navigator-client-status";const updating=studioNavigatorMcpUpdating(session.documentId);status.dataset.updating=String(updating);status.textContent=t(updating?"studioNavigatorUpdating":"studioNavigatorIdle");row.append(avatar,copy,status);row.addEventListener("click",()=>void mcpShowSession(session));host.append(row);
+      }
+      if(!sessions.length){const empty=document.createElement("p");empty.className="studio-navigator-mcp-empty";empty.textContent=t(ui.connected?"studioNavigatorWaitingAI":"studioNavigatorMcpOffline");host.append(empty);}
+      if(!ui.connected){const connect=document.createElement("button");connect.type="button";connect.className="studio-navigator-mcp-connect";connect.textContent=t("studioNavigatorConnectAI");connect.addEventListener("click",()=>void mcpOpenStatus());host.append(connect);}
     }
     function renderStudioMcpHistory() {
-      renderStudioNavigatorOpenCanvases();
-      syncStudioMcpActions();
+      renderStudioNavigatorOpenCanvases();syncStudioMcpActions();
       if(!studioNavigatorIsOpen()){studioNavigatorHistoryDirty=true;return;}
-      releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
-      studioMcpRecentList.replaceChildren();
-      const query=studioNavigatorSearchQuery();
-      for(const group of studioNavigatorMcpGroups().filter(group=>studioNavigatorGroupMatches(group,query))){
-        studioMcpRecentList.append(studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls}));
+      renderStudioNavigatorMcpStatus();
+      releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);studioMcpRecentList.replaceChildren();
+      const query=studioNavigatorSearchQuery(),groups=studioNavigatorMcpGroups().filter(group=>studioNavigatorGroupMatches(group,query)||studioNavigatorMcpClient(group).toLocaleLowerCase().includes(query));
+      document.getElementById("studioNavigatorAiTitle").textContent=`${t("studioNavigatorFromAI")} · ${groups.length}`;
+      const categories=[["studioNavigatorUpdatingNow",group=>studioNavigatorMcpUpdating(group.documentId)],["studioNavigatorNewForYou",group=>!studioNavigatorMcpUpdating(group.documentId)&&group.unseen],["studioNavigatorEarlier",group=>!studioNavigatorMcpUpdating(group.documentId)&&!group.unseen]],ordered=categories.flatMap(([key,filter])=>groups.filter(filter).map(group=>({key,group})));
+      let previous="";
+      for(const {key,group} of studioNavigatorMcpExpanded||query?ordered:ordered.slice(0,5)){
+        if(key!==previous){const label=studioNavigatorSectionLabel(key);label.classList.add("studio-navigator-date");studioMcpRecentList.append(label);previous=key;}
+        const section=studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});section.classList.add("studio-navigator-ai-canvas");section.dataset.updating=String(studioNavigatorMcpUpdating(group.documentId));
+        const meta=section.querySelector("small"),client=document.createElement("span"),time=document.createElement("span"),doc=canvasDocuments.records.get(group.documentId);client.className="studio-navigator-ai-client";client.textContent=studioNavigatorMcpClient(group);time.textContent=studioNavigatorMcpUpdating(group.documentId)?t("studioNavigatorUpdating"):studioNavigatorMetaTime(group.updatedAt);meta.replaceChildren(client,time);
+        if(doc?.unseen){const count=document.createElement("span");count.className="studio-navigator-unread-count";count.textContent=String(doc.unseen);count.setAttribute("aria-label",t("studioNavigatorNewCount").replace("{count}",String(doc.unseen)));section.append(count);}
+        appendStudioCanvasClose(section,group.documentId,group.current,group.name);studioMcpRecentList.append(section);
       }
-      if(!studioMcpRecentList.childElementCount)studioNavigatorEmpty(studioMcpRecentList,query?"studioNavigatorNoMatch":"studioNavigatorMcpEmpty");
+      if(!groups.length)studioNavigatorEmpty(studioMcpRecentList,query?"studioNavigatorNoMatch":"studioNavigatorMcpEmpty");
+      if(ordered.length>5&&!query){const more=document.createElement("button");more.type="button";more.className="studio-navigator-show-more";more.textContent=studioNavigatorMcpExpanded?t("studioNavigatorShowLess"):t("studioNavigatorShowMore").replace("{count}",String(ordered.length-5));more.setAttribute("aria-expanded",String(studioNavigatorMcpExpanded));more.addEventListener("click",()=>{studioNavigatorMcpExpanded=!studioNavigatorMcpExpanded;renderStudioMcpHistory();});studioMcpRecentList.append(more);}
+    }
+    function syncStudioNavigatorMcpPresentation() {
+      studioNavigatorMcpTab.dataset.online=String(mcpUiState().connected);
+      if(studioNavigatorActiveTab!=="mcp"||!studioNavigatorIsOpen())return;
+      const signature=JSON.stringify([state.language,mcpRuntime.socket?.availability,mcpUiState().key,mcpRuntime.activeMutation,mcpRuntime.mutationDocumentId,[...mcpRuntime.sessions.values()].map(session=>[session.sessionId,session.client,session.documentId,session.closed]),studioNavigatorMcpGroups().map(group=>[group.documentId,canvasDocuments.records.get(group.documentId)?.unseen,group.name,group.updatedAt,group.savedAt])]);
+      if(signature===studioNavigatorMcpSignature)return;studioNavigatorMcpSignature=signature;renderStudioMcpHistory();
     }
     function syncStudioNavigatorMcp(enabled,{reveal=true}={}) {
       enabled=Boolean(enabled);
       if(enabled===studioNavigatorMcpEnabled)return;
       studioNavigatorMcpEnabled=enabled;
       if(!enabled){studioMcpPendingDocumentId=null;studioMcpPendingRegion=null;studioMcpLatestDocumentId=null;studioMcpLatestRegion=null;}
-      studioNavigatorMcpTab.hidden=!enabled;
+      studioNavigatorMcpTab.hidden=false;studioNavigatorMcpTab.dataset.online=String(enabled);
       if(enabled&&reveal){
         selectCanvasToolMode("hand");
         studioNavigatorSuspendedAgent=false;
@@ -29289,7 +29429,7 @@ var canvasDocumentIdentity = (() => {
         // Connection changes preserve the user’s Follow latest preference.
         studioMcpPendingDocumentId=null;studioMcpPendingRegion=null;
         syncStudioMcpActions();
-      }else if(!enabled&&studioNavigatorActiveTab==="mcp")setStudioNavigatorTab("all",{persist:false});
+      }
     }
     let studioWorkspaceSignature="";
     function studioWorkspaceChanged() {
@@ -29307,22 +29447,9 @@ var canvasDocumentIdentity = (() => {
         if(dot){dot.hidden=!doc?.unseen;dot.setAttribute("aria-label",canvasDocumentsCopy("New updates","有新内容"));}
         row.disabled=canvasDocuments.switching;
       }
-      if(typeof studioNavigatorActiveTab!=="undefined"&&studioNavigatorActiveTab==="mcp"){
-        const rows=new Map([...studioMcpRecentList.querySelectorAll("[data-workspace-document-id]")].map(row=>[row.dataset.workspaceDocumentId,row]));
-        let index=0;
-        for(const group of studioNavigatorMcpGroups()){
-          const row=rows.get(group.documentId);if(!row)continue;
-          const section=row.parentElement;
-          if(studioMcpRecentList.children[index]!==section)studioMcpRecentList.insertBefore(section,studioMcpRecentList.children[index]||null);
-          const meta=row.querySelector("small");
-          if(meta&&meta.dataset.updatedAt!==String(group.updatedAt)){
-            studioNavigatorRenderCanvasMeta(meta,group.current,true,group.location,group.updatedAt);
-            meta.dataset.updatedAt=String(group.updatedAt);
-          }
-          index++;
-        }
-      }
+      if(typeof studioNavigatorActiveTab!=="undefined"&&studioNavigatorActiveTab==="mcp")syncStudioNavigatorMcpPresentation();
     }
+
     function renderActiveStudioNavigatorHistory() {
       if (!studioNavigatorIsOpen()) {
         studioNavigatorHistoryDirty = true;
@@ -29334,7 +29461,11 @@ var canvasDocumentIdentity = (() => {
       else renderStudioWorkHistory();
     }
     function setStudioNavigatorTab(tab, { focus = false, persist = true } = {}) {
-      studioNavigatorActiveTab=(tab==="mcp"&&studioNavigatorMcpEnabled)||["all","canvas","agent"].includes(tab)?tab:"all";
+      studioNavigatorActiveTab=["all","canvas","agent","mcp"].includes(tab)?tab:"all";
+      studioNavigator.dataset.tab=studioNavigatorActiveTab;
+      const searchKey={all:"studioNavigatorSearch",canvas:"studioNavigatorSearchCanvases",agent:"studioNavigatorSearchChats",mcp:"studioNavigatorSearchAI"}[studioNavigatorActiveTab];
+      studioNavigatorSearch.dataset.i18nPlaceholder=searchKey;studioNavigatorSearch.dataset.i18nAria=searchKey;studioNavigatorSearch.placeholder=t(searchKey);studioNavigatorSearch.setAttribute("aria-label",t(searchKey));
+      const workspace=document.getElementById("canvasWorkspace"),host=document.getElementById(studioNavigatorActiveTab==="mcp"?"studioNavigatorMcpMenuHost":"studioNavigatorOpenSection");if(workspace&&host)host.append(workspace);
       const tabs={all:studioNavigatorAllTab,mcp:studioNavigatorMcpTab,canvas:studioNavigatorCanvasTab,agent:studioNavigatorAgentTab},panels={all:studioNavigatorAllPanel,mcp:studioNavigatorMcpPanel,canvas:studioNavigatorCanvasPanel,agent:studioNavigatorAgentPanel};
       for(const [key,control] of Object.entries(tabs)){
         const active=key===studioNavigatorActiveTab;
@@ -29363,7 +29494,7 @@ var canvasDocumentIdentity = (() => {
     function handleStudioNavigatorTabKeydown(event) {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
-      const order=studioNavigatorMcpEnabled?["all","mcp","canvas","agent"]:["all","canvas","agent"],current=order.indexOf(studioNavigatorActiveTab),index=event.key==="Home"?0:event.key==="End"?order.length-1:event.key==="ArrowRight"?(current+1)%order.length:(current+order.length-1)%order.length;
+      const order=["all","canvas","agent","mcp"],current=order.indexOf(studioNavigatorActiveTab),index=event.key==="Home"?0:event.key==="End"?order.length-1:event.key==="ArrowRight"?(current+1)%order.length:(current+order.length-1)%order.length;
       setStudioNavigatorTab(order[index],{focus:true});
     }
     function historyManagerWillOpen() {
@@ -29489,8 +29620,12 @@ var canvasDocumentIdentity = (() => {
     studioNavigatorSearch.addEventListener("input", renderActiveStudioNavigatorHistory);
     studioNavigatorSearch.addEventListener("keydown", event => {
       if(event.key==="Escape"&&studioNavigatorSearch.value){event.preventDefault();event.stopPropagation();studioNavigatorSearch.value="";renderActiveStudioNavigatorHistory();}
-      else if(event.key==="Enter"){event.preventDefault();studioNavigator.querySelector('.studio-navigator-panel:not([hidden]) .studio-navigator-group-heading')?.click();}
+      else if(event.key==="Enter"){event.preventDefault();studioNavigator.querySelector('.studio-navigator-panel:not([hidden]) :is(.studio-navigator-group-heading,.studio-navigator-conversation)')?.click();}
     });
+    document.getElementById("studioNavigatorOpenToggle").addEventListener("click",()=>{studioNavigatorOpenCollapsed=!studioNavigatorOpenCollapsed;renderStudioNavigatorOpenCanvases();});
+    document.getElementById("studioNavigatorOpenMore").addEventListener("click",()=>{studioNavigatorOpenExpanded=!studioNavigatorOpenExpanded;renderStudioNavigatorOpenCanvases();});
+    document.getElementById("studioNavigatorSort").addEventListener("change",event=>{studioNavigatorCanvasSort=event.target.value;renderStudioCanvasHistory();});
+    document.getElementById("studioNavigatorNewChat").addEventListener("click",()=>{openCanvasAgent({focus:true});canvasAgentNew.click();});
     studioNavigatorMcpTab.addEventListener("click",()=>setStudioNavigatorTab("mcp"));
     document.getElementById("studioMcpCloseAll")?.addEventListener("click",()=>canvasDocumentsUiAction(closeAllStudioMcpCanvases));
     document.getElementById("studioMcpFollowLatest")?.addEventListener("click",()=>{
@@ -29549,6 +29684,8 @@ var canvasDocumentIdentity = (() => {
     window.addEventListener("penecho:languagechange", renderStudioNavigator);
     window.PenEchoStudioNavigator = Object.freeze({
       render:renderStudioNavigator,
+      focusSearch:()=>{setStudioNavigatorOpen(true,{restoreAgent:false,persist:true});requestAnimationFrame(()=>studioNavigatorSearch.focus({preventScroll:true}));},
+      renderMcpStatus:syncStudioNavigatorMcpPresentation,
       renderWork:()=>{if(studioNavigatorActiveTab==="all")renderStudioWorkHistory();},
       renderAgent:()=>{studioNavigatorActiveTab==="agent"?renderStudioAgentHistory():studioNavigatorActiveTab==="all"&&renderStudioWorkHistory();},
       renderCanvases:renderActiveStudioNavigatorHistory,
@@ -29578,7 +29715,8 @@ var canvasDocumentIdentity = (() => {
   const KEYBOARD_SHORTCUT_STORAGE_KEY = "penecho-keyboard-shortcuts-v1";
   const KEYBOARD_SHORTCUT_COMMANDS = Object.freeze([
     { id:"pen-tool", group:"essential", labelKey:"pen", descriptionKey:"shortcutPenHelp", defaultChord:"p" },
-    { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Mod+k" },
+    { id:"search-work", group:"essential", labelKey:"shortcutSearchWork", descriptionKey:"shortcutSearchWorkHelp", defaultChord:"Mod+k" },
+    { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Tab" },
     { id:"save-canvas", group:"essential", labelKey:"saveCanvas", descriptionKey:"shortcutSaveCanvasHelp", defaultChord:"Mod+s" },
     { id:"undo", group:"essential", labelKey:"undo", descriptionKey:"shortcutUndoHelp", defaultChord:"Mod+z" },
     { id:"redo", group:"essential", labelKey:"redo", descriptionKey:"shortcutRedoHelp", defaultChord:"Mod+Shift+z" },
@@ -29610,6 +29748,9 @@ var canvasDocumentIdentity = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEYBOARD_SHORTCUT_STORAGE_KEY) || "null");
       if (!saved || typeof saved !== "object" || Array.isArray(saved)) return bindings;
+      // Migrate the previous default while retaining explicitly customized bindings.
+      if (!("search-work" in saved) && saved["focus-agent"] === "Mod+k") saved["focus-agent"] = "Tab";
+      if (!("search-work" in saved) && Object.values(saved).includes("Mod+k")) bindings["search-work"] = "";
       for (const command of KEYBOARD_SHORTCUT_COMMANDS) {
         if (Object.prototype.hasOwnProperty.call(saved, command.id) && typeof saved[command.id] === "string") bindings[command.id] = saved[command.id];
       }
@@ -29693,6 +29834,8 @@ var canvasDocumentIdentity = (() => {
     if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
     const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
     if (shortcut) { shortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["focus-agent"] || ""); shortcut.hidden = !keyboardShortcutBindings["focus-agent"]; }
+    const search = document.querySelector("#studioNavigatorSearchShortcut");
+    if (search) { search.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["search-work"] || ""); search.hidden = !keyboardShortcutBindings["search-work"]; }
     const container = document.querySelector("#settingsShortcutList");
     if (!container) return;
     container.replaceChildren();
@@ -29848,12 +29991,13 @@ var canvasDocumentIdentity = (() => {
     if (command.id === "open-settings" && settings.open) return true;
     if (keyboardShortcutBlockingSurfaceOpen()) return false;
     if (keyboardShortcutLocalSurface(event.target)) return false;
-    if (keyboardShortcutTextEditingTarget(event.target)) return command.id === "save-canvas";
+    if (keyboardShortcutTextEditingTarget(event.target)) return command.id === "save-canvas" || command.id === "search-work";
     if (command.id === "focus-agent" && (!canvasAgentAvailable() || canvasAgentPanel.contains(event.target))) return false;
     if (keyboardShortcutControlOwnsKey(event, chord)) return false;
     return true;
   }
   function keyboardShortcutPerform(commandId) {
+    if (commandId === "search-work") { window.PenEchoStudioNavigator?.focusSearch(); return true; }
     if (commandId === "pen-tool") { setCanvasMode("pen"); return true; }
     if (commandId === "focus-agent") {
       const opening = canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open");

@@ -318,6 +318,7 @@
     }
   }
   function mcpRenderCanvasStatus() {
+    window.PenEchoStudioNavigator?.renderMcpStatus?.();
     const ui=mcpUiState(),mutationVisible=!mcpRuntime.mutationDocumentId||typeof canvasDocuments==="undefined"||mcpRuntime.mutationDocumentId===canvasDocuments.activeId;
     const pending=[...mcpRuntime.pendingView].filter(([id,ids])=>ids.size&&mcpSessionTransportActive(mcpRuntime.sessions.get(id)));
     if(ui.connected&&typeof canvasDocuments!=="undefined")for(const session of mcpLiveSessions()){
