@@ -61,9 +61,10 @@ test("maximized Widgets use an opaque page and header", () => {
 });
 
 test("floating chrome follows the existing navigator and Agent state classes", () => {
-  const css = read("public/studio-shell.css");
-  assert.match(css, /\.studio-agent-docked\.canvas-agent-open:not\(\.canvas-agent-navigation-hidden\)\s*\{[^}]*--pe-shell-right:/);
-  for (let step = 0; step <= 40; step += 1) assert.match(css, new RegExp(`\\.canvas-frame\\.canvas-agent-width-${step}\\) \\{ --pe-shell-agent-width: `));
+  const css = read("public/studio-shell.css"), js = read("public/studio-shell.js");
+  assert.match(css, /\.studio-agent-docked\.canvas-agent-open:not\(\.canvas-agent-navigation-hidden\)\s+\.shell-geometry\s*\{[^}]*--pe-shell-right:/);
+  assert.ok(js.includes('/^canvas-agent-width-\\d+$/'), "Agent width comes from the retained frame class");
+  assert.match(js, /target\.style\.setProperty\("--pe-shell-agent-width",agentWidth\)/);
   assert.match(css, /main > footer:not\(\.penecho-desktop-update-visible\)/);
 });
 

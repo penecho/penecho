@@ -155,18 +155,29 @@
     window.addEventListener("resize",syncSidebarToolbarInset);syncSidebarToolbarInset();
   }
 
-  // Settle flex geometry once, then animate the panels on compositor layers.
-  // The viewport uses a positional offset (not a transform, which would change
-  // the containing block of its fixed toolbars). Its width stays constant.
+  // Reserve the final flex geometry, but keep enough live canvas underneath
+  // both moving edges until the slide ends. Translating a final-size viewport
+  // exposes a blank strip on opening; animating `left` also lays out every frame.
   const motionPanels=[document.querySelector("#studioNavigator"),document.querySelector("#canvasAgentPanel")];
   const motionViewport=document.querySelector("#viewport");
-  let sidebarAnimations=[],sidebarMotionGeneration=0,sidebarMotionRunning=false;
+  let sidebarAnimations=[],sidebarMotionGeneration=0,sidebarMotionRunning=false,sidebarMotionRestore=[];
+  function restoreSidebarMotion() {
+    for(const animation of sidebarAnimations)animation.cancel();
+    sidebarAnimations=[];
+    for(const restore of sidebarMotionRestore)restore();
+    sidebarMotionRestore=[];
+  }
+  function setMotionStyles(element,values) {
+    const previous=Object.keys(values).map(name=>[name,element.style.getPropertyValue(name),element.style.getPropertyPriority(name)]);
+    sidebarMotionRestore.push(()=>{for(const [name,value,priority] of previous){if(value)element.style.setProperty(name,value,priority);else element.style.removeProperty(name);}});
+    for(const [name,value] of Object.entries(values))element.style.setProperty(name,value);
+  }
   function captureSidebarMotion(animate=true) {
     const elements=[...motionPanels,motionViewport].filter(Boolean);
     const snapshot=elements.map(element=>({element,rect:element.getBoundingClientRect()}));
+    snapshot.contentLeft=document.querySelector("#screen")?.getBoundingClientRect().left;
     sidebarMotionGeneration++;
-    for(const animation of sidebarAnimations)animation.cancel();
-    sidebarAnimations=[];sidebarMotionRunning=false;
+    restoreSidebarMotion();sidebarMotionRunning=false;
     if(!animate||document.body.dataset.theme!=="studio"||matchMedia("(prefers-reduced-motion: reduce)").matches)return null;
     sidebarMotionRunning=true;
     return snapshot;
@@ -174,25 +185,45 @@
   function playSidebarMotion(snapshot) {
     if(!snapshot){window.dispatchEvent(new Event("penecho-sidebar-settled"));return;}
     const generation=++sidebarMotionGeneration;
-    for(const animation of sidebarAnimations)animation.cancel();
-    sidebarAnimations=[];
+    restoreSidebarMotion();
+    sidebarMotionRunning=true;
     const scale=parseFloat(getComputedStyle(document.documentElement).zoom)||1;
-    const targets=snapshot.map(({element,rect})=>({element,dx:(rect.left-element.getBoundingClientRect().left)/scale}));
+    const targets=snapshot.map(({element,rect})=>{const finalRect=element.getBoundingClientRect();return {element,rect,finalRect,dx:(rect.left-finalRect.left)/scale};});
+    const viewport=targets.find(target=>target.element===motionViewport);
+    const timing={duration:240,easing:"cubic-bezier(.2,.72,.2,1)",fill:"both"};
+    if(viewport){
+      // Keep the viewport itself untransformed: fixed chrome retains its
+      // containing block. Only its live content layers slide over the wider
+      // drawing surface, so neither Widgets nor toolbars need reparenting.
+      const layers=[...motionViewport.children].filter(element=>(element.getClientRects().length||element.matches("canvas, .widget-layer, .text-editor-layer"))&&getComputedStyle(element).position!=="fixed");
+      const left=Math.min(viewport.rect.left,viewport.finalRect.left);
+      const width=(Math.max(viewport.rect.right,viewport.finalRect.right)-left)/scale;
+      const from=((snapshot.contentLeft??viewport.rect.left)-left)/scale,to=(viewport.finalRect.left-left)/scale;
+      if(width-viewport.finalRect.width/scale>.5){
+        setMotionStyles(motionViewport,{flex:`0 0 ${width}px`,left:`${(left-viewport.finalRect.left)/scale}px`,"margin-right":`${viewport.finalRect.width/scale-width}px`});
+        const welcome=document.querySelector("#canvasWelcome");
+        if(welcome)setMotionStyles(welcome,{width:`${viewport.finalRect.width/scale}px`,"box-sizing":"border-box"});
+      }
+      if(Math.abs(from)>=.5||Math.abs(to)>=.5){
+        for(const element of layers)sidebarAnimations.push(element.animate([{translate:`${from}px 0`},{translate:`${to}px 0`}],timing));
+      }
+    }
     for(const {element,dx} of targets){
-      if(Math.abs(dx)<.5)continue;
-      const frames=element===motionViewport?[{left:`${dx}px`},{left:"0px"}]:[{transform:`translate3d(${dx}px,0,0)`},{transform:"translate3d(0,0,0)"}];
-      sidebarAnimations.push(element.animate(frames,{duration:240,easing:"cubic-bezier(.2,.72,.2,1)"}));
+      if(element===motionViewport||Math.abs(dx)<.5)continue;
+      sidebarAnimations.push(element.animate([{transform:`translate3d(${dx}px,0,0)`},{transform:"translate3d(0,0,0)"}],timing));
     }
     Promise.allSettled(sidebarAnimations.map(animation=>animation.finished)).then(()=>{
       if(generation!==sidebarMotionGeneration)return;
-      sidebarAnimations=[];sidebarMotionRunning=false;
-      for(const panel of motionPanels)panel?.dispatchEvent(new Event("penecho-sidebar-motion-end"));
-      window.dispatchEvent(new Event("penecho-sidebar-settled"));
+      finishSidebarMotion();
     });
   }
   // Finish movement before a canvas gesture reads its pointer coordinates.
   function finishSidebarMotion() {
-    for(const animation of sidebarAnimations)if(animation.playState==="running")animation.finish();
+    if(!sidebarMotionRunning)return;
+    sidebarMotionGeneration++;
+    restoreSidebarMotion();sidebarMotionRunning=false;
+    for(const panel of motionPanels)panel?.dispatchEvent(new Event("penecho-sidebar-motion-end"));
+    window.dispatchEvent(new Event("penecho-sidebar-settled"));
   }
   sidebarFrame?.addEventListener("pointerdown",finishSidebarMotion,true);
   motionViewport?.addEventListener("wheel",finishSidebarMotion,{capture:true,passive:true});
@@ -248,15 +279,24 @@
     document.body.append(space);
     const dockPropertyTargets=[...document.querySelectorAll(".primary-tools, .ai-tools-section, .canvas-zoom-controls, .canvas-navigation-lock, .canvas-fit-contents, .canvas-navigation-actions, .canvas-auto-paused-notice, #mcpCanvasNotice, .shell-dock-space, .pen-size-popover, #autoDelayPopover, #effortPopover, main > footer")];
     for(const target of dockPropertyTargets)target.classList.add("shell-geometry");
-    let frame = 0;
+    let frame = 0, lastDockInputs = "";
+    const dockSizeTargets=[space,dock,aiTools,zoomControls,motionViewport,document.querySelector("#canvasAutoPausedNotice")].filter(Boolean);
+    function dockInputs() {
+      const body=document.body,viewport=motionViewport.getBoundingClientRect();
+      return JSON.stringify([body.className,body.dataset.theme,body.dataset.canvasMode,document.documentElement.lang,document.documentElement.dataset.penechoPageScale,viewport.left,viewport.width,...dockSizeTargets.flatMap(element=>[element.offsetWidth,element.offsetHeight])]);
+    }
     function layoutDock() {
       frame = 0;
       if(sidebarMotionRunning)return;
       const body = document.body;
       if (body.dataset.theme !== "studio" || !matchMedia("(min-width: 701px)").matches) {
         delete body.dataset.shellDockLayout;
+        lastDockInputs = "";
         return;
       }
+      // Our own width/row updates notify ResizeObserver again. Reuse the
+      // settled arrangement instead of cycling through all three layouts.
+      if(lastDockInputs===dockInputs())return;
       const widthClass=[...document.querySelector(".canvas-frame").classList].find(name=>/^canvas-agent-width-\d+$/.test(name));
       const agentWidth=widthClass?`${Number(widthClass.split("-").at(-1))*2.5}%`:"390px";
       for(const target of dockPropertyTargets)if(target.style.getPropertyValue("--pe-shell-agent-width")!==agentWidth)target.style.setProperty("--pe-shell-agent-width",agentWidth);
@@ -325,14 +365,13 @@
       }
       body.dataset.shellDockLayout = mode;
       delete body.dataset.shellDockMeasuring;
+      lastDockInputs = dockInputs();
     }
     function scheduleDockLayout() {
       if (!frame) frame = requestAnimationFrame(layoutDock);
     }
     const sizes = new ResizeObserver(scheduleDockLayout);
-    for (const element of [space, dock, aiTools, zoomControls, document.querySelector("#viewport"), document.querySelector("#canvasAutoPausedNotice")]) {
-      if (element) sizes.observe(element);
-    }
+    for (const element of dockSizeTargets) sizes.observe(element);
     const changes = new MutationObserver(scheduleDockLayout);
     changes.observe(document.body, { attributes: true, attributeFilter: ["class", "data-theme", "data-canvas-mode"] });
     const canvasFrame = document.querySelector(".canvas-frame");
@@ -340,7 +379,7 @@
     window.addEventListener("resize", scheduleDockLayout);
     window.addEventListener("penecho-sidebar-settled", scheduleDockLayout);
     changes.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-penecho-page-scale"] });
-    document.fonts?.ready.then(scheduleDockLayout);
+    document.fonts?.ready.then(()=>{lastDockInputs="";scheduleDockLayout();});
     scheduleDockLayout();
   }
 

@@ -1954,7 +1954,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsAppearance: "Appearance",
       settingsAppearanceHelp: "Studio stays consistent while its accent and supporting neutrals change together.",
       settingsColorScheme: "Color scheme",
-      settingsColorSchemeHelp: "Eight restrained, professional Studio palettes.",
+      settingsColorSchemeHelp: "Twelve restrained, professional Studio palettes.",
       settingsInterfaceScale: "Interface scale",
       settingsInterfaceScaleHelp: "Scale the application text and controls.",
       studioPaletteIndigo: "Indigo",
@@ -1973,6 +1973,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioPaletteAmberHelp: "Warm and decisive",
       studioPaletteBurgundy: "Burgundy",
       studioPaletteBurgundyHelp: "Deep and editorial",
+      studioPalettePlum: "Plum",
+      studioPalettePlumHelp: "Thoughtful and expressive",
+      studioPaletteRose: "Rose",
+      studioPaletteRoseHelp: "Soft and welcoming",
+      studioPaletteTerracotta: "Terracotta",
+      studioPaletteTerracottaHelp: "Earthy and warm",
+      studioPaletteOlive: "Olive",
+      studioPaletteOliveHelp: "Natural and composed",
       settingsApiSection: "AI connection",
       settingsApiDescription: "Choose an API or an existing local CLI login.",
       settingsProvider: "AI provider",
@@ -3094,7 +3102,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     DEFAULT_STUDIO_PALETTE = "indigo",
     REMOVED_THEMES = new Set(["arcane", "scifi", "research"]),
     SUPPORTED_THEMES = new Set([DEFAULT_THEME]),
-    SUPPORTED_STUDIO_PALETTES = new Set(["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy"]),
+    SUPPORTED_STUDIO_PALETTES = new Set(["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy", "plum", "rose", "terracotta", "olive"]),
     DIAGRAM_RUNTIME_VERSION = "penecho-diagram-source-v1",
     DIAGRAM_SOURCE_FORMATS = new Set(["mermaid", "dot", "bpmn-xml", "vega-lite", "geojson", "smiles", "cytoscape-json"]),
     BUILTIN_PLUGIN_DEFINITIONS = Object.freeze([]);
@@ -9931,12 +9939,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bottom = region.y + region.h;
     context.save();
     if (state.gridStyle !== "lines") {
+      const radius = 1.125 / scale;
       context.fillStyle = state.paint.paperGrid;
       context.beginPath();
       for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
         for (let y = Math.floor(region.y / step) * step; y <= bottom; y += step) {
-          context.moveTo(x + 1 / scale, y);
-          context.arc(x, y, 1 / scale, 0, Math.PI * 2);
+          context.moveTo(x + radius, y);
+          context.arc(x, y, radius, 0, Math.PI * 2);
         }
       }
       context.fill(); context.restore(); return;
@@ -29849,7 +29858,8 @@ var canvasDocumentIdentity = (() => {
     const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
     if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
     const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
-    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["focus-agent"] || ""); shortcut.hidden = !keyboardShortcutBindings["focus-agent"]; }
+    // On the empty canvas, Mod+K opens the Agent directly from the welcome card.
+    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay("Mod+k"); shortcut.hidden = false; }
     const search = document.querySelector("#studioNavigatorSearchShortcut");
     if (search) { search.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["search-work"] || ""); search.hidden = !keyboardShortcutBindings["search-work"]; }
     const container = document.querySelector("#settingsShortcutList");
@@ -30052,7 +30062,8 @@ var canvasDocumentIdentity = (() => {
     }
     const chord = keyboardShortcutChordFromEvent(event);
     if (!chord) return;
-    const command = chord === "Tab" ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
+    const welcomeAgentShortcut = chord === "Mod+k" && !document.querySelector("#canvasWelcome")?.hidden;
+    const command = chord === "Tab" || welcomeAgentShortcut ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
     if (!keyboardShortcutCanRun(command, event, chord)) return;
     event.preventDefault();
     event.stopImmediatePropagation();

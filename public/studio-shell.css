@@ -261,7 +261,7 @@
     border: 0;
     background: transparent;
     pointer-events: none;
-    transition: left .22s cubic-bezier(.2,.72,.2,1), right .22s cubic-bezier(.2,.72,.2,1);
+    transition: none;
   }
   body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) #coords {
     position: fixed;
@@ -1248,24 +1248,26 @@ body[data-theme="studio"] .ai-tools-section .color-orb-trigger > span { display:
 /* One welcome composition, centered in the available canvas. */
 body[data-theme="studio"] .canvas-welcome {
   inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 24px 24px 110px; gap: 12px; text-align: center; transition: none;
+  padding: 24px 24px clamp(100px, 15.53vw, 350px); gap: clamp(6px, .416vw, 9.6px); text-align: center; transition: none;
 }
-body[data-theme="studio"] .canvas-welcome > strong { font-size: 22px; font-weight: 600; line-height: 1.3; }
-body[data-theme="studio"] .canvas-welcome > span { max-width: 560px; font-size: 14px; line-height: 1.5; text-wrap: balance; }
+body[data-theme="studio"] .canvas-welcome > :is(strong, span, .canvas-welcome-actions) { --welcome-unit: clamp(1px, .071cqw, 1.6px); }
+body[data-theme="studio"] .canvas-welcome > strong { margin-bottom: var(--welcome-unit); color: #20232b; font-size: calc(var(--welcome-unit) * 20); font-weight: 600; line-height: 1.25; }
+body[data-theme="studio"] .canvas-welcome > span { max-width: calc(var(--welcome-unit) * 381 + 64px); color: #4e5764; font-size: calc(var(--welcome-unit) * 13); line-height: calc(var(--welcome-unit) * 21); text-wrap: normal; }
 body[data-theme="studio"] .canvas-welcome .canvas-welcome-actions {
   position: static; inset: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: min(740px, 100%); align-items: stretch; gap: 14px; margin: 18px 0 0; padding: 0;
+  width: min(calc(var(--welcome-unit) * 700), 100%); align-items: stretch; gap: calc(var(--welcome-unit) * 12); margin: calc(var(--welcome-unit) * 20) 0 0; padding: 0;
 }
 body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) {
   display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
-  height: auto; min-height: 158px; gap: 5px; padding: 15px;
-  text-align: left; white-space: normal; border-radius: 11px; box-shadow: none;
+  height: auto; min-height: calc(var(--welcome-unit) * 148); gap: 0; padding: calc(var(--welcome-unit) * 14);
+  color: #20232b; background: #fff; border: 1px solid #e3e4e5;
+  text-align: left; white-space: normal; border-radius: calc(var(--welcome-unit) * 10); box-shadow: none;
 }
-body[data-theme="studio"] .canvas-welcome-actions > button > svg { width: 32px; height: 32px; flex: 0 0 32px; padding: 7px; margin-bottom: 6px; }
-body[data-theme="studio"] .canvas-welcome-actions > button > strong { font-size: 14px; line-height: 1.4; font-weight: 500; text-wrap: auto; }
-body[data-theme="studio"] .canvas-welcome-actions > button > span { font-size: 13px; line-height: 1.45; color: var(--studio-muted); }
-body[data-theme="studio"] .canvas-welcome-actions > button > kbd { margin-top: auto; border: 1px solid var(--studio-line); border-radius: 5px; padding: 2px 7px; font: 11px/1.2 var(--pe-font-ui, system-ui); color: var(--studio-muted); background: var(--studio-titlebar); }
-body[data-theme="studio"] .canvas-welcome-actions > button > .welcome-link { margin-top: auto; padding-top: 5px; color: var(--studio-accent-strong); }
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) > svg { width: calc(var(--welcome-unit) * 30); height: calc(var(--welcome-unit) * 30); flex: 0 0 calc(var(--welcome-unit) * 30); padding: calc(var(--welcome-unit) * 7); margin-bottom: calc(var(--welcome-unit) * 9); color: #3730a3; border-radius: calc(var(--welcome-unit) * 6); background: #eeedfc; }
+body[data-theme="studio"] .canvas-welcome-actions > button > strong { color: #20232b; font-size: calc(var(--welcome-unit) * 14); line-height: 1.4; font-weight: 500; text-wrap: auto; }
+body[data-theme="studio"] .canvas-welcome-actions > button > span { color: #626b78; font-size: calc(var(--welcome-unit) * 13); line-height: 1.45; }
+body[data-theme="studio"] .canvas-welcome-actions > button > kbd { margin-top: auto; border: 1px solid #dcdfe1; border-radius: calc(var(--welcome-unit) * 5); padding: var(--welcome-unit) calc(var(--welcome-unit) * 7); font: calc(var(--welcome-unit) * 10.5)/1.2 var(--pe-font-ui, system-ui); color: #4e5764; background: #f8f9fb; }
+body[data-theme="studio"] .canvas-welcome-actions > button > .welcome-link { margin-top: auto; padding-top: calc(var(--welcome-unit) * 3); color: #3730a3; }
 @container (max-width: 580px) {
   body[data-theme="studio"] .canvas-welcome .canvas-welcome-actions { gap: 8px; }
   body[data-theme="studio"] .canvas-welcome-actions > button { padding: 10px; }
@@ -1358,8 +1360,6 @@ body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached::afte
 
 /* Reference sizing and compact tool properties. */
 body[data-theme="studio"] .studio-navigator :is(.studio-navigator-head, .studio-navigator-body, .studio-navigator-foot) { width: 100%; }
-body[data-theme="studio"] .canvas-welcome { padding-bottom: 230px; }
-body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) > svg { width: 32px; height: 32px; flex-basis: 32px; padding: 7px; }
 body[data-theme="studio"] .canvas-welcome-actions > button > span { font-weight: 400; }
 body[data-theme="studio"] #clipboardCopyBtn { display: none; }
 body[data-theme="studio"] .pen-tool-properties > [data-color-control="ink"] { order: -1; }
@@ -1708,6 +1708,15 @@ body[data-theme="studio"] .canvas-welcome { container: canvas-welcome / inline-s
   body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) { min-height: 0; display: grid; grid-template-columns: 32px 1fr; padding: 10px 12px; gap: 2px 10px; }
   body[data-theme="studio"] .canvas-welcome-actions > button > svg { grid-row: 1 / 3; margin: 0; }
   body[data-theme="studio"] .canvas-welcome-actions > button > :is(kbd, .welcome-link) { display: none; }
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] .canvas-welcome { padding: 20px 16px 100px; }
+  body[data-theme="studio"] .canvas-welcome > strong { font-size: 22px; }
+  body[data-theme="studio"] .canvas-welcome > span { font-size: 14px; }
+  body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) { min-height: 0; padding: 10px 12px; border-width: 1px; border-radius: 12px; }
+  body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) > svg { grid-row: 1 / 3; width: 32px; height: 32px; flex-basis: 32px; padding: 7px; margin: 0; border-radius: 7px; }
+  body[data-theme="studio"] .canvas-welcome-actions > button > strong { font-size: 15px; }
+  body[data-theme="studio"] .canvas-welcome-actions > button > span { font-size: 13px; }
 }
 
 /* Four views share one search, scroll surface and fixed destination footer. */

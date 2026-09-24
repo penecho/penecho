@@ -3524,12 +3524,13 @@
       bottom = region.y + region.h;
     context.save();
     if (state.gridStyle !== "lines") {
+      const radius = 1.125 / scale;
       context.fillStyle = state.paint.paperGrid;
       context.beginPath();
       for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
         for (let y = Math.floor(region.y / step) * step; y <= bottom; y += step) {
-          context.moveTo(x + 1 / scale, y);
-          context.arc(x, y, 1 / scale, 0, Math.PI * 2);
+          context.moveTo(x + radius, y);
+          context.arc(x, y, radius, 0, Math.PI * 2);
         }
       }
       context.fill(); context.restore(); return;

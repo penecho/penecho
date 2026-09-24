@@ -3331,7 +3331,7 @@ test("New and Export remain accessible Studio-aware icon buttons while duplicate
   assert.doesNotMatch(html, /id="clearCanvasBtn"|data-action="clear"/);
   assert.doesNotMatch(html, /id="debugBtn"/);
   assert.doesNotMatch(html, /id="theme"|value="(?:arcane|scifi|research)"/);
-  assert.equal((html.match(/class="studio-palette-option"/g) || []).length, 8);
+  assert.equal((html.match(/class="studio-palette-option"/g) || []).length, 12);
   assert.match(css, /button\.utility-icon:not\(\.active\).*var\(--ink\)/);
   assert.match(css, /button\.utility-icon\.danger:not\(\.active\).*var\(--danger\)/);
 });
@@ -3345,6 +3345,38 @@ test("Canvas grid toolbar icon uses four equal cells", () => {
   assert.doesNotMatch(button, /<path/);
 });
 
+test("every Studio palette selects exactly one matching card and persists its identity", () => {
+  const html = read("public/index.html"), app = read("public/app.js");
+  const cards = [...html.matchAll(/<button class="studio-palette-option"[^>]*data-studio-palette="([^"]+)"[^>]*aria-checked="([^"]+)"[\s\S]*?<\/button>/g)];
+  const palettes = [...vm.runInNewContext(app.match(/SUPPORTED_STUDIO_PALETTES = (new Set\([^\n]+\))/)[1])];
+  assert.deepEqual(cards.map(card => card[1]), palettes, "Each supported palette has one unique card in the same order");
+  assert.deepEqual(cards.filter(card => card[2] === "true").map(card => card[1]), ["indigo"]);
+  for (const card of cards) {
+    const name = card[1][0].toUpperCase() + card[1].slice(1);
+    assert.ok(card[0].includes(`data-i18n="studioPalette${name}"`), "The card label matches the applied palette");
+  }
+  const buttons = cards.map(card => ({
+    dataset: { studioPalette: card[1] },
+    setAttribute(name, value) { this[name] = value; },
+    classList: { toggle() {} },
+  }));
+  const stored = new Map();
+  const context = vm.createContext({
+    SUPPORTED_STUDIO_PALETTES: new Set(palettes), DEFAULT_STUDIO_PALETTE: "indigo",
+    state: { studioPalette: "indigo", pageScale: 1 },
+    document: { body: { dataset: {} }, querySelectorAll: selector => selector.includes("studio-palette-option") ? buttons : [] },
+    localStorage: { setItem: (key, value) => stored.set(key, value) },
+    updatePaint() {}, requestRender() {},
+  });
+  vm.runInContext(["normalizeStudioPalette", "updateAppearanceControls", "applyStudioPalette"].map(name => functionSource(app, name)).join("\n"), context);
+  for (const palette of palettes) {
+    context.applyStudioPalette(palette);
+    assert.deepEqual(buttons.filter(button => button["aria-checked"] === "true").map(button => button.dataset.studioPalette), [palette]);
+    assert.equal(context.document.body.dataset.studioPalette, palette);
+    assert.equal(stored.get("penecho-studio-palette"), palette);
+  }
+});
+
 test("Studio-only palettes are wired through initialization, localization, and snapshots", () => {
   const html = read("public/index.html"), app = read("public/app.js"), css = read("public/style.css"), zh = read("public/locales/zh.js");
   assert.match(html, /<body\b[^>]*\bdata-theme="studio"[^>]*\bdata-studio-palette="indigo"/);
@@ -3354,7 +3386,7 @@ test("Studio-only palettes are wired through initialization, localization, and s
   assert.match(app, /DEFAULT_STUDIO_PALETTE\s*=\s*"indigo"/);
   assert.match(app, /REMOVED_THEMES\s*=\s*new Set\(\["arcane", "scifi", "research"\]\)/);
   assert.match(app, /SUPPORTED_THEMES\s*=\s*new Set\(\[DEFAULT_THEME\]\)/);
-  assert.match(app, /SUPPORTED_STUDIO_PALETTES\s*=\s*new Set\(\["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy"\]\)/);
+  assert.match(app, /SUPPORTED_STUDIO_PALETTES\s*=\s*new Set\(\["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy", "plum", "rose", "terracotta", "olive"\]\)/);
   assert.match(app, /function normalizeTheme\(theme\)\s*\{\s*return SUPPORTED_THEMES\.has\(theme\) \? theme : DEFAULT_THEME;/);
   assert.match(app, /function normalizeStudioPalette\(palette\)\s*\{\s*return SUPPORTED_STUDIO_PALETTES\.has\(palette\) \? palette : DEFAULT_STUDIO_PALETTE;/);
   assert.match(app, /function normalizeStudioPaletteForTheme\(theme, palette\)\s*\{\s*return REMOVED_THEMES\.has\(theme\) \? DEFAULT_STUDIO_PALETTE : normalizeStudioPalette\(palette\);/);
@@ -3368,12 +3400,12 @@ test("Studio-only palettes are wired through initialization, localization, and s
   assert.match(functionSource(app, "applyTheme"), /normalizeStudioPaletteForTheme\(theme, state\.studioPalette\)[\s\S]*?theme\s*=\s*normalizeTheme\(theme\)[\s\S]*?penecho-studio-palette/);
   assert.match(functionSource(app, "applyStudioPalette"), /normalizeStudioPalette\(palette\)[\s\S]*?penecho-studio-palette/);
 
-  for (const key of ["guideStudio", "studioPaletteIndigo", "studioPaletteGraphite", "studioPaletteCobalt", "studioPaletteAzure", "studioPaletteTeal", "studioPaletteForest", "studioPaletteAmber", "studioPaletteBurgundy"]) {
+  for (const key of ["guideStudio", "studioPaletteIndigo", "studioPaletteGraphite", "studioPaletteCobalt", "studioPaletteAzure", "studioPaletteTeal", "studioPaletteForest", "studioPaletteAmber", "studioPaletteBurgundy", "studioPalettePlum", "studioPaletteRose", "studioPaletteTerracotta", "studioPaletteOlive"]) {
     assert.match(app, new RegExp(`\\b${key}:\\s*"`));
     assert.match(zh, new RegExp(`\\b${key}:\\s*"`));
   }
   assert.match(css, /body\[data-theme="studio"\]\s*\{/);
-  for (const palette of ["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy"]) assert.match(css, new RegExp(`\\[data-studio-palette="${palette}"\\]`));
+  for (const palette of ["indigo", "graphite", "cobalt", "azure", "teal", "forest", "amber", "burgundy", "plum", "rose", "terracotta", "olive"]) assert.match(css, new RegExp(`\\[data-studio-palette="${palette}"\\]`));
   assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-project-dialog\s*\{[^}]*color:\s*var\(--studio-text\)[^}]*border-color:\s*var\(--studio-line\)[^}]*background:\s*var\(--penecho-dialog-surface\)/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-project-row\.selected,[\s\S]*?\.canvas-agent-project-row\.selected:hover\s*\{[^}]*background:\s*var\(--pe-selected\)/);
   assert.match(css, /body\[data-theme="studio"\] \.canvas-agent-resource-heading-icon,[\s\S]*?\.canvas-agent-resource-icon\s*\{[^}]*color:\s*var\(--pe-ink-2\)[^}]*background:\s*var\(--pe-surface-muted\)/);
@@ -3431,7 +3463,7 @@ test("Settings is a centered frosted workbench with persistent navigation and sw
     assert.match(panel, new RegExp(`data-settings-page="${page}"`));
   }
   assert.ok(panel.indexOf('class="settings-navigation penecho-workbench-navigation"') < panel.indexOf('class="settings-detail"'));
-  assert.equal((panel.match(/class="studio-palette-option"/g) || []).length, 8);
+  assert.equal((panel.match(/class="studio-palette-option"/g) || []).length, 12);
   assert.equal((panel.match(/data-page-scale=/g) || []).length, 4);
   assert.match(panel, /data-page-scale="0\.9" aria-checked="false"[^>]*>90%<\/button>/);
   assert.match(panel, /data-page-scale="1" aria-checked="true"/);
@@ -3459,7 +3491,7 @@ test("Canvas grid renders sparse dots or lines consistently in the viewport and 
   const arcs=[], lines=[], context={save(){},restore(){},beginPath(){},moveTo(){},fill(){},stroke(){},arc(...v){arcs.push(v);},lineTo(...v){lines.push(v);}};
   draw(context,{x:0,y:0,w:2000,h:1000},.5);
   assert.ok(arcs.length>100 && arcs.length<2000);
-  assert.ok(arcs.every(([x,y,r])=>Number.isFinite(x)&&Number.isFinite(y)&&r===2));
+  assert.ok(arcs.every(([x,y,r])=>Number.isFinite(x)&&Number.isFinite(y)&&r===2.25));
   assert.equal(lines.length,0);
   arcs.length=0;
   draw(context,{x:0,y:0,w:20000,h:20000},.03);

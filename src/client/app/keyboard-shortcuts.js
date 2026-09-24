@@ -119,7 +119,8 @@
     const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
     if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
     const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
-    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["focus-agent"] || ""); shortcut.hidden = !keyboardShortcutBindings["focus-agent"]; }
+    // On the empty canvas, Mod+K opens the Agent directly from the welcome card.
+    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay("Mod+k"); shortcut.hidden = false; }
     const search = document.querySelector("#studioNavigatorSearchShortcut");
     if (search) { search.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["search-work"] || ""); search.hidden = !keyboardShortcutBindings["search-work"]; }
     const container = document.querySelector("#settingsShortcutList");
@@ -322,7 +323,8 @@
     }
     const chord = keyboardShortcutChordFromEvent(event);
     if (!chord) return;
-    const command = chord === "Tab" ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
+    const welcomeAgentShortcut = chord === "Mod+k" && !document.querySelector("#canvasWelcome")?.hidden;
+    const command = chord === "Tab" || welcomeAgentShortcut ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
     if (!keyboardShortcutCanRun(command, event, chord)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
