@@ -1704,10 +1704,10 @@ body[data-theme="studio"] .object-chrome-button.widget-chrome-control.widget-too
 .text-input-hint { max-width: min(440px, 100%); pointer-events: none; white-space: nowrap; }
 .text-input-hint kbd { padding: 0; color: inherit; border: 0; border-radius: 0; background: transparent; font: inherit; }
 #tip { max-width: min(440px, 100%); pointer-events: none; visibility: hidden; opacity: 0; white-space: nowrap; transition: opacity .2s ease, visibility 0s linear .2s; }
-main:has(#viewport.is-navigating):not(:has(#mcpCanvasNotice:not([hidden]))) #tip { visibility: visible; opacity: 1; transition-delay: 0s; }
+.page-hint-slot[data-navigation-hint="pan"] #tip { visibility: visible; opacity: 1; transition-delay: 0s; }
 .canvas-navigation-lock-hint { max-width: min(440px, 100%); pointer-events: none; visibility: hidden; opacity: 0; white-space: nowrap; transition: opacity .2s ease, visibility 0s linear .2s; }
-main:has(#viewport.navigation-locked) .canvas-navigation-lock-hint { visibility: visible; opacity: 1; transition-delay: 0s; }
-main:has(#viewport.navigation-locked) #tip { visibility: hidden; opacity: 0; }
+.page-hint-slot[data-navigation-hint="locked"] .canvas-navigation-lock-hint { visibility: visible; opacity: 1; transition-delay: 0s; }
+.page-hint-slot[data-navigation-hint="locked"] #tip { visibility: hidden; opacity: 0; }
 
 .ai-embodiment { position: absolute; z-index: 5; top: 12px; right: 13px; width: 58px; height: 58px; pointer-events: none; opacity: 1; transition: opacity .32s ease; }
 .ai-embodiment.idle-dim:not(.working):not(:hover):not(:focus-within) { opacity: .36; }
@@ -1783,8 +1783,8 @@ main > footer.penecho-desktop-update-visible .page-hint-slot { display: none; }
 .canvas-hint[hidden] { display: none; }
 /* Page guidance shares one application-level bottom-right slot. Specific editing
    guidance wins, followed by navigation state, then the current tool hint. */
-main:has(#viewport:is(.is-navigating, .navigation-locked)) .canvas-hint,
-main:has(.text-input-hint:not([hidden])) #pageHintSlot :is(#tip, .canvas-navigation-lock-hint, .canvas-hint) { visibility: hidden; opacity: 0; }
+.page-hint-slot[data-navigation-active="true"] .canvas-hint,
+.page-hint-slot[data-navigation-hint="text"] :is(#tip, .canvas-navigation-lock-hint, .canvas-hint) { visibility: hidden; opacity: 0; }
 body[data-theme="scifi"] { color-scheme: dark; font-family: "Segoe UI", "Trebuchet MS", Arial, sans-serif; --night: #05101d; --panel: #071928; --panel-raised: #0a2134; --ink: #c9f6ff; --muted: #77a9bc; --gold: #23cce5; --gold-bright: #95f5ff; --accent-ink: #032330; --line: #21647c; --danger: #ff7f96; --confirm: #65d88f; --paper: #dceef3; --paper-grid: #39b8cf42; --outside: #020914; background: radial-gradient(circle at 20% 0, #0b4060 0, transparent 28rem), linear-gradient(135deg, #04101d, #07101f 60%, #061a28); }
 body[data-theme="scifi"]::before { opacity: .18; background-image: linear-gradient(#3cd7f233 1px, transparent 1px), linear-gradient(90deg, #3cd7f233 1px, transparent 1px); background-size: 70px 70px; mask-image: none; }
 body[data-theme="scifi"] h1 { color: #c9f9ff; letter-spacing: .13em; text-shadow: 0 0 15px #21cfe955; }
@@ -2016,7 +2016,7 @@ body[data-theme="studio"] .canvas-file-actions button, body[data-theme="studio"]
 body[data-theme="studio"] .canvas-file-actions button:hover, body[data-theme="studio"] #settingsBtn:hover { color: var(--studio-accent); border-color: transparent; background: var(--studio-accent-softer); }
 
 body[data-theme="studio"] .toolbar { position: absolute; z-index: 49; top: 100%; right: 0; left: 0; min-height: var(--studio-toolbar-height); align-items: center; justify-content: flex-start; column-gap: 6px; padding: 3px 8px; overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid rgba(157, 163, 175, .34); background: var(--studio-glass); box-shadow: none; -webkit-backdrop-filter: saturate(1.2) blur(18px); backdrop-filter: saturate(1.2) blur(18px); scrollbar-width: thin; }
-body[data-theme="studio"]:has(#viewport:is(.canvas-chrome-lightweight, .is-drawing)) .toolbar { background: color-mix(in srgb, var(--studio-toolbar) 88%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
+body[data-theme="studio"] .toolbar.studio-chrome-lightweight { background: color-mix(in srgb, var(--studio-toolbar) 88%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .canvas-agent-toolbar-home { display: none; }
 body[data-theme="studio"] .canvas-agent-toolbar-home { display: flex; min-width: max-content; align-items: center; flex: 0 0 auto; margin-left: auto; }
 body[data-theme="studio"] .canvas-agent-toolbar-home:empty { display: none; }
@@ -2167,7 +2167,7 @@ body[data-theme="studio"] .studio-navigator {
   backdrop-filter: saturate(1.15) blur(20px);
   transition: transform .22s cubic-bezier(.2,.72,.2,1), opacity .16s ease, border-color .16s ease, visibility 0s linear 0s;
 }
-body[data-theme="studio"]:has(#viewport:is(.canvas-chrome-lightweight, .is-drawing)) .studio-navigator { background: var(--studio-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+body[data-theme="studio"] .studio-navigator.studio-chrome-lightweight { background: var(--studio-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
 body[data-theme="studio"]:not(.studio-navigator-open) .studio-navigator {
   pointer-events: none;
   opacity: 0;
@@ -3728,7 +3728,7 @@ body:not([data-theme="studio"]) .canvas-workspace {top:12px;}
     backdrop-filter: var(--penecho-large-dialog-surface-filter);
     transition: transform .22s cubic-bezier(.2,.72,.2,1), opacity .16s ease, border-color .16s ease, visibility 0s linear 0s;
   }
-  body[data-theme="studio"].studio-agent-docked:has(#viewport:is(.canvas-chrome-lightweight, .is-drawing)) .canvas-agent-panel { background: var(--studio-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  body[data-theme="studio"].studio-agent-docked .canvas-agent-panel.studio-chrome-lightweight { background: var(--studio-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
   body[data-theme="studio"].studio-agent-docked .canvas-agent-panel[hidden] { display: flex; }
   body[data-theme="studio"].studio-agent-docked .canvas-agent-panel.canvas-agent-no-motion { transition: none; }
   body[data-theme="studio"].studio-agent-docked:not(.canvas-agent-open) .canvas-agent-panel {

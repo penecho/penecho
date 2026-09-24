@@ -42,19 +42,19 @@
     --pe-shell-float-shadow: 0 6px 14px rgba(17, 24, 39, .14);
   }
   @media (min-width: 1101px) {
-    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: 320px; }
+    body[data-theme="studio"].studio-navigator-open .shell-geometry { --pe-shell-left: 320px; }
   }
   /* Below 1101px the navigator overlays the canvas; floating chrome steps aside. */
   @media (max-width: 1100px) {
-    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: min(320px, calc(100% - 44px)); }
+    body[data-theme="studio"].studio-navigator-open .shell-geometry { --pe-shell-left: min(320px, calc(100% - 44px)); }
   }
   @media (max-width: 820px) {
-    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: min(360px, calc(100% - 16px)); }
+    body[data-theme="studio"].studio-navigator-open .shell-geometry { --pe-shell-left: min(360px, calc(100% - 16px)); }
   }
-  body[data-theme="studio"].studio-agent-docked.canvas-agent-open:not(.canvas-agent-navigation-hidden) {
+  body[data-theme="studio"].studio-agent-docked.canvas-agent-open:not(.canvas-agent-navigation-hidden) .shell-geometry {
     --pe-shell-right: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
   }
-  body[data-theme="studio"].studio-agent-docked.canvas-agent-open {
+  body[data-theme="studio"].studio-agent-docked.canvas-agent-open .shell-geometry {
     --pe-shell-right-reserved: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
   }
 
@@ -128,7 +128,7 @@
     transition: left .22s cubic-bezier(.2,.72,.2,1), right .22s cubic-bezier(.2,.72,.2,1);
   }
   body[data-theme="studio"] .topbar .tool-group.primary-tools::-webkit-scrollbar { display: none; }
-  body[data-theme="studio"]:has(.canvas-frame.canvas-agent-resizing) .topbar :is(.tool-group.primary-tools, .ai-tools-section) { transition: none; }
+  body[data-theme="studio"] .topbar :is(.tool-group.primary-tools, .ai-tools-section) { transition: none; }
 
   /* Dock order: tools, ink, history, view. */
   body[data-theme="studio"] .primary-tools > .mode-tools { order: 1; margin: 0; padding: 0 4px 0 0; border-right: 1px solid var(--studio-line); }
@@ -306,7 +306,7 @@
   }
   /* The general pan/zoom tip only appears while navigating; contextual hints keep their own rules. */
   body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) #tip { visibility: hidden; opacity: 0; }
-  body[data-theme="studio"] main:has(#viewport.is-navigating):not(:has(#viewport.navigation-locked)):not(:has(.text-input-hint:not([hidden]))):not(:has(#mcpCanvasNotice:not([hidden]))) > footer:not(.penecho-desktop-update-visible) #tip { visibility: visible; opacity: 1; }
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) .page-hint-slot[data-navigation-hint="pan"] #tip { visibility: visible; opacity: 1; }
   body[data-theme="studio"] .primary-tools .effort-label-full { display: none; }
   body[data-theme="studio"] .primary-tools .effort-label-short { display: block; }
   body[data-theme="studio"] .canvas-frame { flex: 1 1 auto; }
@@ -1080,56 +1080,13 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
   body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) > .widget-presentation-toolbar { margin: 0 -8px 8px; padding: 0 8px; }
 }
 
-/* Docked Agent width mirrors .canvas-frame.canvas-agent-width-N so floating chrome can avoid it. */
-@media (min-width: 701px) {
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-0) { --pe-shell-agent-width: 0%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-1) { --pe-shell-agent-width: 2.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-2) { --pe-shell-agent-width: 5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-3) { --pe-shell-agent-width: 7.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-4) { --pe-shell-agent-width: 10%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-5) { --pe-shell-agent-width: 12.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-6) { --pe-shell-agent-width: 15%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-7) { --pe-shell-agent-width: 17.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-8) { --pe-shell-agent-width: 20%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-9) { --pe-shell-agent-width: 22.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-10) { --pe-shell-agent-width: 25%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-11) { --pe-shell-agent-width: 27.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-12) { --pe-shell-agent-width: 30%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-13) { --pe-shell-agent-width: 32.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-14) { --pe-shell-agent-width: 35%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-15) { --pe-shell-agent-width: 37.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-16) { --pe-shell-agent-width: 40%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-17) { --pe-shell-agent-width: 42.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-18) { --pe-shell-agent-width: 45%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-19) { --pe-shell-agent-width: 47.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-20) { --pe-shell-agent-width: 50%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-21) { --pe-shell-agent-width: 52.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-22) { --pe-shell-agent-width: 55%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-23) { --pe-shell-agent-width: 57.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-24) { --pe-shell-agent-width: 60%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-25) { --pe-shell-agent-width: 62.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-26) { --pe-shell-agent-width: 65%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-27) { --pe-shell-agent-width: 67.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-28) { --pe-shell-agent-width: 70%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-29) { --pe-shell-agent-width: 72.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-30) { --pe-shell-agent-width: 75%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-31) { --pe-shell-agent-width: 77.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-32) { --pe-shell-agent-width: 80%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-33) { --pe-shell-agent-width: 82.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-34) { --pe-shell-agent-width: 85%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-35) { --pe-shell-agent-width: 87.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-36) { --pe-shell-agent-width: 90%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-37) { --pe-shell-agent-width: 92.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-38) { --pe-shell-agent-width: 95%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-39) { --pe-shell-agent-width: 97.5%; }
-  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-40) { --pe-shell-agent-width: 100%; }
-}
+/* Agent width is mirrored directly to the chrome by studio-shell.js. */
 
 
 /* Anchor the side groups to the canvas edges and keep the drawing dock centered.
    Test the actual clearance before stacking the sides or using two rows. */
 @media (min-width: 701px) {
-  body[data-theme="studio"][data-shell-dock-layout] {
+  body[data-theme="studio"][data-shell-dock-layout] .shell-geometry {
     --pe-shell-view-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-view-height)) / 2);
     --pe-shell-ai-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-ai-height)) / 2);
   }
@@ -1198,7 +1155,7 @@ body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widg
   }
   body[data-theme="studio"][data-shell-dock-layout="vertical"] .primary-tools > .ai-tools-section { flex-direction: column; align-items: stretch; }
   body[data-theme="studio"][data-shell-dock-layout="vertical"] #aiToolbarRun { align-self: stretch; justify-content: center; }
-  body[data-theme="studio"][data-shell-dock-layout="rows"] { --pe-shell-corner-lift: 52px; }
+  body[data-theme="studio"][data-shell-dock-layout="rows"] .shell-geometry { --pe-shell-corner-lift: 52px; }
   body[data-theme="studio"][data-shell-dock-layout] .topbar > :is(#autoDelayPopover, #effortPopover).toolbar-anchored-popover {
     bottom: calc(var(--pe-shell-ai-bottom) + var(--pe-shell-ai-height, 38px) + 8px) !important;
   }
@@ -1361,7 +1318,7 @@ body[data-theme="studio"] #canvasAgentSend .canvas-agent-action-label { display:
 body[data-theme="studio"] .canvas-auto-paused-notice { position: absolute; z-index: 8; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 12px 16px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); color: var(--studio-muted); box-shadow: var(--pe-shell-float-shadow); font-size: 13px; }
 body[data-theme="studio"] .canvas-auto-paused-notice[hidden] { display: none; }
 .canvas-auto-paused-notice svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; flex-shrink: 0; }
-body[data-theme="studio"]:has(#canvasAutoPausedNotice:not([hidden])) #aiToolsSection { visibility: hidden; }
+body[data-theme="studio"] #aiToolsSection.studio-auto-paused { visibility: hidden; }
 body[data-theme="studio"] #mcpReconnectCancel { padding: 12px 16px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: var(--pe-shell-float-shadow); font-size: 13px; }
 body[data-theme="studio"] #mcpReconnectCancel::before { content: ""; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #a55b09; }
 body[data-theme="studio"] #mcpReconnectCancel .mcp-retry-action { margin-left: 16px; color: var(--studio-muted); }
@@ -1469,7 +1426,7 @@ body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-project-c
 body[data-theme="studio"] .canvas-frame > .studio-navigator,
 body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel {
   box-sizing: border-box; opacity: 1; visibility: visible;
-  transition: margin-left .3s cubic-bezier(.2,.72,.2,1), margin-right .3s cubic-bezier(.2,.72,.2,1), transform .3s cubic-bezier(.2,.72,.2,1);
+  transition: none;
 }
 body[data-theme="studio"].studio-navigator-open .canvas-frame > .studio-navigator { display: flex; margin-left: 0; transform: none; }
 body[data-theme="studio"].studio-agent-docked.canvas-agent-open .canvas-frame > .canvas-agent-panel { margin-right: 0; transform: none; }
@@ -1690,7 +1647,7 @@ body[data-theme="studio"] #mcpToolbarToggle > .mcp-status-chevron { display: blo
 /* In two rows, clear the entire height of the upper controls, including a
    wrapped paused notice; center alignment must never move the dock into it. */
 @media (min-width: 701px) {
-  body[data-theme="studio"][data-shell-dock-layout="rows"] {
+  body[data-theme="studio"][data-shell-dock-layout="rows"] .shell-geometry {
     --pe-shell-view-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-view-height)) / 2);
     --pe-shell-ai-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-ai-height)) / 2);
   }
@@ -1820,3 +1777,6 @@ body[data-theme="studio"] #studioNavigator .studio-navigator-canvas-card .studio
 body[data-theme="studio"] #studioNavigator .studio-navigator-client-avatar[data-client="claude"] { background: #f5e9e1; color: #9f6037; }
 
 body[data-theme="studio"] #studioWorkRecentList .mcp-sidebar-badge { display: none; }
+
+/* Geometry changes belong to chrome, never the entire document tree. */
+body[data-theme="studio"] .shell-geometry { --pe-shell-corner-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-corner-lift)); }

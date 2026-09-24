@@ -4718,7 +4718,7 @@
   const CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS=320;
   let canvasAgentDockedTransitionHandler=null,canvasAgentDockedOpenTimer=0;
   function canvasAgentCancelDockedOpenWork() {
-    if(canvasAgentDockedTransitionHandler)canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    if(canvasAgentDockedTransitionHandler){canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);canvasAgentPanel.removeEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);}
     if(canvasAgentDockedOpenTimer)clearTimeout(canvasAgentDockedOpenTimer);
     canvasAgentDockedTransitionHandler=null;
     canvasAgentDockedOpenTimer=0;
@@ -4731,9 +4731,10 @@
     };
     if(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches){finish();return;}
     canvasAgentDockedTransitionHandler=event=>{
-      if(event.target===canvasAgentPanel&&["transform","margin-right"].includes(event.propertyName))finish();
+      if(event.target===canvasAgentPanel&&(event.type==="penecho-sidebar-motion-end"||["transform","margin-right"].includes(event.propertyName)))finish();
     };
     canvasAgentPanel.addEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    canvasAgentPanel.addEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);
     canvasAgentDockedOpenTimer=setTimeout(finish,CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS);
   }
   function canvasAgentPrepareOpenState() {
@@ -4809,6 +4810,7 @@
     canvasAgentCancelInitialAutoHide();
     canvasAgentCancelPanelMotion();
     canvasAgentCancelDockedOpenWork();
+    const motion=canvasAgentDockedPanel()?window.PenEchoShellMotion?.capture(animate):null;
     canvasAgentPanel.hidden = false;
     canvasAgentToggle.setAttribute("aria-expanded","true");
     const docked=canvasAgentDockedPanel();
@@ -4818,6 +4820,7 @@
     document.body.classList.add("canvas-agent-open");
     canvasAgentPauseAutomaticAI();
     window.PenEchoStudioNavigator?.agentWillOpen?.();
+    if(docked)window.PenEchoShellMotion?.play(motion);
     if(animate&&docked){
       canvasAgentScheduleDockedOpenWork(focus,connect);
       return;
@@ -4872,12 +4875,14 @@
     canvasAgentCancelDockedOpenWork();
     const docked=canvasAgentDockedPanel();
     if(docked){
+      const motion=window.PenEchoShellMotion?.capture(animate);
       if(!animate){
         canvasAgentPanel.classList.add("canvas-agent-no-motion");
         requestAnimationFrame(()=>canvasAgentPanel.classList.remove("canvas-agent-no-motion"));
       }
       canvasAgentToggle.setAttribute("aria-expanded","false");
       document.body.classList.remove("canvas-agent-open");
+      window.PenEchoShellMotion?.play(motion);
       canvasAgentResumeAutomaticAI();
       if(focus)canvasAgentToggle.focus();
       else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();

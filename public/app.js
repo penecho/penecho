@@ -24398,7 +24398,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS=320;
   let canvasAgentDockedTransitionHandler=null,canvasAgentDockedOpenTimer=0;
   function canvasAgentCancelDockedOpenWork() {
-    if(canvasAgentDockedTransitionHandler)canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    if(canvasAgentDockedTransitionHandler){canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);canvasAgentPanel.removeEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);}
     if(canvasAgentDockedOpenTimer)clearTimeout(canvasAgentDockedOpenTimer);
     canvasAgentDockedTransitionHandler=null;
     canvasAgentDockedOpenTimer=0;
@@ -24411,9 +24411,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
     if(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches){finish();return;}
     canvasAgentDockedTransitionHandler=event=>{
-      if(event.target===canvasAgentPanel&&["transform","margin-right"].includes(event.propertyName))finish();
+      if(event.target===canvasAgentPanel&&(event.type==="penecho-sidebar-motion-end"||["transform","margin-right"].includes(event.propertyName)))finish();
     };
     canvasAgentPanel.addEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    canvasAgentPanel.addEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);
     canvasAgentDockedOpenTimer=setTimeout(finish,CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS);
   }
   function canvasAgentPrepareOpenState() {
@@ -24489,6 +24490,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentCancelInitialAutoHide();
     canvasAgentCancelPanelMotion();
     canvasAgentCancelDockedOpenWork();
+    const motion=canvasAgentDockedPanel()?window.PenEchoShellMotion?.capture(animate):null;
     canvasAgentPanel.hidden = false;
     canvasAgentToggle.setAttribute("aria-expanded","true");
     const docked=canvasAgentDockedPanel();
@@ -24498,6 +24500,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     document.body.classList.add("canvas-agent-open");
     canvasAgentPauseAutomaticAI();
     window.PenEchoStudioNavigator?.agentWillOpen?.();
+    if(docked)window.PenEchoShellMotion?.play(motion);
     if(animate&&docked){
       canvasAgentScheduleDockedOpenWork(focus,connect);
       return;
@@ -24552,12 +24555,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentCancelDockedOpenWork();
     const docked=canvasAgentDockedPanel();
     if(docked){
+      const motion=window.PenEchoShellMotion?.capture(animate);
       if(!animate){
         canvasAgentPanel.classList.add("canvas-agent-no-motion");
         requestAnimationFrame(()=>canvasAgentPanel.classList.remove("canvas-agent-no-motion"));
       }
       canvasAgentToggle.setAttribute("aria-expanded","false");
       document.body.classList.remove("canvas-agent-open");
+      window.PenEchoShellMotion?.play(motion);
       canvasAgentResumeAutomaticAI();
       if(focus)canvasAgentToggle.focus();
       else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();
@@ -28586,7 +28591,7 @@ var canvasDocumentIdentity = (() => {
       return true;
     }
     function cancelStudioNavigatorOpenWork() {
-      if (studioNavigatorTransitionHandler) studioNavigator.removeEventListener("transitionend", studioNavigatorTransitionHandler);
+      if (studioNavigatorTransitionHandler) { studioNavigator.removeEventListener("transitionend", studioNavigatorTransitionHandler);studioNavigator.removeEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler); }
       if (studioNavigatorOpenTimer) clearTimeout(studioNavigatorOpenTimer);
       studioNavigatorTransitionHandler = null;
       studioNavigatorOpenTimer = 0;
@@ -28599,12 +28604,11 @@ var canvasDocumentIdentity = (() => {
         if (studioNavigatorIsOpen() !== Boolean(open)) return;
         updateStudioNavigatorA11y();
         if (open) {
-          renderStudioNavigator();
+          if(studioNavigatorHistoryDirty)renderStudioNavigator();
           void refreshStudioNavigatorSources();
         } else {
-          releaseStudioNavigatorPreviewUrls(studioNavigatorWorkPreviewUrls);
-          releaseStudioNavigatorPreviewUrls(studioNavigatorAgentPreviewUrls);
-          releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
+          // Keep the unchanged list and decoded previews for the next opening.
+          // Each renderer releases its previous URLs when the data changes.
           if (restoreAgent) restoreStudioAgentAfterNavigator();
         }
       };
@@ -28614,12 +28618,14 @@ var canvasDocumentIdentity = (() => {
       }
       studioNavigatorTransitionHandler = event => {
         const property = studioNavigatorIsMcpDocked() ? "opacity" : "transform";
-        if (event.target === studioNavigator && (event.propertyName === property || event.propertyName === "margin-left")) settle();
+        if (event.target === studioNavigator && (event.type === "penecho-sidebar-motion-end" || event.propertyName === property || event.propertyName === "margin-left")) settle();
       };
       studioNavigator.addEventListener("transitionend", studioNavigatorTransitionHandler);
+      studioNavigator.addEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
     function setStudioNavigatorOpen(open, { restoreAgent = true, persist = false } = {}) {
+      const motion=window.PenEchoShellMotion?.capture();
       studioNavigatorOpenPreference = Boolean(open);
       if (persist) { try { localStorage.setItem(STUDIO_NAVIGATOR_OPEN_KEY, String(Boolean(open))); } catch {} }
       if (open) restoreCanvasChromeMaterial();
@@ -28627,6 +28633,7 @@ var canvasDocumentIdentity = (() => {
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
       if (!open && studioNavigator.contains(document.activeElement)) studioNavigatorToggle.focus({ preventScroll:true });
       if (open) suspendStudioAgentForNavigator();
+      window.PenEchoShellMotion?.play(motion);
       scheduleStudioNavigatorOpenWork(open, { restoreAgent });
     }
     function syncStudioNavigatorTheme(theme = state.theme) {

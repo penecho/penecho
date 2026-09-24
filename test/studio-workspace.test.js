@@ -143,7 +143,7 @@ test("compact Agent opening reserves usable canvas space while Library preserves
 });
 test("manually closing and reopening MCP preserves its selected tab and persistence",()=>{
   const classes=new Set(["studio-navigator-open"]);
-  const context=vm.createContext({studioNavigatorIsCompact:()=>false,studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
+  const context=vm.createContext({window:{},studioNavigatorIsCompact:()=>false,studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
     document:{body:{classList:{contains:key=>classes.has(key),toggle:(key,value)=>value?classes.add(key):classes.delete(key)}},activeElement:{}},
     studioNavigator:{contains:()=>false},restoreCanvasChromeMaterial(){},updateStudioNavigatorA11y(){},suspendStudioAgentForNavigator(){},scheduleStudioNavigatorOpenWork(){},
   });

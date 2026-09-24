@@ -155,6 +155,70 @@
     window.addEventListener("resize",syncSidebarToolbarInset);syncSidebarToolbarInset();
   }
 
+  // Settle flex geometry once, then animate the panels on compositor layers.
+  // The viewport uses a positional offset (not a transform, which would change
+  // the containing block of its fixed toolbars). Its width stays constant.
+  const motionPanels=[document.querySelector("#studioNavigator"),document.querySelector("#canvasAgentPanel")];
+  const motionViewport=document.querySelector("#viewport");
+  let sidebarAnimations=[],sidebarMotionGeneration=0,sidebarMotionRunning=false;
+  function captureSidebarMotion(animate=true) {
+    const elements=[...motionPanels,motionViewport].filter(Boolean);
+    const snapshot=elements.map(element=>({element,rect:element.getBoundingClientRect()}));
+    sidebarMotionGeneration++;
+    for(const animation of sidebarAnimations)animation.cancel();
+    sidebarAnimations=[];sidebarMotionRunning=false;
+    if(!animate||document.body.dataset.theme!=="studio"||matchMedia("(prefers-reduced-motion: reduce)").matches)return null;
+    sidebarMotionRunning=true;
+    return snapshot;
+  }
+  function playSidebarMotion(snapshot) {
+    if(!snapshot){window.dispatchEvent(new Event("penecho-sidebar-settled"));return;}
+    const generation=++sidebarMotionGeneration;
+    for(const animation of sidebarAnimations)animation.cancel();
+    sidebarAnimations=[];
+    const scale=parseFloat(getComputedStyle(document.documentElement).zoom)||1;
+    const targets=snapshot.map(({element,rect})=>({element,dx:(rect.left-element.getBoundingClientRect().left)/scale}));
+    for(const {element,dx} of targets){
+      if(Math.abs(dx)<.5)continue;
+      const frames=element===motionViewport?[{left:`${dx}px`},{left:"0px"}]:[{transform:`translate3d(${dx}px,0,0)`},{transform:"translate3d(0,0,0)"}];
+      sidebarAnimations.push(element.animate(frames,{duration:240,easing:"cubic-bezier(.2,.72,.2,1)"}));
+    }
+    Promise.allSettled(sidebarAnimations.map(animation=>animation.finished)).then(()=>{
+      if(generation!==sidebarMotionGeneration)return;
+      sidebarAnimations=[];sidebarMotionRunning=false;
+      for(const panel of motionPanels)panel?.dispatchEvent(new Event("penecho-sidebar-motion-end"));
+      window.dispatchEvent(new Event("penecho-sidebar-settled"));
+    });
+  }
+  // Finish movement before a canvas gesture reads its pointer coordinates.
+  function finishSidebarMotion() {
+    for(const animation of sidebarAnimations)if(animation.playState==="running")animation.finish();
+  }
+  sidebarFrame?.addEventListener("pointerdown",finishSidebarMotion,true);
+  motionViewport?.addEventListener("wheel",finishSidebarMotion,{capture:true,passive:true});
+  window.addEventListener("resize",finishSidebarMotion);
+  window.PenEchoShellMotion=Object.freeze({capture:captureSidebarMotion,play:playSidebarMotion,isRunning:()=>sidebarMotionRunning});
+
+  // Root :has([hidden]) rules invalidate thousands of unrelated descendants
+  // when a preview or panel toggles visibility. Mirror only the hint/chrome
+  // state at its actual consumers instead.
+  const hintSlot=document.querySelector("#pageHintSlot"),textHint=document.querySelector(".text-input-hint"),mcpNotice=document.querySelector("#mcpCanvasNotice");
+  const lightweightTargets=[sidebarToolbar,...motionPanels].filter(Boolean),pausedNotice=document.querySelector("#canvasAutoPausedNotice"),pausedTools=document.querySelector("#aiToolsSection");
+  function syncNavigationChrome() {
+    if(!motionViewport)return;
+    const classes=motionViewport.classList;
+    const paused=Boolean(pausedNotice&&!pausedNotice.hidden);if(pausedTools&&pausedTools.classList.contains("studio-auto-paused")!==paused)pausedTools.classList.toggle("studio-auto-paused",paused);
+    const mode=textHint&&!textHint.hidden?"text":classes.contains("navigation-locked")?"locked":classes.contains("is-navigating")&&(!mcpNotice||mcpNotice.hidden)?"pan":"none";
+    if(hintSlot&&hintSlot.dataset.navigationHint!==mode)hintSlot.dataset.navigationHint=mode;
+    const navigating=String(classes.contains("is-navigating")||classes.contains("navigation-locked"));if(hintSlot&&hintSlot.dataset.navigationActive!==navigating)hintSlot.dataset.navigationActive=navigating;
+    const light=classes.contains("canvas-chrome-lightweight")||classes.contains("is-drawing");
+    for(const target of lightweightTargets)if(target.classList.contains("studio-chrome-lightweight")!==light)target.classList.toggle("studio-chrome-lightweight",light);
+  }
+  const navigationChromeObserver=new MutationObserver(syncNavigationChrome);
+  if(motionViewport)navigationChromeObserver.observe(motionViewport,{attributes:true,attributeFilter:["class"]});
+  for(const target of [textHint,mcpNotice,pausedNotice])if(target)navigationChromeObserver.observe(target,{attributes:true,attributeFilter:["hidden"]});
+  syncNavigationChrome();
+
   const viewControls = document.querySelector("#canvasZoomControls");
   const fitButton = document.querySelector("#canvasFitContents");
   const lockButton = document.querySelector("#canvasNavigationLock");
@@ -181,14 +245,20 @@
     space.className = "shell-dock-space";
     space.setAttribute("aria-hidden", "true");
     document.body.append(space);
+    const dockPropertyTargets=[...document.querySelectorAll(".primary-tools, .ai-tools-section, .canvas-zoom-controls, .canvas-navigation-lock, .canvas-fit-contents, .canvas-navigation-actions, .canvas-auto-paused-notice, #mcpCanvasNotice, .shell-dock-space, .pen-size-popover, #autoDelayPopover, #effortPopover, main > footer")];
+    for(const target of dockPropertyTargets)target.classList.add("shell-geometry");
     let frame = 0;
     function layoutDock() {
       frame = 0;
+      if(sidebarMotionRunning)return;
       const body = document.body;
       if (body.dataset.theme !== "studio" || !matchMedia("(min-width: 701px)").matches) {
         delete body.dataset.shellDockLayout;
         return;
       }
+      const widthClass=[...document.querySelector(".canvas-frame").classList].find(name=>/^canvas-agent-width-\d+$/.test(name));
+      const agentWidth=widthClass?`${Number(widthClass.split("-").at(-1))*2.5}%`:"390px";
+      for(const target of dockPropertyTargets)if(target.style.getPropertyValue("--pe-shell-agent-width")!==agentWidth)target.style.setProperty("--pe-shell-agent-width",agentWidth);
       const scale = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
       const measure = element => {
         const rect = element.getBoundingClientRect();
@@ -247,7 +317,10 @@
         "view-height": viewHeight,
         "row-height": Math.max(measure(dock).height, viewHeight, aiHeight),
       };
-      for (const [key, value] of Object.entries(values)) body.style.setProperty(`--pe-shell-${key}`, `${value}px`);
+      for (const target of dockPropertyTargets) for (const [key, value] of Object.entries(values)) {
+        const property=`--pe-shell-${key}`,next=`${value}px`;
+        if(target.style.getPropertyValue(property)!==next)target.style.setProperty(property,next);
+      }
       body.dataset.shellDockLayout = mode;
       delete body.dataset.shellDockMeasuring;
     }
@@ -263,6 +336,7 @@
     const canvasFrame = document.querySelector(".canvas-frame");
     if (canvasFrame) changes.observe(canvasFrame, { attributes: true, attributeFilter: ["class"] });
     window.addEventListener("resize", scheduleDockLayout);
+    window.addEventListener("penecho-sidebar-settled", scheduleDockLayout);
     changes.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-penecho-page-scale"] });
     document.fonts?.ready.then(scheduleDockLayout);
     scheduleDockLayout();

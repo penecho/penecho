@@ -125,7 +125,7 @@ test("hand panning and Canvas zoom preview content on the compositor before the 
   assert.match(css, /#viewport\.canvas-navigation-previewing :is\(#screen,[^}]*\.placed-content-layer[^}]*\.ink-layer[^}]*\)[^{]*\{[^}]*translate3d\(var\(--canvas-navigation-preview-x[^}]*scale\(var\(--canvas-navigation-preview-scale[^}]*transform-origin:\s*0 0[^}]*will-change:\s*transform/);
   assert.doesNotMatch(css, /#viewport\.canvas-navigation-previewing :is\([^}]*\.widget-layer/);
   assert.match(css, /#coords\s*\{[^}]*contain:\s*layout paint/);
-  assert.match(css, /body\[data-theme="studio"\]:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.toolbar\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
+  assert.match(css, /body\[data-theme="studio"\] \.toolbar\.studio-chrome-lightweight\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
   const state = { scale:1, panX:-10000, panY:-8000, navigationLocked:false, renderQueued:false, paint:{ paper:"#fafafa" } }, classes = new Set(), properties = new Map(), frames = [], timers = new Map(), counts = { coordinates:0, animation:0, exact:0, quality:0 },
     harness = vm.runInNewContext(`(() => {
       const CANVAS_NAVIGATION_SETTLE_MS = 80, CANVAS_NAVIGATION_REBASE_VIEWPORT_RATIO = 0.60, CANVAS_NAVIGATION_REBASE_MIN_PX = 192;
@@ -709,7 +709,7 @@ test("contextual Canvas hints share one quiet application-footer line by priorit
   assert.match(css, /\.page-hint-slot > :is\(\.text-input-hint, \.canvas-navigation-lock-hint, #tip, \.canvas-hint\)\s*\{[^}]*position:\s*absolute;[^}]*top:\s*50%;[^}]*right:\s*0;[^}]*bottom:\s*auto;[^}]*transform:\s*translateY\(-50%\);[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;[^}]*text-align:\s*right/);
   assert.match(css, /\.text-input-hint kbd\s*\{[^}]*padding:\s*0;[^}]*color:\s*inherit;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*font:\s*inherit/);
   assert.match(css, /\.canvas-hint\s*\{[^}]*max-width:\s*min\(440px, 50vw\)[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/);
-  assert.match(css, /main:has\(#viewport:is\(\.is-navigating, \.navigation-locked\)\) \.canvas-hint,[\s\S]*?main:has\(\.text-input-hint:not\(\[hidden\]\)\) #pageHintSlot :is\(#tip, \.canvas-navigation-lock-hint, \.canvas-hint\)\s*\{[^}]*visibility:\s*hidden;[^}]*opacity:\s*0/);
+  assert.match(css, /\.page-hint-slot\[data-navigation-active="true"\] \.canvas-hint,[\s\S]*?\.page-hint-slot\[data-navigation-hint="text"\] :is\(#tip, \.canvas-navigation-lock-hint, \.canvas-hint\)\s*\{[^}]*visibility:\s*hidden;[^}]*opacity:\s*0/);
   assert.match(css, /main > footer\.penecho-desktop-update-visible \.page-hint-slot\s*\{\s*display:\s*none/);
   assert.doesNotMatch(css, /canvasHintSettle|\.canvas-hint\.is-new\s*\{[^}]*animation|\.page-hint-slot[^}]*text-shadow|\.canvas-hint\.two-line/);
   assert.doesNotMatch(app, /fitCanvasHint|canvasHintResizeScheduled|classList\.(?:add|remove)\("two-line"\)/);
@@ -972,7 +972,7 @@ test("canvas navigation guidance emphasizes middle-mouse panning for at least te
   assert.match(app, /tip:\s*"Pan: two-finger scroll, Hand, or Space \+ drag · Zoom: pinch or Ctrl\/Cmd \+ scroll"/);
   assert.match(zh, /tip:\s*"移动：双指滑动、小手或空格＋拖动 · 缩放：捏合或 Ctrl\/Cmd＋滚动"/);
   assert.match(css, /#tip\s*\{[^}]*max-width:\s*min\(440px, 100%\)[^}]*visibility:\s*hidden[^}]*opacity:\s*0/);
-  assert.match(css, /main:has\(#viewport\.is-navigating\):not\(:has\(#mcpCanvasNotice:not\(\[hidden\]\)\)\) #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
+  assert.match(css, /\.page-hint-slot\[data-navigation-hint="pan"\] #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
   assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
 });
 
@@ -1124,9 +1124,9 @@ test("Canvas chrome uses one drawing and navigation cooldown before restoring st
   assert.match(finishDrawing, /state\.drawing = null[\s\S]*?noteCanvasChromeInteraction\(\)[\s\S]*?classList\.remove\("is-drawing"\)/);
   assert.match(openAgent, /restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.add\("canvas-agent-open"\)/);
   assert.match(openNavigator, /if \(open\) restoreCanvasChromeMaterial\(\)[\s\S]*?classList\.toggle\("studio-navigator-open"/);
-  assert.match(css, /body\[data-theme="studio"\]:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.toolbar\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /body\[data-theme="studio"\]:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.studio-navigator\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
-  assert.match(css, /studio-agent-docked:has\(#viewport:is\(\.canvas-chrome-lightweight, \.is-drawing\)\) \.canvas-agent-panel\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
+  assert.match(css, /body\[data-theme="studio"\] \.toolbar\.studio-chrome-lightweight\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--studio-toolbar\) 88%, transparent\)[^}]*backdrop-filter:\s*none/);
+  assert.match(css, /body\[data-theme="studio"\] \.studio-navigator\.studio-chrome-lightweight\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
+  assert.match(css, /studio-agent-docked \.canvas-agent-panel\.studio-chrome-lightweight\s*\{[^}]*background:\s*var\(--studio-panel\)[^}]*backdrop-filter:\s*none/);
   assert.match(css, /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\)\s*\{[\s\S]*?body\[data-theme="studio"\] \.toolbar\s*\{[^}]*background:\s*var\(--studio-toolbar\) !important[^}]*backdrop-filter:\s*none !important[\s\S]*?studio-agent-docked \.canvas-agent-panel\s*\{[^}]*background:\s*var\(--studio-panel\) !important[^}]*backdrop-filter:\s*none !important/);
 
   let now = 100, timerId = 0;
@@ -1243,7 +1243,7 @@ test("canvas navigation lock freezes only the outer view and leaves locked widge
   assert.match(css, /\.canvas-fit-contents\s*\{[^}]*bottom:\s*6px[^}]*left:\s*6px[^}]*width:\s*30px[^}]*height:\s*30px[^}]*opacity:\s*\.3/);
   assert.match(css, /#viewport\.is-navigating \.canvas-fit-contents[^}]*opacity:\s*\.58/);
   assert.match(css, /\.canvas-navigation-lock-hint\s*\{[^}]*max-width:\s*min\(440px, 100%\)[^}]*visibility:\s*hidden[^}]*opacity:\s*0[^}]*white-space:\s*nowrap/);
-  assert.match(css, /main:has\(#viewport\.navigation-locked\) \.canvas-navigation-lock-hint\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
+  assert.match(css, /\.page-hint-slot\[data-navigation-hint="locked"\] \.canvas-navigation-lock-hint\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
   assert.match(app, /NAVIGATION_HINT_VISIBLE_MS\s*=\s*10000/);
   assert.match(toggle, /state\.navigationLocked = Boolean\(locked\)[\s\S]*?view\.classList\.toggle\("navigation-locked"[\s\S]*?syncWidgetHostStates\(\)[\s\S]*?setNavigating\(true\)/);
   assert.match(move, /if \(state\.navigationLocked\)[\s\S]*?return false[\s\S]*?canvasClientDelta\(dx, dy\)[\s\S]*?state\.panX \+= delta\.x/);

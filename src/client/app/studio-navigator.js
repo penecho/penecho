@@ -210,7 +210,7 @@
       return true;
     }
     function cancelStudioNavigatorOpenWork() {
-      if (studioNavigatorTransitionHandler) studioNavigator.removeEventListener("transitionend", studioNavigatorTransitionHandler);
+      if (studioNavigatorTransitionHandler) { studioNavigator.removeEventListener("transitionend", studioNavigatorTransitionHandler);studioNavigator.removeEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler); }
       if (studioNavigatorOpenTimer) clearTimeout(studioNavigatorOpenTimer);
       studioNavigatorTransitionHandler = null;
       studioNavigatorOpenTimer = 0;
@@ -223,12 +223,11 @@
         if (studioNavigatorIsOpen() !== Boolean(open)) return;
         updateStudioNavigatorA11y();
         if (open) {
-          renderStudioNavigator();
+          if(studioNavigatorHistoryDirty)renderStudioNavigator();
           void refreshStudioNavigatorSources();
         } else {
-          releaseStudioNavigatorPreviewUrls(studioNavigatorWorkPreviewUrls);
-          releaseStudioNavigatorPreviewUrls(studioNavigatorAgentPreviewUrls);
-          releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
+          // Keep the unchanged list and decoded previews for the next opening.
+          // Each renderer releases its previous URLs when the data changes.
           if (restoreAgent) restoreStudioAgentAfterNavigator();
         }
       };
@@ -238,12 +237,14 @@
       }
       studioNavigatorTransitionHandler = event => {
         const property = studioNavigatorIsMcpDocked() ? "opacity" : "transform";
-        if (event.target === studioNavigator && (event.propertyName === property || event.propertyName === "margin-left")) settle();
+        if (event.target === studioNavigator && (event.type === "penecho-sidebar-motion-end" || event.propertyName === property || event.propertyName === "margin-left")) settle();
       };
       studioNavigator.addEventListener("transitionend", studioNavigatorTransitionHandler);
+      studioNavigator.addEventListener("penecho-sidebar-motion-end",studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
     function setStudioNavigatorOpen(open, { restoreAgent = true, persist = false } = {}) {
+      const motion=window.PenEchoShellMotion?.capture();
       studioNavigatorOpenPreference = Boolean(open);
       if (persist) { try { localStorage.setItem(STUDIO_NAVIGATOR_OPEN_KEY, String(Boolean(open))); } catch {} }
       if (open) restoreCanvasChromeMaterial();
@@ -251,6 +252,7 @@
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
       if (!open && studioNavigator.contains(document.activeElement)) studioNavigatorToggle.focus({ preventScroll:true });
       if (open) suspendStudioAgentForNavigator();
+      window.PenEchoShellMotion?.play(motion);
       scheduleStudioNavigatorOpenWork(open, { restoreAgent });
     }
     function syncStudioNavigatorTheme(theme = state.theme) {
