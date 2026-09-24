@@ -61,13 +61,13 @@ test("desktop settings support CLI providers without exposing API secrets", () =
   assert.equal(JSON.stringify(visible).includes("never-return-this"), false);
   assert.equal(publicSettings({ env:{} }).host, "0.0.0.0");
   assert.equal(publicSettings({ env:{} }).autoDelay, "5");
-  assert.equal(publicSettings({ env:{} }).canvasAgentAutoOpen, true);
+  assert.equal(publicSettings({ env:{} }).canvasAgentAutoOpen, false);
   assert.equal(publicSettings({ env:{} }).canvasAgentTurnLimit,"100");
   assert.equal(publicSettings({ env:{ PENECHO_CANVAS_AGENT_TURN_LIMIT:"275" } }).canvasAgentTurnLimit,"275");
   assert.equal(publicSettings({ env:{ PENECHO_CANVAS_AGENT_AUTO_OPEN:"false" } }).canvasAgentAutoOpen, false);
   assert.equal(normalizeSettings(base({ autoDelay:undefined })).updates.AUTO_AI_DELAY_SECONDS, "5");
   assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:false })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "false");
-  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:undefined })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "true");
+  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:undefined })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "false");
   const visibleKimi = publicSettings({ provider:"kimi-cli", env:{ KIMI_CLI_PATH:"kimi", KIMI_CLI_MODEL:"kimi-code/k3" } });
   assert.equal(visibleKimi.provider, "kimi-cli");
   assert.equal(visibleKimi.kimiCliPath, "kimi");

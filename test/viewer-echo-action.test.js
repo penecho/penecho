@@ -162,6 +162,8 @@ function createHarness({ session = "anonymous", artifact = "ok", language = "en"
     : response(200, { account: null });
   const artifactResponse = artifact === "forbidden"
     ? response(403)
+    : artifact === "failure" ? response(503)
+    : artifact === "unavailable" ? response(404)
     : response(200, payload || { format: "penecho-canvas", items: [] });
 
   function fetch(url, options) {
@@ -337,4 +339,27 @@ test("signed-in viewers follow the Dashboard preference instead of the Canvas pr
   run.dispatchLanguageChange();
   assert.equal(primaryAction(run).children[0].textContent,"在我的空间编辑");
   assert.equal(run.document.documentElement.lang,"zh");
+});
+
+test("a live-share account stays identifiable and links to the user's space", async () => {
+  const run = createHarness({live:true, session:"signed-in"});
+  await run.settle();
+  assert.equal(viewerActions(run)[0], accountAction(run));
+  assert.equal(accountAction(run).children[0].textContent, "A");
+  assert.equal(accountAction(run).getAttribute("aria-label"), "Astra · Open console");
+  assert.equal(accountAction(run).href, "/dashboard.html#projects");
+  assert.equal(primaryAction(run).title, "Save a copy to your space and edit it");
+});
+
+test("transient share failures offer retry while revoked shares remain unavailable", async () => {
+  const failed = createHarness({live:true, artifact:"failure"});
+  await failed.settle();
+  assert.equal(failed.document.querySelector(".viewer-status").dataset.copyKey, "failed");
+  assert.equal(failed.document.querySelector(".viewer-retry").textContent, "Try again");
+  assert.equal(viewerActions(failed).length, 0);
+  const unavailable = createHarness({live:true, artifact:"unavailable"});
+  await unavailable.settle();
+  assert.equal(unavailable.document.querySelector(".viewer-status").dataset.copyKey, "unavailable");
+  assert.equal(unavailable.document.querySelector(".viewer-retry"), null);
+  assert.equal(viewerActions(unavailable).length, 0);
 });

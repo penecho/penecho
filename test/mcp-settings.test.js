@@ -3,7 +3,7 @@ const {test}=require("node:test"),assert=require("node:assert/strict"),fs=requir
 
 function harness(fetchImpl) {
   const nodes=new Map(),requests=[],clipboard=[],clientInputs=["codex","claude","other"].map(value=>({value,checked:value==="codex",disabled:false}));
-  for(const id of ["status","mcpReconnectCancel","mcpListenerStatus","mcpTroubleshoot","mcpTroubleshootStatus","mcpCopyTroubleshootPrompt","mcpSetupBlock","mcpSetupPrompt","mcpSetupPromptCode","mcpToolbarToggle","mcpManualSteps","mcpManual","mcpCanvasRing","mcpCanvasNotice","mcpCanvasNoticeButton","mcpEnabled","mcpConnectionStatus","mcpConfig","mcpConfigure","mcpCopyInstructions","mcpClients","mcpExamples","mcpExampleStatus","mcpRefresh","mcpConfigStatus","mcpConfigureStatus","mcpSetupStatus","settingsPageMcp","mcpLan","mcpResetCertificate","mcpCertificateNotice","mcpCertificateDialog","mcpCertificateTitle","mcpCertificateStatus","mcpCertificateConfirm","mcpCertificateCancel","mcpLanStatus","mcpLanClients","mcpLanPairDialog","mcpLanPairIdentity","mcpLanPairCode","mcpLanPairStatus","mcpLanApprove","mcpLanReject","mcpLanBlock"]){
+  for(const id of ["status","mcpReconnectCancel","mcpListenerStatus","mcpTroubleshoot","mcpTroubleshootStatus","mcpCopyTroubleshootPrompt","mcpSetupBlock","mcpSetupPrompt","mcpSetupPromptCode","mcpToolbarToggle","mcpToolbarStatus","mcpActivityLabel","mcpManualSteps","mcpManual","mcpCanvasRing","mcpCanvasNotice","mcpCanvasNoticeButton","mcpEnabled","mcpConnectionStatus","mcpConfig","mcpConfigure","mcpCopyInstructions","mcpClients","mcpExamples","mcpExampleStatus","mcpRefresh","mcpConfigStatus","mcpConfigureStatus","mcpSetupStatus","settingsPageMcp","mcpLan","mcpResetCertificate","mcpCertificateNotice","mcpCertificateDialog","mcpCertificateTitle","mcpCertificateStatus","mcpCertificateConfirm","mcpCertificateCancel","mcpLanStatus","mcpLanClients","mcpLanPairDialog","mcpLanPairIdentity","mcpLanPairCode","mcpLanPairStatus","mcpLanApprove","mcpLanReject","mcpLanBlock"]){
     nodes.set(id,{hidden:id==="settingsPageMcp"||id==="mcpConfigStatus",value:"",textContent:"",disabled:false,dataset:{},listeners:{},classList:{toggle(){}},attributes:{},replaceChildren(...children){this.children=children;if(children[0])this.value=children[0].value;},showModal(){this.open=true;},close(){this.open=false;},setAttribute(key,value){this.attributes[key]=value;},addEventListener(type,listener){this.listeners[type]=listener;}});
   }
   const ui={status:"",page:null,hints:[]},storage=new Map(),listeners={};
@@ -90,8 +90,8 @@ test("configuration failures and uncertain network outcomes have distinct action
 test("the canvas MCP notice follows live access, not saved client configuration",async()=>{
   const h=harness(()=>ready());await h.mcpRefreshSettings();const notice=h.nodes.get("mcpCanvasNotice");assert.equal(notice.hidden,true);
   h.mcpRuntime.socket={readyState:0};h.mcpRenderSettings();assert.equal(notice.hidden,true);
-  h.mcpRuntime.socket={readyState:1};h.mcpRuntime.ready=true;h.mcpRenderSettings();assert.equal(notice.hidden,false);assert.match(h.nodes.get("mcpCanvasNoticeButton").textContent,/Local online/);
-  h.state.language="zh";h.mcpRenderSettings();assert.match(h.nodes.get("mcpCanvasNoticeButton").textContent,/本地在线/);
+  h.mcpRuntime.socket={readyState:1};h.mcpRuntime.ready=true;h.mcpRenderSettings();assert.equal(notice.hidden,true);assert.equal(h.nodes.get("mcpToolbarStatus").textContent,"Online");
+  h.state.language="zh";h.mcpRenderSettings();assert.equal(notice.hidden,true);assert.equal(h.nodes.get("mcpToolbarStatus").textContent,"在线");
   h.mcpRuntime.socket=null;h.mcpRenderSettings();assert.equal(notice.hidden,true);
 });
 
@@ -108,10 +108,10 @@ test("MCP availability notice reports actual Cloud and Local channels in both la
 
 test("MCP canvas status distinguishes sessions, actual mutation and unexpected disconnect",()=>{
   const h=harness(()=>ready()),socket={readyState:1,close(){}};h.mcpRuntime.socket=socket;h.mcpRuntime.ready=true;
-  h.mcpRuntime.sessions.set("a",{client:"Codex"});h.mcpRenderSettings();assert.match(h.nodes.get("mcpCanvasNoticeButton").textContent,/Codex · 1 session/);assert.equal(h.nodes.get("mcpCanvasRing").hidden,false);
-  h.mcpBeginMutation("Codex");assert.match(h.nodes.get("mcpCanvasNoticeButton").textContent,/updating/);assert.equal(h.mcpRuntime.glowing,true);
-  h.mcpEndMutation();assert.doesNotMatch(h.nodes.get("mcpCanvasNoticeButton").textContent,/updating/);
-  h.mcpDisconnect(true);assert.equal(h.nodes.get("mcpCanvasRing").hidden,true);assert.equal(h.nodes.get("mcpCanvasNotice").hidden,false);assert.match(h.nodes.get("mcpCanvasNoticeButton").textContent,/lost/);
+  h.mcpRuntime.sessions.set("a",{client:"Codex"});h.mcpRenderSettings();assert.equal(h.nodes.get("mcpToolbarStatus").textContent,"1 AI");assert.equal(h.nodes.get("mcpCanvasNotice").hidden,true);assert.equal(h.nodes.get("mcpCanvasRing").hidden,false);
+  h.mcpBeginMutation("Codex");assert.match(h.nodes.get("mcpActivityLabel").textContent,/updating/);assert.equal(h.mcpRuntime.glowing,true);
+  h.mcpEndMutation();assert.doesNotMatch(h.nodes.get("mcpActivityLabel").textContent,/updating/);
+  h.mcpDisconnect(true);assert.equal(h.nodes.get("mcpCanvasRing").hidden,true);assert.equal(h.nodes.get("mcpCanvasNotice").hidden,false);assert.match(h.nodes.get("mcpActivityLabel").textContent,/lost/);
   h.mcpDisconnect();assert.equal(h.nodes.get("mcpCanvasNotice").hidden,true);
 });
 test("a visible browser with an expired heartbeat revokes access",()=>{
@@ -278,7 +278,7 @@ test("Cloud registers using the linked-device MCP socket and never offers local 
     assert.equal(h.nodes.get("mcpConfigure").disabled,true);
     assert.equal(h.nodes.get("mcpEnabled").disabled,false);
     const socket=h.mcpRuntime.socket;socket.listeners.error();
-    assert.equal(h.nodes.get("mcpToolbarToggle").attributes["data-state"],"failed");
+    assert.equal(h.nodes.get("mcpToolbarToggle").attributes["data-state"],"retrying");
     assert.match(h.nodes.get("mcpConnectionStatus").textContent,/retry/);
   } finally {h.mcpDisconnect();}
 });
@@ -615,10 +615,10 @@ for(const runtime of ["local","cloud"])for(const cancelFrom of ["toolbar","statu
     assert.deepEqual(navigation.at(-1),{enabled:true,reveal:true});
     h.mcpRuntime.reconnectDelay=4000;first.listeners.close();
     const retry=scheduled.get(h.mcpRuntime.reconnectTimer),button=h.nodes.get("mcpReconnectCancel");
-    assert.equal(button.hidden,false);assert.match(button.textContent,/4s/);
+    assert.equal(button.hidden,false);assert.match(button.dataset.message,/4 s/);
     assert.equal(h.nodes.get("mcpCanvasNotice").hidden,false);assert.equal(h.nodes.get("mcpCanvasNoticeButton").hidden,true,"retry replaces lost instead of stacking with it");
     assert.equal(h.nodes.get("mcpToolbarToggle").attributes["aria-pressed"],"true");
-    now+=1000;scheduled.get(h.mcpRuntime.reconnectStatusTimer).fn();assert.match(button.textContent,/3s/);
+    now+=1000;scheduled.get(h.mcpRuntime.reconnectStatusTimer).fn();assert.match(button.dataset.message,/3 s/);
     if(cancelFrom==="toolbar")await h.mcpToolbarClick();else if(cancelFrom==="settings")h.nodes.get("mcpEnabled").listeners.click({});else button.listeners.click();
     assert.equal(h.mcpRuntime.wanted,false);assert.equal(h.mcpRuntime.reconnectTimer,0);assert.equal(h.mcpRuntime.reconnectStatusTimer,0);assert.equal(button.hidden,true);
     retry.fn();first.listeners.message({data:JSON.stringify({type:"ready"})});
@@ -626,7 +626,7 @@ for(const runtime of ["local","cloud"])for(const cancelFrom of ["toolbar","statu
     await h.mcpToolbarClick();assert.ok(h.mcpRuntime.socket,"next explicit click starts fresh connection");
     h.mcpRuntime.socket.listeners.close();scheduled.get(h.mcpRuntime.reconnectTimer).fn();
     const recovering=h.mcpRuntime.socket;recovering.readyState=1;recovering.listeners.open();
-    assert.equal(navigation.at(-1).enabled,false);assert.match(button.textContent,/reconnecting/);
+    assert.equal(navigation.at(-1).enabled,false);assert.match(button.dataset.message,/reconnecting/);
     assert.equal(h.nodes.get("mcpCanvasNotice").hidden,false);assert.equal(h.nodes.get("mcpCanvasNoticeButton").hidden,true);
     if(cancelFrom==="toolbar")await h.mcpToolbarClick();else if(cancelFrom==="settings")h.nodes.get("mcpEnabled").listeners.click({});else button.listeners.click();
     recovering.listeners.message({data:JSON.stringify({type:"ready"})});

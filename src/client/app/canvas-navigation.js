@@ -443,6 +443,9 @@
   });
   view.addEventListener('contextmenu', (event) => { showWidgetContextToolbar(event); });
   document.querySelector('#canvasFitContents')?.addEventListener('click', fitCanvasContents);
+  document.querySelector('#canvasZoomOut')?.addEventListener('click', () => zoomCanvasBy(1 / 1.25));
+  document.querySelector('#canvasZoomIn')?.addEventListener('click', () => zoomCanvasBy(1.25));
+  document.querySelector('#canvasZoomLevel')?.addEventListener('click', () => zoomCanvasBy(1 / state.scale));
   const wheelZoomSetting = document.querySelector('#settingsWheelZoom');
   if (wheelZoomSetting) {
     wheelZoomSetting.setAttribute('aria-checked', String(state.wheelZoom));

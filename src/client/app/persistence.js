@@ -40,7 +40,8 @@
     historyDeletePending = null,
     historySelectedSnapshotId = null,
     historySelectedSnapshotLocation = null,
-    historyGridSelectionActivated = false;
+    historyGridSelectionActivated = false,
+    historyRecentView = false;
   function currentCanvasDisplayName() {
     return state.currentCanvasSuggestedName || state.currentSnapshotName;
   }
@@ -142,6 +143,8 @@
     renderServerProjectUi();
   }
   function setSnapshotLocation(location, { refresh = true } = {}) {
+    historyRecentView = false;
+    updateHistoryNavigation();
     if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
       updateSnapshotLocationUi();
       if (snapshotItemsLocation !== location && restoreHistoryPage()) renderSnapshotList();
@@ -268,7 +271,7 @@
       const active = snapshotLoadInProgress && button.dataset.snapshotId === snapshotLoadingId;
       const label = button.querySelector(".history-open-label");
       if (label) label.textContent = t(active ? "snapshotLoadingShort" : "historyOpenCanvas");
-      else button.textContent = t(active ? "snapshotLoadingShort" : "loadSnapshot");
+      else button.textContent = t(active ? "snapshotLoadingShort" : "historyOpenNow");
       if (active) button.setAttribute("aria-busy", "true");
       else button.removeAttribute("aria-busy");
     });
@@ -1661,7 +1664,7 @@
     const label = document.querySelector("#currentSnapshotLabel"),
       overwrite = document.querySelector("#newOverwrite"),
       title = document.querySelector("#newCanvasTitle"),
-      description = document.querySelector("#newCanvasDialog > form > p:not(.current-snapshot)"),
+      description = document.querySelector("#newCanvasDialog .pe-dialog-body > p:not(.current-snapshot)"),
       discard = document.querySelector("#newDiscard"),
       saveCopy = document.querySelector("#newSaveCopy"),
       loading = pendingCanvasTransition?.type === "load",
@@ -2104,6 +2107,8 @@
       button.append(icon, label, count);
       button.onclick = () => {
         if (button.disabled || select.value === option.value) return;
+        historyRecentView = false;
+        updateHistoryNavigation();
         select.value = option.value;
         if (isCloud) rememberSelectedCloudProject(option.value);
         else rememberSelectedServerProject(option.value);
@@ -2205,6 +2210,27 @@
         ? Number(b.createdAt || 0) - Number(a.createdAt || 0)
         : Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
   }
+  function updateHistoryNavigation() {
+    const panel = document.querySelector("#historyPanel");
+    if (panel) panel.dataset.historyScope = historyRecentView ? "recent" : "location";
+    document.querySelector("#historyRecentNav")?.setAttribute("aria-current", historyRecentView ? "page" : "false");
+  }
+  function openHistoryRecent() {
+    historyRecentView = true;
+    rememberSelectedServerProject(SERVER_ALL_PROJECTS_ID);
+    rememberSelectedCloudProject(CLOUD_ALL_PROJECTS_ID);
+    document.querySelector("#historySort").value = "modified";
+    updateHistoryNavigation();
+    historyFiltersChanged({ immediate:true });
+  }
+  function historyModifiedLabel(value) {
+    const elapsed = Math.max(0, Date.now() - Number(value)), minutes = Math.floor(elapsed / 60000);
+    if (minutes < 1) return t("historyEditedJustNow");
+    if (minutes < 60) return t("historyEditedMinutes").replace("{count}", String(minutes));
+    if (minutes < 1440) return t("historyEditedHours").replace("{count}", String(Math.floor(minutes / 60)));
+    if (minutes < 2880) return t("historyEditedYesterday");
+    return new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { month:"short", day:"numeric" }).format(value);
+  }
   function updateHistoryLibrarySummary(visibleCount, scopedCount = visibleCount) {
     const location = state.snapshotLocation,
       title = document.querySelector("#historySectionTitle"),
@@ -2215,7 +2241,8 @@
       countText = Number.isFinite(visibleCount) ? t("historyCanvasCount").replace("{count}", String(visibleCount)) : "",
       locationText = snapshotLocationLabel(location);
     if (snapshotItemsLocation === location && Number.isFinite(scopedCount)) snapshotLocationCountCache.set(location, scopedCount);
-    if (title) title.textContent = projectName;
+    if (title) title.textContent = historyRecentView ? t("historyRecent") : projectName;
+    updateHistoryNavigation();
     if (summary) summary.textContent = [countText, locationText].filter(Boolean).join(" · ");
     if (windowSummary) windowSummary.textContent = [locationText, projectName, countText].filter(Boolean).join(" · ");
     document.querySelectorAll(".history-location-count").forEach((node) => {
@@ -2243,30 +2270,39 @@
       card.classList.toggle("selected", selected);
       card.dataset.peState = selected ? "selected" : "default";
       card.querySelector(".history-card-select")?.setAttribute("aria-pressed", String(selected));
+      for (const control of card.querySelectorAll(".history-item-load, .history-more")) control.hidden = !selected;
     });
     return selectedItem;
   }
   function closeHistoryRowActions(except = null) {
     document.querySelectorAll(".history-row-actions:not([hidden])").forEach((row) => {
       if (row === except) return;
+      if (row.matches(":popover-open")) row.hidePopover();
       row.hidden = true;
       row.closest(".history-card")?.querySelector(".history-more")?.setAttribute("aria-expanded", "false");
     });
   }
   function positionHistoryRowActions(row, trigger) {
     if (!row || row.hidden || !trigger) return;
-    const list = row.closest("#historyList");
-    if (!list || list.classList.contains("grid-view")) {
-      row.dataset.pePlacement = "top";
-      return;
-    }
-    const listRect = list.getBoundingClientRect(),
+    // Top-layer popovers escape both the scrolling list and the cards' paint
+    // containment. Keep coordinates in CSS pixels, including page-scale zoom.
+    const panelRect = row.closest("#historyPanel").getBoundingClientRect(),
       triggerRect = trigger.getBoundingClientRect(),
-      menuHeight = row.offsetHeight,
-      gutter = 8,
-      spaceAbove = triggerRect.top - listRect.top,
-      spaceBelow = listRect.bottom - triggerRect.bottom;
-    row.dataset.pePlacement = spaceBelow >= menuHeight + gutter || spaceBelow >= spaceAbove ? "bottom" : "top";
+      scale = row.getBoundingClientRect().width / row.offsetWidth || 1,
+      gutter = 8 * scale,
+      topEdge = Math.max(0, panelRect.top) + gutter,
+      bottomEdge = Math.min(window.innerHeight, panelRect.bottom) - gutter;
+    row.style.maxHeight = `${Math.max(0, bottomEdge - topEdge) / scale}px`;
+    const menuRect = row.getBoundingClientRect(),
+      spaceAbove = triggerRect.top - topEdge,
+      spaceBelow = bottomEdge - triggerRect.bottom,
+      below = spaceBelow >= menuRect.height + gutter || spaceBelow >= spaceAbove,
+      top = below ? triggerRect.bottom + gutter : triggerRect.top - menuRect.height - gutter,
+      leftEdge = Math.max(0, panelRect.left) + gutter,
+      rightEdge = Math.min(window.innerWidth, panelRect.right) - gutter;
+    row.dataset.pePlacement = below ? "bottom" : "top";
+    row.style.left = `${Math.max(leftEdge, Math.min(triggerRect.right - menuRect.width, rightEdge - menuRect.width)) / scale}px`;
+    row.style.top = `${Math.max(topEdge, Math.min(top, bottomEdge - menuRect.height)) / scale}px`;
   }
   function selectHistorySnapshot(item, location = state.snapshotLocation, { focus = false } = {}) {
     if (!item || location !== state.snapshotLocation) return false;
@@ -2455,8 +2491,8 @@
     const selectedItem = ensureHistorySelection(items, location),
       renderGeneration = historyListRenderGeneration,
       locale = state.language === "zh" ? "zh-CN" : "en",
-      modifiedFormatter = new Intl.DateTimeFormat(locale, { dateStyle:"short", timeStyle:"short" }),
-      gridDateFormatter = new Intl.DateTimeFormat(locale, { month:"short", day:"numeric" });
+      modifiedFormatter = new Intl.DateTimeFormat(locale, { dateStyle:"short", timeStyle:"short" });
+
     setHistoryView(localStorage.getItem(HISTORY_VIEW_STORAGE_KEY) === "list" ? "list" : "grid");
     const appendHistoryCard = (item, fragment) => {
       const card = document.createElement("article"),
@@ -2535,16 +2571,16 @@
         beginSnapshotRename(item, location, titleRow, title, rename);
       });
       titleRow.append(title);
-      load.className = isCurrent ? "history-item-save history-save-current" : "history-item-load history-load";
+      load.className = "history-item-load history-load";
       load.type = "button";
+      load.hidden = true;
       peButton(load, "secondary", "compact");
       load.dataset.snapshotId = item.id;
-      load.textContent = t(isCurrent ? "saveCurrentSnapshot" : "loadSnapshot");
-      load.setAttribute("aria-label", `${t(isCurrent ? "saveCurrentSnapshot" : "loadSnapshot")}: ${title.textContent}`);
-      load.onclick = isCurrent ? () => saveCurrentHistoryItem(item, location) : () => loadHistorySnapshot(item, location, load);
+      load.textContent = t("historyOpenNow");
+      load.setAttribute("aria-label", `${t("historyOpenNow")}: ${title.textContent}`);
+      load.onclick = () => isCurrent ? closeHistoryPanel() : loadHistorySnapshot(item, location, load);
       const modifiedAt = item.updatedAt || item.createdAt,
-        modified = modifiedFormatter.format(modifiedAt),
-        gridDateText = gridDateFormatter.format(modifiedAt);
+        modified = modifiedFormatter.format(modifiedAt);
       const stats = document.createElement("div"),
         contentSummary = historyItemContentSummary(item);
       stats.className = "history-stats";
@@ -2557,13 +2593,15 @@
       description.className = "history-card-description";
       description.dataset.peRegion = "description";
       gridDate.className = "history-grid-date";
-      gridDate.textContent = gridDateText;
+      gridDate.textContent = `${snapshotLocationLabel(location)} · ${historyModifiedLabel(modifiedAt)}`;
+      gridDate.title = modified;
       description.append(gridDate, stats);
       const modifiedColumn = document.createElement("div");
       modifiedColumn.className = "history-modified";
       modifiedColumn.textContent = modified;
       more.className = "history-more";
       more.type = "button";
+      more.hidden = true;
       peButton(more, "toolbar", "compact");
       more.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>`;
       more.setAttribute("aria-expanded", "false");
@@ -2582,13 +2620,15 @@
       advancedActions.dataset.pePresentation = "anchored";
       advancedActions.dataset.peState = "default";
       advancedActions.setAttribute("aria-labelledby", more.id);
+      advancedActions.setAttribute("popover", "manual");
       advancedActions.hidden = true;
       more.onclick = (event) => {
         const willOpen = advancedActions.hidden;
-        closeHistoryRowActions(advancedActions);
-        advancedActions.hidden = !willOpen;
-        more.setAttribute("aria-expanded", String(!advancedActions.hidden));
-        if (!advancedActions.hidden) {
+        closeHistoryRowActions();
+        if (willOpen) {
+          advancedActions.hidden = false;
+          advancedActions.showPopover();
+          more.setAttribute("aria-expanded", "true");
           positionHistoryRowActions(advancedActions, more);
           if (event.detail === 0) rename.focus({ preventScroll:true });
         }
@@ -2597,15 +2637,13 @@
         if (event.key !== "Escape" || advancedActions.hidden) return;
         event.preventDefault();
         event.stopPropagation();
-        advancedActions.hidden = true;
-        more.setAttribute("aria-expanded", "false");
+        closeHistoryRowActions();
       });
       advancedActions.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
         event.stopPropagation();
-        advancedActions.hidden = true;
-        more.setAttribute("aria-expanded", "false");
+        closeHistoryRowActions();
         more.focus({ preventScroll:true });
       });
       remove.className = "history-delete";
@@ -2619,7 +2657,11 @@
       };
       advancedActions.append(rename);
       if (location === "server" || location === "cloud") {
-        const move = document.createElement("select");
+        const move = document.createElement("select"),
+          moveGroup = document.createElement("label"),
+          moveLabel = document.createElement("span");
+        moveGroup.className = "history-move-group";
+        moveLabel.textContent = t("canvasProjectMove");
         move.className = "history-move";
         move.dataset.peControl = "select";
         move.setAttribute("aria-label", t("canvasProjectMove"));
@@ -2628,12 +2670,16 @@
         for (const project of projects) {
           const option = document.createElement("option");
           option.value = project.id;
-          option.textContent = `${t("canvasProject")}: ${serverProjectName(project)}`;
+          option.textContent = serverProjectName(project);
           move.append(option);
         }
         move.value = item.projectId || (location === "cloud" ? cloudDefaultProjectId() || "" : SERVER_DEFAULT_PROJECT_ID);
-        move.onchange = () => runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
-        advancedActions.append(move);
+        move.onchange = () => {
+          closeHistoryRowActions();
+          runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
+        };
+        moveGroup.append(moveLabel, move);
+        advancedActions.append(moveGroup);
       }
       const actionSeparator = document.createElement("div");
       actionSeparator.className = "menu-separator";
@@ -2645,9 +2691,16 @@
       footer.append(modifiedColumn, load, more);
       content.append(meta, footer);
       selectButton.onclick = () => selectHistorySnapshot(item, location);
+      selectButton.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          selectHistorySnapshot(item, location);
+          load.click();
+        }
+      });
       selectButton.ondblclick = () => {
         selectHistorySnapshot(item, location);
-        loadHistorySnapshot(item, location, load);
+        load.click();
       };
       content.onclick = (event) => {
         if (event.target.closest("button, input, select, textarea, a")) return;
@@ -2656,7 +2709,7 @@
       content.ondblclick = (event) => {
         if (event.target.closest("button, input, select, textarea, a")) return;
         selectHistorySnapshot(item, location);
-        loadHistorySnapshot(item, location, load);
+        load.click();
       };
       card.append(selectButton, content, advancedActions);
       fragment.append(card);
@@ -2810,6 +2863,7 @@
     const panel = document.querySelector("#historyPanel"),
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
+    closeHistoryRowActions();
     closeHistorySavePanel();
     historyOpenWorkGeneration++;
     cancelHistoryListRender();
@@ -3189,6 +3243,13 @@
       setStatusKey(state.pending?.items ? "batchDraftReady" : "draftReady");
     }
   }
+  function updateHistoryButtons() {
+    const pending = state.historyBefore.size || state.animationHistoryBefore || state.widgetHistoryBefore || state.imageHistoryBefore || state.textBoxHistoryBefore;
+    for (const action of ["undo", "redo"]) {
+      const button = document.querySelector(`[data-action="${action}"]`);
+      if (button) button.disabled = action === "undo" ? !(state.history.length || pending) : !state.future.length;
+    }
+  }
   function save() {
     if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) return null;
     const changes = [];
@@ -3223,6 +3284,7 @@
     state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
+    updateHistoryButtons();
     window.PenEchoStudioNavigator?.updateDocument?.();
     return entry;
   }

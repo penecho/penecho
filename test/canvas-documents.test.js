@@ -73,10 +73,10 @@ function harness(options = {}) {
   const context = vm.createContext({
     PenEchoCanvasFilePatch: require("../src/shared/canvas-file-patch"),
     SIZE: 32768, TILE: 512, MAX_HISTORY: 50, state, crypto: options.crypto || crypto.webcrypto,
-    TextEncoder, TextDecoder, Blob, URL, structuredClone, queueMicrotask,
+    TextEncoder, TextDecoder, Blob, URL, Event, structuredClone, queueMicrotask,
     AbortController, AbortSignal, setTimeout, clearTimeout, performance,
     document: { getElementById: () => null, querySelectorAll: () => [], hidden: false, createElement: () => ({}) },
-    window: { PENECHO_CONFIG: {} }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
+    window: { PENECHO_CONFIG: {}, dispatchEvent: () => true }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
     addEventListener: (type, fn) => { listeners[type] = fn; },
     requestResult: async request => request.value,
     indexedDB: { open: () => { throw Error("unexpected IndexedDB open"); } },
@@ -107,7 +107,7 @@ function harness(options = {}) {
     canvasAgentFrameRegion: () => { control.frames += 1; }, canvasAgentViewFacts: () => ({}),
     canvasAgentSelectionIds: () => [], canvasAgentSyncState: () => {}, canvasAgentSyncAutomaticAIStatus: () => {},
     canvasAgentCanvasDidChange: () => {}, canvasAgentCapture: async () => { throw Error("capture was not expected"); },
-    canvasAgentInput: { value: "" }, canvasAgent: { attachments: [], inkPresent: false }, canvasAgentResizeInput: () => {},
+    canvasAgentInput: { value: "" }, canvasAgent: { attachments: [], references: [], inkPresent: false }, canvasAgentResizeInput: () => {},
     visibleInkBounds: () => null, viewportRect: () => ({ x: 0, y: 0, w: 1200, h: 800 }),
     intersection: (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y,
     unionDirtyBounds: (a, b) => !a ? { ...b } : a, tiles: new Map(),
@@ -166,7 +166,8 @@ test("Canvas boot reaches theme paint and creates distinct documents without ran
     canvasAgentExecutionAvailable: () => true,
     getComputedStyle: () => ({ getPropertyValue: name => name === "--paper" ? "#ffffff" : "" }),
   });
-  vm.runInContext(`${clientFunction("canvas-agent-runtime.js", "canvasAgentSyncSendAvailability")}
+  vm.runInContext(`${clientFunction("canvas-agent-runtime.js", "canvasAgentPromptHasDraft")}
+    ${clientFunction("canvas-agent-runtime.js", "canvasAgentSyncSendAvailability")}
     ${clientFunction("core.js", "updatePaint")}
     canvasAgentSyncSendAvailability(); updatePaint();`, h.context);
   assert.equal(h.state.paint.paper, "#ffffff", "Agent controls must not stop the white theme from initializing");
@@ -974,7 +975,7 @@ test("draw_ink canonical raster tiles round trip through real save undo and redo
   const state={userRevision:0,historyBefore:new Map(),history:[],future:[],inkBounds:new Map()},tiles=new Map(),doc={revision:0};
   const canvas=()=>({marks:[],getContext(){const owner=this;return {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},stroke(){owner.marks.push({color:this.strokeStyle,width:this.lineWidth});}};}});
   const cloneCanvas=value=>{if(!value)return null;const next=canvas();next.marks=structuredClone(value.marks);return next;};
-  const context=vm.createContext({state,tiles,SIZE:20000,TILE:512,MAX_HISTORY:50,window:{},key:(x,y)=>`${x},${y}`,cloneCanvas,tile:(x,y,create=true)=>{const key=`${x},${y}`;if(create&&!tiles.has(key))tiles.set(key,canvas());return tiles.get(key);},valid:p=>p.x>=0&&p.y>=0&&p.x<=20000&&p.y<=20000,invalidateSharpOverlays(){},canvasDocumentsIsActive:()=>true,canvasAgentMutationIdle(){},canvasAgentAssertToolExecution(){},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),invalidateRecognition(){},restorePendingHistoryState(){},clearSharpOverlays(){},requestAnimationLayerRender(){},render(){}});
+  const context=vm.createContext({state,tiles,SIZE:20000,TILE:512,MAX_HISTORY:50,window:{},key:(x,y)=>`${x},${y}`,cloneCanvas,tile:(x,y,create=true)=>{const key=`${x},${y}`;if(create&&!tiles.has(key))tiles.set(key,canvas());return tiles.get(key);},valid:p=>p.x>=0&&p.y>=0&&p.x<=20000&&p.y<=20000,invalidateSharpOverlays(){},canvasDocumentsIsActive:()=>true,canvasAgentMutationIdle(){},canvasAgentAssertToolExecution(){},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),invalidateRecognition(){},restorePendingHistoryState(){},clearSharpOverlays(){},requestAnimationLayerRender(){},updateHistoryButtons(){},render(){}});
   for(const name of ["recordBefore","unionLocalBounds","extendInkBounds","lineIntersectsRect","stroke","dot","save","applyHistory","undo","redo"])vm.runInContext(clientFunction("persistence.js",name),context);
   vm.runInContext(`function canvasDocumentsEndEdit(doc){state.userRevision++;save();doc.revision=state.userRevision;} async ${clientFunction("canvas-documents.js","canvasDocumentsEdit")}`,context);
   await context.canvasDocumentsEdit(doc,{action:"draw_ink",baseRevision:0,strokes:[{color:"#42b983",width:5,points:[{x:100,y:100},{x:200,y:200}]},{color:"#abc123",width:9,points:[{x:110,y:100}]}]},{});

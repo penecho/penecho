@@ -1,6 +1,6 @@
 /* Read-only Canvas viewer mode.
-   Activated only when html has .viewer-mode (set by viewer.js when
-   PENECHO_CONFIG.viewer is true). Everything interactive is hidden or made
+   Activated only when html has .viewer-mode (set by viewer.js).
+   Everything interactive is hidden or made
    pointer-transparent; only pan/zoom stays available. */
 
 html.viewer-mode .topbar,
@@ -13,6 +13,7 @@ html.viewer-mode #animationControls,
 html.viewer-mode .cloud-toolbar,
 html.viewer-mode #changelogLayer,
 html.viewer-mode #settingsLayer,
+html.viewer-mode #mcpToolbarToggle,
 html.viewer-mode .canvas-navigation-lock,
 html.viewer-mode .canvas-navigation-lock-hint,
 html.viewer-mode .canvas-hint,
@@ -218,3 +219,91 @@ html.viewer-live-share .viewer-brand:focus-visible { outline: 2px solid #3b5034;
 @keyframes viewer-spin { to { transform: rotate(360deg); } }
 
 .viewer-copy-error { max-width: 240px; font: inherit; white-space: normal; }
+
+/* Shared Canvas actions stay legible over the drawing, independent of the
+   artifact's theme. Match the public site's forest-green wordmark. */
+html.viewer-live-share .viewer-topbar {
+  top: max(16px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+  right: max(20px, env(safe-area-inset-right));
+}
+html.viewer-live-share .viewer-actions {
+  position: relative;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid #e4e8e1;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(32 44 30 / .06);
+  opacity: 1;
+}
+html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-primary {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 14px;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #354d36;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: none;
+}
+html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-primary:hover { background: #293e2b; }
+html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-primary[aria-busy="true"] { cursor: progress; opacity: .7; }
+html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-account-action {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f3ed;
+  color: #354d36;
+  font-size: 14px;
+  font-weight: 600;
+}
+html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-account-action:hover { background: #e3e9de; }
+html.viewer-live-share .viewer-actions a:focus-visible { outline: 2px solid #354d36; outline-offset: 3px; }
+html.viewer-live-share .viewer-copy-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 40px));
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #ead8cd;
+  border-radius: 9px;
+  background: #fffaf6;
+  color: #784128;
+  font-size: 12px;
+  line-height: 1.5;
+}
+html.viewer-live-share .viewer-status { align-content: center; gap: 20px; }
+.viewer-retry {
+  padding: 10px 18px;
+  border: 1px solid #d6dfd2;
+  border-radius: 8px;
+  background: #fff;
+  color: #354d36;
+  font: inherit;
+  cursor: pointer;
+}
+.viewer-retry:hover { background: #f0f3ed; }
+.viewer-retry:focus-visible { outline: 2px solid #354d36; outline-offset: 3px; }
+@media (max-width: 620px) {
+  html.viewer-live-share .viewer-topbar { top: max(8px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); }
+  html.viewer-live-share .viewer-brand { font-size: 21px; padding-inline: 0; }
+  html.viewer-live-share .viewer-actions { max-width: calc(100% - 100px); gap: 4px; padding: 4px; border-radius: 12px; }
+  html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-primary { height: 44px; min-height: 44px; padding-inline: 10px; gap: 5px; font-size: 12px; }
+  html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-account-action { width: 44px; height: 44px; min-height: 44px; }
+  html.viewer-live-share .viewer-primary svg { width: 15px; height: 15px; }
+}
+@media (pointer: coarse) {
+  html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-primary,
+  html.viewer-live-share :is(#pe-button-contract, .viewer-topbar) .viewer-account-action { height: 44px; min-height: 44px; }
+}

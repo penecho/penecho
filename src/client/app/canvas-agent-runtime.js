@@ -133,13 +133,13 @@
     CANVAS_AGENT_COMFORT_BODY_PX = 15,
     CANVAS_AGENT_PREFERRED_BODY_MIN_PX = 11,
     CANVAS_AGENT_COMPACT_TEXT_MIN_PX = 8,
-    CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused","canvasAgentExternalAIPaused"]),
+    CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentExternalAIPaused"]),
     CANVAS_AGENT_LAYOUT_CAPTURE_POLICY = Object.freeze({id:"canvas-layout-v1",maxLongEdge:1024,maxPixels:520000,quality:.72,maxBytes:700*1024}),
     CANVAS_AGENT_DETAIL_CAPTURE_POLICY = Object.freeze({id:"canvas-detail-v1",maxLongEdge:1440,maxPixels:1800000,quality:.88,maxBytes:1200*1024}),
     CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
       simpleDiagram:{category:"notes",prompt:"canvasAgentPromptSimpleDiagram",title:"canvasAgentPromptSimpleDiagramTitle",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
-      sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"architecture"},
-      workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"sequence"},
+      workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"workflow"},
       organize:{category:"notes",prompt:"canvasAgentPromptOrganize",title:"canvasAgentPromptOrganizeTitle",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
       applyAnnotations:{category:"notes",prompt:"canvasAgentPromptApplyAnnotations",title:"canvasAgentPromptApplyAnnotationsTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       followCanvasCues:{category:"notes",prompt:"canvasAgentPromptFollowCanvasCues",title:"canvasAgentPromptFollowCanvasCuesTitle",focus:"canvasAgentPromptFocusFollowCanvasCues",icon:"revise"},
@@ -151,9 +151,9 @@
       releaseReadiness:{category:"files",prompt:"canvasAgentPromptReleaseReadiness",title:"canvasAgentPromptReleaseReadinessTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       transformer:{category:"notes",prompt:"canvasAgentPromptTransformer",title:"canvasAgentPromptTransformerTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
       ukTrip:{category:"create",prompt:"canvasAgentPromptUkTrip",title:"canvasAgentPromptUkTripTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
-      interactivePrototype:{category:"create",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"visual"},
+      interactivePrototype:{category:"create",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"prototype"},
       interactiveCalculator:{category:"create",prompt:"canvasAgentPromptInteractiveCalculator",title:"canvasAgentPromptInteractiveCalculatorTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
-      selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
+      selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"quiz"},
       file:{category:"files",prompt:"canvasAgentPromptFile",title:"canvasAgentPromptFileTitle",focus:"canvasAgentPromptFocusExplain",icon:"file"},
       architecture:{category:"create",prompt:"canvasAgentPromptArchitecture",title:"canvasAgentPromptArchitectureTitle",focus:"canvasAgentPromptFocusArchitecture",icon:"architecture"},
       handwriting:{category:"notes",prompt:"canvasAgentPromptHandwriting",title:"canvasAgentPromptHandwritingTitle",focus:"canvasAgentPromptFocusEnhance",icon:"handwriting"},
@@ -194,12 +194,16 @@
       plan:["M6 4h12v16H6z","m9 2 3 3M9 10h6M9 14h6M9 18h4"],
       file:["M6 3h8l4 4v14H6z","M14 3v5h5M9 12h6M9 16h6"],
       architecture:["M12 4v5M6 20v-5h12v5M6 15v-3h12v3","M9 4h6v5H9zM3 20h6v-5H3zM15 20h6v-5h-6z"],
+      sequence:["M5 3v18M19 3v18M5 8h11m-3-3 3 3-3 3M19 16H8m3-3-3 3 3 3"],
+      workflow:["M3 3h7v6H3zM14 15h7v6h-7zM6.5 9v9H14"],
+      prototype:["M3 3h18v18H3zM3 8h18M9 8v13"],
+      quiz:["M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0","M9.5 8a2.5 2.5 0 1 1 4 2c-1.5 1-1.5 1.5-1.5 3M12 17h.01"],
       handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
       revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactivePrototype","interactiveCalculator","selfCheckQuiz"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","interactivePrototype","selfCheckQuiz","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactiveCalculator"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -365,7 +369,7 @@
   }
   function canvasAgentSyncSendAvailability() {
     const unavailable = !(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) && !canvasAgentExecutionAvailable();
-    canvasAgentSend.disabled = unavailable || canvasAgentInput.disabled || canvasAgent.attachmentBusy || canvasAgent.projectUploadBusy;
+    canvasAgentSend.disabled = unavailable || canvasAgentInput.disabled || canvasAgent.attachmentBusy || canvasAgent.projectUploadBusy || !canvasAgentPromptHasDraft();
     if (unavailable) canvasAgentSend.setAttribute("aria-describedby","canvasAgentStatus");
     else canvasAgentSend.removeAttribute("aria-describedby");
   }
@@ -381,11 +385,14 @@
   function canvasAgentAutomaticAIStatusKey() {
     if (!state.auto) return null;
     if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal())return "canvasAgentExternalAIPaused";
-    if (canvasAgent.requestPending || canvasAgent.running) return "canvasAgentAutoAIRequestPaused";
     return canvasAgentIsOpen() ? "canvasAgentAutoAIFocusPaused" : null;
   }
   function canvasAgentSyncAutomaticAIStatus() {
     const nextKey = canvasAgentAutomaticAIStatusKey();
+    const notice = document.querySelector("#canvasAutoPausedNotice");
+    notice.hidden = !nextKey;
+    document.body.classList.toggle("canvas-auto-paused", Boolean(nextKey));
+    notice.querySelector("span").textContent = nextKey ? t(nextKey) : "";
     if (nextKey) {
       if (!canvasAgent.automaticAIStatusRestore) canvasAgent.automaticAIStatusRestore = { key:state.statusKey, text:status.textContent };
       if (state.statusKey !== nextKey) setStatusKey(nextKey);
@@ -474,6 +481,8 @@
     canvasAgentStatus.textContent = message === t("canvasAgentConnectionStale") ? t("canvasAgentChooseConnection") : message;
     canvasAgentStatus.title = message;
     canvasAgentPanel.dataset.status = unavailable ? "unavailable" : kind;
+    document.querySelector("#canvasAgentConnectionNotice").hidden = !unavailable && allAiConnections().length > 0;
+    if (unavailable || !allAiConnections().length || kind === "ready" && !canvasAgent.currentConversation?.items?.length) canvasAgentStatus.textContent = t("canvasAgentNewCanvasStatus");
   }
   function canvasAgentSetComposerActionLabel(button,key) {
     const label=t(key),text=button.querySelector(".canvas-agent-action-label");
@@ -590,7 +599,9 @@
         copy.dataset.peRegion="copy";
         title.dataset.peRegion="title";
         title.textContent=titleText;
-        copy.append(title);
+        const summary = document.createElement("small");
+        summary.textContent = t(`${suggestion.prompt}Summary`);
+        copy.append(title, summary);
         button.append(icon,copy);
         button.setAttribute("title",titleText);
         button.setAttribute("aria-label",titleText);
@@ -644,17 +655,18 @@
       && canvasAgentApproval.hidden);
   }
   function canvasAgentShouldShowPromptSuggestions() {
-    return canvasAgentPromptSuggestionsAvailable();
+    return canvasAgentPromptSuggestionsAvailable() && !canvasAgentPromptHasDraft() && !canvasAgentTranscript.querySelector(".canvas-agent-message, .canvas-agent-tool-row");
   }
   function canvasAgentSyncPromptSuggestions() {
     if(!canvasAgentPromptSuggestions)return;
+    canvasAgentSyncSendAvailability();
     const suggestionSet=canvasAgentPromptSuggestionSet();
     if(suggestionSet.key!==canvasAgent.promptSuggestionContextKey)canvasAgentRenderPromptSuggestions(suggestionSet);
     const visible=canvasAgentShouldShowPromptSuggestions();
     if(canvasAgentPromptControl)canvasAgentPromptControl.hidden=!visible;
     if(visible){
       canvasAgentInputHint.hidden=true;
-      canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
+      canvasAgentSetPromptSuggestionsExpanded(true, {manual:false});
     }
     else{
       canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
@@ -692,7 +704,8 @@
   }
   function canvasAgentUpdateConnectionButton() {
     if(!canvasAgentConnectionButton||!canvasAgentConnectionLabel)return;
-    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection)}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentNoConnections"),action=t("canvasAgentChooseConnection");
+    document.querySelector("#canvasAgentConnectionNotice").hidden = canvasAgentExecutionAvailable() && allAiConnections().length > 0;
+    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection)}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentChooseModel"),action=t("canvasAgentChooseConnection");
     canvasAgentConnectionLabel.textContent=label;
     canvasAgentConnectionButton.setAttribute("aria-label",`${action}: ${label}`);
     canvasAgentConnectionButton.setAttribute("title",`${action}: ${label}`);
@@ -2001,13 +2014,13 @@
     });
   }
   function canvasAgentWorkbenchNeedsSync(theme = state.theme) {
-    const docked = theme === "studio" && Boolean(window.matchMedia?.("(min-width: 701px)").matches),
+    const docked = theme === "studio",
       dockedClass = document.body.classList.contains("studio-agent-docked"),
       expectedParent = docked ? canvasAgentFrame : view;
     return dockedClass !== docked || canvasAgentPanel.parentElement !== expectedParent;
   }
   function syncStudioWorkbench(theme = state.theme) {
-    const docked = theme === "studio" && Boolean(window.matchMedia?.("(min-width: 701px)").matches);
+    const docked = theme === "studio";
     document.body.classList.toggle("studio-agent-docked", docked);
     if (docked && canvasAgentPanel.parentElement !== canvasAgentFrame) canvasAgentFrame.append(canvasAgentPanel);
     else if (!docked && canvasAgentPanel.parentElement !== view) canvasAgentHome.after(canvasAgentPanel);
@@ -2535,6 +2548,7 @@
     canvasAgentInkContext.restore();
     canvasAgent.inkPresent=true;
     canvasAgentSyncInputHint();
+    canvasAgentSyncSendAvailability();
     event.preventDefault();
   }
   function canvasAgentInkPointerMove(event) {
@@ -4717,7 +4731,7 @@
     };
     if(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches){finish();return;}
     canvasAgentDockedTransitionHandler=event=>{
-      if(event.target===canvasAgentPanel&&event.propertyName==="transform")finish();
+      if(event.target===canvasAgentPanel&&["transform","margin-right"].includes(event.propertyName))finish();
     };
     canvasAgentPanel.addEventListener("transitionend",canvasAgentDockedTransitionHandler);
     canvasAgentDockedOpenTimer=setTimeout(finish,CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS);

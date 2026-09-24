@@ -1015,7 +1015,7 @@
       start:imageLayout(result.image),
       changed:false,
     };
-    setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
+    setCanvasCursor(["resize-ne", "resize-sw"].includes(result.hit) ? "nesw-resize" : result.hit.startsWith("resize") ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     requestInteractionLayerRender();
     return true;
   }
@@ -1532,7 +1532,7 @@
   }
   function createWidgetResizeHandle(widget, hit) {
     const handle = document.createElement("div");
-    handle.className = `canvas-widget-resize-handle ${hit === "width" ? "width" : hit === "height" ? "height" : "corner"}`;
+    handle.className = `canvas-widget-resize-handle ${hit === "width" ? "width" : hit === "height" ? "height" : hit.startsWith("resize-") ? `corner ${hit}` : "corner resize-se"}`;
     handle.addEventListener("pointerdown", (event) => {
       if (state.viewMode || state.spacePan || !["hand", "select"].includes(state.mode) || Number(event.button) !== 0) return;
       const pending = widget === state.pendingWidget && widget.pending === true;
@@ -1625,6 +1625,7 @@
       createWidgetResizeHandle(widget, "width"),
       createWidgetResizeHandle(widget, "height"),
       createWidgetResizeHandle(widget, "resize"),
+      ...["nw", "ne", "sw"].map(corner => createWidgetResizeHandle(widget, `resize-${corner}`)),
     );
     widgetLayer.append(shell);
     widget.shell = shell;
@@ -2250,6 +2251,14 @@
         height = Math.max(minimum, Math.min(maximum, point.y - start.y));
       return { ...start, h:height, contentH:height / displayScale };
     }
+    if (["resize-nw", "resize-ne", "resize-sw"].includes(hit)) {
+      const west = hit.endsWith("w"), north = hit.includes("-n"), right = start.x + start.w, bottom = start.y + start.h,
+        requested = Math.max((west ? right - point.x : point.x - start.x) / start.w, (north ? bottom - point.y : point.y - start.y) / start.h),
+        maximum = Math.min((west ? right : limit - start.x) / start.w, (north ? bottom : limit - start.y) / start.h),
+        minimum = Math.max(minimumWidth / start.w, minimumHeight / start.h),
+        scale = Math.min(maximum, Math.max(minimum, requested)), w = start.w * scale, h = start.h * scale;
+      return { ...start, x:west ? right - w : start.x, y:north ? bottom - h : start.y, w, h };
+    }
     const minimumScale = Math.max(minimumWidth / contentW, minimumHeight / contentH),
       maximumScale = Math.min((limit - start.x) / start.w, (limit - start.y) / start.h),
       requestedScale = Math.max((point.x - start.x) / start.w, (point.y - start.y) / start.h),
@@ -2274,7 +2283,7 @@
       start:widgetLayout(result.widget),
       changed:false,
     };
-    setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
+    setCanvasCursor(["resize", "resize-nw"].includes(result.hit) ? "nwse-resize" : ["resize-ne", "resize-sw"].includes(result.hit) ? "nesw-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     requestInteractionLayerRender();
     return true;
   }
@@ -3480,6 +3489,8 @@
       y = point ? point.y : (height / 2 - state.panY) / state.scale,
       text = `x ${Math.round(x)} · y ${Math.round(y)} · ${Math.round(state.scale * 100)}%`;
     if (coords.textContent !== text) coords.textContent = text;
+    const zoomText = `${Math.round(state.scale * 100)}%`;
+    if (canvasZoomLevel && canvasZoomLevel.textContent !== zoomText) canvasZoomLevel.textContent = zoomText;
   }
   function requestCoordinatesUpdate(point = null) {
     coordinatesUpdatePending = true;
@@ -3507,11 +3518,24 @@
   function drawCanvasLineGrid(context, region, renderScale) {
     if (!region || region.w <= 0 || region.h <= 0) return;
     const scale = Math.max(0.03, Number(renderScale) || 1),
-      step = 500,
+      baseStep = state.gridStyle === "lines" ? 250 : 48,
+      step = baseStep * Math.pow(2, Math.max(0, Math.ceil(Math.log2(16 / (baseStep * scale))))),
       right = region.x + region.w,
       bottom = region.y + region.h;
     context.save();
+    if (state.gridStyle !== "lines") {
+      context.fillStyle = state.paint.paperGrid;
+      context.beginPath();
+      for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
+        for (let y = Math.floor(region.y / step) * step; y <= bottom; y += step) {
+          context.moveTo(x + 1 / scale, y);
+          context.arc(x, y, 1 / scale, 0, Math.PI * 2);
+        }
+      }
+      context.fill(); context.restore(); return;
+    }
     context.strokeStyle = state.paint.paperGrid;
+    context.globalAlpha *= 0.65;
     context.lineWidth = 1 / scale;
     context.beginPath();
     for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
@@ -3591,6 +3615,7 @@
     canvasRenderTimedStage(record, "selectionToolbarMs", updateSelectionToolbar);
   }
   function render() {
+    updateHistoryButtons();
     if (!canvasRenderTiming.enabled) {
       renderCanvasBackground();
       renderCanvasContent();
@@ -4209,7 +4234,9 @@
   }
   const WIDGET_COPY_ICON_FEEDBACK_MS = 2000;
   const OBJECT_CHROME_ICONS = Object.freeze({
-    interact:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>',
+    askagent:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z"/></svg>',
+    delete:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>',
+    interact:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 3 6 17 3-7 7-3L4 3Z"/></svg>',
     move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9V3M9 6l3-3 3 3M12 15v6M9 18l3 3 3-3M9 12H3M6 9l-3 3 3 3M15 12h6M18 9l3 3-3 3"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -4319,6 +4346,13 @@
       busy:widget.downloadBusy === true,
       activate:() => void downloadWidgetImage(widget),
     });
+    if (options.objectToolbarKey && !widget.pending) {
+      items.unshift({key:`widget:${widget.id}:ask-agent`, kind:"askagent", label:t("widgetAskAgent"), baseWidth:108, iconOnly:false,
+        activate:() => { openCanvasAgent({focus:false}); canvasAgentToggleReference(widget.id,true); canvasAgentInput.focus(); }});
+      items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
+      const order = ["askagent", "interact", "favorite", "copy", "echo", "share", "download", "delete"];
+      items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
+    }
     if (!items.length) return;
     const gap = 4,
       groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
@@ -4380,6 +4414,24 @@
     for (const spec of specs) {
       if (!spec.objectToolbar) continue;
       const decisions = spec.toolbarHasDecisions !== false;
+      if (spec.target === "widget" && !decisions) {
+        const items = specs.filter(item => item.objectToolbarKey === spec.key);
+        let offset = 34, row = 0;
+        const maxWidth = Math.max(160, view.clientWidth - 12);
+        for (const item of items) {
+          const divider = ["askagent", "interact", "favorite", "echo", "delete"].includes(item.kind);
+          if (offset + item.baseWidth + 8 > maxWidth) { row++; offset = 8; }
+          else if (divider && offset > 34) offset += 10;
+          item.toolbarCompactOffset = offset;
+          item.toolbarCompactRow = row;
+          item.toolbarDivider = divider;
+          offset += item.baseWidth + 4;
+        }
+        spec.floatingWidgetToolbar = true;
+        spec.minimumWidth = row ? maxWidth : offset + 4;
+        spec.baseHeight = 40 + row * 34;
+        continue;
+      }
       spec.minimumWidth = objectToolbarMinimumWidth(toolCounts.get(spec.key) || 0, decisions);
       if (centeredToolbars.has(spec.key)) {
         // Keep the labeled action at screen size even when its Widget is tiny.
@@ -4466,12 +4518,17 @@
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value));
     if (spec?.objectToolbar) {
+      if (spec.floatingWidgetToolbar) {
+        const toolbarWidth = spec.minimumWidth;
+        return { x:Math.max(6, Math.min(screenBox.left, viewportWidth - toolbarWidth - 6)), y:Math.max(6, screenBox.top - baseHeight - 10), scale:1, baseWidth:toolbarWidth, baseHeight };
+      }
       const toolbarWidth = Math.max(spec.minimumWidth || 100, screenBox.width);
       return { x:screenBox.left, y:screenBox.top - baseHeight, scale:1, baseWidth:toolbarWidth, baseHeight };
     }
     if (spec?.objectToolbarItem) {
       const toolbar = knownPositions?.get?.(spec.objectToolbarKey);
       if (!toolbar) return null;
+      if (spec.toolbarCompactOffset !== undefined) return { x:toolbar.x + spec.toolbarCompactOffset, y:toolbar.y + 6 + spec.toolbarCompactRow * 34, scale:1, baseWidth, baseHeight };
       const hasDecisions = spec.toolbarHasDecisions !== false,
         toolbarWidth = toolbar.baseWidth * (toolbar.scale || 1),
         toolbarHeight = toolbar.baseHeight * (toolbar.scale || 1),
@@ -4645,7 +4702,7 @@
     button.className = kind === "toolbar" ? "object-chrome-button" : `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
     button.innerHTML = OBJECT_CHROME_ICONS[kind] || "";
-    if (kind === "interact") {
+    if (kind === "interact" || kind === "askagent") {
       const label = document.createElement("span");
       label.className = "widget-interact-label";
       button.append(label);
@@ -4959,8 +5016,11 @@
       button.classList.toggle("object-toolbar-surface", Boolean(spec.objectToolbar));
       button.classList.toggle("object-toolbar-shell", Boolean(spec.objectToolbar));
       button.classList.toggle("widget-object-toolbar", Boolean(spec.objectToolbar && ["widget", "pending-widget"].includes(spec.target)));
+      button.classList.toggle("has-decisions", Boolean(spec.objectToolbar && spec.toolbarHasDecisions !== false));
       button.classList.toggle("object-toolbar-item", Boolean(spec.objectToolbarItem));
-      button.classList.toggle("icon-only", Boolean(spec.iconOnly || (spec.objectToolbarItem && spec.kind !== "interact")));
+      button.classList.toggle("icon-only", Boolean(spec.iconOnly || (spec.objectToolbarItem && !["interact", "askagent"].includes(spec.kind))));
+      button.classList.toggle("toolbar-group-start", Boolean(spec.toolbarDivider));
+      button.classList.toggle("floating-widget-toolbar", Boolean(spec.floatingWidgetToolbar));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
@@ -4983,6 +5043,7 @@
       else button.removeAttribute("aria-busy");
       if (spec.kind === "refine" || spec.objectToolbar) button.removeAttribute("title");
       else button.title = spec.tooltip || label;
+      if (spec.kind === "askagent") button.querySelector(".widget-interact-label").textContent = t("widgetAskAgent");
       if (spec.kind === "interact") button.querySelector(".widget-interact-label").textContent = t("widgetInteractShort");
       if (spec.kind === "refine") {
         const buttonLabel = button.querySelector(".widget-refine-button-label"),
@@ -5033,13 +5094,14 @@
     }
     const { spec, position } = record,
       screenBox = screenObjectBox(spec.box),
-      toolbarWidth = Math.max(screenBox.width, position.baseWidth || 0),
-      toolbarHeight = position.baseHeight || 34,
-      materialX = position.x - state.panX,
-      materialY = position.y - state.panY,
+      toolbarWidth = spec.floatingWidgetToolbar ? screenBox.width : Math.max(screenBox.width, position.baseWidth || 0),
+      toolbarHeight = spec.floatingWidgetToolbar ? 0 : position.baseHeight || 34,
+      materialX = (spec.floatingWidgetToolbar ? screenBox.left : position.x) - state.panX,
+      materialY = (spec.floatingWidgetToolbar ? screenBox.top : position.y) - state.panY,
       widgetStackIndex = state.widgets.length + (state.pendingWidget ? 2 : 1),
       declaration = runtimeElementStyle(selectedWidgetMaterial, "selected-widget-material");
     selectedWidgetMaterial.hidden = false;
+    selectedWidgetMaterial.classList.toggle("floating-toolbar-selection", Boolean(spec.floatingWidgetToolbar));
     selectedWidgetMaterial.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
     syncWidgetLayerOrder();
     if (spec.object?.styleRule?.style) spec.object.styleRule.style.zIndex = String(widgetStackIndex);
@@ -6200,6 +6262,19 @@
   }
   function valid(p) {
     return p.x >= 0 && p.x <= SIZE && p.y >= 0 && p.y <= SIZE;
+  }
+  function zoomCanvasBy(factor) {
+    if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return false;
+    const rect = view.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    // zoomCanvasAt clamps one wheel step to +/-300, so larger jumps (reset to 100%) take a few steps.
+    let remaining = -Math.log(factor) / .002, changed = false;
+    for (let step = 0; step < 8 && Math.abs(remaining) > 1e-6; step += 1) {
+      const delta = Math.max(-300, Math.min(300, remaining));
+      if (!zoomCanvasAt(x, y, delta)) break;
+      changed = true;
+      remaining -= delta;
+    }
+    return changed;
   }
   function mergeDirty(x, y, p = 10) {
     const a = {

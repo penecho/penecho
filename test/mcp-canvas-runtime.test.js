@@ -495,3 +495,13 @@ test('Widget artifact captures include full content and overflow while inspect k
   assert.equal(draws.length,1);assert.deepEqual([widget.w,widget.h,widget.contentW,widget.contentH],[1600,800,800,400]);
  }
 });
+
+test('turning off MCP follow retains pending content until an explicit reveal',async()=>{
+  const h=harness();await h.mcpExecute('mcp_start_session',{sessionId:'external',title:'Design'},{});
+  h.mcpRuntime.ready=true;h.mcpRuntime.socket={readyState:1,close(){}};
+  h.context.window.PenEchoStudioNavigator={mcpFollowEnabled:()=>false};
+  await h.mcpExecute('mcp_present_widget',{sessionId:'external',artifactId:'new',title:'New content',html:'<p>Result</p>'},{});
+  h.mcpFlushView();assert.equal(h.context.frames.length,0);assert.equal(h.mcpRuntime.pendingView.size,1);
+  h.mcpFlushView(true);assert.equal(h.context.frames.length,1);assert.equal(h.mcpRuntime.pendingView.size,0);
+  h.mcpDisconnect();
+});

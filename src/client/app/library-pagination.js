@@ -157,6 +157,7 @@
       status=document.createElement("span"),toggle=document.createElement("button"),button=document.createElement("button");
     status.setAttribute("role","status");
     status.textContent=t(more?"historyLoadedCount":"historyEnd").replace("{count}",String(count)).replace("{total}",String(total));
+    footer.dataset.compact = String(!more && total <= HISTORY_PAGE_SIZE);
     footer.append(status);
     if(!more || historyPageError)return;
     toggle.type=button.type="button";peButton(toggle,"secondary","compact");peButton(button,"secondary","compact");

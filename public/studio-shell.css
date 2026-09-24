@@ -1,0 +1,1707 @@
+.canvas-share-label { display: none; }
+@media (min-width: 701px) {
+  body[data-theme="studio"] .topbar #shareCanvasBtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    width: auto; min-width: 80px; height: 28px; min-height: 28px; flex: 0 0 auto;
+    padding: 0 12px; border: 1px solid transparent; border-radius: 5px;
+    color: #fff; background: #4632d3; box-shadow: none;
+    font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+  }
+  body[data-theme="studio"] .topbar #shareCanvasBtn .canvas-share-label { display: inline; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn:hover:not(:disabled) { color: #fff; background: #3c2bb8; border-color: transparent; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn:active:not(:disabled) { background: #34259e; }
+  body[data-theme="studio"] .topbar #shareCanvasBtn:focus-visible { outline: 2px solid #4632d3; outline-offset: 3px; }
+}
+
+/* PenEcho Studio shell — presentation layer loaded after every other stylesheet.
+   It restyles the existing Canvas chrome and dialogs without changing their
+   markup contracts, ids or runtime behaviour. Scoped to the Studio theme. */
+/* ------------------------------------------------------------------
+   1. Canvas chrome (desktop widths)
+   One 48px title bar; drawing tools float in a bottom dock centred on
+   the visible canvas. The existing DOM, ids and handlers are unchanged:
+   .top-row and .toolbar become layout-transparent so their children
+   can share a single row, and .primary-tools becomes the dock.
+   ------------------------------------------------------------------ */
+@media (min-width: 701px) {
+  body[data-theme="studio"] {
+    --studio-toolbar-height: 0px;
+    --pe-shell-bar-h: 48px;
+    --pe-shell-dock-bottom: 16px;
+    --pe-shell-dock-h: 44px;
+    --pe-shell-left: 0px;
+    --pe-shell-right: 0px;
+    /* Space the docked Agent reserves even while a canvas drag briefly hides it,
+       so the bottom corners do not jump during a drag. */
+    --pe-shell-right-reserved: 0px;
+    /* The shell measures the actual controls before choosing a second row. */
+    --pe-shell-corner-lift: 0px;
+    --pe-shell-corner-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-corner-lift));
+    --pe-shell-dock-surface: color-mix(in srgb, var(--studio-panel, #ffffff) 96%, transparent);
+    --pe-shell-float-shadow: 0 6px 14px rgba(17, 24, 39, .14);
+  }
+  @media (min-width: 1101px) {
+    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: 320px; }
+  }
+  /* Below 1101px the navigator overlays the canvas; floating chrome steps aside. */
+  @media (max-width: 1100px) {
+    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: min(320px, calc(100% - 44px)); }
+  }
+  @media (max-width: 820px) {
+    body[data-theme="studio"].studio-navigator-open { --pe-shell-left: min(360px, calc(100% - 16px)); }
+  }
+  body[data-theme="studio"].studio-agent-docked.canvas-agent-open:not(.canvas-agent-navigation-hidden) {
+    --pe-shell-right: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
+  }
+  body[data-theme="studio"].studio-agent-docked.canvas-agent-open {
+    --pe-shell-right-reserved: calc(clamp(360px, var(--pe-shell-agent-width, 390px), 50%) - 4px);
+  }
+
+  /* Title bar: one row. */
+  body[data-theme="studio"] .topbar {
+    display: flex;
+    height: var(--pe-shell-bar-h);
+    min-height: var(--pe-shell-bar-h);
+    box-sizing: border-box;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 0 8px;
+    border-bottom: 1px solid var(--studio-hairline);
+    background: var(--studio-titlebar);
+  }
+  body[data-theme="studio"] .topbar > .top-row,
+  body[data-theme="studio"] .topbar > .toolbar { display: contents; }
+
+  body[data-theme="studio"] .topbar .studio-navigator-toggle { order: -4; }
+  body[data-theme="studio"] .topbar .toolbar-leading-divider { order: -3; height: 20px; margin-inline: 2px; }
+  body[data-theme="studio"] .topbar .brand { order: -2; padding-inline: 4px 2px; }
+  body[data-theme="studio"] .topbar .canvas-document-meta { order: -1; margin-left: 2px; padding-left: 10px; }
+  body[data-theme="studio"] .topbar #aiStatusArea { order: 0; display: flex; flex: 1 1 0; min-width: 0; justify-content: center; margin: 0; }
+  body[data-theme="studio"] .topbar .canvas-agent-toolbar-home { order: 1; margin-left: 0; }
+  body[data-theme="studio"] .topbar .canvas-file-actions { order: 2; margin-left: 4px; padding-left: 8px; }
+  body[data-theme="studio"] .topbar #cloudAccountBtn { order: 3; }
+  body[data-theme="studio"] .topbar #settingsBtn { order: 4; }
+
+  body[data-theme="studio"] .topbar .canvas-agent-control { height: 30px; min-height: 30px; gap: 6px; }
+  body[data-theme="studio"] .topbar .canvas-agent-trigger {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 5px;
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  body[data-theme="studio"] .topbar .canvas-agent-trigger svg { width: 15px; height: 15px; }
+  body[data-theme="studio"] .topbar .canvas-agent-trigger[aria-expanded="true"] {
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    border-color: color-mix(in srgb, var(--studio-accent) 24%, transparent);
+    background: var(--pe-selected, var(--studio-accent-soft));
+  }
+
+  /* Bottom dock: the tool group, centred on the visible canvas. */
+  body[data-theme="studio"] .topbar .tool-group.primary-tools {
+    position: fixed;
+    z-index: 45;
+    right: calc(var(--pe-shell-right) + 16px);
+    bottom: var(--pe-shell-dock-bottom);
+    left: calc(var(--pe-shell-left) + 16px);
+    display: flex;
+    width: max-content;
+    min-width: 0;
+    max-width: calc(100% - var(--pe-shell-left) - var(--pe-shell-right) - 32px);
+    height: var(--pe-shell-dock-h);
+    min-height: var(--pe-shell-dock-h);
+    box-sizing: border-box;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 2px;
+    margin: 0 auto;
+    padding: 0 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border: 1px solid var(--studio-line);
+    border-radius: 12px;
+    background: var(--pe-shell-dock-surface);
+    box-shadow: var(--pe-shell-float-shadow);
+    transition: left .22s cubic-bezier(.2,.72,.2,1), right .22s cubic-bezier(.2,.72,.2,1);
+  }
+  body[data-theme="studio"] .topbar .tool-group.primary-tools::-webkit-scrollbar { display: none; }
+  body[data-theme="studio"]:has(.canvas-frame.canvas-agent-resizing) .topbar :is(.tool-group.primary-tools, .ai-tools-section) { transition: none; }
+
+  /* Dock order: tools, ink, history, view. */
+  body[data-theme="studio"] .primary-tools > .mode-tools { order: 1; margin: 0; padding: 0 4px 0 0; border-right: 1px solid var(--studio-line); }
+  body[data-theme="studio"] .primary-tools > .pen-tool-properties { order: 2; }
+  body[data-theme="studio"] .primary-tools > [data-action="undo"] { order: 3; }
+  body[data-theme="studio"] .primary-tools > [data-action="redo"] { order: 3; }
+  /* AI controls float beside the AI orb at the bottom right of the canvas.
+     The dock has no backdrop filter, so this fixed child uses the viewport. */
+  body[data-theme="studio"] .primary-tools > .ai-tools-section {
+    position: fixed;
+    z-index: 45;
+    top: auto;
+    right: calc(var(--pe-shell-right) + 12px);
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 40px) / 2);
+    display: flex;
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+    padding: 0 4px;
+    border: 1px solid var(--studio-line);
+    border-radius: 10px;
+    background: var(--pe-shell-dock-surface);
+    box-shadow: var(--pe-shell-float-shadow);
+    transition: right .22s cubic-bezier(.2,.72,.2,1), bottom .22s cubic-bezier(.2,.72,.2,1);
+  }
+  /* The AI orb sits in the same bottom-right corner, level with the dock. */
+  body[data-theme="studio"] #viewport > .ai-embodiment {
+    top: auto;
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 48px) / 2);
+    transition: right .22s cubic-bezier(.2,.72,.2,1), bottom .22s cubic-bezier(.2,.72,.2,1), opacity .18s ease-out;
+  }
+  body[data-theme="studio"] .primary-tools > .view-tools { order: 5; margin-left: 2px; padding-left: 4px; border-left: 1px solid var(--studio-line); border-right: 0; }
+  body[data-theme="studio"][data-canvas-mode="pen"] .primary-tools > .pen-tool-properties { padding: 0 4px; border-right: 1px solid var(--studio-line); }
+  body[data-theme="studio"] .primary-tools .ai-section-label {
+    min-height: 22px;
+    padding-inline: 6px;
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    background: var(--pe-selected, var(--studio-accent-soft));
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  body[data-theme="studio"] .primary-tools .mode-tools :is(button[data-pe-button="toolbar"], .icon-button),
+  body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]),
+  body[data-theme="studio"] .primary-tools .view-tools > button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    border-radius: 7px;
+  }
+  body[data-theme="studio"] .primary-tools button.active,
+  body[data-theme="studio"] .primary-tools button[aria-pressed="true"]:is([data-mode], #canvasViewBtn) {
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    border-color: transparent;
+    background: var(--pe-selected, var(--studio-accent-soft));
+    box-shadow: none;
+  }
+  body[data-theme="studio"] .primary-tools #auto.active {
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    border-color: color-mix(in srgb, var(--studio-accent) 26%, transparent);
+    background: var(--pe-selected, var(--studio-accent-soft));
+  }
+  body[data-theme="studio"] .primary-tools #gridToggle.active {
+    color: var(--studio-text);
+    background: transparent;
+  }
+  body[data-theme="studio"] .primary-tools #gridToggle.active:hover { background: var(--studio-accent-softer); }
+
+  /* Popovers that belong to dock controls open upward, above the dock. */
+  body[data-theme="studio"] .topbar > :is(#eraserToolMenu, #inkColorPopover, #aiColorPopover).toolbar-anchored-popover {
+    position: fixed;
+    top: auto !important;
+    bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px) !important;
+  }
+  /* Auto and effort popovers open upward from the bottom-right AI cluster;
+     the runtime still sets their horizontal position. */
+  body[data-theme="studio"] .topbar > :is(#autoDelayPopover, #effortPopover).toolbar-anchored-popover {
+    position: fixed;
+    top: auto !important;
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 40px) / 2 + 40px + 8px) !important;
+  }
+
+  /* Bottom-left view cluster: lock and fit share one quiet pill, level with
+     the dock (the locked-view hint names the bottom-left lock). */
+  body[data-theme="studio"] #viewport > .canvas-fit-contents,
+  body[data-theme="studio"] #viewport > :is(#pe-button-contract, .canvas-navigation-lock)[data-pe-button] {
+    position: absolute;
+    z-index: 7;
+    top: auto;
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 32px) / 2);
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    margin: 0;
+    color: var(--studio-muted);
+    border: 1px solid var(--studio-line);
+    background: var(--pe-shell-dock-surface);
+    box-shadow: var(--pe-shell-float-shadow);
+    transition: left .22s cubic-bezier(.2,.72,.2,1), bottom .22s cubic-bezier(.2,.72,.2,1);
+  }
+  /* "Exit interaction" (widget interaction) stacks above the view cluster. */
+  body[data-theme="studio"] #viewport > .canvas-navigation-actions {
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 32px) / 2 + 40px);
+    left: calc(var(--studio-navigator-edge-shift, 0px) + 16px);
+  }
+  body[data-theme="studio"] #viewport > :is(#pe-button-contract, .canvas-navigation-lock)[data-pe-button] { left: calc(var(--studio-navigator-edge-shift, 0px) + 16px); border-radius: 9px 0 0 9px; }
+  body[data-theme="studio"] #viewport > .canvas-fit-contents { left: calc(var(--studio-navigator-edge-shift, 0px) + 47px); border-left-color: transparent; border-radius: 0 9px 9px 0; }
+  body[data-theme="studio"] #viewport > .canvas-fit-contents:hover,
+  body[data-theme="studio"] #viewport > .canvas-navigation-lock:hover { color: var(--studio-text); background: var(--studio-panel); }
+  body[data-theme="studio"] #viewport > :is(#pe-button-contract, .canvas-navigation-lock.locked)[data-pe-button] { color: var(--pe-accent-label, var(--studio-accent-strong)); background: var(--pe-selected, var(--studio-accent-soft)); }
+
+  /* Status bar becomes an overlay: coordinates sit beside the view cluster,
+     transient hints float above the dock. The desktop update banner keeps
+     the original bar. */
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) {
+    position: fixed;
+    z-index: 44;
+    right: var(--pe-shell-right);
+    bottom: 0;
+    left: var(--pe-shell-left);
+    display: block;
+    height: 0;
+    min-height: 0;
+    flex: 0 0 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+    transition: left .22s cubic-bezier(.2,.72,.2,1), right .22s cubic-bezier(.2,.72,.2,1);
+  }
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) #coords {
+    position: fixed;
+    top: calc(var(--pe-shell-bar-h) + 20px);
+    left: calc(var(--pe-shell-left) + 90px);
+    max-width: 200px;
+    color: var(--pe-ink-3, var(--studio-muted));
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 16px;
+    transition: left .22s cubic-bezier(.2,.72,.2,1);
+  }
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) .page-hint-slot {
+    position: absolute;
+    right: 16px;
+    bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-row-height, var(--pe-shell-dock-h)) + 12px + var(--pe-shell-corner-lift));
+    left: 16px;
+    height: 30px;
+    min-height: 30px;
+    text-align: center;
+  }
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) .page-hint-slot > :is(.text-input-hint, .canvas-navigation-lock-hint, #tip, .canvas-hint) {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+    max-width: min(520px, 100%);
+    box-sizing: border-box;
+    padding: 6px 12px;
+    overflow: hidden;
+    color: var(--studio-text);
+    border: 1px solid var(--studio-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--studio-panel, #ffffff) 96%, transparent);
+    box-shadow: var(--pe-shell-float-shadow);
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  /* The general pan/zoom tip only appears while navigating; contextual hints keep their own rules. */
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) #tip { visibility: hidden; opacity: 0; }
+  body[data-theme="studio"] main:has(#viewport.is-navigating):not(:has(#viewport.navigation-locked)):not(:has(.text-input-hint:not([hidden]))) > footer:not(.penecho-desktop-update-visible) #tip { visibility: visible; opacity: 1; }
+  body[data-theme="studio"] .primary-tools .effort-label-full { display: none; }
+  body[data-theme="studio"] .primary-tools .effort-label-short { display: block; }
+  body[data-theme="studio"] .canvas-frame { flex: 1 1 auto; }
+  body[data-theme="studio"] .canvas-frame::after { display: none; }
+}
+
+/* Title bar and dock at narrower desktop widths. Labels collapse before
+   controls do; every control stays reachable. */
+@media (min-width: 701px) and (max-width: 1240px) {
+  body[data-theme="studio"] .topbar #canvasAgentToggle > span { display: none; }
+  body[data-theme="studio"] .topbar #canvasAgentToggle { padding-inline: 8px; }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  body[data-theme="studio"] .topbar .canvas-file-actions { gap: 0; padding-left: 6px; }
+  body[data-theme="studio"] .primary-tools .mode-tools :is(button[data-pe-button="toolbar"], .icon-button),
+  body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]),
+  body[data-theme="studio"] .primary-tools .view-tools > button { width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
+  body[data-theme="studio"] .primary-tools #penSize { width: 52px; }
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  body[data-theme="studio"] .topbar { gap: 4px; padding-inline: 6px; }
+  body[data-theme="studio"] .topbar .brand { display: none; }
+  body[data-theme="studio"] .topbar .toolbar-leading-divider { display: none; }
+  body[data-theme="studio"] .topbar .canvas-document-meta { padding-left: 4px; border-left: 0; }
+  body[data-theme="studio"] .topbar #mcpToolbarToggle > span { display: none; }
+  body[data-theme="studio"] .primary-tools .ai-section-label { display: none; }
+}
+@media (min-width: 701px) {
+  body[data-theme="studio"] .topbar #status:not([data-ai-progress="true"]):not([data-multiline="true"]) { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  body[data-theme="studio"] .primary-tools #penSize { width: 44px; }
+  body[data-theme="studio"][data-canvas-mode="pen"] .primary-tools > .pen-tool-properties { padding-inline: 2px; }
+  body[data-theme="studio"] .primary-tools > .mode-tools { padding-right: 2px; }
+  body[data-theme="studio"] .primary-tools > .view-tools { margin-left: 0; padding-left: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-theme="studio"] :is(.primary-tools, .ai-tools-section, main > footer, #coords, .canvas-welcome-actions, #viewport > .canvas-fit-contents, #viewport > .canvas-navigation-lock) { transition: none !important; }
+}
+
+/* ------------------------------------------------------------------
+   2. Empty canvas
+   ------------------------------------------------------------------ */
+body[data-theme="studio"] .canvas-welcome { gap: 6px; }
+body[data-theme="studio"] .canvas-welcome-kicker { display: none; }
+body[data-theme="studio"] .canvas-welcome strong { font-size: 20px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+body[data-theme="studio"] .canvas-welcome > span:last-child { max-width: 440px; color: var(--pe-ink-2, var(--studio-muted)); font-size: 13px; line-height: 1.45; }
+
+/* Welcome actions only forward to the existing toolbar buttons. */
+.canvas-welcome-actions { display: none; }
+body[data-theme="studio"] .canvas-welcome-actions {
+  position: absolute;
+  z-index: 4;
+  inset: var(--studio-toolbar-height) var(--studio-agent-edge-shift) 0 var(--studio-navigator-edge-shift);
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 150px 24px 0;
+  pointer-events: none;
+  transition: right .22s cubic-bezier(.2,.72,.2,1), left .22s cubic-bezier(.2,.72,.2,1);
+}
+body[data-theme="studio"] .canvas-welcome[hidden] + .canvas-welcome-actions,
+body[data-theme="studio"].canvas-view-mode .canvas-welcome-actions,
+body[data-theme="studio"] #viewport:has(#textEditorLayer > *) .canvas-welcome-actions,
+html.viewer-mode .canvas-welcome-actions { display: none; }
+body[data-theme="studio"] .canvas-frame.canvas-agent-resizing .canvas-welcome-actions { transition: none; }
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) {
+  display: inline-flex;
+  height: 34px;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 10px;
+  color: var(--studio-text);
+  border: 1px solid var(--studio-line);
+  border-radius: 10px;
+  background: var(--studio-panel, #ffffff);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, .06);
+  font: 500 13px/1 var(--pe-font-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button):hover {
+  border-color: color-mix(in srgb, var(--studio-accent) 30%, var(--studio-line));
+  background: var(--pe-hover-surface, color-mix(in srgb, var(--studio-accent) 4%, var(--studio-panel, #ffffff)));
+}
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button):focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) > svg {
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 3px;
+  flex: 0 0 22px;
+  color: var(--pe-accent-label, var(--studio-accent-strong));
+  border-radius: 5px;
+  background: var(--pe-selected, var(--studio-accent-soft));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] .canvas-welcome-actions { display: none; }
+}
+
+/* ------------------------------------------------------------------
+   3. Dialog material
+   Every dialog already reads its material from these tokens. Content is
+   opaque; the scrim keeps a light 2px blur; one shadow, one radius ladder.
+   ------------------------------------------------------------------ */
+body[data-theme="studio"] {
+  --pe-shell-nav-surface: color-mix(in srgb, var(--studio-text, #20242c) 4.5%, var(--studio-panel, #ffffff));
+  --pe-shell-dialog-shadow: 0 14px 30px rgba(17, 24, 39, .20), 0 1px 3px rgba(17, 24, 39, .08);
+  --penecho-dialog-backdrop: rgba(0, 0, 0, .22);
+  --penecho-dialog-backdrop-filter: blur(2px);
+  --penecho-dialog-surface: var(--studio-panel, #ffffff);
+  --penecho-dialog-raised-surface: var(--studio-panel-raised, #f8f9fb);
+  --penecho-dialog-body-surface: var(--studio-panel, #ffffff);
+  --penecho-dialog-surface-filter: none;
+  --penecho-large-dialog-radius: 16px;
+  --penecho-large-dialog-surface: var(--studio-panel, #ffffff);
+  --penecho-large-dialog-surface-filter: none;
+  --penecho-large-dialog-shadow: var(--pe-shell-dialog-shadow);
+  --penecho-workbench-title-surface: var(--studio-panel-raised, #f8f9fb);
+  --penecho-workbench-title-filter: none;
+  --penecho-workbench-navigation-surface: var(--pe-shell-nav-surface);
+  --penecho-workbench-navigation-filter: none;
+  --penecho-workbench-content-surface: var(--studio-panel, #ffffff);
+}
+body[data-theme="studio"] .penecho-cloud-dialog.publish-success { --penecho-dialog-surface: var(--studio-panel, #ffffff); }
+
+/* Large workbench dialogs (Settings, Canvas Library): one header height,
+   no helper subtitle in Settings, hairline outline. */
+body[data-theme="studio"] .penecho-workbench-dialog {
+  --penecho-workbench-header-h: 56px;
+  --penecho-workbench-header-padding: 10px 12px 10px 20px;
+  --penecho-workbench-navigation-w: 216px;
+  border: 1px solid color-mix(in srgb, var(--studio-line) 90%, transparent);
+}
+body[data-theme="studio"] #settingsPanel .penecho-workbench-heading > p,
+body[data-theme="studio"] #settingsPanel .settings-title-stack > p { display: none; }
+body[data-theme="studio"] .penecho-workbench-dialog > .penecho-workbench-header h2 { font-size: 17px; font-weight: 600; line-height: 1.3; letter-spacing: -.005em; }
+body[data-theme="studio"] .penecho-workbench-dialog > .penecho-workbench-header { border-bottom: 1px solid var(--studio-line); }
+
+/* Shared S/M/L frame. Keep form submission and each surface's existing focus
+   handling; only the body scrolls, so close and action controls stay reachable. */
+body[data-theme="studio"] :is(.new-canvas-dialog, .changelog-dialog, .configuration-panel, .penecho-cloud-dialog:not(.cloud-center), .canvas-agent-project-dialog) {
+  box-sizing: border-box;
+  width: min(560px, calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px));
+  max-width: calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px);
+  max-height: calc(var(--penecho-canvas-page-dynamic-height, 100dvh) - 32px);
+  overflow: hidden;
+  color: var(--pe-ink);
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-panel);
+  box-shadow: var(--pe-shell-dialog-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body[data-theme="studio"] .new-canvas-dialog > form {
+  display: flex;
+  max-height: calc(var(--penecho-canvas-page-dynamic-height, 100dvh) - 34px);
+  min-height: 0;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+body[data-theme="studio"] :is(.new-canvas-dialog > form > header, .changelog-header, .configuration-panel > header, .cloud-dialog-titlebar, .canvas-agent-project-dialog-head) {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 56px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 10px 20px;
+  border-bottom: 1px solid var(--studio-line);
+  background: var(--studio-panel-raised);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body[data-theme="studio"] .new-canvas-dialog header h2 { margin: 0; }
+body[data-theme="studio"] :is(.pe-dialog-body, .changelog-scroll) {
+  min-width: 0;
+  min-height: 0;
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--studio-panel);
+}
+body[data-theme="studio"] .pe-dialog-body > :first-child { margin-top: 0; }
+body[data-theme="studio"] .pe-dialog-body > :last-child { margin-bottom: 0; }
+body[data-theme="studio"] .new-canvas-save-fields { grid-template-columns: minmax(0, 1fr); }
+body[data-theme="studio"] :is(.new-canvas-actions, .mcp-certificate-actions) {
+  min-height: 56px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--studio-line);
+  background: var(--studio-panel-raised);
+}
+body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .canvas-agent-project-close, .cloud-dialog-close) {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  margin-left: auto;
+  padding: 0;
+  color: var(--pe-ink-2);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+body[data-theme="studio"] :is(.configuration-panel > header p, .cloud-dialog-heading p, .canvas-agent-project-eyebrow) { display: none; }
+body[data-theme="studio"] .canvas-agent-project-dialog[open] { display: flex; flex-direction: column; }
+body[data-theme="studio"] .canvas-agent-project-dialog-body { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; max-height: none; }
+body[data-theme="studio"] .canvas-agent-resource-group { min-height: 0; }
+body[data-theme="studio"] #canvasAgentProjectDescription { margin: 0; color: var(--pe-ink-2); }
+body[data-theme="studio"] .canvas-agent-project-dialog-head p { display: none; }
+body[data-theme="studio"] :is(.changelog-badge, .tour-badge, .canvas-agent-resource-count, .crafts-sidebar-section h3) { text-transform: none; letter-spacing: normal; }
+:is(#pe-type-contract, body[data-theme="studio"]) .changelog-badge { color: var(--pe-ink); font-size: 17px; font-weight: 600; }
+:is(#pe-type-contract, body[data-theme="studio"]) :is(.tour-badge, .changelog-badge, .text-help-example h3, .plugin-option-section-title, .studio-navigator-section-label, .mcp-eyebrow, .cloud-environment span, .canvas-agent-resource-count, .canvas-agent-error-label) { text-transform: none; letter-spacing: normal; }
+
+/* Alerts use the question as their title, without a title bar or icon rail. */
+body[data-theme="studio"] .studio-session-delete-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px));
+  max-height: calc(var(--penecho-canvas-page-dynamic-height, 100dvh) - 32px);
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow: var(--pe-shell-dialog-shadow);
+}
+body[data-theme="studio"] .studio-session-delete-dialog form { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px; }
+body[data-theme="studio"] .studio-session-delete-icon { display: none; }
+body[data-theme="studio"] .studio-session-delete-actions { margin: 0; flex-wrap: wrap; }
+
+/* Both library implementations and Settings use the L frame. */
+body[data-theme="studio"] :is(#settingsPanel, #historyPanel.history-panel[data-library-design="reference"], .crafts-modal, .penecho-cloud-dialog.cloud-center, .plugin-modal) {
+  width: min(1080px, calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px));
+  max-width: calc(var(--penecho-canvas-page-viewport-width, 100vw) - 32px);
+  border-radius: 16px;
+}
+body[data-theme="studio"] #historyPanel[data-library-design="reference"].history-panel[data-pe-surface="manager"] { --penecho-workbench-header-h: 56px; --penecho-workbench-navigation-w: 216px; grid-template-rows: 56px minmax(0, 1fr); }
+body[data-theme="studio"] #historyPanel[data-library-design="reference"] > .history-titlebar { min-height: 56px; padding: 10px 12px 10px 20px; }
+@media (min-width: 701px) {
+  body[data-theme="studio"] #historyPanel[data-library-design="reference"] .history-library-browser { grid-template-columns: 216px minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] #historyPanel[data-library-design="reference"] .history-library-browser { grid-template-columns: minmax(0, 1fr); }
+  body[data-theme="studio"] :is(.pe-dialog-body, .changelog-scroll) { padding: 16px; }
+}
+@media (pointer: coarse) {
+  body[data-theme="studio"] :is(.new-canvas-close, .changelog-close, .settings-close, .canvas-agent-project-close, .cloud-dialog-close) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex-basis: 44px; }
+}
+
+/* Library ↔ Favorites links (studio-shell.js forwards to the existing buttons). */
+.shell-library-links { display: none; }
+body[data-theme="studio"] .shell-library-links { display: grid; gap: 2px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--studio-line) 80%, transparent); }
+body[data-theme="studio"] .shell-library-link {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  color: var(--pe-ink-2, var(--studio-muted));
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+body[data-theme="studio"] .shell-library-link:hover { color: var(--studio-text); background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 5.5%, transparent)); }
+body[data-theme="studio"] .shell-library-link > svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+body[data-theme="studio"] .crafts-library-link { width: auto; margin: 8px 0 0; }
+
+/* Navigators: selection reads clearly against the neutral rail. */
+body[data-theme="studio"] :is(.penecho-workbench-navigation, .crafts-sidebar, .cloud-navigation) {
+  --pe-selected: color-mix(in srgb, var(--studio-accent) 13%, var(--studio-panel, #ffffff));
+  --pe-hover: color-mix(in srgb, var(--studio-text, #20242c) 6%, transparent);
+}
+
+/* Native dialog scrims use the same light veil. */
+body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog, .canvas-agent-project-dialog)::backdrop {
+  background: rgba(0, 0, 0, .22);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+@media (prefers-reduced-transparency: reduce) {
+  body[data-theme="studio"] :is(.new-canvas-dialog, .studio-session-delete-dialog, .canvas-agent-project-dialog)::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ------------------------------------------------------------------
+   4. Controls and surfaces
+   ------------------------------------------------------------------ */
+
+/* Switches: neutral track, white knob in every state; only "on" is tinted.
+   (#pe-button-contract matches the specificity of the base contract.) */
+body[data-theme="studio"] :is(#pe-button-contract, [data-pe-control="switch"]):not([aria-checked="true"]) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--studio-text, #20242c) 17%, var(--studio-panel, #ffffff));
+}
+body[data-theme="studio"] :is(#pe-button-contract, [data-pe-control="switch"])::after {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, .28);
+}
+
+/* The MCP keep-awake checkbox reads as the same switch. */
+body[data-theme="studio"] :is(#pe-button-contract, #mcpKeepAwake[data-pe-control="checkbox"]) {
+  width: 36px;
+  min-width: 36px;
+  height: 20px;
+  margin: 0;
+  flex: 0 0 36px;
+  border: 0;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 10px 50%, #ffffff 7.2px, transparent 7.9px),
+    color-mix(in srgb, var(--studio-text, #20242c) 17%, var(--studio-panel, #ffffff));
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  transition: background .16s ease;
+}
+body[data-theme="studio"] :is(#pe-button-contract, #mcpKeepAwake[data-pe-control="checkbox"]):checked {
+  background:
+    radial-gradient(circle at 26px 50%, #ffffff 7.2px, transparent 7.9px),
+    var(--pe-accent, var(--studio-accent));
+}
+body[data-theme="studio"] :is(#pe-button-contract, #mcpKeepAwake[data-pe-control="checkbox"]):focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+/* Settings → Canvas: rows become grouped cards with a stable height. */
+body[data-theme="studio"] #settingsPageCanvas { display: grid; align-content: start; gap: 18px; }
+body[data-theme="studio"] #settingsPageCanvas[hidden] { display: none; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > h3 { margin: 0 0 14px; font-size: 20px; font-weight: 600; line-height: 1.25; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row {
+  min-height: 50px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--studio-line);
+  border-top-width: 0;
+  border-radius: 0;
+  background: var(--studio-panel, #ffffff);
+  font-size: 13px;
+  font-weight: 500;
+}
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > :is(h3 + .settings-row, .settings-row:first-child) { border-top-width: 1px; border-top-left-radius: 10px; border-top-right-radius: 10px; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+
+/* Settings navigation: a clear selected row. */
+body[data-theme="studio"] .settings-navigation :is(#pe-button-contract, button[aria-selected="true"]) {
+  color: var(--pe-accent-label, var(--studio-accent-strong));
+  border-color: transparent;
+  background: var(--pe-selected);
+}
+
+/* Recent-work navigator and Agent panel sit on opaque surfaces. */
+body[data-theme="studio"] .studio-navigator {
+  background: color-mix(in srgb, var(--studio-titlebar, #f8f9fb) 97%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Agent without a connection is waiting for setup, not failing. */
+body[data-theme="studio"] .canvas-agent-panel[data-status="offline"] .canvas-agent-mark { background: #b7791f; box-shadow: 0 0 0 4px rgba(183, 121, 31, .12); }
+
+/* Share Canvas (M dialog). */
+body[data-theme="studio"] .penecho-cloud-overlay:has(> .penecho-live-share-dialog) { align-items: center; padding: 16px; }
+body[data-theme="studio"] .penecho-live-share-dialog {
+  width: min(560px, 100%);
+  border-color: var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-panel, #ffffff);
+  box-shadow: var(--pe-shell-dialog-shadow);
+}
+body[data-theme="studio"] .penecho-live-share-dialog > [data-pe-region="header"] { min-height: 56px; box-sizing: border-box; padding: 10px 12px 10px 20px; background: var(--studio-panel-raised, #f8f9fb); }
+body[data-theme="studio"] .penecho-live-share-dialog h2 { font-size: 17px; font-weight: 600; }
+body[data-theme="studio"] .penecho-live-share-dialog > [data-pe-region="body"] { padding: 20px; color: var(--pe-ink-2, var(--studio-muted)); font-size: 13px; line-height: 1.45; }
+body[data-theme="studio"] .penecho-live-share-dialog > [data-pe-region="body"] > p:not([role="status"]) { max-width: 60ch; }
+body[data-theme="studio"] .penecho-live-share-dialog [role="status"]:not(:empty) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  color: var(--studio-text);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-panel, #ffffff));
+}
+body[data-theme="studio"] .penecho-live-share-dialog [role="status"]:not(:empty)::before {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--studio-accent);
+  content: "";
+}
+body[data-theme="studio"] .penecho-live-share-dialog > footer { min-height: 56px; box-sizing: border-box; align-items: center; padding: 10px 20px; background: var(--studio-panel-raised, #f8f9fb); }
+body[data-theme="studio"] .penecho-live-share-dialog button[data-pe-button="primary"] { padding-inline: 12px; background: var(--studio-accent-strong, var(--studio-accent)); }
+body[data-theme="studio"] .penecho-live-share-dialog button:disabled { opacity: .45; }
+
+/* The general navigation tip stays quiet text; contextual hints keep the pill. */
+@media (min-width: 701px) {
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) .page-hint-slot > #tip {
+    color: var(--pe-ink-3, var(--studio-muted));
+    border-color: transparent;
+    background: color-mix(in srgb, var(--studio-panel, #ffffff) 80%, transparent);
+    box-shadow: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   5. Title bar More menu, zoom controls, merged Library, Account & Cloud,
+      Share checklist and the object toolbar move grip.
+   ------------------------------------------------------------------ */
+.canvas-more-control, .canvas-zoom-controls { display: none; }
+
+@media (min-width: 701px) {
+  /* New, Library, Export and Echo move into More; the originals stay in the DOM. */
+  body[data-theme="studio"] .topbar :is(#newCanvasBtn, #echoCanvasBtn, #exportPngBtn, #historyBtn) { display: none; }
+  body[data-theme="studio"] .topbar .canvas-more-control { position: relative; order: 2; display: flex; align-items: center; }
+  body[data-theme="studio"] .topbar #canvasMoreBtn[aria-expanded="true"] { color: var(--studio-text); background: var(--pe-selected, var(--studio-accent-soft)); }
+  body[data-theme="studio"] .canvas-more-menu {
+    position: absolute;
+    z-index: 60;
+    top: calc(100% + 6px);
+    right: 0;
+    display: grid;
+    min-width: 212px;
+    box-sizing: border-box;
+    gap: 1px;
+    padding: 4px;
+    border: 1px solid var(--studio-line);
+    border-radius: 10px;
+    background: var(--studio-panel, #ffffff);
+    box-shadow: 0 6px 14px rgba(17, 24, 39, .14);
+  }
+  body[data-theme="studio"] .canvas-more-menu[hidden] { display: none; }
+  body[data-theme="studio"] .canvas-more-menu > :is(#pe-button-contract, button[role="menuitem"]) {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px;
+    color: var(--studio-text);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 400;
+    text-align: left;
+    white-space: nowrap;
+  }
+  body[data-theme="studio"] .canvas-more-menu > :is(#pe-button-contract, button[role="menuitem"])[hidden] { display: none; }
+  body[data-theme="studio"] .canvas-more-menu > :is(#pe-button-contract, button[role="menuitem"]):is(:hover, :focus-visible) { background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent)); outline: none; }
+  body[data-theme="studio"] .canvas-more-menu > button > svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--studio-muted); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Zoom joins the bottom-left view cluster; the percentage resets to 100%. */
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls {
+    position: absolute;
+    z-index: 7;
+    bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-dock-h) - 32px) / 2);
+    left: calc(var(--studio-navigator-edge-shift, 0px) + 86px);
+    display: flex;
+    height: 32px;
+    box-sizing: border-box;
+    align-items: center;
+    padding: 0 2px;
+    border: 1px solid var(--studio-line);
+    border-radius: 9px;
+    background: var(--pe-shell-dock-surface);
+    box-shadow: var(--pe-shell-float-shadow);
+    transition: left .22s cubic-bezier(.2,.72,.2,1), bottom .22s cubic-bezier(.2,.72,.2,1);
+  }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls > :is(#pe-button-contract, button) {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    color: var(--studio-muted);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+  }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls > :is(#pe-button-contract, #canvasZoomLevel) {
+    width: 48px;
+    min-width: 48px;
+    color: var(--studio-text);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls > :is(#pe-button-contract, button):hover { color: var(--studio-text); background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent)); }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  body[data-theme="studio"] main > footer:not(.penecho-desktop-update-visible) #coords { display: none; }
+  html.viewer-mode .canvas-zoom-controls,
+  .playground-entry .canvas-zoom-controls { display: none !important; }
+}
+
+/* Canvas Library: Favorites is a view of the Library window. */
+body[data-theme="studio"] .history-favorites-view[hidden] { display: none; }
+body[data-theme="studio"] #historyPanel[data-library-view="favorites"] .history-library-main > :not(#historyFavoritesView) { display: none !important; }
+body[data-theme="studio"] #historyPanel[data-library-view="favorites"] #historyWindowSummary { display: none; }
+body[data-theme="studio"] #historyPanel[data-library-view="favorites"] .history-library-main { grid-template-rows: minmax(0, 1fr); }
+body[data-theme="studio"] #historyPanel[data-library-view="favorites"] .history-library-main > #historyFavoritesView { grid-row: 1 / -1; }
+/* While Favorites is showing, the storage location is not the current page. */
+:is(#pe-button-contract, body[data-theme="studio"]) #historyPanel[data-library-view="favorites"] .snapshot-location-options > label > input:checked + span[data-pe-button="menu-item"] {
+  color: var(--pe-ink-2, var(--studio-muted));
+  background: transparent;
+  font-weight: 400;
+}
+:is(#pe-button-contract, body[data-theme="studio"]) #historyPanel[data-library-view="favorites"] .snapshot-location-options > label > input:checked + span .history-location-count {
+  color: var(--pe-ink-3);
+  background: var(--pe-surface-raised);
+}
+body[data-theme="studio"] .history-favorites-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+body[data-theme="studio"] .history-favorites-view > .crafts-workspace { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; border: 0; background: transparent; }
+body[data-theme="studio"] .history-favorites-view #craftsClose { display: none; }
+body[data-theme="studio"] .history-favorites-view .crafts-head { flex-wrap: wrap; gap: 8px 12px; padding: 12px 20px; border-bottom: 1px solid var(--studio-line); background: transparent; }
+body[data-theme="studio"] .history-favorites-view .crafts-list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* The kind filter reads as a segmented control inside the Favorites header. */
+body[data-theme="studio"] .history-favorites-view #craftsFilters {
+  display: inline-flex;
+  height: 30px;
+  box-sizing: border-box;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-text, #20242c) 6%, var(--studio-panel, #ffffff));
+}
+body[data-theme="studio"] .history-favorites-view #craftsFilters > :is(#pe-button-contract, .crafts-nav-item) {
+  width: auto;
+  height: 26px;
+  min-height: 26px;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--pe-ink-2, var(--studio-muted));
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 26px;
+}
+body[data-theme="studio"] .history-favorites-view #craftsFilters > :is(#pe-button-contract, .crafts-nav-item)[aria-selected="true"] {
+  color: var(--studio-text);
+  background: var(--studio-panel, #ffffff);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, .12);
+}
+body[data-theme="studio"] .history-favorites-view #craftsFilters svg { width: 14px; height: 14px; }
+body[data-theme="studio"] .shell-library-link[aria-current="page"] {
+  color: var(--pe-accent-label, var(--studio-accent-strong));
+  background: var(--pe-selected);
+}
+body[data-theme="studio"] .history-library-sidebar > .crafts-echoes-link { margin-top: auto; }
+
+/* Settings → Account & Cloud hosts the Cloud account and Link device panels. */
+body[data-theme="studio"] .settings-cloud-host {
+  --ai-surface: var(--studio-panel, #ffffff);
+  --ai-raised: var(--studio-panel-raised, #fbfbfc);
+  --ai-well: color-mix(in srgb, var(--studio-toolbar, #eef0f2) 74%, var(--studio-panel, #ffffff));
+  --ai-line: color-mix(in srgb, var(--studio-line, #d8dbe2) 72%, transparent);
+  --ai-line-strong: var(--studio-line, #d8dbe2);
+  --ai-ink: var(--studio-text, #1c1f27);
+  --ai-muted: var(--studio-muted, #666d7d);
+  --ai-faint: color-mix(in srgb, var(--studio-muted, #666d7d) 88%, var(--studio-panel, #ffffff));
+  --ai-accent: var(--studio-accent, #4f46e5);
+  --ai-accent-soft: var(--studio-accent-soft, #e7e8fb);
+  --ai-primary: var(--studio-accent-strong, #4338ca);
+  --ai-primary-ink: #ffffff;
+  --ai-primary-hover: color-mix(in srgb, var(--studio-accent-strong, #4338ca) 86%, #111827);
+  --ai-primary-active: color-mix(in srgb, var(--studio-accent-strong, #4338ca) 74%, #111827);
+  --ai-hover: color-mix(in srgb, var(--studio-text, #1c1f27) 5%, transparent);
+  --ai-track: color-mix(in srgb, var(--studio-text, #1c1f27) 10%, transparent);
+  --ai-danger: #b63742;
+  --ai-ok: #137a50;
+  --cloud-link: var(--studio-accent, #4f46e5);
+  display: grid;
+  gap: 28px;
+  color: var(--studio-text);
+}
+body[data-theme="studio"] .settings-cloud-host > .penecho-cloud-panel { display: grid; gap: 14px; margin: 0; padding: 0; border: 0; background: transparent; }
+body[data-theme="studio"] .settings-cloud-host > .cloud-device-panel { padding-top: 24px; border-top: 1px solid var(--studio-line); }
+body[data-theme="studio"] .settings-cloud-host .cloud-content-heading h3 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }
+body[data-theme="studio"] .settings-cloud-host > .cloud-device-panel .cloud-content-heading h3 { font-size: 15px; }
+body[data-theme="studio"] .settings-cloud-host .cloud-content-heading p,
+body[data-theme="studio"] .settings-cloud-host .penecho-cloud-panel > p { margin: 4px 0 0; color: var(--pe-ink-2, var(--studio-muted)); font-size: 13px; line-height: 1.45; }
+body[data-theme="studio"] .settings-cloud-host .cloud-settings-group { border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-panel, #ffffff); }
+body[data-theme="studio"] .settings-cloud-host .cloud-sign-in-group { border: 0; border-radius: 0; background: transparent; }
+body[data-theme="studio"] .settings-cloud-host > .cloud-device-panel { border-radius: 0; }
+/* The account section sits directly above, so the device panel does not need its "Open account" jump. */
+body[data-theme="studio"] .settings-cloud-host > .cloud-device-panel > :is(#pe-button-contract, .cloud-button) { display: none; }
+
+/* Share: the checklist reads top to bottom; the current step is tinted. */
+body[data-theme="studio"] .live-share-steps { display: grid; margin: 16px 0 0; padding: 0; overflow: hidden; list-style: none; border: 1px solid var(--studio-line); border-radius: 10px; }
+body[data-theme="studio"] .live-share-step { display: flex; min-height: 52px; box-sizing: border-box; align-items: center; gap: 12px; padding: 8px 14px; counter-increment: live-share-step; }
+body[data-theme="studio"] .live-share-steps { counter-reset: live-share-step; }
+body[data-theme="studio"] .live-share-step + .live-share-step { border-top: 1px solid var(--studio-line); }
+body[data-theme="studio"] .live-share-step[data-state="current"] { background: color-mix(in srgb, var(--studio-accent) 7%, var(--studio-panel, #ffffff)); }
+body[data-theme="studio"] .live-share-step-mark {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  box-sizing: border-box;
+  place-items: center;
+  color: var(--pe-ink-3, var(--studio-muted));
+  border: 1.5px solid color-mix(in srgb, var(--studio-text) 22%, transparent);
+  border-radius: 50%;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+body[data-theme="studio"] .live-share-step-mark::before { content: counter(live-share-step); }
+body[data-theme="studio"] .live-share-step[data-state="current"] .live-share-step-mark { color: var(--pe-accent-label, var(--studio-accent-strong)); border-color: var(--studio-accent); }
+body[data-theme="studio"] .live-share-step[data-state="done"] .live-share-step-mark { color: #277a4c; border-color: transparent; background: rgba(39, 122, 76, .12); }
+body[data-theme="studio"] .live-share-step[data-state="done"] .live-share-step-mark::before { content: "✓"; font-size: 12px; }
+body[data-theme="studio"] .live-share-step-copy { display: grid; min-width: 0; gap: 2px; }
+body[data-theme="studio"] .live-share-step-copy > strong { color: var(--studio-text); font-size: 13px; font-weight: 500; }
+body[data-theme="studio"] .live-share-step-copy > :is(small, p) { margin: 0; color: var(--pe-ink-2, var(--studio-muted)); font-size: 12.5px; line-height: 1.4; }
+body[data-theme="studio"] .live-share-step[data-state="pending"] .live-share-step-copy > strong { color: var(--pe-ink-2, var(--studio-muted)); }
+
+/* Object toolbar: a visible grip marks the drag-to-move surface. */
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface)::before {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  width: 8px;
+  height: 14px;
+  margin-top: -7px;
+  content: "";
+  opacity: .5;
+  background-image: radial-gradient(circle, currentColor 1.15px, transparent 1.5px);
+  background-size: 4px 4.67px;
+  pointer-events: none;
+  transition: opacity 160ms ease-out;
+}
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.has-decisions)::before { left: 42px; }
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface):is(:hover, :focus-visible)::before { opacity: .9; }
+
+/* AI cluster (bottom right): one quiet pill — a sparkle label, the Auto
+   toggle with a status dot and the effort menu. */
+@media (min-width: 701px) {
+  body[data-theme="studio"] .primary-tools > .ai-tools-section { gap: 2px; padding: 4px; border-radius: 10px; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > .ai-section-label {
+    display: inline-flex;
+    height: 28px;
+    min-height: 28px;
+    align-items: center;
+    align-self: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0 6px;
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: .01em;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > .ai-section-label::before {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+    background: currentColor;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    content: "";
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto, #aiEffortButton) {
+    height: 28px;
+    min-height: 28px;
+    gap: 6px;
+    padding: 0 7px;
+    color: var(--pe-ink-2, var(--studio-muted));
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto)::before {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    box-sizing: border-box;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    content: "";
+    opacity: .7;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active {
+    color: var(--pe-accent-label, var(--studio-accent-strong));
+    background: var(--pe-selected, var(--studio-accent-soft));
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active::before {
+    border: 0;
+    background: var(--studio-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-accent) 22%, transparent);
+    opacity: 1;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #aiEffortButton) { gap: 3px; padding: 0 5px; color: var(--studio-text); }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto, #aiEffortButton):is(:hover, [aria-expanded="true"]):not(.active) {
+    color: var(--studio-text);
+    background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent));
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section :is(#pe-button-contract, #auto).active:hover { background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-panel, #ffffff)); }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #craftsControl {
+    height: 20px;
+    margin-left: 4px;
+    padding-left: 4px;
+    border-left: 1px solid var(--studio-line);
+  }
+}
+
+/* Maximized Widget and image presentation: an opaque page with a solid
+   header, instead of a blurred glass layer over the canvas. */
+body[data-theme="studio"] #viewport .canvas-widget.widget-maximized {
+  background: color-mix(in srgb, var(--studio-text, #1c1f27) 4%, var(--studio-panel, #ffffff));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) > .widget-presentation-toolbar {
+  margin: 0 -20px 16px;
+  padding: 0 16px 0 20px;
+  color: var(--studio-text, #24262a);
+  border-bottom: 1px solid var(--studio-line);
+  background: var(--studio-panel, #ffffff);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body[data-theme="studio"] .canvas-image-presentation { background: color-mix(in srgb, var(--studio-text, #1c1f27) 4%, var(--studio-panel, #ffffff)); }
+body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) .widget-presentation-title { font-size: 13.5px; font-weight: 600; }
+body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) > .widget-presentation-toolbar button {
+  color: var(--pe-ink-2, var(--studio-muted));
+  border-radius: 7px;
+  background: transparent;
+}
+body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) > .widget-presentation-toolbar button:hover:not(:disabled) {
+  color: var(--studio-text);
+  background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 6%, transparent));
+}
+body[data-theme="studio"] #viewport .canvas-widget.widget-maximized .canvas-widget-frame {
+  box-shadow: 0 0 0 1px var(--studio-line), 0 8px 24px rgba(17, 24, 39, .08);
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] :is(.widget-maximized, .canvas-image-presentation) > .widget-presentation-toolbar { margin: 0 -8px 8px; padding: 0 8px; }
+}
+
+/* Docked Agent width mirrors .canvas-frame.canvas-agent-width-N so floating chrome can avoid it. */
+@media (min-width: 701px) {
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-0) { --pe-shell-agent-width: 0%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-1) { --pe-shell-agent-width: 2.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-2) { --pe-shell-agent-width: 5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-3) { --pe-shell-agent-width: 7.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-4) { --pe-shell-agent-width: 10%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-5) { --pe-shell-agent-width: 12.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-6) { --pe-shell-agent-width: 15%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-7) { --pe-shell-agent-width: 17.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-8) { --pe-shell-agent-width: 20%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-9) { --pe-shell-agent-width: 22.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-10) { --pe-shell-agent-width: 25%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-11) { --pe-shell-agent-width: 27.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-12) { --pe-shell-agent-width: 30%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-13) { --pe-shell-agent-width: 32.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-14) { --pe-shell-agent-width: 35%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-15) { --pe-shell-agent-width: 37.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-16) { --pe-shell-agent-width: 40%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-17) { --pe-shell-agent-width: 42.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-18) { --pe-shell-agent-width: 45%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-19) { --pe-shell-agent-width: 47.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-20) { --pe-shell-agent-width: 50%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-21) { --pe-shell-agent-width: 52.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-22) { --pe-shell-agent-width: 55%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-23) { --pe-shell-agent-width: 57.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-24) { --pe-shell-agent-width: 60%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-25) { --pe-shell-agent-width: 62.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-26) { --pe-shell-agent-width: 65%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-27) { --pe-shell-agent-width: 67.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-28) { --pe-shell-agent-width: 70%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-29) { --pe-shell-agent-width: 72.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-30) { --pe-shell-agent-width: 75%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-31) { --pe-shell-agent-width: 77.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-32) { --pe-shell-agent-width: 80%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-33) { --pe-shell-agent-width: 82.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-34) { --pe-shell-agent-width: 85%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-35) { --pe-shell-agent-width: 87.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-36) { --pe-shell-agent-width: 90%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-37) { --pe-shell-agent-width: 92.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-38) { --pe-shell-agent-width: 95%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-39) { --pe-shell-agent-width: 97.5%; }
+  body[data-theme="studio"]:has(> main .canvas-frame.canvas-agent-width-40) { --pe-shell-agent-width: 100%; }
+}
+
+
+/* Anchor the side groups to the canvas edges and keep the drawing dock centered.
+   Test the actual clearance before stacking the sides or using two rows. */
+@media (min-width: 701px) {
+  body[data-theme="studio"][data-shell-dock-layout] {
+    --pe-shell-view-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-view-height)) / 2);
+    --pe-shell-ai-bottom: calc(var(--pe-shell-corner-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-ai-height)) / 2);
+  }
+  body[data-theme="studio"] .shell-dock-space {
+    position: fixed;
+    left: calc(var(--pe-shell-left) + 12px);
+    right: calc(var(--pe-shell-right-reserved) + 12px);
+    height: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #craftsControl,
+  body[data-theme="studio"] #viewport > .ai-embodiment { display: none; }
+  body[data-theme="studio"] .primary-tools > .ai-tools-section > #aiToolbarRun { cursor: pointer; }
+  body[data-theme="studio"] #aiToolbarRun:is(:hover, :focus-visible) { background: var(--pe-selected); }
+  body[data-theme="studio"] #aiToolbarRun:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+  body[data-theme="studio"] #aiToolbarRun[data-busy="true"]::before { clip-path: none; border-radius: 2px; }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls { width: 94px; min-width: 0; gap: 0; }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls > :is(#pe-button-contract, button) { width: 24px; min-width: 24px; flex: 0 0 auto; margin: 0; }
+  body[data-theme="studio"] #viewport > .canvas-zoom-controls > :is(#pe-button-contract, #canvasZoomLevel) { width: 40px; min-width: 40px; }
+  body[data-theme="studio"][data-shell-dock-layout] .topbar .tool-group.primary-tools {
+    bottom: calc(var(--pe-shell-dock-bottom) + (var(--pe-shell-row-height) - var(--pe-shell-dock-h)) / 2);
+    left: var(--pe-shell-tools-x);
+    right: auto;
+    max-width: var(--pe-shell-tools-max);
+    margin: 0;
+    transition: none;
+  }
+  body[data-theme="studio"][data-shell-dock-layout] .primary-tools :is(.mode-tools, .view-tools) { gap: 2px; }
+  body[data-theme="studio"][data-shell-dock-layout] .primary-tools .mode-tools :is(#pe-button-contract, button[data-pe-button="toolbar"]),
+  body[data-theme="studio"][data-shell-dock-layout] .primary-tools > :is(#pe-button-contract, button[data-pe-button="toolbar"]) { margin-inline: 0; }
+  body[data-theme="studio"][data-shell-dock-layout] .primary-tools > .ai-tools-section {
+    left: var(--pe-shell-ai-x);
+    right: auto;
+    bottom: var(--pe-shell-ai-bottom);
+    height: auto;
+    min-height: 38px;
+    transition: none;
+  }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > :is(.canvas-navigation-lock, .canvas-fit-contents, .canvas-zoom-controls) {
+    position: fixed;
+    bottom: var(--pe-shell-view-bottom);
+    transition: none;
+  }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > :is(#pe-button-contract, .canvas-navigation-lock)[data-pe-button] { left: var(--pe-shell-view-x); bottom: var(--pe-shell-view-bottom); }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > .canvas-fit-contents { left: calc(var(--pe-shell-view-x) + 31px); }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > .canvas-zoom-controls { left: calc(var(--pe-shell-view-x) + 67px); }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #viewport > .canvas-zoom-controls {
+    left: var(--pe-shell-view-x);
+    width: 46px;
+    flex-direction: column;
+    height: auto;
+    padding: 2px;
+  }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #viewport > :is(#pe-button-contract, .canvas-navigation-lock)[data-pe-button] {
+    left: calc(var(--pe-shell-view-x) + 7px);
+    bottom: calc(var(--pe-shell-view-bottom) + 125px);
+    border-radius: 8px 8px 0 0;
+  }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #viewport > .canvas-fit-contents {
+    left: calc(var(--pe-shell-view-x) + 7px);
+    bottom: calc(var(--pe-shell-view-bottom) + 94px);
+    border-left-color: var(--studio-line);
+    border-top-color: transparent;
+    border-radius: 0 0 8px 8px;
+  }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] .primary-tools > .ai-tools-section { flex-direction: column; align-items: stretch; }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #aiToolbarRun { align-self: stretch; justify-content: center; }
+  body[data-theme="studio"][data-shell-dock-layout="rows"] { --pe-shell-corner-lift: 52px; }
+  body[data-theme="studio"][data-shell-dock-layout] .topbar > :is(#autoDelayPopover, #effortPopover).toolbar-anchored-popover {
+    bottom: calc(var(--pe-shell-ai-bottom) + var(--pe-shell-ai-height, 38px) + 8px) !important;
+  }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > .canvas-navigation-actions {
+    position: fixed;
+    left: var(--pe-shell-view-x);
+    bottom: calc(var(--pe-shell-view-bottom) + var(--pe-shell-view-height, 32px) + 8px);
+  }
+  body[data-theme="studio"][data-shell-dock-measuring] .topbar .tool-group.primary-tools { max-width: none; }
+}
+/* Other themes and mobile keep the original orb as their manual AI action. */
+body:not([data-theme="studio"]) #aiToolbarRun { display: none; }
+@media (max-width: 700px) { #aiToolbarRun { display: none; } }
+
+
+/* Reference canvas shell: sidebars reserve layout space on the canvas plane. */
+body[data-theme="studio"] .canvas-frame {
+  --studio-navigator-width: min(248px, 42%);
+  --studio-agent-width: clamp(320px, var(--canvas-agent-width, 420px), 50%);
+  --studio-navigator-edge-shift: 0px !important;
+  --studio-agent-edge-shift: 0px !important;
+  display: flex;
+  align-items: stretch;
+}
+body[data-theme="studio"] .canvas-frame::after { display: none; }
+body[data-theme="studio"] .canvas-frame > #viewport { flex: 1 1 0; width: 0; height: auto; min-width: 0; }
+body[data-theme="studio"] .canvas-frame > .studio-navigator {
+  position: relative; inset: auto; flex: 0 0 var(--studio-navigator-width);
+  width: var(--studio-navigator-width); min-width: 0; max-width: var(--studio-navigator-width);
+  margin: 0; border-right: 1px solid var(--studio-line); border-radius: 0;
+  background: var(--studio-panel); box-shadow: none; transform: none; transition: none;
+}
+body[data-theme="studio"]:not(.studio-navigator-open) .canvas-frame > .studio-navigator {
+  margin-left: calc(-1 * var(--studio-navigator-width));
+  transform: none;
+  pointer-events: none;
+}
+body[data-theme="studio"] .studio-navigator-scrim { display: none !important; }
+body[data-theme="studio"] .canvas-frame > .canvas-agent-panel {
+  position: relative; inset: auto; flex: 0 0 var(--studio-agent-width);
+  width: var(--studio-agent-width); min-width: 0; max-width: var(--studio-agent-width);
+  height: auto; min-height: 0; max-height: none; margin: 0;
+  border: 0; border-left: 1px solid var(--studio-line); border-radius: 0;
+  background: var(--studio-panel); box-shadow: none; transform: none; transition: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel[hidden] { display: flex; }
+body[data-theme="studio"]:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel {
+  margin-right: calc(-1 * var(--studio-agent-width));
+  transform: none;
+  pointer-events: none;
+}
+body[data-theme="studio"].canvas-agent-navigation-hidden .canvas-frame > .canvas-agent-panel { opacity: 1; visibility: visible; transform: none; border-left-color: var(--studio-line); }
+body[data-theme="studio"] #saveCanvasBtn { display: none; }
+body[data-theme="studio"] #canvasDocumentSaveState { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+body[data-theme="studio"] #canvasDocumentSaveState:hover { background: var(--studio-toolbar); }
+body[data-theme="studio"] #canvasDocumentSaveState:focus-visible { outline: 2px solid var(--studio-accent); }
+body[data-theme="studio"] .primary-tools > .view-tools { display: none; }
+body[data-theme="studio"] .primary-tools .mode-tools { display: flex; }
+body[data-theme="studio"] .mode-tools #canvasViewBtn { order: -3; }
+body[data-theme="studio"] .mode-tools [data-mode="select"] { order: -2; }
+body[data-theme="studio"] .mode-tools #handToolBtn { order: -1; }
+body[data-theme="studio"] .ai-tools-section > [data-color-control="ai"] { display: flex; align-items: center; margin-left: 4px; padding-left: 5px; border-left: 1px solid var(--studio-line); }
+body[data-theme="studio"] .ai-tools-section .color-orb-trigger { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
+body[data-theme="studio"] .ai-tools-section .color-orb-trigger > span { display: none; }
+
+/* One welcome composition, centered in the available canvas. */
+body[data-theme="studio"] .canvas-welcome {
+  inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 24px 110px; gap: 12px; text-align: center; transition: none;
+}
+body[data-theme="studio"] .canvas-welcome > strong { font-size: 22px; font-weight: 600; line-height: 1.3; }
+body[data-theme="studio"] .canvas-welcome > span { max-width: 560px; font-size: 14px; line-height: 1.5; text-wrap: balance; }
+body[data-theme="studio"] .canvas-welcome .canvas-welcome-actions {
+  position: static; inset: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(740px, 100%); align-items: stretch; gap: 14px; margin: 18px 0 0; padding: 0;
+}
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  height: auto; min-height: 158px; gap: 5px; padding: 15px;
+  text-align: left; white-space: normal; border-radius: 11px; box-shadow: none;
+}
+body[data-theme="studio"] .canvas-welcome-actions > button > svg { width: 32px; height: 32px; flex: 0 0 32px; padding: 7px; margin-bottom: 6px; }
+body[data-theme="studio"] .canvas-welcome-actions > button > strong { font-size: 14px; line-height: 1.4; font-weight: 500; text-wrap: auto; }
+body[data-theme="studio"] .canvas-welcome-actions > button > span { font-size: 13px; line-height: 1.45; color: var(--studio-muted); }
+body[data-theme="studio"] .canvas-welcome-actions > button > kbd { margin-top: auto; border: 1px solid var(--studio-line); border-radius: 5px; padding: 2px 7px; font: 11px/1.2 var(--pe-font-ui, system-ui); color: var(--studio-muted); background: var(--studio-titlebar); }
+body[data-theme="studio"] .canvas-welcome-actions > button > .welcome-link { margin-top: auto; padding-top: 5px; color: var(--studio-accent-strong); }
+@container (max-width: 580px) {
+  body[data-theme="studio"] .canvas-welcome .canvas-welcome-actions { gap: 8px; }
+  body[data-theme="studio"] .canvas-welcome-actions > button { padding: 10px; }
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] .canvas-welcome { padding: 20px 16px 100px; }
+  body[data-theme="studio"] .canvas-welcome .canvas-welcome-actions { grid-template-columns: 1fr; max-width: 360px; gap: 8px; margin-top: 8px; }
+  body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) { min-height: 0; display: grid; grid-template-columns: 32px 1fr; padding: 10px 12px; gap: 2px 10px; }
+  body[data-theme="studio"] .canvas-welcome-actions > button > svg { grid-row: 1 / 3; margin: 0; }
+  body[data-theme="studio"] .canvas-welcome-actions > button > :is(kbd, .welcome-link) { display: none; }
+  body[data-theme="studio"] .canvas-frame { --studio-agent-width: min(420px, 78%); }
+}
+
+/* Settings uses the existing workbench navigation and working preferences. */
+body[data-theme="studio"] #settingsPanel { width: min(1120px, calc(100vw - 64px)); }
+body[data-theme="studio"] #settingsPageCanvas { padding: 28px 34px; }
+.settings-canvas-heading { margin-bottom: 26px; }
+.settings-canvas-heading h2 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
+.settings-canvas-heading p { margin: 0; color: var(--studio-muted); font-size: 15px; line-height: 1.5; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group { margin: 0 0 24px; padding: 0; }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--studio-muted); }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row { min-height: 68px; padding: 14px 20px; gap: 18px; }
+.settings-row-copy { min-width: 0; display: grid; gap: 3px; }
+.settings-row-copy > span { font-size: 15px; font-weight: 500; }
+.settings-row-copy > small { color: var(--studio-muted); font-size: 14px; font-weight: 400; line-height: 1.4; }
+.settings-row-controls { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
+body[data-theme="studio"] #settingsPageCanvas select { min-height: 36px; min-width: 115px; font-size: 14px; }
+body[data-theme="studio"] #settingsPageCanvas .settings-switch { flex: 0 0 42px; }
+.settings-grid-options { display: flex; flex-shrink: 0; padding: 3px; gap: 2px; border-radius: 7px; background: var(--studio-toolbar); }
+body[data-theme="studio"] .settings-grid-options button { border: 0; border-radius: 5px; padding: 6px 11px; color: var(--studio-muted); background: transparent; font-size: 14px; }
+body[data-theme="studio"] .settings-grid-options button[aria-pressed="true"] { color: var(--studio-text); background: var(--studio-panel); box-shadow: 0 1px 4px #00000014; }
+@media (max-width: 700px) {
+  body[data-theme="studio"] #settingsPanel { width: calc(100vw - 16px); }
+  body[data-theme="studio"] #settingsPageCanvas { padding: 18px 14px; }
+  body[data-theme="studio"] #settingsPageCanvas > .settings-group > .settings-row { flex-wrap: wrap; padding: 12px; }
+}
+
+/* Agent: a flat panel, inline suggestions and an unobtrusive composer. */
+body[data-theme="studio"] .canvas-agent-head { min-height: 64px; padding: 12px 16px; background: var(--studio-titlebar) !important; border-bottom: 1px solid var(--studio-line); }
+body[data-theme="studio"] .canvas-agent-mark { display: none; }
+body[data-theme="studio"] .canvas-agent-heading strong { font-size: 16px; }
+body[data-theme="studio"] .canvas-agent-heading small { font-size: 13px; }
+body[data-theme="studio"] #canvasAgentPromptControl { display: none; }
+body[data-theme="studio"] .canvas-agent-panel[data-prompt-suggestions-open="true"] .canvas-agent-transcript { display: none; }
+body[data-theme="studio"] .canvas-agent-connection-notice { display: flex; flex: 0 0 auto; gap: 12px; margin: 18px 18px 6px; padding: 16px; border-radius: 12px; background: color-mix(in srgb, #a55b09 7%, var(--studio-panel)); }
+body[data-theme="studio"] .canvas-agent-connection-notice[hidden] { display: none; }
+.canvas-agent-connection-notice > svg { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 1px; color: #a55b09; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.canvas-agent-connection-notice strong { font-size: 15px; font-weight: 500; }
+.canvas-agent-connection-notice p { margin: 5px 0 12px; color: var(--studio-muted); font-size: 14px; line-height: 1.5; }
+.connection-notice-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+body[data-theme="studio"] .connection-notice-actions button { padding: 7px 11px; font-size: 13px; border: 1px solid var(--studio-line); border-radius: 6px; background: var(--studio-panel); }
+body[data-theme="studio"] .connection-notice-actions #canvasAgentSignIn { color: var(--studio-accent-strong); border-color: transparent; background: transparent; }
+body[data-theme="studio"] .canvas-agent-prompt-suggestions { padding: 16px 18px; }
+body[data-theme="studio"] .canvas-agent-prompt-categories { display: flex; flex: 0 0 auto; gap: 16px; padding: 0; border: 0; border-bottom: 1px solid var(--studio-line); border-radius: 0; background: transparent; }
+body[data-theme="studio"] .canvas-agent-prompt-categories > button { flex: none; padding: 8px 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--studio-muted); font-size: 13px; white-space: nowrap; box-shadow: none; }
+body[data-theme="studio"] .canvas-agent-prompt-categories > button[aria-selected="true"] { color: var(--studio-text); background: transparent; border-bottom-color: var(--studio-accent); }
+body[data-theme="studio"] .canvas-agent-prompt-popup { margin-top: 14px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+body[data-theme="studio"] .canvas-agent-prompt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; min-height: 58px; margin: 0 0 3px; padding: 10px; border: 0; border-radius: 11px; }
+body[data-theme="studio"] .canvas-agent-prompt-row:hover { background: var(--studio-toolbar); }
+body[data-theme="studio"] .canvas-agent-prompt-row > .canvas-agent-prompt-icon { width: 34px; height: 34px; color: var(--studio-muted); border: 1px solid var(--studio-line); border-radius: 6px; background: var(--studio-panel); }
+body[data-theme="studio"] .canvas-agent-prompt-copy { display: grid; gap: 4px; }
+body[data-theme="studio"] .canvas-agent-prompt-copy > strong { font-size: 14px; line-height: 1.3; font-weight: 500; }
+body[data-theme="studio"] .canvas-agent-prompt-copy > small { font-size: 13px; line-height: 1.4; color: var(--studio-muted); }
+body[data-theme="studio"] .canvas-agent-composer { padding: 12px 18px 18px; }
+body[data-theme="studio"] .canvas-agent-composer-surface { border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: none !important; padding: 9px; }
+body[data-theme="studio"] .canvas-agent-composer-toolbar { display: flex; justify-content: flex-start; gap: 5px; }
+body[data-theme="studio"] :is(#canvasAgentProject, #canvasAgentConnection) { flex: 0 1 auto; max-width: 60%; padding: 5px 9px; border: 0; border-radius: 6px; background: var(--studio-toolbar); color: var(--studio-muted); }
+body[data-theme="studio"] #canvasAgentInput { min-height: 76px; font-size: 14px; line-height: 1.5; padding: 12px 5px; }
+body[data-theme="studio"] .canvas-agent-composer .canvas-agent-tool-actions button:is(.active, [aria-pressed="true"], [aria-expanded="true"], [data-pe-state="selected"]) { background: transparent !important; border-color: transparent !important; box-shadow: none !important; color: var(--studio-accent-strong) !important; }
+body[data-theme="studio"] #canvasAgentTextMode.active { display: none; }
+body[data-theme="studio"] #canvasAgentSend { width: 32px; height: 32px; border-radius: 7px; }
+body[data-theme="studio"] #canvasAgentSend .canvas-agent-action-label { display: none; }
+body[data-theme="studio"] .canvas-auto-paused-notice { position: absolute; z-index: 8; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 12px 16px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); color: var(--studio-muted); box-shadow: var(--pe-shell-float-shadow); font-size: 13px; }
+body[data-theme="studio"] .canvas-auto-paused-notice[hidden] { display: none; }
+.canvas-auto-paused-notice svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; flex-shrink: 0; }
+body[data-theme="studio"]:has(#canvasAutoPausedNotice:not([hidden])) #aiToolsSection { visibility: hidden; }
+body[data-theme="studio"] #mcpReconnectCancel { padding: 12px 16px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: var(--pe-shell-float-shadow); font-size: 13px; }
+body[data-theme="studio"] #mcpReconnectCancel::before { content: ""; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #a55b09; }
+body[data-theme="studio"] #mcpReconnectCancel .mcp-retry-action { margin-left: 16px; color: var(--studio-muted); }
+body[data-theme="studio"] .mcp-canvas-notice:has(#mcpReconnectCancel:not([hidden])) { bottom: 78px; }
+
+/* Selected Widgets retain a distinct selection outline below the floating tools. */
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.floating-widget-toolbar),
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.floating-widget-toolbar):hover {
+  border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: 0 4px 14px #00000016; backdrop-filter: none;
+}
+body[data-theme="studio"] .object-chrome-button.toolbar-group-start::after { content: ""; position: absolute; left: -5px; top: 4px; bottom: 4px; width: 1px; background: var(--studio-line); pointer-events: none; }
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.askagent) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--studio-accent-strong); background: transparent; font-size: 13px; white-space: nowrap; }
+body[data-theme="studio"] .selected-widget-material.floating-toolbar-selection { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; clip-path: none; filter: none; outline: 2px solid var(--studio-accent); outline-offset: 4px; border-radius: 12px; }
+body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached { border-radius: 10px; }
+body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached::after { border: 1px solid var(--studio-line); border-radius: 10px; }
+
+/* Reference sizing and compact tool properties. */
+body[data-theme="studio"] .studio-navigator :is(.studio-navigator-head, .studio-navigator-body, .studio-navigator-foot) { width: 100%; }
+body[data-theme="studio"] .canvas-welcome { padding-bottom: 230px; }
+body[data-theme="studio"] .canvas-welcome-actions > :is(#pe-button-contract, button) > svg { width: 32px; height: 32px; flex-basis: 32px; padding: 7px; }
+body[data-theme="studio"] .canvas-welcome-actions > button > span { font-weight: 400; }
+body[data-theme="studio"] #clipboardCopyBtn { display: none; }
+body[data-theme="studio"] .pen-tool-properties > [data-color-control="ink"] { order: -1; }
+body[data-theme="studio"] .pen-tool-properties .color-orb-trigger,
+body[data-theme="studio"] .ai-tools-section .color-orb-trigger { position: relative; border: 0 !important; background: transparent !important; width: 28px !important; min-width: 28px !important; height: 28px !important; padding: 0 !important; box-shadow: none !important; }
+body[data-theme="studio"] .pen-tool-properties .color-orb-trigger > span,
+body[data-theme="studio"] .ai-tools-section .color-orb-trigger > span { display: none !important; }
+body[data-theme="studio"] .pen-tool-properties .color-orb-trigger::before,
+body[data-theme="studio"] .ai-tools-section .color-orb-trigger::before { width: 17px; height: 17px; outline: 1px solid var(--studio-line); outline-offset: 2px; border-radius: 50%; }
+body[data-theme="studio"] .pen-size-trigger { display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 5px; border: 0; background: transparent; color: var(--studio-muted); font-size: 13px; }
+.pen-size-trigger svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+body[data-theme="studio"] .pen-size-popover:popover-open { position: fixed; inset: auto auto 76px var(--pe-shell-tools-x, 40%); padding: 16px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-panel); color: var(--studio-text); box-shadow: var(--pe-shell-float-shadow); }
+body[data-theme="studio"] .pen-size-popover .range-control { display: flex; gap: 12px; }
+body[data-theme="studio"] .pen-size-popover input { width: 140px; }
+body[data-theme="studio"] #viewport > .canvas-navigation-hint { display: none; }
+body[data-theme="studio"].canvas-auto-paused #aiStatusArea #status { visibility: hidden; }
+body[data-theme="studio"][data-shell-dock-layout="rows"] .canvas-auto-paused-notice { bottom: calc(var(--pe-shell-dock-bottom) + 52px); }
+body[data-theme="studio"][data-shell-dock-layout="vertical"] .canvas-auto-paused-notice { max-width: 180px; bottom: calc(var(--pe-shell-dock-bottom) + 170px); }
+body[data-theme="studio"] #settingsPanel { height: min(820px, calc(100dvh - 64px)); max-height: calc(100dvh - 64px); }
+body[data-theme="studio"] #settingsPageCanvas > .settings-group { margin-bottom: 20px; }
+body[data-theme="studio"] .canvas-agent-composer-toolbar { border-bottom: 0; padding-bottom: 0; }
+body[data-theme="studio"] #canvasAgentConnection { max-width: 60%; width: auto; }
+@media (max-width: 700px) {
+  body[data-theme="studio"] .canvas-welcome { padding-bottom: 100px; }
+}
+
+body[data-theme="studio"] #status[data-status-key="ready"] { visibility: hidden; }
+body[data-theme="studio"] .settings-navigation :is(#pe-button-contract, button[aria-selected="true"]):is(:hover, :focus, :active) { background: var(--studio-accent-soft); }
+body[data-theme="studio"] .canvas-agent-prompt-row .canvas-agent-prompt-icon svg { width: 22px; height: 22px; }
+body[data-theme="studio"] #canvasAgentSend:disabled { color: var(--studio-muted); background: var(--studio-toolbar); }
+body[data-theme="studio"] .canvas-agent-panel .canvas-agent-resize-edge { box-shadow: none; }
+
+body[data-theme="studio"] .selected-widget-material.floating-toolbar-selection { background: var(--studio-panel); }
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.askagent)[data-pe-button] { color: var(--studio-accent-strong); font-weight: 500; }
+body[data-theme="studio"] .object-chrome-button.toolbar-group-start::after { display: block !important; background: var(--studio-line) !important; opacity: 1 !important; }
+body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached { overflow: visible; contain: layout style; }
+body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached .canvas-widget-frame { border-radius: 10px; }
+body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached .canvas-widget-resize-handle.corner { width: 12px; height: 12px; right: -7px; bottom: -7px; box-sizing: border-box; border: 2px solid var(--studio-accent); border-radius: 2px; background: var(--studio-panel); }
+body[data-theme="studio"] .canvas-widget-resize-handle.resize-nw { top: -7px; left: -7px; right: auto !important; bottom: auto !important; cursor: nwse-resize; }
+body[data-theme="studio"] .canvas-widget-resize-handle.resize-ne { top: -7px; bottom: auto !important; cursor: nesw-resize; }
+body[data-theme="studio"] .canvas-widget-resize-handle.resize-sw { left: -7px; right: auto !important; cursor: nesw-resize; }
+body[data-theme="studio"] .canvas-widget:not(.object-toolbar-attached) .canvas-widget-resize-handle:is(.resize-nw,.resize-ne,.resize-sw) { display: none; }
+
+body[data-theme="studio"] .canvas-agent-composer-toolbar .canvas-agent-project-control { flex: 0 1 auto; max-width: 40%; }
+
+/* Reference chrome: neutral typography, shared corner control, and joined slides. */
+@media (min-width: 701px) {
+  body[data-theme="studio"] .topbar { gap: 8px; padding-inline: 12px; background: var(--studio-panel); }
+  body[data-theme="studio"] .topbar .toolbar-leading-divider { display: none; }
+  body[data-theme="studio"] .topbar .brand { padding-inline: 0 4px; }
+  body[data-theme="studio"] .topbar .brand h1 { font-size: 14px; font-weight: 400; letter-spacing: normal; }
+  body[data-theme="studio"] .topbar .brand h1 strong { color: var(--studio-text); font-weight: 650; }
+  body[data-theme="studio"] .topbar .canvas-document-meta { margin-left: 0; padding-left: 12px; gap: 10px; height: 20px; }
+  body[data-theme="studio"] .topbar #canvasDocumentName { font-size: 14px; font-weight: 500; gap: 10px; cursor: pointer; }
+  body[data-theme="studio"] .topbar #canvasDocumentName::after {
+    width: 6px; height: 6px; flex: 0 0 6px; margin: -3px 3px 0 0;
+    border-right: 1px solid currentColor; border-bottom: 1px solid currentColor;
+    transform: rotate(45deg); background: none; mask: none; -webkit-mask: none; opacity: .75;
+  }
+  body[data-theme="studio"] .topbar #canvasDocumentSaveState { font-size: 12px; font-weight: 400; padding-inline: 0; }
+  body[data-theme="studio"] .topbar .canvas-agent-control { gap: 8px; }
+  body[data-theme="studio"] .topbar :is(#mcpToolbarToggle, #canvasAgentToggle) {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; min-height: 28px;
+    padding: 0 10px; border: 1px solid var(--studio-line); border-radius: 5px;
+    color: var(--studio-text); background: var(--studio-panel); font-size: 13px; font-weight: 500; box-shadow: none;
+  }
+  body[data-theme="studio"] #mcpToolbarStatus { color: var(--studio-muted); font-weight: 400; }
+  body[data-theme="studio"] .topbar #canvasAgentToggle svg { width: 16px; height: 16px; }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls {
+    left: var(--pe-shell-view-x); width: max-content; height: 40px; min-height: 40px;
+    flex-direction: row; gap: 4px; padding: 3px 8px; border-radius: 10px;
+  }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > button {
+    position: static; inset: auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; min-width: 26px; height: 30px; min-height: 30px; padding: 0; margin: 0;
+    border: 0; border-radius: 5px; background: transparent; box-shadow: none; color: var(--studio-muted);
+  }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > #canvasZoomLevel { width: 42px; min-width: 42px; font-size: 13px; font-weight: 500; color: var(--studio-text); }
+  body[data-theme="studio"] #canvasZoomControls svg { width: 18px; height: 18px; }
+  body[data-theme="studio"] #canvasZoomControls .canvas-view-divider { flex: 0 0 1px; height: 18px; margin-inline: 2px; background: var(--studio-line); }
+  body[data-theme="studio"] #canvasZoomControls #canvasNavigationLock svg > path:last-child { display: none; }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > button:hover { background: var(--pe-hover); color: var(--studio-text); }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #canvasZoomControls > #canvasNavigationLock.locked { color: var(--studio-accent); background: var(--pe-selected); }
+}
+body[data-theme="studio"] .canvas-frame > .studio-navigator,
+body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel {
+  box-sizing: border-box; opacity: 1; visibility: visible;
+  transition: margin-left .3s cubic-bezier(.2,.72,.2,1), margin-right .3s cubic-bezier(.2,.72,.2,1), transform .3s cubic-bezier(.2,.72,.2,1);
+}
+body[data-theme="studio"].studio-navigator-open .canvas-frame > .studio-navigator { display: flex; margin-left: 0; transform: none; }
+body[data-theme="studio"].studio-agent-docked.canvas-agent-open .canvas-frame > .canvas-agent-panel { margin-right: 0; transform: none; }
+body[data-theme="studio"].studio-agent-docked:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel { border-left-color: var(--studio-line); transform: none; }
+body[data-theme="studio"] .canvas-frame.canvas-agent-resizing > .canvas-agent-panel,
+body[data-theme="studio"] .canvas-frame > .canvas-agent-panel.canvas-agent-no-motion { transition: none; }
+body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]) { color: var(--studio-muted); }
+body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]):disabled { color: #9ca3af; opacity: 1; background: transparent; cursor: default; }
+body[data-theme="studio"] .canvas-auto-paused-notice { cursor: pointer; text-align: left; font-family: inherit; transition: background .15s, border-color .15s, box-shadow .15s, transform .15s; }
+body[data-theme="studio"] .canvas-auto-paused-notice:hover { background: var(--pe-hover, #f8f9fc); border-color: var(--studio-accent); box-shadow: 0 5px 16px rgba(17,24,39,.16); transform: translateY(-1px); }
+body[data-theme="studio"] .canvas-auto-paused-notice:active { transform: translateY(1px); box-shadow: none; }
+body[data-theme="studio"] .canvas-auto-paused-notice:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  body[data-theme="studio"] .canvas-frame > .studio-navigator,
+  body[data-theme="studio"].studio-agent-docked .canvas-frame > .canvas-agent-panel,
+  body[data-theme="studio"] .canvas-auto-paused-notice { transition: none; }
+}
+
+@media (min-width: 701px) {
+  body[data-theme="studio"] .topbar #canvasDocumentName::after { position: static; inset: auto; display: block; border-radius: 0; pointer-events: none; }
+  body[data-theme="studio"] .topbar #studioNavigatorToggle svg { width: 18px; height: 18px; flex: 0 0 18px; }
+  body[data-theme="studio"] .topbar :is(#pe-button-contract, .canvas-agent-control) > #canvasAgentToggle[data-pe-button="toolbar"] { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 5px; background: var(--studio-panel); }
+  body[data-theme="studio"] #viewport > #canvasZoomControls svg { width: 20px; height: 20px; flex: 0 0 20px; }
+  body[data-theme="studio"] .primary-tools > :is(#pe-button-contract, [data-action="undo"], [data-action="redo"])[data-pe-button="toolbar"] { border: 0; background: transparent; box-shadow: none; color: var(--studio-muted); }
+  body[data-theme="studio"] .primary-tools > :is(#pe-button-contract, [data-action="undo"], [data-action="redo"])[data-pe-button="toolbar"]:disabled { color: #9ca3af; opacity: 1; }
+  body[data-theme="studio"] .primary-tools > :is([data-action="undo"], [data-action="redo"]) svg { width: 20px; height: 20px; flex: 0 0 20px; }
+}
+
+/* Keep model names legible and use the reference's status dot in the header. */
+body[data-theme="studio"] #mcpToolbarToggle > svg { display: none; }
+body[data-theme="studio"] #mcpToolbarToggle .mcp-toolbar-dot { display: block; position: static; width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #9ca3af; box-shadow: none; }
+body[data-theme="studio"] #mcpToolbarToggle[data-state="connected"] .mcp-toolbar-dot { background: #22a468; }
+body[data-theme="studio"] #mcpToolbarToggle:is([data-state="connecting"], [data-state="failed"]) .mcp-toolbar-dot { background: #a55b09; }
+body[data-theme="studio"] #mcpToolbarToggle:is([data-state="connecting"], [data-state="failed"]) #mcpToolbarStatus { color: #a55b09; }
+body[data-theme="studio"] :is(#pe-button-contract, .canvas-agent-composer-toolbar) .canvas-agent-connection-button[data-pe-button] { width: auto; max-width: 60%; padding-inline: 10px; margin: 0; }
+body[data-theme="studio"] .canvas-agent-connection-button > .canvas-agent-connection-label-clip { mask-image: none; -webkit-mask-image: none; padding-inline-end: 20px; }
+
+/* MCP connection details and contextual activity, shared with the title bar. */
+body #mcpToolbarToggle { gap:7px; }
+body #mcpToolbarToggle .mcp-toolbar-dot { display:block;order:0;width:7px;height:7px;background:#9ca3af; }
+body #mcpToolbarToggle .mcp-status-chevron { width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.6; }
+body #mcpToolbarToggle[aria-expanded="true"] { border-color:#6554f5;box-shadow:0 0 0 3px #eeebff; }
+body #mcpToolbarToggle[aria-expanded="true"] .mcp-status-chevron { transform:rotate(180deg); }
+body #mcpToolbarToggle[data-state="connected"] .mcp-toolbar-dot { background:#0f8562;box-shadow:0 0 0 3px #e0eee8; }
+body #mcpToolbarToggle[data-state="updating"] { color:#4936c8;border-color:#6554f5; }
+body #mcpToolbarToggle[data-state="updating"] .mcp-toolbar-dot { background:#5946ed;box-shadow:0 0 0 3px #e8e4ff; }
+body #mcpToolbarToggle:is([data-state="connecting"],[data-state="retrying"],[data-state="signin"]) .mcp-toolbar-dot { background:#b85b13; }
+body #mcpToolbarToggle[data-state="failed"] .mcp-toolbar-dot { background:#ce2737; }
+#mcpToolbarStatus { color:#667080;font-weight:400; }
+body #mcpToolbarName { max-width:150px;overflow:hidden;text-overflow:ellipsis; }
+#mcpStatusPopover { --mcp-muted:#667080;--mcp-line:#e6e6e9;box-sizing:border-box;position:fixed;inset:auto;margin:0;width:400px;max-width:calc(100vw - 24px);padding:18px;border:1px solid #e1e1e5;border-radius:14px;background:#fff;color:#252831;box-shadow:0 16px 42px #20202c24;overflow:auto;font:400 14px/1.45 var(--pe-font-ui,system-ui); }
+#mcpStatusPopover::backdrop { background:transparent; }
+#mcpStatusPopover header { display:flex;align-items:center;justify-content:space-between;gap:14px; }
+#mcpStatusPopover h2 { margin:0;font-size:17px;line-height:1.3;font-weight:650; }
+#mcpStatusPopover .mcp-status-badge { display:flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-size:13px;white-space:nowrap;color:var(--mcp-muted);background:#f3f4f6; }
+#mcpStatusPopover .mcp-status-badge::before,.mcp-channel-state::before,.mcp-sidebar-badge::before { content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0; }
+#mcpStatusPopover:is([data-state="connected"],[data-state="updating"]) .mcp-status-badge { color:#0b805d;background:#e6f3ed; }
+#mcpStatusPopover:is([data-state="retrying"],[data-state="connecting"],[data-state="signin"]) .mcp-status-badge { color:#a85512;background:#fff3e6; }
+#mcpStatusPopover[data-state="failed"] .mcp-status-badge { color:#cb2737;background:#fceced; }
+.mcp-status-description { color:#596272;margin:8px 0 16px;line-height:1.5; }
+.mcp-status-channels { border:1px solid var(--mcp-line);border-radius:11px;padding:5px 13px; }
+.mcp-status-channel { display:flex;align-items:center;gap:11px;padding:9px 0; }
+.mcp-status-channel + .mcp-status-channel { border-top:1px solid var(--mcp-line); }
+.mcp-channel-icon { display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;background:#f3f4f6;border-radius:8px;font:22px/1 system-ui;color:#596272; }
+.mcp-status-channel > div,.mcp-status-session > span:nth-child(2) { flex:1;min-width:0; }
+.mcp-status-channel strong,.mcp-status-session strong { display:block;font-weight:550; }
+.mcp-status-channel small,.mcp-status-session small { display:block;color:var(--mcp-muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.mcp-channel-state { display:flex;align-items:center;gap:6px;color:#89909b;font-size:13px;white-space:nowrap; }
+.mcp-channel-state[data-online="true"] { color:#0b805d; }
+#mcpStatusPopover h3 { margin:16px 0 5px;color:var(--mcp-muted);font-size:12px;letter-spacing:.065em;font-weight:650; }
+.mcp-status-sessions { max-height:220px;overflow:auto;margin:0 -9px; }
+#mcpStatusPopover .mcp-status-session { display:flex;align-items:center;text-align:start;gap:11px;width:100%;padding:13px 9px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer; }
+#mcpStatusPopover .mcp-status-session:hover { background:#f5f5f8; }
+#mcpStatusPopover .mcp-status-session[data-updating="true"] { background:#eeebff; }
+.mcp-session-avatar { display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:50%;background:#e6edf7;color:#2d527c;font-size:12px;font-weight:650; }
+.mcp-session-avatar[data-client="claude"] { background:#f4e9dd;color:#965529; }
+.mcp-session-state { font-size:12px;color:var(--mcp-muted);white-space:nowrap; }
+[data-updating="true"] > .mcp-session-state { color:#4936c8; }
+[data-updating="true"] > .mcp-session-state::before { content:"";display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#5946ed;box-shadow:0 0 0 3px #ded8ff; }
+.mcp-sessions-empty { margin:12px 9px 16px;color:var(--mcp-muted);font-size:13px; }
+.mcp-status-follow { display:flex;align-items:center;justify-content:space-between;gap:14px;border-top:1px solid var(--mcp-line);padding:13px 0 17px;margin-top:14px; }
+.mcp-status-follow label { font-weight:550;cursor:pointer; }
+.mcp-status-follow p { margin:2px 0 0;color:var(--mcp-muted);font-size:12px; }
+#mcpStatusFollow { position:relative;width:36px;height:21px;flex-shrink:0;border:0;border-radius:99px;background:#9da4af;cursor:pointer;padding:3px; }
+#mcpStatusFollow::after { content:"";display:block;width:15px;height:15px;border-radius:50%;background:white;box-shadow:0 1px 3px #0002;transition:transform .15s; }
+#mcpStatusFollow[aria-checked="true"] { background:#5642e9; }
+#mcpStatusFollow[aria-checked="true"]::after { transform:translateX(15px); }
+#mcpStatusPopover footer { display:flex;align-items:center;gap:8px; }
+#mcpStatusPopover footer button { border:1px solid transparent;border-radius:7px;padding:7px 10px;background:transparent;color:#535c6d;font:500 14px/1.3 var(--pe-font-ui,system-ui);cursor:pointer; }
+#mcpStatusPopover #mcpStatusConnect { border-color:#e1e1e5;color:#252831; }
+#mcpStatusPopover #mcpStatusPower { margin-left:auto;color:#4936c8; }
+#mcpStatusPopover #mcpStatusPower[data-destructive="true"] { color:#c82332; }
+#mcpStatusPopover button:focus-visible { outline:2px solid #6554f5;outline-offset:2px; }
+#mcpStatusPopover footer button:hover { background:#f4f3f8; }
+body[data-theme="studio"] #viewport > #mcpCanvasNotice { position:fixed;left:calc(var(--pe-shell-left,0px) + (100% - var(--pe-shell-left,0px) - var(--pe-shell-right,0px)) / 2);right:auto;bottom:calc(var(--pe-shell-dock-bottom,16px) + var(--pe-shell-dock-h,44px) + 16px);transform:translateX(-50%);width:max-content;max-width:calc(100% - var(--pe-shell-left,0px) - var(--pe-shell-right,0px) - 32px);flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:10px;padding:5px 6px 5px 13px;border:1px solid #e4e4e8;border-radius:99px;background:#fff;box-shadow:0 5px 14px #20202c1a;color:#252831;font-size:13px; }
+body #mcpCanvasNotice[hidden] { display:none!important; }
+#mcpCanvasNotice::before { content:"";width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#5946ed;box-shadow:0 0 0 3px #eeebff; }
+#mcpCanvasNotice[data-state="failed"]::before { background:#ce2737;box-shadow:none; }
+#mcpCanvasNotice[data-state="retrying"]::before { background:#b85b13;box-shadow:none; }
+.mcp-activity-label { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+body #mcpCanvasNotice > button[data-pe-button] { height:28px;min-height:28px;padding:4px 11px;border:0;border-radius:99px;background:#eeebff;color:#4936c8;box-shadow:none;font-size:13px;line-height:20px;white-space:nowrap;flex-shrink:0; }
+body #mcpCanvasNotice #mcpReconnectCancel { min-width:0;white-space:normal;background:transparent;color:#915013; }
+body #mcpCanvasNotice #mcpCanvasNoticeButton { color:#ce2737;background:#fceced; }
+.mcp-sidebar-badge { display:flex;align-items:center;gap:5px;width:fit-content;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;padding:2px 6px;border-radius:99px;background:#f0f1f5;color:#687181;font-size:11px;font-weight:500; }
+.mcp-sidebar-badge[data-updating="true"] { background:#eeebff;color:#5140d7; }
+body .studio-navigator-group-heading.mcp-ai-updating { background:#eeebff; }
+@media(max-width:700px) {
+  body[data-theme="studio"] .topbar #mcpToolbarToggle > #mcpToolbarName { display:inline;max-width:70px; }
+  body #mcpToolbarToggle .mcp-status-chevron { display:none; }
+  body[data-theme="studio"] #viewport > #mcpCanvasNotice { bottom:90px; }
+  #mcpStatusPopover { padding:16px; }
+  .mcp-status-channel { gap:8px; }
+}
+@media(prefers-reduced-motion:reduce) { #mcpStatusFollow::after { transition:none; } }
+@media(forced-colors:active) { #mcpToolbarToggle .mcp-toolbar-dot,#mcpCanvasNotice::before { background:Highlight!important; } #mcpStatusFollow { border:1px solid ButtonText; } }
+
+/* Workspace navigation: destinations, open documents, then dated history. */
+body[data-theme="studio"] .canvas-frame { --studio-navigator-width: 320px; }
+body[data-theme="studio"] #studioNavigator { background: var(--studio-titlebar, #fafafb); box-shadow: none; border-right: 1px solid var(--studio-line); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-head { padding: 14px 12px 12px; border-bottom: 1px solid var(--studio-line); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-search-row { display: flex; align-items: center; gap: 8px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-search { flex: 1; min-width: 0; height: 36px; margin: 0; border-radius: 8px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-new { flex: 0 0 36px; width: 36px; height: 36px; min-height: 36px; padding: 8px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-panel); color: var(--studio-text); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-new svg, body[data-theme="studio"] #studioNavigator .studio-navigator-destinations svg, body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon svg, body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-destinations { display: grid; gap: 2px; margin-top: 12px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-destinations > :is(button,a) { display: flex; justify-content: flex-start; width: 100%; height: 36px; min-height: 36px; align-items: center; gap: 12px; padding: 0 8px; color: var(--studio-text); border: 0; border-radius: 7px; background: transparent; text-decoration: none; font: 500 14px/1.3 var(--pe-font-ui, system-ui); cursor: pointer; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-destinations > :is(button,a):hover { background: var(--studio-toolbar) !important; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-destinations svg { color: var(--studio-muted); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-destinations a > span:last-child { margin-left: auto; color: var(--studio-muted); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-body { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 8px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-panel { height: auto; overflow: visible; padding: 0 0 12px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-section { position: relative; padding: 0 0 14px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-section[hidden] { display: none; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-section-label { margin: 10px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-item { position: relative; border-radius: 8px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-item.current { background: var(--studio-accent-soft); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-canvas { display: flex; width: 100%; min-height: 36px; align-items: center; gap: 7px; padding: 7px 30px 7px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: var(--studio-text); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-canvas strong { overflow: hidden; flex: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-canvas small { max-width: 105px; overflow: hidden; font-size: 11px; color: var(--studio-muted); text-overflow: ellipsis; white-space: nowrap; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-canvas[aria-current] strong { color: var(--studio-accent-strong); font-weight: 600; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-canvas:hover { background: var(--studio-toolbar) !important; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-item .studio-navigator-current-close { top: 4px; right: 2px; width: 28px; height: 28px; min-height: 28px; padding: 6px; opacity: 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-open-item:is(.current,:hover,:focus-within) .studio-navigator-current-close { opacity: 1; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-recent-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 2px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-recent-heading h3 { flex-shrink: 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-tabs { margin: 0; padding: 2px; gap: 0; border: 0; border-radius: 8px; background: var(--studio-toolbar); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-tabs button { flex: 0 1 auto; border: 0; border-radius: 6px; background: transparent; height: 26px; min-height: 26px; padding: 0 9px; font-size: 11px; font-weight: 500; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-date { margin: 12px 9px 5px; font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group { position: relative; padding: 2px 0; border: 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading { background: transparent; border: 0; box-shadow: none; min-height: 54px; padding: 7px 8px; gap: 11px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading .studio-navigator-item-body strong { font-weight: 500; font-size: 13px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading .studio-navigator-item-icon.canvas { width: 42px; height: 32px; flex-basis: 42px; border-radius: 6px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading.current { background: transparent; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-heading:hover { background: var(--studio-toolbar); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group.has-chats > .studio-navigator-group-heading { padding-right: 61px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle { position: absolute; top: 15px; right: 4px; display: flex; align-items: center; gap: 3px; width: 54px; height: 28px; min-height: 28px; padding: 4px; color: var(--studio-muted); border: 0; background: transparent; font-size: 11px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle svg { width: 14px; height: 14px; flex-basis: 14px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-toggle[aria-expanded="true"] .studio-navigator-chevron { transform: rotate(90deg); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-conversations { margin: 3px 0 5px 28px; padding-left: 8px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-group-conversations[hidden] { display: none; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation { background: transparent; border: 0; box-shadow: none; gap: 8px; min-height: 34px; padding: 5px 8px; border-radius: 0 7px 7px 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon { color: var(--studio-muted); line-height: 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-icon svg { width: 15px; height: 15px; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-chat-time { flex-shrink: 0; font-size: 10px; color: var(--studio-muted); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-entry:is(:hover,:focus-within) .studio-navigator-chat-time { visibility: hidden; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-name { font-size: 12px; font-weight: 400; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation.current .studio-navigator-conversation-name { color: var(--studio-accent-strong); font-weight: 600; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-foot { display: block; padding: 8px 12px; background: transparent; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-save-row { display: flex; min-height: 32px; align-items: center; gap: 8px; }
+body[data-theme="studio"] #studioNavigator #studioNavigatorSaveStatus { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: var(--studio-muted); font-size: 11px; }
+body[data-theme="studio"] #studioNavigator #studioNavigatorSaveStatus::before { content: ""; flex: 0 0 7px; height: 7px; border-radius: 50%; background: var(--studio-muted); }
+body[data-theme="studio"] #studioNavigator #studioNavigatorSaveStatus[data-state="saved"]::before { background: #168463; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-save-row .studio-navigator-close { width: 28px; height: 28px; min-height: 28px; flex: 0 0 28px; padding: 6px; }
+body[data-theme="studio"] #studioNavigator #studioNavigatorOpenSection #canvasWorkspace { position: absolute; top: 0; right: 4px; width: auto; }
+body[data-theme="studio"] #studioNavigator #studioNavigatorOpenSection #canvasWorkspaceCount { display: none; }
+body[data-theme="studio"] #studioNavigator #studioNavigatorOpenSection #studioMcpMenu { top: 100%; bottom: auto; width: 200px; max-width: 260px; z-index: 8; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-source-state[data-tone="error"] { border-color: #e9c99f; background: #fff4e6; color: #945018; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-source-state[data-tone="error"] strong { color: inherit; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-empty { padding: 32px 20px; font-size: 12px; font-weight: 400; }
+@media (hover: none) { body[data-theme="studio"] .studio-navigator-open-item .studio-navigator-current-close { opacity: 1; } }
+#mcpStatusPopover .mcp-channel-icon svg { width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round; }
+body .studio-navigator-open-canvas .mcp-sidebar-badge { flex-shrink:1;max-width:100px;margin:0;font-size:10px; }
+body .studio-navigator-open-canvas.mcp-ai-updating { background:#eeebff; }
+
+body[data-theme="studio"] #studioNavigator .studio-navigator-tabs button[aria-selected="true"] { background: var(--studio-panel); box-shadow: 0 1px 3px #1820301a; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-tabs button::after { display: none; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation.current { background: var(--studio-accent-soft); }
+body[data-theme="studio"] #studioNavigator .studio-navigator-session-delete { opacity: 0; }
+body[data-theme="studio"] #studioNavigator .studio-navigator-conversation-entry:is(:hover,:focus-within) .studio-navigator-session-delete { opacity: 1; }
+@media (hover: none) { body[data-theme="studio"] #studioNavigator .studio-navigator-session-delete { opacity: 1; } }
+
+/* Integrated chrome: use the canvas bounds after both sidebars reserve space. */
+body[data-theme="studio"] .canvas-frame { --studio-navigator-width: min(320px, 82vw); }
+body[data-theme="studio"] .canvas-frame > #viewport { margin-left: 0; }
+body[data-theme="studio"] :is(.pen-tool-properties, .ai-tools-section) .color-orb-trigger::before {
+  content: ""; display: block; position: absolute; top: 5.5px; left: 5.5px;
+  background: var(--selected-color, #2563eb); pointer-events: none;
+}
+body[data-theme="studio"] #mcpToolbarToggle > .mcp-status-chevron { display: block; }
+@media (min-width: 701px) {
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #viewport > #canvasZoomControls {
+    flex-direction: column; width: 42px; height: auto; padding: 5px 3px;
+  }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] #canvasZoomControls .canvas-view-divider { width: 22px; height: 1px; flex-basis: 1px; margin: 2px 0; }
+  body[data-theme="studio"][data-shell-dock-layout] .canvas-auto-paused-notice {
+    position: fixed; left: var(--pe-shell-ai-x); right: auto;
+    bottom: var(--pe-shell-ai-bottom); max-width: min(300px, var(--pe-shell-canvas-width));
+    min-height: 40px; box-sizing: border-box; padding: 10px 14px;
+  }
+  body[data-theme="studio"][data-shell-dock-layout="vertical"] .canvas-auto-paused-notice { max-width: 150px; }
+  body[data-theme="studio"][data-shell-dock-layout="rows"] .canvas-auto-paused-notice { max-width: max(120px, calc(var(--pe-shell-canvas-width) - 204px)); }
+  body[data-theme="studio"][data-shell-dock-layout] #viewport > #mcpCanvasNotice {
+    left: calc(var(--pe-shell-view-x) + var(--pe-shell-canvas-width) / 2);
+    max-width: var(--pe-shell-canvas-width); bottom: var(--pe-shell-notice-bottom);
+  }
+}
+/* In two rows, clear the entire height of the upper controls, including a
+   wrapped paused notice; center alignment must never move the dock into it. */
+@media (min-width: 701px) {
+  body[data-theme="studio"][data-shell-dock-layout="rows"] {
+    --pe-shell-view-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-view-height)) / 2);
+    --pe-shell-ai-bottom: calc(var(--pe-shell-dock-bottom) + var(--pe-shell-dock-h) + 8px + (max(var(--pe-shell-view-height), var(--pe-shell-ai-height)) - var(--pe-shell-ai-height)) / 2);
+  }
+  body[data-theme="studio"][data-shell-dock-layout="rows"] .topbar .tool-group.primary-tools { bottom: var(--pe-shell-dock-bottom); }
+}
+
+@media (min-width: 701px) {
+  body[data-theme="studio"][data-shell-dock-sides="compact"] #viewport > #canvasZoomControls { flex-direction: column; width: 42px; height: auto; padding: 5px 3px; }
+  body[data-theme="studio"][data-shell-dock-sides="compact"] #canvasZoomControls .canvas-view-divider { width: 22px; height: 1px; flex-basis: 1px; margin: 2px 0; }
+  body[data-theme="studio"][data-shell-dock-sides="compact"] .primary-tools > .ai-tools-section { flex-direction: column; align-items: stretch; }
+  body[data-theme="studio"][data-shell-dock-sides="compact"] #aiToolbarRun { align-self: stretch; justify-content: center; }
+  body[data-theme="studio"][data-shell-dock-sides="compact"] .canvas-auto-paused-notice { max-width: 150px; }
+}
+body[data-theme="studio"] #canvasAgentClose { border-color: transparent; background: transparent; box-shadow: none; }
+body[data-theme="studio"] #canvasAgentClose:hover { background: var(--studio-toolbar); }

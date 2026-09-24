@@ -1,8 +1,6 @@
 "use strict";
 
-/* Read-only Canvas viewer bootstrap. Only the Cloud serves pages with
-   PENECHO_CONFIG.viewer = true (the public /canvas/view/:itemId shell);
-   the regular local app never enters this mode. */
+/* Read-only Canvas viewer bootstrap for Cloud Craft and live-share links. */
 
 (() => {
   // The viewer shell is served at /canvas/view/:itemId on PenEcho Cloud.
@@ -35,6 +33,9 @@
       previewOnly:"This Craft's full view needs a redemption. Showing the preview.",
       failed:"This Craft could not be opened.",
       backTitle:"Back to Echoes",
+      retry:"Try again",
+      saving:"Saving a copy…",
+      editHint:"Save a copy to your space and edit it",
     },
     zh: {
       loading:"正在打开这个 Craft…",
@@ -46,6 +47,9 @@
       previewOnly:"查看完整内容需要先赎回，正在展示预览图。",
       failed:"这个 Craft 暂时无法打开。",
       backTitle:"返回 Echoes",
+      retry:"重新加载",
+      saving:"正在保存副本…",
+      editHint:"保存副本到你的空间后编辑",
     },
   };
   if (live) {
@@ -67,6 +71,7 @@
 
   const topbar = document.createElement("div");
   topbar.className = "viewer-topbar";
+  topbar.setAttribute("role", "navigation");
   const brand = document.createElement("a");
   brand.className = "viewer-brand";
   // Live shares surface the site wordmark (same as the public header/404 page)
@@ -113,7 +118,12 @@
     link.setAttribute("aria-label", copy.takeFurther);
     const text = document.createElement("span");
     text.className = "viewer-action-label";
-    text.textContent = copy.takeFurther;
+    text.textContent = copying ? copy.saving : copy.takeFurther;
+    if (live) link.title = copy.editHint;
+    if (copying) {
+      link.setAttribute("aria-busy", "true");
+      link.setAttribute("aria-disabled", "true");
+    }
     const arrow = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     arrow.setAttribute("viewBox", "0 0 20 20");
     arrow.setAttribute("aria-hidden", "true");
@@ -125,7 +135,7 @@
 
   let copying = false;
   async function copyToMySpace(button) {
-    if(copying)return;copying=true;button?.setAttribute("aria-busy","true");
+    if(copying)return;copying=true;copyFailed=false;renderActions();
     try {
       const csrf = decodeURIComponent(document.cookie.split(";").map(v=>v.trim()).find(v=>v.startsWith("penecho_csrf="))?.slice(13) || "");
       const response=await fetch(`/api/v1/shares/${itemId}/copy`,{method:"POST",credentials:"same-origin",headers:{"x-penecho-csrf":csrf,"content-type":"application/json"},body:JSON.stringify({})});
@@ -142,6 +152,13 @@
     // The live-share brand remains available while loading or unavailable,
     // but account and edit actions only make sense after content is ready.
     if (live && !contentReady) return;
+    if (live && accountState.kind === "signed-in") {
+      const name = accountState.account.name || copy.openDashboard;
+      const account = chip(name, `${name} · ${copy.openDashboard}`, config.dashboardUrl, "viewer-account-action");
+      account.setAttribute("aria-label", `${name} · ${copy.openDashboard}`);
+      account.children[0].textContent = Array.from(name.trim())[0]?.toLocaleUpperCase() || "P";
+      actions.append(account);
+    }
     actions.append(primaryAction());
     if (copyFailed && contentReady) {
       const message = document.createElement("span");
@@ -150,7 +167,7 @@
       message.textContent = copy.copyFailed;
       actions.append(message);
     }
-    if (accountState.kind !== "signed-in") return;
+    if (live || accountState.kind !== "signed-in") return;
     actions.append(chip(
       accountState.account.name || copy.openDashboard,
       copy.openDashboard,
@@ -202,6 +219,14 @@
     if (live) { contentReady = false; renderActions(); }
     status.dataset.copyKey = copyKey;
     status.innerHTML = `<div>${copy[copyKey] || ""}${config.previewUrl ? `<img src="${config.previewUrl}" alt="">` : ""}</div>`;
+    if (live && copyKey === "failed") {
+      const retry = document.createElement("button");
+      retry.className = "viewer-retry";
+      retry.type = "button";
+      retry.textContent = copy.retry;
+      retry.addEventListener("click", () => location.reload());
+      status.append(retry);
+    }
   }
 
   window.addEventListener("penecho:languagechange", applyViewerLanguage);

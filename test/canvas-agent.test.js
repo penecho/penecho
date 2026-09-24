@@ -3027,7 +3027,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(selectProjectSource,/canvasAgentChangeContext\(\{submitExecution\}\)/);
   assert.doesNotMatch(selectProjectSource,/canvasAgentBeginLocalConversation|canvasAgentDropSessionIdentity|canvasAgentStartNewConversation/);
   assert.doesNotMatch(source,/function canvasAgentSetAccessMode|canvasAgentProjectFull\.addEventListener/);
-  assert.match(html,/<dialog id="canvasAgentProjectRemoveDialog"[^>]*class="studio-session-delete-dialog"[^>]*role="alertdialog"[^>]*aria-modal="true"[^>]*data-pe-surface="alert"[^>]*data-pe-size="xs"[^>]*data-pe-layout="single"/);
+  assert.match(html,/<dialog id="canvasAgentProjectRemoveDialog"[^>]*class="studio-session-delete-dialog"[^>]*role="alertdialog"[^>]*aria-modal="true"[^>]*data-pe-surface="alert"[^>]*data-pe-size="s"[^>]*data-pe-layout="single"/);
   assert.match(html,/id="canvasAgentProjectRemoveCancel"[^>]*data-pe-button="secondary"[\s\S]*?id="canvasAgentProjectRemoveConfirm"[^>]*data-pe-button="danger-primary"/);
   assert.match(functionSource(source,"canvasAgentRemoveProject"),/canvasAgentRemoveFolderConfirm[\s\S]*?canvasAgentRemoveUploadConfirm[\s\S]*?canvasAgentProjectRemoveDialog\.showModal\(\)/);
   assert.doesNotMatch(functionSource(source,"canvasAgentRemoveProject"),/window\.confirm/);
@@ -3381,14 +3381,14 @@ test("PenEcho Agent open panel and active turns suppress Auto AI while submitted
   assert.match(sendRequest,/if \(!canvasAgent\.requestPending\) canvasAgentBeginRequest\(\)[\s\S]*canvasAgentSendEnvelope\(type,payload\)/);
   assert.match(sendRequest,/catch \(error\)[\s\S]*canvasAgentRequestDidNotSend\(\)/);
   assert.match(functionSource(agent,"canvasAgentSetRunning"),/if \(running\) canvasAgentPauseAutomaticAI\(\);[\s\S]*else canvasAgentResumeAutomaticAI\(\)/);
-  assert.match(functionSource(agent,"canvasAgentAutomaticAIStatusKey"),/if \(!state\.auto\) return null;[\s\S]*requestPending \|\| canvasAgent\.running[\s\S]*canvasAgentAutoAIRequestPaused[\s\S]*canvasAgentIsOpen\(\)[\s\S]*canvasAgentAutoAIFocusPaused/);
+  assert.match(functionSource(agent,"canvasAgentAutomaticAIStatusKey"),/if \(!state\.auto\) return null;[\s\S]*canvasAgentIsOpen\(\)[\s\S]*canvasAgentAutoAIFocusPaused/);
   assert.match(functionSource(agent,"canvasAgentSyncAutomaticAIStatus"),/automaticAIStatusRestore = \{ key:state\.statusKey, text:status\.textContent \}[\s\S]*setStatusKey\(nextKey\)[\s\S]*CANVAS_AGENT_AUTO_AI_STATUS_KEYS\.has\(state\.statusKey\)[\s\S]*setStatusKey\(previous\.key\)/);
   assert.match(functionSource(agent,"canvasAgentPauseAutomaticAI"),/canvasAgentSyncAutomaticAIStatus\(\)/);
   assert.match(functionSource(agent,"canvasAgentResumeAutomaticAI"),/canvasAgentSyncAutomaticAIStatus\(\)/);
   assert.match(functionSource(core,"setAutoEnabled"),/updateAutoControl\(\);[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
   for (const source of [core,zh]) {
     assert.match(source,/canvasAgentAutoAIFocusPaused/);
-    assert.match(source,/canvasAgentAutoAIRequestPaused/);
+    assert.doesNotMatch(source,/canvasAgentAutoAIRequestPaused/);
   }
   assert.match(agent,/canvasAgentPanel\.addEventListener\("focusin",canvasAgentPauseAutomaticAI\)/);
   assert.match(agent,/canvasAgentPanel\.addEventListener\("focusout",\(\)=>queueMicrotask\(canvasAgentResumeAutomaticAI\)\)/);
@@ -3403,11 +3403,11 @@ test("PenEcho Agent open panel and active turns suppress Auto AI while submitted
   assert.match(agent,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"/);
 });
 
-test("PenEcho Agent explains each Auto AI pause reason and restores the prior top status",()=>{
+test("PenEcho Agent keeps the open-panel Auto AI notice during requests and restores the prior top status",()=>{
   const source=read("src/client/app/canvas-agent-runtime.js"),runtime=vm.runInNewContext(`(()=>{
     let panelOpen=true;
-    const CANVAS_AGENT_AUTO_AI_STATUS_KEYS=new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused"]),
-      inside={},outside={},document={activeElement:outside,body:{classList:{contains:()=>panelOpen}}},canvasAgentPanel={hidden:false,contains:target=>target===inside},
+    const CANVAS_AGENT_AUTO_AI_STATUS_KEYS=new Set(["canvasAgentAutoAIFocusPaused"]),
+      inside={},outside={},notice={hidden:true,querySelector:()=>({textContent:""})},document={activeElement:outside,querySelector:()=>notice,body:{classList:{contains:()=>panelOpen,toggle(){}}}},canvasAgentPanel={hidden:false,contains:target=>target===inside},
       status={textContent:"Ready"},state={auto:true,statusKey:"ready"},canvasAgent={requestPending:false,running:false,automaticAIStatusRestore:null};
     const t=key=>key==="ready"?"Ready":key,setStatusKey=key=>{state.statusKey=key;status.textContent=t(key);},setStatus=(text,key=null)=>{state.statusKey=key;status.textContent=text;};
     ${functionSource(source,"canvasAgentIsOpen")}
@@ -3421,7 +3421,7 @@ test("PenEcho Agent explains each Auto AI pause reason and restores the prior to
   assert.equal(runtime.state.statusKey,"canvasAgentAutoAIFocusPaused");
   runtime.canvasAgent.requestPending=true;
   runtime.sync();
-  assert.equal(runtime.state.statusKey,"canvasAgentAutoAIRequestPaused");
+  assert.equal(runtime.state.statusKey,"canvasAgentAutoAIFocusPaused");
   runtime.canvasAgent.requestPending=false;
   runtime.sync();
   assert.equal(runtime.suppresses(),true);

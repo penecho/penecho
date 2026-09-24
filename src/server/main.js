@@ -258,7 +258,7 @@ const autoDelayValue = process.env.AUTO_AI_DELAY_SECONDS?.trim();
 const configuredAutoDelay = autoDelayValue ? Number(autoDelayValue) : NaN;
 const AUTO_AI_DELAY_MS = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 && configuredAutoDelay <= 60 ? Math.round(configuredAutoDelay * 1000) : 5000;
 const canvasAgentAutoOpenText = process.env.PENECHO_CANVAS_AGENT_AUTO_OPEN?.trim();
-const canvasAgentAutoOpenValue = canvasAgentAutoOpenText ? optionalBoolean(canvasAgentAutoOpenText) : true;
+const canvasAgentAutoOpenValue = canvasAgentAutoOpenText ? optionalBoolean(canvasAgentAutoOpenText) : false;
 const CANVAS_AGENT_AUTO_OPEN = canvasAgentAutoOpenValue === true;
 const debugArtifactsValue = optionalBoolean(process.env.PENECHO_DEBUG_ARTIFACTS);
 const DEBUG_ARTIFACTS = debugArtifactsValue === true;

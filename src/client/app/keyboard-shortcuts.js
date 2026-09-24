@@ -1,6 +1,7 @@
   const KEYBOARD_SHORTCUT_STORAGE_KEY = "penecho-keyboard-shortcuts-v1";
   const KEYBOARD_SHORTCUT_COMMANDS = Object.freeze([
-    { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Tab" },
+    { id:"pen-tool", group:"essential", labelKey:"pen", descriptionKey:"shortcutPenHelp", defaultChord:"p" },
+    { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Mod+k" },
     { id:"save-canvas", group:"essential", labelKey:"saveCanvas", descriptionKey:"shortcutSaveCanvasHelp", defaultChord:"Mod+s" },
     { id:"undo", group:"essential", labelKey:"undo", descriptionKey:"shortcutUndoHelp", defaultChord:"Mod+z" },
     { id:"redo", group:"essential", labelKey:"redo", descriptionKey:"shortcutRedoHelp", defaultChord:"Mod+Shift+z" },
@@ -111,6 +112,10 @@
     requestAnimationFrame(() => document.querySelector(`[data-shortcut-edit="${commandId}"]`)?.focus({ preventScroll:true }));
   }
   function renderKeyboardShortcuts() {
+    const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
+    if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
+    const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
+    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["focus-agent"] || ""); shortcut.hidden = !keyboardShortcutBindings["focus-agent"]; }
     const container = document.querySelector("#settingsShortcutList");
     if (!container) return;
     container.replaceChildren();
@@ -260,6 +265,8 @@
   }
   function keyboardShortcutCanRun(command, event, chord) {
     if (!command || event.defaultPrevented || event.isComposing || event.repeat) return false;
+    // Tab is the global Agent toggle, including pointer focus and its composer.
+    if (command.id === "focus-agent" && chord === "Tab" && !keyboardShortcutBlockingSurfaceOpen()) return canvasAgentAvailable();
     if (state.interactingWidgetId) return false;
     if (command.id === "open-settings" && settings.open) return true;
     if (keyboardShortcutBlockingSurfaceOpen()) return false;
@@ -270,6 +277,7 @@
     return true;
   }
   function keyboardShortcutPerform(commandId) {
+    if (commandId === "pen-tool") { setCanvasMode("pen"); return true; }
     if (commandId === "focus-agent") {
       const opening = canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open");
       if (opening) openCanvasAgent({ focus:false, animate:true });
@@ -307,7 +315,7 @@
     }
     const chord = keyboardShortcutChordFromEvent(event);
     if (!chord) return;
-    const command = KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
+    const command = chord === "Tab" ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
     if (!keyboardShortcutCanRun(command, event, chord)) return;
     event.preventDefault();
     event.stopImmediatePropagation();

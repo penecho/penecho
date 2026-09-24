@@ -1,6 +1,7 @@
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
+      STUDIO_NAVIGATOR_OPEN_KEY = "penecho-studio-navigator-open",
       STUDIO_EDGE_SWIPE_START_PX = 28,
       STUDIO_EDGE_SWIPE_COMMIT_PX = 56,
       STUDIO_EDGE_SWIPE_CANCEL_PX = 36,
@@ -39,7 +40,7 @@
       saveCanvasLabel = document.querySelector("#saveCanvasLabel"),
       canvasWelcome = document.querySelector("#canvasWelcome"),
       studioNavigatorCompactMedia = window.matchMedia?.("(max-width: 1100px)");
-    let studioNavigatorOpenPreference = false,
+    let studioNavigatorOpenPreference = storedStudioNavigatorOpen(),
       studioNavigatorMcpEnabled = false,
       studioNavigatorActiveTab = storedStudioNavigatorTab(),
       studioNavigatorWorkPreviewUrls = new Map(),
@@ -60,6 +61,13 @@
       studioNavigatorOpenTimer = 0,
       studioNavigatorHistoryDirty = true,
       studioEdgeSwipe = null;
+    const studioNavigatorExpandedGroups = new Map();
+
+    function storedStudioNavigatorOpen() {
+      if (studioNavigatorCompactMedia?.matches) return false;
+      try { return localStorage.getItem(STUDIO_NAVIGATOR_OPEN_KEY) !== "false"; }
+      catch { return true; }
+    }
 
     function storedStudioNavigatorTab() {
       try {
@@ -102,7 +110,13 @@
       canvasDocumentNameConfirm.disabled = snapshotSaveInProgress;
       canvasDocumentNameConfirm.setAttribute("aria-busy", String(snapshotSaveInProgress));
       canvasDocumentSaveState.dataset.state = stateKey;
+      canvasDocumentSaveState.disabled = snapshotSaveInProgress;
       canvasDocumentSaveLabel.textContent = t(copyKey);
+      const sidebarStatus = document.getElementById("studioNavigatorSaveStatus");
+      if (sidebarStatus) {
+        sidebarStatus.dataset.state = stateKey;
+        sidebarStatus.textContent = [saved ? snapshotLocationLabel(state.snapshotLocation) : "", t(copyKey)].filter(Boolean).join(" · ");
+      }
       saveCanvasLabel.textContent = t(snapshotSaveInProgress ? "snapshotSavingShort" : "saveCurrentSnapshot");
       canvasWelcome.hidden = !active || state.viewMode || studioCanvasHasContent();
     }
@@ -156,7 +170,7 @@
       }
     }
     function updateStudioNavigatorSurfaceInert() {
-      const blocked = studioNavigatorIsStudio() && studioNavigatorIsOpen() && studioNavigatorIsCompact() && !studioNavigatorIsMcpDocked() && !state.viewMode;
+      const blocked = false; // The navigator reserves space and never blocks the canvas.
       if (blocked && !view.hasAttribute("inert")) {
         view.inert = true;
         view.dataset.studioNavigatorInert = "true";
@@ -179,7 +193,7 @@
       const toggleKey = open ? "studioNavigatorClose" : "studioNavigatorOpen";
       studioNavigatorToggle.setAttribute("aria-label", t(toggleKey));
       studioNavigatorToggle.setAttribute("title", t(toggleKey));
-      studioNavigatorScrim.hidden = !(active && open && studioNavigatorIsCompact() && !studioNavigatorIsMcpDocked() && !state.viewMode);
+      studioNavigatorScrim.hidden = true;
       if (!deferSurface) updateStudioNavigatorSurfaceInert();
     }
     function suspendStudioAgentForNavigator() {
@@ -223,13 +237,14 @@
       }
       studioNavigatorTransitionHandler = event => {
         const property = studioNavigatorIsMcpDocked() ? "opacity" : "transform";
-        if (event.target === studioNavigator && event.propertyName === property) settle();
+        if (event.target === studioNavigator && (event.propertyName === property || event.propertyName === "margin-left")) settle();
       };
       studioNavigator.addEventListener("transitionend", studioNavigatorTransitionHandler);
       studioNavigatorOpenTimer = setTimeout(settle, STUDIO_NAVIGATOR_SETTLE_FALLBACK_MS);
     }
-    function setStudioNavigatorOpen(open, { restoreAgent = true } = {}) {
+    function setStudioNavigatorOpen(open, { restoreAgent = true, persist = false } = {}) {
       studioNavigatorOpenPreference = Boolean(open);
+      if (persist) { try { localStorage.setItem(STUDIO_NAVIGATOR_OPEN_KEY, String(Boolean(open))); } catch {} }
       if (open) restoreCanvasChromeMaterial();
       document.body.classList.toggle("studio-navigator-open", studioNavigatorIsStudio() && studioNavigatorOpenPreference);
       updateStudioNavigatorA11y({ deferSurface:studioNavigatorIsStudio() });
@@ -261,7 +276,9 @@
       list.replaceChildren(empty);
     }
     function studioNavigatorMetaTime(value) {
-      return Number(value)>0?canvasAgentHistoryTime(Number(value)):"";
+      if(!(Number(value)>0))return "";
+      const date=new Date(Number(value)),today=new Date();today.setHours(0,0,0,0);
+      return date>=today?date.toLocaleTimeString(state.language==="zh"?"zh-CN":"en-GB",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"}):date.toLocaleDateString(state.language==="zh"?"zh-CN":"en",{month:"short",day:"numeric"});
     }
     function studioNavigatorCanvasMeta(current, open, location, updatedAt) {
       return [current ? t("studioNavigatorCurrent") : open ? t("studioNavigatorOpened") : t("studioNavigatorNotOpened"),
@@ -353,6 +370,7 @@
       if (studioNavigatorIsCompact() && !studioNavigatorIsMcpDocked()) setStudioNavigatorOpen(false);
     }
     function collapseStudioNavigatorForWorkspaceFocus(event) {
+      if (!studioNavigatorIsCompact()) return false;
       if (!studioNavigatorIsOpen() || studioNavigatorIsMcpDocked()) return false;
       const target=event?.target;
       if (target && (studioNavigator.contains(target) || studioNavigatorToggle.contains(target))) return false;
@@ -479,7 +497,7 @@
       return label;
     }
     function studioNavigatorConversationEntry(group,conversation) {
-      const entry=document.createElement("div"),row=document.createElement("button"),remove=document.createElement("button"),body=document.createElement("span"),title=document.createElement("strong"),current=group.current&&conversation.id===canvasAgent.currentConversation?.id,conversationName=conversation.title||t("canvasAgentHistoryUntitled"),deleteLabel=t("studioNavigatorDeleteSession").replace("{name}",conversationName);
+      const entry=document.createElement("div"),row=document.createElement("button"),remove=document.createElement("button"),body=document.createElement("span"),title=document.createElement("strong"),current=Boolean(group.current&&conversation.id===canvasAgent.currentConversation?.id),conversationName=conversation.title||t("canvasAgentHistoryUntitled"),deleteLabel=t("studioNavigatorDeleteSession").replace("{name}",conversationName);
       entry.className="studio-navigator-conversation-entry";
       row.type="button";row.className="studio-navigator-item studio-navigator-conversation";row.dataset.conversationId=conversation.id;row.classList.toggle("current",current);
       peChoice(row);
@@ -488,7 +506,12 @@
       title.className="studio-navigator-conversation-name";
       title.textContent=conversationName;
       title.title=conversationName;
-      body.append(title);row.append(body);
+      const icon=document.createElement("span"),time=document.createElement("small");
+      icon.className="studio-navigator-chat-icon";
+      icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4Z"/></svg>';
+      time.className="studio-navigator-chat-time";
+      time.textContent=studioNavigatorMetaTime(conversation.updatedAt||conversation.createdAt);
+      body.append(title);row.append(icon,body,time);
       row.addEventListener("click",()=>void openStudioConversation(group,conversation,row));
       remove.type="button";remove.className="studio-navigator-session-delete";remove.setAttribute("aria-label",deleteLabel);remove.title=deleteLabel;
       peButton(remove,"toolbar","compact");
@@ -504,7 +527,7 @@
       heading.type="button";
       peChoice(heading);
       heading.className="studio-navigator-group-heading studio-navigator-canvas-heading";
-      heading.classList.toggle("current",group.current);
+      heading.classList.toggle("current",Boolean(group.current));
       if(group.current)heading.setAttribute("aria-current","page");
       headingBody.className="studio-navigator-item-body";
       name.textContent=group.name;
@@ -525,13 +548,28 @@
         void runSnapshotLoadAction(heading,()=>requestLoadSnapshot(identity.id,identity.location));
       });
       section.append(heading);
-      if(group.documentId)appendStudioCanvasClose(section,group.documentId,group.current,group.name);
-
+      queueMicrotask(()=>mcpRenderSidebarBadges());
       if(includeConversations&&group.conversations.length){
-        const list=document.createElement("div");
+        const list=document.createElement("div"),toggle=document.createElement("button");
         list.className="studio-navigator-group-conversations";
-        for(const conversation of group.conversations)list.append(studioNavigatorConversationEntry(group,conversation));
-        section.append(list);
+        const query=studioNavigatorSearchQuery();
+        const conversations=query?group.conversations.filter(conversation=>`${conversation.title||""} ${studioNavigatorConversationSummary(conversation)}`.toLocaleLowerCase(state.language==="zh"?"zh-CN":"en").includes(query)):group.conversations;
+        const expanded=Boolean(query)||studioNavigatorExpandedGroups.get(group.canvasKey)===true;
+        list.hidden=!expanded;
+        for(const conversation of conversations)list.append(studioNavigatorConversationEntry(group,conversation));
+        toggle.type="button";toggle.className="studio-navigator-chat-toggle";
+        peButton(toggle,"ghost","compact");
+        toggle.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4Z"/></svg><span></span><svg class="studio-navigator-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+        toggle.querySelector("span").textContent=String(conversations.length);
+        toggle.setAttribute("aria-label",t("studioNavigatorSessionCount").replace("{count}",String(conversations.length)));
+        toggle.setAttribute("aria-expanded",String(expanded));
+        toggle.addEventListener("click",()=>{
+          list.hidden=!list.hidden;
+          studioNavigatorExpandedGroups.set(group.canvasKey,!list.hidden);
+          toggle.setAttribute("aria-expanded",String(!list.hidden));
+        });
+        section.classList.add("has-chats");
+        section.append(toggle,list);
       }
       return section;
     }
@@ -629,6 +667,7 @@
       return true;
     }
     function renderStudioAgentHistory() {
+      renderStudioNavigatorOpenCanvases();
       if (!studioAgentRecentList) return;
       if (!studioNavigatorIsOpen()) {
         studioNavigatorHistoryDirty = true;
@@ -643,7 +682,7 @@
         studioNavigatorEmpty(studioAgentRecentList, query ? "studioNavigatorAgentNoMatch" : "studioNavigatorAgentEmpty");
         return;
       }
-      for (const group of groups) studioAgentRecentList.append(studioNavigatorGroupSection(group,{previewUrls:studioNavigatorAgentPreviewUrls}));
+      appendStudioNavigatorRecentGroups(studioAgentRecentList,groups,{previewUrls:studioNavigatorAgentPreviewUrls});
     }
     function revokeStudioNavigatorPreviewUrlWhenSettled(url, image) {
       const revoke = () => {
@@ -679,6 +718,47 @@
       preview.append(image);
       return preview;
     }
+    function renderStudioNavigatorOpenCanvases() {
+      const list=document.getElementById("studioNavigatorOpenList"),section=document.getElementById("studioNavigatorOpenSection");
+      if(!list||!section)return;
+      section.hidden=Boolean(studioNavigatorSearchQuery());
+      if(section.hidden)return;
+      list.replaceChildren();
+      const groups=studioNavigatorWorkGroups().filter(group=>group.documentId);
+      document.getElementById("studioNavigatorOpenTitle").textContent=`${t("studioNavigatorOpened")} · ${groups.length}`;
+      for(const group of groups){
+        const entry=document.createElement("section"),row=document.createElement("button"),name=document.createElement("strong"),status=document.createElement("small"),dot=document.createElement("span");
+        entry.className="studio-navigator-open-item";
+        row.type="button";row.className="studio-navigator-open-canvas";peChoice(row);
+        row.dataset.workspaceDocumentId=group.documentId;
+        if(group.current)row.setAttribute("aria-current","page");
+        row.disabled=canvasDocuments.switching;
+        name.textContent=group.name;name.title=group.name;
+        dot.className="workspace-update-dot";dot.hidden=!group.unseen;dot.setAttribute("role","img");dot.setAttribute("aria-label",canvasDocumentsCopy("New updates","有新内容"));
+        const session=[...mcpRuntime.sessions.values()].find(session=>session.documentId===group.documentId&&!session.closed&&session.client);
+        status.textContent=!session&&!group.location?t("canvasSaveStateUnsaved"):"";
+        status.title=status.textContent;
+        row.append(name,dot,status);
+        row.addEventListener("click",()=>canvasDocumentsUiAction(async()=>{await canvasDocumentsShow(group.documentId);closeStudioNavigatorAfterCompactAction();}));
+        entry.append(row);appendStudioCanvasClose(entry,group.documentId,group.current,group.name);list.append(entry);
+        queueMicrotask(()=>mcpRenderSidebarBadges());
+      }
+    }
+    function appendStudioNavigatorRecentGroups(list,groups,options={}) {
+      let previous="";
+      const today=new Date();today.setHours(0,0,0,0);
+      const yesterday=new Date(today);yesterday.setDate(yesterday.getDate()-1);
+      const week=new Date(today);week.setDate(week.getDate()-6);
+      for(const group of [...groups].sort((a,b)=>b.updatedAt-a.updatedAt)){
+        if(!group.location&&!group.conversations.length)continue;
+        const timestamp=Number(group.updatedAt)||0;
+        const key=timestamp>=+today?"studioNavigatorToday":timestamp>=+yesterday?"studioNavigatorYesterday":timestamp>=+week?"studioNavigatorThisWeek":"studioNavigatorEarlier";
+        if(!studioNavigatorSearchQuery()&&key!==previous){
+          const label=studioNavigatorSectionLabel(key);label.classList.add("studio-navigator-date");list.append(label);previous=key;
+        }
+        list.append(studioNavigatorGroupSection(group,options));
+      }
+    }
     function renderStudioWorkHistory() {
       if (!studioWorkRecentList) return;
       if (!studioNavigatorIsOpen()) {
@@ -686,13 +766,14 @@
         return;
       }
       studioNavigatorHistoryDirty = false;
+      renderStudioNavigatorOpenCanvases();
       releaseStudioNavigatorPreviewUrls(studioNavigatorWorkPreviewUrls);
       const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter((group)=>studioNavigatorGroupMatches(group,query));
       studioNavigatorQueueCanvasGroupSnapshots(groups);
       studioWorkRecentList.replaceChildren();
-      for(const group of groups)studioWorkRecentList.append(studioNavigatorGroupSection(group));
-      renderStudioNavigatorSourceStates(studioWorkRecentList,query);
+      appendStudioNavigatorRecentGroups(studioWorkRecentList,groups);
       if(!studioWorkRecentList.childElementCount)studioNavigatorEmpty(studioWorkRecentList,query?"studioNavigatorNoMatch":"studioNavigatorEmpty");
+      renderStudioNavigatorSourceStates(studioWorkRecentList,query);
     }
     function renderStudioCanvasHistory() {
       if (!studioCanvasRecentList) return;
@@ -701,14 +782,13 @@
         return;
       }
       studioNavigatorHistoryDirty = false;
+      renderStudioNavigatorOpenCanvases();
       releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
       const query=studioNavigatorSearchQuery(),groups=studioNavigatorWorkGroups().filter(group=>group.documentId||group.location);
       studioCanvasRecentList.replaceChildren();
-      for(const group of groups.filter(group=>studioNavigatorGroupMatches(group,query))){
-        studioCanvasRecentList.append(studioNavigatorGroupSection(group,{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls}));
-      }
-      renderStudioNavigatorSourceStates(studioCanvasRecentList,query);
+      appendStudioNavigatorRecentGroups(studioCanvasRecentList,groups.filter(group=>studioNavigatorGroupMatches(group,query)),{includeConversations:false,previewUrls:studioNavigatorCanvasPreviewUrls});
       if(!studioCanvasRecentList.childElementCount)studioNavigatorEmpty(studioCanvasRecentList,groups.length?"studioNavigatorCanvasNoMatch":"studioNavigatorCanvasEmpty");
+      renderStudioNavigatorSourceStates(studioCanvasRecentList,query);
     }
     let studioMcpFollowLatest=true,studioMcpLatestDocumentId=null,studioMcpPendingDocumentId=null,studioMcpFollowing=false,studioMcpCloseQueue=null;
     let studioMcpLatestRegion=null,studioMcpPendingRegion=null,studioMcpUpdateRevision=0;
@@ -834,6 +914,7 @@
       return studioNavigatorWorkGroups().filter(group=>group.documentId);
     }
     function renderStudioMcpHistory() {
+      renderStudioNavigatorOpenCanvases();
       syncStudioMcpActions();
       if(!studioNavigatorIsOpen()){studioNavigatorHistoryDirty=true;return;}
       releaseStudioNavigatorPreviewUrls(studioNavigatorCanvasPreviewUrls);
@@ -1051,19 +1132,23 @@
       if(opening&&studioNavigatorToggle.dataset.workspaceUpdates==="true"){
         studioNavigatorSearch.value="";setStudioNavigatorTab(studioNavigatorMcpEnabled?"mcp":"all");
       }
-      setStudioNavigatorOpen(opening);
+      setStudioNavigatorOpen(opening, { persist:true });
     }
     studioNavigatorToggle.addEventListener("click", toggleStudioWorkspaceNavigator);
-    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false));
+    studioNavigatorClose.addEventListener("click", () => setStudioNavigatorOpen(false, { persist:true }));
     studioNavigatorScrim.addEventListener("click", () => setStudioNavigatorOpen(false));
     studioNavigatorSearch.addEventListener("input", renderActiveStudioNavigatorHistory);
+    studioNavigatorSearch.addEventListener("keydown", event => {
+      if(event.key==="Escape"&&studioNavigatorSearch.value){event.preventDefault();event.stopPropagation();studioNavigatorSearch.value="";renderActiveStudioNavigatorHistory();}
+      else if(event.key==="Enter"){event.preventDefault();studioNavigator.querySelector('.studio-navigator-panel:not([hidden]) .studio-navigator-group-heading')?.click();}
+    });
     studioNavigatorMcpTab.addEventListener("click",()=>setStudioNavigatorTab("mcp"));
     document.getElementById("studioMcpCloseAll")?.addEventListener("click",()=>canvasDocumentsUiAction(closeAllStudioMcpCanvases));
     document.getElementById("studioMcpFollowLatest")?.addEventListener("click",()=>{
       studioMcpFollowLatest=!studioMcpFollowLatest;
       studioMcpPendingDocumentId=studioMcpFollowLatest?studioMcpLatestDocumentId:null;
       studioMcpPendingRegion=studioMcpFollowLatest?studioMcpLatestRegion:null;
-      syncStudioMcpActions();void flushStudioMcpFollowLatest();
+      syncStudioMcpActions();mcpRenderStatusPopover();void flushStudioMcpFollowLatest();
     });
     const resumeMcpFollow=()=>{if(studioMcpFollowLatest&&studioMcpPendingDocumentId)queueMicrotask(()=>void flushStudioMcpFollowLatest());};
     window.addEventListener("pointerup",resumeMcpFollow);
@@ -1122,6 +1207,7 @@
       workspaceChanged:studioWorkspaceChanged,
       noteMcpContentUpdate:noteStudioMcpContentUpdate,
       flushMcpFollow:flushStudioMcpFollowLatest,
+      mcpFollowEnabled:()=>studioMcpFollowLatest,
       syncMcp:syncStudioNavigatorMcp,
       isMcpDocked:studioNavigatorIsMcpDocked,
       canvasDidLoad:studioNavigatorCanvasDidLoad,
@@ -1138,4 +1224,5 @@
     });
     setStudioNavigatorTab(studioNavigatorActiveTab, { persist:false });
     syncStudioNavigatorTheme(state.theme);
+    if(studioNavigatorIsOpen())void refreshStudioNavigatorSources();
   }

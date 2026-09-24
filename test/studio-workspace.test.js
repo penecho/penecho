@@ -59,9 +59,9 @@ test("opening the update indicator reveals Recent Work without a stale search fi
 
 test("background MCP activity does not highlight the visible Canvas",()=>{
   const runtimeSource=fs.readFileSync(path.join(root,"src/client/app/mcp-runtime.js"),"utf8");
-  const ring={setAttribute(key,value){this[key]=value;}},button={},newButton={},notice={};
+  const ring={setAttribute(key,value){this[key]=value;}},button={},newButton={},notice={setAttribute(){}};
   const runtime={ready:true,socket:{readyState:1},sessions:new Map(),pendingView:new Map(),glowing:true,activeMutation:"AI",mutationDocumentId:"background"};
-  const context=vm.createContext({mcpRuntime:runtime,window:{PENECHO_CONFIG:{runtime:"local"}},WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
+  const context=vm.createContext({mcpUiState:()=>({connected:true,retrying:false}),mcpLiveSessions:()=>[],mcpUiText:en=>en,mcpRenderStatusPopover(){},mcpRenderSidebarBadges(){},mcpRuntime:runtime,window:{PENECHO_CONFIG:{runtime:"local"}},WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
     mcpEl:id=>({mcpCanvasRing:ring,mcpCanvasNotice:notice,mcpCanvasNoticeButton:button,mcpShowNewContent:newButton})[id],
   });
   vm.runInContext(extract("mcpAccessLabel",runtimeSource)+extract("mcpRenderCanvasStatus",runtimeSource),context);
@@ -142,7 +142,7 @@ test("opening Agent or Library never automatically hides the MCP dock",()=>{
 });
 test("manually closing and reopening MCP preserves its selected tab and persistence",()=>{
   const classes=new Set(["studio-navigator-open"]);
-  const context=vm.createContext({studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
+  const context=vm.createContext({studioNavigatorIsCompact:()=>false,studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
     document:{body:{classList:{contains:key=>classes.has(key),toggle:(key,value)=>value?classes.add(key):classes.delete(key)}},activeElement:{}},
     studioNavigator:{contains:()=>false},restoreCanvasChromeMaterial(){},updateStudioNavigatorA11y(){},suspendStudioAgentForNavigator(){},scheduleStudioNavigatorOpenWork(){},
   });
@@ -205,7 +205,7 @@ test("empty draft timestamps use their stable first appearance rather than sideb
     currentCanvasDisplayName:()=>"",t:key=>key,canvasAgentHistoryForCanvas:()=>[],canvasAgentHistoryTime:value=>String(value)});
   vm.runInContext(extract("studioNavigatorWorkGroups")+extract("studioNavigatorMetaTime"),context);
   assert.equal(context.studioNavigatorWorkGroups()[0].updatedAt,12345);
-  assert.equal(context.studioNavigatorMetaTime(12345),"12345");
+  assert.equal(context.studioNavigatorMetaTime(12345),new Date(12345).toLocaleDateString("en",{month:"short",day:"numeric"}));
   assert.equal(context.studioNavigatorMetaTime(0),"","unknown timestamps must not pretend that old documents were just created");
 });
 

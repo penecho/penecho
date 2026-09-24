@@ -46,6 +46,8 @@
     "public/canvas-agent-activity.js",
     "public/app.js",
     "public/playground.css",
+    "public/studio-shell.css",
+    "public/studio-shell.js",
     "public/playground/liveclay-v1.js",
     "public/playground/three-LICENSE.txt",
     "public/draw.js",

@@ -97,7 +97,7 @@ function normalizeSettings(input, options = {}) {
   const canvasAgentTurnLimit = number(input.canvasAgentTurnLimit ?? DEFAULT_CANVAS_AGENT_TURN_LIMIT, "PenEcho Agent rounds per request", MIN_CANVAS_AGENT_TURN_LIMIT, Infinity, true);
   const autoDelay = number(input.autoDelay ?? 5, "Auto AI delay", 0, 10);
   if (!Number.isInteger(autoDelay * 10)) throw new Error("Auto AI delay must have at most one decimal place.");
-  const canvasAgentAutoOpen = input.canvasAgentAutoOpen === undefined ? true : input.canvasAgentAutoOpen;
+  const canvasAgentAutoOpen = input.canvasAgentAutoOpen === undefined ? false : input.canvasAgentAutoOpen;
   if (typeof canvasAgentAutoOpen !== "boolean") throw new Error("PenEcho Agent auto-open must be true or false.");
   const traceLimit = number(input.traceLimit ?? 100, "Request record limit", 1, 1000, true);
   const updates = {
@@ -194,7 +194,7 @@ function publicSettings(configuration, options = {}) {
     canvasAgentTurnLimit:String(env.PENECHO_CANVAS_AGENT_TURN_LIMIT || DEFAULT_CANVAS_AGENT_TURN_LIMIT),
     imageFormat:String(env.PENECHO_AI_IMAGE_FORMAT || "webp"),
     autoDelay:String(env.AUTO_AI_DELAY_SECONDS || "5"),
-    canvasAgentAutoOpen:!/^(?:0|false|no|off)$/i.test(String(env.PENECHO_CANVAS_AGENT_AUTO_OPEN || "true")),
+    canvasAgentAutoOpen:!/^(?:0|false|no|off)$/i.test(String(env.PENECHO_CANVAS_AGENT_AUTO_OPEN || "false")),
     host:String(env.HOST || "0.0.0.0"),
     port:String(env.PORT || "3888"),
     requestTrace:/^(?:1|true|yes|on)$/i.test(String(env.PENECHO_REQUEST_TRACE || "false")),

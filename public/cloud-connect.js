@@ -827,6 +827,8 @@
     const remote = window.PENECHO_CONFIG?.runtime === "cloud" ? window.PENECHO_REMOTE_CLOUD_STATUS : null;
     const connected = remote ? Boolean(remote.deviceReady) : Boolean(state.status?.device?.connected && !state.statusUnavailable);
     const signedIn = remote ? Boolean(remote.accountName) : accountSignedIn();
+    const librarySignIn = document.querySelector("#historyCloudSignIn");
+    if (librarySignIn) librarySignIn.hidden = signedIn || !state.status && !remote;
     const accountName = String(remote?.accountName || account?.name || "");
     const credits = account?.credits ?? remote?.credits;
     cloudButton.dataset.state = connected ? "connected" : signedIn ? "signed-in" : "signed-out";
@@ -948,6 +950,7 @@
     browserSignInMessage(cloudT("signedInReady"), "success");
     try { if (popupWindow && !popupWindow.closed) popupWindow.close(); } catch {}
     if (overlay?.isConnected) closeOverlay(overlay);
+    if (cloudSettingsVisible()) renderCloudSettings();
   }
 
   function startBrowserSignInWatch({ started, popup, externalOpened = false, render }) {
@@ -968,7 +971,7 @@
       : cloudT("browserBlocked"), popup || externalOpened ? "" : "error");
 
     const renderIfOpen = () => {
-      if (document.querySelector(".penecho-cloud-overlay") || document.querySelector('#settingsPageMcp:not([hidden])')) render?.();
+      if (document.querySelector(".penecho-cloud-overlay") || document.querySelector('#settingsPageMcp:not([hidden])') || cloudSettingsVisible()) render?.();
     };
     const poll = async () => {
       if (id !== state.browserSignIn.id || !state.browserSignIn.active || state.browserSignIn.polling) return;
@@ -1128,6 +1131,7 @@
 
   window.PenEchoCloudSettings = {
     api, origin:cloudOrigin,
+    accountDisplayName:()=>accountSignedIn()?String(isCloudRuntime()?window.PENECHO_REMOTE_CLOUD_STATUS?.accountName||"":state.status?.account?.name||""):"",
     cacheIdentity:()=>{
       // Cloud status is published by the Remote Canvas gate; local status may
       // never be initialized there. Scope cached pages to the same authority.
@@ -1525,8 +1529,57 @@
     return cloudProjectsPanel(setRefreshing);
   }
 
+  // Desktop Canvas: the Cloud account and Link device pages live in Settings,
+  // Cloud projects in the Canvas Library and Favorites in the Library too.
+  // Without the Settings host the Cloud Center dialog below remains the surface.
+  const settingsCloudHost = document.getElementById("settingsCloudHost");
+  let cloudSettingsRevision = "";
+  function cloudSettingsAvailable() {
+    return Boolean(localHostControlsAvailable && settingsCloudHost && !window.PENECHO_CONFIG?.guestCanvas);
+  }
+  function cloudSettingsVisible() {
+    return Boolean(settingsCloudHost?.isConnected && !settingsCloudHost.closest?.("[hidden]"));
+  }
+  const cloudSettingsWatchHandle = { get isConnected() { return cloudSettingsVisible(); } };
+  function cloudSettingsStateRevision() {
+    return JSON.stringify([accountSignedIn(), state.status?.account?.name, state.status?.account?.membership?.tier, deviceStatusRevision(), state.browserSignIn.active, state.browserSignIn.message]);
+  }
+  function renderCloudSettings() {
+    if (!cloudSettingsAvailable()) return;
+    const setRefreshing = (refreshing) => settingsCloudHost.setAttribute("aria-busy", String(Boolean(refreshing)));
+    cloudSettingsRevision = cloudSettingsStateRevision();
+    settingsCloudHost.replaceChildren(accountPanel(renderCloudSettings, setRefreshing), devicePanel(renderCloudSettings));
+    // Device status polling runs only while this page is visible.
+    state.cloudSection = "device";
+    startDeviceConnectionWatch(renderCloudSettings, cloudSettingsWatchHandle);
+  }
+  function openCloudSettings() {
+    window.dispatchEvent(new CustomEvent("penecho:show-settings", { detail:{ page:"cloud" } }));
+    renderCloudSettings();
+    const previous = cloudSettingsStateRevision();
+    cloudButton.setAttribute("aria-busy", "true");
+    void refreshStatus().then(() => {
+      if (cloudSettingsVisible() && previous !== cloudSettingsStateRevision()) renderCloudSettings();
+    }).finally(() => cloudButton.setAttribute("aria-busy", "false"));
+  }
+  if (cloudSettingsAvailable()) {
+    window.addEventListener("penecho:settings-page", (event) => {
+      if (event.detail?.page === "cloud") queueMicrotask(() => { if (cloudSettingsVisible()) renderCloudSettings(); });
+      else stopDeviceConnectionWatch();
+    });
+    window.addEventListener("penecho:cloud-account-changed", () => {
+      if (cloudSettingsVisible() && cloudSettingsRevision !== cloudSettingsStateRevision()) renderCloudSettings();
+    });
+  }
+
   async function openCloud() {
     if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
+    if (cloudSettingsAvailable()) {
+      if (state.cloudSection === "favorites") { openFavorites(); return; }
+      if (state.cloudSection === "projects" && accountSignedIn() && window.PenEchoCloudProjects?.openHistory) { await window.PenEchoCloudProjects.openHistory(); return; }
+      openCloudSettings();
+      return;
+    }
     cloudButton.setAttribute("aria-expanded", "true");
     const shell = dialogShell({ title:"PenEcho Cloud", subtitle:cloudT("cloudSubtitle"), variant:"cloud-center" });
     shell.dialog.dataset.peSurface = "manager";
@@ -1757,7 +1810,28 @@
     const enable = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
     const revoke = el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"standard",text:text("Turn off sharing","关闭分享")});
     const footer = el("footer", {"data-pe-region":"footer"}, [revoke,enable]);
-    shell.body.append(note,storageNote,field,status); shell.dialog.append(footer);
+    // A short checklist shows what sharing still needs, in order.
+    const steps = el("ol", {class:"live-share-steps","aria-label":text("Before you share","分享前的步骤")});
+    function shareStep(key, done, title, detail, detailNode = null) {
+      const item = el("li", {class:"live-share-step","data-step":key,"data-state":done ? "done" : "pending"}, [
+        el("span", {class:"live-share-step-mark","aria-hidden":"true"}),
+        el("span", {class:"live-share-step-copy"}, [el("strong", {text:title}), detailNode || (detail ? el("small", {text:detail}) : null)]),
+      ]);
+      item.setAttribute("aria-label", `${title}${done ? text(" — done"," — 已完成") : ""}`);
+      return item;
+    }
+    function renderSteps() {
+      const signedIn = accountSignedIn(), saved = Boolean(canvasId), linked = Boolean(currentShare);
+      const items = [];
+      if (kind === "canvas") items.push(shareStep("content", !emptyCanvas, text("Canvas has content","画布已有内容"), emptyCanvas ? text("Draw or add something first.","请先画点什么或添加内容。") : text("Ready to share.","可以分享。")));
+      items.push(shareStep("account", signedIn, text("Sign in to PenEcho Cloud","登录 PenEcho Cloud"), text("Share links are hosted by your Cloud account.","分享链接由你的云端账户托管。")));
+      items.push(shareStep("cloud", saved, text("Save to Cloud","保存到云端"), saved ? text("Saved. Later saves to this Cloud Canvas update the link.","已保存。之后保存到这份云端 Canvas 会更新链接。") : "", saved ? null : storageNote));
+      items.push(shareStep("link", linked, text("Turn on the link","开启链接"), linked ? text("Sharing is on.","已开启分享。") : text("Anyone with the link can view it.","任何持有链接的人都可以查看。")));
+      const current = items.find((item) => item.dataset.state !== "done");
+      if (current) current.dataset.state = "current";
+      steps.replaceChildren(...items);
+    }
+    shell.body.append(note,steps,field,status); shell.dialog.append(footer);
     const selection = sourceId ? {widgetId:sourceId} : {};
     const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
     function render() {
@@ -1766,6 +1840,7 @@
       link.value=currentShare ? new URL(currentShare.url,cloudOrigin()).href : "";
       enable.textContent=currentShare ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
       enable.disabled=busy || emptyCanvas; revoke.disabled=busy;
+      renderSteps();
     }
     async function run(action) { if(busy)return; busy=true;status.textContent=text("Working…","正在处理…");render();try{await action();}catch(error){status.textContent=error.message;}finally{busy=false;render();} }
     enable.addEventListener("click",()=>run(async()=>{
@@ -2001,6 +2076,16 @@
   let selectedCraftKind = "all";
   let selectedCraftView = "list";
   let craftsRestoreFocus = null;
+  // Desktop Canvas hosts Favorites inside the Canvas Library window. Without
+  // that host (tests, embedded shells) the standalone Favorites dialog remains.
+  const libraryPanel = document.getElementById("historyPanel");
+  const libraryFavoritesView = document.getElementById("historyFavoritesView");
+  const libraryFavoritesNav = document.getElementById("historyFavoritesNav");
+  const craftsWorkspace = craftsPopover?.querySelector?.(".crafts-workspace") || null;
+  let craftsInLibrary = false;
+  function craftsVisible() {
+    return craftsInLibrary || Boolean(craftsPopover && !craftsPopover.hidden);
+  }
   const savedT = (key, fallback) => {
     const translated = window.PenEchoI18n?.t?.(key);
     if (translated && translated !== key) return translated;
@@ -2069,7 +2154,7 @@
     updateCraftFilterTabs();
     craftsPager = favoritePagerForKind(kind);
     renderCraftsList(favoritePagerEntries(craftsPager));
-    if (!craftsPopover?.hidden) void refreshCraftsList({ reset:true });
+    if (craftsVisible()) void refreshCraftsList({ reset:true });
     if (focus) craftFilterOptions.find((option) => option.kind === kind)?.button.focus();
   }
 
@@ -2093,6 +2178,12 @@
   });
 
   function setCraftsOpen(open) {
+    // Closing Favorites after adding or opening an item also closes the Library it lives in.
+    if (!open && craftsInLibrary) {
+      setLibraryFavoritesView(false);
+      document.getElementById("historyClose")?.click();
+      return;
+    }
     if (!craftsPopover) return;
     const wasOpen = !craftsPopover.hidden;
     if (open && !wasOpen) craftsRestoreFocus = document.activeElement || craftsButton;
@@ -2625,6 +2716,11 @@
     craftsObserver?.disconnect();
     craftsObserver = null;
     const visibleEntries = filteredFavoriteCrafts(entries);
+    const libraryCount = document.querySelector("#historyFavoritesCount"), allFavorites = favoritePagers.get("all");
+    if (libraryCount && allFavorites) {
+      libraryCount.hidden = Boolean(allFavorites.loading || allFavorites.error || allFavorites.remoteHasMore);
+      libraryCount.textContent = String(favoritePagerAllEntries(allFavorites).length);
+    }
     if (craftsCount) craftsCount.textContent = savedT("savedCount", "{count} favorites").replace("{count}", String(visibleEntries.length));
     const rows = [];
     if (!visibleEntries.length && craftsPager?.loading) {
@@ -2678,7 +2774,7 @@
       else void refreshStatus();
       if (!craftsPager || craftsPager.kind !== selectedCraftKind) craftsPager = favoritePagerForKind(selectedCraftKind);
       await loadFavoritePager(craftsPager, { reset, onUpdate:() => {
-        if (generation === craftsRefreshGeneration && !craftsPopover?.hidden) renderCraftsList(favoritePagerEntries(craftsPager));
+        if (generation === craftsRefreshGeneration && craftsVisible()) renderCraftsList(favoritePagerEntries(craftsPager));
       } });
       if (generation !== craftsRefreshGeneration) return;
       renderCraftsList(favoritePagerEntries(craftsPager));
@@ -2706,7 +2802,64 @@
     void refreshCraftsList({ reset:true });
   }
 
-  craftsButton?.addEventListener("click", openCrafts);
+  function libraryFavoritesAvailable() {
+    return Boolean(libraryPanel && libraryFavoritesView && craftsWorkspace && typeof libraryFavoritesView.append === "function");
+  }
+
+  function mountFavoritesInLibrary() {
+    if (!libraryFavoritesAvailable()) return false;
+    if (craftsWorkspace.parentElement !== libraryFavoritesView) {
+      libraryFavoritesView.append(craftsWorkspace);
+      // The kind filter becomes a segmented control in the Favorites header.
+      if (craftsFilters) craftsWorkspace.querySelector(".crafts-title-row")?.after(craftsFilters);
+    }
+    return true;
+  }
+
+  function setLibraryFavoritesView(active) {
+    craftsInLibrary = Boolean(active);
+    if (!libraryPanel) return;
+    if (craftsInLibrary) libraryPanel.dataset.libraryView = "favorites";
+    else delete libraryPanel.dataset.libraryView;
+    if (libraryFavoritesView) libraryFavoritesView.hidden = !craftsInLibrary;
+    libraryFavoritesNav?.setAttribute("aria-current", craftsInLibrary ? "page" : "false");
+    craftsButton?.setAttribute("aria-expanded", String(craftsInLibrary));
+    if (!craftsInLibrary) {
+      craftsObserver?.disconnect();
+      craftsObserver = null;
+    }
+  }
+
+  function openFavorites() {
+    if (!mountFavoritesInLibrary()) return openCrafts();
+    const wasOpen = craftsInLibrary;
+    if (!libraryPanel.classList.contains("open")) document.getElementById("historyBtn")?.click();
+    if (!wasOpen) selectedCraftKind = "all";
+    setLibraryFavoritesView(true);
+    craftsPager = favoritePagerForKind(selectedCraftKind);
+    updateCraftFilterTabs();
+    updateCraftView();
+    updateCraftsEchoesLink();
+    if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
+    else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
+    void refreshCraftsList({ reset:true });
+  }
+
+  if (libraryFavoritesAvailable()) {
+    // "Browse Echoes" belongs to the Library navigation.
+    const librarySidebar = libraryPanel.querySelector(".history-library-sidebar");
+    if (craftsEchoesLink && librarySidebar) librarySidebar.append(craftsEchoesLink);
+    libraryFavoritesNav?.addEventListener("click", () => openFavorites());
+    librarySidebar?.addEventListener("click", (event) => {
+      if (craftsInLibrary && event.target?.closest?.(".snapshot-location-options label, .history-project-nav-item, #historyProjectCreate, #historyRecentNav")) setLibraryFavoritesView(false);
+    });
+    // Every close of the Library ends its Favorites view.
+    new MutationObserver(() => {
+      if (!libraryPanel.classList.contains("open") && craftsInLibrary) setLibraryFavoritesView(false);
+    }).observe(libraryPanel, { attributes:true, attributeFilter:["class"] });
+  }
+
+  craftsButton?.addEventListener("click", openFavorites);
   craftsClose?.addEventListener("click", () => setCraftsOpen(false));
   craftsPopover?.addEventListener("mousedown", (event) => { if (event.target === craftsPopover) setCraftsOpen(false); });
   document.addEventListener("keydown", (event) => {
@@ -2740,10 +2893,15 @@
       overlay._cloudRender();
     }
     if (craftsPopover && !craftsPopover.hidden) void openCrafts();
+    else if (craftsInLibrary) openFavorites();
+    if (cloudSettingsVisible()) renderCloudSettings();
   });
   window.addEventListener("penecho:remote-cloud-status", () => { updateCloudButton(); refreshCanvasShareStatus(); });
 
-  cloudButton.addEventListener("click", openCloud);
+  cloudButton.addEventListener("click", () => {
+    if (cloudSettingsAvailable()) state.cloudSection = "account";
+    void openCloud();
+  });
   document.getElementById("settingsCloudSetupLink")?.addEventListener("click", (event) => {
     if (!localHostControlsAvailable) return;
     event.preventDefault();

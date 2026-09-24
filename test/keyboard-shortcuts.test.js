@@ -38,7 +38,7 @@ test("shortcut defaults cover Agent focus, save, history, editing, and workspace
   const source = read("src/client/app/keyboard-shortcuts.js"), build = read("scripts/build-client.js");
   assert.match(build, /src\/client\/app\/keyboard-shortcuts\.js/);
   for (const [id, chord] of [
-    ["focus-agent", "Tab"], ["save-canvas", "Mod+s"], ["undo", "Mod+z"],
+    ["focus-agent", "Mod+k"], ["pen-tool", "p"], ["save-canvas", "Mod+s"], ["undo", "Mod+z"],
     ["redo", "Mod+Shift+z"], ["canvas-library", "Mod+o"],
     ["toggle-fullscreen", "Mod+Shift+f"], ["open-settings", "Mod+,"],
   ]) assert.match(source, new RegExp(`id:\\"${id}\\"[^\\n]*defaultChord:\\"${chord.replace(/[+]/g, "\\+")}\\"`));
@@ -109,7 +109,7 @@ test("shortcut settings are localized in English and Chinese", () => {
   }
 });
 
-test("Agent shortcut toggles twice without stealing focus and yields to content", () => {
+test("Tab toggles Agent twice from controls and editors without stealing focus", () => {
   const source=read("src/client/app/keyboard-shortcuts.js"), vm=require("node:vm"), calls=[];
   const state={interactingWidgetId:null}, panel={hidden:true,contains:target=>Boolean(target?.inPanel)};
   const context={state,settings:{},canvasAgentPanel:panel,document:{body:{classList:{contains:()=>!panel.hidden}}},
@@ -124,8 +124,9 @@ test("Agent shortcut toggles twice without stealing focus and yields to content"
   assert.equal(api.keyboardShortcutCanRun(command,{target:{}},'Tab'),true);
   api.keyboardShortcutPerform(command.id);api.keyboardShortcutPerform(command.id);
   assert.deepEqual(calls,[['open',false],['close',false]]);
-  for(const target of [{editable:true},{button:true},{inPanel:true}])assert.equal(api.keyboardShortcutCanRun(command,{target},'Tab'),false);
-  state.interactingWidgetId='widget';assert.equal(api.keyboardShortcutCanRun(command,{target:{}},'Tab'),false);
+  for(const target of [{editable:true},{button:true},{inPanel:true}])assert.equal(api.keyboardShortcutCanRun(command,{target},'Tab'),true);
+  for(const target of [{editable:true},{button:true},{inPanel:true}])assert.equal(api.keyboardShortcutCanRun(command,{target},'Mod+k'),false);
+  state.interactingWidgetId='widget';assert.equal(api.keyboardShortcutCanRun(command,{target:{}},'Tab'),true);
   state.interactingWidgetId=null;assert.equal(api.keyboardShortcutCanRun(command,{target:{},defaultPrevented:true},'Tab'),false);
 });
 
@@ -143,7 +144,7 @@ test("pointer controls retain workspace shortcuts while keyboard navigation and 
   const input = {closest:selector=>selector.startsWith('input') ? input : null};
   const event = {target:button};
   const agent = {id:'focus-agent'};
-  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),false);
+  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),true);
   api.keyboardShortcutPointerDown(event);
   api.keyboardShortcutFocusChanged(event);
   for (const id of ['focus-agent','save-canvas','undo','redo','canvas-library']) {
@@ -153,7 +154,7 @@ test("pointer controls retain workspace shortcuts while keyboard navigation and 
   for (const chord of ['Enter','Space','Delete','Backspace','ArrowLeft']) assert.equal(api.keyboardShortcutCanvasContext(event,chord),false,chord);
   assert.equal(api.keyboardShortcutCanRun(agent,{target:button,metaKey:true},'Mod+j'),true);
   api.keyboardShortcutFocusChanged({target:input});
-  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),false);
+  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),true);
   assert.equal(api.keyboardShortcutCanRun({id:'undo'},{target:input,metaKey:true},'Mod+z'),false);
   assert.equal(api.keyboardShortcutCanRun({id:'save-canvas'},{target:input,metaKey:true},'Mod+s'),true);
   api.keyboardShortcutPointerDown(event);
@@ -163,7 +164,7 @@ test("pointer controls retain workspace shortcuts while keyboard navigation and 
   blocking=false;local=true;
   assert.equal(api.keyboardShortcutCanvasContext(event,'h'),false);
   local=false;context.state.interactingWidgetId='widget';
-  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),false);
+  assert.equal(api.keyboardShortcutCanRun(agent,event,'Tab'),true);
 });
 
 test("Canvas cancellation yields to editing and modal contexts and consumes only one action", () => {
