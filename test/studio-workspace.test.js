@@ -132,12 +132,12 @@ test("Canvas changes suppress automatic Agent opening only while MCP is docked",
   }
 });
 
-test("opening Agent or Library never automatically hides the MCP dock",()=>{
+test("compact Agent opening reserves usable canvas space while Library preserves the MCP dock",()=>{
   for(const docked of [false,true])for(const name of ["studioNavigatorAgentWillOpen","historyManagerWillOpen"]){
     let closed=0;
     const context={studioNavigatorIsCompact:()=>true,studioNavigatorIsOpen:()=>true,studioNavigatorIsMcpDocked:()=>docked,studioNavigatorSuspendedAgent:false,setStudioNavigatorOpen:()=>closed++};
     vm.runInNewContext(`(${extract(name)})()`,context);
-    assert.equal(closed,docked?0:1,`${name}: ordinary tabs retain their existing auto-collapse`);
+    assert.equal(closed,name==="studioNavigatorAgentWillOpen"?1:docked?0:1,`${name}: compact panels retain enough canvas space`);
   }
 });
 test("manually closing and reopening MCP preserves its selected tab and persistence",()=>{

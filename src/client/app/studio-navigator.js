@@ -1037,7 +1037,9 @@
       openCanvasAgent({focus:false,connect:false,animate:false});
     }
     function studioNavigatorAgentWillOpen() {
-      if(!studioNavigatorIsCompact()||!studioNavigatorIsOpen()||studioNavigatorIsMcpDocked())return;
+      // Compact windows cannot reserve both sidebars and a usable canvas. An
+      // explicit Agent request folds navigation while retaining its MCP tab.
+      if(!studioNavigatorIsCompact()||!studioNavigatorIsOpen())return;
       studioNavigatorSuspendedAgent=false;
       setStudioNavigatorOpen(false,{restoreAgent:false});
     }

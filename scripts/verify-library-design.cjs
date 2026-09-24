@@ -52,6 +52,7 @@ app.whenReady().then(async()=>{try{
   await js(`document.querySelector('#changelogClose')?.click();document.querySelector('#tourSkip')?.click();document.querySelector('.history-card-select').click()`);
   const overflow=await js(`[document.querySelector('#historyPanel'),document.querySelector('#historyList')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth}))`);assert.ok(overflow.every(x=>x.scroll<=x.width+1),JSON.stringify(overflow));
   report[name]=await js(`(()=>{const e=document.querySelector('.selected .history-item-load'),c=document.querySelector('.selected'),s=getComputedStyle(e);return {button:e.getBoundingClientRect().toJSON(),card:c.getBoundingClientRect().toJSON(),display:s.display,visibility:s.visibility,opacity:s.opacity,position:s.position,gridArea:s.gridArea,offsetParent:e.offsetParent?.className,hit:document.elementFromPoint(e.getBoundingClientRect().x+5,e.getBoundingClientRect().y+5)?.outerHTML.slice(0,200)}})()`);
+  if(name==='reference-grid')assert.equal(await js("getComputedStyle(document.querySelector('#historyList')).gridTemplateColumns.split(' ').length"),3,'Desktop Library has three columns');
   if(view==='grid') { const g=report[name]; assert.ok(g.button.top>=g.card.top&&g.button.top<g.card.top+40,JSON.stringify(g));assert.match(g.hit,/^<button/); }
   fs.writeFileSync(path.join(directory,name+".png"),(await win.webContents.capturePage()).toPNG());report.checks.push(name+': no horizontal overflow');
  }

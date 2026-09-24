@@ -1704,7 +1704,7 @@ body[data-theme="studio"] .object-chrome-button.widget-chrome-control.widget-too
 .text-input-hint { max-width: min(440px, 100%); pointer-events: none; white-space: nowrap; }
 .text-input-hint kbd { padding: 0; color: inherit; border: 0; border-radius: 0; background: transparent; font: inherit; }
 #tip { max-width: min(440px, 100%); pointer-events: none; visibility: hidden; opacity: 0; white-space: nowrap; transition: opacity .2s ease, visibility 0s linear .2s; }
-main:has(#viewport.is-navigating) #tip { visibility: visible; opacity: 1; transition-delay: 0s; }
+main:has(#viewport.is-navigating):not(:has(#mcpCanvasNotice:not([hidden]))) #tip { visibility: visible; opacity: 1; transition-delay: 0s; }
 .canvas-navigation-lock-hint { max-width: min(440px, 100%); pointer-events: none; visibility: hidden; opacity: 0; white-space: nowrap; transition: opacity .2s ease, visibility 0s linear .2s; }
 main:has(#viewport.navigation-locked) .canvas-navigation-lock-hint { visibility: visible; opacity: 1; transition-delay: 0s; }
 main:has(#viewport.navigation-locked) #tip { visibility: hidden; opacity: 0; }

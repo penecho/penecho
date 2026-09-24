@@ -206,7 +206,7 @@
           body.dataset.shellDockLayout = mode;
           viewWidth = measure(zoomControls).width;
           aiWidth = Math.ceil(measure(aiSurface).width);
-          if (viewWidth + aiWidth + gap > available.width) {
+          if (viewWidth + aiWidth + gap > available.width || (aiSurface === pauseNotice && aiWidth < 180)) {
             body.dataset.shellDockSides = "compact";
             viewWidth = measure(zoomControls).width;
             aiWidth = Math.ceil(measure(aiSurface).width);

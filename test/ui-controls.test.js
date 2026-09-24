@@ -972,7 +972,7 @@ test("canvas navigation guidance emphasizes middle-mouse panning for at least te
   assert.match(app, /tip:\s*"Pan: two-finger scroll, Hand, or Space \+ drag · Zoom: pinch or Ctrl\/Cmd \+ scroll"/);
   assert.match(zh, /tip:\s*"移动：双指滑动、小手或空格＋拖动 · 缩放：捏合或 Ctrl\/Cmd＋滚动"/);
   assert.match(css, /#tip\s*\{[^}]*max-width:\s*min\(440px, 100%\)[^}]*visibility:\s*hidden[^}]*opacity:\s*0/);
-  assert.match(css, /main:has\(#viewport\.is-navigating\) #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
+  assert.match(css, /main:has\(#viewport\.is-navigating\):not\(:has\(#mcpCanvasNotice:not\(\[hidden\]\)\)\) #tip\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/);
   assert.match(css, /\.ink-layer\s*\{[^}]*z-index:\s*2/);
 });
 
