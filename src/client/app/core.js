@@ -1312,6 +1312,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentMessage: "Message PenEcho Agent",
       canvasAgentChooseConnection: "Choose AI connection",
       canvasAgentModel: "AI model",
+      canvasAgentThinking: "Thinking",
+      canvasAgentThinkingOff: "Off",
+      canvasAgentThinkingOffHelp: "Answer directly, no extra reasoning",
+      canvasAgentThinkingLowHelp: "Quick edits and short questions",
+      canvasAgentThinkingMediumHelp: "Balanced — good for most canvas work",
+      canvasAgentThinkingHighHelp: "Complex diagrams, maths, handwriting",
+      canvasAgentThinkingMaxHelp: "Hardest problems; slowest, uses most credits",
+      canvasAgentThinkingDefault: "Model default",
+      canvasAgentThinkingDefaultHelp: "from connection settings",
+      canvasAgentThinkingCustom: "Custom",
+      canvasAgentThinkingCustomPlaceholder: "e.g. xhigh, 8000 tokens",
+      canvasAgentThinkingFootnote: "Also used by Auto AI on the canvas. Higher levels are slower and use more credits.",
+      canvasAgentThinkingUnavailable: "This model does not support thinking levels",
+      canvasAgentThinkingNextMessage: "Thinking set to {level} · applies from your next message",
       canvasAgentPromptSuggestions: "Suggested prompts",
       canvasAgentPromptSuggestionsTitle: "Try asking",
       canvasAgentPromptSuggestionsHint: "Suggestions adapt to the current context.",
@@ -2696,7 +2710,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return `${Number(value).toLocaleString(undefined, { maximumFractionDigits:1 })}×`;
   }
   function allAiConnections() {
-    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier })), ...(settings.connectionScope === aiConnectionScope() ? settings.connections : [])];
+    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier, supportsThinking:model.supportsThinking })), ...(settings.connectionScope === aiConnectionScope() ? settings.connections : [])];
   }
   function renderHostedModels() {
     const section = document.getElementById("settingsHostedSection"), list = document.getElementById("settingsHostedList"), status = document.getElementById("settingsHostedStatus"), rates = document.getElementById("settingsHostedRates");
@@ -3188,7 +3202,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateSettingsProviderFields();
     renderConnectionLists();
     setSettingsStatus();
-    requestAnimationFrame(() => settingsProvider.focus({ preventScroll:true }));
+    requestAnimationFrame(() => {
+      const heading = canvasSettingsForm.querySelector("#settingsApiHeading");
+      if (heading && configurationBody) {
+        const top = configurationBody.scrollTop + heading.getBoundingClientRect().top - configurationBody.getBoundingClientRect().top - 8;
+        configurationBody.scrollTo({ top, behavior:"instant" });
+      }
+      settingsProvider.focus({ preventScroll:true });
+    });
   }
   function hideConnectionEditor() {
     settings.editingConnectionId = null;
@@ -4703,6 +4724,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.reasoningEffort = effort;
     localStorage.setItem("penecho-ai-effort", state.reasoningEffort);
     updateEffortControl();
+    if (typeof canvasAgentEffortDidChange === "function") canvasAgentEffortDidChange();
     hideEffortControl();
     return true;
   }

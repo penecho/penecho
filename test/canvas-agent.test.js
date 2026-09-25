@@ -603,7 +603,8 @@ test("PenEcho Agent maps full API endpoints back to pi-ai provider base URLs",as
     kimiCoding=connectionProfile({id:"kimi-coding",apiFormat:"openai",apiPreset:"kimi-global-coding",apiUrl:"https://api.kimi.com/coding/v1",apiModel:"k3-256k",effort:"medium"}),
     kimiOther=connectionProfile({id:"kimi-other",apiFormat:"openai",apiUrl:"https://api.kimi.com/v1",apiModel:"k3-256k",effort:"medium"}),
     claude=connectionProfile({id:"claude",apiFormat:"anthropic",apiUrl:"https://api.anthropic.com",apiModel:"claude-opus-5",effort:"xhigh"}),
-    disabled=connectionProfile({id:"disabled",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-5.6-sol",effort:"none"});
+    disabled=connectionProfile({id:"disabled",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-5.6-sol",effort:"none"}),
+    noThinking=connectionProfile({id:"no-thinking",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-4o-mini",effort:"high"});
   assert.equal(openai.config.baseURL,"https://gateway.test/openai/v1");
   assert.equal(openai.config.streamIdleTimeoutMs,180_000);
   assert.equal(Object.hasOwn(openai.config,"timeoutMs"),false);
@@ -636,6 +637,9 @@ test("PenEcho Agent maps full API endpoints back to pi-ai provider base URLs",as
   assert.deepEqual(claude.config.models[0].compat,{forceAdaptiveThinking:true});
   assert.equal(disabled.reasoningEffort,"off");
   assert.equal(disabled.config.models[0].reasoningEfforts.off,"none");
+  assert.equal(noThinking.reasoningEffort,undefined);
+  assert.equal(noThinking.config.models[0].reasoningEfforts,false);
+  assert.equal(connectionProfile({id:"declared-no-thinking",apiFormat:"openai",apiUrl:"https://gateway.test/v1",apiModel:"private-model",supportsThinking:false}).config.models[0].reasoningEfforts,false);
   assert.deepEqual(resolveCanvasAgentRequestEffort({effort:"high"},"  Provider_Native  "),{selected:"provider_native",effective:"provider_native"});
   assert.throws(()=>resolveCanvasAgentRequestEffort({effort:"high"},"provider\nnative"),/reasoning effort is invalid/);
 });

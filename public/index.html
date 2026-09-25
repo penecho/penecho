@@ -810,12 +810,33 @@
                   <button id="canvasAgentPromptToggle" type="button" aria-expanded="false" aria-controls="canvasAgentPromptSuggestions" data-i18n-title="canvasAgentPromptMore" title="Show suggested prompts" data-i18n-aria="canvasAgentPromptMore" aria-label="Show suggested prompts" data-pe-control="disclosure" data-pe-button="ghost" data-pe-density="compact" data-pe-state="collapsed"><span class="canvas-agent-prompt-toggle-copy" data-pe-region="copy"><span data-i18n="canvasAgentPromptSuggestionsTitle" data-pe-region="title">Try asking</span><span id="canvasAgentPromptDisclosureCopy" class="canvas-agent-visually-hidden" data-i18n="canvasAgentPromptDisclosureMore">More</span></span><svg class="canvas-agent-prompt-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
                   </button>
                 </div>
-                <button id="canvasAgentConnection" class="canvas-agent-connection-button" type="button" aria-haspopup="dialog" aria-controls="settingsPanel" data-i18n-title="canvasAgentChooseConnection" title="Choose AI connection" data-i18n-aria="canvasAgentChooseConnection" aria-label="Choose AI connection" data-pe-button="ghost" data-pe-density="compact">
-                  <span class="canvas-agent-connection-label-clip"><span id="canvasAgentConnectionLabel" data-i18n="canvasAgentModel">AI model</span></span>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
-                </button>
+                <div id="canvasAgentModelControl" class="canvas-agent-model-control">
+                  <div class="canvas-agent-model-split">
+                    <button id="canvasAgentConnection" class="canvas-agent-connection-button" type="button" aria-haspopup="dialog" aria-controls="settingsPanel" data-i18n-title="canvasAgentChooseConnection" title="Choose AI connection" data-i18n-aria="canvasAgentChooseConnection" aria-label="Choose AI connection" data-pe-button="ghost" data-pe-density="compact">
+                      <span class="canvas-agent-connection-label-clip"><span id="canvasAgentConnectionLabel" data-i18n="canvasAgentModel">AI model</span></span>
+                    </button>
+                    <button id="canvasAgentThinkingButton" class="canvas-agent-thinking-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="canvasAgentThinkingPopover" data-i18n-aria="canvasAgentThinking" aria-label="Thinking" data-pe-button="ghost" data-pe-density="compact">
+                      <span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="canvasAgentThinkingLabel">Med</span>
+                      <svg class="canvas-agent-thinking-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg>
+                    </button>
+                  </div>
+                  <section id="canvasAgentThinkingPopover" class="canvas-agent-thinking-popover" role="dialog" aria-labelledby="canvasAgentThinkingTitle" hidden>
+                    <header><strong id="canvasAgentThinkingTitle" data-i18n="canvasAgentThinking">Thinking</strong><span id="canvasAgentThinkingModel"></span></header>
+                    <div id="canvasAgentThinkingOptions" class="canvas-agent-thinking-options" role="listbox" data-i18n-aria="canvasAgentThinking" aria-label="Thinking">
+                      <button type="button" role="option" data-effort="none" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="canvasAgentThinkingOff">Off</strong><small data-i18n="canvasAgentThinkingOffHelp">Answer directly, no extra reasoning</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                      <button type="button" role="option" data-effort="low" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortLow">Low</strong><small data-i18n="canvasAgentThinkingLowHelp">Quick edits and short questions</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                      <button type="button" role="option" data-effort="medium" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortMedium">Medium</strong><small data-i18n="canvasAgentThinkingMediumHelp">Balanced — good for most canvas work</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                      <button type="button" role="option" data-effort="high" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortHigh">High</strong><small data-i18n="canvasAgentThinkingHighHelp">Complex diagrams, maths, handwriting</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                      <button type="button" role="option" data-effort="max" aria-selected="false"><span class="canvas-agent-thinking-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong data-i18n="effortMaximum">Max</strong><small data-i18n="canvasAgentThinkingMaxHelp">Hardest problems; slowest, uses most credits</small></span><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                      <button type="button" role="option" data-effort="config" aria-selected="false" class="canvas-agent-thinking-default"><span data-i18n="canvasAgentThinkingDefault">Model default</span><small data-i18n="canvasAgentThinkingDefaultHelp">from connection settings</small><span class="canvas-agent-thinking-check" aria-hidden="true">✓</span></button>
+                    </div>
+                    <div class="canvas-agent-thinking-custom"><label for="canvasAgentThinkingCustom" data-i18n="canvasAgentThinkingCustom">Custom</label><input id="canvasAgentThinkingCustom" type="text" maxlength="128" autocomplete="off" autocapitalize="none" spellcheck="false" data-i18n-placeholder="canvasAgentThinkingCustomPlaceholder" placeholder="e.g. xhigh, 8000 tokens"></div>
+                    <p data-i18n="canvasAgentThinkingFootnote">Also used by Auto AI on the canvas. Higher levels are slower and use more credits.</p>
+                  </section>
+                </div>
               </div>
               <textarea id="canvasAgentInput" rows="1" maxlength="40000" data-i18n-placeholder="canvasAgentPlaceholder" placeholder="Try: draw a professional architecture, sequence, or workflow diagram." data-i18n-aria="canvasAgentMessage" aria-label="Message PenEcho Agent" aria-describedby="canvasAgentInputHint"></textarea>
+              <p id="canvasAgentThinkingNotice" class="canvas-agent-thinking-notice" role="status" hidden><span id="canvasAgentThinkingNoticeText"></span></p>
               <div id="canvasAgentInkInput" class="canvas-agent-ink-input" hidden>
                 <canvas id="canvasAgentInkCanvas" width="1200" height="1040" tabindex="0" data-i18n-aria="canvasAgentHandwrite" aria-label="Handwrite a PenEcho Agent message"></canvas>
                 <button id="canvasAgentClearInk" class="canvas-agent-clear-ink" type="button" data-i18n="canvasAgentClearInk" data-pe-button="ghost" data-pe-density="compact">Clear</button>

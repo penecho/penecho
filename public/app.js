@@ -2698,6 +2698,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentMessage: "Message PenEcho Agent",
       canvasAgentChooseConnection: "Choose AI connection",
       canvasAgentModel: "AI model",
+      canvasAgentThinking: "Thinking",
+      canvasAgentThinkingOff: "Off",
+      canvasAgentThinkingOffHelp: "Answer directly, no extra reasoning",
+      canvasAgentThinkingLowHelp: "Quick edits and short questions",
+      canvasAgentThinkingMediumHelp: "Balanced — good for most canvas work",
+      canvasAgentThinkingHighHelp: "Complex diagrams, maths, handwriting",
+      canvasAgentThinkingMaxHelp: "Hardest problems; slowest, uses most credits",
+      canvasAgentThinkingDefault: "Model default",
+      canvasAgentThinkingDefaultHelp: "from connection settings",
+      canvasAgentThinkingCustom: "Custom",
+      canvasAgentThinkingCustomPlaceholder: "e.g. xhigh, 8000 tokens",
+      canvasAgentThinkingFootnote: "Also used by Auto AI on the canvas. Higher levels are slower and use more credits.",
+      canvasAgentThinkingUnavailable: "This model does not support thinking levels",
+      canvasAgentThinkingNextMessage: "Thinking set to {level} · applies from your next message",
       canvasAgentPromptSuggestions: "Suggested prompts",
       canvasAgentPromptSuggestionsTitle: "Try asking",
       canvasAgentPromptSuggestionsHint: "Suggestions adapt to the current context.",
@@ -4082,7 +4096,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return `${Number(value).toLocaleString(undefined, { maximumFractionDigits:1 })}×`;
   }
   function allAiConnections() {
-    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier })), ...(settings.connectionScope === aiConnectionScope() ? settings.connections : [])];
+    return [...hostedSettings.models.map(model => ({ id:`hosted:${model.id}`, provider:"api", apiModel:model.displayName, hosted:true, modelId:model.id, multiplier:model.multiplier, supportsThinking:model.supportsThinking })), ...(settings.connectionScope === aiConnectionScope() ? settings.connections : [])];
   }
   function renderHostedModels() {
     const section = document.getElementById("settingsHostedSection"), list = document.getElementById("settingsHostedList"), status = document.getElementById("settingsHostedStatus"), rates = document.getElementById("settingsHostedRates");
@@ -4574,7 +4588,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateSettingsProviderFields();
     renderConnectionLists();
     setSettingsStatus();
-    requestAnimationFrame(() => settingsProvider.focus({ preventScroll:true }));
+    requestAnimationFrame(() => {
+      const heading = canvasSettingsForm.querySelector("#settingsApiHeading");
+      if (heading && configurationBody) {
+        const top = configurationBody.scrollTop + heading.getBoundingClientRect().top - configurationBody.getBoundingClientRect().top - 8;
+        configurationBody.scrollTo({ top, behavior:"instant" });
+      }
+      settingsProvider.focus({ preventScroll:true });
+    });
   }
   function hideConnectionEditor() {
     settings.editingConnectionId = null;
@@ -6089,6 +6110,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.reasoningEffort = effort;
     localStorage.setItem("penecho-ai-effort", state.reasoningEffort);
     updateEffortControl();
+    if (typeof canvasAgentEffortDidChange === "function") canvasAgentEffortDidChange();
     hideEffortControl();
     return true;
   }
@@ -19713,6 +19735,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectLabel = document.querySelector("#canvasAgentProjectLabel"),
     canvasAgentConnectionButton = document.querySelector("#canvasAgentConnection"),
     canvasAgentConnectionLabel = document.querySelector("#canvasAgentConnectionLabel"),
+    canvasAgentConnectionClip = document.querySelector(".canvas-agent-model-split .canvas-agent-connection-label-clip"),
+    canvasAgentModelControl = document.querySelector("#canvasAgentModelControl"),
+    canvasAgentThinkingButton = document.querySelector("#canvasAgentThinkingButton"),
+    canvasAgentThinkingLabel = document.querySelector("#canvasAgentThinkingLabel"),
+    canvasAgentThinkingPopover = document.querySelector("#canvasAgentThinkingPopover"),
+    canvasAgentThinkingModel = document.querySelector("#canvasAgentThinkingModel"),
+    canvasAgentThinkingCustom = document.querySelector("#canvasAgentThinkingCustom"),
+    canvasAgentThinkingNotice = document.querySelector("#canvasAgentThinkingNotice"),
+    canvasAgentThinkingNoticeText = document.querySelector("#canvasAgentThinkingNoticeText"),
     canvasAgentProjectPopover = document.querySelector("#canvasAgentProjectPopover"),
     canvasAgentProjectClose = document.querySelector("#canvasAgentProjectClose"),
     canvasAgentProjectList = document.querySelector("#canvasAgentProjectList"),
@@ -19939,6 +19970,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     outgoingSeq:0,
     incomingSeq:0,
     running:false,
+    thinkingChangedWhileRunning:false,
     requestPending:false,
     activeEvaluationContext:null,
     lastTurnError:null,
@@ -20403,13 +20435,63 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function canvasAgentUpdateConnectionButton() {
     if(!canvasAgentConnectionButton||!canvasAgentConnectionLabel)return;
     document.querySelector("#canvasAgentConnectionNotice").hidden = canvasAgentExecutionAvailable() && allAiConnections().length > 0;
-    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection)}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentChooseModel"),action=t("canvasAgentChooseConnection");
+    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection).replace(/^☁️\s*/,"")}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentChooseModel"),action=t("canvasAgentChooseConnection");
     canvasAgentConnectionLabel.textContent=label;
     canvasAgentConnectionButton.setAttribute("aria-label",`${action}: ${label}`);
     canvasAgentConnectionButton.setAttribute("title",`${action}: ${label}`);
+    canvasAgentUpdateModelScroll();
+    canvasAgentUpdateThinkingControl();
     canvasAgentSyncSendAvailability();
   }
+  function canvasAgentUpdateModelScroll() {
+    if (!canvasAgentConnectionClip) return;
+    const overflow=Math.max(0,canvasAgentConnectionLabel.scrollWidth-canvasAgentConnectionClip.clientWidth);
+    canvasAgentConnectionClip.classList.toggle("is-overflowing",overflow>2);
+    canvasAgentConnectionClip.style.setProperty("--canvas-agent-model-scroll-distance",`${-overflow}px`);
+    canvasAgentConnectionClip.style.setProperty("--canvas-agent-model-scroll-duration",`${Math.max(3.5,Math.min(10,2+overflow/36))}s`);
+  }
+  function canvasAgentThinkingAvailable(connection) {
+    if (!connection) return true;
+    if (connection.supportsThinking === false || connection.reasoningSupported === false) return false;
+    if (connection.provider !== "api") return true;
+    const model=String(connection.modelId || connection.apiModel || "").trim().toLowerCase().split("/").pop();
+    return !/^(?:gpt-4o(?:-mini)?|gpt-4\.1(?:-mini|-nano)?|gpt-3\.5-turbo)(?:$|[-/])/.test(model);
+  }
+  function canvasAgentThinkingLevelLabel(effort=state.reasoningEffort) {
+    const key={none:"canvasAgentThinkingOff",low:"effortLow",medium:"effortMediumShort",high:"effortHigh",max:"effortMaximum",config:"canvasAgentThinkingDefault"}[effort];
+    return key ? t(key) : effort;
+  }
+  function canvasAgentUpdateThinkingNotice() {
+    const show=canvasAgent.thinkingChangedWhileRunning && (canvasAgent.running || canvasAgent.requestPending) && canvasAgentModelControl.dataset.thinkingUnavailable !== "true";
+    canvasAgentThinkingNotice.hidden=!show;
+    if (show) canvasAgentThinkingNoticeText.textContent=t("canvasAgentThinkingNextMessage").replace("{level}",canvasAgentThinkingLevelLabel());
+  }
+  function canvasAgentUpdateThinkingControl() {
+    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),available=canvasAgentThinkingAvailable(connection),effort=normalizeToolbarReasoningEffort(state.reasoningEffort)||"config";
+    if (!available) canvasAgentHideThinkingPopover();
+    canvasAgentModelControl.dataset.thinkingUnavailable=String(!available);
+    canvasAgentThinkingLabel.textContent=available?canvasAgentThinkingLevelLabel(effort):"—";
+    canvasAgentThinkingButton.dataset.effort=available?effort:"unavailable";
+    canvasAgentThinkingButton.setAttribute("aria-disabled",String(!available));
+    canvasAgentThinkingButton.setAttribute("aria-label",available?`${t("canvasAgentThinking")}: ${canvasAgentThinkingLevelLabel(effort)}`:t("canvasAgentThinkingUnavailable"));
+    canvasAgentThinkingButton.title=available?t("canvasAgentThinking"):t("canvasAgentThinkingUnavailable");
+    canvasAgentThinkingModel.textContent=connection?String(connection.apiModel || connection.cliModel || ""):"";
+    canvasAgentThinkingPopover.querySelectorAll("[data-effort]").forEach(option=>option.setAttribute("aria-selected",String(option.dataset.effort===effort)));
+    if (document.activeElement !== canvasAgentThinkingCustom) canvasAgentThinkingCustom.value=["config","none","low","medium","high","max"].includes(effort)?"":effort;
+    canvasAgentUpdateThinkingNotice();
+  }
+  function canvasAgentHideThinkingPopover({restoreFocus=false}={}) {
+    if (canvasAgentThinkingPopover.hidden) return;
+    canvasAgentThinkingPopover.hidden=true;
+    canvasAgentThinkingButton.setAttribute("aria-expanded","false");
+    if (restoreFocus) canvasAgentThinkingButton.focus({preventScroll:true});
+  }
+  function canvasAgentEffortDidChange() {
+    if (canvasAgent.running || canvasAgent.requestPending) canvasAgent.thinkingChangedWhileRunning=true;
+    canvasAgentUpdateThinkingControl();
+  }
   function canvasAgentOpenConnectionSettings() {
+    canvasAgentHideThinkingPopover();
     selectSettingsPage("connections");
     openSettings();
   }
@@ -20448,6 +20530,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgentProjectButton.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectButton.setAttribute("title",t("canvasAgentProject"));
     canvasAgentUpdateConnectionButton();
+    canvasAgentUpdateThinkingControl();
     canvasAgentProjectClose.setAttribute("aria-label",t("canvasAgentProjectClose"));
     canvasAgentProjectRootBack.setAttribute("aria-label",t("canvasAgentRootBack"));
     canvasAgentProjectRootSelect.textContent=t("canvasAgentRootSelect");
@@ -23166,6 +23249,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function canvasAgentSetRunning(running) {
     canvasAgent.running = running;
+    if (!running) canvasAgent.thinkingChangedWhileRunning=false;
+    canvasAgentUpdateThinkingNotice();
     canvasAgentStop.hidden = !running;
     canvasAgentSetComposerActionLabel(canvasAgentSend,running ? "canvasAgentSteer" : "canvasAgentSend");
     canvasAgentSetStatus(t(running ? "canvasAgentWorking" : "canvasAgentReady"),running ? "running" : "ready");
@@ -24635,6 +24720,26 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     void canvasAgentEnsureProjects({refresh:true}).catch(error=>canvasAgentSetProjectError(String(error?.message||error)));
   });
   canvasAgentConnectionButton?.addEventListener("click",canvasAgentOpenConnectionSettings);
+  if (typeof ResizeObserver === "function" && canvasAgentConnectionClip) {
+    canvasAgent.modelScrollObserver=new ResizeObserver(canvasAgentUpdateModelScroll);
+    canvasAgent.modelScrollObserver.observe(canvasAgentConnectionClip);
+    canvasAgent.modelScrollObserver.observe(canvasAgentConnectionLabel);
+  }
+  canvasAgentThinkingButton.addEventListener("click",()=>{
+    if (canvasAgentThinkingButton.getAttribute("aria-disabled")==="true") return;
+    const open=canvasAgentThinkingPopover.hidden;
+    canvasAgentThinkingPopover.hidden=!open;
+    canvasAgentThinkingButton.setAttribute("aria-expanded",String(open));
+    if (open) canvasAgentUpdateThinkingControl();
+  });
+  canvasAgentThinkingPopover.querySelectorAll("[data-effort]").forEach(option=>option.addEventListener("click",()=>{
+    if (setEffort(option.dataset.effort)) canvasAgentHideThinkingPopover({restoreFocus:true});
+  }));
+  canvasAgentThinkingCustom.addEventListener("keydown",event=>{
+    if (event.key!=="Enter") return;
+    event.preventDefault();
+    if (setEffort(canvasAgentThinkingCustom.value)) canvasAgentHideThinkingPopover({restoreFocus:true});
+  });
   canvasAgentProjectClear.addEventListener("click",event=>{
     event.preventDefault();event.stopPropagation();
     if(canvasAgent.projectId)void canvasAgentSelectProject("");
@@ -24690,6 +24795,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   document.addEventListener("keydown",event=>{
     if (event.key !== "Escape" || canvasAgentPanel.hidden) return;
     if (canvasAgentProjectRemoveDialog.open) return;
+    if (!canvasAgentThinkingPopover.hidden) {
+      event.preventDefault();
+      canvasAgentHideThinkingPopover({restoreFocus:true});
+      return;
+    }
     if (canvasAgent.promptSuggestionsExpanded) {
       event.preventDefault();
       canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
@@ -24717,6 +24827,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     closeCanvasAgent();
   });
   document.addEventListener("pointerdown",event=>{
+    if (!canvasAgentThinkingPopover.hidden&&!canvasAgentModelControl.contains(event.target)) canvasAgentHideThinkingPopover();
     if (!canvasAgentHistoryPopover.hidden&&!canvasAgentHistoryPopover.contains(event.target)&&!canvasAgentHistory.contains(event.target)) canvasAgentHideHistoryPopover();
     if (canvasAgentProjectDialogOpen()&&!canvasAgentProjectPopover.contains(event.target)&&!canvasAgentProjectRemoveDialog.contains(event.target)&&!canvasAgentProjectButton.contains(event.target)) canvasAgentHideProjectPopover();
     if (!canvasAgentReferencePicker.hidden&&!canvasAgentReferencePicker.contains(event.target)&&!canvasAgentReference.contains(event.target)) canvasAgentToggleReferencePicker(false);

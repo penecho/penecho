@@ -32,6 +32,10 @@ function isGlm53Model(model) {
   return /^glm-5\.3(?:$|-)/i.test(String(model || "").trim().split("/").pop());
 }
 
+function modelSupportsReasoningEffort(model) {
+  return !/^(?:gpt-4o(?:-mini)?|gpt-4\.1(?:-mini|-nano)?|gpt-3\.5-turbo)(?:$|[-/])/i.test(String(model || "").trim().split("/").pop());
+}
+
 function mapGlm53ReasoningEffort(effort) {
   // GLM-5.3 / Flash force thinking and accept only low, high, max.
   // Unsupported common levels otherwise silently select maximum reasoning.
@@ -62,6 +66,7 @@ function reasoningEffortMapping({ provider = "api", apiFormat = "openai", apiPre
 }
 
 function apiReasoningParameters(options = {}) {
+  if (options.supportsThinking === false || !modelSupportsReasoningEffort(options.model)) return {};
   const mapping = reasoningEffortMapping({ ...options, provider:"api" });
   if (mapping.family === "kimi" && mapping.mode === "thinking") return { thinking:{ type:mapping.value } };
   if (mapping.family === "kimi" && mapping.mode === "native-default") return {};
@@ -79,6 +84,7 @@ module.exports = {
   apiReasoningParameters,
   mapKimiReasoningEffort,
   isGlm53Model,
+  modelSupportsReasoningEffort,
   mapGlm53ReasoningEffort,
   normalizeReasoningEffort,
   reasoningEffortTimeoutMultiplier,
