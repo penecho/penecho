@@ -74,9 +74,9 @@ function harness(options = {}) {
     PenEchoCanvasFilePatch: require("../src/shared/canvas-file-patch"),
     SIZE: 32768, TILE: 512, MAX_HISTORY: 50, state, crypto: options.crypto || crypto.webcrypto,
     TextEncoder, TextDecoder, Blob, URL, Event, structuredClone, queueMicrotask,
-    AbortController, AbortSignal, setTimeout, clearTimeout, performance,
-    document: { getElementById: () => null, querySelectorAll: () => [], hidden: false, createElement: () => ({}) },
-    window: { PENECHO_CONFIG: {}, dispatchEvent: () => true }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
+    AbortController, AbortSignal, setTimeout, clearTimeout, setInterval: () => 1, performance,
+    document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {}, hidden: false, createElement: () => ({}) },
+    window: { PENECHO_CONFIG: options.browserDraftId ? { browserDraftId: options.browserDraftId } : {}, navigator: options.navigator, dispatchEvent: () => true }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
     addEventListener: (type, fn) => { listeners[type] = fn; },
     requestResult: async request => request.value,
     indexedDB: { open: () => { throw Error("unexpected IndexedDB open"); } },
@@ -1913,4 +1913,16 @@ test('browser draft MCP cannot borrow a later Cloud login to open or rename save
  assert.equal(renamed.saved,false);assert.equal(doc.title,'Local draft name');
  const reopened=await h.canvasDocumentsExecute('mcp_open_canvas',{documentId:doc.id,requestId:'own-local-draft'},execution);
  assert.equal(reopened.documentId,doc.id);
+});
+
+test('the same browser draft opens in two windows despite a held browser lock',async()=>{
+ const records=new Map();
+ let requests=0,held=false;
+ const navigator={locks:{request:async(_name,_options,callback)=>{requests++;if(held)return callback(null);held=true;return callback({});}}};
+ const first=harness({records,browserDraftId:'shared-draft',navigator});
+ const second=harness({records,browserDraftId:'shared-draft',navigator});
+ await Promise.all([first.context.window.PenEchoBrowserDraft.open(),second.context.window.PenEchoBrowserDraft.open()]);
+ assert.equal(requests,0);
+ assert.ok(first.canvasDocuments.activeId);
+ assert.ok(second.canvasDocuments.activeId);
 });

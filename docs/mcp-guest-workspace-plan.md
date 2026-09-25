@@ -4,7 +4,7 @@
 
 ## 已实现的使用流程
 
-安装启用包含 MCP 配置和 Skill 的插件 → 客户端发起 OAuth → 选择匿名试用或登录授权 → 客户端自动存储凭证 → Agent 调用 `penecho_open_workspace` → 打开返回地址 → 网页自动连接 MCP → `penecho_workspace_status` 返回精确会话目标 → Agent 创建和修改内容。
+Scope correction (2026-09-25): this document records plugin development work only. It does not define the general MCP connection workflow. General MCP instructions and the Canvas skill have been restored to the Canvas 1.3.3 contract. Design any future plugin onboarding separately; do not inject this document's browser-workspace or guest flow into general MCP instructions.
 
 - 不输入配对码；OAuth 后不再要求复制 Access Token。授权页面保留明确的同意/取消操作。
 - 页面复用完整 Canvas。外部 Agent 可渲染、编辑、读取反馈；PenEcho Agent 和 Cloud 保存按现有登录、权限和计费规则执行。

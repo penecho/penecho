@@ -1766,6 +1766,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   const initialPlugins = storedPluginSettings();
   const ERASER_MODE_STORAGE_KEY = "penecho-eraser-mode";
+  const GRID_PREFERENCE_VERSION_KEY = "penecho-grid-preference-version";
+  const GRID_PREFERENCE_VERSION = "dots-default-v1";
+  function loadCanvasGridPreference() {
+    if (localStorage.getItem(GRID_PREFERENCE_VERSION_KEY) !== GRID_PREFERENCE_VERSION) {
+      localStorage.setItem("penecho-grid", "true");
+      localStorage.setItem("penecho-grid-style", "dots");
+      localStorage.setItem(GRID_PREFERENCE_VERSION_KEY, GRID_PREFERENCE_VERSION);
+    }
+    return {
+      visible: localStorage.getItem("penecho-grid") !== "false",
+      style: localStorage.getItem("penecho-grid-style") === "lines" ? "lines" : "dots",
+    };
+  }
   function normalizeAiFont(value) {
     const font = String(value || "").trim();
     if (font === AI_FONT_HANDWRITTEN_LEGACY) return AI_FONT_HANDWRITTEN;
@@ -1781,7 +1794,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedLegacyLanguage = localStorage.getItem("ghostboard-language"),
     storedTheme = localStorage.getItem("penecho-theme") || localStorage.getItem("ghostboard-theme"),
     storedStudioPalette = localStorage.getItem("penecho-studio-palette"),
-    storedGrid = localStorage.getItem("penecho-grid") ?? localStorage.getItem("ghostboard-grid"),
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
@@ -1796,7 +1808,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     initialTheme = normalizeTheme(storedTheme),
     initialStudioPalette = normalizeStudioPaletteForTheme(storedTheme, storedStudioPalette),
     initialPageScale = window.PenEchoPageScale?.current?.() || 1,
-    initialGrid = storedGrid === null ? true : storedGrid === "true",
+    initialGridPreference = loadCanvasGridPreference(),
     configuredAutoDelay = Number(window.PENECHO_CONFIG?.autoAiDelayMs),
     configuredAiTimeout = Number(window.PENECHO_CONFIG?.aiRequestTimeoutMs),
     configuredAiEffort = normalizeToolbarReasoningEffort(window.PENECHO_CONFIG?.aiEffort),
@@ -2067,8 +2079,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       theme: initialTheme,
       studioPalette: initialStudioPalette,
       pageScale: initialPageScale,
-      gridVisible: initialGrid,
-      gridStyle: localStorage.getItem("penecho-grid-style") === "lines" ? "lines" : "dots",
+      gridVisible: initialGridPreference.visible,
+      gridStyle: initialGridPreference.style,
       paint: { paper: "#ead9ad", paperGrid: "#c8ae7155", outside: "#090814", border: "#7f693b" },
       navigationTimer: 0,
       navigationDeadline: 0,
@@ -4843,7 +4855,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem("penecho-studio-palette", studioPalette);
       updateAppearanceControls();
     }
-    state.gridVisible = (localStorage.getItem("penecho-grid") ?? localStorage.getItem("ghostboard-grid")) !== "false";
     updateEmbodimentLabel();
     updateGridButton();
     syncStudioWorkbench(theme);

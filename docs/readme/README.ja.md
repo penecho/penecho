@@ -1,175 +1,88 @@
-<h1 align="center">
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
     <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
   </picture>
-</h1>
-
-<p align="center">
-  <a href="../../README.md">English</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <strong>日本語</strong> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.de.md">Deutsch</a>
 </p>
 
-<h1 align="center">AI と考えるための<br>空間ワークスペース。</h1>
-<p align="center">内蔵 Agent や MCP 対応の AI アシスタントで、描き、探究し、形にしましょう。</p>
+<h1 align="center">どんな AI とも、キャンバスで考える。</h1>
+
+<p align="center">手でスケッチ。PenEcho の内蔵 Agent や Codex、Claude Code、あらゆる MCP クライアントが、メモのそばに図、文書、動くウィジェットを作ります。</p>
+
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="バージョン 1.3.4">
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.4-087f83" alt="Release v1.3.4"></a>
+  <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
+  <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
+  <a href="../mcp-setup.md"><img src="https://img.shields.io/badge/MCP-ready-6f42c1" alt="MCP"></a>
 </p>
+
 <p align="center">
-  <a href="https://penecho.ai">ウェブサイト</a> ·
-  <a href="https://github.com/penecho/penecho/releases/latest">ダウンロード</a> ·
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_MACOS-24292f?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="macOS"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_WINDOWS-0969da?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Windows"></a>
+  <a href="https://penecho.ai"><img src="https://img.shields.io/badge/OPEN_PENECHO.AI-087f83?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="penecho.ai"></a>
+</p>
+
+<p align="center">
   <a href="#quick-start">クイックスタート</a> ·
-  <a href="../mcp-setup.md">MCP ガイド</a> ·
+  <a href="#connect-your-ai-agent-mcp">AI エージェントを接続（MCP）</a> ·
+  <a href="../">ドキュメント</a> ·
   <a href="https://discord.gg/3jrPJ3mXdX">Discord</a>
 </p>
 
-<p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho の全機能デモ" width="49%">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="PenEcho の専門的な図のデモ" width="49%">
-</p>
+<p align="center"><sub><a href="../../README.md">English</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <strong>日本語</strong> ·
+  <a href="README.ko.md">한국어</a> ·
+  <a href="README.ru.md">Русский</a> ·
+  <a href="README.es.md">Español</a> ·
+  <a href="README.pt-BR.md">Português</a> ·
+  <a href="README.fr.md">Français</a> ·
+  <a href="README.de.md">Deutsch</a></sub></p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho プラグインのデモ" width="49%">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="PenEcho のインタラクティブなキャンバスのデモ" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho" width="100%">
 </p>
-
-<p align="center">
-  <a href="https://www.kimi.com/code?aff=penecho">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="../assets/kimi-open-source-friends-dark.svg">
-      <img src="../assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
-    </picture>
-  </a>
-</p>
-
-## AI との会話を空間へ広げる
-
-**Codex、Claude、Kimi などの AI エージェント**との会話を続けながら、その成果を PenEcho に並べましょう。
-
-MCP を通じて、AI は説明を図に、アイデアをインタラクティブなプレビューに変換できます。資料、考察、成果を並べて確認し、キャンバスに書き込んだフィードバックを次の対話に取り込めます。
-
-| 会話を続ける | 成果が形になるのを見る | フィードバックを届ける |
-| --- | --- | --- |
-| 使い慣れた AI エージェントで作業できます。 | PenEcho の MCP サーバーが図、ドキュメント、インタラクティブなプレビューを Canvas に配置します。 | 成果を試して注釈を加え、エージェントに読み取らせて次の修正につなげます。 |
-
-<p align="center">
-  <a href="../assets/mcp-spatial-example.webp">
-    <img src="../assets/mcp-spatial-example.webp" alt="AI とのアーキテクチャ検討。Canvas 上の設計案に手書きでフィードバックを追加。" width="760">
-  </a>
-</p>
-<p align="center"><em>Canvas に手書きで注釈を加えたアーキテクチャの検討。</em></p>
-
-<!-- professional-diagram-gallery -->
-<p align="center">さまざまな<strong>専門的な図表</strong>を作成し、見やすく、操作しやすく。</p>
-
-<table width="100%">
-  <tr>
-    <th colspan="2" align="left">アーキテクチャ図</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 本番クラスタ" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="モノリスからマイクロサービスへ" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>Kubernetes 本番クラスタ</strong></td>
-    <td valign="top"><strong>モノリスからマイクロサービスへ</strong></td>
-  </tr>
-  <tr>
-    <th colspan="2" align="left">シーケンス図</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="イベント駆動の通知" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP リクエストが Canvas に届くまで" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>イベント駆動の通知</strong></td>
-    <td valign="top"><strong>MCP リクエストが Canvas に届くまで</strong></td>
-  </tr>
-  <tr>
-    <th colspan="2" align="left">ワークフロー</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="リリース準備：並列処理と合流" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="複数リージョンへの展開とロールバック" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>リリース準備：並列処理と合流</strong></td>
-    <td valign="top"><strong>複数リージョンへの展開とロールバック</strong></td>
-  </tr>
-</table>
-
-<p align="center"><sub>画像をクリックすると、元のサイズで表示できます。</sub></p>
-<!-- /professional-diagram-gallery -->
-
-**完成する前から確認できます。** AI と話しながら成果が形になる様子を確認し、試してフィードバックを伝え、一緒にプロジェクトを進めましょう。
-
-[MCP でエージェントを接続 →](#connect-your-agent-with-mcp)
+<p align="center"><em>手描きのスケッチからインタラクティブな成果まで、ひとつのキャンバスで。</em></p>
 
 ## できること
 
-- **視覚的に作業。** 広いキャンバスに手書き、数式、テキスト、画像、図、インタラクティブな HTML Widgets を組み合わせられます。
-- **AI と制作。** 内蔵 Agent で調査、ファイル操作、アイデアの説明、編集可能な視覚的成果の作成ができます。
-- **自分のエージェントを接続。** Codex、Claude Code などの MCP 対応クライアントで、明示的に有効化した Canvas を読み取り、編集できます。
-- **成果を保存・共有。** Canvas をプロジェクトに整理し、Cloud のリビジョンを保存、お気に入りを同期し、Echoes で公開できます。
-
-## 1.3.3 の新機能
-
-| 図の種類 | 描画できる内容 |
-| --- | --- |
-| **アーキテクチャ図** | サービス、依存関係、入れ子のシステム境界を、自動レイアウトと接続線の経路計算で表現します。 |
-| **シーケンス図** | 参加者とメッセージの順序を、応答、自己呼び出し、条件分岐・ループ・並列のフラグメントで表現します。 |
-| **ワークフロー** | 手順、判断、条件付き分岐、ループ、分岐・合流を伴う並列処理を描画します。 |
-
-PenEcho Agent または MCP 接続のエージェントに要件を伝え、Canvas 上で詳細を確認し、フィードバックで修正して SVG / PNG に書き出せます。
-
-[更新履歴](../../CHANGELOG.md#133)
-
-## 仕組み
-
-<p align="center">
-  <img src="../../public/penecho-architecture.webp" alt="PenEcho の構成：ブラウザーは PenEcho Cloud またはローカル PC に接続します。Cloud はホストモデルを提供し、リンク済みデバイスにも接続できます。PC は独自の LLM API やエージェントとともに PenEcho CLI またはアプリを実行します。外部 AI エージェントは Cloud MCP または Local MCP を任意で利用できます。" width="1483">
-</p>
-
-PenEcho Cloud、または CLI・デスクトップアプリを実行するローカル PC を通じて、ブラウザーで PenEcho を開きます。Cloud はホストモデルを提供し、リンク済みデバイスにも接続できます。PC では独自のモデル API やエージェントを使用できます。Codex、Claude などの外部 AI エージェントは Cloud MCP または Local MCP で接続できます。どちらの MCP 接続も任意です。
-
-実装の詳細は[アーキテクチャの説明](../architecture.md)をご覧ください。
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="描いてから質問" width="100%"><br>
+      <strong>描いてから質問</strong><br>
+      無限のキャンバスに手書き、数式、テキスト、画像を配置。手を止めると AI が自動で応答します。
+    </td>
+    <td width="33%" valign="top">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes クラスター" width="100%"></a><br>
+      <strong>プロ向けの図</strong><br>
+      自動レイアウトのアーキテクチャ図、シーケンス図、ワークフロー図。SVG または PNG で書き出せます。
+    </td>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="動くウィジェット" width="100%"><br>
+      <strong>動くウィジェット</strong><br>
+      電卓、クイズ、プロトタイプをキャンバスで実行し、お気に入り登録や共有もできます。
+    </td>
+  </tr>
+</table>
 
 <a id="quick-start"></a>
-
 ## クイックスタート
 
-**デスクトップ：** [GitHub Releases](https://github.com/penecho/penecho/releases/latest) から Windows または macOS アプリをダウンロードします。
-
-**npm：** Node.js **22.19 以降**が必要です。
+| | 始め方 |
+| --- | --- |
+| **デスクトップアプリ** | macOS 版と Windows 版を [GitHub Releases](https://github.com/penecho/penecho/releases/latest) から入手。必要な機能が揃い、自動更新されます。 |
+| **npm** | Node.js 22.19 以降が必要です。`npm i -g penecho`、続いて `penecho` を実行し、`localhost:3888` を開きます。 |
+| **ブラウザー** | [penecho.ai](https://penecho.ai) にサインインして、ホストモデルとクラウドのキャンバスを使用。インストール不要です。 |
 
 ```bash
 npm install -g penecho
-penecho
+penecho             # http://localhost:3888
 ```
 
-`http://localhost:3888` を開きます。**設定 → 接続**で独自のモデル API、または認証済みの Codex、Claude Code、Kimi CLI を追加します。接続は `~/.penecho/connections.json` に保存され、一般設定は `~/.penecho/config.env` に保存されます。PenEcho がホストするモデルを使うには、サインインして設定で利用可能なモデルを選択します。
-
-起動時に 6 桁のアクセスコードを設定するか、信頼できるネットワークでオープンアクセスを明示的に有効にします。他のデバイスから接続できる LAN アドレスも起動時に表示されます。
+> [!TIP]
+> 初回起動時に 6 桁のアクセスコードを設定します。信頼できるネットワークではオープンアクセスも選べます。**設定 → AI と接続**で独自の API キー、サインイン済みの Codex / Claude Code / Kimi CLI、または PenEcho モデルを追加します。
 
 <details>
 <summary>ソースから実行</summary>
@@ -183,14 +96,13 @@ npm start
 
 </details>
 
-<a id="connect-your-agent-with-mcp"></a>
+<a id="connect-your-ai-agent-mcp"></a>
+## AI エージェントを接続（MCP）
 
-## MCP でエージェントを接続
+使い慣れたエージェントで会話を続けられます。エージェントがキャンバスに描き、あなたが注釈を付けると、次のターンでその内容を読み取ります。
 
-**Local MCP** の場合：
-
-1. PenEcho を起動し、**設定 → MCP サービス**で現在の Canvas を有効にします。
-2. 設定から対応するローカルクライアントを構成するか、生成された起動設定をコピーします。npm のグローバルインストールでは、`mcpServers` JSON に対応するクライアントは次の設定を使用できます。
+1. PenEcho の**設定 → MCP サービス**を開き、現在のキャンバスを有効にします。
+2. 対応クライアントには**自動設定**を使うか、生成された設定プロンプトを Codex、Claude Code、Kimi、Cursor などに貼り付けます。npm のグローバルインストールでは、`mcpServers` JSON に対応するクライアントに次の互換設定も使えます。
 
    ```json
    {
@@ -200,29 +112,56 @@ npm start
    }
    ```
 
-3. エージェントに依頼します：**「話し合ったアーキテクチャを私の PenEcho Canvas に表示して。」**
+3. *「話し合ったアーキテクチャを PenEcho のキャンバスに表示して」*と頼みます。
 
-エージェントは関連する内容のキャプチャ、オブジェクト編集、視覚的成果の作成、ドキュメントのソースファイルへのパッチ適用、フィードバックの受信ができます。検出できるのは有効化され、接続中の Canvas のみです。Local MCP では MCP クライアントを PenEcho ホスト上で実行します。LAN やリンク済みデバイスのブラウザーへの対応によって、ローカル MCP エンドポイントが公開されるわけではありません。Cloud MCP は、有効化済みの PenEcho Cloud キャンバス向けの、独立した認証付き HTTPS 接続です。
+<p align="center"><a href="../assets/mcp-spatial-example.webp"><img src="../assets/mcp-spatial-example.webp" alt="AI とのアーキテクチャ検討。Canvas 上の設計案に手書きでフィードバックを追加。" width="760"></a></p>
+<p align="center"><em>Claude Code とのアーキテクチャ検討に、キャンバス上で手書きの注釈を追加。</em></p>
 
-デスクトップ版では、適切な同梱ランタイムを含む生成済みの設定を使用してください。[MCP セットアップ](../mcp-setup.md)と任意の[エージェントワークフロースキル](../../skills/penecho-mcp/SKILL.md)をご覧ください。
+> [!NOTE]
+> エージェントに見えるのは有効化したキャンバスだけです。Local MCP はコンピューター内で動作し、Cloud MCP はクラウドのキャンバス用の独立した認証接続です。 [MCP ガイド →](../mcp-setup.md)
 
-## PenEcho Cloud と AI 接続
+## 図のギャラリー
 
-[PenEcho Cloud](https://penecho.ai) は、非公開プロジェクトのバージョン管理、お気に入りの同期、Echoes による公開共有、リンク済みコンピューターへのリモートアクセスを提供します。
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes クラスター" width="100%"></a><br><strong>Kubernetes クラスター</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="モノリス → マイクロサービス" width="100%"></a><br><strong>モノリス → マイクロサービス</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="イベント駆動の通知" width="100%"></a><br><strong>イベント駆動の通知</strong></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="MCP からキャンバスへの経路" width="100%"></a><br><strong>MCP からキャンバスへの経路</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="リリース：並列タスク" width="100%"></a><br><strong>リリース：並列タスク</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="複数リージョンへの展開" width="100%"></a><br><strong>複数リージョンへの展開</strong></td>
+  </tr>
+</table>
 
-| 接続 | 仕組み |
-| --- | --- |
-| **PenEcho のモデル** | サインインして利用可能なホストモデルを選び、アカウントのクレジットで使用します。現在の料金と残高は設定に表示されます。 |
-| **独自のモデル API** | OpenAI または Anthropic 互換のエンドポイント、モデル、API キーを設定します。利用量はプロバイダー側で処理されます。 |
-| **独自の CLI** | ローカルにインストールして認証済みの Codex、Claude Code、Kimi CLI を使用します。利用可否と利用量は各プロバイダーのプランに依存します。 |
+<p align="center"><sub>図をクリックするとフルサイズで表示します。</sub></p>
 
-コンピューターでホストモデルを使用するには Cloud へのサインインが必要ですが、デバイスのペアリングや別の Credits API キーは不要です。Cloud MCP は有効化された Cloud キャンバスに直接アクセスできます。コンピューター上でホストする Canvas に Cloud 経由でアクセスするには、リンク済みデバイスがオンラインで、必要なリレー機能に対応している必要があります。
+## 仕組み
 
-独自の API・CLI 接続では PenEcho クレジットを消費しません。独自の接続を使うローカル利用では Cloud アカウントは任意です。AI 機能には選択したプロバイダーへのアクセスが必要であり、PenEcho をローカルで実行してもリモートモデルがオフラインで使えるようにはなりません。
+<p align="center"><img src="../../public/penecho-architecture.webp" alt="PenEcho の構成：ブラウザーは PenEcho Cloud またはローカル PC に接続します。Cloud はホストモデルを提供し、リンク済みデバイスにも接続できます。PC は独自の LLM API やエージェントとともに PenEcho CLI またはアプリを実行します。外部 AI エージェントは Cloud MCP または Local MCP を任意で利用できます。" width="100%"></p>
 
-## 推奨モデル設定
+- **コンピューター上** — デスクトップアプリまたは CLI がキャンバスを提供し、独自のモデル API や Agent CLI を使用します。
+- **クラウド上** — penecho.ai にはホストモデル、同期するプロジェクトとお気に入りがあり、リンク済みコンピューターにも接続できます。
+- **あなたのエージェント** — Local または Cloud MCP で接続します。どちらも任意です。
 
-現在の実機検証を基に、PenEcho の実際のキャンバス作業における回答品質と待ち時間のバランスを考慮した推奨設定です。実際の応答時間はプロバイダー、キャンバスの複雑さ、推論動作によって変わります。
+詳細: [アーキテクチャ資料](../architecture.md).
+
+## AI の選び方
+
+| 接続 | 費用 | 適した用途 |
+| --- | --- | --- |
+| **PenEcho モデル** — サインインして選択 | アカウントのクレジット | キーなしで始められる |
+| **独自のモデル API** — OpenAI / Anthropic | プロバイダーの料金 | モデルと費用を自分で管理 |
+| **独自の CLI** — Codex, Claude Code, Kimi | 契約中のプラン | 既存のサブスクリプションを活用 |
+
+モデルと推論強度の選び方： [推奨モデル](#recommended-models) (リリースごとに更新).
+
+<a name="recommended-models"></a>
+<details>
+<summary>推奨モデル</summary>
+
+現在の実測を基に、PenEcho のキャンバス作業での回答品質と待ち時間のバランスを考慮しました。実際の応答時間はプロバイダー、キャンバスの複雑さ、推論動作によって変わります。
 
 | モデル | 推論強度 | 備考 | 推奨用途 |
 | --- | --- | --- | --- |
@@ -237,24 +176,40 @@ npm start
 | `deepseek-v4-flash-vision-exp` | `medium` | 良好 | DeepSeek API を使う視覚対応の作業 |
 | `glm-5.3-flash` | `medium` | 良好 | GLM の Anthropic 互換 API を使う高速な作業 |
 
-## コミュニティとライセンス
+</details>
 
-貢献するには [CONTRIBUTING.md](../../CONTRIBUTING.md) を読み、プルリクエストを作成する前に `npm run check` を実行してください。不具合は [Issues](https://github.com/penecho/penecho/issues)、アイデアは [Discussions](https://github.com/penecho/penecho/discussions)、交流は [Discord](https://discord.gg/3jrPJ3mXdX) へ。
+## 1.3.3 の新機能
 
-[AGPL-3.0-only](../../LICENSE) ライセンスで提供しています。別途[商用ライセンス](../../COMMERCIAL-LICENSE.md)も利用できます。[商標ポリシー](../../TRADEMARKS.md)と[貢献者契約](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)をご覧ください。
+- **アーキテクチャ図、シーケンス図、ワークフロー図** 自動レイアウト、接続線の経路設定、SVG / PNG 書き出しに対応。
+- **キャンバスライブラリー** ページ分け、検索、プロジェクト別の絞り込み、並べ替えに対応。
+- **モデル API のプリセットを追加** モデル一覧を自動取得します。
 
-## 謝辞
+[変更履歴の全文 →](../../CHANGELOG.md#133)
 
-tt-a1i による [Archify](https://github.com/tt-a1i/archify) に感謝します。PenEcho の専門図レンダラーは、この MIT ライセンスのプロジェクトから SVG・幾何処理の補助コードを適用しています。[MIT ライセンスと著作権表示](../../src/architecture/vendor/archify/LICENSE) を保持しています。第三者への帰属は [NOTICE](../../NOTICE) を参照してください。
+## コミュニティー
 
-## スター履歴
+| [Discord](https://discord.gg/3jrPJ3mXdX) | [Discussions](https://github.com/penecho/penecho/discussions) | [Issues](https://github.com/penecho/penecho/issues) | [Contributing](../../CONTRIBUTING.md) |
+| --- | --- | --- | --- |
+| チームと交流 | アイデアや質問 | バグを報告 | 先に実行： `npm run check` |
+
+[AGPL-3.0-only](../../LICENSE) ライセンスで提供しています。[商用ライセンス](../../COMMERCIAL-LICENSE.md)も利用できます。[商標ポリシー](../../TRADEMARKS.md)と[貢献者契約](../../CONTRIBUTOR-LICENSE-AGREEMENT.md)もご覧ください。
+
+図のレンダラーには、tt-a1i の [Archify](https://github.com/tt-a1i/archify) に由来する SVG・幾何処理の補助コードを適用しています（MIT）。詳細は [NOTICE](../../NOTICE).
+
+<p align="center">
+  <a href="https://www.kimi.com/code?aff=penecho">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/kimi-open-source-friends-dark.svg">
+      <img src="../assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
+    </picture>
+  </a>
+</p>
 
 <p align="center">
   <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
-      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="PenEcho の GitHub スター数の推移" width="800">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="PenEcho GitHub stars" width="800">
     </picture>
   </a>
 </p>

@@ -160,6 +160,9 @@
   // exposes a blank strip on opening; animating `left` also lays out every frame.
   const motionPanels=[document.querySelector("#studioNavigator"),document.querySelector("#canvasAgentPanel")];
   const motionViewport=document.querySelector("#viewport");
+  const motionChrome=[".primary-tools","#aiToolsSection","#canvasZoomControls","#canvasAutoPausedNotice","#mcpCanvasNotice","#pageHintSlot"].map(selector=>document.querySelector(selector)).filter(Boolean);
+  const motionPausedNotice=document.querySelector("#canvasAutoPausedNotice"),motionAiTools=document.querySelector("#aiToolsSection");
+  let layoutDockForMotion=null;
   let sidebarAnimations=[],sidebarMotionGeneration=0,sidebarMotionRunning=false,sidebarMotionRestore=[];
   function restoreSidebarMotion() {
     for(const animation of sidebarAnimations)animation.cancel();
@@ -176,6 +179,7 @@
     const elements=[...motionPanels,motionViewport].filter(Boolean);
     const snapshot=elements.map(element=>({element,rect:element.getBoundingClientRect()}));
     snapshot.contentLeft=document.querySelector("#screen")?.getBoundingClientRect().left;
+    snapshot.chrome=new Map(motionChrome.filter(element=>element.getClientRects().length&&getComputedStyle(element).visibility!=="hidden").map(element=>[element,element.getBoundingClientRect()]));
     sidebarMotionGeneration++;
     restoreSidebarMotion();sidebarMotionRunning=false;
     if(!animate||document.body.dataset.theme!=="studio"||matchMedia("(prefers-reduced-motion: reduce)").matches)return null;
@@ -187,6 +191,10 @@
     const generation=++sidebarMotionGeneration;
     restoreSidebarMotion();
     sidebarMotionRunning=true;
+    syncNavigationChrome();
+    // Resolve the destination dock before the first animation frame. Waiting
+    // until the panels settle makes the fixed controls disappear and jump back.
+    layoutDockForMotion?.();
     const scale=parseFloat(getComputedStyle(document.documentElement).zoom)||1;
     const targets=snapshot.map(({element,rect})=>{const finalRect=element.getBoundingClientRect();return {element,rect,finalRect,dx:(rect.left-finalRect.left)/scale};});
     const viewport=targets.find(target=>target.element===motionViewport);
@@ -211,6 +219,22 @@
     for(const {element,dx} of targets){
       if(element===motionViewport||Math.abs(dx)<.5)continue;
       sidebarAnimations.push(element.animate([{transform:`translate3d(${dx}px,0,0)`},{transform:"translate3d(0,0,0)"}],timing));
+    }
+    for(const element of motionChrome){
+      if(!element.getClientRects().length||getComputedStyle(element).visibility==="hidden")continue;
+      const previous=snapshot.chrome.get(element)||snapshot.chrome.get(element===motionPausedNotice?motionAiTools:element===motionAiTools?motionPausedNotice:null);
+      if(!previous)continue;
+      const final=element.getBoundingClientRect(),substituted=!snapshot.chrome.has(element);
+      const oldLeft=substituted?previous.right-final.width:previous.left;
+      const oldTop=substituted?previous.bottom-final.height:previous.top;
+      const dx=(oldLeft-final.left)/scale,dy=(oldTop-final.top)/scale;
+      if(Math.abs(dx)<.5&&Math.abs(dy)<.5)continue;
+      if(element.matches(".primary-tools")){
+        // Translating this ancestor would change the containing block of its
+        // fixed AI controls. Only this small dock animates its CSS position.
+        const style=getComputedStyle(element),left=parseFloat(style.left),bottom=parseFloat(style.bottom);
+        sidebarAnimations.push(element.animate([{left:`${left+dx}px`,bottom:`${bottom-dy}px`},{left:`${left}px`,bottom:`${bottom}px`}],timing));
+      }else sidebarAnimations.push(element.animate([{translate:`${dx}px ${dy}px`},{translate:"0px 0px"}],timing));
     }
     Promise.allSettled(sidebarAnimations.map(animation=>animation.finished)).then(()=>{
       if(generation!==sidebarMotionGeneration)return;
@@ -285,9 +309,9 @@
       const body=document.body,viewport=motionViewport.getBoundingClientRect();
       return JSON.stringify([body.className,body.dataset.theme,body.dataset.canvasMode,document.documentElement.lang,document.documentElement.dataset.penechoPageScale,viewport.left,viewport.width,...dockSizeTargets.flatMap(element=>[element.offsetWidth,element.offsetHeight])]);
     }
-    function layoutDock() {
+    function layoutDock(force=false) {
       frame = 0;
-      if(sidebarMotionRunning)return;
+      if(sidebarMotionRunning&&force!==true)return;
       const body = document.body;
       if (body.dataset.theme !== "studio" || !matchMedia("(min-width: 701px)").matches) {
         delete body.dataset.shellDockLayout;
@@ -296,7 +320,7 @@
       }
       // Our own width/row updates notify ResizeObserver again. Reuse the
       // settled arrangement instead of cycling through all three layouts.
-      if(lastDockInputs===dockInputs())return;
+      if(force!==true&&lastDockInputs===dockInputs())return;
       const widthClass=[...document.querySelector(".canvas-frame").classList].find(name=>/^canvas-agent-width-\d+$/.test(name));
       const agentWidth=widthClass?`${Number(widthClass.split("-").at(-1))*2.5}%`:"390px";
       for(const target of dockPropertyTargets)if(target.style.getPropertyValue("--pe-shell-agent-width")!==agentWidth)target.style.setProperty("--pe-shell-agent-width",agentWidth);
@@ -367,8 +391,9 @@
       delete body.dataset.shellDockMeasuring;
       lastDockInputs = dockInputs();
     }
+    layoutDockForMotion=()=>layoutDock(true);
     function scheduleDockLayout() {
-      if (!frame) frame = requestAnimationFrame(layoutDock);
+      if (!frame) frame = requestAnimationFrame(()=>layoutDock());
     }
     const sizes = new ResizeObserver(scheduleDockLayout);
     for (const element of dockSizeTargets) sizes.observe(element);

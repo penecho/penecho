@@ -1,175 +1,88 @@
-<h1 align="center">
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
     <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
   </picture>
-</h1>
-
-<p align="center">
-  <a href="../../README.md">English</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.es.md">Español</a> |
-  <strong>Português (Brasil)</strong> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.de.md">Deutsch</a>
 </p>
 
-<h1 align="center">Um espaço de trabalho visual<br>para pensar com IA.</h1>
-<p align="center">Desenhe, explore e crie com o Agent integrado ou seu próprio assistente compatível com MCP.</p>
+<h1 align="center">Pense em um canvas com qualquer IA.</h1>
+
+<p align="center">Desenhe à mão. O Agent integrado do PenEcho, o Codex, o Claude Code ou qualquer cliente MCP transforma suas ideias em diagramas, documentos e widgets funcionais ao lado das suas notas.</p>
+
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.4-087f83" alt="Versão 1.3.4">
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.4-087f83" alt="Release v1.3.4"></a>
+  <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
+  <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
+  <a href="../mcp-setup.md"><img src="https://img.shields.io/badge/MCP-ready-6f42c1" alt="MCP"></a>
 </p>
+
 <p align="center">
-  <a href="https://penecho.ai">Site</a> ·
-  <a href="https://github.com/penecho/penecho/releases/latest">Download</a> ·
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_MACOS-24292f?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="macOS"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/DOWNLOAD_FOR_WINDOWS-0969da?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Windows"></a>
+  <a href="https://penecho.ai"><img src="https://img.shields.io/badge/OPEN_PENECHO.AI-087f83?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="penecho.ai"></a>
+</p>
+
+<p align="center">
   <a href="#quick-start">Início rápido</a> ·
-  <a href="../mcp-setup.md">Guia MCP</a> ·
+  <a href="#connect-your-ai-agent-mcp">Conecte seu agente de IA (MCP)</a> ·
+  <a href="../">Documentação</a> ·
   <a href="https://discord.gg/3jrPJ3mXdX">Discord</a>
 </p>
 
-<p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="Demonstração completa do PenEcho" width="49%">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins.webp" alt="Demonstração de diagramas profissionais do PenEcho" width="49%">
-</p>
+<p align="center"><sub><a href="../../README.md">English</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.ko.md">한국어</a> ·
+  <a href="README.ru.md">Русский</a> ·
+  <a href="README.es.md">Español</a> ·
+  <strong>Português</strong> ·
+  <a href="README.fr.md">Français</a> ·
+  <a href="README.de.md">Deutsch</a></sub></p>
 
 <p align="center">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Demonstração de plugins do PenEcho" width="49%">
-  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Demonstração do canvas interativo do PenEcho" width="49%">
+  <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_full_demo.webp" alt="PenEcho" width="100%">
 </p>
-
-<p align="center">
-  <a href="https://www.kimi.com/code?aff=penecho">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="../assets/kimi-open-source-friends-dark.svg">
-      <img src="../assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
-    </picture>
-  </a>
-</p>
-
-## Uma extensão espacial da sua conversa com IA
-
-Continue conversando com **Codex, Claude, Kimi ou outros agentes de IA**. Deixe o PenEcho dar um lugar para o seu trabalho.
-
-Com MCP, sua IA pode transformar explicações em diagramas e ideias em prévias interativas. Mantenha referências, raciocínio e resultados lado a lado, anote no canvas e leve seus comentários para a próxima rodada.
-
-| Continue a conversa | Veja o trabalho tomar forma | Envie seus comentários |
-| --- | --- | --- |
-| Trabalhe com o agente de IA que você já usa. | O servidor MCP do PenEcho traz diagramas, documentos e prévias interativas para o Canvas. | Experimente o resultado, faça anotações e deixe o agente ler seus comentários para a próxima revisão. |
-
-<p align="center">
-  <a href="../assets/mcp-spatial-example.webp">
-    <img src="../assets/mcp-spatial-example.webp" alt="Uma discussão de arquitetura com IA, com comentários manuscritos ao lado da proposta no PenEcho Canvas" width="760">
-  </a>
-</p>
-<p align="center"><em>Uma discussão de arquitetura com anotações manuscritas no Canvas.</em></p>
-
-<!-- professional-diagram-gallery -->
-<p align="center">Crie <strong>diagramas profissionais</strong> fáceis de explorar e com os quais você pode interagir.</p>
-
-<table width="100%">
-  <tr>
-    <th colspan="2" align="left">Arquitetura</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Cluster Kubernetes em produção" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="Migração para microsserviços" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>Cluster Kubernetes em produção</strong></td>
-    <td valign="top"><strong>Migração para microsserviços</strong></td>
-  </tr>
-  <tr>
-    <th colspan="2" align="left">Sequências</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Notificações orientadas a eventos" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Como as solicitações MCP chegam ao Canvas" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>Notificações orientadas a eventos</strong></td>
-    <td valign="top"><strong>Como as solicitações MCP chegam ao Canvas</strong></td>
-  </tr>
-  <tr>
-    <th colspan="2" align="left">Fluxos de trabalho</th>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="Preparação: tarefas em paralelo" width="100%"></a>
-    </td>
-    <td width="50%" align="center" valign="middle">
-      <a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="Implantação e reversão multirregional" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top"><strong>Preparação: tarefas em paralelo</strong></td>
-    <td valign="top"><strong>Implantação e reversão multirregional</strong></td>
-  </tr>
-</table>
-
-<p align="center"><sub>Clique em uma imagem para ver o diagrama em tamanho completo.</sub></p>
-<!-- /professional-diagram-gallery -->
-
-**Veja antes de ficar pronto.** Acompanhe o trabalho tomando forma enquanto conversa com a IA. Experimente, dê feedback e avance no projeto em conjunto.
-
-[Conecte seu agente com MCP →](#connect-your-agent-with-mcp)
+<p align="center"><em>De um esboço a um resultado interativo no mesmo canvas.</em></p>
 
 ## O que você pode fazer
 
-- **Trabalhe visualmente.** Combine escrita à mão, equações, texto, imagens, diagramas e HTML Widgets interativos em um canvas amplo.
-- **Crie com IA.** Use o Agent integrado para pesquisar, trabalhar com arquivos, explicar ideias e criar resultados visuais editáveis.
-- **Traga seu próprio agente.** Conecte Codex, Claude Code ou outro cliente compatível com MCP para ler e editar um Canvas explicitamente habilitado.
-- **Guarde e compartilhe seu trabalho.** Organize Canvases em projetos, salve revisões na Cloud, sincronize favoritos e publique pelo Echoes.
-
-## Novidades da versão 1.3.3
-
-| Tipo de diagrama | O que você pode desenhar |
-| --- | --- |
-| **Diagramas de arquitetura** | Represente serviços, dependências e limites de sistemas aninhados com organização automática e roteamento das conexões. |
-| **Diagramas de sequência** | Mostre participantes e mensagens em ordem, com respostas, chamadas a si mesmo e fragmentos condicionais, repetitivos ou paralelos. |
-| **Fluxos de trabalho** | Organize etapas, decisões, ramificações com condições, ciclos e caminhos paralelos com pontos de bifurcação e junção. |
-
-Descreva os requisitos ao PenEcho Agent ou a um agente conectado por MCP. Confira os detalhes no Canvas, refine o resultado com feedback e exporte em SVG ou PNG.
-
-[Histórico completo de alterações](../../CHANGELOG.md#133)
-
-## Como funciona
-
-<p align="center">
-  <img src="../../public/penecho-architecture.webp" alt="Arquitetura do PenEcho: um navegador se conecta ao PenEcho Cloud ou ao PC local. A Cloud inclui modelos hospedados e se conecta ao dispositivo vinculado. O PC executa o PenEcho CLI ou App com sua API de LLM ou seus agentes. Agentes externos podem usar Cloud MCP ou Local MCP; ambas as conexões são opcionais." width="1483">
-</p>
-
-Abra o PenEcho no navegador pelo PenEcho Cloud ou pelo PC local executando o CLI ou o aplicativo desktop. A Cloud oferece modelos hospedados e pode se conectar ao dispositivo vinculado; seu PC pode usar sua própria API de modelos ou seus agentes. Agentes de IA externos, como Codex e Claude, podem se conectar por Cloud MCP ou Local MCP. Ambas as conexões MCP são opcionais.
-
-Consulte as [notas de arquitetura](../architecture.md) para detalhes de implementação.
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Desenhe e pergunte" width="100%"><br>
+      <strong>Desenhe e pergunte</strong><br>
+      Escrita à mão, equações, texto e imagens em um canvas infinito. A IA responde automaticamente quando você faz uma pausa.
+    </td>
+    <td width="33%" valign="top">
+      <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Cluster Kubernetes" width="100%"></a><br>
+      <strong>Diagramas profissionais</strong><br>
+      Diagramas de arquitetura, sequência e fluxo com layout automático. Exporte em SVG ou PNG.
+    </td>
+    <td width="33%" valign="top">
+      <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/play_patris.webp" alt="Widgets funcionais" width="100%"><br>
+      <strong>Widgets funcionais</strong><br>
+      Calculadoras, quizzes e protótipos que rodam no canvas e podem ser favoritados ou compartilhados.
+    </td>
+  </tr>
+</table>
 
 <a id="quick-start"></a>
-
 ## Início rápido
 
-**Desktop:** baixe o aplicativo para Windows ou macOS em [GitHub Releases](https://github.com/penecho/penecho/releases/latest).
-
-**npm:** requer Node.js **22.19 ou mais recente**.
+| | Como começar |
+| --- | --- |
+| **Aplicativo para desktop** | Baixe a versão para macOS ou Windows no [GitHub Releases](https://github.com/penecho/penecho/releases/latest). Ela inclui tudo e se atualiza automaticamente. |
+| **npm** | Requer Node.js 22.19 ou superior. Execute `npm i -g penecho`, depois `penecho` e abra `localhost:3888`. |
+| **Navegador** | Entre em [penecho.ai](https://penecho.ai) para usar modelos hospedados e canvases na nuvem. Não precisa instalar nada. |
 
 ```bash
 npm install -g penecho
-penecho
+penecho             # http://localhost:3888
 ```
 
-Abra `http://localhost:3888`. Adicione sua API de modelos ou um Codex, Claude Code ou Kimi CLI autenticado em **Configurações → Conexões**. As conexões são salvas em `~/.penecho/connections.json`; as configurações gerais continuam em `~/.penecho/config.env`. Para modelos hospedados pelo PenEcho, entre na conta e selecione um modelo disponível nas configurações.
-
-Na inicialização, defina um código de acesso de seis dígitos ou habilite explicitamente o acesso aberto na sua rede confiável. A inicialização também mostra os endereços LAN para outros dispositivos.
+> [!TIP]
+> Na primeira inicialização, escolha um código de acesso de seis dígitos ou acesso aberto em uma rede confiável. Em **Configurações → IA e conexões**, adicione sua chave de API, uma CLI autenticada do Codex / Claude Code / Kimi ou modelos PenEcho.
 
 <details>
 <summary>Executar a partir do código-fonte</summary>
@@ -183,14 +96,13 @@ npm start
 
 </details>
 
-<a id="connect-your-agent-with-mcp"></a>
+<a id="connect-your-ai-agent-mcp"></a>
+## Conecte seu agente de IA (MCP)
 
-## Conecte seu agente com MCP
+Continue conversando no agente que você já usa. Ele desenha no canvas, você faz anotações e, no próximo turno, ele lê seu feedback.
 
-Para **Local MCP**:
-
-1. Inicie o PenEcho e habilite o Canvas atual em **Configurações → Serviço MCP**.
-2. Use as configurações para configurar um cliente local compatível ou copie a configuração de inicialização gerada. Em uma instalação global via npm, clientes que aceitam JSON `mcpServers` podem usar:
+1. No PenEcho, abra **Configurações → Serviço MCP** e habilite o canvas atual.
+2. Use a **Configuração automática** em um cliente compatível ou copie as instruções geradas para Codex, Claude Code, Kimi, Cursor etc. Com a instalação global via npm, clientes que aceitam JSON `mcpServers` também podem usar esta configuração compatível:
 
    ```json
    {
@@ -200,29 +112,56 @@ Para **Local MCP**:
    }
    ```
 
-3. Peça ao agente: **“Mostre a arquitetura que discutimos no meu PenEcho Canvas.”**
+3. Peça: *“Mostre a arquitetura que discutimos no meu canvas do PenEcho.”*
 
-O agente pode capturar conteúdo relevante, editar objetos, criar resultados visuais, aplicar alterações aos arquivos-fonte de documentos e receber seus comentários. Apenas Canvases habilitados e conectados podem ser descobertos. Com Local MCP, o cliente MCP é executado no host do PenEcho; o suporte a navegadores na LAN e em dispositivos vinculados não expõe publicamente o endpoint MCP local. Cloud MCP é uma conexão HTTPS autenticada separada para seus canvases habilitados no PenEcho Cloud.
+<p align="center"><a href="../assets/mcp-spatial-example.webp"><img src="../assets/mcp-spatial-example.webp" alt="Uma discussão de arquitetura com IA, com comentários manuscritos ao lado da proposta no PenEcho Canvas" width="760"></a></p>
+<p align="center"><em>Uma discussão de arquitetura no Claude Code, anotada à mão no canvas.</em></p>
 
-Instalações desktop devem usar a configuração gerada, que inclui o runtime correto distribuído com o aplicativo. Consulte a [configuração MCP](../mcp-setup.md) e a [skill opcional de fluxo de trabalho do agente](../../skills/penecho-mcp/SKILL.md).
+> [!NOTE]
+> Os agentes só veem os canvases que você habilitar. O Local MCP permanece no computador; o Cloud MCP é uma conexão autenticada separada para canvases na nuvem. [Guia de MCP →](../mcp-setup.md)
 
-## PenEcho Cloud e conexões de IA
+## Galeria de diagramas
 
-O [PenEcho Cloud](https://penecho.ai) acrescenta projetos privados com histórico de versões, favoritos sincronizados, compartilhamento público pelo Echoes e acesso remoto a um computador vinculado.
+<table width="100%">
+  <tr>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Cluster Kubernetes" width="100%"></a><br><strong>Cluster Kubernetes</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/migration.webp"><img src="../assets/professional-diagrams/previews/migration.webp" alt="Monólito → microsserviços" width="100%"></a><br><strong>Monólito → microsserviços</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/notifications.webp"><img src="../assets/professional-diagrams/previews/notifications.webp" alt="Notificações orientadas a eventos" width="100%"></a><br><strong>Notificações orientadas a eventos</strong></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/mcp-request.webp"><img src="../assets/professional-diagrams/previews/mcp-request.webp" alt="Como o MCP chega ao canvas" width="100%"></a><br><strong>Como o MCP chega ao canvas</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/release.webp"><img src="../assets/professional-diagrams/previews/release.webp" alt="Lançamento: tarefas em paralelo" width="100%"></a><br><strong>Lançamento: tarefas em paralelo</strong></td>
+    <td width="33%" valign="top"><a href="../assets/professional-diagrams/rollout.webp"><img src="../assets/professional-diagrams/previews/rollout.webp" alt="Implantação em várias regiões" width="100%"></a><br><strong>Implantação em várias regiões</strong></td>
+  </tr>
+</table>
 
-| Conexão | Como funciona |
-| --- | --- |
-| **Modelos PenEcho** | Entre na conta, selecione um modelo hospedado disponível e use créditos da conta. As configurações mostram preços atuais e saldo. |
-| **Sua API de modelos** | Configure um endpoint compatível com OpenAI ou Anthropic, um modelo e uma chave de API. O uso é gerenciado pelo seu provedor. |
-| **Seu CLI** | Use Codex, Claude Code ou Kimi CLI instalado e autenticado localmente. A disponibilidade e o uso dependem do plano do provedor. |
+<p align="center"><sub>Clique em um diagrama para vê-lo em tamanho completo.</sub></p>
 
-Os modelos hospedados usados no seu computador exigem login na Cloud, sem pareamento de dispositivo nem chave separada da Credits API. Cloud MCP pode acessar diretamente os canvases habilitados na Cloud. Para acessar pela Cloud um Canvas hospedado no seu computador, o dispositivo vinculado precisa estar online e contar com o suporte de retransmissão necessário.
+## Como funciona
 
-Suas próprias conexões de API e CLI não gastam créditos PenEcho. A conta Cloud é opcional para uso local com sua própria conexão. Os recursos de IA exigem acesso ao provedor selecionado; executar o PenEcho localmente não torna um modelo remoto disponível offline.
+<p align="center"><img src="../../public/penecho-architecture.webp" alt="Arquitetura do PenEcho: um navegador se conecta ao PenEcho Cloud ou ao PC local. A Cloud inclui modelos hospedados e se conecta ao dispositivo vinculado. O PC executa o PenEcho CLI ou App com sua API de LLM ou seus agentes. Agentes externos podem usar Cloud MCP ou Local MCP; ambas as conexões são opcionais." width="100%"></p>
 
-## Configurações de modelos recomendadas
+- **No seu computador** — O aplicativo para desktop ou a CLI oferece o canvas e usa sua própria API de modelos ou Agent CLI.
+- **Na nuvem** — penecho.ai adiciona modelos hospedados, projetos e favoritos sincronizados e pode acessar seu computador vinculado.
+- **Seu agente** — Conecta-se por Local ou Cloud MCP. Ambos são opcionais.
 
-Estas recomendações equilibram a qualidade das respostas e a latência em tarefas reais de canvas do PenEcho, com base nos testes práticos atuais. O tempo de resposta varia conforme o provedor, a complexidade do canvas e o comportamento de raciocínio.
+Detalhes: [notas de arquitetura](../architecture.md).
+
+## Escolha sua IA
+
+| Conexão | Custo | Melhor para |
+| --- | --- | --- |
+| **Modelos PenEcho** — entre e escolha um modelo | Créditos da conta | Começar sem chaves |
+| **Sua API de modelos** — OpenAI / Anthropic | Seu provedor | Controle total do modelo e dos custos |
+| **Sua CLI** — Codex, Claude Code, Kimi | Seu plano | Reutilizar uma assinatura existente |
+
+Como escolher modelo e nível de esforço: [Modelos recomendados](#recommended-models) (atualizado a cada versão).
+
+<a name="recommended-models"></a>
+<details>
+<summary>Modelos recomendados</summary>
+
+Estas recomendações equilibram qualidade e latência em tarefas reais do canvas do PenEcho com base em testes recentes; o tempo de resposta varia com o provedor, a complexidade do canvas e o raciocínio.
 
 | Modelo | Esforço | Observações | Uso recomendado |
 | --- | --- | --- | --- |
@@ -237,24 +176,40 @@ Estas recomendações equilibram a qualidade das respostas e a latência em tare
 | `deepseek-v4-flash-vision-exp` | `medium` | Bom | Trabalho com capacidade visual pela API DeepSeek |
 | `glm-5.3-flash` | `medium` | Bom | Trabalho rápido pela API GLM compatível com Anthropic |
 
-## Comunidade e licença
+</details>
 
-Leia [CONTRIBUTING.md](../../CONTRIBUTING.md) para contribuir e execute `npm run check` antes de abrir um pull request. Relate bugs em [Issues](https://github.com/penecho/penecho/issues), discuta ideias em [Discussions](https://github.com/penecho/penecho/discussions) ou participe do [Discord](https://discord.gg/3jrPJ3mXdX).
+## Novidades da versão 1.3.3
 
-Licenciado sob [AGPL-3.0-only](../../LICENSE). Há também uma [licença comercial](../../COMMERCIAL-LICENSE.md) alternativa. Consulte a [política de marcas](../../TRADEMARKS.md) e o [acordo de contribuição](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+- **Diagramas de arquitetura, sequência e fluxo de trabalho** Com layout automático, conexões roteadas e exportação SVG / PNG.
+- **Biblioteca de canvases** Com paginação, pesquisa, filtros de projeto e ordenação.
+- **Mais predefinições de provedores de API** As listas de modelos são buscadas automaticamente.
 
-## Agradecimentos
+[Histórico completo de alterações →](../../CHANGELOG.md#133)
 
-Agradecemos ao projeto [Archify](https://github.com/tt-a1i/archify), de tt-a1i. Os renderizadores de diagramas profissionais do PenEcho usam funções auxiliares de SVG e geometria adaptadas desse projeto sob licença MIT. A [licença MIT e os avisos de direitos autorais](../../src/architecture/vendor/archify/LICENSE) foram preservados; consulte [NOTICE](../../NOTICE) para as atribuições de terceiros.
+## Comunidade
 
-## Histórico de estrelas
+| [Discord](https://discord.gg/3jrPJ3mXdX) | [Discussions](https://github.com/penecho/penecho/discussions) | [Issues](https://github.com/penecho/penecho/issues) | [Contributing](../../CONTRIBUTING.md) |
+| --- | --- | --- | --- |
+| Converse com a equipe | Ideias e dúvidas | Relate um problema | Execute antes `npm run check` |
+
+Distribuído sob a licença [AGPL-3.0-only](../../LICENSE); há também uma [licença comercial](../../COMMERCIAL-LICENSE.md). Consulte a [política de marcas](../../TRADEMARKS.md) e o [acordo de contribuição](../../CONTRIBUTOR-LICENSE-AGREEMENT.md).
+
+Os renderizadores de diagramas adaptam recursos auxiliares de SVG e geometria do [Archify](https://github.com/tt-a1i/archify) de tt-a1i (MIT). Consulte [NOTICE](../../NOTICE).
+
+<p align="center">
+  <a href="https://www.kimi.com/code?aff=penecho">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/kimi-open-source-friends-dark.svg">
+      <img src="../assets/kimi-open-source-friends-light.svg" alt="Kimi Open Source Friends" width="326" height="56">
+    </picture>
+  </a>
+</p>
 
 <p align="center">
   <a href="https://www.star-history.com/?repos=penecho%2Fpenecho&amp;type=date&amp;legend=top-left">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;theme=dark&amp;legend=top-left">
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left">
-      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="Gráfico do histórico de estrelas do PenEcho no GitHub" width="800">
+      <img src="https://api.star-history.com/chart?repos=penecho/penecho&amp;type=date&amp;legend=top-left" alt="PenEcho GitHub stars" width="800">
     </picture>
   </a>
 </p>

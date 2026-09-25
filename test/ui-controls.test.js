@@ -3502,6 +3502,32 @@ test("Canvas grid renders sparse dots or lines consistently in the viewport and 
   assert.match(functionSource(persistence,"renderExportCanvas"), /drawCanvasLineGrid\(context, region, scale\)/);
 });
 
+test("Canvas grid starts with dots once, then keeps manual choices across reloads", () => {
+  const core = read("src/client/app/core.js");
+  const versionKey = "penecho-grid-preference-version";
+  const version = "dots-default-v1";
+  const run = (storage) => {
+    const localStorage = {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); },
+    };
+    return vm.runInNewContext(`(${functionSource(core, "loadCanvasGridPreference")})()`, {
+      localStorage, GRID_PREFERENCE_VERSION_KEY: versionKey, GRID_PREFERENCE_VERSION: version,
+    });
+  };
+  const fresh = new Map();
+  assert.deepEqual({ ...run(fresh) }, { visible:true, style:"dots" });
+  assert.equal(fresh.get(versionKey), version);
+
+  const legacy = new Map([["penecho-grid", "false"], ["penecho-grid-style", "lines"], ["ghostboard-grid", "false"]]);
+  assert.deepEqual({ ...run(legacy) }, { visible:true, style:"dots" });
+  legacy.set("penecho-grid", "false");
+  assert.deepEqual({ ...run(legacy) }, { visible:false, style:"dots" });
+  legacy.set("penecho-grid", "true");
+  legacy.set("penecho-grid-style", "lines");
+  assert.deepEqual({ ...run(legacy) }, { visible:true, style:"lines" });
+});
+
 test("Studio navigator reserves canvas space and keeps the existing Agent runtime", () => {
   const html=read("public/index.html"),css=read("public/studio-shell.css"),agent=read("src/client/app/canvas-agent-runtime.js");
   assert.match(css,/\.canvas-frame > #viewport \{[^}]*margin-left: 0/);

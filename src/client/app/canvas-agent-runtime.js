@@ -4945,8 +4945,8 @@
       }
       canvasAgentToggle.setAttribute("aria-expanded","false");
       document.body.classList.remove("canvas-agent-open");
-      window.PenEchoShellMotion?.play(motion);
       canvasAgentResumeAutomaticAI();
+      window.PenEchoShellMotion?.play(motion);
       if(focus)canvasAgentToggle.focus();
       else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();
       if(animate){canvasAgentScheduleDockedCloseWork();return;}

@@ -1,5 +1,5 @@
   // External MCP sessions share Canvas primitives, but never an Agent conversation.
-  var mcpRuntime = { socket:null, browserId:null, wanted:false, pageHidden:false, reconnectTimer:0, reconnectStatusTimer:0, reconnectAt:0, reconnecting:false, reconnectDelay:1000, generation:0, sessions:new Map(), previews:new Map(), controllers:new Map(), queue:Promise.resolve(), queued:0, status:null, loading:null, loadError:null, configuring:false, configureResult:null, feedbackSequence:0, feedback:[], ready:false, connectionLost:false, authRequired:false, heartbeatTimer:0, heartbeatSupported:false, catalogSupported:false, catalogSignature:"", lastPong:0, activeMutation:null, mutationDocumentId:null, glowTimer:0, glowing:false, pendingView:new Map(), viewSequence:0, layoutTimer:0, layoutSince:0, viewPaused:false, exampleStatusTimer:0 };
+  var mcpRuntime = { socket:null, browserId:null, wanted:false, pageHidden:false, reconnectTimer:0, reconnectStatusTimer:0, reconnectAt:0, reconnecting:false, reconnectDelay:1000, generation:0, sessions:new Map(), previews:new Map(), controllers:new Map(), queue:Promise.resolve(), queued:0, status:null, loading:null, loadError:null, configuring:false, configureResult:null, feedbackSequence:0, feedback:[], ready:false, connectionLost:false, authRequired:false, connectionNotice:null, heartbeatTimer:0, heartbeatSupported:false, catalogSupported:false, catalogSignature:"", lastPong:0, activeMutation:null, mutationDocumentId:null, glowTimer:0, glowing:false, pendingView:new Map(), viewSequence:0, layoutTimer:0, layoutSince:0, viewPaused:false, exampleStatusTimer:0 };
   const mcpCopy = {
     keepAwake:["Keep awake while MCP is connected","MCP 连接时保持唤醒"],
     keepAwakeHelp:["Optional. In a browser, keep this tab visible. Your device may still suspend.","可选。浏览器中请保持此标签页可见；设备仍可能进入休眠。"],
@@ -42,6 +42,8 @@
     toolbarCancelRetry:["MCP retry active. Click MCP Server to cancel.","MCP 自动重试中。点击 MCP Server 可取消。"],
     toolbarRetry:["Connection failed. Click MCP Server to retry.","连接失败。点击 MCP Server 重试。"],
     cloudSignInRequired:["Cloud session expired. Sign in again, then reopen MCP.","Cloud 登录已过期。重新登录后，再开启 MCP。"],
+    workspaceAccessRequired:["MCP authorization for this canvas is unavailable. Reopen the canvas connection link.","此画布的 MCP 连接授权不可用。请重新打开画布连接链接。"],
+    workspaceReplaced:["This canvas is connected in another window. Continue there.","此画布已在另一个窗口中连接。请回到那个窗口继续使用。"],
     nav:["MCP service","MCP 服务"], eyebrow:["MCP Service","MCP 服务"], heading:["Connect your AI Agent", "连接你的 AI Agent"],
     canvasNotice:["MCP connected · AI can update this canvas","MCP 已连接 · AI 可更新此画布"],
     canvasCloudLocal:["MCP · Cloud + Local online","MCP · 云端与本地在线"],
@@ -212,7 +214,7 @@
     for(const [id] of mcpRuntime.pendingView)if(!mcpRuntime.sessions.get(id)?.internalAgent)mcpRuntime.pendingView.delete(id);
     if(!mcpRuntime.pendingView.size)mcpRuntime.viewPaused=false;
     clearTimeout(mcpRuntime.heartbeatTimer);clearTimeout(mcpRuntime.glowTimer);
-    mcpRuntime.heartbeatTimer=0;mcpRuntime.glowTimer=0;mcpRuntime.ready=false;mcpRuntime.heartbeatSupported=false;mcpRuntime.catalogSupported=false;mcpRuntime.catalogSignature="";mcpRuntime.connectionLost=lost;mcpRuntime.activeMutation=null;mcpRuntime.mutationDocumentId=null;mcpRuntime.glowing=false;
+    mcpRuntime.heartbeatTimer=0;mcpRuntime.glowTimer=0;mcpRuntime.ready=false;mcpRuntime.heartbeatSupported=false;mcpRuntime.catalogSupported=false;mcpRuntime.catalogSignature="";mcpRuntime.connectionLost=lost;mcpRuntime.connectionNotice=null;mcpRuntime.activeMutation=null;mcpRuntime.mutationDocumentId=null;mcpRuntime.glowing=false;
     for (const controller of mcpRuntime.controllers.values()) controller.abort();
     mcpRuntime.controllers.clear();
     // A retired connection may still be unwinding an asynchronous operation.
@@ -242,6 +244,7 @@
       availability=mcpRuntime.socket?.availability||{cloud:connected&&window.PENECHO_CONFIG?.runtime==="cloud",local:connected&&window.PENECHO_CONFIG?.runtime!=="cloud"};
     return mcpText(availability.cloud&&availability.local?"canvasCloudLocal":availability.cloud?"canvasCloud":availability.local?"canvasLocal":"canvasConnecting");
   }
+  function mcpConnectionNotice() { return mcpText(mcpRuntime.connectionNotice||(mcpRuntime.authRequired?"cloudSignInRequired":"canvasLost")); }
   function mcpUiText(en,zh) { return state.language==="zh"?zh:en; }
   function mcpLiveSessions() { return [...mcpRuntime.sessions.values()].filter(session=>!session.internalAgent&&!session.closed); }
   function mcpUiState() {
@@ -263,7 +266,7 @@
     panel.dataset.state=ui.key;
     put("mcpStatusHeading",ui.connected?mcpUiText("MCP is on","MCP 已开启"):ui.key==="off"?mcpUiText("MCP is off","MCP 已关闭"):mcpUiText("MCP connection","MCP 连接"));
     put("mcpStatusBadge",ui.connected?mcpUiText("Online","在线"):ui.label);
-    put("mcpStatusDescription",ui.connected?mcpUiText("Your AI tools can find and edit canvases in this workspace.","你的 AI 工具可以查找和编辑此工作区中的画布。"):ui.key==="signin"?mcpText("cloudSignInRequired"):ui.retrying?mcpUiText("Reconnecting automatically. You can cancel below.","正在自动重新连接，你可以在下方取消。"):ui.opening?mcpUiText("Starting the local server or Cloud relay…","正在连接本地服务或云端中继…"):ui.key==="failed"?mcpUiText("AI changes are paused. Retry to reconnect.","AI 更新已暂停，请重试连接。"):mcpUiText("Turn on MCP to let your AI tools find and edit this workspace.","开启 MCP，让你的 AI 工具查找和编辑此工作区。"));
+    put("mcpStatusDescription",ui.connected?mcpUiText("Your AI tools can find and edit canvases in this workspace.","你的 AI 工具可以查找和编辑此工作区中的画布。"):ui.key==="signin"?mcpText("cloudSignInRequired"):ui.retrying?mcpUiText("Reconnecting automatically. You can cancel below.","正在自动重新连接，你可以在下方取消。"):ui.opening?mcpUiText("Starting the local server or Cloud relay…","正在连接本地服务或云端中继…"):ui.key==="failed"?(mcpRuntime.connectionNotice?mcpConnectionNotice():mcpUiText("AI changes are paused. Retry to reconnect.","AI 更新已暂停，请重试连接。")):mcpUiText("Turn on MCP to let your AI tools find and edit this workspace.","开启 MCP，让你的 AI 工具查找和编辑此工作区。"));
     const availability=mcpRuntime.socket?.availability||{local:ui.connected&&window.PENECHO_CONFIG?.runtime!=="cloud",cloud:ui.connected&&window.PENECHO_CONFIG?.runtime==="cloud"};
     const channels=mcpEl("mcpStatusChannels");channels.replaceChildren();
     for(const [key,name,icon] of [["local",mcpUiText("Local server","本地服务"),'<rect x="4" y="3" width="16" height="13" rx="2"/><path d="M2 20h20"/>'],["cloud",mcpUiText("Cloud relay","云端中继"),'<path d="M7 19a6 6 0 1 1 5.7-8H16a4 4 0 0 1 0 8Z"/>']]) {
@@ -336,7 +339,7 @@
     if(notice){notice.hidden=!count&&!updating&&!ui.retrying&&!lost;notice.setAttribute("data-state",lost?"failed":ui.retrying?"retrying":"updating");}
     if(ring){ring.hidden=!ui.connected;ring.setAttribute("data-state",mcpRuntime.glowing&&mutationVisible?"updating":"open");}
     if(button){button.hidden=!lost;button.textContent=lost?mcpRuntime.authRequired?mcpUiText("Sign in","登录"):mcpUiText("Retry","重试"):mcpAccessLabel();}
-    if(label){label.hidden=ui.retrying;label.textContent=lost?mcpText(mcpRuntime.authRequired?"cloudSignInRequired":"canvasLost"):updating?mcpUiText(`${mcpRuntime.activeMutation} is updating this canvas`,`${mcpRuntime.activeMutation} 正在更新此画布`):session?mcpSessionVisible(session)?mcpUiText(`${session.client||"AI"} updated this canvas`,`${session.client||"AI"} 已更新此画布`):mcpUiText(`${session.client||"AI"} added content to ${mcpDocumentTitle(session)}`,`${session.client||"AI"} 已更新 ${mcpDocumentTitle(session)}`):"";}
+    if(label){label.hidden=ui.retrying;label.textContent=lost?mcpConnectionNotice():updating?mcpUiText(`${mcpRuntime.activeMutation} is updating this canvas`,`${mcpRuntime.activeMutation} 正在更新此画布`):session?mcpSessionVisible(session)?mcpUiText(`${session.client||"AI"} updated this canvas`,`${session.client||"AI"} 已更新此画布`):mcpUiText(`${session.client||"AI"} added content to ${mcpDocumentTitle(session)}`,`${session.client||"AI"} 已更新 ${mcpDocumentTitle(session)}`):"";}
     if(show){show.hidden=!count;show.textContent=mcpUiText(`${count} new · ${current.length?"Show":"Open"}`,`${count} 项新内容 · ${current.length?"查看":"打开"}`);}
     mcpRuntime.noticeSessionId=session?.sessionId||target?.[0]||null;
     mcpRenderStatusPopover();mcpRenderSidebarBadges();
@@ -608,7 +611,7 @@
     if(mcpEl("mcpEnabled")){mcpEl("mcpEnabled").setAttribute("aria-checked",String(mcpRuntime.wanted||connected||connecting));mcpEl("mcpEnabled").classList.toggle("on",mcpRuntime.wanted||connected||connecting);mcpEl("mcpEnabled").disabled=!mcpLocal();}
     const connection=mcpEl("mcpConnectionStatus");
     if(connection){
-      connection.textContent=connected?mcpAccessLabel():mcpText(!mcpLocal()?"localOnly":connecting?"connecting":mcpRuntime.authRequired?"cloudSignInRequired":mcpRuntime.connectionLost?(mcpRuntime.wanted?"toolbarCancelRetry":"toolbarRetry"):"disconnected");
+      connection.textContent=connected?mcpAccessLabel():mcpText(!mcpLocal()?"localOnly":connecting?"connecting":mcpRuntime.authRequired?"cloudSignInRequired":mcpRuntime.connectionLost?(mcpRuntime.connectionNotice||(mcpRuntime.wanted?"toolbarCancelRetry":"toolbarRetry")):"disconnected");
       connection.dataset.state=!mcpLocal()?"off":connected?"on":connecting?"pending":mcpRuntime.connectionLost?"error":"off";
     }
     const remote=mcpRemoteBrowser(),config=remote?null:mcpRuntime.status?.config;
@@ -942,7 +945,16 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(message.name==="mcp_find_canvases")void run();
       else mcpRuntime.queue=mcpRuntime.queue.catch(()=>{}).then(run);
     });
-    socket.addEventListener("close",event=>{if(socket!==mcpRuntime.socket)return;if(window.PENECHO_CONFIG?.browserDraftId&&event?.code===4001){mcpDisconnect();mcpRuntime.connectionLost=true;setStatus(state.language==="zh"?"此画布已在另一个窗口中连接。":"This Canvas is connected in another window.");mcpRenderSettings();return;}if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}mcpDisconnect(true);});
+    socket.addEventListener("close",event=>{
+      if(socket!==mcpRuntime.socket)return;
+      if(window.PENECHO_CONFIG?.browserDraftId&&[4001,4401].includes(event?.code)){
+        mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.connectionLost=true;
+        mcpRuntime.connectionNotice=event.code===4001?"workspaceReplaced":"workspaceAccessRequired";
+        setStatus(mcpConnectionNotice());mcpRenderSettings();return;
+      }
+      if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}
+      mcpDisconnect(true);
+    });
     socket.addEventListener("error",()=>{if(socket===mcpRuntime.socket)mcpDisconnect(true);});
     mcpRenderSettings();
   }

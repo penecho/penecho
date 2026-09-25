@@ -5,15 +5,9 @@ description: Create diagrams, interactive previews, and visual explanations on P
 
 Use the connected PenEcho Cloud MCP tools and their live schemas. Discover only missing tools. This plugin connects to https://penecho.ai/mcp with OAuth; never request credentials in chat or put tokens in files.
 
-For a new conversation, call `penecho_open_workspace` with a unique, stable `sessionKey`. Reuse that key on retries. This creates a browser draft, not a Cloud project document. The client handles OAuth automatically: the user can choose guest access or sign in. Never ask for a pairing code or a personal token after OAuth.
+For first use, have the user sign in to PenEcho, open a Canvas, and enable Settings → MCP → Cloud MCP. Keep that browser Canvas open. Use penecho_list_canvases to check availability without mutating documents. If no Canvas is available, explain this setup step rather than guessing a document.
 
-Open the returned `url` using the host's browser-opening capability. Prefer an in-app side browser when available; otherwise use the external browser. Reuse the existing tab for this workspace when possible. If the client cannot open a browser, provide a clickable link. A server cannot force a host to open its sidebar. Do not claim it opened until the opening tool succeeds. Do not publish launch URLs to other people: they contain a short-lived, one-use browser capability.
-
-Call `penecho_workspace_status` with the returned `workspaceId`. If waiting, retry at its indicated interval for at most 15 seconds; then provide the Canvas link and stop polling until the user opens it. Once ready, call `penecho_start_session` with the exact returned `startSession` arguments. Retain `sessionId`, `documentId`, `workspaceId` and `sessionKey`. Never fall back to the latest browser, omit the explicit canvasId, or substitute a new document on reconnect. If the user explicitly chooses an existing Canvas, use `penecho_list_canvases` and bind that exact selection instead.
-
-Guests can edit and render with external AI through MCP. Cloud saving and PenEcho Agent require signing in through the Canvas Cloud button. Browser drafts survive login and connection cleanup; clearing browser storage removes them. A signed-in browser does not elevate the old guest OAuth credential: reconnect/account-authorize the plugin when account-wide access is needed. Account personal tokens stay stable until explicitly invalidated; configure them only through the client's secure advanced settings, never in conversation.
-
-If an anonymous creation allowance is reached, explain the returned retry/sign-in option. Reuse the existing workspace. Do not repeatedly mint credentials or try to bypass a limit. Keep the Canvas browser open while rendering; there is no headless server rendering in this workflow.
+Bind the conversation once with penecho_start_session. Use a stable sessionKey and retain the returned sessionId/documentId. Respect an explicitly selected Canvas; use target:current for the user's current Canvas. Never silently switch documents after reconnecting.
 
 For architecture or visual explanations, load only the relevant penecho_get_guidance topic. Create a coherent diagram or interactive Widget with stable artifact identifiers, keeping explanatory labels readable and the next user action clear. Follow the live authoring guidance and use native objects for small edits when appropriate.
 

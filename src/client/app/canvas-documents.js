@@ -1166,7 +1166,7 @@
   // Each automatically opened workspace has its own browser draft collection.
   // Signing in changes Cloud capabilities, never this storage namespace.
   if(window.PENECHO_CONFIG?.browserDraftId) {
-    let draftReady=false,writing=null,lastRevision=-1,draftLock=false;
+    let draftReady=false,writing=null,lastRevision=-1;
     const flush=async()=>{
       if(writing)return writing;
       if(!draftReady||canvasDocuments.switching||snapshotLoadInProgress)return;
@@ -1177,14 +1177,6 @@
     };
     window.PenEchoBrowserDraft={
       async open(){
-        if(window.navigator?.locks&&!draftLock){
-          await new Promise((resolve,reject)=>{
-            void navigator.locks.request(`penecho-draft:${window.PENECHO_CONFIG.browserDraftId}`,{ifAvailable:true},async lock=>{
-              if(!lock){reject(Error(canvasDocumentsCopy("This draft is already open in another window. Close that window, then reload here.","此草稿已在另一个窗口打开。关闭那个窗口后，在这里刷新即可。")));return;}
-              draftLock=true;resolve();await new Promise(()=>{});
-            }).catch(reject);
-          });
-        }
         await canvasDocumentsReady();
         const saved=[...canvasDocuments.records.values()].filter(doc=>doc.stored&&!canvasDocumentsIsEmptyPlaceholder(doc)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
         if(saved)await canvasDocumentsShow(saved.id);

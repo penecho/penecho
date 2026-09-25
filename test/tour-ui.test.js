@@ -242,7 +242,7 @@ test("README version badges match the package version in every language", () => 
   ];
   for (const readmePath of readmePaths) {
     assert.ok(
-      read(readmePath).includes(`/badge/version-${version}-`),
+      read(readmePath).includes(`/badge/release-v${version}-`),
       `${readmePath} version badge must match package.json`,
     );
   }

@@ -4,7 +4,7 @@
 
 ## 用户流程与边界
 
-安装启用包含 MCP + Skill 的插件 → 客户端触发 OAuth → 用户选择匿名试用或登录授权 → 客户端自动保存凭证 → Agent 调用 `penecho_open_workspace` → 打开返回的网页 → 查询 `penecho_workspace_status` → 使用返回的精确参数开始会话。
+The general MCP instructions and Canvas skill use the Canvas 1.3.3 contract. The browser-workspace and guest flows documented below are plugin development material, not general MCP instructions or a default connection workflow. Design plugin onboarding separately before publishing it.
 
 无需输入配对码、无需 OAuth 后再填 Token。手动 PAT 是高级替代配置，不是默认流程。画布内容在浏览器中渲染和保留；浏览器关闭时无法继续渲染。侧栏或外部浏览器由宿主决定。注册账户的 PAT 不因这些操作变化；主动重置/撤销才失效。
 
