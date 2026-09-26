@@ -6832,8 +6832,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!n(naturalW, 1, MAX_IMAGE_DIMENSION) || !n(naturalH, 1, MAX_IMAGE_DIMENSION) || naturalW * naturalH > MAX_IMAGE_PIXELS) return null;
     return {
       id:typeof item.id === "string" && /^image-\d+$/.test(item.id) ? item.id : `image-${state.nextImageId++}`,
-      x:Math.round(item.x),
-      y:Math.round(item.y),
+      x:Math.min(Math.round(item.x),SIZE-Math.round(item.w)),
+      y:Math.min(Math.round(item.y),SIZE-Math.round(item.h)),
       w:Math.round(item.w),
       h:Math.round(item.h),
       naturalW:Math.round(naturalW),
