@@ -1037,6 +1037,13 @@
   async function importCommunityCanvasArtifact(artifact, origin = null) {
     const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,
       item={ ...parsed.item,id,createdAt:stamp,updatedAt:stamp,name:String(parsed.item.name || "Community Canvas").slice(0,160),projectId:null };
+    const extensions=snapshotExtensionObject(item.bundleExtensions),
+      sourceDocument=canvasDocumentIdentity.normalizeMetadata(extensions.penechoDocument);
+    extensions.penechoWorkspace={version:1};
+    if(sourceDocument) {
+      extensions.penechoDocument={...sourceDocument,documentId:canvasClientId(),title:item.name,bindings:[],locators:[],processor:{kind:"penecho"}};
+    }
+    item.bundleExtensions=extensions;
     if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
       item.bundleExtensions = {
         ...snapshotExtensionObject(item.bundleExtensions),
