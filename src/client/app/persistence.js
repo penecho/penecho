@@ -2101,12 +2101,12 @@
       icon.setAttribute("aria-hidden", "true");
       path.setAttribute("d", isAll ? "M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z" : "M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z");
       icon.append(path);
-      label.textContent = option.textContent;
+      label.textContent = isAll ? t("all") : option.textContent;
       count.textContent = String(itemCount);
       count.hidden = snapshotItemsLocation !== location;
       button.append(icon, label, count);
       button.onclick = () => {
-        if (button.disabled || select.value === option.value) return;
+        if (button.disabled || select.value === option.value && !historyRecentView) return;
         historyRecentView = false;
         updateHistoryNavigation();
         select.value = option.value;

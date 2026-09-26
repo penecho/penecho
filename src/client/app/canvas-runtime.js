@@ -2522,9 +2522,9 @@
     if (!widget) return;
     const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
-    if (!options.allowRevisionMismatch && widget.revision !== state.userRevision) {
+    if ((widget.recognitionGeneration !== undefined && widget.recognitionGeneration !== state.recognitionGeneration) || aiWidgetEditChanged(replacement?.edit)) {
       rejectPendingWidget(AI_CANCELLED);
-      setStatusKey("canvasChanged");
+      setStatusKey(replacement ? "aiWidgetChanged" : "canvasChanged");
       return;
     }
     recordWidgetsBefore();
@@ -2545,6 +2545,7 @@
         return;
       }
       state.widgets.splice(index, 1, widget);
+      if (replacement.edit) replacement.edit.committed = true;
       mountWidget(widget);
     } else {
       state.widgets.push(widget);
@@ -2604,6 +2605,7 @@
     if (!widget || !pluginEnabled(widget.pluginId)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     state.pendingWidget = widget;
     enterAIDraftHandMode();
     mountWidget(widget);
@@ -2629,16 +2631,17 @@
       favorite:false,
     };
   }
-  function startPendingWidgetReplacement(command, target, revision) {
+  function startPendingWidgetReplacement(command, target, revision, edit = aiWidgetEditSnapshot(target, revision)) {
     if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
     const widget = widgetRecord(widgetReplacementRecordInput(command, target));
-    if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
+    if (!widget || !pluginEnabled(widget.pluginId) || aiWidgetEditChanged(edit)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     target.hiddenForReplacement = true;
     unmountWidget(target);
     state.pendingWidget = widget;
-    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
+    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision, edit };
     acceptPendingWidget({ restoreMode:false });
     return Promise.resolve(state.widgets.includes(widget));
   }

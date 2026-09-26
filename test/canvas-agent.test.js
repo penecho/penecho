@@ -3371,17 +3371,19 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(css,/@media \(max-width: 700px\)[\s\S]*?\.canvas-agent-panel\s*\{[^}]*height: 66\.6667%;[^}]*min-height: 0/s);
 });
 
-test("PenEcho Agent open panel and active turns suppress Auto AI while submitted turns cancel only automatic requests",()=>{
+test("PenEcho Agent panel pauses new Auto AI scheduling without cancelling independent requests",()=>{
   const agent=read("src/client/app/canvas-agent-runtime.js"),ai=read("src/client/app/ai-runtime.js"),core=read("src/client/app/core.js"),zh=read("public/locales/zh.js"),
     suppression=functionSource(agent,"canvasAgentSuppressesAutomaticAI"),beginRequest=functionSource(agent,"canvasAgentBeginRequest"),sendRequest=functionSource(agent,"canvasAgentSendRequest"),
     stopAutomatic=functionSource(ai,"stopActiveAutomaticAI"),requestAI=functionSource(ai,"requestAI");
   assert.match(functionSource(agent,"canvasAgentHasFocus"),/!canvasAgentPanel\.hidden[\s\S]*canvasAgentPanel\.contains\(document\.activeElement\)/);
-  assert.match(suppression,/canvasAgent\.requestPending \|\| canvasAgent\.running \|\| canvasAgentIsOpen\(\)/);
+  assert.match(suppression,/canvasAgentIsOpen\(\)/);
+  assert.doesNotMatch(suppression,/canvasAgent\.(requestPending|running)/);
   assert.match(functionSource(ai,"launchAutomaticAI"),/canvasAgentSuppressesAutomaticAI\(\)/);
   assert.match(functionSource(ai,"schedule"),/clearTimeout\(state\.timer\)[\s\S]*canvasAgentSuppressesAutomaticAI\(\)/);
   assert.match(stopAutomatic,/preparation\?\.action !== "auto" && active\?\.action !== "auto"[\s\S]*supersedeActiveAI\(reason\)/);
   assert.match(requestAI,/preparation = \{[\s\S]*?action,[\s\S]*?widgetEdit/);
-  assert.match(beginRequest,/requestPending = true[\s\S]*canvasAgentPauseAutomaticAI\(\)[\s\S]*stopActiveAutomaticAI\("canvas-agent-request"\)[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
+  assert.match(beginRequest,/requestPending = true[\s\S]*canvasAgentPauseAutomaticAI\(\)[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
+  assert.doesNotMatch(beginRequest,/stopActiveAutomaticAI|supersedeActiveAI/);
   assert.match(sendRequest,/if \(!canvasAgent\.requestPending\) canvasAgentBeginRequest\(\)[\s\S]*canvasAgentSendEnvelope\(type,payload\)/);
   assert.match(sendRequest,/catch \(error\)[\s\S]*canvasAgentRequestDidNotSend\(\)/);
   assert.match(functionSource(agent,"canvasAgentSetRunning"),/if \(running\) canvasAgentPauseAutomaticAI\(\);[\s\S]*else canvasAgentResumeAutomaticAI\(\)/);

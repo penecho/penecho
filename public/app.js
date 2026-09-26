@@ -2504,7 +2504,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiStillWaiting: "The model is taking longer than usual · PenEcho timeout {seconds}s",
       aiCancelled: "AI request cancelled",
       aiCancelledForInput: "AI request cancelled because new input started",
-      deferred: "New ink found; this AI result was deferred",
+      aiRequestSuperseded: "A newer request replaced this AI request. Your input is kept; try again if you still need this result.",
+      aiRequestFailed: "AI request failed. Please try again",
+      deferred: "Canvas input changed; this AI result was deferred",
+      aiWidgetChanged: "This Widget was updated while AI was working. Your input is kept; retry to apply it to the latest version.",
       writing: "Writing...",
       aiDone: "AI completed",
       draftRejected: "AI draft discarded",
@@ -3609,7 +3612,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       height = rect.height * metrics.clientScaleY;
     return { left, top, right:left + width, bottom:top + height, width, height };
   }
-  const AI_NON_PROGRESS_STATUS_KEYS = new Set(["aiBusy", "aiDone", "aiNoVisibleResponse", "aiError", "aiCancelled", "aiCancelledForInput"]);
+  const AI_NON_PROGRESS_STATUS_KEYS = new Set(["aiBusy", "aiDone", "aiNoVisibleResponse", "aiError", "aiCancelled", "aiCancelledForInput", "aiRequestSuperseded", "aiWidgetChanged", "aiRequestFailed"]);
   const MULTILINE_STATUS_KEYS = new Set(["widgetRefinePending"]);
   const setStatus = (text, key = null) => {
     status.textContent = text;
@@ -8970,9 +8973,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!widget) return;
     const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
-    if (!options.allowRevisionMismatch && widget.revision !== state.userRevision) {
+    if ((widget.recognitionGeneration !== undefined && widget.recognitionGeneration !== state.recognitionGeneration) || aiWidgetEditChanged(replacement?.edit)) {
       rejectPendingWidget(AI_CANCELLED);
-      setStatusKey("canvasChanged");
+      setStatusKey(replacement ? "aiWidgetChanged" : "canvasChanged");
       return;
     }
     recordWidgetsBefore();
@@ -8993,6 +8996,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         return;
       }
       state.widgets.splice(index, 1, widget);
+      if (replacement.edit) replacement.edit.committed = true;
       mountWidget(widget);
     } else {
       state.widgets.push(widget);
@@ -9052,6 +9056,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!widget || !pluginEnabled(widget.pluginId)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     state.pendingWidget = widget;
     enterAIDraftHandMode();
     mountWidget(widget);
@@ -9077,16 +9082,17 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       favorite:false,
     };
   }
-  function startPendingWidgetReplacement(command, target, revision) {
+  function startPendingWidgetReplacement(command, target, revision, edit = aiWidgetEditSnapshot(target, revision)) {
     if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
     const widget = widgetRecord(widgetReplacementRecordInput(command, target));
-    if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
+    if (!widget || !pluginEnabled(widget.pluginId) || aiWidgetEditChanged(edit)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     target.hiddenForReplacement = true;
     unmountWidget(target);
     state.pendingWidget = widget;
-    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
+    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision, edit };
     acceptPendingWidget({ restoreMode:false });
     return Promise.resolve(state.widgets.includes(widget));
   }
@@ -15014,12 +15020,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       icon.setAttribute("aria-hidden", "true");
       path.setAttribute("d", isAll ? "M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z" : "M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z");
       icon.append(path);
-      label.textContent = option.textContent;
+      label.textContent = isAll ? t("all") : option.textContent;
       count.textContent = String(itemCount);
       count.hidden = snapshotItemsLocation !== location;
       button.append(icon, label, count);
       button.onclick = () => {
-        if (button.disabled || select.value === option.value) return;
+        if (button.disabled || select.value === option.value && !historyRecentView) return;
         historyRecentView = false;
         updateHistoryNavigation();
         select.value = option.value;
@@ -16859,13 +16865,28 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     return true;
   }
+  // Canvas AI creates new objects or replaces one Widget source. Other virtual
+  // files and geometry are independent writes; the canvas revision is not a lock.
+  function aiWidgetSourceSignature(widget) {
+    return JSON.stringify(canvasAgentWidgetSourceState(widgetEditContext(widget, "refine")));
+  }
+  function aiWidgetEditSnapshot(target, revision) {
+    return target ? { target, targetId:target.id, pluginId:target.pluginId, revision, sourceSignature:aiWidgetSourceSignature(target) } : null;
+  }
+  function aiWidgetEditChanged(edit) {
+    return Boolean(edit && !edit.committed && (!state.widgets.includes(edit.target)
+      || edit.target.id !== edit.targetId || aiWidgetSourceSignature(edit.target) !== edit.sourceSignature));
+  }
+  function aiInputInvalid(run) {
+    return run.recognitionGeneration !== state.recognitionGeneration;
+  }
   function aiPreparationInvalid(preparation, generation, revision) {
     if (generation !== aiPreparationGeneration || preparation.superseded || aiPreparation !== preparation) return true;
-    if (state.userRevision === revision) return false;
+    if (!aiInputInvalid(preparation) && !aiWidgetEditChanged(preparation.widgetEdit)) return false;
     preparation.superseded = true;
     preparation.controller.abort();
     finishAIPreparation(preparation);
-    setStatusKey("deferred");
+    setStatusKey(aiWidgetEditChanged(preparation.widgetEdit) ? "aiWidgetChanged" : "deferred");
     return true;
   }
   function supersedeActiveAI(reason) {
@@ -16975,6 +16996,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const status=Number.isInteger(terminal.status)?terminal.status:terminal.type==="result"?200:500;
     return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
   }
+  function aiCommandFailure(data,status) {
+    const code=typeof data?.code==="string"?data.code:typeof data?.error==="string"?data.error:"";
+    const detail=typeof data?.message==="string"?data.message.trim():"";
+    const fallback=code&&!/^[a-z][a-z0-9_]*$/.test(code)?code:"";
+    return Object.assign(Error(detail||fallback||`${t("aiRequestFailed")} (HTTP ${status})`),{code,status});
+  }
   function launchAutomaticAI(reason) {
     if (canvasAgentSuppressesAutomaticAI()) return;
     if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing || state.widgetRefineConfirmation) return;
@@ -17041,10 +17068,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       && inner.y + inner.h <= outer.y + outer.h);
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
-    if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) {
-      if(action!=="auto") {openCanvasAgent({focus:false});canvasDocumentsReport(canvasDocumentsCopy("An external conversation is selected. Send it an instruction here, or select PenEcho Agent to use Canvas AI.","当前由外部对话处理。请在这里发送指令，或选择 PenEcho Agent 使用画布 AI。"));}
-      return;
-    }
     requestOptions = requestOptions || {};
     const automatic = action === "auto";
     if (!automatic) {
@@ -17069,9 +17092,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       preparation = {
         controller,
         generation:preparationGeneration,
+        recognitionGeneration,
         superseded:false,
         action,
-        widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null,
+        widgetEdit:aiWidgetEditSnapshot(widgetEditTarget, revision),
       };
     let attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox);
     if (requestedAttentionBox) attentionBox = requestedAttentionBox;
@@ -17122,7 +17146,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const requestBox = packed.changedBox;
     const // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputConsumed:isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputConsumed:isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:preparation.widgetEdit, action };
     if (aiPreparation !== preparation) return;
     aiPreparation = null;
     state.activeAI = run;
@@ -17164,9 +17188,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (run.superseded || state.activeAI !== run) throw Error(AI_SUPERSEDED);
       rememberRequest(data.requestId);
       if (!streamed.ok) {
-        const error = Error(data.error || `HTTP ${streamed.status}`);
-        error.status = streamed.status;
-        throw error;
+        throw aiCommandFailure(data,streamed.status);
       }
       // Draft confirmation is a separate interaction after the model request has
       // ended. Stop request-only timers now so they cannot report a slow model
@@ -17196,16 +17218,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         rejectedCount: rawCount - commands.length,
         tools: commands.map((c) => c.tool),
       });
-      if (state.userRevision !== revision) {
-        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
-          state.autoEligible = Boolean(state.dirty);
-          schedule();
-        }
-        setStatusKey("deferred");
-        debug("ai-deferred", { ...meta, reason: "user-revision-changed" });
-        return;
-      }
+      checkAI(revision, run);
       if (state.images.length + commands.filter((command) => command.tool === "plot_function").length > MAX_VISIBLE_IMAGES) {
         setStatusKey("imageLimitReached");
         throw Error(t("imageLimitReached"));
@@ -17220,13 +17233,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         }
         setStatusKey("writing");
         if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
-          if (state.userRevision !== revision) throw Error(AI_CANCELLED);
+          checkAI(revision, run);
           await animate(commands[0], revision, meta, run);
           checkAI(revision, run);
         } else {
           const items = [];
           for (const c of commands) {
-            if (state.userRevision !== revision) throw Error(AI_CANCELLED);
+            checkAI(revision, run);
             const item = await preparePendingItem(c, revision, meta, run);
             if (item) items.push(item);
             checkAI(revision, run);
@@ -17262,7 +17275,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         else setStatusKey("aiNoVisibleResponse");
       }
     } catch (e) {
-      if (run.superseded) {
+      if (run.superseded || state.activeAI !== run) {
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "request-superseded" });
       } else if (e.message === AI_REJECTED) {
         if (!isolatedSelection && run.inputCleared && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
@@ -17276,7 +17289,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         setStatusKey("draftRejected");
       } else if (e.message === AI_SUPERSEDED) {
         setStatusKey("ready");
-      } else if (state.userRevision !== revision) {
+      } else if (e.code === "SOURCE_CONFLICT") {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          restoreDirty(dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiWidgetChanged");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:"target-source-changed", targetId:run.widgetEdit?.targetId });
+      } else if (aiInputInvalid(run)) {
         if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
@@ -17295,6 +17317,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
           requestId: state.lastRequestId,
           reason: "animation-cancelled",
         });
+      } else if (["hosted_request_superseded","hosted_execution_session_stale"].includes(e.code)) {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          restoreDirty(dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiRequestSuperseded");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:e.code });
       } else {
         const timedOut = e.name === "AbortError",
           message = timedOut ? t("timeout") : e.message;
@@ -17820,8 +17851,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return c;
   }
   function checkAI(revision, run = null) {
-    if (state.userRevision !== revision) throw Error(AI_CANCELLED);
     if (run && (run.superseded || state.activeAI !== run)) throw Error(AI_SUPERSEDED);
+    if (run ? aiInputInvalid(run) : state.userRevision !== revision) throw Error(AI_CANCELLED);
+    if (aiWidgetEditChanged(run?.widgetEdit)) throw Object.assign(Error(t("aiWidgetChanged")), { code:"SOURCE_CONFLICT" });
   }
   async function animate(c, revision, meta, run) {
     debug("tool-start", {
@@ -17838,7 +17870,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if (["html_widget", "diagram_source"].includes(c.tool)) {
         if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error("Widget rendering is unavailable");
         const target = run?.widgetEdit?.target,
-          accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);
+          accepted = target ? await startPendingWidgetReplacement(c, target, revision, run.widgetEdit) : await startPendingWidget(c, revision);
         if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
         if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
         if (accepted === AI_REJECTED) throw Error(AI_REJECTED);
@@ -18704,7 +18736,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!p) return;
     const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -18742,7 +18774,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!item) return;
     const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -18935,6 +18967,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         heightLocked: false,
         revealProgress: animationScene ? 1 : 0,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,
@@ -18973,6 +19006,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         selectedIndex: Math.max(0, items.findIndex((item) => item.animationScene)),
         revealProgress: 1,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,
@@ -20121,7 +20155,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return !canvasAgentPanel.hidden && document.body.classList.contains("canvas-agent-open");
   }
   function canvasAgentSuppressesAutomaticAI() {
-    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgent.requestPending || canvasAgent.running || canvasAgentIsOpen();
+    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgentIsOpen();
   }
   function canvasAgentAutomaticAIStatusKey() {
     if (!state.auto) return null;
@@ -20168,7 +20202,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasAgent.requestPending = true;
     canvasAgentSyncTriggerState();
     canvasAgentPauseAutomaticAI();
-    stopActiveAutomaticAI("canvas-agent-request");
     canvasAgentSyncAutomaticAIStatus();
   }
   function canvasAgentRequestDidNotSend() {
@@ -23995,7 +24028,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function canvasAgentMutationIdle(execution) {
     canvasAgentAssertToolExecution(execution);
-    if (state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement || state.selection || state.selectionGesture
+    if (state.drawing || state.selection || state.selectionGesture
       || state.imageEdit || state.imageGesture || state.imageImporting || state.widgetEdit || state.widgetGesture || state.animationEdit || state.animationGesture || state.textEditors.size) {
       throw canvasAgentToolError("CANVAS_BUSY","Finish the active canvas edit or draft before Agent changes the canvas.");
     }

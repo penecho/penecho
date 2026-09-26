@@ -390,7 +390,7 @@
     return !canvasAgentPanel.hidden && document.body.classList.contains("canvas-agent-open");
   }
   function canvasAgentSuppressesAutomaticAI() {
-    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgent.requestPending || canvasAgent.running || canvasAgentIsOpen();
+    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgentIsOpen();
   }
   function canvasAgentAutomaticAIStatusKey() {
     if (!state.auto) return null;
@@ -437,7 +437,6 @@
     canvasAgent.requestPending = true;
     canvasAgentSyncTriggerState();
     canvasAgentPauseAutomaticAI();
-    stopActiveAutomaticAI("canvas-agent-request");
     canvasAgentSyncAutomaticAIStatus();
   }
   function canvasAgentRequestDidNotSend() {
@@ -4264,7 +4263,7 @@
   }
   function canvasAgentMutationIdle(execution) {
     canvasAgentAssertToolExecution(execution);
-    if (state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement || state.selection || state.selectionGesture
+    if (state.drawing || state.selection || state.selectionGesture
       || state.imageEdit || state.imageGesture || state.imageImporting || state.widgetEdit || state.widgetGesture || state.animationEdit || state.animationGesture || state.textEditors.size) {
       throw canvasAgentToolError("CANVAS_BUSY","Finish the active canvas edit or draft before Agent changes the canvas.");
     }

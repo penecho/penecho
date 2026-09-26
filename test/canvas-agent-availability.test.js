@@ -171,7 +171,7 @@ test("Canvas Agent unavailable status and connection label remain unavailable ac
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
     document:{querySelector:()=>({hidden:true})},canvasAgent:{currentConversation:null},canvasAgentStatus:status,canvasAgentPanel:panel,canvasAgentConnectionButton:connection,canvasAgentConnectionLabel:label,
     allAiConnections:()=>[{id:"saved",provider:"api",name:"Saved API"}],selectedAiConnectionId:()=>"saved",connectionTitle:item=>item.name,
-    t:localized,canvasAgentSyncSendAvailability(){},
+    t:localized,canvasAgentSyncSendAvailability(){},canvasAgentUpdateModelScroll(){},canvasAgentUpdateThinkingControl(){},
   },run=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
     ${functionSource(source,"canvasAgentUnavailableMessage")}
@@ -273,7 +273,7 @@ test("Canvas Agent language refresh keeps unavailable status instead of restorin
   ];
   const element=()=>({textContent:"",hidden:true,value:"",dataset:{status:"connecting"},classList:{contains:()=>false},setAttribute(){},querySelector:()=>({textContent:""}),querySelectorAll:()=>[]});
   const context={window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},document:{querySelector:()=>({hidden:true})},allAiConnections:()=>[],canvasAgent:{running:false,projectRootApproval:null,projectRemovePending:null,toolRows:new Map(),lastTurnError:null},t:localized,
-    canvasAgentSetComposerActionLabel(){},canvasAgentRenderPromptSuggestions(){},canvasAgentUpdateSearchButton(){},canvasAgentUpdateConnectionButton(){},canvasAgentRenderToolRow(){},canvasAgentBlockLabel:key=>key,
+    canvasAgentUpdateThinkingControl(){},canvasAgentSetComposerActionLabel(){},canvasAgentRenderPromptSuggestions(){},canvasAgentUpdateSearchButton(){},canvasAgentUpdateConnectionButton(){},canvasAgentRenderToolRow(){},canvasAgentBlockLabel:key=>key,
     canvasAgentSetAssistantCopyState(){},canvasAgentRenderErrorElement(){},canvasAgentSyncSelection(){},canvasAgentRenderReferencePicker(){},canvasAgentRenderHistoryList(){},canvasAgentRenderProjects(){},canvasAgentRenderEmpty(){},
     canvasAgentSyncInputHint(){},canvasAgentSyncPromptSuggestions(){},canvasAgentSyncSendAvailability(){},canvasAgentResizeInput(){inputResizeCalls++;},
   };

@@ -1118,7 +1118,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       aiStillWaiting: "The model is taking longer than usual · PenEcho timeout {seconds}s",
       aiCancelled: "AI request cancelled",
       aiCancelledForInput: "AI request cancelled because new input started",
-      deferred: "New ink found; this AI result was deferred",
+      aiRequestSuperseded: "A newer request replaced this AI request. Your input is kept; try again if you still need this result.",
+      aiRequestFailed: "AI request failed. Please try again",
+      deferred: "Canvas input changed; this AI result was deferred",
+      aiWidgetChanged: "This Widget was updated while AI was working. Your input is kept; retry to apply it to the latest version.",
       writing: "Writing...",
       aiDone: "AI completed",
       draftRejected: "AI draft discarded",
@@ -2223,7 +2226,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       height = rect.height * metrics.clientScaleY;
     return { left, top, right:left + width, bottom:top + height, width, height };
   }
-  const AI_NON_PROGRESS_STATUS_KEYS = new Set(["aiBusy", "aiDone", "aiNoVisibleResponse", "aiError", "aiCancelled", "aiCancelledForInput"]);
+  const AI_NON_PROGRESS_STATUS_KEYS = new Set(["aiBusy", "aiDone", "aiNoVisibleResponse", "aiError", "aiCancelled", "aiCancelledForInput", "aiRequestSuperseded", "aiWidgetChanged", "aiRequestFailed"]);
   const MULTILINE_STATUS_KEYS = new Set(["widgetRefinePending"]);
   const setStatus = (text, key = null) => {
     status.textContent = text;

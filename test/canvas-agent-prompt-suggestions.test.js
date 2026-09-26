@@ -67,7 +67,8 @@ test("PenEcho Agent places its categorized prompt list at the top of the content
 test("PenEcho Agent keeps the Try asking trigger in the composer and its content above the transcript",()=>{
   const {document}=parseHTML(html),form=document.querySelector("#canvasAgentForm"),surface=form.querySelector(".canvas-agent-composer-surface"),toolbar=form.querySelector(".canvas-agent-composer-toolbar"),control=document.querySelector("#canvasAgentPromptControl"),project=document.querySelector("#canvasAgentProjectControl"),connection=document.querySelector("#canvasAgentConnection"),toggle=document.querySelector("#canvasAgentPromptToggle"),prompts=document.querySelector("#canvasAgentPromptSuggestions"),categories=document.querySelector("#canvasAgentPromptCategories"),list=document.querySelector("#canvasAgentPromptPopup"),tabs=[...categories.querySelectorAll('[role="tab"]')],panels=[...list.querySelectorAll('[role="tabpanel"]')];
   assert.equal(toolbar.parentElement,surface);
-  assert.deepEqual([...toolbar.children],[project,control,connection]);
+  assert.deepEqual([...toolbar.children].map(element=>element.id),[project.id,control.id,"canvasAgentModelControl"]);
+  assert.equal(connection.closest("#canvasAgentModelControl")?.id,"canvasAgentModelControl");
   assert.equal(control.hasAttribute("hidden"),true);
   assert.equal(toggle.getAttribute("aria-controls"),prompts.id);
   assert.equal(categories.dataset.peControl,"tab");assert.equal(categories.dataset.peBehavior,"product");

@@ -289,6 +289,14 @@
             <button id="historyRecentNav" class="shell-library-link" type="button" aria-current="page" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span data-i18n="historyRecent">Recent</span></button>
             <button id="historyFavoritesNav" class="shell-library-link" type="button" aria-current="false" aria-controls="historyFavoritesView" data-pe-button="menu-item"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg><span data-i18n="libraryFavorites">Favorites</span><small id="historyFavoritesCount" class="history-favorites-count" hidden></small></button>
           </div>
+          <fieldset class="snapshot-location history-sidebar-section" aria-describedby="historyStorageDescription">
+            <legend data-i18n="historyLocations">Locations</legend>
+            <div class="snapshot-location-options">
+              <label><input type="radio" name="historyStorageLocation" value="device"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storageThisDevice">Device</span><small class="history-location-count" data-location="device" hidden></small></span></label>
+              <label><input type="radio" name="historyStorageLocation" value="server"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storagePenEchoServer">Server</span><small class="history-location-count" data-location="server" hidden></small></span></label>
+              <label><input type="radio" name="historyStorageLocation" value="cloud"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storagePenEchoCloud">Cloud</span><small class="history-location-count" data-location="cloud" hidden></small><small id="historyCloudSignIn" class="history-location-signin" data-i18n="historySignIn" hidden>Sign in</small></span></label>
+            </div>
+          </fieldset>
           <section id="serverProjectManager" class="history-projects history-sidebar-section" hidden>
             <div class="history-sidebar-heading">
               <span data-i18n="historyProjects">Projects</span>
@@ -300,14 +308,6 @@
             <div id="historyProjectNav" class="history-project-nav" role="navigation" data-i18n-aria="historyProjects" aria-label="Projects"></div>
             <button id="historyProjectDelete" class="history-project-delete" type="button" data-i18n-aria="canvasProjectDelete" aria-label="Delete project" data-i18n-title="canvasProjectDelete" title="Delete project" data-pe-button="danger" data-pe-density="standard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span data-i18n="canvasProjectDelete">Delete project</span></button>
           </section>
-          <fieldset class="snapshot-location history-sidebar-section" aria-describedby="historyStorageDescription">
-            <legend data-i18n="historyLocations">Locations</legend>
-            <div class="snapshot-location-options">
-              <label><input type="radio" name="historyStorageLocation" value="device"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storageThisDevice">Device</span><small class="history-location-count" data-location="device" hidden></small></span></label>
-              <label><input type="radio" name="historyStorageLocation" value="server"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storagePenEchoServer">Server</span><small class="history-location-count" data-location="server" hidden></small></span></label>
-              <label><input type="radio" name="historyStorageLocation" value="cloud"><span data-pe-button="menu-item"><span class="history-location-label" data-i18n="storagePenEchoCloud">Cloud</span><small class="history-location-count" data-location="cloud" hidden></small><small id="historyCloudSignIn" class="history-location-signin" data-i18n="historySignIn" hidden>Sign in</small></span></label>
-            </div>
-          </fieldset>
         </aside>
 
         <section class="history-library-main" data-pe-region="content" data-i18n-aria="historyCanvasList" aria-label="Canvas Library content">

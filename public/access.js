@@ -71,7 +71,6 @@
   }
   function beginPin(nextFlow) {
     flow=nextFlow;entry="";backButton.hidden=nextFlow==="unlock";show(pinView);renderPinCopy();renderEntry();
-    document.querySelector("#accessKeypad button[data-digit]")?.focus();
   }
   function addDigit(digit) {
     if(busy||Date.now()<cooldownUntil||entry.length>=6)return;

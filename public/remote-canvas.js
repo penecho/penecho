@@ -301,6 +301,8 @@
         if (!current()) return jsonResponse({ error:"cloud_canvas_changed", message:"The active Canvas changed. Retry on the current Canvas." }, 409);
         return nativeFetch(`/api/v1/hosted/canvases/${executionCanvasId}/execution-fence`, { ...options, method, headers, credentials:"same-origin", body:JSON.stringify(execution) }).then(async (fence) => {
           if (!fence.ok) return fence;
+          const admitted = await fence.json();
+          if (admitted.stale) return jsonResponse({ error:"hosted_execution_session_stale" }, 409);
           if (!current()) return jsonResponse({ error:"cloud_canvas_changed", message:"The active Canvas changed. Retry on the current Canvas." }, 409);
           return nativeFetch("/api/v1/hosted/commands", { ...options, method, headers, credentials:"same-origin", body:JSON.stringify({ modelId:hostedModel[1], canvasId:executionCanvasId, command, ...execution }) });
         });
