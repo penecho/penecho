@@ -7,6 +7,27 @@ const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
+function shortcutSettingsHarness(saved = null) {
+  const vm = require("node:vm"), storage = new Map(), actions = [];
+  const storageKey = "penecho-keyboard-shortcuts-v1";
+  if (saved) storage.set(storageKey, JSON.stringify(saved));
+  let writes = 0;
+  const context = vm.createContext({
+    state:{}, settings:{}, navigator:{platform:"MacIntel"},
+    localStorage:{getItem:key=>storage.get(key) || null, setItem:(key,value)=>{storage.set(key,value);writes++;}},
+    window:{addEventListener(){}}, requestAnimationFrame:callback=>callback(),
+    document:{querySelector:selector=>selector === '[data-action="undo"]' ? {click:()=>actions.push("undo")} : null},
+    canvasAgentPanel:{contains:()=>false}, t:key=>key,
+    saveCurrentCanvas:()=>actions.push("save-canvas"),
+  });
+  vm.runInContext(read("src/client/app/keyboard-shortcuts.js"), context);
+  const api = vm.runInContext(`({
+    assign:keyboardShortcutAssign, reset:keyboardShortcutReset, resetAll:keyboardShortcutResetAll,
+    handle:handleKeyboardShortcutKeydown, bindings:()=>({...keyboardShortcutBindings}),
+    status:()=>keyboardShortcutStatus,
+  })`, context);
+  return {api, actions, writes:()=>writes, saved:()=>JSON.parse(storage.get(storageKey) || "null")};
+}
 const functionSource = (source, name) => {
   const start = source.indexOf(`function ${name}(`);
   assert.notEqual(start, -1, `missing function ${name}`);
@@ -66,6 +87,51 @@ test("shortcut normalization treats Control and Command as the same cross-platfo
   assert.equal(chord({ key:"S", ctrlKey:false, metaKey:true, altKey:false, shiftKey:true }), "Mod+Shift+s");
   assert.equal(chord({ key:"Tab", ctrlKey:false, metaKey:false, altKey:false, shiftKey:false }), "Tab");
   assert.equal(chord({ key:"Control", ctrlKey:true, metaKey:false, altKey:false, shiftKey:false }), "");
+});
+
+test("resetting one shortcut rejects an occupied default without changing saved bindings or actions", () => {
+  const h = shortcutSettingsHarness();
+  assert.equal(h.api.assign("undo", "Mod+u"), true);
+  assert.equal(h.api.assign("save-canvas", "Mod+z"), true);
+  const before = h.saved(), writes = h.writes();
+
+  assert.equal(h.api.reset("undo"), false);
+  assert.deepEqual(h.saved(), before);
+  assert.equal(h.writes(), writes);
+  assert.equal(h.api.status().key, "settingsShortcutConflict");
+  assert.equal(h.api.status().values.command, "saveCanvas");
+
+  for (const key of ["z", "u"]) h.api.handle({key, ctrlKey:true, preventDefault(){}, stopImmediatePropagation(){}});
+  assert.deepEqual(h.actions, ["save-canvas", "undo"]);
+});
+
+test("resetting a shortcut after freeing its default persists it and preserves unrelated custom bindings", () => {
+  const h = shortcutSettingsHarness();
+  h.api.assign("undo", "Mod+u");
+  h.api.assign("save-canvas", "Mod+z");
+  h.api.assign("canvas-library", "Mod+k");
+  h.api.assign("save-canvas", "");
+
+  assert.equal(h.api.reset("undo"), true);
+  assert.equal(h.api.status().key, "settingsShortcutResetDone");
+  const reloaded = shortcutSettingsHarness(h.saved());
+  assert.equal(reloaded.api.bindings().undo, "Mod+z");
+  assert.equal(reloaded.api.bindings()["save-canvas"], "");
+  assert.equal(reloaded.api.bindings()["canvas-library"], "Mod+k");
+  reloaded.api.handle({key:"z", metaKey:true, preventDefault(){}, stopImmediatePropagation(){}});
+  assert.deepEqual(reloaded.actions, ["undo"]);
+});
+
+test("reset all restores unique defaults after shortcuts have exchanged bindings", () => {
+  const h = shortcutSettingsHarness();
+  h.api.assign("undo", "Mod+u");
+  h.api.assign("save-canvas", "Mod+z");
+  h.api.assign("undo", "Mod+s");
+  h.api.resetAll();
+  const restored = shortcutSettingsHarness(h.saved()).api.bindings();
+  assert.equal(restored.undo, "Mod+z");
+  assert.equal(restored["save-canvas"], "Mod+s");
+  assert.equal(new Set(Object.values(restored)).size, Object.keys(restored).length);
 });
 
 test("Canvas shortcut hints show the current binding and omit cleared shortcuts", () => {

@@ -197,12 +197,8 @@
   function keyboardShortcutReset(commandId) {
     const command = keyboardShortcutCommand(commandId);
     if (!command) return false;
-    keyboardShortcutRecordingId = "";
-    keyboardShortcutBindings = { ...keyboardShortcutBindings, [commandId]:command.defaultChord };
-    keyboardShortcutPersistBindings();
+    if (!keyboardShortcutAssign(commandId, command.defaultChord)) return false;
     keyboardShortcutSetStatus("settingsShortcutResetDone", { command:t(command.labelKey) }, "success");
-    renderKeyboardShortcuts();
-    keyboardShortcutFocusEditor(commandId);
     return true;
   }
   function keyboardShortcutResetAll() {
