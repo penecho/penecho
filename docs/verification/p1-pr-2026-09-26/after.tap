@@ -1,0 +1,238 @@
+TAP version 13
+# Subtest: control: importing legacy community bundle creates an independent document
+ok 1 - control: importing legacy community bundle creates an independent document
+  ---
+  duration_ms: 59.256917
+  type: 'test'
+  ...
+# Subtest: importing current-format community bundle creates an independent document
+ok 2 - importing current-format community bundle creates an independent document
+  ---
+  duration_ms: 15.814458
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 0.1
+ok 3 - real text persistence retains world frame after rerasterization at placement zoom 0.1
+  ---
+  duration_ms: 9.196959
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 0.5
+ok 4 - real text persistence retains world frame after rerasterization at placement zoom 0.5
+  ---
+  duration_ms: 1.885291
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 1
+ok 5 - real text persistence retains world frame after rerasterization at placement zoom 1
+  ---
+  duration_ms: 1.323458
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 2
+ok 6 - real text persistence retains world frame after rerasterization at placement zoom 2
+  ---
+  duration_ms: 1.055208
+  type: 'test'
+  ...
+# Subtest: invalid saved text frames do not overwrite validated rendered geometry
+ok 7 - invalid saved text frames do not overwrite validated rendered geometry
+  ---
+  duration_ms: 1.575541
+  type: 'test'
+  ...
+# Subtest: artifact author mapping survives the real workspace JSON normalization roundtrip
+ok 8 - artifact author mapping survives the real workspace JSON normalization roundtrip
+  ---
+  duration_ms: 4.968833
+  type: 'test'
+  ...
+# Subtest: artifact normalizer discards nonfinite and out-of-contract author mappings
+ok 9 - artifact normalizer discards nonfinite and out-of-contract author mappings
+  ---
+  duration_ms: 2.014625
+  type: 'test'
+  ...
+# Subtest: real widget and image records preserve small world frames at zoom two
+ok 10 - real widget and image records preserve small world frames at zoom two
+  ---
+  duration_ms: 3.588
+  type: 'test'
+  ...
+# Subtest: dragging a viewport-mapped widget reflows without a world-pixel minimum jump
+ok 11 - dragging a viewport-mapped widget reflows without a world-pixel minimum jump
+  ---
+  duration_ms: 2.047333
+  type: 'test'
+  ...
+# Subtest: a superseded text restore cannot repopulate a cleared canvas or consume its next id
+ok 12 - a superseded text restore cannot repopulate a cleared canvas or consume its next id
+  ---
+  duration_ms: 2.065459
+  type: 'test'
+  ...
+# Subtest: the latest text restore owns matching ids and unrelated quality refreshes do not cancel it
+ok 13 - the latest text restore owns matching ids and unrelated quality refreshes do not cancel it
+  ---
+  duration_ms: 1.579625
+  type: 'test'
+  ...
+# Subtest: a failed superseded text restore does not begin rendering later stale items
+ok 14 - a failed superseded text restore does not begin rendering later stale items
+  ---
+  duration_ms: 0.907167
+  type: 'test'
+  ...
+# Subtest: cancelled snapshot load stops text restoration without replacing its list (resolved raster)
+ok 15 - cancelled snapshot load stops text restoration without replacing its list (resolved raster)
+  ---
+  duration_ms: 0.874291
+  type: 'test'
+  ...
+# Subtest: cancelled snapshot load stops text restoration without replacing its list (rejected raster)
+ok 16 - cancelled snapshot load stops text restoration without replacing its list (rejected raster)
+  ---
+  duration_ms: 1.062458
+  type: 'test'
+  ...
+# Subtest: v1 reopens a integer image at the x boundary
+ok 17 - v1 reopens a integer image at the x boundary
+  ---
+  duration_ms: 7.705167
+  type: 'test'
+  ...
+# Subtest: v1 reopens a fractional image at the x boundary
+ok 18 - v1 reopens a fractional image at the x boundary
+  ---
+  duration_ms: 3.119875
+  type: 'test'
+  ...
+# Subtest: v1 reopens a integer image at the y boundary
+ok 19 - v1 reopens a integer image at the y boundary
+  ---
+  duration_ms: 5.647833
+  type: 'test'
+  ...
+# Subtest: v1 reopens a fractional image at the y boundary
+ok 20 - v1 reopens a fractional image at the y boundary
+  ---
+  duration_ms: 4.854083
+  type: 'test'
+  ...
+# Subtest: v2 reopens a integer image at the x boundary
+ok 21 - v2 reopens a integer image at the x boundary
+  ---
+  duration_ms: 11.019667
+  type: 'test'
+  ...
+# Subtest: v2 reopens a fractional image at the x boundary
+ok 22 - v2 reopens a fractional image at the x boundary
+  ---
+  duration_ms: 3.114583
+  type: 'test'
+  ...
+# Subtest: v2 reopens a integer image at the y boundary
+ok 23 - v2 reopens a integer image at the y boundary
+  ---
+  duration_ms: 3.207708
+  type: 'test'
+  ...
+# Subtest: v2 reopens a fractional image at the y boundary
+ok 24 - v2 reopens a fractional image at the y boundary
+  ---
+  duration_ms: 5.101334
+  type: 'test'
+  ...
+# Subtest: client image restore retains an accepted fractional boundary frame
+ok 25 - client image restore retains an accepted fractional boundary frame
+  ---
+  duration_ms: 2.459583
+  type: 'test'
+  ...
+# Subtest: v1 saves and reopens a 1-unit image frame
+ok 26 - v1 saves and reopens a 1-unit image frame
+  ---
+  duration_ms: 11.588584
+  type: 'test'
+  ...
+# Subtest: v1 saves and reopens a 40-unit image frame
+ok 27 - v1 saves and reopens a 40-unit image frame
+  ---
+  duration_ms: 6.393208
+  type: 'test'
+  ...
+# Subtest: v1 saves and reopens a 79-unit image frame
+ok 28 - v1 saves and reopens a 79-unit image frame
+  ---
+  duration_ms: 3.99275
+  type: 'test'
+  ...
+# Subtest: v1 saves and reopens a 80-unit image frame
+ok 29 - v1 saves and reopens a 80-unit image frame
+  ---
+  duration_ms: 4.550875
+  type: 'test'
+  ...
+# Subtest: v2 saves and reopens a 1-unit image frame
+ok 30 - v2 saves and reopens a 1-unit image frame
+  ---
+  duration_ms: 12.12375
+  type: 'test'
+  ...
+# Subtest: v2 saves and reopens a 40-unit image frame
+ok 31 - v2 saves and reopens a 40-unit image frame
+  ---
+  duration_ms: 4.621125
+  type: 'test'
+  ...
+# Subtest: v2 saves and reopens a 79-unit image frame
+ok 32 - v2 saves and reopens a 79-unit image frame
+  ---
+  duration_ms: 3.11375
+  type: 'test'
+  ...
+# Subtest: v2 saves and reopens a 80-unit image frame
+ok 33 - v2 saves and reopens a 80-unit image frame
+  ---
+  duration_ms: 2.85025
+  type: 'test'
+  ...
+# Subtest: small-image support retains geometry, raster and data validation
+ok 34 - small-image support retains geometry, raster and data validation
+  ---
+  duration_ms: 3.066833
+  type: 'test'
+  ...
+# Subtest: ordinary snapshot load releases its busy state
+ok 35 - ordinary snapshot load releases its busy state
+  ---
+  duration_ms: 58.354042
+  type: 'test'
+  ...
+# Subtest: new Canvas during a pending read keeps a blank document and releases the load lock
+ok 36 - new Canvas during a pending read keeps a blank document and releases the load lock
+  ---
+  duration_ms: 14.881667
+  type: 'test'
+  ...
+# Subtest: new Canvas during text restoration is not relabeled by late snapshot completion
+ok 37 - new Canvas during text restoration is not relabeled by late snapshot completion
+  ---
+  duration_ms: 13.780708
+  type: 'test'
+  ...
+# Subtest: new Canvas during legacy identity lookup is not adopted by a stale load
+ok 38 - new Canvas during legacy identity lookup is not adopted by a stale load
+  ---
+  duration_ms: 12.236875
+  type: 'test'
+  ...
+1..38
+# tests 38
+# suites 0
+# pass 38
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 193.702

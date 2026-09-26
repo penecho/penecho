@@ -1,0 +1,37 @@
+[
+  {
+    "file": "test/mcp-text-viewport.test.js",
+    "baselineTestSha256": "9a7ea79ea3835b324dfc61a133a3d06227971870e6ba6d72b80b64a20435313d",
+    "finalTestSha256": "af7831e72b0b368f2fb5f812b9a910ad55570d8d9f4570a5cd83487aebe35985",
+    "unchanged": false,
+    "onlyAppended": true
+  },
+  {
+    "file": "test/server-canvas-images.test.js",
+    "baselineTestSha256": "b497b843f914d7550b7dd738b849519b485c9e0a4b7662e6d68cf5ce2eda26b1",
+    "finalTestSha256": "b497b843f914d7550b7dd738b849519b485c9e0a4b7662e6d68cf5ce2eda26b1",
+    "unchanged": true,
+    "onlyAppended": false
+  },
+  {
+    "file": "test/server-canvas-image-boundary.test.js",
+    "baselineTestSha256": "37bc9a396afd02c11a876bff3cf570dbc14250b13210f002eb97db7b628e5867",
+    "finalTestSha256": "37bc9a396afd02c11a876bff3cf570dbc14250b13210f002eb97db7b628e5867",
+    "unchanged": true,
+    "onlyAppended": false
+  },
+  {
+    "file": "test/community-import-identity.test.js",
+    "baselineTestSha256": "e45c7e8c037316a0334e9c59b875e3684e1f7cbd75585adb51c67a51628bee18",
+    "finalTestSha256": "e45c7e8c037316a0334e9c59b875e3684e1f7cbd75585adb51c67a51628bee18",
+    "unchanged": true,
+    "onlyAppended": false
+  },
+  {
+    "file": "test/snapshot-load-ownership.test.js",
+    "baselineTestSha256": "bf2e90d596c4bd727c48c9b575fd34cac15840d5903d3301d4555699993b6dfb",
+    "finalTestSha256": "bf2e90d596c4bd727c48c9b575fd34cac15840d5903d3301d4555699993b6dfb",
+    "unchanged": true,
+    "onlyAppended": false
+  }
+]

@@ -1,0 +1,130 @@
+{
+  "runtime": "v24.19.0",
+  "baselineCommit": "84972557965b3976707302a8ae8efcde850dc346",
+  "command": "BROWSER=/usr/bin/true PHONE_HARNESS_TELEMETRY=0 npm run check",
+  "before": {
+    "counts": {
+      "tests": 2159,
+      "pass": 2148,
+      "fail": 10,
+      "skipped": 1,
+      "cancelled": 0
+    },
+    "failures": [
+      {
+        "location": "test/cloud-connect-ui.test.js:878:1",
+        "name": "publication uses one consolidated PenEcho agreement link in browsers and desktop apps",
+        "error": "AssertionError [ERR_ASSERTION]: the consent checkbox aligns with the form controls' outer left edge"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:199:1",
+        "name": "an explicit rename persists an otherwise blank Canvas with its name and identity",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:238:1",
+        "name": "renaming an existing Canvas overwrites its stored identity",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:273:1",
+        "name": "saving retains Widget source when preview capture is unavailable",
+        "error": "ReferenceError: Event is not defined"
+      },
+      {
+        "location": "test/mcp-workspace-actions.test.js:144:1",
+        "name": "A live MCP connection turns Follow latest on so the next content update switches canvases",
+        "error": "TypeError: Cannot set properties of undefined (setting 'online')"
+      },
+      {
+        "location": "test/mcp-workspace-actions.test.js:349:1",
+        "name": "Follow preference survives reconnect and every close action while obsolete targets are cleared",
+        "error": "TypeError: Cannot set properties of undefined (setting 'online')"
+      },
+      {
+        "location": "test/pencil-writing-lifecycle.test.js:92:1",
+        "name": "Agent pen cannot be stolen by a palm; ending or switching preserves ink and releases capture",
+        "error": "ReferenceError: canvasAgentSyncSendAvailability is not defined"
+      },
+      {
+        "location": "test/plugin.test.js:944:1",
+        "name": "widget iframe preserves native navigation while forwarding only focus and resize chrome",
+        "error": "AssertionError [ERR_ASSERTION]: The input was expected to not match the regular expression /addEventListener\\(\"wheel\"|penecho-widget-wheel/. Input:"
+      },
+      {
+        "location": "test/selection-ui.test.js:12:1",
+        "name": "selection toolbar is an accessible viewport overlay with stable action hooks",
+        "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /class=\"selection-overlay-layer\"[^>]*hidden/. Input:"
+      },
+      {
+        "location": "test/server-security.test.js:3171:1",
+        "name": "static page keeps strict styles while allowing the pinned MathJax CDN",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:"
+      }
+    ],
+    "logSha256": "28e4dfdb3bc2ac2813f906a1033a75e8e0c2b8f73ac8a363f75f4462d1d77241"
+  },
+  "after": {
+    "counts": {
+      "tests": 2188,
+      "pass": 2178,
+      "fail": 10,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "failures": [
+      {
+        "location": "test/cloud-connect-ui.test.js:878:1",
+        "name": "publication uses one consolidated PenEcho agreement link in browsers and desktop apps",
+        "error": "AssertionError [ERR_ASSERTION]: the consent checkbox aligns with the form controls' outer left edge"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:199:1",
+        "name": "an explicit rename persists an otherwise blank Canvas with its name and identity",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:238:1",
+        "name": "renaming an existing Canvas overwrites its stored identity",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
+      },
+      {
+        "location": "test/empty-canvas-rename.test.js:273:1",
+        "name": "saving retains Widget source when preview capture is unavailable",
+        "error": "ReferenceError: Event is not defined"
+      },
+      {
+        "location": "test/mcp-workspace-actions.test.js:144:1",
+        "name": "A live MCP connection turns Follow latest on so the next content update switches canvases",
+        "error": "TypeError: Cannot set properties of undefined (setting 'online')"
+      },
+      {
+        "location": "test/mcp-workspace-actions.test.js:349:1",
+        "name": "Follow preference survives reconnect and every close action while obsolete targets are cleared",
+        "error": "TypeError: Cannot set properties of undefined (setting 'online')"
+      },
+      {
+        "location": "test/pencil-writing-lifecycle.test.js:92:1",
+        "name": "Agent pen cannot be stolen by a palm; ending or switching preserves ink and releases capture",
+        "error": "ReferenceError: canvasAgentSyncSendAvailability is not defined"
+      },
+      {
+        "location": "test/plugin.test.js:944:1",
+        "name": "widget iframe preserves native navigation while forwarding only focus and resize chrome",
+        "error": "AssertionError [ERR_ASSERTION]: The input was expected to not match the regular expression /addEventListener\\(\"wheel\"|penecho-widget-wheel/. Input:"
+      },
+      {
+        "location": "test/selection-ui.test.js:12:1",
+        "name": "selection toolbar is an accessible viewport overlay with stable action hooks",
+        "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /class=\"selection-overlay-layer\"[^>]*hidden/. Input:"
+      },
+      {
+        "location": "test/server-security.test.js:3171:1",
+        "name": "static page keeps strict styles while allowing the pinned MathJax CDN",
+        "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:"
+      }
+    ],
+    "logSha256": "d45cada4bce0d60066add7694a139428bf591cda9189ae22d9b44490d843547e"
+  },
+  "identicalFailures": true
+}
