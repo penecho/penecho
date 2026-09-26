@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.5
+
+- **UI:** minor interface fixes.
+- **Concurrent canvas editing:** support Canvas AI, Agent, and MCP modifying the same canvas simultaneously.
+
 ## 1.3.3
 
 ### Professional diagrams on the Canvas

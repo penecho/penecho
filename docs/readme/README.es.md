@@ -178,13 +178,12 @@ Estas recomendaciones equilibran la calidad y la latencia en tareas reales del l
 
 </details>
 
-## Novedades de la versión 1.3.3
+## Novedades de la versión 1.3.5
 
-- **Diagramas de arquitectura, secuencia y flujo de trabajo** Con diseño automático, conexiones trazadas y exportación SVG / PNG.
-- **Biblioteca de lienzos** Con paginación, búsqueda, filtros de proyectos y ordenación.
-- **Más configuraciones de proveedores de API** Las listas de modelos se obtienen automáticamente.
+- **UI:** pequeñas correcciones en la interfaz.
+- **Edición simultánea del lienzo:** Canvas AI, Agent y MCP pueden modificar el mismo lienzo al mismo tiempo.
 
-[Registro completo de cambios →](../../CHANGELOG.md#133)
+[Registro completo de cambios →](../../CHANGELOG.md#135)
 
 ## Comunidad
 

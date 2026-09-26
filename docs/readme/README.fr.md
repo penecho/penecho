@@ -178,13 +178,12 @@ Ces recommandations équilibrent qualité et latence pour de vraies tâches sur 
 
 </details>
 
-## Nouveautés de la version 1.3.3
+## Nouveautés de la version 1.3.5
 
-- **Schémas d’architecture, de séquence et de flux** Avec disposition automatique, connexions acheminées et export SVG / PNG.
-- **Bibliothèque de canevas** Avec pagination, recherche, filtres de projets et tri.
-- **Davantage de préréglages de fournisseurs API** Les listes de modèles sont récupérées automatiquement.
+- **UI :** corrections mineures de l’interface.
+- **Modification simultanée du canevas :** Canvas AI, Agent et MCP peuvent modifier le même canevas en même temps.
 
-[Journal complet des modifications →](../../CHANGELOG.md#133)
+[Journal complet des modifications →](../../CHANGELOG.md#135)
 
 ## Communauté
 

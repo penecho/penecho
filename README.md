@@ -180,13 +180,12 @@ These recommendations balance answer quality against the latency of PenEcho's re
 
 </details>
 
-## What's new in 1.3.3
+## What's new in 1.3.5
 
-- **Architecture, sequence and workflow diagrams** with automatic layout, routed connections and SVG/PNG export.
-- **Canvas Library** with pagination, search, project filters and sorting.
-- **More API provider presets**, with model lists fetched for you.
+- **UI:** minor interface fixes.
+- **Concurrent canvas editing:** support Canvas AI, Agent, and MCP modifying the same canvas simultaneously.
 
-[Full changelog →](CHANGELOG.md#133)
+[Full changelog →](CHANGELOG.md#135)
 
 ## Community
 

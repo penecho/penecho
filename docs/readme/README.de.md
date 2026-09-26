@@ -178,13 +178,12 @@ Diese Empfehlungen gleichen Antwortqualität und Latenz bei echten PenEcho-Leinw
 
 </details>
 
-## Neu in 1.3.3
+## Neu in 1.3.5
 
-- **Architektur-, Sequenz- und Workflow-Diagramme** Mit automatischem Layout, geführten Verbindungen und SVG / PNG-Export.
-- **Leinwandbibliothek** Mit Seitennavigation, Suche, Projektfiltern und Sortierung.
-- **Mehr Vorlagen für API-Anbieter** Modelllisten werden automatisch abgerufen.
+- **UI:** kleinere Fehler in der Benutzeroberfläche behoben.
+- **Gleichzeitige Leinwandbearbeitung:** Canvas AI, Agent und MCP können dieselbe Leinwand gleichzeitig bearbeiten.
 
-[Vollständiges Änderungsprotokoll →](../../CHANGELOG.md#133)
+[Vollständiges Änderungsprotokoll →](../../CHANGELOG.md#135)
 
 ## Community
 

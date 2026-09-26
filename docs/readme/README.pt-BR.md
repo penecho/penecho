@@ -178,13 +178,12 @@ Estas recomendações equilibram qualidade e latência em tarefas reais do canva
 
 </details>
 
-## Novidades da versão 1.3.3
+## Novidades da versão 1.3.5
 
-- **Diagramas de arquitetura, sequência e fluxo de trabalho** Com layout automático, conexões roteadas e exportação SVG / PNG.
-- **Biblioteca de canvases** Com paginação, pesquisa, filtros de projeto e ordenação.
-- **Mais predefinições de provedores de API** As listas de modelos são buscadas automaticamente.
+- **UI:** pequenas correções na interface.
+- **Edição simultânea do canvas:** Canvas AI, Agent e MCP podem modificar o mesmo canvas ao mesmo tempo.
 
-[Histórico completo de alterações →](../../CHANGELOG.md#133)
+[Histórico completo de alterações →](../../CHANGELOG.md#135)
 
 ## Comunidade
 
