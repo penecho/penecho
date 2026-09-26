@@ -6758,7 +6758,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     canvasTextQualityGeneration++;
     clearHandToolbarTargets("text-box");
     clearTextEditors();
-    state.textBoxes = [];
+    // List ownership is independent of background raster quality refreshes.
+    const restored = [];
+    state.textBoxes = restored;
     state.nextTextBoxId = 1;
     state.selectedTextBoxId = null;
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_TEXT_BOXES) : []) {
@@ -6766,16 +6768,23 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       try {
         if (item?.image && textImageRasterRatio(item.image) >= pixelRatio / 1.05) record = textBoxHistoryRecord(item);
         else {
-          record = await renderedTextBoxRecord(item, pixelRatio);
+          // Allocate an identity only when this restore commits to its own list.
+          const id = typeof item?.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${state.nextTextBoxId}`;
+          record = await renderedTextBoxRecord({ ...item, id }, pixelRatio);
           // Raster dimensions describe typography; the saved frame describes
           // world placement. Rehydrating pixels must not reset their mapping.
           if(record&&[item.x,item.y,item.w,item.h].every(Number.isFinite)&&item.x>=0&&item.y>=0&&item.w>0&&item.h>0&&item.x+item.w<=SIZE&&item.y+item.h<=SIZE)
             Object.assign(record,{x:item.x,y:item.y,w:item.w,h:item.h});
         }
       } catch {
+        if (state.textBoxes !== restored) return;
         // One invalid or unsupported text box must not make an otherwise valid
         // saved Canvas impossible to restore.
         continue;
+      }
+      if (state.textBoxes !== restored) {
+        if (record?.image && record.image !== item?.image) releaseTextRaster(record.image);
+        return;
       }
       if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
       const numbered = /^text-box-(\d+)$/.exec(record.id);

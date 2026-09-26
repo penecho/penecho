@@ -102,3 +102,44 @@ test('dragging a viewport-mapped widget reflows without a world-pixel minimum ju
  assert.equal(resize(start,{x:0,y:0},'height').h,100);
  assert.equal(resize(start,{x:0,y:0},'width').w,150);
 });
+
+test('a superseded text restore cannot repopulate a cleared canvas or consume its next id',async()=>{
+ const {context:c}=harness(),released=[],effects=[];
+ let finish;
+ c.renderTextBoxImage=()=>new Promise(resolve=>{finish=resolve;});
+ c.releaseTextRaster=image=>released.push(image);
+ c.positionTextEditors=()=>effects.push('position');c.requestRender=()=>effects.push('render');c.refreshVisibleTextBoxQuality=()=>effects.push('quality');
+ const pending=c.restoreTextBoxes([{text:'Old Canvas',fontSize:20,maxWidth:240,x:100,y:100}]);
+ await c.restoreTextBoxes([]);
+ const effectCount=effects.length,image={width:240,height:40,logicalWidth:240,logicalHeight:40};
+ finish({image});await pending;
+ assert.equal(c.state.textBoxes.length,0);
+ assert.equal(c.state.nextTextBoxId,1);
+ assert.deepEqual(released,[image]);
+ assert.equal(effects.length,effectCount,'stale completion must not refresh the new canvas');
+});
+
+test('the latest text restore owns matching ids and unrelated quality refreshes do not cancel it',async()=>{
+ const {context:c}=harness(),released=[];let finish;
+ const render=c.renderTextBoxImage;
+ c.renderTextBoxImage=(item,ratio)=>item.text==='Old'?new Promise(resolve=>{finish=resolve;}):render(item,ratio);
+ c.releaseTextRaster=image=>released.push(image);
+ const item={id:'text-box-1',fontSize:20,maxWidth:240,x:100,y:100};
+ const pending=c.restoreTextBoxes([{...item,text:'Old'}]);
+ await c.restoreTextBoxes([{...item,text:'New'}]);
+ const image={width:240,height:40,logicalWidth:240,logicalHeight:40};finish({image});await pending;
+ assert.equal(c.state.textBoxes.length,1);assert.equal(c.state.textBoxes[0].text,'New');assert.deepEqual(released,[image]);
+ const current=c.restoreTextBoxes([{...item,text:'Old'}]);
+ c.canvasTextQualityGeneration++;
+ finish({image:{...image}});await current;
+ assert.equal(c.state.textBoxes[0].text,'Old','quality refresh generation is separate from restore ownership');
+});
+
+test('a failed superseded text restore does not begin rendering later stale items',async()=>{
+ const {context:c}=harness();let reject,rendered=0;
+ c.renderTextBoxImage=()=>{rendered++;return rendered===1?new Promise((resolve,fail)=>{reject=fail;}):Promise.resolve({image:{width:240,height:40,logicalWidth:240,logicalHeight:40}});};
+ const item={fontSize:20,maxWidth:240,x:100,y:100};
+ const pending=c.restoreTextBoxes([{...item,text:'First'},{...item,text:'Second'}]);
+ await c.restoreTextBoxes([]);reject(Error('render failed'));await pending;
+ assert.equal(rendered,1);assert.equal(c.state.textBoxes.length,0);
+});

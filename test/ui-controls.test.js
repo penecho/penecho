@@ -4624,7 +4624,7 @@ test("settled Canvas zoom upgrades only visible text raster caches within the sh
   assert.match(refresh, /renderedRatio <= textImageRasterRatio\(currentImage\) \* 1\.05[\s\S]*?renderedPixels > MAX_SHARP_OVERLAY_ITEM_PIXELS[\s\S]*?additionalPixels > remainingPixels/);
   assert.match(refresh, /item\.image = image[\s\S]*?remainingPixels -= additionalPixels[\s\S]*?renderTextContentLayer\(canvasRenderRegion\(\)\.visible\)/);
   assert.doesNotMatch(refresh, /state\.userRevision|saveUserCanvasChange|requestRender\(|\brender\(/);
-  assert.match(restore, /textImageRasterRatio\(item\.image\) >= pixelRatio \/ 1\.05[\s\S]*?renderedTextBoxRecord\(item, pixelRatio\)/);
+  assert.match(restore, /textImageRasterRatio\(item\.image\) >= pixelRatio \/ 1\.05[\s\S]*?renderedTextBoxRecord\(\{ \.\.\.item, id \}, pixelRatio\)/);
   assert.match(restore, /pixelRatio = 1[\s\S]*?requestRender\(\)[\s\S]*?refreshVisibleTextBoxQuality\(\)/);
   assert.match(finishPreview, /render\(\)[\s\S]*?void refreshVisibleTextBoxQuality\(\)/);
   assert.match(persistence, /restoreTextBoxes\(item\.textBoxes, 1\)/);
