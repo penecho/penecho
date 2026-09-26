@@ -14203,7 +14203,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         id,
         createdAt,
         updatedAt,
-        name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : location === "cloud" ? "Untitled Canvas" : ""),
+        name: requestedName || (overwriteId
+          ? (existing ? existing.name : state.currentSnapshotName)
+          : (state.currentSnapshotHasExplicitName ? state.currentSnapshotName : "") || (location === "cloud" ? "Untitled Canvas" : "")),
         projectId:location === "server"
           ? overwriteId
             ? existing?.projectId || state.currentSnapshotProjectId || SERVER_DEFAULT_PROJECT_ID

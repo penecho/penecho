@@ -126,7 +126,7 @@ function harness(options = {}) {
     plugins: {},
   };
   const historyName = { value: "" };
-  const busy = [], notices = [], statusKeys = [], statuses = [], navigatorUpdates = [];
+  const busy = [], notices = [], statusKeys = [], statuses = [], navigatorUpdates = [], saveRequests = [];
   const context = vm.createContext({
     state,
     tiles: new Map(),
@@ -135,6 +135,9 @@ function harness(options = {}) {
     SNAPSHOT_LOCATIONS: new Set(["device", "server", "cloud"]),
     SNAPSHOT_STORE: "snapshots",
     SNAPSHOT_TILE_STORE: "snapshot-tiles",
+    SERVER_DEFAULT_PROJECT_ID: "uncategorized",
+    SIZE: 20000,
+    TILE: 512,
     Blob,
     Event,
     TextEncoder,
@@ -181,8 +184,15 @@ function harness(options = {}) {
     refreshSnapshots: async () => true,
     snapshotDb: async () => storage.db,
     snapshotName: item => item.name || "fallback",
-    saveServerSnapshot: async () => {},
-    saveCloudSnapshot: async () => {},
+    selectedServerSaveProjectId: () => "server-project",
+    selectedCloudSaveProjectId: () => "cloud-project",
+    authenticatedApiHeaders: headers => headers,
+    snapshotBundleAsset: async (kind, _blob, metadata) => ({ kind, metadata }),
+    snapshotApiResponse: async response => response,
+    fetch: async (url, options) => {
+      saveRequests.push({ url, method: options.method, body: JSON.parse(options.body) });
+      return { canvas: { id: "cloud-copy" }, revision: { id: "cloud-revision" } };
+    },
   });
   context.setHistorySaveBusy = value => {
     busy.push(value);
@@ -192,11 +202,105 @@ function harness(options = {}) {
     functionSource("requestResult"),
     functionSource("transactionDone"),
     functionSource("saveDeviceSnapshot"),
+    functionSource("serverSnapshotPayload"),
+    functionSource("saveServerSnapshot"),
+    functionSource("saveCloudSnapshot"),
     functionSource("saveSnapshot"),
+    functionSource("saveSnapshotFromHistory"),
     functionSource("renameCurrentCanvasFromTitle"),
   ].join("\n"), context, { filename: "src/client/app/persistence.js" });
-  return { context, storage, state, busy, notices, statusKeys, statuses, navigatorUpdates };
+  return { context, storage, state, historyName, busy, notices, statusKeys, statuses, navigatorUpdates, saveRequests };
 }
+
+function namedCanvasCopyHarness(location) {
+  const h = harness();
+  const original = { id: "device-original", name: "课程设计", createdAt: 123, widgets: [] };
+  h.storage.items.set(original.id, structuredClone(original));
+  Object.assign(h.state, {
+    snapshotLocation: location,
+    currentSnapshotId: original.id,
+    currentSnapshotLocation: "device",
+    currentSnapshotName: original.name,
+    currentSnapshotHasExplicitName: true,
+  });
+  const widget = { id: "lesson", html: "<p>Lesson content</p>", x: 100, y: 100, w: 400, h: 400 };
+  h.context.visibleWidgets = () => [widget];
+  h.context.serializedWidgets = () => [widget];
+  return { ...h, original, widget };
+}
+
+function savedCopy(h, location) {
+  if (location === "device") return h.storage.items.get(h.state.currentSnapshotId);
+  const [request] = h.saveRequests;
+  assert.ok(request, "the save must reach the storage request");
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, location === "cloud" ? "/api/cloud/projects/cloud-project/save" : "/api/canvases");
+  if (location === "cloud") assert.equal(request.body.name, request.body.bundle.name);
+  return location === "cloud" ? request.body.bundle : request.body;
+}
+
+for (const location of ["server", "cloud", "device"]) {
+  test(`saving a named device Canvas copy to ${location} retains its name and original`, async () => {
+    const h = namedCanvasCopyHarness(location);
+    const metadataRequests = [];
+    h.context.canvasDocumentsSaveMetadata = options => {
+      metadataRequests.push(options.copy);
+      return structuredClone(h.state.currentSnapshotBundleExtensions);
+    };
+
+    await h.context.saveSnapshotFromHistory();
+
+    const item = savedCopy(h, location);
+    assert.equal(item.name, h.original.name);
+    assert.equal(h.state.currentSnapshotName, h.original.name);
+    assert.equal(h.state.currentSnapshotHasExplicitName, true);
+    assert.equal(h.state.currentSnapshotLocation, location);
+    assert.notEqual(h.state.currentSnapshotId, h.original.id);
+    assert.notEqual(item.id, h.original.id);
+    assert.deepEqual(metadataRequests, [true]);
+    assert.deepEqual(h.storage.items.get(h.original.id), h.original);
+    const widgets = location === "device" ? item.widgets : item.assets.filter(asset => asset.kind === "widget");
+    assert.equal(widgets.length, 1);
+    assert.deepEqual(h.busy, [true, false]);
+    assert.equal(h.notices.at(-1).key, "snapshotSaved");
+  });
+
+  test(`saving an unnamed Canvas to ${location} keeps the original naming fallback`, async () => {
+    const h = namedCanvasCopyHarness(location);
+    h.state.currentSnapshotName = "Sep 27, 2026, 9:30 AM";
+    h.state.currentSnapshotHasExplicitName = false;
+    await h.context.saveSnapshotFromHistory();
+    assert.equal(savedCopy(h, location).name, location === "cloud" ? "Untitled Canvas" : "");
+  });
+}
+
+test("an entered copy name takes priority over the existing Canvas name", async () => {
+  const h = namedCanvasCopyHarness("cloud");
+  h.historyName.value = "  课程设计（副本）  ";
+  await h.context.saveSnapshotFromHistory();
+  assert.equal(savedCopy(h, "cloud").name, "课程设计（副本）");
+  assert.equal(h.state.currentSnapshotName, "课程设计（副本）");
+  assert.equal(h.historyName.value, "");
+  assert.deepEqual(h.storage.items.get(h.original.id), h.original);
+});
+
+test("a generated name is retained when saving an unnamed Canvas to Server", async () => {
+  const h = namedCanvasCopyHarness("server");
+  h.state.currentSnapshotHasExplicitName = false;
+  h.state.currentCanvasSuggestedName = "Suggested lesson";
+  await h.context.saveSnapshotFromHistory();
+  assert.equal(savedCopy(h, "server").name, "Suggested lesson");
+  assert.equal(h.state.currentCanvasSuggestedName, "");
+});
+
+test("a blank copy name retains an existing long imported Canvas name without truncation", async () => {
+  const h = namedCanvasCopyHarness("cloud");
+  const name = "Imported lesson ".repeat(5);
+  h.state.currentSnapshotName = name;
+  h.historyName.value = "  ";
+  await h.context.saveSnapshotFromHistory();
+  assert.equal(savedCopy(h, "cloud").name, name);
+});
 
 test("an explicit rename persists an otherwise blank Canvas with its name and identity", async () => {
   const h = harness();

@@ -38,3 +38,21 @@ git diff --check
 Local raw logs: `/tmp/penecho-p1-reproduced-20260926/release-test-adapters.log` and `/tmp/penecho-p1-reproduced-20260926/release-check.log`.
 
 GitHub publication must use this combined source history. Node 22/24 CI and installer build/signing results are separate from the local test result above. These tests do not claim manual browser, packaged-app, mobile-device, or deployed Cloud acceptance.
+
+## Save-copy name follow-up (2026-09-27)
+
+The user reported that saving a named Device canvas to Server or Cloud lost its name. The history Save copy action calls `saveSnapshot()` without an explicit name. When creating a storage record, its fallback ignored `currentSnapshotName`, producing an empty Server/Device name or `Untitled Canvas` on Cloud. The same fallback exists in the pre-PR baseline `8497255`; it was not introduced by the five P1 merges.
+
+The canonical persistence code now retains an explicitly named canvas's existing name for a new storage record. An entered name still takes priority, generated suggestions still work, and genuinely unnamed canvases retain their original fallback. Existing long imported names are retained without truncation. The client bundle was regenerated with `npm run build:client`; versions remain `1.3.5`.
+
+The save/rename harness now executes the production history action, save function, bundle serialization, and Server/Cloud request builders. Storage/network responses and preview encoding are isolated test doubles. Nine additional cases cover the three save destinations, name priority, unnamed fallbacks, and long existing names, including the outbound Cloud name and bundle name, current title, original record preservation, and copy identity request.
+
+- Before the production fix: **14 tests, 10 passed, 4 failed**, including the reported Cloud `Untitled Canvas` result and empty Server/Device names.
+- After the fix, with the same tests: **14 passed, 0 failed**.
+- Full canonical `npm run check` on Node.js `v24.19.0`: **2,197 passed, 0 failed, 0 skipped**, including generated-asset and syntax checks. Log: `/tmp/penecho-save-name-check-unrestricted.log`.
+- Focused command: `node --test test/empty-canvas-rename.test.js`.
+- Local before/after logs: `/tmp/penecho-save-name-before.tap` and `/tmp/penecho-save-name-after.tap`.
+
+The initial full check was blocked by sandbox `listen EPERM` errors in local service tests. The full check was rerun with permission to start those isolated test services. No live Cloud writes, existing-service restarts, or deployments were performed during local verification. The user subsequently confirmed successful testing and authorized committing and pushing this fix to the existing `codex/p1-reproduced-fixes` branch and PR #71.
+
+Manual release acceptance: save a named Device canvas to Server and Cloud with the optional name field empty, then close/reopen each copy and verify its title and content. Confirm the Device original remains available. Repeat once with an explicit new copy name and verify that the new name takes priority.
