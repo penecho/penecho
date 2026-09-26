@@ -7,6 +7,80 @@ function extract(name,input=source){
   for(let i=body;i<input.length;i++){if(input[i]==="{")depth++;else if(input[i]==="}"&&--depth===0)return input.slice(start,i+1);}
   throw Error(name);
 }
+function welcomeHarness() {
+  const element=()=>({hidden:false,dataset:{},setAttribute(){}}),
+    state={theme:"studio",viewMode:false,images:[],textBoxes:[],preservedSnapshotAnimations:[],animations:[],widgets:[],plugins:{},widgetMessageHooked:false},
+    context=vm.createContext({state,tiles:new Map(),pluginManifests:new Map(),
+      widgetRuntimeEnabled:()=>state.widgetMessageHooked,pluginEnabled:id=>id==="general"||state.plugins[id]===true,
+      studioNavigatorIsStudio:()=>state.theme==="studio",canvasHasUnsavedChanges:()=>false,
+      snapshotSaveInProgress:false,currentCanvasDisplayName:()=>"Test canvas",t:key=>key,
+      document:{getElementById:()=>null},
+    });
+  for(const name of ["canvasDocumentMeta","canvasDocumentNameLabel","canvasDocumentName","canvasDocumentNameInput","canvasDocumentNameConfirm","canvasDocumentSaveState","canvasDocumentSaveLabel","saveCanvasLabel","canvasWelcome"])context[name]=element();
+  const runtime=fs.readFileSync(path.join(root,"src/client/app/canvas-runtime.js"),"utf8");
+  vm.runInContext(extract("visibleWidgets",runtime)+extract("studioCanvasHasContent")+extract("updateStudioDocumentState"),context);
+  return context;
+}
+test("Widget-only snapshots hide the welcome before the plugin catalog finishes loading",()=>{
+  const h=welcomeHarness();
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.widgets.push({id:"widget-1",pluginId:"general"});
+  h.state.currentSnapshotId="saved-canvas";
+  h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,true,"saved content must hide the welcome even before its renderer is ready");
+  h.pluginManifests.set("general",{});h.state.widgetMessageHooked=true;
+  assert.equal(h.visibleWidgets().length,1);
+  assert.equal(h.canvasWelcome.hidden,true,"mounting the Widget later must not leave a stale welcome");
+  h.state.widgets=[];h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,false,"removing the final object restores the welcome");
+});
+test("welcome counts stored Widgets independently of plugin visibility",()=>{
+  const h=welcomeHarness();
+  for(const key of ["images","textBoxes","preservedSnapshotAnimations","widgets"]){
+    h.state[key]=[{id:"content",pluginId:"unavailable-plugin",hiddenForReplacement:true}];
+    h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true,key);
+    h.state[key]=[];
+  }
+  h.tiles.set("0,0",{});h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.tiles.clear();h.state.currentSnapshotId="empty-saved-canvas";
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.viewMode=true;h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.state.viewMode=false;h.state.theme="light";h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+});
+test("welcome preserves animation enablement and does not count uncommitted Widget previews",()=>{
+  const h=welcomeHarness();
+  h.state.animations=[{id:"animation-1"}];h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.plugins.animation=true;h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.state.animations=[];h.state.pendingWidget={id:"preview",pluginId:"general"};
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+});
+test("welcome changes no document state as content is removed and restored",()=>{
+  const h=welcomeHarness(),widget={id:"widget-1",pluginId:"general",hiddenForReplacement:true};
+  h.state.currentSnapshotId="saved-canvas";h.state.userRevision=7;
+  for(const widgets of [[widget],[],[widget]]){
+    h.state.widgets=widgets;
+    const before=JSON.stringify(h.state);
+    h.updateStudioDocumentState();
+    assert.equal(h.canvasWelcome.hidden,widgets.length>0);
+    assert.equal(JSON.stringify(h.state),before,"welcome updates must not mutate saved content or revisions");
+  }
+});
+test("welcome-only Mod+K routing ends once a stored Widget exists",()=>{
+  const h=welcomeHarness(),performed=[];
+  Object.assign(h,{
+    keyboardShortcutRecordingId:"",keyboardShortcutChordFromEvent:()=>"Mod+k",
+    document:{querySelector:()=>h.canvasWelcome,getElementById:()=>null},
+    keyboardShortcutCommand:id=>({id}),KEYBOARD_SHORTCUT_COMMANDS:[{id:"custom-command"}],
+    keyboardShortcutBindings:{"custom-command":"Mod+k"},keyboardShortcutCanRun:()=>true,
+    keyboardShortcutPerform:id=>performed.push(id),
+  });
+  const keyboard=fs.readFileSync(path.join(root,"src/client/app/keyboard-shortcuts.js"),"utf8");
+  vm.runInContext(extract("handleKeyboardShortcutKeydown",keyboard),h);
+  const event={preventDefault(){},stopImmediatePropagation(){}};
+  h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
+  h.state.widgets=[{id:"widget-1",pluginId:"general"}];h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
+  assert.deepEqual(performed,["focus-agent","custom-command"]);
+});
 test("Recent Work merges saved documents once and sorts by last save",()=>{
   const records=new Map([
     ["active",{id:"active",title:"Current",locator:{location:"server",id:"one"},unseen:0}],
