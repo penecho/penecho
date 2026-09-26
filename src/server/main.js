@@ -1325,7 +1325,7 @@ function canonicalSharedCanvasV1(value) {
   }
   for(const image of images) {
     if(!image||typeof image!=="object"||typeof image.id!=="string"||!/^image-\d+$/.test(image.id)||!validSnapshotDataUrl(image.data,new Set(["image/png","image/jpeg","image/webp","image/gif"]),32*1024*1024))return null;
-    if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<80||image.h<80||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
+    if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<1||image.h<1||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
     if(image.plotExpression!==undefined&&(typeof image.plotExpression!=="string"||!image.plotExpression.trim()||image.plotExpression.trim().length>180))return null;
   }
   const canonicalTextBoxes=[];
