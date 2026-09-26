@@ -899,7 +899,8 @@ test("publication uses one consolidated PenEcho agreement link in browsers and d
     assert.equal(agreement.children.at(-1)?.textContent, "↗");
     assert.equal(agreement.children.at(-1)?.getAttribute("aria-hidden"), "true");
     assert.match(cloudCss, /\.cloud-publication-consent\s*\{[^}]*align-items:\s*center[^}]*gap:\s*8px/);
-    assert.match(cloudCss, /\.cloud-publication-consent\s*\{[^}]*padding-inline-start:\s*0/, "the consent checkbox aligns with the form controls' outer left edge");
+    assert.match(cloudCss, /\.cloud-publication-consent\s*\{[^}]*padding:\s*\.65rem \.7rem/, "the consent panel retains the symmetric inset introduced by the Studio layout");
+    assert.doesNotMatch(cloudCss, /\.cloud-publication-consent\s*\{[^}]*padding-inline-start:\s*0/);
     assert.match(cloudCss, /\.cloud-publication-consent input\s*\{[^}]*flex:\s*0 0 15px[^}]*margin:\s*0/);
     assert.match(cloudCss, /\.cloud-publication-consent \.cloud-publication-link\s*\{[^}]*border:\s*0[^}]*background:\s*transparent/);
     assert.doesNotMatch(overlay.textContent, /Public Craft ML License|CC BY-SA 4\.0|embedded source under MIT|including its open-license and model-training terms/);

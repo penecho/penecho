@@ -9,9 +9,20 @@ const root = path.join(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 const functionSource = (source, name) => source.match(new RegExp(`function ${name}\\([^]*?\\n  \\}`))?.[0] || "";
 
+function viewportSource(html) {
+  const start = html.indexOf('<section id="viewport"');
+  assert.ok(start >= 0, "Canvas viewport exists");
+  let depth = 0;
+  for (const match of html.slice(start).matchAll(/<\/?section\b[^>]*>/g)) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) return html.slice(start, start + match.index + match[0].length);
+  }
+  assert.fail("Canvas viewport closes after its nested sections");
+}
+
 test("selection toolbar is an accessible viewport overlay with stable action hooks", () => {
   const html = read("public/index.html"),
-    viewport = html.match(/<section id="viewport"[\s\S]*?<\/section>/)?.[0] || "",
+    viewport = viewportSource(html),
     layer = viewport.match(/<div id="selectionOverlayLayer"[\s\S]*?<\/div>\s*<\/div>/)?.[0] || "";
 
   assert.match(layer, /class="selection-overlay-layer"[^>]*hidden/);

@@ -43,7 +43,7 @@ function harness({documents=[],dirty=false}={}){
     let pendingCanvasTransition=null;
     let studioMcpFollowLatest=true,studioMcpLatestDocumentId=null,studioMcpLatestRegion=null,studioMcpPendingDocumentId=null,studioMcpPendingRegion=null,studioMcpFollowing=false,studioMcpCloseQueue=null,studioMcpUpdateRevision=0;
     let studioNavigatorMcpEnabled=false,studioNavigatorActiveTab="all",studioNavigatorSuspendedAgent=false,studioNavigatorRestoreAgentAfterManager=false;
-    const studioNavigatorMcpTab={hidden:true},studioNavigatorSearch={value:""};
+    const studioNavigatorMcpTab={hidden:false,dataset:{online:"false"}},studioNavigatorSearch={value:""};
     function setStudioNavigatorTab(tab){studioNavigatorActiveTab=tab;}
     function setStudioNavigatorOpen(){}
     function closeCanvasAgent(){}

@@ -136,6 +136,7 @@ function harness(options = {}) {
     SNAPSHOT_STORE: "snapshots",
     SNAPSHOT_TILE_STORE: "snapshot-tiles",
     Blob,
+    Event,
     TextEncoder,
     structuredClone,
     queueMicrotask,
@@ -148,6 +149,7 @@ function harness(options = {}) {
       },
     },
     window: {
+      dispatchEvent: () => true,
       PenEchoStudioNavigator: {
         updateDocument: () => navigatorUpdates.push("document"),
         refreshSource: () => navigatorUpdates.push("source"),

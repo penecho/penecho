@@ -1,5 +1,7 @@
 # Reproduced P1 PR integration — 2026-09-26
 
+Release follow-up: the ten pre-existing test failures recorded here were subsequently resolved during the combined 1.3.5 release preparation. See [the release verification report](../release-1.3.5-2026-09-26.md) for the passing 2,188-test result. This report retains the original integration evidence.
+
 Only PRs #57, #59, #64, #66, and #68 are in scope. Each was gated on a failing local regression against the user's committed production source before any merge, followed by the same regression passing after the merge. These are bug fixes, not feature additions.
 
 ## Baseline and delivery boundaries

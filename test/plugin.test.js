@@ -1013,7 +1013,9 @@ test("widget iframe preserves native navigation while forwarding only focus and 
   middle.pointer("pointermove", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
   middle.pointer("pointerup", { pointerType:"mouse", button:1, clientX:125, screenX:125 });
   assert.deepEqual(interactionMessages(middle).map((message) => message.type), []);
-  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"), /addEventListener\("wheel"|penecho-widget-wheel/);
+  // Presentation scrolling has a separate guarded handler, covered by
+  // widget-host-presentation-size.test.js; regular canvas wheel forwarding stays absent.
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "public", "widget-host.js"), "utf8"), /penecho-widget-wheel/);
 
   const suspended = widgetRuntimeHarness();
   let frameCount = 0;

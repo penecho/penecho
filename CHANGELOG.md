@@ -4,6 +4,8 @@
 
 - **UI:** minor interface fixes.
 - **Concurrent canvas editing:** support Canvas AI, Agent, and MCP modifying the same canvas simultaneously.
+- **Community imports:** imported canvases receive an independent document identity and workspace, preserving newer edits in the original canvas.
+- **Save and restore reliability:** keep small images saveable and fractional images at canvas boundaries reopenable; discard superseded text restores and prevent canceled snapshot loads from retaking a new canvas.
 
 ## 1.3.3
 
