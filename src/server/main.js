@@ -258,7 +258,7 @@ const autoDelayValue = process.env.AUTO_AI_DELAY_SECONDS?.trim();
 const configuredAutoDelay = autoDelayValue ? Number(autoDelayValue) : NaN;
 const AUTO_AI_DELAY_MS = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 && configuredAutoDelay <= 60 ? Math.round(configuredAutoDelay * 1000) : 5000;
 const canvasAgentAutoOpenText = process.env.PENECHO_CANVAS_AGENT_AUTO_OPEN?.trim();
-const canvasAgentAutoOpenValue = canvasAgentAutoOpenText ? optionalBoolean(canvasAgentAutoOpenText) : true;
+const canvasAgentAutoOpenValue = canvasAgentAutoOpenText ? optionalBoolean(canvasAgentAutoOpenText) : false;
 const CANVAS_AGENT_AUTO_OPEN = canvasAgentAutoOpenValue === true;
 const debugArtifactsValue = optionalBoolean(process.env.PENECHO_DEBUG_ARTIFACTS);
 const DEBUG_ARTIFACTS = debugArtifactsValue === true;
@@ -1325,7 +1325,7 @@ function canonicalSharedCanvasV1(value) {
   }
   for(const image of images) {
     if(!image||typeof image!=="object"||typeof image.id!=="string"||!/^image-\d+$/.test(image.id)||!validSnapshotDataUrl(image.data,new Set(["image/png","image/jpeg","image/webp","image/gif"]),32*1024*1024))return null;
-    if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<80||image.h<80||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
+    if(![image.x,image.y,image.w,image.h,image.naturalW,image.naturalH].every(Number.isFinite)||image.x<0||image.y<0||image.w<1||image.h<1||image.x+image.w>CANVAS_SIZE||image.y+image.h>CANVAS_SIZE||image.naturalW<1||image.naturalH<1||image.naturalW>2048||image.naturalH>2048||image.naturalW*image.naturalH>16*1024*1024)return null;
     if(image.plotExpression!==undefined&&(typeof image.plotExpression!=="string"||!image.plotExpression.trim()||image.plotExpression.trim().length>180))return null;
   }
   const canonicalTextBoxes=[];
@@ -1343,7 +1343,8 @@ function canonicalSharedCanvasV1(value) {
     version:1,id:value.id,createdAt,updatedAt,name,theme,view,
     animations,widgets,textBoxes:canonicalTextBoxes,
     images:images.map(image=>({
-      id:image.id,x:Math.round(image.x),y:Math.round(image.y),w:Math.round(image.w),h:Math.round(image.h),
+      id:image.id,x:Math.min(Math.round(image.x),CANVAS_SIZE-Math.round(image.w)),
+      y:Math.min(Math.round(image.y),CANVAS_SIZE-Math.round(image.h)),w:Math.round(image.w),h:Math.round(image.h),
       naturalW:Math.round(image.naturalW),naturalH:Math.round(image.naturalH),
       sourceName:typeof image.sourceName==="string"?image.sourceName.trim().slice(0,160):"",
       ...(typeof image.plotExpression==="string"?{plotExpression:image.plotExpression.trim()}:{}),
@@ -3126,6 +3127,12 @@ function resolveCanvasAgentWidgetCapabilities(value = {}) {
 const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, "Bad Request", "text/plain; charset=utf-8"); }
+  if (req.method === "POST" && url.pathname === "/api/playground/liveclay") {
+    const error=browserRequestError(req);if(error)return send(res,403,{error});
+    try{const body=await readJson(req,2048);if(typeof body.text!=="string"||body.text.length>180)return send(res,400,{error:"Use at most 180 characters."});return send(res,200,await cloudConnector.cloudRequest("/api/playground/liveclay",{method:"POST",body:{text:body.text}}));}
+    catch(error){return send(res,error.status||502,{error:String(error.message||"Sign in to PenEcho Cloud to use Live Clay.")});}
+  }
+  if(req.method==="GET"&&url.pathname==="/play/liveclay"){res.writeHead(302,{Location:"/?playground=liveclay"});return res.end();}
   if (req.method === "POST" && ["/api/mcp/skill","/api/mcp/guide"].includes(url.pathname)) {
     const error=browserRequestError(req);if(error)return send(res,403,{error});
     const file=url.pathname.endsWith("/skill")?"skills/penecho-mcp/SKILL.md":"docs/mcp-setup.md";
@@ -3251,6 +3258,10 @@ const server = http.createServer(async (req, res) => {
         const result=await cloudConnector.cloudRequest(url.pathname.replace("/api/cloud/mcp","/api/v1/mcp"),{method:req.method,...(req.method==="POST"?{body:await readJson(req,4096)}:{})});
         if(req.method==='GET'&&url.pathname==='/api/cloud/mcp')result.local={cloudMcpEnabled:cloudConnector.status().cloudMcpEnabled,device:cloudConnector.status().device};
         return send(res,req.method==="POST"?201:200,result);
+      }
+      if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(url.pathname) && ["GET","POST","DELETE"].includes(req.method)) {
+        const path=url.pathname.replace("/api/cloud/","/api/v1/")+(req.method==="GET"?url.search:"");
+        return send(res,200,await cloudConnector.cloudRequest(path,{method:req.method,...(req.method!=="GET"?{body:await readJson(req,4096)}:{})}));
       }
       if(req.method==="GET"&&url.pathname==="/api/cloud/status")return send(res,200,cloudConnector.status());
       if(req.method==="GET"&&url.pathname==="/api/cloud/account")return send(res,200,await cloudConnector.refreshAccount({force:true}));
@@ -3882,6 +3893,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });
     if (req.method === "HEAD") return res.end();
     return fs.createReadStream(WIDGET_RENDERER).pipe(res);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/playground/liveclay-v1.js") {
+    res.writeHead(200,{"Content-Type":"application/javascript; charset=utf-8","Cache-Control":"public, max-age=300","Access-Control-Allow-Origin":"*","Cross-Origin-Resource-Policy":"cross-origin","X-Content-Type-Options":"nosniff"});
+    if(req.method==="HEAD")return res.end();return fs.createReadStream(path.join(PUBLIC,"playground/liveclay-v1.js")).pipe(res);
   }
   if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/visual-explainer-vendor.js") {
     res.writeHead(200, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"public, max-age=86400", "Access-Control-Allow-Origin":"*", "Cross-Origin-Resource-Policy":"cross-origin", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" });

@@ -209,7 +209,7 @@ test("1.3.0 release notes include Canvas Agent and MCP in both languages", () =>
   assert.match(app, /CHANGELOG_VERSION = "1\.3\.0"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
-  assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer" \|\| settings\.open\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
+  assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer" \|\| settings\.open \|\| state\.theme === "studio"\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
   assert.match(app, /function closeFeatureTour[\s\S]*?maybeShowChangelog\(\)/);
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
@@ -242,7 +242,7 @@ test("README version badges match the package version in every language", () => 
   ];
   for (const readmePath of readmePaths) {
     assert.ok(
-      read(readmePath).includes(`/badge/version-${version}-`),
+      read(readmePath).includes(`/badge/release-v${version}-`),
       `${readmePath} version badge must match package.json`,
     );
   }
@@ -305,8 +305,8 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /不会参考画布其他部分/);
   assert.match(app, /tourFavoritesBody:[^\n]*Echoes favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
   assert.match(zh, /tourFavoritesBody:[^\n]*Echoes[^\n]*收藏组件[^\n]*收藏画布/);
-  assert.match(app, /tourShareCanvasBody:[^\n]*public in Echoes[^\n]*Use Cloud instead for private saves/);
-  assert.match(zh, /tourShareCanvasBody:[^\n]*公开发布到 Echoes[^\n]*私密保存请使用 Cloud/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*separate Craft to Echoes/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*独立的 Echo 按钮[^\n]*Echoes/);
   assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or Widgets/);
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);

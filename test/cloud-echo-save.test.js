@@ -40,6 +40,9 @@ function harness(overrides = {}) {
     setHistorySaveBusy:(busy) => { events.push({ type:"busy", busy }); },
     showHistoryNoticeKey:(key, tone, duration) => { events.push({ type:"notice-key", key, tone, duration }); },
     selectionAIBusy:() => false,
+    finalizeCanvasForSnapshot:async () => { events.push({ type:"finalize" }); },
+    canvasHasShareableContent:() => true,
+    canvasHasUnsavedChanges:() => true,
     selectionAIStatusKey:() => "selectionBusy",
     setStatus:(message) => { events.push({ type:"status", message }); },
     showHistoryNotice:(message, tone, options) => { events.push({ type:"notice", message, tone, options }); },
@@ -48,8 +51,9 @@ function harness(overrides = {}) {
   };
   const functions = vm.runInNewContext(`(() => {
     ${functionSource("saveEchoToCloud")}
+    ${functionSource("saveLiveShareToCloud")}
     ${functionSource("saveCurrentCanvas")}
-    return { saveEchoToCloud, saveCurrentCanvas };
+    return { saveEchoToCloud, saveCurrentCanvas, saveLiveShareToCloud };
   })()`, context, { filename:"src/client/app/persistence.js" });
   return { ...functions, context, events };
 }
@@ -111,4 +115,31 @@ test("saveCurrentCanvas reports a Cloud save failure without showing a success n
     options:{ duration:5000 },
   });
   assert.deepEqual(plain(run.events.at(-1)), { type:"busy", busy:false });
+});
+
+
+test("live sharing saves local content to Cloud without requiring a linked device", async () => {
+  const run = harness({window:{PENECHO_CONFIG:{runtime:"local"}}});
+  assert.equal(await run.saveLiveShareToCloud(), SAVED_CANVAS_ID);
+  assert.deepEqual(run.events.map(event => event.type), ["finalize", "location", "cloud-projects", "save"]);
+  assert.equal(run.events[3].options.overwriteId,null);
+});
+
+test("live sharing keeps the existing Cloud Canvas identity", async () => {
+  const run = harness({state:{currentSnapshotLocation:"cloud",currentSnapshotId:SAVED_CANVAS_ID}});
+  await run.saveLiveShareToCloud();
+  assert.equal(run.events[3].options.overwriteId,SAVED_CANVAS_ID);
+});
+
+
+test("sharing an unchanged Cloud Canvas does not create another revision", async () => {
+  const run=harness({state:{currentSnapshotLocation:"cloud",currentSnapshotId:SAVED_CANVAS_ID},canvasHasUnsavedChanges:()=>false});
+  assert.equal(await run.saveLiveShareToCloud(),SAVED_CANVAS_ID);
+  assert.deepEqual(run.events,[{type:"finalize"}]);
+});
+
+test("empty Canvas sharing stops before Cloud save or share request", async () => {
+  const run=harness({canvasHasShareableContent:() => false});
+  await assert.rejects(run.saveLiveShareToCloud(), /emptyCanvas/);
+  assert.deepEqual(run.events,[{type:"finalize"}]);
 });

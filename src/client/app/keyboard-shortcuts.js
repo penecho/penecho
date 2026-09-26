@@ -1,5 +1,7 @@
   const KEYBOARD_SHORTCUT_STORAGE_KEY = "penecho-keyboard-shortcuts-v1";
   const KEYBOARD_SHORTCUT_COMMANDS = Object.freeze([
+    { id:"pen-tool", group:"essential", labelKey:"pen", descriptionKey:"shortcutPenHelp", defaultChord:"p" },
+    { id:"search-work", group:"essential", labelKey:"shortcutSearchWork", descriptionKey:"shortcutSearchWorkHelp", defaultChord:"Mod+k" },
     { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Tab" },
     { id:"save-canvas", group:"essential", labelKey:"saveCanvas", descriptionKey:"shortcutSaveCanvasHelp", defaultChord:"Mod+s" },
     { id:"undo", group:"essential", labelKey:"undo", descriptionKey:"shortcutUndoHelp", defaultChord:"Mod+z" },
@@ -32,6 +34,9 @@
     try {
       const saved = JSON.parse(localStorage.getItem(KEYBOARD_SHORTCUT_STORAGE_KEY) || "null");
       if (!saved || typeof saved !== "object" || Array.isArray(saved)) return bindings;
+      // Migrate the previous default while retaining explicitly customized bindings.
+      if (!("search-work" in saved) && saved["focus-agent"] === "Mod+k") saved["focus-agent"] = "Tab";
+      if (!("search-work" in saved) && Object.values(saved).includes("Mod+k")) bindings["search-work"] = "";
       for (const command of KEYBOARD_SHORTCUT_COMMANDS) {
         if (Object.prototype.hasOwnProperty.call(saved, command.id) && typeof saved[command.id] === "string") bindings[command.id] = saved[command.id];
       }
@@ -111,6 +116,13 @@
     requestAnimationFrame(() => document.querySelector(`[data-shortcut-edit="${commandId}"]`)?.focus({ preventScroll:true }));
   }
   function renderKeyboardShortcuts() {
+    const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
+    if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
+    const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
+    // On the empty canvas, Mod+K opens the Agent directly from the welcome card.
+    if (shortcut) { shortcut.textContent = keyboardShortcutDisplay("Mod+k"); shortcut.hidden = false; }
+    const search = document.querySelector("#studioNavigatorSearchShortcut");
+    if (search) { search.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["search-work"] || ""); search.hidden = !keyboardShortcutBindings["search-work"]; }
     const container = document.querySelector("#settingsShortcutList");
     if (!container) return;
     container.replaceChildren();
@@ -260,16 +272,20 @@
   }
   function keyboardShortcutCanRun(command, event, chord) {
     if (!command || event.defaultPrevented || event.isComposing || event.repeat) return false;
+    // Tab is the global Agent toggle, including pointer focus and its composer.
+    if (command.id === "focus-agent" && chord === "Tab" && !keyboardShortcutBlockingSurfaceOpen()) return canvasAgentAvailable();
     if (state.interactingWidgetId) return false;
     if (command.id === "open-settings" && settings.open) return true;
     if (keyboardShortcutBlockingSurfaceOpen()) return false;
     if (keyboardShortcutLocalSurface(event.target)) return false;
-    if (keyboardShortcutTextEditingTarget(event.target)) return command.id === "save-canvas";
+    if (keyboardShortcutTextEditingTarget(event.target)) return command.id === "save-canvas" || command.id === "search-work";
     if (command.id === "focus-agent" && (!canvasAgentAvailable() || canvasAgentPanel.contains(event.target))) return false;
     if (keyboardShortcutControlOwnsKey(event, chord)) return false;
     return true;
   }
   function keyboardShortcutPerform(commandId) {
+    if (commandId === "search-work") { window.PenEchoStudioNavigator?.focusSearch(); return true; }
+    if (commandId === "pen-tool") { setCanvasMode("pen"); return true; }
     if (commandId === "focus-agent") {
       const opening = canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open");
       if (opening) openCanvasAgent({ focus:false, animate:true });
@@ -307,7 +323,8 @@
     }
     const chord = keyboardShortcutChordFromEvent(event);
     if (!chord) return;
-    const command = KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
+    const welcomeAgentShortcut = chord === "Mod+k" && !document.querySelector("#canvasWelcome")?.hidden;
+    const command = chord === "Tab" || welcomeAgentShortcut ? keyboardShortcutCommand("focus-agent") : KEYBOARD_SHORTCUT_COMMANDS.find((item) => keyboardShortcutBindings[item.id] === chord);
     if (!keyboardShortcutCanRun(command, event, chord)) return;
     event.preventDefault();
     event.stopImmediatePropagation();

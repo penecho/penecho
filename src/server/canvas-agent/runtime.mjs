@@ -47,7 +47,7 @@ const { presetRequestHeaders } = require('../../providers/preset-discovery.js')
 const { commandFromWidgetPatch } = require('../widget-patch.js')
 let packagedRipgrepPath = ''
 const PLUGIN_FORMAT = require('../../../public/plugins.js')
-const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping, isGlm53Model } = require('../../providers/reasoning-effort.js')
+const { DEFAULT_REASONING_EFFORT, reasoningEffortMapping, isGlm53Model, modelSupportsReasoningEffort } = require('../../providers/reasoning-effort.js')
 const { projectFileReader, validateProjectFileContent } = require('./project-store.js')
 const { fetchPublicResource } = require('../public-fetch.js')
 const turnLimit = require('./turn-limit.js')
@@ -1975,6 +1975,7 @@ function isKimiCodingPlanOpenAiApi(connection) {
 
 function apiHarnessReasoning(connection) {
   const model = String(connection.apiModel || '').trim()
+  if (connection.supportsThinking === false || !modelSupportsReasoningEffort(model)) return { reasoningEffort:undefined, reasoningEfforts:false }
   const mappings = Object.fromEntries(CANVAS_HARNESS_REASONING_LEVELS.map(([level, effort]) => [level, reasoningEffortMapping({
     provider:'api',
     apiFormat:connection.apiFormat,
@@ -2021,6 +2022,7 @@ function apiHarnessReasoning(connection) {
 }
 
 function harnessRequestReasoningEffort(connection, requestEffort) {
+  if (connection.provider === 'api' && (connection.supportsThinking === false || !modelSupportsReasoningEffort(connection.apiModel))) return undefined
   if (requestEffort.selected === 'config') {
     return connection.provider === 'api' ? apiHarnessReasoning(connection).reasoningEffort : undefined
   }

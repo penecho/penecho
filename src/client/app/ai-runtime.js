@@ -38,13 +38,28 @@
     }
     return true;
   }
+  // Canvas AI creates new objects or replaces one Widget source. Other virtual
+  // files and geometry are independent writes; the canvas revision is not a lock.
+  function aiWidgetSourceSignature(widget) {
+    return JSON.stringify(canvasAgentWidgetSourceState(widgetEditContext(widget, "refine")));
+  }
+  function aiWidgetEditSnapshot(target, revision) {
+    return target ? { target, targetId:target.id, pluginId:target.pluginId, revision, sourceSignature:aiWidgetSourceSignature(target) } : null;
+  }
+  function aiWidgetEditChanged(edit) {
+    return Boolean(edit && !edit.committed && (!state.widgets.includes(edit.target)
+      || edit.target.id !== edit.targetId || aiWidgetSourceSignature(edit.target) !== edit.sourceSignature));
+  }
+  function aiInputInvalid(run) {
+    return run.recognitionGeneration !== state.recognitionGeneration;
+  }
   function aiPreparationInvalid(preparation, generation, revision) {
     if (generation !== aiPreparationGeneration || preparation.superseded || aiPreparation !== preparation) return true;
-    if (state.userRevision === revision) return false;
+    if (!aiInputInvalid(preparation) && !aiWidgetEditChanged(preparation.widgetEdit)) return false;
     preparation.superseded = true;
     preparation.controller.abort();
     finishAIPreparation(preparation);
-    setStatusKey("deferred");
+    setStatusKey(aiWidgetEditChanged(preparation.widgetEdit) ? "aiWidgetChanged" : "deferred");
     return true;
   }
   function supersedeActiveAI(reason) {
@@ -154,6 +169,12 @@
     const status=Number.isInteger(terminal.status)?terminal.status:terminal.type==="result"?200:500;
     return{ok:terminal.type==="result"&&status>=200&&status<300,status,data:terminal.data||{}};
   }
+  function aiCommandFailure(data,status) {
+    const code=typeof data?.code==="string"?data.code:typeof data?.error==="string"?data.error:"";
+    const detail=typeof data?.message==="string"?data.message.trim():"";
+    const fallback=code&&!/^[a-z][a-z0-9_]*$/.test(code)?code:"";
+    return Object.assign(Error(detail||fallback||`${t("aiRequestFailed")} (HTTP ${status})`),{code,status});
+  }
   function launchAutomaticAI(reason) {
     if (canvasAgentSuppressesAutomaticAI()) return;
     if (state.mode === "hand" || !state.auto || !state.dirty || !state.autoEligible || state.drawing || state.widgetRefineConfirmation) return;
@@ -220,10 +241,6 @@
       && inner.y + inner.h <= outer.y + outer.h);
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
-    if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) {
-      if(action!=="auto") {openCanvasAgent({focus:false});canvasDocumentsReport(canvasDocumentsCopy("An external conversation is selected. Send it an instruction here, or select PenEcho Agent to use Canvas AI.","当前由外部对话处理。请在这里发送指令，或选择 PenEcho Agent 使用画布 AI。"));}
-      return;
-    }
     requestOptions = requestOptions || {};
     const automatic = action === "auto";
     if (!automatic) {
@@ -248,9 +265,10 @@
       preparation = {
         controller,
         generation:preparationGeneration,
+        recognitionGeneration,
         superseded:false,
         action,
-        widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null,
+        widgetEdit:aiWidgetEditSnapshot(widgetEditTarget, revision),
       };
     let attentionBox = dirtySnapshot || (captureCurrentViewport ? null : latestBox);
     if (requestedAttentionBox) attentionBox = requestedAttentionBox;
@@ -301,7 +319,7 @@
     const requestBox = packed.changedBox;
     const // A selection-scoped request never consumes the normal recognition state. Mark its
       // snapshot as already preserved so superseding it cannot merge stale dirty ink back in.
-      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputConsumed:isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:widgetEditTarget ? { target:widgetEditTarget, targetId:widgetEditTarget.id, pluginId:widgetEditTarget.pluginId, revision } : null, action };
+      run = { controller, dirtySnapshot, recognitionGeneration, superseded: false, dirtyRestored: true, inputCleared:false, inputConsumed:isolatedSelection, isolatedSelection, oneShotInput, selection: requestOptions.selection || null, selectionRequestToken: requestOptions.selectionRequestToken || null, widgetEdit:preparation.widgetEdit, action };
     if (aiPreparation !== preparation) return;
     aiPreparation = null;
     state.activeAI = run;
@@ -343,9 +361,7 @@
       if (run.superseded || state.activeAI !== run) throw Error(AI_SUPERSEDED);
       rememberRequest(data.requestId);
       if (!streamed.ok) {
-        const error = Error(data.error || `HTTP ${streamed.status}`);
-        error.status = streamed.status;
-        throw error;
+        throw aiCommandFailure(data,streamed.status);
       }
       // Draft confirmation is a separate interaction after the model request has
       // ended. Stop request-only timers now so they cannot report a slow model
@@ -375,16 +391,7 @@
         rejectedCount: rawCount - commands.length,
         tools: commands.map((c) => c.tool),
       });
-      if (state.userRevision !== revision) {
-        if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
-          restoreDirty(dirtySnapshot);
-          state.autoEligible = Boolean(state.dirty);
-          schedule();
-        }
-        setStatusKey("deferred");
-        debug("ai-deferred", { ...meta, reason: "user-revision-changed" });
-        return;
-      }
+      checkAI(revision, run);
       if (state.images.length + commands.filter((command) => command.tool === "plot_function").length > MAX_VISIBLE_IMAGES) {
         setStatusKey("imageLimitReached");
         throw Error(t("imageLimitReached"));
@@ -399,13 +406,13 @@
         }
         setStatusKey("writing");
         if (commands.length === 1 && !["draw", "erase"].includes(commands[0].tool)) {
-          if (state.userRevision !== revision) throw Error(AI_CANCELLED);
+          checkAI(revision, run);
           await animate(commands[0], revision, meta, run);
           checkAI(revision, run);
         } else {
           const items = [];
           for (const c of commands) {
-            if (state.userRevision !== revision) throw Error(AI_CANCELLED);
+            checkAI(revision, run);
             const item = await preparePendingItem(c, revision, meta, run);
             if (item) items.push(item);
             checkAI(revision, run);
@@ -441,7 +448,7 @@
         else setStatusKey("aiNoVisibleResponse");
       }
     } catch (e) {
-      if (run.superseded) {
+      if (run.superseded || state.activeAI !== run) {
         debug("ai-deferred", { requestId: state.lastRequestId, reason: "request-superseded" });
       } else if (e.message === AI_REJECTED) {
         if (!isolatedSelection && run.inputCleared && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
@@ -455,7 +462,16 @@
         setStatusKey("draftRejected");
       } else if (e.message === AI_SUPERSEDED) {
         setStatusKey("ready");
-      } else if (state.userRevision !== revision) {
+      } else if (e.code === "SOURCE_CONFLICT") {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          restoreDirty(dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiWidgetChanged");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:"target-source-changed", targetId:run.widgetEdit?.targetId });
+      } else if (aiInputInvalid(run)) {
         if (!isolatedSelection && !oneShotInput && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
           restoreDirty(dirtySnapshot);
           state.autoEligible = Boolean(state.dirty);
@@ -474,6 +490,15 @@
           requestId: state.lastRequestId,
           reason: "animation-cancelled",
         });
+      } else if (["hosted_request_superseded","hosted_execution_session_stale"].includes(e.code)) {
+        if (!isolatedSelection && !run.inputConsumed && state.recognitionGeneration === recognitionGeneration) {
+          restoreDirty(dirtySnapshot);
+          run.dirtyRestored = true;
+          run.inputCleared = false;
+          state.autoEligible = false;
+        }
+        setStatusKey("aiRequestSuperseded");
+        debug("ai-deferred", { requestId:state.lastRequestId, reason:e.code });
       } else {
         const timedOut = e.name === "AbortError",
           message = timedOut ? t("timeout") : e.message;
@@ -999,8 +1024,9 @@
     return c;
   }
   function checkAI(revision, run = null) {
-    if (state.userRevision !== revision) throw Error(AI_CANCELLED);
     if (run && (run.superseded || state.activeAI !== run)) throw Error(AI_SUPERSEDED);
+    if (run ? aiInputInvalid(run) : state.userRevision !== revision) throw Error(AI_CANCELLED);
+    if (aiWidgetEditChanged(run?.widgetEdit)) throw Object.assign(Error(t("aiWidgetChanged")), { code:"SOURCE_CONFLICT" });
   }
   async function animate(c, revision, meta, run) {
     debug("tool-start", {
@@ -1017,7 +1043,7 @@
       if (["html_widget", "diagram_source"].includes(c.tool)) {
         if (!pluginEnabled(c.pluginId) || !pluginManifests.has(c.pluginId)) throw Error("Widget rendering is unavailable");
         const target = run?.widgetEdit?.target,
-          accepted = target ? await startPendingWidgetReplacement(c, target, revision) : await startPendingWidget(c, revision);
+          accepted = target ? await startPendingWidgetReplacement(c, target, revision, run.widgetEdit) : await startPendingWidget(c, revision);
         if (accepted === AI_CANCELLED) throw Error(AI_CANCELLED);
         if (accepted === AI_SUPERSEDED) throw Error(AI_SUPERSEDED);
         if (accepted === AI_REJECTED) throw Error(AI_REJECTED);
@@ -1883,7 +1909,7 @@
     if (!p) return;
     const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -1921,7 +1947,7 @@
     if (!item) return;
     const pendingBefore = capturePendingHistoryState();
     blockCanvasInput();
-    if (p.revision !== state.userRevision && state.userRevision !== p.latestUserRevision) {
+    if (p.recognitionGeneration !== undefined && p.recognitionGeneration !== state.recognitionGeneration) {
       rejectPending();
       setStatusKey("canvasChanged");
       return;
@@ -2114,6 +2140,7 @@
         heightLocked: false,
         revealProgress: animationScene ? 1 : 0,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,
@@ -2152,6 +2179,7 @@
         selectedIndex: Math.max(0, items.findIndex((item) => item.animationScene)),
         revealProgress: 1,
         revision,
+        recognitionGeneration:state.recognitionGeneration,
         meta,
         isolatedSelection: Boolean(state.activeAI?.isolatedSelection),
         selection: state.activeAI?.isolatedSelection ? state.activeAI.selection || null : null,

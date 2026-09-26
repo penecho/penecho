@@ -5,7 +5,7 @@
   window.PenEchoCloudMcpSocket = class extends EventTarget {
     constructor() {
       super();this.local=window.PENECHO_CONFIG?.runtime!=='cloud';this.readyState=0;this.routes=new Map();this.deviceSessions=new Set();this.closed=false;this.hello=null;this.retry=null;this.device=null;this.deviceId=null;this.retryCount=0;this.primaryReady=false;this.deviceReady=false;this.primaryCatalog=false;this.deviceCatalog=false;
-      this.primary=new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}${this.local?'/api/mcp/canvas':'/api/v1/mcp/canvas'}`);
+      this.primary=new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}${this.local?'/api/mcp/canvas':window.PENECHO_CONFIG?.browserDraftId?`/api/v1/mcp/workspaces/${window.PENECHO_CONFIG.browserDraftId}/canvas`:'/api/v1/mcp/canvas'}`);
       this.primaryTimer=setTimeout(()=>{if(!this.closed&&this.primary.readyState!==1){this.primary.close(4000,'MCP connection timed out.');}},SOCKET_CONNECT_TIMEOUT_MS);
       this.primary.addEventListener('open',()=>{clearTimeout(this.primaryTimer);if(this.closed)return;this.readyState=1;this.dispatchEvent(new Event('open'));this.connectDevice();});
       this.primary.addEventListener('message',event=>this.receive(event,this.primary,'cloud'));
@@ -70,7 +70,7 @@
       if(this.device?.readyState===1)this.device.send(raw);
     }
     async connectDevice() {
-      if(this.closed||this.readyState!==1)return;
+      if(this.closed||this.readyState!==1||window.PENECHO_CONFIG?.browserDraftId)return;
       const remoteStatus=window.PENECHO_REMOTE_CLOUD_STATUS;
       let deviceId=remoteStatus?.deviceOnline===false?null:remoteStatus?.deviceId;
       if(this.local) {

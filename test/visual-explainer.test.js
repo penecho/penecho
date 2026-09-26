@@ -141,7 +141,7 @@ test("nested HTML frames are enabled only when the current Visual Explainer embe
     const rendererUrl="http://127.0.0.1/vendor/penecho-dom-renderer.js",visualExplainerVendorUrl="http://127.0.0.1/vendor/visual-explainer.js",visualExplainerRuntimeUrl="http://127.0.0.1/visual-explainer-runtime.js";
     ${functionSource(host,"csp")}
     return [csp(),csp(true)];
-  })()`),allows=vm.runInNewContext(`(${functionSource(host,"visualExplainerAllowsNestedFrames")})`);
+  })()`, {URL, location:{href:"http://127.0.0.1/widget-host.html"}}),allows=vm.runInNewContext(`(${functionSource(host,"visualExplainerAllowsNestedFrames")})`);
   assert.match(policies[0],/frame-src 'none'/);
   assert.doesNotMatch(policies[0],/frame-src 'self' data: blob:/);
   assert.match(policies[1],/frame-src 'self' data: blob:/);

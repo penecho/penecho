@@ -1104,6 +1104,7 @@
       orbit.setAttribute("aria-hidden", String(!open));
       orbit.querySelectorAll(".orbit-swatch, [data-custom-color-open]").forEach((button) => button.setAttribute("tabindex", open ? "0" : "-1"));
       if (open) {
+        syncColorHeading(type === "ink" ? state.inkColor : state.aiColor);
         positionToolbarPopover(`[data-color-control="${type}"]`, `#${orbit.id}`, { align:"center", gap:6 });
         requestAnimationFrame(positionOpenToolbarPopovers);
       }
@@ -1137,19 +1138,53 @@
     };
     const customEditor = orbit.querySelector(".custom-color-editor"),
       customOpen = orbit.querySelector("[data-custom-color-open]"),
-      channels = [...customEditor.querySelectorAll("[data-color-channel]")];
-    function previewCustomColor(color) {
+      channels = [...customEditor.querySelectorAll("[data-color-channel]")],
+      spectrum = customEditor.querySelector("[data-color-spectrum]"),
+      hueInput = customEditor.querySelector("[data-color-hue]"),
+      saturationInput = customEditor.querySelector("[data-color-saturation]"),
+      brightnessInput = customEditor.querySelector("[data-color-brightness]");
+    let draftHsv = { h:0, s:0, v:0 };
+    function syncColorHeading(color) {
+      orbit.querySelector("[data-color-value]").textContent = color.toUpperCase();
+      runtimeElementStyle(orbit, `color-heading-${type}`)?.setProperty("--current-color", color);
+    }
+    function colorHexToHsv(color, previousHue = 0) {
+      const [r, g, b] = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255),
+        max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+      let h = previousHue;
+      if (delta) h = (((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60) + 360) % 360;
+      return { h, s:max ? delta / max : 0, v:max };
+    }
+    function colorHsvToHex(hsv) {
+      const { h, s, v } = hsv;
+      const channel = n => {
+        const k = (n + h / 60) % 6;
+        return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))).toString(16).padStart(2, "0");
+      };
+      return `#${channel(5)}${channel(3)}${channel(1)}`;
+    }
+    function previewCustomColor(color, preserveHsv = false) {
       if (!/^#[0-9a-f]{6}$/i.test(color)) return;
       customInput.value = color.toLowerCase();
-      customEditor.querySelector(".custom-color-preview").style.backgroundColor = color;
-      channels.forEach((slider, index) => {
-        slider.value = String(parseInt(color.slice(1 + index * 2, 3 + index * 2), 16));
-        slider.nextElementSibling.value = slider.value;
+      runtimeElementStyle(customEditor.querySelector(".custom-color-preview"), `color-preview-${type}`)?.setProperty("background-color", color);
+      channels.forEach((input, index) => {
+        input.value = String(parseInt(color.slice(1 + index * 2, 3 + index * 2), 16));
       });
+      if (!preserveHsv) draftHsv = colorHexToHsv(color, draftHsv.h);
+      hueInput.value = String(Math.round(draftHsv.h));
+      saturationInput.value = String(Math.round(draftHsv.s * 100));
+      brightnessInput.value = String(Math.round(draftHsv.v * 100));
+      const editorStyle = runtimeElementStyle(customEditor, `color-spectrum-${type}`);
+      editorStyle?.setProperty("--spectrum-hue", `hsl(${draftHsv.h} 100% 50%)`);
+      editorStyle?.setProperty("--spectrum-x", `${draftHsv.s * 100}%`);
+      editorStyle?.setProperty("--spectrum-y", `${(1 - draftHsv.v) * 100}%`);
+      syncColorHeading(color);
     }
+    function previewHsv() { previewCustomColor(colorHsvToHex(draftHsv), true); }
     function closeCustomColor() {
       customEditor.hidden = true;
       customOpen.setAttribute("aria-expanded", "false");
+      syncColorHeading(type === "ink" ? state.inkColor : state.aiColor);
       customOpen.focus({ preventScroll:true });
       positionOpenToolbarPopovers();
     }
@@ -1159,11 +1194,45 @@
       customEditor.hidden = false;
       customOpen.setAttribute("aria-expanded", "true");
       positionOpenToolbarPopovers();
+      hueInput.focus({ preventScroll:true });
     };
     customInput.oninput = () => previewCustomColor(customInput.value);
-    channels.forEach(slider => {
-      slider.oninput = () => previewCustomColor("#" + channels.map(channel => Number(channel.value).toString(16).padStart(2, "0")).join(""));
+    channels.forEach(input => {
+      input.oninput = () => {
+        if (channels.some(channel => !channel.validity.valid || channel.value === "")) return;
+        previewCustomColor("#" + channels.map(channel => Number(channel.value).toString(16).padStart(2, "0")).join(""));
+      };
     });
+    hueInput.oninput = () => { draftHsv.h = Number(hueInput.value); previewHsv(); };
+    saturationInput.oninput = () => { draftHsv.s = Number(saturationInput.value) / 100; previewHsv(); };
+    brightnessInput.oninput = () => { draftHsv.v = Number(brightnessInput.value) / 100; previewHsv(); };
+    customEditor.addEventListener("focusin", () => requestAnimationFrame(positionOpenToolbarPopovers));
+    customEditor.addEventListener("focusout", () => requestAnimationFrame(positionOpenToolbarPopovers));
+    let colorPointerId = null;
+    function updateSpectrumPointer(event) {
+      const rect = spectrum.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      draftHsv.s = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      draftHsv.v = 1 - Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+      previewHsv();
+    }
+    spectrum.onpointerdown = event => {
+      if (event.button !== 0 || colorPointerId !== null) return;
+      event.preventDefault();
+      colorPointerId = event.pointerId;
+      spectrum.setPointerCapture(event.pointerId);
+      updateSpectrumPointer(event);
+    };
+    spectrum.onpointermove = event => {
+      if (event.pointerId === colorPointerId) updateSpectrumPointer(event);
+    };
+    spectrum.onpointerup = event => {
+      if (event.pointerId !== colorPointerId) return;
+      updateSpectrumPointer(event);
+      colorPointerId = null;
+      spectrum.releasePointerCapture(event.pointerId);
+    };
+    spectrum.onlostpointercapture = spectrum.onpointercancel = () => { colorPointerId = null; };
     customEditor.querySelector("[data-custom-color-cancel]").onclick = closeCustomColor;
     customEditor.onkeydown = event => {
       if (event.key !== "Escape") return;
@@ -1359,6 +1428,23 @@
   document.querySelectorAll("[data-page-scale]").forEach((button) => {
     button.addEventListener("click", () => applyPageScale(button.dataset.pageScale));
   });
+  document.querySelector("#settingsGridStyle").addEventListener("click", event => {
+    const choice = event.target.closest("[data-grid-style]");
+    if (!choice) return;
+    state.gridVisible = choice.dataset.gridStyle !== "none";
+    if (state.gridVisible) state.gridStyle = choice.dataset.gridStyle;
+    localStorage.setItem("penecho-grid", String(state.gridVisible));
+    localStorage.setItem("penecho-grid-style", state.gridStyle);
+    updateGridButton(); render();
+  });
+  document.querySelector("#settingsCanvasAutoDelay").addEventListener("change", event => {
+    const autoDelayRange = document.querySelector("#autoDelayRange");
+    autoDelayRange.value = event.target.value;
+    autoDelayRange.dispatchEvent(new Event("input", {bubbles:true}));
+  });
+  document.querySelector("#canvasAgentSignIn").addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("penecho:show-settings", {detail:{page:"cloud"}}));
+  });
   document.querySelector("#gridToggle").onclick = () => {
     state.gridVisible = !state.gridVisible;
     localStorage.setItem("penecho-grid", String(state.gridVisible));
@@ -1381,6 +1467,7 @@
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvas;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
+  document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
   document.querySelector("#historyClose").onclick = closeHistoryPanel;
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = () => {
@@ -1409,6 +1496,8 @@
     if (event.target instanceof Element && event.target.closest(".history-more, .history-row-actions")) return;
     closeHistoryRowActions();
   });
+  document.querySelector("#historyList").addEventListener("scroll", () => closeHistoryRowActions(), { passive:true });
+  window.addEventListener("resize", () => closeHistoryRowActions());
   document.querySelector("#historyNewCanvas").onclick = () => {
     closeHistoryPanel();
     requestAnimationFrame(() => document.querySelector("#newCanvasBtn")?.click());
@@ -1576,6 +1665,11 @@
   settingsButton.addEventListener("click", () => {
     if (settings.open) closeSettings();
     else openSettings();
+  });
+  // Other surfaces (Cloud, Library) open a specific Settings page through this event.
+  window.addEventListener("penecho:show-settings", (event) => {
+    openSettings();
+    selectSettingsPage(String(event.detail?.page || "appearance"));
   });
   settingsCloseButton.addEventListener("click", () => closeSettings());
   settingsBackdrop.addEventListener("pointerdown", () => closeSettings());
@@ -1808,6 +1902,9 @@
     currentExecutionScope:canvasAgentCloudExecutionScope,
     currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
+    saveForShare:saveLiveShareToCloud,
+    hasShareableContent:canvasHasShareableContent,
+    shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
@@ -1832,6 +1929,7 @@
   if (window.PENECHO_CONFIG?.runtime !== "viewer"
     && !(window.PENECHO_CONFIG?.runtime === "cloud" && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true)) refreshSnapshots().catch(() => {});
   fit();
+  if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
   if(window.PENECHO_CONFIG?.runtime!=="viewer")void canvasDocumentsReady().catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsReady()));

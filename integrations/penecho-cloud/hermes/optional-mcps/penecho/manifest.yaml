@@ -1,0 +1,25 @@
+# Submission source; inclusion in this repository is NOT Nous approval.
+manifest_version: 1
+name: penecho
+description: Create editable diagrams and interactive previews in a browser Canvas, then revise them from annotations. Free guest trial available.
+source: https://github.com/penecho/penecho/tree/main/integrations/penecho-cloud
+transport:
+  type: http
+  url: https://penecho.ai/mcp
+auth:
+  type: oauth
+suggest:
+  keywords:
+    - penecho
+  hosts:
+    - penecho.ai
+post_install: |
+  Complete PenEcho authorization once.
+  Hermes stores the MCP credentials automatically; no pairing code or API key is required.
+  Sign in to PenEcho, open a Canvas, and enable Settings → MCP → Cloud MCP.
+  Ask your agent to list available PenEcho canvases, then create or revise content
+  in the one you select. Bind once with penecho_start_session and retain the
+  sessionKey, sessionId and documentId when resuming.
+  Keep the Canvas browser open while editing. Saving to Cloud and PenEcho Agent require sign-in.
+  Native MCP catalog installation includes MCP tools and server instructions. For the
+  bundled Canvas skill as well, install the PenEcho portable plugin package.

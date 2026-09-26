@@ -7,6 +7,80 @@ function extract(name,input=source){
   for(let i=body;i<input.length;i++){if(input[i]==="{")depth++;else if(input[i]==="}"&&--depth===0)return input.slice(start,i+1);}
   throw Error(name);
 }
+function welcomeHarness() {
+  const element=()=>({hidden:false,dataset:{},setAttribute(){}}),
+    state={theme:"studio",viewMode:false,images:[],textBoxes:[],preservedSnapshotAnimations:[],animations:[],widgets:[],plugins:{},widgetMessageHooked:false},
+    context=vm.createContext({state,tiles:new Map(),pluginManifests:new Map(),
+      widgetRuntimeEnabled:()=>state.widgetMessageHooked,pluginEnabled:id=>id==="general"||state.plugins[id]===true,
+      studioNavigatorIsStudio:()=>state.theme==="studio",canvasHasUnsavedChanges:()=>false,
+      snapshotSaveInProgress:false,currentCanvasDisplayName:()=>"Test canvas",t:key=>key,
+      document:{getElementById:()=>null},
+    });
+  for(const name of ["canvasDocumentMeta","canvasDocumentNameLabel","canvasDocumentName","canvasDocumentNameInput","canvasDocumentNameConfirm","canvasDocumentSaveState","canvasDocumentSaveLabel","saveCanvasLabel","canvasWelcome"])context[name]=element();
+  const runtime=fs.readFileSync(path.join(root,"src/client/app/canvas-runtime.js"),"utf8");
+  vm.runInContext(extract("visibleWidgets",runtime)+extract("studioCanvasHasContent")+extract("updateStudioDocumentState"),context);
+  return context;
+}
+test("Widget-only snapshots hide the welcome before the plugin catalog finishes loading",()=>{
+  const h=welcomeHarness();
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.widgets.push({id:"widget-1",pluginId:"general"});
+  h.state.currentSnapshotId="saved-canvas";
+  h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,true,"saved content must hide the welcome even before its renderer is ready");
+  h.pluginManifests.set("general",{});h.state.widgetMessageHooked=true;
+  assert.equal(h.visibleWidgets().length,1);
+  assert.equal(h.canvasWelcome.hidden,true,"mounting the Widget later must not leave a stale welcome");
+  h.state.widgets=[];h.updateStudioDocumentState();
+  assert.equal(h.canvasWelcome.hidden,false,"removing the final object restores the welcome");
+});
+test("welcome counts stored Widgets independently of plugin visibility",()=>{
+  const h=welcomeHarness();
+  for(const key of ["images","textBoxes","preservedSnapshotAnimations","widgets"]){
+    h.state[key]=[{id:"content",pluginId:"unavailable-plugin",hiddenForReplacement:true}];
+    h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true,key);
+    h.state[key]=[];
+  }
+  h.tiles.set("0,0",{});h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.tiles.clear();h.state.currentSnapshotId="empty-saved-canvas";
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.viewMode=true;h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.state.viewMode=false;h.state.theme="light";h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+});
+test("welcome preserves animation enablement and does not count uncommitted Widget previews",()=>{
+  const h=welcomeHarness();
+  h.state.animations=[{id:"animation-1"}];h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+  h.state.plugins.animation=true;h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,true);
+  h.state.animations=[];h.state.pendingWidget={id:"preview",pluginId:"general"};
+  h.updateStudioDocumentState();assert.equal(h.canvasWelcome.hidden,false);
+});
+test("welcome changes no document state as content is removed and restored",()=>{
+  const h=welcomeHarness(),widget={id:"widget-1",pluginId:"general",hiddenForReplacement:true};
+  h.state.currentSnapshotId="saved-canvas";h.state.userRevision=7;
+  for(const widgets of [[widget],[],[widget]]){
+    h.state.widgets=widgets;
+    const before=JSON.stringify(h.state);
+    h.updateStudioDocumentState();
+    assert.equal(h.canvasWelcome.hidden,widgets.length>0);
+    assert.equal(JSON.stringify(h.state),before,"welcome updates must not mutate saved content or revisions");
+  }
+});
+test("welcome-only Mod+K routing ends once a stored Widget exists",()=>{
+  const h=welcomeHarness(),performed=[];
+  Object.assign(h,{
+    keyboardShortcutRecordingId:"",keyboardShortcutChordFromEvent:()=>"Mod+k",
+    document:{querySelector:()=>h.canvasWelcome,getElementById:()=>null},
+    keyboardShortcutCommand:id=>({id}),KEYBOARD_SHORTCUT_COMMANDS:[{id:"custom-command"}],
+    keyboardShortcutBindings:{"custom-command":"Mod+k"},keyboardShortcutCanRun:()=>true,
+    keyboardShortcutPerform:id=>performed.push(id),
+  });
+  const keyboard=fs.readFileSync(path.join(root,"src/client/app/keyboard-shortcuts.js"),"utf8");
+  vm.runInContext(extract("handleKeyboardShortcutKeydown",keyboard),h);
+  const event={preventDefault(){},stopImmediatePropagation(){}};
+  h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
+  h.state.widgets=[{id:"widget-1",pluginId:"general"}];h.updateStudioDocumentState();h.handleKeyboardShortcutKeydown(event);
+  assert.deepEqual(performed,["focus-agent","custom-command"]);
+});
 test("Recent Work merges saved documents once and sorts by last save",()=>{
   const records=new Map([
     ["active",{id:"active",title:"Current",locator:{location:"server",id:"one"},unseen:0}],
@@ -59,9 +133,9 @@ test("opening the update indicator reveals Recent Work without a stale search fi
 
 test("background MCP activity does not highlight the visible Canvas",()=>{
   const runtimeSource=fs.readFileSync(path.join(root,"src/client/app/mcp-runtime.js"),"utf8");
-  const ring={setAttribute(key,value){this[key]=value;}},button={},newButton={},notice={};
+  const ring={setAttribute(key,value){this[key]=value;}},button={},newButton={},notice={setAttribute(){}};
   const runtime={ready:true,socket:{readyState:1},sessions:new Map(),pendingView:new Map(),glowing:true,activeMutation:"AI",mutationDocumentId:"background"};
-  const context=vm.createContext({mcpRuntime:runtime,window:{PENECHO_CONFIG:{runtime:"local"}},WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
+  const context=vm.createContext({mcpUiState:()=>({connected:true,retrying:false}),mcpLiveSessions:()=>[],mcpUiText:en=>en,mcpRenderStatusPopover(){},mcpRenderSidebarBadges(){},mcpRuntime:runtime,window:{PENECHO_CONFIG:{runtime:"local"}},WebSocket:{OPEN:1},canvasDocuments:{activeId:"visible"},mcpLocal:()=>true,mcpSessionVisible:()=>true,mcpText:key=>key,
     mcpEl:id=>({mcpCanvasRing:ring,mcpCanvasNotice:notice,mcpCanvasNoticeButton:button,mcpShowNewContent:newButton})[id],
   });
   vm.runInContext(extract("mcpAccessLabel",runtimeSource)+extract("mcpRenderCanvasStatus",runtimeSource),context);
@@ -70,7 +144,7 @@ test("background MCP activity does not highlight the visible Canvas",()=>{
 });
 
 test("MCP connection opens its tab once, preserves Follow latest and clears pending on disconnect",()=>{
-  const actions=[],search={value:"stale"},tab={hidden:true};
+  const actions=[],search={value:"stale"},tab={hidden:true,dataset:{}};
   const context=vm.createContext({studioNavigatorMcpEnabled:false,studioNavigatorSuspendedAgent:true,studioNavigatorActiveTab:"agent",studioNavigatorMcpTab:tab,studioNavigatorSearch:search,
     studioMcpFollowLatest:true,studioMcpLatestDocumentId:null,studioMcpLatestRegion:null,studioMcpPendingDocumentId:"stale",studioMcpPendingRegion:{x:1,y:2,w:3,h:4},
     syncStudioMcpActions:()=>actions.push(["follow",context.studioMcpFollowLatest]),
@@ -83,25 +157,26 @@ test("MCP connection opens its tab once, preserves Follow latest and clears pend
   assert.equal(context.studioMcpFollowLatest,true,"Follow latest is on by default for a live MCP connection");
   assert.equal(context.studioMcpPendingDocumentId,null);assert.equal(context.studioMcpPendingRegion,null);
   context.syncStudioNavigatorMcp(true);assert.equal(actions.length,5,"heartbeat/status renders must not reopen navigation");
-  context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,true);assert.equal(context.studioNavigatorActiveTab,"all");assert.equal(context.studioMcpFollowLatest,true);
+  context.syncStudioNavigatorMcp(false);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");assert.equal(context.studioMcpFollowLatest,true);
   const before=actions.length;context.syncStudioNavigatorMcp(true);assert.equal(tab.hidden,false);assert.equal(context.studioNavigatorActiveTab,"mcp");
   assert.deepEqual(actions.slice(before),[["tool","hand"],["close",false],["tab","mcp"],["open",true],["follow",true]],"a recovered connection reveals the MCP sidebar again");
   context.syncStudioNavigatorMcp(true);assert.equal(actions.length,before+5,"connected status refreshes must not reopen navigation");
 });
-test("MCP list contains every open Canvas in saved order independent of catalog selection",()=>{
+test("MCP list contains AI canvases only in saved order independent of catalog selection",()=>{
   const docs=[{id:"ordinary"},{id:"bound",bindings:[{}]},{id:"retained",sessions:[{}]},{id:"live"}];
-  const result=vm.runInNewContext(`(${extract("studioNavigatorMcpGroups")})()`,{
+  const result=vm.runInNewContext(`${extract("studioMcpOpenDocumentIds")}\n(${extract("studioNavigatorMcpGroups")})()`,{
+    canvasDocuments:{records:new Map(docs.map(doc=>[doc.id,doc]))},mcpRuntime:{sessions:new Map([["live-session",{documentId:"live"}]])},
     studioNavigatorWorkGroups:()=>[...docs.map(doc=>({documentId:doc.id})),{canvasKey:"server:unrelated"}],
     canvasDocumentsCatalog:()=>[{documentId:"retained",active:true},...docs.filter(doc=>doc.id!=="retained").map(doc=>({documentId:doc.id,active:false}))],
   });
-  assert.deepEqual(Array.from(result,group=>group.documentId),["ordinary","bound","retained","live"]);
+  assert.deepEqual(Array.from(result,group=>group.documentId),["bound","retained","live"]);
 });
-test("tab keyboard navigation includes MCP only while enabled",()=>{
+test("tab keyboard navigation always follows All, Canvases, Chats, MCP",()=>{
   for(const enabled of [false,true]){
     let selected;
     const context={studioNavigatorMcpEnabled:enabled,studioNavigatorActiveTab:"all",setStudioNavigatorTab:tab=>{selected=tab;}};
     const handle=vm.runInNewContext(`(${extract("handleStudioNavigatorTabKeydown")})`,context);
-    handle({key:"ArrowRight",preventDefault(){}});assert.equal(selected,enabled?"mcp":"canvas");
+    handle({key:"ArrowRight",preventDefault(){}});assert.equal(selected,"canvas");
   }
 });
 
@@ -132,17 +207,17 @@ test("Canvas changes suppress automatic Agent opening only while MCP is docked",
   }
 });
 
-test("opening Agent or Library never automatically hides the MCP dock",()=>{
+test("compact Agent opening reserves usable canvas space while Library preserves the MCP dock",()=>{
   for(const docked of [false,true])for(const name of ["studioNavigatorAgentWillOpen","historyManagerWillOpen"]){
     let closed=0;
     const context={studioNavigatorIsCompact:()=>true,studioNavigatorIsOpen:()=>true,studioNavigatorIsMcpDocked:()=>docked,studioNavigatorSuspendedAgent:false,setStudioNavigatorOpen:()=>closed++};
     vm.runInNewContext(`(${extract(name)})()`,context);
-    assert.equal(closed,docked?0:1,`${name}: ordinary tabs retain their existing auto-collapse`);
+    assert.equal(closed,name==="studioNavigatorAgentWillOpen"?1:docked?0:1,`${name}: compact panels retain enough canvas space`);
   }
 });
 test("manually closing and reopening MCP preserves its selected tab and persistence",()=>{
   const classes=new Set(["studio-navigator-open"]);
-  const context=vm.createContext({studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
+  const context=vm.createContext({window:{},studioNavigatorIsCompact:()=>false,studioNavigatorActiveTab:"mcp",studioNavigatorMcpEnabled:true,studioNavigatorIsStudio:()=>true,
     document:{body:{classList:{contains:key=>classes.has(key),toggle:(key,value)=>value?classes.add(key):classes.delete(key)}},activeElement:{}},
     studioNavigator:{contains:()=>false},restoreCanvasChromeMaterial(){},updateStudioNavigatorA11y(){},suspendStudioAgentForNavigator(){},scheduleStudioNavigatorOpenWork(){},
   });
@@ -172,7 +247,7 @@ test("canvas metadata distinguishes current, background open and closed saved ca
   const context=vm.createContext({canvasDocuments:{records,activeId:"new"},state:{canvasAgentCanvasKey:""},
     studioCanvasOpenedAt:()=>0,canvasAgentStoredHistoryGroups:()=>[],studioNavigatorSnapshots:()=>[],t:key=>key,mcpRuntime:{sessions:new Map()}});
   context.canvasDocumentsCatalog=()=>[...records.values()].sort((a,b)=>Number(b.id===context.canvasDocuments.activeId)-Number(a.id===context.canvasDocuments.activeId)).map(doc=>({documentId:doc.id,title:doc.title,active:doc.id===context.canvasDocuments.activeId}));
-  vm.runInContext(extract("studioNavigatorWorkGroups")+"\n"+extract("studioNavigatorMcpGroups"),context);
+  vm.runInContext(extract("studioNavigatorWorkGroups")+"\n"+extract("studioMcpOpenDocumentIds")+"\n"+extract("studioNavigatorMcpGroups"),context);
   assert.deepEqual(Array.from(context.studioNavigatorMcpGroups(),g=>g.documentId),["new","old"]);
   assert.equal(context.studioNavigatorMcpGroups()[1].updatedAt,300);
   records.get("new").changes.push({at:400});
@@ -205,7 +280,7 @@ test("empty draft timestamps use their stable first appearance rather than sideb
     currentCanvasDisplayName:()=>"",t:key=>key,canvasAgentHistoryForCanvas:()=>[],canvasAgentHistoryTime:value=>String(value)});
   vm.runInContext(extract("studioNavigatorWorkGroups")+extract("studioNavigatorMetaTime"),context);
   assert.equal(context.studioNavigatorWorkGroups()[0].updatedAt,12345);
-  assert.equal(context.studioNavigatorMetaTime(12345),"12345");
+  assert.equal(context.studioNavigatorMetaTime(12345),new Date(12345).toLocaleDateString("en",{month:"short",day:"numeric"}));
   assert.equal(context.studioNavigatorMetaTime(0),"","unknown timestamps must not pretend that old documents were just created");
 });
 

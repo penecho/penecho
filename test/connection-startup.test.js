@@ -20,12 +20,12 @@ function routing(runtime) {
   vm.runInContext(extract("routeStartupConnections"),context);
   return {calls,context};
 }
-test("first launch opens Connections once for empty or incomplete configuration",()=>{
+test("first launch keeps the canvas visible with empty or incomplete configuration",()=>{
   for(const runtime of [undefined,"local","desktop"]) {
     const {calls,context}=routing(runtime);
     context.routeStartupConnections({hasUsableConnection:false});
     context.routeStartupConnections({hasUsableConnection:false});
-    assert.deepEqual(calls,["connections","open"]);
+    assert.deepEqual(calls,[]);
   }
 });
 test("configured launches remain on Canvas; explicit configure opens Connections",()=>{

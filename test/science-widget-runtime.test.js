@@ -153,11 +153,11 @@ test("science CSP adds only the exact local Manim-Web source", () => {
       visualExplorerManimMathJaxUrl:"https://canvas.example/visual-explorer-manim-web/MathJaxBundle-xSidSV0E.js?v=0.3.24",
       visualExplainerRuntimeUrl:"https://canvas.example/visual-explainer-runtime.js?v=3",
     },
-    csp = vm.runInNewContext(`(${functionSource(host, "csp")})`, urls),
+    csp = vm.runInNewContext(`(${functionSource(host, "csp")})`, {...urls, URL, location:{href:"https://canvas.example/widget-host.html"}}),
     ordinary = csp(false, false),
     science = csp(false, true),
     sourceUrl = url => url.replace(/[?#].*$/, "");
-  assert.equal(ordinary, `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${sourceUrl(urls.rendererUrl)} ${sourceUrl(urls.visualExplainerVendorUrl)} ${sourceUrl(urls.visualExplainerRuntimeUrl)}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`);
+  assert.equal(ordinary, `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${sourceUrl(urls.rendererUrl)} ${sourceUrl(urls.visualExplainerVendorUrl)} ${sourceUrl(urls.visualExplainerRuntimeUrl)} https://canvas.example/playground/liveclay-v1.js; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; frame-src 'none'; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`);
   assert.equal(science.replace(` ${sourceUrl(urls.visualExplorerManimWebUrl)} ${sourceUrl(urls.visualExplorerManimMathJaxUrl)};`, ";"), ordinary);
   assert.equal((science.match(new RegExp(sourceUrl(urls.visualExplorerManimWebUrl).replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
   assert.equal((science.match(new RegExp(sourceUrl(urls.visualExplorerManimMathJaxUrl).replace(/[?.*+^${}()|[\]\\]/g, "\\$&"), "g")) || []).length, 1);
@@ -292,7 +292,7 @@ test("science snapshot hooks are bounded and failures do not displace the ordina
       scienceMode:false,activeSnapshot:null,activeSnapshotRender:null,
       globalThis:{ __penechoScienceSnapshotHooks:{ beforeSnapshot() { throw Error("collision"); } } },
       snapshotDebugLog() {},
-      schedulePresentationSize() {},
+      reportPresentationScrollExtent() {},
       snapshotDocument: async (message, requirePresentedFrame) => {
         snapshotCalls.push(requirePresentedFrame);
         return "ordinary";

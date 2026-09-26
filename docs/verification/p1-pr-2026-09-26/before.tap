@@ -1,0 +1,530 @@
+TAP version 13
+# Subtest: control: importing legacy community bundle creates an independent document
+not ok 1 - control: importing legacy community bundle creates an independent document
+  ---
+  duration_ms: 43.397125
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/community-import-identity.test.js:34:44'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    7 !== undefined
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  actual: 7
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/community-import-identity.test.js:52:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: importing current-format community bundle creates an independent document
+not ok 2 - importing current-format community bundle creates an independent document
+  ---
+  duration_ms: 6.884417
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/community-import-identity.test.js:34:44'
+  failureType: 'testCodeFailure'
+  error: |-
+    parking the imported copy must not overwrite original edits
+    + actual - expected
+
+    + '<p>Published source</p>'
+    - '<p>Newer local edits</p>'
+          ^
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '<p>Newer local edits</p>'
+  actual: '<p>Published source</p>'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/community-import-identity.test.js:49:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 0.1
+ok 3 - real text persistence retains world frame after rerasterization at placement zoom 0.1
+  ---
+  duration_ms: 6.165958
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 0.5
+ok 4 - real text persistence retains world frame after rerasterization at placement zoom 0.5
+  ---
+  duration_ms: 1.23525
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 1
+ok 5 - real text persistence retains world frame after rerasterization at placement zoom 1
+  ---
+  duration_ms: 1.083375
+  type: 'test'
+  ...
+# Subtest: real text persistence retains world frame after rerasterization at placement zoom 2
+ok 6 - real text persistence retains world frame after rerasterization at placement zoom 2
+  ---
+  duration_ms: 0.844167
+  type: 'test'
+  ...
+# Subtest: invalid saved text frames do not overwrite validated rendered geometry
+ok 7 - invalid saved text frames do not overwrite validated rendered geometry
+  ---
+  duration_ms: 0.682583
+  type: 'test'
+  ...
+# Subtest: artifact author mapping survives the real workspace JSON normalization roundtrip
+ok 8 - artifact author mapping survives the real workspace JSON normalization roundtrip
+  ---
+  duration_ms: 4.804917
+  type: 'test'
+  ...
+# Subtest: artifact normalizer discards nonfinite and out-of-contract author mappings
+ok 9 - artifact normalizer discards nonfinite and out-of-contract author mappings
+  ---
+  duration_ms: 0.865333
+  type: 'test'
+  ...
+# Subtest: real widget and image records preserve small world frames at zoom two
+ok 10 - real widget and image records preserve small world frames at zoom two
+  ---
+  duration_ms: 1.636708
+  type: 'test'
+  ...
+# Subtest: dragging a viewport-mapped widget reflows without a world-pixel minimum jump
+ok 11 - dragging a viewport-mapped widget reflows without a world-pixel minimum jump
+  ---
+  duration_ms: 1.040709
+  type: 'test'
+  ...
+# Subtest: a superseded text restore cannot repopulate a cleared canvas or consume its next id
+not ok 12 - a superseded text restore cannot repopulate a cleared canvas or consume its next id
+  ---
+  duration_ms: 1.611041
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:106:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:116:9)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: the latest text restore owns matching ids and unrelated quality refreshes do not cancel it
+not ok 13 - the latest text restore owns matching ids and unrelated quality refreshes do not cancel it
+  ---
+  duration_ms: 1.287458
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:122:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+    + []
+    - [
+    -   {
+    -     height: 40,
+    -     logicalHeight: 40,
+    -     logicalWidth: 240,
+    -     width: 240
+    -   }
+    - ]
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      width: 240
+      height: 40
+      logicalWidth: 240
+      logicalHeight: 40
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:131:96)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: a failed superseded text restore does not begin rendering later stale items
+not ok 14 - a failed superseded text restore does not begin rendering later stale items
+  ---
+  duration_ms: 0.620833
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:138:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    2 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/mcp-text-viewport.test.js:144:9)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v1 reopens a integer image at the x boundary
+ok 15 - v1 reopens a integer image at the x boundary
+  ---
+  duration_ms: 6.120584
+  type: 'test'
+  ...
+# Subtest: v1 reopens a fractional image at the x boundary
+not ok 16 - v1 reopens a fractional image at the x boundary
+  ---
+  duration_ms: 2.645042
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:32:3'
+  failureType: 'testCodeFailure'
+  error: 'Stored canvas is invalid.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.readSharedCanvas (evalmachine.<anonymous>:10:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:27:24)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:37:22)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: v1 reopens a integer image at the y boundary
+ok 17 - v1 reopens a integer image at the y boundary
+  ---
+  duration_ms: 2.331667
+  type: 'test'
+  ...
+# Subtest: v1 reopens a fractional image at the y boundary
+not ok 18 - v1 reopens a fractional image at the y boundary
+  ---
+  duration_ms: 2.633083
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:32:3'
+  failureType: 'testCodeFailure'
+  error: 'Stored canvas is invalid.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.readSharedCanvas (evalmachine.<anonymous>:10:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:27:24)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:37:22)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v2 reopens a integer image at the x boundary
+ok 19 - v2 reopens a integer image at the x boundary
+  ---
+  duration_ms: 5.737875
+  type: 'test'
+  ...
+# Subtest: v2 reopens a fractional image at the x boundary
+not ok 20 - v2 reopens a fractional image at the x boundary
+  ---
+  duration_ms: 1.962917
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:32:3'
+  failureType: 'testCodeFailure'
+  error: 'Stored canvas is invalid.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.readSharedCanvas (evalmachine.<anonymous>:10:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:27:24)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:37:22)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v2 reopens a integer image at the y boundary
+ok 21 - v2 reopens a integer image at the y boundary
+  ---
+  duration_ms: 2.962333
+  type: 'test'
+  ...
+# Subtest: v2 reopens a fractional image at the y boundary
+not ok 22 - v2 reopens a fractional image at the y boundary
+  ---
+  duration_ms: 3.005125
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:32:3'
+  failureType: 'testCodeFailure'
+  error: 'Stored canvas is invalid.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.readSharedCanvas (evalmachine.<anonymous>:10:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:27:24)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:37:22)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: client image restore retains an accepted fractional boundary frame
+not ok 23 - client image restore retains an accepted fractional boundary frame
+  ---
+  duration_ms: 5.868
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:44:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(restored.x + restored.w <= 20000 && restored.y + restored.h <= 20000)
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-image-boundary.test.js:57:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v1 saves and reopens a 1-unit image frame
+not ok 24 - v1 saves and reopens a 1-unit image frame
+  ---
+  duration_ms: 5.19675
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.start (node:internal/test_runner/test:1242:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: v1 saves and reopens a 40-unit image frame
+not ok 25 - v1 saves and reopens a 40-unit image frame
+  ---
+  duration_ms: 1.200042
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: v1 saves and reopens a 79-unit image frame
+not ok 26 - v1 saves and reopens a 79-unit image frame
+  ---
+  duration_ms: 1.510417
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v1 saves and reopens a 80-unit image frame
+ok 27 - v1 saves and reopens a 80-unit image frame
+  ---
+  duration_ms: 3.408166
+  type: 'test'
+  ...
+# Subtest: v2 saves and reopens a 1-unit image frame
+not ok 28 - v2 saves and reopens a 1-unit image frame
+  ---
+  duration_ms: 5.32475
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v2 saves and reopens a 40-unit image frame
+not ok 29 - v2 saves and reopens a 40-unit image frame
+  ---
+  duration_ms: 2.155708
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v2 saves and reopens a 79-unit image frame
+not ok 30 - v2 saves and reopens a 79-unit image frame
+  ---
+  duration_ms: 1.293459
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:31:63'
+  failureType: 'testCodeFailure'
+  error: 'Invalid shared canvas snapshot.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.saveSharedCanvas (evalmachine.<anonymous>:16:36)
+    saveAndRead (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:26:10)
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/server-canvas-images.test.js:34:20)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: v2 saves and reopens a 80-unit image frame
+ok 31 - v2 saves and reopens a 80-unit image frame
+  ---
+  duration_ms: 3.365416
+  type: 'test'
+  ...
+# Subtest: small-image support retains geometry, raster and data validation
+ok 32 - small-image support retains geometry, raster and data validation
+  ---
+  duration_ms: 4.322
+  type: 'test'
+  ...
+# Subtest: ordinary snapshot load releases its busy state
+ok 33 - ordinary snapshot load releases its busy state
+  ---
+  duration_ms: 30.33775
+  type: 'test'
+  ...
+# Subtest: new Canvas during a pending read keeps a blank document and releases the load lock
+not ok 34 - new Canvas during a pending read keeps a blank document and releases the load lock
+  ---
+  duration_ms: 7.4915
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:40:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    cancelled load must release its busy lock
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:49:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: new Canvas during text restoration is not relabeled by late snapshot completion
+not ok 35 - new Canvas during text restoration is not relabeled by late snapshot completion
+  ---
+  duration_ms: 8.369583
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:51:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    late metadata must not reactivate the loaded identity
+    + actual - expected
+
+    + 'legacy-85b91fd603adc8ea5c2d2990f60f63da0b814713bbe4882ffe0e6192e684edc2'
+    - '57163880-ca67-42ca-8e82-863d64f8a550'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '57163880-ca67-42ca-8e82-863d64f8a550'
+  actual: 'legacy-85b91fd603adc8ea5c2d2990f60f63da0b814713bbe4882ffe0e6192e684edc2'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:63:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: new Canvas during legacy identity lookup is not adopted by a stale load
+not ok 36 - new Canvas during legacy identity lookup is not adopted by a stale load
+  ---
+  duration_ms: 6.761584
+  type: 'test'
+  location: '/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:68:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/heack/workspace/penecho_071_version/test/snapshot-load-ownership.test.js:75:19)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+1..36
+# tests 36
+# suites 0
+# pass 17
+# fail 19
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 117.760833

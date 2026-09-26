@@ -8,30 +8,11 @@ const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../src/client/app/canvas-runtime.js"), "utf8");
 
-function extractFunction(sourceText, name) {
-  const start = sourceText.indexOf(`function ${name}(`);
-  assert.ok(start >= 0, `missing function ${name}`);
-  const body = sourceText.indexOf("{", start);
-  let depth = 0;
-  let quote = "";
-  let escaped = false;
-  for (let index = body; index < sourceText.length; index++) {
-    const current = sourceText[index];
-    const next = sourceText[index + 1];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (current === "\\") escaped = true;
-      else if (current === quote) quote = "";
-      continue;
-    }
-    if (["'", '"', "`"].includes(current)) {
-      quote = current;
-      continue;
-    }
-    if (current === "{") depth++;
-    else if (current === "}" && --depth === 0) return sourceText.slice(start, index + 1);
-  }
-  assert.fail(`unterminated function ${name}`);
+function extractFunction(text,name) {
+ const start=text.indexOf(`  function ${name}(`);
+ const end=text.indexOf('\n  function ',start+1);
+ assert.ok(start>=0 && end>start);
+ return text.slice(start,end);
 }
 
 function harness({ maximized, presentationZoom = 100, presentationWidth = 640 } = {}) {
@@ -39,6 +20,7 @@ function harness({ maximized, presentationZoom = 100, presentationWidth = 640 } 
   const classChanges = [];
   const shell = {
     clientWidth: 1000,
+    clientHeight: 800,
     classList: {
       toggle(name, enabled) { classChanges.push([name, enabled]); },
     },
@@ -79,11 +61,13 @@ function harness({ maximized, presentationZoom = 100, presentationWidth = 640 } 
   const context = {
     canvasWidgetInteractive: () => false,
     canvasWidgetSelectionEnabled: () => true,
-    getComputedStyle: () => ({ paddingLeft: "20px", paddingRight: "20px" }),
+    getComputedStyle: () => ({ paddingLeft: "20px", paddingRight: "20px", paddingTop: "0px", paddingBottom: "20px" }),
     location: { origin: "https://canvas.test" },
     state,
     syncMcpWidgetProgress() {},
   };
+  const navigation = fs.readFileSync(path.join(__dirname, '../src/client/app/canvas-navigation.js'), 'utf8');
+  context.widgetPresentationScale = vm.runInNewContext(`(${extractFunction(navigation, 'widgetPresentationScale')})`, context);
   const sendWidgetHostState = vm.runInNewContext(
     `(${extractFunction(source, "sendWidgetHostState")})`,
     context,
@@ -91,41 +75,47 @@ function harness({ maximized, presentationZoom = 100, presentationWidth = 640 } 
   return { classChanges, frame, messages, sendWidgetHostState, shell, state, widget };
 }
 
-test("maximized Widget host scale applies available width, presentation width, and zoom percent", () => {
-  const h = harness({ maximized: true, presentationZoom: 50, presentationWidth: 640 });
-  const geometry = { w: h.widget.w, h: h.widget.h, contentW: h.widget.contentW, contentH: h.widget.contentH };
-
-  h.sendWidgetHostState(h.widget, undefined, undefined, true);
-
-  assert.equal(h.messages.length, 1);
-  const message = h.messages[0].message;
-  assert.equal(message.type, "penecho-widget-state");
-  assert.equal(message.maximized, true);
-  assert.equal(message.fitContent, false);
-  assert.equal(message.fitContentAxes, null);
-  assert.equal(message.selected, false);
-  assert.equal(message.interactive, false);
-  assert.equal(message.active, true);
-  assert.equal(message.navigationLocked, false);
-  assert.equal(message.scaleX, 0.75);
-  assert.equal(message.scaleY, 0.75);
-  assert.equal(h.messages[0].origin, "https://canvas.test");
-  assert.deepEqual({ w: h.widget.w, h: h.widget.h, contentW: h.widget.contentW, contentH: h.widget.contentH }, geometry);
+test("maximizing fits page width regardless of Canvas zoom and responds to window resize", () => {
+  const h = harness({maximized:true});
+  const geometry = [h.widget.w,h.widget.h,h.widget.contentW,h.widget.contentH];
+  h.state.scale = .05;
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,3);
+  assert.equal(h.messages.at(-1).message.scaleY,3);
+  h.state.scale = 4;
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.length,1);
+  h.shell.clientWidth=360;
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,1);
+  assert.deepEqual([h.widget.w,h.widget.h,h.widget.contentW,h.widget.contentH],geometry);
 });
 
-test("leaving maximized mode restores the normal Canvas zoom scale", () => {
-  const h = harness({ maximized: true, presentationZoom: 50, presentationWidth: 640 });
+test("toolbar zoom scales the width-fit view and exit restores Canvas scale", () => {
+  const h=harness({maximized:true,presentationZoom:50});
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,1.5);
+  h.widget.presentationZoom=100;h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,3);
+  h.widget.maximized=false;h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,1);
+});
 
-  h.sendWidgetHostState(h.widget, undefined, undefined, true);
-  h.widget.maximized = false;
-  h.widget.presentationWidth = null;
-  h.widget.presentationZoom = 100;
-  h.sendWidgetHostState(h.widget, undefined, undefined, true);
+test("reported page overflow reduces the host scale to fit the whole page", () => {
+  const h=harness({maximized:true});
+  h.widget.presentationScrollContent={width:1200,viewportWidth:320};
+  h.sendWidgetHostState(h.widget);
+  assert.equal(h.messages.at(-1).message.scaleX,.8);
+  assert.equal(h.messages.at(-1).message.scaleY,.8);
+  assert.equal(h.widget.contentW,320);
+});
 
-  assert.equal(h.messages.length, 2);
-  assert.equal(h.messages[0].message.scaleX, 0.75);
-  assert.equal(h.messages[0].message.scaleY, 0.75);
-  assert.equal(h.messages[1].message.maximized, false);
-  assert.equal(h.messages[1].message.scaleX, 1);
-  assert.equal(h.messages[1].message.scaleY, 1);
+test("the host keeps its existing inner iframe at native full size", () => {
+  const host=fs.readFileSync(path.join(__dirname,'../public/widget-host.js'),'utf8');
+  const messages=[],inner={style:{},contentWindow:{postMessage:m=>messages.push(m)}};
+  const widgetState={maximized:true,scaleX:.75,scaleY:.75};
+  const forward=vm.runInNewContext(`(${extractFunction(host,'forwardWidgetState')})`,{inner,widgetState});
+  forward();widgetState.scaleX=.375;forward();widgetState.maximized=false;forward();
+  assert.deepEqual(inner.style,{},'no pinning, transform or document recreation');
+  assert.equal(messages.length,3);
 });

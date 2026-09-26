@@ -15,9 +15,12 @@ const ALLOWED_BUTTONS = new Set([
 
 test("every static product button uses a defined PenEcho control contract", () => {
   const html = read("public/index.html"), { document } = parseHTML(html);
+  // These controls are styled by their owning Studio component.
+  const componentControls = "#canvasDocumentSaveState,#aiToolbarRun,#penSizeTrigger,#studioNavigatorOpenToggle,#studioNavigatorOpenMore,#studioNavigatorNewChat,#canvasAutoPausedNotice,#mcpStatusFollow,#mcpStatusConnect,#mcpStatusSettings,#mcpStatusPower,#canvasWelcomeDraw,#canvasWelcomeAgent,#canvasWelcomeMcp,#canvasAgentSignIn,[data-shell-forward],[data-effort],[data-grid-style]";
   const uncovered = [];
   for (const button of document.querySelectorAll("button")) {
     if (["aiOrb","canvasAgentSend","canvasAgentStop"].includes(button.id)) continue;
+    if (button.matches(componentControls)) continue;
     const direct = button.matches("[data-pe-button],[data-pe-control],[data-pe-hit],[data-pe-item]");
     const controlled = Boolean(button.closest('[data-pe-control="tab"],[data-pe-control="segmented"]'));
     if (!direct && !controlled) uncovered.push(button.id || button.outerHTML.slice(0, 80));
@@ -157,8 +160,8 @@ test("Agent composer keeps the scale90 button set and layout while adopting tint
     "canvasAgentStop",
     "canvasAgentSend",
   ]);
-  const toolbarIds = Array.from(document.querySelectorAll(".canvas-agent-composer-toolbar button"), (button) => button.id);
-  assert.deepEqual(toolbarIds, ["canvasAgentProject","canvasAgentProjectClear","canvasAgentPromptToggle","canvasAgentConnection"]);
+  const toolbarIds = Array.from(document.querySelectorAll(".canvas-agent-composer-toolbar button:not([data-effort])"), (button) => button.id);
+  assert.deepEqual(toolbarIds, ["canvasAgentProject","canvasAgentProjectClear","canvasAgentPromptToggle","canvasAgentConnection","canvasAgentThinkingButton"]);
   assert.equal(document.querySelector("#canvasAgentProjectLabel")?.parentElement?.className, "canvas-agent-project-content");
   assert.equal(document.querySelector("#canvasAgentProjectLabel")?.parentElement?.parentElement?.className, "canvas-agent-project-label-clip");
   assert.equal(document.querySelector("#canvasAgentConnectionLabel")?.parentElement?.className, "canvas-agent-connection-label-clip");

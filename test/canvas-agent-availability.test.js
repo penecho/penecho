@@ -36,6 +36,8 @@ function localized(key) {
   return {
     canvasAgentNoConnections: "No available connections",
     canvasAgentChooseConnection: "Choose AI connection",
+    canvasAgentChooseModel: "Choose model",
+    canvasAgentNewCanvasStatus: "New conversation · this canvas",
   }[key] || key;
 }
 
@@ -67,7 +69,7 @@ test("Canvas Agent availability separates browser-only UI from executable connec
 test("Canvas Agent browser-only mode keeps the panel launcher but disables sending with status linkage",()=>{
   const send=button(),input={disabled:false},context={
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
-    canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false},
+    canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false},
   },sync=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
     ${functionSource(source,"canvasAgentSyncSendAvailability")}
@@ -81,6 +83,9 @@ test("Canvas Agent browser-only mode keeps the panel launcher but disables sendi
   sync();
   assert.equal(send.disabled,false);
   assert.equal(send.attributes["aria-describedby"],undefined);
+  context.canvasAgentPromptHasDraft=()=>false; sync();
+  assert.equal(send.disabled,true,"an empty draft cannot be sent");
+  context.canvasAgentPromptHasDraft=()=>true;
 
   for (const state of [
     {inputDisabled:true,attachmentBusy:false,projectUploadBusy:false},
@@ -96,11 +101,46 @@ test("Canvas Agent browser-only mode keeps the panel launcher but disables sendi
   }
 });
 
+test("Canvas Agent enables Send on the first handwritten mark and respects execution and upload blockers",()=>{
+  const send=button(),input={disabled:false,value:""},agent={inkPresent:false,inkStroke:null,attachments:[],references:[],attachmentBusy:false,projectUploadBusy:false},context={
+    window:{PENECHO_CONFIG:{runtime:"local",canvasAgent:true}},
+    canvasAgent:agent,canvasAgentInput:input,canvasAgentSend:send,state:{inkColor:"#123456"},
+    CANVAS_AGENT_INK_LINE_WIDTH:4,canvasPencilWritingActive:()=>false,
+    canvasAgentInkCanvas:{width:1200,height:1040,getBoundingClientRect:()=>({left:0,top:0,width:600,height:520}),setPointerCapture(){},hasPointerCapture:()=>false},
+    canvasAgentInkContext:{save(){},restore(){},beginPath(){},arc(){},fill(){},clearRect(){}},
+    canvasAgentSyncInputHint(){},canvasAgentSyncPromptSuggestions(){api.sync();},
+  },names=["canvasAgentExecutionAvailable","canvasAgentPromptHasDraft","canvasAgentSyncSendAvailability","canvasAgentInkPoint","canvasAgentFinishInkStroke","canvasAgentInkPointerDown","canvasAgentClearInkDraft"],api=vm.runInNewContext(`(()=>{
+    ${names.map(name=>functionSource(source,name)).join("\n")}
+    return {sync:canvasAgentSyncSendAvailability,down:canvasAgentInkPointerDown,clear:canvasAgentClearInkDraft};
+  })()`,context),event={button:0,pointerId:1,pointerType:"pen",clientX:30,clientY:40,preventDefault(){}};
+  api.sync();
+  assert.equal(send.disabled,true,"empty handwriting cannot be sent");
+  api.down(event);
+  assert.equal(agent.inkPresent,true);
+  assert.equal(send.disabled,false,"a single handwritten dot enables Send without typing or switching modes");
+  api.clear();
+  assert.equal(send.disabled,true,"clearing the only draft disables Send again");
+  for(const blocker of ["attachmentBusy","projectUploadBusy"]){
+    agent[blocker]=true;
+    api.down(event);
+    assert.equal(send.disabled,true,`${blocker} still blocks sending handwriting`);
+    agent[blocker]=false;
+    api.clear();
+  }
+  context.window.PENECHO_CONFIG.canvasAgent=false;
+  api.down(event);
+  assert.equal(send.disabled,true,"handwriting cannot bypass unavailable execution");
+  context.window.PENECHO_CONFIG.canvasAgent=true;
+  api.clear();
+  api.down(event);
+  assert.equal(send.disabled,false,"drawing again after clearing re-enables Send");
+});
+
 test("Canvas Agent attachment sync restores sending after project upload and keeps browser-only sending disabled",()=>{
   const attach=button(),send=button(),input={disabled:false},context={
     window:{PENECHO_CONFIG:{runtime:"local",canvasAgent:true}},
     canvasAgentUsesCloudHost:()=>false,t:localized,canvasAgentFileInput:{accept:""},
-    canvasAgentAttach:attach,canvasAgentSend:send,canvasAgentInput:input,
+    canvasAgentAttach:attach,canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,
     canvasAgent:{attachmentBusy:false,projectUploadBusy:true},canvasAgentSyncPromptSuggestions() {},
   },sync=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
@@ -129,9 +169,9 @@ test("Canvas Agent unavailable status and connection label remain unavailable ac
   assert.match(zhSource,/canvasAgentNoConnections:\s*"无可用的连接"/);
   const status={textContent:"",},panel={dataset:{status:"ready"}},label={textContent:""},connection=button(),context={
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
-    canvasAgentStatus:status,canvasAgentPanel:panel,canvasAgentConnectionButton:connection,canvasAgentConnectionLabel:label,
+    document:{querySelector:()=>({hidden:true})},canvasAgent:{currentConversation:null},canvasAgentStatus:status,canvasAgentPanel:panel,canvasAgentConnectionButton:connection,canvasAgentConnectionLabel:label,
     allAiConnections:()=>[{id:"saved",provider:"api",name:"Saved API"}],selectedAiConnectionId:()=>"saved",connectionTitle:item=>item.name,
-    t:localized,canvasAgentSyncSendAvailability(){},
+    t:localized,canvasAgentSyncSendAvailability(){},canvasAgentUpdateModelScroll(){},canvasAgentUpdateThinkingControl(){},
   },run=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
     ${functionSource(source,"canvasAgentUnavailableMessage")}
@@ -140,11 +180,11 @@ test("Canvas Agent unavailable status and connection label remain unavailable ac
     return {setStatus:canvasAgentSetStatus,updateConnectionButton:canvasAgentUpdateConnectionButton};
   })()`,context);
   run.setStatus("Ready", "ready");
-  assert.equal(status.textContent,"No available connections");
+  assert.equal(status.textContent,"New conversation · this canvas");
   assert.equal(panel.dataset.status,"unavailable");
   run.updateConnectionButton();
-  assert.equal(label.textContent,"No available connections");
-  assert.match(connection.attributes["aria-label"],/Choose AI connection: No available connections/);
+  assert.equal(label.textContent,"Choose model");
+  assert.match(connection.attributes["aria-label"],/Choose AI connection: Choose model/);
 
   context.window.PENECHO_CONFIG={runtime:"local",canvasAgent:true};
   run.setStatus("Connecting…", "connecting");
@@ -232,8 +272,8 @@ test("Canvas Agent language refresh keeps unavailable status instead of restorin
     "canvasAgentProjectRemoveConfirm","canvasAgentProjectRemoveDescription","canvasAgentApproval","canvasAgentTranscript","canvasAgentStatus","canvasAgentPanel",
   ];
   const element=()=>({textContent:"",hidden:true,value:"",dataset:{status:"connecting"},classList:{contains:()=>false},setAttribute(){},querySelector:()=>({textContent:""}),querySelectorAll:()=>[]});
-  const context={window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},canvasAgent:{running:false,projectRootApproval:null,projectRemovePending:null,toolRows:new Map(),lastTurnError:null},t:localized,
-    canvasAgentSetComposerActionLabel(){},canvasAgentRenderPromptSuggestions(){},canvasAgentUpdateSearchButton(){},canvasAgentUpdateConnectionButton(){},canvasAgentRenderToolRow(){},canvasAgentBlockLabel:key=>key,
+  const context={window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},document:{querySelector:()=>({hidden:true})},allAiConnections:()=>[],canvasAgent:{running:false,projectRootApproval:null,projectRemovePending:null,toolRows:new Map(),lastTurnError:null},t:localized,
+    canvasAgentUpdateThinkingControl(){},canvasAgentSetComposerActionLabel(){},canvasAgentRenderPromptSuggestions(){},canvasAgentUpdateSearchButton(){},canvasAgentUpdateConnectionButton(){},canvasAgentRenderToolRow(){},canvasAgentBlockLabel:key=>key,
     canvasAgentSetAssistantCopyState(){},canvasAgentRenderErrorElement(){},canvasAgentSyncSelection(){},canvasAgentRenderReferencePicker(){},canvasAgentRenderHistoryList(){},canvasAgentRenderProjects(){},canvasAgentRenderEmpty(){},
     canvasAgentSyncInputHint(){},canvasAgentSyncPromptSuggestions(){},canvasAgentSyncSendAvailability(){},canvasAgentResizeInput(){inputResizeCalls++;},
   };
@@ -248,7 +288,7 @@ test("Canvas Agent language refresh keeps unavailable status instead of restorin
     return updateCanvasAgentLanguage;
   })()`,context);
   run();
-  assert.equal(context.canvasAgentStatus.textContent,"No available connections");
+  assert.equal(context.canvasAgentStatus.textContent,"New conversation · this canvas");
   assert.equal(context.canvasAgentPanel.dataset.status,"unavailable");
   assert.equal(inputResizeCalls,1,"language changes recalculate the composer height");
 });
@@ -299,7 +339,7 @@ test("Canvas Agent unavailable submission returns false without consuming the dr
   const send=button(),input={disabled:false,value:"keep this draft"},conversation={id:"conversation-before"},counts={begin:0,submit:0,conversation:0,connect:0,search:0,request:0,network:0},status=[];
   const context={
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
-    canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false,attachments:[{id:"draft-image"}],inkPresent:true,currentConversation:conversation},
+    canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false,attachments:[{id:"draft-image"}],inkPresent:true,currentConversation:conversation},
     canvasAgentSetStatus:(text,kind)=>status.push({text,kind}),canvasAgentSyncSendAvailability:null,
     canvasAgentBeginRequest:()=>counts.begin++,canvasAgentBeginSubmitExecution:()=>{counts.submit++;},canvasAgentDidStartUserConversation:()=>{counts.conversation++;},
     canvasAgentConnect:async()=>{counts.connect++;},canvasAgentEnsureSearchSession:async()=>{counts.search++;},canvasAgentSendRequest:()=>counts.request++,

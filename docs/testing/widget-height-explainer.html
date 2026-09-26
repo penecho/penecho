@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Widget 最大化 · 保持字号，保留高度</title>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; min-width: 0; background: transparent; }
+body { color: #23313c; font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+main { max-width: 1440px; margin: auto; padding: 28px 32px; background: #fff; }
+header { padding-bottom: 20px; border-bottom: 1px solid #dbe2e7; }
+h1 { margin: 0 0 8px; font-size: 27px; line-height: 1.35; font-weight: 600; }
+h2 { margin: 0; font-size: 20px; font-weight: 600; }
+h3 { margin: 16px 0 6px; font-size: 16px; font-weight: 500; }
+p { margin: 6px 0; }
+.status { color: #75602d; font-size: 14px; }
+.columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px; }
+article { min-width: 0; padding: 22px 0 18px; }
+.index { color: #7a8791; margin-right: 8px; font-size: 16px; }
+.summary { color: #586671; margin: 8px 0 14px; }
+.diagram { margin: 0; border: 1px solid #dbe2e7; border-radius: 6px; padding: 12px; }
+svg { display: block; width: 100%; max-width: 530px; height: auto; margin: auto; font: 15px system-ui, sans-serif; }
+figcaption { color: #64727c; font-size: 13px; margin-top: 6px; }
+.cause { min-height: 62px; }
+.fix { border-left: 3px solid #328073; padding-left: 12px; margin-top: 14px; }
+.fix h3 { color: #246e62; margin-top: 0; }
+.fix p { margin: 3px 0; }
+.result { display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: baseline; margin-top: 12px; }
+.result b { color: #246e62; font-size: 20px; font-weight: 500; }
+.result span { font-size: 14px; color: #586671; }
+.flow { border-top: 1px solid #dbe2e7; padding-top: 17px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.flow h2 { font-size: 17px; }
+.measure { font-size: 19px; margin: 6px 0; font-variant-numeric: tabular-nums; }
+footer { border-top: 1px solid #dbe2e7; margin-top: 18px; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 5px 22px; color: #64727c; font-size: 13px; }
+@media (max-width: 760px) {
+  main { padding: 20px; }
+  .columns, .flow { grid-template-columns: 1fr; gap: 0; }
+  article + article { border-top: 1px solid #dbe2e7; }
+  .flow > div + div { margin-top: 14px; }
+  h1 { font-size: 23px; }
+  .cause { min-height: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>最大化：扩大窗口，保持入场字号，保留原始高度</h1>
+<p>页面保留自己的 CSS 布局，由外层统一滚动。工具栏 100% 是进入时的大小，主动选 50% 才缩小。</p>
+<p class="status">交付状态 · 正式 071 源码已修复并验收；共享链接所在的 Cloud / UAT 尚未部署。</p>
+</header>
+<section class="columns" aria-label="两类问题对照">
+<article>
+<h2><span class="index">A</span>最初的问题：越放大，越变高</h2>
+<p class="summary">容器和内容互相撑高，滚动条滑块越来越小。</p>
+<figure class="diagram">
+<svg viewBox="0 0 470 207" role="img" aria-label="错误反馈循环：容器增高导致内容增高，测量结果再写回容器；修复后保留原始视口和正常滚动">
+<defs><marker id="arrow-a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#b04d4d"/></marker></defs>
+<text x="12" y="23" fill="#aa4141">原来：自我放大</text>
+<rect x="12" y="40" width="133" height="45" rx="5" fill="#fff5f3" stroke="#cd7a73"/>
+<text x="78" y="69" text-anchor="middle">容器变高</text>
+<rect x="270" y="40" width="185" height="45" rx="5" fill="#fff5f3" stroke="#cd7a73"/>
+<text x="362" y="69" text-anchor="middle">内容跟着变高</text>
+<path d="M150 62H261" stroke="#b04d4d" marker-end="url(#arrow-a)" fill="none"/>
+<text x="206" y="48" text-anchor="middle" fill="#6d7680" font-size="13">依赖视口</text>
+<path d="M362 89V108H78V91" stroke="#b04d4d" marker-end="url(#arrow-a)" fill="none"/>
+<text x="220" y="130" text-anchor="middle" fill="#aa4141">测量结果再次写回 → 循环</text>
+<path d="M12 146H455" stroke="#e1e6e9"/>
+<text x="12" y="173" fill="#246e62">现在：移除测量 → 改高反馈</text>
+<text x="12" y="197" fill="#586671">视口保持稳定；外层统一滚动，内容区滚轮可用</text>
+</svg>
+<figcaption>机制示意；200vh 等布局也会触发同类反馈，并非 Live Clay 独有。</figcaption>
+</figure>
+<div class="cause">
+<h3>Live Clay 的具体触发点</h3>
+<p>标注和引线本应覆盖在场景上，却额外参与撑高；最大化测量把增量反复放大。</p>
+</div>
+<div class="fix">
+<h3>修复</h3>
+<p>覆盖层明确定位，不再挤占正文高度。</p>
+<p>通用宿主不再测量正文后反向改高，也不注入自动展开 CSS。</p>
+</div>
+<div class="result"><b>2486 × 1449</b><span>原始 Live Clay 两次进入尺寸一致，暂停状态保留</span></div>
+</article>
+<article>
+<h2><span class="index">B</span>后来的回归：内容挤到一起</h2>
+<p class="summary">固定布局的高度基准变了，百分比定位跟着上移。</p>
+<figure class="diagram">
+<svg viewBox="0 0 470 207" role="img" aria-label="原高度1100的固定布局被压短后重叠；修复后保留至少1100的页面高度">
+<text x="77" y="22" text-anchor="middle" fill="#586671">原布局</text>
+<text x="234" y="22" text-anchor="middle" fill="#aa4141">错误改高</text>
+<text x="391" y="22" text-anchor="middle" fill="#246e62">保留布局</text>
+<rect x="15" y="35" width="126" height="132" rx="4" fill="#f8fafb" stroke="#9aa9b5"/>
+<rect x="172" y="35" width="126" height="67" rx="4" fill="#fff5f3" stroke="#cd7a73"/>
+<rect x="329" y="35" width="126" height="132" rx="4" fill="#f2faf7" stroke="#619d90"/>
+<path d="M5 120H465" stroke="#789cc2" stroke-dasharray="4 4"/>
+<rect x="37" y="113" width="82" height="23" rx="3" fill="#dfebe8" stroke="#328073"/>
+<rect x="194" y="75" width="82" height="23" rx="3" fill="#f3d9d5" stroke="#b04d4d"/>
+<rect x="351" y="113" width="82" height="23" rx="3" fill="#dfebe8" stroke="#328073"/>
+<text x="77" y="130" text-anchor="middle" font-size="13">内容模块</text>
+<text x="234" y="92" text-anchor="middle" font-size="13">上移重叠</text>
+<text x="392" y="130" text-anchor="middle" font-size="13">内容模块</text>
+<path d="M21 140Q71 149 134 138M335 140Q390 149 447 138" stroke="#4e759e" stroke-width="2" fill="none"/>
+<text x="77" y="188" text-anchor="middle">1100 px</text>
+<text x="234" y="188" text-anchor="middle" fill="#aa4141">被压短</text>
+<text x="391" y="188" text-anchor="middle" fill="#246e62">1100 px</text>
+</svg>
+<figcaption>蓝线示意固定布局锚点；原始高度作为下限，不再清除页面的高度约束。</figcaption>
+</figure>
+<div class="cause">
+<h3>之前修复的错误</h3>
+<p>统一把根元素改为 height:auto，主容器塌缩；内容和笔迹原有的相对位置随之被破坏。</p>
+</div>
+<div class="fix">
+<h3>修复</h3>
+<p>内页高度 = 可用高度与保存高度中的较大值。</p>
+<p>保存 1100px 就至少保留 1100px；固定 CSS 与 Canvas 几何不改写。</p>
+</div>
+<div class="result"><b>1100 → 1328 px</b><span>窗口足够高时增加空间；固定像素锚点保持，响应式布局自然重排</span></div>
+</article>
+</section>
+<section class="flow" aria-label="普通内容与验收">
+<div>
+<h2>C · 长流程图不再自动缩成整页</h2>
+<p class="measure">标题 24px → <span style="color:#246e62">仍为 24px</span></p>
+<p>之前用整页宽高计算适配比例，长页面就越缩越小。现在扩大视口、保留进入时比例，超出部分滚动查看。</p>
+</div>
+<div>
+<h2>普通长文档仍正常增减内容</h2>
+<p>iframe 保持 828px；文档滚动高度 2855 → 3455 → 2855px。</p>
+<p>内容新增 / 移除 600px 时，外层更新滚动范围，iframe 不跟着循环增高。</p>
+</div>
+</section>
+<footer>
+<span>本地 Chromium · 宽屏 / 窄屏 · 100% / 125% 界面缩放</span>
+<span>125 项相关测试通过 · 窄屏 390 × 844 无宿主横向溢出</span>
+<span>2026-09-24 · 数值来自原件及回归样例实测</span>
+</footer>
+</main>
+<script>
+parent.postMessage({type: 'penecho-widget-updated'}, '*');
+</script>
+</body>
+</html>

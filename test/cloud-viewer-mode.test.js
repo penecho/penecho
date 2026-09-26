@@ -71,7 +71,7 @@ test("the viewer localizes its actions and responsively frames Widgets and compl
   assert.equal((js.match(/takeFurther:"Echo"/g) || []).length, 2);
   assert.match(js, /backTitle:"Back to Echoes"/);
   assert.match(js, /backTitle:"返回 Echoes"/);
-  assert.match(js, /PenEchoI18n\?\.currentLanguage/);
+  assert.match(js, /penecho-site-language/);
   assert.match(js, /penecho:languagechange/);
   assert.match(js, /fitViewport:true/);
   assert.match(js, /if \(artifact\?\.format === "penecho-widget"\) await bridge\.importWidget\(artifact, null, \{ fitViewport:true \}\);/);
@@ -122,6 +122,22 @@ test("the viewer controls stay quiet until hovered or focused", () => {
   assert.match(css, /\.viewer-actions\s*\{[\s\S]*?opacity:\s*\.5/);
   assert.match(css, /\.viewer-brand:hover\s*\{\s*opacity:\s*1/);
   assert.match(css, /\.viewer-actions:hover,[\s\S]*?\.viewer-actions:focus-within\s*\{\s*opacity:\s*1/);
+});
+
+test("an unavailable live share keeps its homepage link above the status surface", () => {
+  const js = read("public/viewer.js"), css = read("public/viewer.css"),
+    liveTopbar = css.match(/html\.viewer-live-share \.viewer-topbar\s*\{[^}]*z-index:\s*(\d+)/),
+    status = css.match(/\.viewer-status\s*\{[^}]*z-index:\s*(\d+)/);
+
+  assert.match(js, /if \(live\) document\.documentElement\.classList\.add\("viewer-live-share"\)/);
+  assert.ok(liveTopbar, "live shares must define an explicit topbar layer");
+  assert.ok(status, "the full-screen status surface must define its layer");
+  assert.ok(Number(liveTopbar[1]) > Number(status[1]), "the live-share homepage link must stay above the status surface");
+  assert.match(js, /if \(live && !contentReady\) return;/);
+  assert.match(
+    css,
+    /html\.viewer-live-share \.viewer-brand\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*color:\s*#30372d;[^}]*font-size:\s*25px;[^}]*letter-spacing:\s*-1\.15px;[^}]*opacity:\s*1;/,
+  );
 });
 
 test("the viewer removes edit guidance, the canvas seam, and the duplicate action border", () => {
@@ -306,6 +322,7 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
       viewerAutoFitWidgetId:null,
       viewerAutoFitCanvas:true,
       state,
+      window:{ PENECHO_CONFIG:{ runtime:"viewer" } },
       view,
       screen:{},
       animationLayer:{},
@@ -323,7 +340,7 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
       animationBounds:() => null,
       widgetBounds,
       unionLocalBounds,
-      document:{ querySelector:() => ({ getBoundingClientRect:() => ({ bottom:56 }) }) },
+      document:{ body:{classList:{contains:() => false}}, querySelector:() => ({ getBoundingClientRect:() => ({ bottom:56 }) }) },
       scheduleLiveInkLayerWarmup() {},
       updateCoordinates() {},
       requestRender() {},
@@ -356,6 +373,29 @@ test("Viewer fit produces visible transforms for a multi-Widget Canvas", () => {
 
   const catalogLoad = functionSource(core, "loadPluginDocuments");
   assert.ok(catalogLoad.indexOf("syncWidgetRuntime();") < catalogLoad.indexOf("if (pluginEnabled(widget.pluginId)) mountWidget(widget)"));
+});
+
+test("Live Clay viewer reflows the iframe at screen size so its playback controls remain usable", () => {
+  const canvas = read("src/client/app/canvas-runtime.js"),
+    style = { setProperty(name, value) { this[name] = value; } },
+    widget = {
+      id:"live-clay", sourceFormat:"penecho-liveclay+json", shell:{},
+      x:100, y:200, w:1200, h:720, contentW:1200, contentH:720,
+      styleRule:{ style },
+    },
+    hostScales = [],
+    positionWidget = vm.runInNewContext(`(${functionSource(canvas, "positionWidget")})`, {
+      state:{ panX:20, panY:30, scale:.3 },
+      window:{ PENECHO_CONFIG:{ runtime:"viewer" } },
+      document:{ body:{ classList:{ contains:() => false } } },
+      updateWidgetRenderVisibility() {},
+      sendWidgetHostState:(_widget, scaleX, scaleY) => hostScales.push([scaleX, scaleY]),
+    });
+  positionWidget(widget);
+  assert.equal(style.width, "360px");
+  assert.equal(style.height, "216px");
+  assert.equal(style.transform, "translate3d(30px,60px,0) scale(1,1)");
+  assert.deepEqual(hostScales, [[1, 1]]);
 });
 
 test("Viewer skips onboarding observers and hidden plugin preview hosts, with a real-Node observer guard", () => {

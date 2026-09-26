@@ -1,0 +1,413 @@
+"use strict";
+// PenEcho Studio shell: presentation-only helpers for studio-shell.css.
+// Controls here forward to existing Canvas buttons, so the Canvas runtime
+// keeps its own flows, state and side effects unchanged.
+(() => {
+  const COPY = {
+    en: {
+      welcomeActions: "Start with PenEcho",
+      welcomeAgent: "Ask PenEcho Agent",
+      welcomeMcp: "Connect your AI via MCP",
+    },
+    zh: {
+      welcomeActions: "开始使用 PenEcho",
+      welcomeAgent: "询问 PenEcho Agent",
+      welcomeMcp: "通过 MCP 连接你的 AI",
+    },
+  };
+
+  function language() {
+    return String(document.documentElement.lang || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  }
+
+  function applyCopy() {
+    const copy = COPY[language()];
+    for (const element of document.querySelectorAll("[data-shell-copy]")) {
+      const text = copy[element.dataset.shellCopy];
+      if (text && element.textContent !== text) element.textContent = text;
+    }
+    for (const element of document.querySelectorAll("[data-shell-aria]")) {
+      const text = copy[element.dataset.shellAria];
+      if (text && element.getAttribute("aria-label") !== text) element.setAttribute("aria-label", text);
+    }
+  }
+
+  function clickExisting(selector) {
+    const target = document.querySelector(selector);
+    if (!target || target.disabled || target.closest("[hidden]")) return false;
+    target.click();
+    return true;
+  }
+
+  // data-shell-forward="#first,#second" clicks each existing control in order,
+  // one frame apart, so a closing surface finishes before the next one opens.
+  function forward(steps) {
+    const [selector, ...rest] = steps;
+    if (!selector || !clickExisting(selector)) return;
+    if (rest.length) requestAnimationFrame(() => requestAnimationFrame(() => forward(rest)));
+  }
+
+  // Title bar "More" menu: New, Library, Export and Echo forward to the
+  // original buttons, which stay in the DOM for every existing handler.
+  const moreButton = document.querySelector("#canvasMoreBtn");
+  const moreMenu = document.querySelector("#canvasMoreMenu");
+  function moreItems() {
+    return moreMenu ? [...moreMenu.querySelectorAll('[role="menuitem"]')].filter((item) => !item.hidden && !item.disabled) : [];
+  }
+  function syncMoreItems() {
+    for (const item of moreMenu?.querySelectorAll("[data-shell-forward]") || []) {
+      const target = document.querySelector(String(item.dataset.shellForward).split(",")[0]);
+      item.hidden = !target || target.hidden;
+      item.disabled = Boolean(target?.disabled);
+    }
+  }
+  function moreOpen() {
+    return Boolean(moreMenu && !moreMenu.hidden);
+  }
+  function setMoreOpen(open, { focus = "" } = {}) {
+    if (!moreMenu || !moreButton) return;
+    if (open) syncMoreItems();
+    moreMenu.hidden = !open;
+    moreButton.setAttribute("aria-expanded", String(open));
+    if (open && focus === "first") moreItems()[0]?.focus();
+    else if (open && focus === "last") moreItems().at(-1)?.focus();
+    else if (!open && focus === "button") moreButton.focus();
+  }
+  moreButton?.addEventListener("click", () => setMoreOpen(!moreOpen()));
+  moreButton?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setMoreOpen(true, { focus:event.key === "ArrowDown" ? "first" : "last" });
+    }
+  });
+  moreMenu?.addEventListener("keydown", (event) => {
+    const items = moreItems(), index = items.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setMoreOpen(false, { focus:"button" });
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      items[(index + step + items.length) % items.length]?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      (event.key === "Home" ? items[0] : items.at(-1))?.focus();
+    } else if (event.key === "Tab") setMoreOpen(false);
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (moreOpen() && !moreMenu.contains(event.target) && !moreButton.contains(event.target)) setMoreOpen(false);
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-shell-forward]") : null;
+    if (!trigger) return;
+    event.preventDefault();
+    if (moreMenu?.contains(trigger)) setMoreOpen(false);
+    forward(String(trigger.dataset.shellForward || "").split(",").map((step) => step.trim()).filter(Boolean));
+  });
+
+  // Welcome actions sit above the drawing surface; keep their presses out of
+  // Canvas gestures that listen on ancestors during the bubble phase.
+  document.querySelector("#canvasAutoPausedNotice")?.addEventListener("pointerdown", event => event.stopPropagation());
+  document.querySelector("#canvasWelcomeActions")?.addEventListener("pointerdown", (event) => {
+    if (event.target instanceof Element && event.target.closest("button")) event.stopPropagation();
+  });
+
+  // Keep the merged manual AI action on the existing runtime path, including
+  // stopping an active request and localized accessible labels.
+  const aiRun = document.querySelector("#aiToolbarRun");
+  const aiOrb = document.querySelector("#aiOrb");
+  const embodiment = document.querySelector("#aiEmbodiment");
+  function syncAIAction() {
+    if (!aiRun || !aiOrb) return;
+    aiRun.disabled = aiOrb.disabled;
+    const pauseAction = document.querySelector("#canvasAutoPausedNotice");
+    if (pauseAction) {
+      pauseAction.disabled = aiOrb.disabled;
+      pauseAction.title = aiOrb.getAttribute("aria-label") || "";
+    }
+    for (const name of ["aria-label", "title"]) {
+      const value = aiOrb.getAttribute(name) || aiOrb.getAttribute("aria-label");
+      if (value) aiRun.setAttribute(name, value);
+    }
+    aiRun.dataset.busy = String(embodiment?.getAttribute("aria-busy") === "true");
+  }
+  if (aiOrb && embodiment) {
+    const observer = new MutationObserver(syncAIAction);
+    observer.observe(aiOrb, { attributes: true, attributeFilter: ["aria-label", "title", "disabled"] });
+    observer.observe(embodiment, { attributes: true, attributeFilter: ["aria-busy"] });
+    syncAIAction();
+  }
+
+  // Mobile drawing controls sit below the title bar. Reserve their measured
+  // height so the sidebar search remains visible, including an OS scrollbar.
+  const sidebarFrame=document.querySelector(".canvas-frame"), sidebarToolbar=document.querySelector(".topbar .toolbar");
+  function syncSidebarToolbarInset() {
+    if(!sidebarFrame||!sidebarToolbar)return;
+    const frame=sidebarFrame.getBoundingClientRect(),bar=sidebarToolbar.getBoundingClientRect(),scale=frame.width/Math.max(1,sidebarFrame.offsetWidth);
+    const inset=document.body.dataset.theme==="studio"&&matchMedia("(max-width: 700px)").matches?Math.max(0,(bar.bottom-frame.top)/scale):0;
+    const value=`${Math.ceil(inset)}px`;
+    if(sidebarFrame.style.getPropertyValue("--studio-navigator-toolbar-inset")!==value)sidebarFrame.style.setProperty("--studio-navigator-toolbar-inset",value);
+  }
+  if(sidebarFrame&&sidebarToolbar){
+    const observer=new ResizeObserver(syncSidebarToolbarInset);observer.observe(sidebarToolbar);observer.observe(document.querySelector(".topbar"));
+    window.addEventListener("resize",syncSidebarToolbarInset);syncSidebarToolbarInset();
+  }
+
+  // Reserve the final flex geometry, but keep enough live canvas underneath
+  // both moving edges until the slide ends. Translating a final-size viewport
+  // exposes a blank strip on opening; animating `left` also lays out every frame.
+  const motionPanels=[document.querySelector("#studioNavigator"),document.querySelector("#canvasAgentPanel")];
+  const motionViewport=document.querySelector("#viewport");
+  const motionChrome=[".primary-tools","#aiToolsSection","#canvasZoomControls","#canvasAutoPausedNotice","#mcpCanvasNotice","#pageHintSlot"].map(selector=>document.querySelector(selector)).filter(Boolean);
+  const motionPausedNotice=document.querySelector("#canvasAutoPausedNotice"),motionAiTools=document.querySelector("#aiToolsSection");
+  let layoutDockForMotion=null;
+  let sidebarAnimations=[],sidebarMotionGeneration=0,sidebarMotionRunning=false,sidebarMotionRestore=[];
+  function restoreSidebarMotion() {
+    for(const animation of sidebarAnimations)animation.cancel();
+    sidebarAnimations=[];
+    for(const restore of sidebarMotionRestore)restore();
+    sidebarMotionRestore=[];
+  }
+  function setMotionStyles(element,values) {
+    const previous=Object.keys(values).map(name=>[name,element.style.getPropertyValue(name),element.style.getPropertyPriority(name)]);
+    sidebarMotionRestore.push(()=>{for(const [name,value,priority] of previous){if(value)element.style.setProperty(name,value,priority);else element.style.removeProperty(name);}});
+    for(const [name,value] of Object.entries(values))element.style.setProperty(name,value);
+  }
+  function captureSidebarMotion(animate=true) {
+    const elements=[...motionPanels,motionViewport].filter(Boolean);
+    const snapshot=elements.map(element=>({element,rect:element.getBoundingClientRect()}));
+    snapshot.contentLeft=document.querySelector("#screen")?.getBoundingClientRect().left;
+    snapshot.chrome=new Map(motionChrome.filter(element=>element.getClientRects().length&&getComputedStyle(element).visibility!=="hidden").map(element=>[element,element.getBoundingClientRect()]));
+    sidebarMotionGeneration++;
+    restoreSidebarMotion();sidebarMotionRunning=false;
+    if(!animate||document.body.dataset.theme!=="studio"||matchMedia("(prefers-reduced-motion: reduce)").matches)return null;
+    sidebarMotionRunning=true;
+    return snapshot;
+  }
+  function playSidebarMotion(snapshot) {
+    if(!snapshot){window.dispatchEvent(new Event("penecho-sidebar-settled"));return;}
+    const generation=++sidebarMotionGeneration;
+    restoreSidebarMotion();
+    sidebarMotionRunning=true;
+    syncNavigationChrome();
+    // Resolve the destination dock before the first animation frame. Waiting
+    // until the panels settle makes the fixed controls disappear and jump back.
+    layoutDockForMotion?.();
+    const scale=parseFloat(getComputedStyle(document.documentElement).zoom)||1;
+    const targets=snapshot.map(({element,rect})=>{const finalRect=element.getBoundingClientRect();return {element,rect,finalRect,dx:(rect.left-finalRect.left)/scale};});
+    const viewport=targets.find(target=>target.element===motionViewport);
+    const timing={duration:240,easing:"cubic-bezier(.2,.72,.2,1)",fill:"both"};
+    if(viewport){
+      // Keep the viewport itself untransformed: fixed chrome retains its
+      // containing block. Only its live content layers slide over the wider
+      // drawing surface, so neither Widgets nor toolbars need reparenting.
+      const layers=[...motionViewport.children].filter(element=>(element.getClientRects().length||element.matches("canvas, .widget-layer, .text-editor-layer"))&&getComputedStyle(element).position!=="fixed");
+      const left=Math.min(viewport.rect.left,viewport.finalRect.left);
+      const width=(Math.max(viewport.rect.right,viewport.finalRect.right)-left)/scale;
+      const from=((snapshot.contentLeft??viewport.rect.left)-left)/scale,to=(viewport.finalRect.left-left)/scale;
+      if(width-viewport.finalRect.width/scale>.5){
+        setMotionStyles(motionViewport,{flex:`0 0 ${width}px`,left:`${(left-viewport.finalRect.left)/scale}px`,"margin-right":`${viewport.finalRect.width/scale-width}px`});
+        const welcome=document.querySelector("#canvasWelcome");
+        if(welcome)setMotionStyles(welcome,{width:`${viewport.finalRect.width/scale}px`,"box-sizing":"border-box"});
+      }
+      if(Math.abs(from)>=.5||Math.abs(to)>=.5){
+        for(const element of layers)sidebarAnimations.push(element.animate([{translate:`${from}px 0`},{translate:`${to}px 0`}],timing));
+      }
+    }
+    for(const {element,dx} of targets){
+      if(element===motionViewport||Math.abs(dx)<.5)continue;
+      sidebarAnimations.push(element.animate([{transform:`translate3d(${dx}px,0,0)`},{transform:"translate3d(0,0,0)"}],timing));
+    }
+    for(const element of motionChrome){
+      if(!element.getClientRects().length||getComputedStyle(element).visibility==="hidden")continue;
+      const previous=snapshot.chrome.get(element)||snapshot.chrome.get(element===motionPausedNotice?motionAiTools:element===motionAiTools?motionPausedNotice:null);
+      if(!previous)continue;
+      const final=element.getBoundingClientRect(),substituted=!snapshot.chrome.has(element);
+      const oldLeft=substituted?previous.right-final.width:previous.left;
+      const oldTop=substituted?previous.bottom-final.height:previous.top;
+      const dx=(oldLeft-final.left)/scale,dy=(oldTop-final.top)/scale;
+      if(Math.abs(dx)<.5&&Math.abs(dy)<.5)continue;
+      if(element.matches(".primary-tools")){
+        // Translating this ancestor would change the containing block of its
+        // fixed AI controls. Only this small dock animates its CSS position.
+        const style=getComputedStyle(element),left=parseFloat(style.left),bottom=parseFloat(style.bottom);
+        sidebarAnimations.push(element.animate([{left:`${left+dx}px`,bottom:`${bottom-dy}px`},{left:`${left}px`,bottom:`${bottom}px`}],timing));
+      }else sidebarAnimations.push(element.animate([{translate:`${dx}px ${dy}px`},{translate:"0px 0px"}],timing));
+    }
+    Promise.allSettled(sidebarAnimations.map(animation=>animation.finished)).then(()=>{
+      if(generation!==sidebarMotionGeneration)return;
+      finishSidebarMotion();
+    });
+  }
+  // Finish movement before a canvas gesture reads its pointer coordinates.
+  function finishSidebarMotion() {
+    if(!sidebarMotionRunning)return;
+    sidebarMotionGeneration++;
+    restoreSidebarMotion();sidebarMotionRunning=false;
+    for(const panel of motionPanels)panel?.dispatchEvent(new Event("penecho-sidebar-motion-end"));
+    window.dispatchEvent(new Event("penecho-sidebar-settled"));
+  }
+  sidebarFrame?.addEventListener("pointerdown",finishSidebarMotion,true);
+  motionViewport?.addEventListener("wheel",finishSidebarMotion,{capture:true,passive:true});
+  window.addEventListener("resize",finishSidebarMotion);
+  window.PenEchoShellMotion=Object.freeze({capture:captureSidebarMotion,play:playSidebarMotion,isRunning:()=>sidebarMotionRunning});
+
+  // Root :has([hidden]) rules invalidate thousands of unrelated descendants
+  // when a preview or panel toggles visibility. Mirror only the hint/chrome
+  // state at its actual consumers instead.
+  const hintSlot=document.querySelector("#pageHintSlot"),textHint=document.querySelector(".text-input-hint"),toolHint=document.querySelector("#canvasHint");
+  const lightweightTargets=[sidebarToolbar,...motionPanels].filter(Boolean),pausedNotice=document.querySelector("#canvasAutoPausedNotice"),pausedTools=document.querySelector("#aiToolsSection");
+  function syncNavigationChrome() {
+    if(!motionViewport)return;
+    const classes=motionViewport.classList;
+    const paused=Boolean(pausedNotice&&!pausedNotice.hidden);if(pausedTools&&pausedTools.classList.contains("studio-auto-paused")!==paused)pausedTools.classList.toggle("studio-auto-paused",paused);
+    const hasToolHint=Boolean(toolHint&&!toolHint.hidden);
+    const mode=textHint&&!textHint.hidden?"text":classes.contains("navigation-locked")?"locked":classes.contains("is-navigating")&&!hasToolHint?"pan":"none";
+    if(hintSlot&&hintSlot.dataset.navigationHint!==mode)hintSlot.dataset.navigationHint=mode;
+    const navigating=String((classes.contains("is-navigating")&&!hasToolHint)||classes.contains("navigation-locked"));if(hintSlot&&hintSlot.dataset.navigationActive!==navigating)hintSlot.dataset.navigationActive=navigating;
+    const light=classes.contains("canvas-chrome-lightweight")||classes.contains("is-drawing");
+    for(const target of lightweightTargets)if(target.classList.contains("studio-chrome-lightweight")!==light)target.classList.toggle("studio-chrome-lightweight",light);
+  }
+  const navigationChromeObserver=new MutationObserver(syncNavigationChrome);
+  if(motionViewport)navigationChromeObserver.observe(motionViewport,{attributes:true,attributeFilter:["class"]});
+  for(const target of [textHint,toolHint,pausedNotice])if(target)navigationChromeObserver.observe(target,{attributes:true,attributeFilter:["hidden"]});
+  syncNavigationChrome();
+
+  const viewControls = document.querySelector("#canvasZoomControls");
+  const fitButton = document.querySelector("#canvasFitContents");
+  const lockButton = document.querySelector("#canvasNavigationLock");
+  const separator = document.createElement("span");
+  separator.className = "canvas-view-divider";
+  separator.setAttribute("aria-hidden", "true");
+  function groupViewControls() {
+    if (document.body.dataset.theme === "studio" && matchMedia("(min-width: 701px)").matches) {
+      if (fitButton.parentElement !== viewControls) viewControls.append(separator, fitButton, lockButton);
+    } else if (fitButton.parentElement === viewControls) {
+      viewControls.before(fitButton, lockButton);
+      separator.remove();
+    }
+  }
+  groupViewControls();
+  window.addEventListener("resize", groupViewControls);
+  new MutationObserver(groupViewControls).observe(document.body, { attributes:true, attributeFilter:["data-theme"] });
+
+  const dock = document.querySelector(".primary-tools");
+  const aiTools = document.querySelector("#aiToolsSection");
+  const zoomControls = document.querySelector("#canvasZoomControls");
+  if (dock && aiTools && zoomControls) {
+    const space = document.createElement("span");
+    space.className = "shell-dock-space";
+    space.setAttribute("aria-hidden", "true");
+    document.body.append(space);
+    const dockPropertyTargets=[...document.querySelectorAll(".primary-tools, .ai-tools-section, .canvas-zoom-controls, .canvas-navigation-lock, .canvas-fit-contents, .canvas-navigation-actions, .canvas-auto-paused-notice, #mcpCanvasNotice, .shell-dock-space, .pen-size-popover, #autoDelayPopover, #effortPopover, main > footer")];
+    for(const target of dockPropertyTargets)target.classList.add("shell-geometry");
+    let frame = 0, lastDockInputs = "";
+    const dockSizeTargets=[space,dock,aiTools,zoomControls,motionViewport,document.querySelector("#canvasAutoPausedNotice")].filter(Boolean);
+    function dockInputs() {
+      const body=document.body,viewport=motionViewport.getBoundingClientRect();
+      return JSON.stringify([body.className,body.dataset.theme,body.dataset.canvasMode,document.documentElement.lang,document.documentElement.dataset.penechoPageScale,viewport.left,viewport.width,...dockSizeTargets.flatMap(element=>[element.offsetWidth,element.offsetHeight])]);
+    }
+    function layoutDock(force=false) {
+      frame = 0;
+      if(sidebarMotionRunning&&force!==true)return;
+      const body = document.body;
+      if (body.dataset.theme !== "studio" || !matchMedia("(min-width: 701px)").matches) {
+        delete body.dataset.shellDockLayout;
+        lastDockInputs = "";
+        return;
+      }
+      // Our own width/row updates notify ResizeObserver again. Reuse the
+      // settled arrangement instead of cycling through all three layouts.
+      if(force!==true&&lastDockInputs===dockInputs())return;
+      const widthClass=[...document.querySelector(".canvas-frame").classList].find(name=>/^canvas-agent-width-\d+$/.test(name));
+      const agentWidth=widthClass?`${Number(widthClass.split("-").at(-1))*2.5}%`:"390px";
+      for(const target of dockPropertyTargets)if(target.style.getPropertyValue("--pe-shell-agent-width")!==agentWidth)target.style.setProperty("--pe-shell-agent-width",agentWidth);
+      const scale = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      const measure = element => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left / scale, width: rect.width / scale, height: rect.height / scale };
+      };
+      const viewport = measure(document.querySelector("#viewport"));
+      space.style.left = `${viewport.left + 16}px`;
+      space.style.right = "auto";
+      space.style.width = `${Math.max(0, viewport.width - 32)}px`;
+      const available = measure(space);
+      if (!available.width || !dock.getClientRects().length) return;
+      // Measure both arrangements synchronously; only the selected result paints.
+      body.dataset.shellDockMeasuring = "";
+      delete body.dataset.shellDockSides;
+      body.dataset.shellDockLayout = "horizontal";
+      const toolsWidth = Math.ceil(measure(dock).width);
+      let viewWidth = measure(zoomControls).width;
+      const pauseNotice = document.querySelector("#canvasAutoPausedNotice");
+      const aiSurface = pauseNotice && !pauseNotice.hidden ? pauseNotice : aiTools;
+      let aiWidth = Math.ceil(measure(aiSurface).width);
+      const gap = 8;
+      let mode = "horizontal";
+      if (viewWidth + toolsWidth + aiWidth + gap * 2 > available.width) {
+        body.dataset.shellDockLayout = "vertical";
+        viewWidth = measure(zoomControls).width;
+        aiWidth = Math.ceil(measure(aiSurface).width);
+        mode = "vertical";
+        if (viewWidth + toolsWidth + aiWidth + gap * 2 > available.width) {
+          mode = "rows";
+          body.dataset.shellDockLayout = mode;
+          viewWidth = measure(zoomControls).width;
+          aiWidth = Math.ceil(measure(aiSurface).width);
+          if (viewWidth + aiWidth + gap > available.width || (aiSurface === pauseNotice && aiWidth < 180)) {
+            body.dataset.shellDockSides = "compact";
+            viewWidth = measure(zoomControls).width;
+            aiWidth = Math.ceil(measure(aiSurface).width);
+          }
+        }
+      }
+      // Prefer the canvas center, then yield to the fixed edge controls before
+      // adding a second row. All measurements use the actual remaining canvas.
+      const centeredX = available.left + Math.max(0, (available.width - toolsWidth) / 2);
+      const toolsX = mode === "rows" ? centeredX : Math.max(available.left + viewWidth + gap,
+        Math.min(centeredX, available.left + available.width - aiWidth - gap - toolsWidth));
+      const aiX = available.left + available.width - aiWidth;
+      const viewHeight = measure(zoomControls).height;
+      const aiHeight = measure(aiSurface).height;
+      const values = {
+        "view-x": available.left,
+        "tools-x": toolsX,
+        "tools-width": measure(dock).width,
+        "ai-x": aiX,
+        "tools-max": available.width,
+        "canvas-width": available.width,
+        "notice-bottom": mode === "rows" ? 16 + Math.max(viewHeight, aiHeight) + 44 + 24 : 16 + Math.max(measure(dock).height, viewHeight, aiHeight) + 12,
+        "ai-height": aiHeight,
+        "view-height": viewHeight,
+        "row-height": Math.max(measure(dock).height, viewHeight, aiHeight),
+      };
+      for (const target of dockPropertyTargets) for (const [key, value] of Object.entries(values)) {
+        const property=`--pe-shell-${key}`,next=`${value}px`;
+        if(target.style.getPropertyValue(property)!==next)target.style.setProperty(property,next);
+      }
+      body.dataset.shellDockLayout = mode;
+      delete body.dataset.shellDockMeasuring;
+      lastDockInputs = dockInputs();
+    }
+    layoutDockForMotion=()=>layoutDock(true);
+    function scheduleDockLayout() {
+      if (!frame) frame = requestAnimationFrame(()=>layoutDock());
+    }
+    const sizes = new ResizeObserver(scheduleDockLayout);
+    for (const element of dockSizeTargets) sizes.observe(element);
+    const changes = new MutationObserver(scheduleDockLayout);
+    changes.observe(document.body, { attributes: true, attributeFilter: ["class", "data-theme", "data-canvas-mode"] });
+    const canvasFrame = document.querySelector(".canvas-frame");
+    if (canvasFrame) changes.observe(canvasFrame, { attributes: true, attributeFilter: ["class"] });
+    window.addEventListener("resize", scheduleDockLayout);
+    window.addEventListener("penecho-sidebar-settled", scheduleDockLayout);
+    changes.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-penecho-page-scale"] });
+    document.fonts?.ready.then(()=>{lastDockInputs="";scheduleDockLayout();});
+    scheduleDockLayout();
+  }
+
+  applyCopy();
+  new MutationObserver(applyCopy).observe(document.documentElement, { attributes:true, attributeFilter:["lang"] });
+})();

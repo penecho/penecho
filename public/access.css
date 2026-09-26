@@ -155,7 +155,7 @@ svg { display: block; }
 .access-keypad button:hover { color: var(--pe-accent-label); border-color: color-mix(in srgb, var(--pe-accent) 45%, var(--pe-line)); background: var(--pe-hover); }
 .access-keypad button:active { background: var(--pe-surface-pressed); transform: scale(.97); }
 .access-keypad .access-key-action { color: var(--pe-ink-2); font-size: 16px; font-weight: var(--pe-type-medium); }
-.access-keypad .access-key-action svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.access-keypad .access-key-action svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The full-width confirmation keeps its 44px presence; hierarchy still comes
    from the single filled primary and its position. */

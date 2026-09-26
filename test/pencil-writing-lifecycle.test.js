@@ -26,6 +26,7 @@ function setup() {
     finishDrawing:()=>{calls.push("finish"); context.state.drawing=null;},
     canvasAgentNavigationPointerDidEnd:id=>calls.push(["navigationEnd",id]),
     requestInteractionLayerRender:()=>calls.push("render"),
+    canvasAgentSyncSendAvailability:()=>calls.push("sync-send"),
   });
   vm.runInContext(extract(agent,"canvasAgentFinishInkStroke"),context);
   vm.runInContext(ui.slice(ui.indexOf("function canvasPencilWritingActive"),ui.indexOf("function canvasPenEraserActive")),context);

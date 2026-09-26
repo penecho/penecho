@@ -1,6 +1,6 @@
 {
   "name": "penecho-cloud",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A shared visual workspace for AI agents: create diagrams and interactive previews, then revise them from handwritten feedback.",
   "author": {
     "name": "PenEcho",

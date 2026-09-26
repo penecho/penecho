@@ -5,7 +5,7 @@ function chunk(start,end){return source.slice(source.indexOf(start),source.index
 test("snapshot owner prevents overlapping capture and releases after completion",async()=>{
   let finish;const messages=[];
   const context=vm.createContext({parent:{postMessage:m=>messages.push(m)},runtimeVersion:3,scienceMode:false,
-    schedulePresentationSize:()=>{},snapshotDebugLog:()=>{},snapshotDocument:()=>new Promise(r=>{finish=r;}),scienceSnapshot:()=>{},});
+    reportPresentationScrollExtent:()=>{},snapshotDebugLog:()=>{},snapshotDocument:()=>new Promise(r=>{finish=r;}),scienceSnapshot:()=>{},});
   vm.runInContext(chunk('    let activeSnapshot =','    async function snapshotPrimarySvg'),context);
   const first=context.snapshot({requestId:"first"});
   await context.snapshot({requestId:"second"});

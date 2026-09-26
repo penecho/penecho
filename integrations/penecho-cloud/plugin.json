@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "penecho-cloud",
+  "version": "1.1.0",
+  "description": "Create editable diagrams and interactive previews in a browser Canvas. Start as a guest, then sign in for Cloud saving and PenEcho Agent.",
+  "author": { "name": "PenEcho", "url": "https://penecho.ai" },
+  "homepage": "https://penecho.ai",
+  "repository": "https://github.com/penecho/penecho",
+  "license": "MIT",
+  "keywords": ["canvas", "diagrams", "mcp", "visualization"]
+}

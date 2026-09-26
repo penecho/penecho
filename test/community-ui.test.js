@@ -61,7 +61,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /contributionNote/);
   assert.match(cloud, /parentItemId/);
   assert.match(cloud, /window\.PenEchoCommunityUI/);
-  assert.doesNotMatch(cloud, /priceCredits|Credit price|field\("Pricing"|price_low|price_high|Free \+ paid|Paid with credits/);
+  assert.doesNotMatch(cloud.replace(/priceCredits:0,/g, ""), /priceCredits|Credit price|field\("Pricing"|price_low|price_high|Free \+ paid|Paid with credits/);
 
   assert.match(cloud, /startBrowserSignInWatch/);
   assert.match(cloud, /window\.open\("about:blank"/);

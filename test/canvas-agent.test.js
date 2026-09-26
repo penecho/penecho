@@ -603,7 +603,8 @@ test("PenEcho Agent maps full API endpoints back to pi-ai provider base URLs",as
     kimiCoding=connectionProfile({id:"kimi-coding",apiFormat:"openai",apiPreset:"kimi-global-coding",apiUrl:"https://api.kimi.com/coding/v1",apiModel:"k3-256k",effort:"medium"}),
     kimiOther=connectionProfile({id:"kimi-other",apiFormat:"openai",apiUrl:"https://api.kimi.com/v1",apiModel:"k3-256k",effort:"medium"}),
     claude=connectionProfile({id:"claude",apiFormat:"anthropic",apiUrl:"https://api.anthropic.com",apiModel:"claude-opus-5",effort:"xhigh"}),
-    disabled=connectionProfile({id:"disabled",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-5.6-sol",effort:"none"});
+    disabled=connectionProfile({id:"disabled",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-5.6-sol",effort:"none"}),
+    noThinking=connectionProfile({id:"no-thinking",apiFormat:"openai",apiUrl:"https://api.openai.com/v1",apiModel:"gpt-4o-mini",effort:"high"});
   assert.equal(openai.config.baseURL,"https://gateway.test/openai/v1");
   assert.equal(openai.config.streamIdleTimeoutMs,180_000);
   assert.equal(Object.hasOwn(openai.config,"timeoutMs"),false);
@@ -636,6 +637,9 @@ test("PenEcho Agent maps full API endpoints back to pi-ai provider base URLs",as
   assert.deepEqual(claude.config.models[0].compat,{forceAdaptiveThinking:true});
   assert.equal(disabled.reasoningEffort,"off");
   assert.equal(disabled.config.models[0].reasoningEfforts.off,"none");
+  assert.equal(noThinking.reasoningEffort,undefined);
+  assert.equal(noThinking.config.models[0].reasoningEfforts,false);
+  assert.equal(connectionProfile({id:"declared-no-thinking",apiFormat:"openai",apiUrl:"https://gateway.test/v1",apiModel:"private-model",supportsThinking:false}).config.models[0].reasoningEfforts,false);
   assert.deepEqual(resolveCanvasAgentRequestEffort({effort:"high"},"  Provider_Native  "),{selected:"provider_native",effective:"provider_native"});
   assert.throws(()=>resolveCanvasAgentRequestEffort({effort:"high"},"provider\nnative"),/reasoning effort is invalid/);
 });
@@ -3027,7 +3031,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(selectProjectSource,/canvasAgentChangeContext\(\{submitExecution\}\)/);
   assert.doesNotMatch(selectProjectSource,/canvasAgentBeginLocalConversation|canvasAgentDropSessionIdentity|canvasAgentStartNewConversation/);
   assert.doesNotMatch(source,/function canvasAgentSetAccessMode|canvasAgentProjectFull\.addEventListener/);
-  assert.match(html,/<dialog id="canvasAgentProjectRemoveDialog"[^>]*class="studio-session-delete-dialog"[^>]*role="alertdialog"[^>]*aria-modal="true"[^>]*data-pe-surface="alert"[^>]*data-pe-size="xs"[^>]*data-pe-layout="single"/);
+  assert.match(html,/<dialog id="canvasAgentProjectRemoveDialog"[^>]*class="studio-session-delete-dialog"[^>]*role="alertdialog"[^>]*aria-modal="true"[^>]*data-pe-surface="alert"[^>]*data-pe-size="s"[^>]*data-pe-layout="single"/);
   assert.match(html,/id="canvasAgentProjectRemoveCancel"[^>]*data-pe-button="secondary"[\s\S]*?id="canvasAgentProjectRemoveConfirm"[^>]*data-pe-button="danger-primary"/);
   assert.match(functionSource(source,"canvasAgentRemoveProject"),/canvasAgentRemoveFolderConfirm[\s\S]*?canvasAgentRemoveUploadConfirm[\s\S]*?canvasAgentProjectRemoveDialog\.showModal\(\)/);
   assert.doesNotMatch(functionSource(source,"canvasAgentRemoveProject"),/window\.confirm/);
@@ -3144,7 +3148,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentBeginSubmitExecution\(selectedAiConnectionId\(\)\)[\s\S]*canvasAgentBindSubmitExecution\(submitExecution\)[\s\S]*canvasAgentInitialTurnState\(submitExecution\)[\s\S]*canvasAgentAssertSubmitExecution\(submitExecution\)[\s\S]*canvasAgentSendRequest/);
   assert.match(functionSource(source,"canvasAgentExecuteTool"),/canvasAgentCapture\(args,\{signal:execution\.controller\.signal,assertCurrent:\(\)=>canvasAgentAssertToolExecution\(execution\)\}\)/);
   assert.match(functionSource(canvasRuntime,"requestWidgetSnapshot"),/signal\?\.aborted[\s\S]*pending=\{ widget, resolve, reject, timer, contentVersion:widget\.contentVersion, signal, abort, highResolution, fullContent \}[\s\S]*signal\?\.addEventListener\("abort",abort/);
-  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/requestWidgetSnapshot\(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution\)/);
+  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/requestWidgetSnapshot\(widget, timeoutMs, true, signal, highResolution\)/);
   assert.match(peer,/if \(!envelope\.canvasSessionId \|\| envelope\.canvasSessionId !== state\.session\.id\) return/);
   assert.match(peer,/const generation = state\.sessionGeneration, session = state\.session/);
   assert.match(peer,/sendForGeneration\(generation\)\('error', \{ message:String\(error\?\.message \|\| error \|\| 'PenEcho Agent failed\.'\), fatal:false \}, session\)/);
@@ -3267,7 +3271,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(persistence,"loadSnapshot"),/wantsConversationForCanvas\?\.\(\{ id:item\.id, location \}\)[\s\S]*?canvasAgentCanvasDidChange\(\{ id:item\.id, location \},\{clearProject:true,deferConversationStart:restoreStudioConversation\}\)/);
   assert.match(functionSource(persistence,"startBlankCanvas"),/canvasAgentCanvasDidChange\(null,\{clearProject:true\}\)/);
   assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/clearProject[\s\S]*projectSelectionRevision\+\+[\s\S]*projectId=""[\s\S]*projectHistoryLoaded=true[\s\S]*localStorage\.removeItem\(CANVAS_AGENT_PROJECT_KEY\)[\s\S]*canvasAgentRenderProjects\(\)[\s\S]*canvasAgentHideProjectPopover\(\)/);
-  assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/if \(state\.canvasAgentAutoOpen && \(canvasAgentPanel\.hidden \|\| !document\.body\.classList\.contains\("canvas-agent-open"\)\)\) openCanvasAgent\(\{focus:false\}\)/);
+  assert.match(functionSource(source,"canvasAgentCanvasDidChange"),/if \(!window\.PENECHO_CONFIG\?\.guestCanvas && state\.canvasAgentAutoOpen && \(canvasAgentPanel\.hidden \|\| !document\.body\.classList\.contains\("canvas-agent-open"\)\)\) openCanvasAgent\(\{focus:false\}\)/);
   assert.match(core,/canvasAgentNoProject: "No project"/);
   assert.match(zh,/canvasAgentNoProject: "无项目"/);
   assert.match(source,/function openCanvasAgent\(\{focus=false\}=\{\}\)[\s\S]*canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput/);
@@ -3367,28 +3371,30 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(css,/@media \(max-width: 700px\)[\s\S]*?\.canvas-agent-panel\s*\{[^}]*height: 66\.6667%;[^}]*min-height: 0/s);
 });
 
-test("PenEcho Agent open panel and active turns suppress Auto AI while submitted turns cancel only automatic requests",()=>{
+test("PenEcho Agent panel pauses new Auto AI scheduling without cancelling independent requests",()=>{
   const agent=read("src/client/app/canvas-agent-runtime.js"),ai=read("src/client/app/ai-runtime.js"),core=read("src/client/app/core.js"),zh=read("public/locales/zh.js"),
     suppression=functionSource(agent,"canvasAgentSuppressesAutomaticAI"),beginRequest=functionSource(agent,"canvasAgentBeginRequest"),sendRequest=functionSource(agent,"canvasAgentSendRequest"),
     stopAutomatic=functionSource(ai,"stopActiveAutomaticAI"),requestAI=functionSource(ai,"requestAI");
   assert.match(functionSource(agent,"canvasAgentHasFocus"),/!canvasAgentPanel\.hidden[\s\S]*canvasAgentPanel\.contains\(document\.activeElement\)/);
-  assert.match(suppression,/canvasAgent\.requestPending \|\| canvasAgent\.running \|\| canvasAgentIsOpen\(\)/);
+  assert.match(suppression,/canvasAgentIsOpen\(\)/);
+  assert.doesNotMatch(suppression,/canvasAgent\.(requestPending|running)/);
   assert.match(functionSource(ai,"launchAutomaticAI"),/canvasAgentSuppressesAutomaticAI\(\)/);
   assert.match(functionSource(ai,"schedule"),/clearTimeout\(state\.timer\)[\s\S]*canvasAgentSuppressesAutomaticAI\(\)/);
   assert.match(stopAutomatic,/preparation\?\.action !== "auto" && active\?\.action !== "auto"[\s\S]*supersedeActiveAI\(reason\)/);
   assert.match(requestAI,/preparation = \{[\s\S]*?action,[\s\S]*?widgetEdit/);
-  assert.match(beginRequest,/requestPending = true[\s\S]*canvasAgentPauseAutomaticAI\(\)[\s\S]*stopActiveAutomaticAI\("canvas-agent-request"\)[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
+  assert.match(beginRequest,/requestPending = true[\s\S]*canvasAgentPauseAutomaticAI\(\)[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
+  assert.doesNotMatch(beginRequest,/stopActiveAutomaticAI|supersedeActiveAI/);
   assert.match(sendRequest,/if \(!canvasAgent\.requestPending\) canvasAgentBeginRequest\(\)[\s\S]*canvasAgentSendEnvelope\(type,payload\)/);
   assert.match(sendRequest,/catch \(error\)[\s\S]*canvasAgentRequestDidNotSend\(\)/);
   assert.match(functionSource(agent,"canvasAgentSetRunning"),/if \(running\) canvasAgentPauseAutomaticAI\(\);[\s\S]*else canvasAgentResumeAutomaticAI\(\)/);
-  assert.match(functionSource(agent,"canvasAgentAutomaticAIStatusKey"),/if \(!state\.auto\) return null;[\s\S]*requestPending \|\| canvasAgent\.running[\s\S]*canvasAgentAutoAIRequestPaused[\s\S]*canvasAgentIsOpen\(\)[\s\S]*canvasAgentAutoAIFocusPaused/);
+  assert.match(functionSource(agent,"canvasAgentAutomaticAIStatusKey"),/if \(!state\.auto\) return null;[\s\S]*canvasAgentIsOpen\(\)[\s\S]*canvasAgentAutoAIFocusPaused/);
   assert.match(functionSource(agent,"canvasAgentSyncAutomaticAIStatus"),/automaticAIStatusRestore = \{ key:state\.statusKey, text:status\.textContent \}[\s\S]*setStatusKey\(nextKey\)[\s\S]*CANVAS_AGENT_AUTO_AI_STATUS_KEYS\.has\(state\.statusKey\)[\s\S]*setStatusKey\(previous\.key\)/);
   assert.match(functionSource(agent,"canvasAgentPauseAutomaticAI"),/canvasAgentSyncAutomaticAIStatus\(\)/);
   assert.match(functionSource(agent,"canvasAgentResumeAutomaticAI"),/canvasAgentSyncAutomaticAIStatus\(\)/);
   assert.match(functionSource(core,"setAutoEnabled"),/updateAutoControl\(\);[\s\S]*canvasAgentSyncAutomaticAIStatus\(\)/);
   for (const source of [core,zh]) {
     assert.match(source,/canvasAgentAutoAIFocusPaused/);
-    assert.match(source,/canvasAgentAutoAIRequestPaused/);
+    assert.doesNotMatch(source,/canvasAgentAutoAIRequestPaused/);
   }
   assert.match(agent,/canvasAgentPanel\.addEventListener\("focusin",canvasAgentPauseAutomaticAI\)/);
   assert.match(agent,/canvasAgentPanel\.addEventListener\("focusout",\(\)=>queueMicrotask\(canvasAgentResumeAutomaticAI\)\)/);
@@ -3403,11 +3409,11 @@ test("PenEcho Agent open panel and active turns suppress Auto AI while submitted
   assert.match(agent,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"/);
 });
 
-test("PenEcho Agent explains each Auto AI pause reason and restores the prior top status",()=>{
+test("PenEcho Agent keeps the open-panel Auto AI notice during requests and restores the prior top status",()=>{
   const source=read("src/client/app/canvas-agent-runtime.js"),runtime=vm.runInNewContext(`(()=>{
     let panelOpen=true;
-    const CANVAS_AGENT_AUTO_AI_STATUS_KEYS=new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused"]),
-      inside={},outside={},document={activeElement:outside,body:{classList:{contains:()=>panelOpen}}},canvasAgentPanel={hidden:false,contains:target=>target===inside},
+    const CANVAS_AGENT_AUTO_AI_STATUS_KEYS=new Set(["canvasAgentAutoAIFocusPaused"]),
+      inside={},outside={},notice={hidden:true,querySelector:()=>({textContent:""})},document={activeElement:outside,querySelector:()=>notice,body:{classList:{contains:()=>panelOpen,toggle(){}}}},canvasAgentPanel={hidden:false,contains:target=>target===inside},
       status={textContent:"Ready"},state={auto:true,statusKey:"ready"},canvasAgent={requestPending:false,running:false,automaticAIStatusRestore:null};
     const t=key=>key==="ready"?"Ready":key,setStatusKey=key=>{state.statusKey=key;status.textContent=t(key);},setStatus=(text,key=null)=>{state.statusKey=key;status.textContent=text;};
     ${functionSource(source,"canvasAgentIsOpen")}
@@ -3421,7 +3427,7 @@ test("PenEcho Agent explains each Auto AI pause reason and restores the prior to
   assert.equal(runtime.state.statusKey,"canvasAgentAutoAIFocusPaused");
   runtime.canvasAgent.requestPending=true;
   runtime.sync();
-  assert.equal(runtime.state.statusKey,"canvasAgentAutoAIRequestPaused");
+  assert.equal(runtime.state.statusKey,"canvasAgentAutoAIFocusPaused");
   runtime.canvasAgent.requestPending=false;
   runtime.sync();
   assert.equal(runtime.suppresses(),true);
@@ -3559,7 +3565,7 @@ test("PenEcho Agent validates capture delivery and browser target errors without
   assert.match(functionSource(source,"canvasAgentAssertToolKeys"),/canvas_read:\["objectId","artifactId","resource","startLine","endLine"\]/);
   assert.match(functionSource(source,"canvasAgentAssertToolKeys"),/canvas_capture:\["target","objectId","region","quality","coordinates","deliverToUser"\]/);
   const browserCaptureSource=functionSource(source,"canvasAgentCapture");
-  assert.match(browserCaptureSource,/prepareVisibleWidgetSnapshots\(region,false,signal\)/);
+  assert.match(browserCaptureSource,/prepareVisibleWidgetSnapshots\(region,false,signal,false,remaining\)/);
   assert.match(browserCaptureSource,/snapshotVersion<widget\.contentVersion[\s\S]*?WIDGET_CAPTURE_UNAVAILABLE/);
   const unavailableCapture=vm.runInNewContext(`(${browserCaptureSource.replace(/^function /,"async function ")})`,{
     CANVAS_AGENT_DETAIL_CAPTURE_POLICY:{maxLongEdge:1600,maxPixels:1600*1600},
@@ -3567,6 +3573,7 @@ test("PenEcho Agent validates capture delivery and browser target errors without
     canvasAgentObject:()=>({kind:"widget"}),
     canvasAgentTargetRegion:()=>({x:0,y:0,w:100,h:100}),
     document:{createElement:()=>({getContext:()=>({})})},
+    performance:{now:()=>0},WIDGET_SNAPSHOT_TIMEOUT_MS:20000,
     prepareVisibleWidgetSnapshots:async()=>({total:1,captured:0,missing:1}),
     capturableWidgets:()=>[{id:"widget-unready",snapshotImage:null,snapshotVersion:-1,contentVersion:0}],
     canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
@@ -3618,6 +3625,40 @@ test("PenEcho Agent reports an empty off-canvas capture without dereferencing or
   assert.strictEqual(region({target:"canvas"}),content,"off-screen content remains capturable by canvas target");
   viewport={x:0,y:0,w:100,h:80};
   assert.strictEqual(region({target:"viewport"}),viewport);
+});
+
+test("PenEcho Agent completes the first capture when Widget load changes its snapshot version",async()=>{
+  const source=read("src/client/app/canvas-agent-runtime.js"),widget={id:"cold-widget",x:0,y:0,w:100,h:100,contentVersion:0,snapshotVersion:-1,snapshotImage:null},
+    context2d={fillRect(){},save(){},scale(){},translate(){},restore(){},drawImage(){}},
+    canvas={width:0,height:0,getContext:()=>context2d},
+    policy={id:"basic",maxLongEdge:1600,maxPixels:2560000,maxBytes:1000000},
+    transient=Object.assign(new Error("Widget changed while loading"),{code:"WIDGET_CONTENT_CHANGED"});
+  let attempts=0;
+  const context={
+    performance:{now:()=>0},WIDGET_SNAPSHOT_TIMEOUT_MS:20000,
+    CANVAS_AGENT_LAYOUT_CAPTURE_POLICY:policy,
+    canvasAgentTargetRegion:()=>({x:0,y:0,w:100,h:100}),
+    document:{createElement:()=>canvas},
+    prepareVisibleWidgetSnapshots:async(_region,_bestEffort,_signal,_highResolution,remaining)=>{
+      assert.equal(remaining,20000);
+      attempts++;
+      if(attempts===1){widget.contentVersion++;throw transient;}
+      widget.snapshotImage={};widget.snapshotVersion=widget.contentVersion;
+    },
+    capturableWidgets:()=>[widget],
+    canvasAgentToolError:(code,message,details)=>Object.assign(new Error(message),{code,details}),
+    state:{paint:{paper:"#fff"},textBoxes:[],userRevision:1},
+    drawAnimationsToContext(){},drawWidgetsToContext(){},drawImagesToContext(){},forTiles(){},drawSharpOverlays(){},
+    canvasAgentGridStep:()=>20,
+    canvasAgentCompressedCanvas:async()=>({canvas,blob:{type:"image/webp",size:3},mediaType:"image/webp",encodeQuality:.8}),
+    canvasAgentReadDataUrl:async()=>"data:image/webp;base64,YQ==",
+    canvasAgentViewFacts:()=>({viewRevision:1}),
+  };
+  const capture=vm.runInNewContext(`(async ${functionSource(source,"canvasAgentCapture")})`,context);
+  const result=await capture({target:"canvas",quality:"basic",coordinates:"none"},{});
+  assert.equal(attempts,2);
+  assert.equal(result.dataUrl,"data:image/webp;base64,YQ==");
+  assert.equal(widget.snapshotVersion,widget.contentVersion);
 });
 
 test("PenEcho Agent aborts stale Widget snapshot requests before they can update capture cache",async()=>{

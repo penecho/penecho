@@ -1,9 +1,9 @@
 {
   "name": "penecho",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "config": {
     "forge": "./forge.config.js",
-    "desktopVersion": "1.3.3"
+    "desktopVersion": "1.3.5"
   },
   "description": "Turn research, files, and canvas context into editable visual work with AI",
   "author": "PenEcho contributors",
@@ -28,6 +28,7 @@
     "server.js",
     "src/",
     "scripts/build-client.js",
+    "scripts/build-playground.cjs",
     "scripts/build-canvas-file-patch.js",
     "scripts/build-visual-explainer-vendor.js",
     "scripts/build-harness-backports.cjs",
@@ -44,6 +45,11 @@
     "public/canvas-agent-activity.css",
     "public/canvas-agent-activity.js",
     "public/app.js",
+    "public/playground.css",
+    "public/studio-shell.css",
+    "public/studio-shell.js",
+    "public/playground/liveclay-v1.js",
+    "public/playground/three-LICENSE.txt",
     "public/draw.js",
     "public/selection.js",
     "public/tour.js",
@@ -100,7 +106,7 @@
   "scripts": {
     "start": "node cli.js",
     "dev": "node server.js",
-    "build:client": "node scripts/build-client.js",
+    "build:client": "npm run build:playground && node scripts/build-client.js",
     "build:visual-explainer-vendor": "node scripts/build-visual-explainer-vendor.js",
     "build:harness-backports": "node scripts/build-harness-backports.cjs",
     "check:harness-backports": "node scripts/build-harness-backports.cjs --check",
@@ -108,7 +114,7 @@
     "check:visual-explainer-vendor": "node scripts/build-visual-explainer-vendor.js --check",
     "preinstall": "node src/cli/node-version.js",
     "prepack": "npm run build:client && npm run build:visual-explainer-vendor && npm run build:architecture && npm run build:sequence && npm run build:workflow",
-    "check": "npm run check:workflow && npm run check:sequence && npm run check:architecture && npm run check:harness-backports && npm run check:client && npm run check:visual-explainer-vendor && node --check cli.js && node --check server.js && node --check scripts/build-client.js && node --check scripts/build-visual-explainer-vendor.js && node --check src/cli/main.js && node --check src/cli/node-version.js && node --check src/cli/configure-ui.js && node --check src/cli/update.js && node --check src/server/main.js && node --check src/server/model-evaluation.js && node --check src/server/public-fetch.js && node --check src/server/cloud-connector.js && node --check src/server/activity-timeout.js && node --check src/server/api-config.js && node --check src/server/api-stream.js && node --check src/server/widget-patch.js && node --check src/server/typeset.js && node --check src/server/canvas-agent/http.js && node --check src/server/canvas-agent/request-trace.js && node --check src/server/canvas-agent/protocol.mjs && node --check src/server/canvas-agent/decision-admission.mjs && node --check src/server/canvas-agent/cli-adapter.mjs && node --check src/server/canvas-agent/codex-native-host.mjs && node --check src/server/canvas-agent/runtime.mjs && node --check src/providers/reasoning-effort.js && node --check src/providers/kimi-cli.js && node --check src/providers/kimi-acp.js && node --check src/providers/codex-cli.js && node --check src/providers/claude-cli.js && node --check tools/electron/run-forge.js && node --check tools/mobile/build-mobile.js && node --check desktop/main.js && node --check desktop/canvas-preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/settings-contract.js && node --check public/access.js && node --check public/cloud-connect.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/summon.js && node --check public/page-scale.js && node --check public/widget-host.js && node --check public/visual-explainer-runtime.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
+    "check": "npm run check:workflow && npm run check:sequence && npm run check:architecture && npm run check:harness-backports && npm run check:playground && npm run check:client && npm run check:visual-explainer-vendor && node --check cli.js && node --check server.js && node --check scripts/build-client.js && node --check scripts/build-visual-explainer-vendor.js && node --check src/cli/main.js && node --check src/cli/node-version.js && node --check src/cli/configure-ui.js && node --check src/cli/update.js && node --check src/server/main.js && node --check src/server/model-evaluation.js && node --check src/server/public-fetch.js && node --check src/server/cloud-connector.js && node --check src/server/activity-timeout.js && node --check src/server/api-config.js && node --check src/server/api-stream.js && node --check src/server/widget-patch.js && node --check src/server/typeset.js && node --check src/server/canvas-agent/http.js && node --check src/server/canvas-agent/request-trace.js && node --check src/server/canvas-agent/protocol.mjs && node --check src/server/canvas-agent/decision-admission.mjs && node --check src/server/canvas-agent/cli-adapter.mjs && node --check src/server/canvas-agent/codex-native-host.mjs && node --check src/server/canvas-agent/runtime.mjs && node --check src/providers/reasoning-effort.js && node --check src/providers/kimi-cli.js && node --check src/providers/kimi-acp.js && node --check src/providers/codex-cli.js && node --check src/providers/claude-cli.js && node --check tools/electron/run-forge.js && node --check tools/mobile/build-mobile.js && node --check desktop/main.js && node --check desktop/canvas-preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/settings-contract.js && node --check public/access.js && node --check public/cloud-connect.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/summon.js && node --check public/page-scale.js && node --check public/widget-host.js && node --check public/visual-explainer-runtime.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
     "test": "node --test",
     "icons": "node scripts/generate-icons.js",
     "desktop": "node tools/electron/run-forge.js start",
@@ -127,7 +133,9 @@
     "build:sequence": "node scripts/build-sequence.js",
     "check:sequence": "node scripts/build-sequence.js --check",
     "build:workflow": "node scripts/build-workflow.js",
-    "check:workflow": "node scripts/build-workflow.js --check"
+    "check:workflow": "node scripts/build-workflow.js --check",
+    "build:playground": "node scripts/build-playground.cjs",
+    "check:playground": "node scripts/build-playground.cjs --check"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -184,7 +192,8 @@
     "pdf-parse": "2.4.5",
     "read-excel-file": "9.3.10",
     "sharp": "0.35.4",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "three": "0.184.0"
   },
   "devDependencies": {
     "elkjs": "0.12.0",

@@ -9,11 +9,21 @@ const {
   reasoningEffortTimeoutMultiplier,
   reasoningEffortMapping,
   isGlm53Model,
+  modelSupportsReasoningEffort,
 } = require("../src/providers/reasoning-effort.js");
 
 test("all new reasoning configurations default to medium", () => {
   assert.equal(normalizeReasoningEffort(""), "medium");
   assert.equal(normalizeReasoningEffort("medium"), "medium");
+});
+
+test("non-reasoning Chat models omit thinking parameters", () => {
+  for (const model of ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "openai/gpt-4.1-nano", "gpt-3.5-turbo"]) {
+    assert.equal(modelSupportsReasoningEffort(model),false);
+    assert.deepEqual(apiReasoningParameters({model,effort:"high"}),{});
+  }
+  assert.equal(modelSupportsReasoningEffort("gpt-5.6-sol"),true);
+  assert.deepEqual(apiReasoningParameters({model:"private-model",supportsThinking:false,effort:"high"}),{});
 });
 
 test("GLM-5.3 native levels never turn a light request into maximum or disabled thinking", () => {

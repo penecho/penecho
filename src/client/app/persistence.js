@@ -1,5 +1,5 @@
 // Canvas snapshots, export, drawing history, strokes, and lasso selection.
-  const SNAPSHOT_DB = "penecho-canvas-history",
+  const SNAPSHOT_DB = "penecho-canvas-history"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
     SNAPSHOT_TILE_DECODE_BATCH_SIZE = 8,
@@ -40,7 +40,8 @@
     historyDeletePending = null,
     historySelectedSnapshotId = null,
     historySelectedSnapshotLocation = null,
-    historyGridSelectionActivated = false;
+    historyGridSelectionActivated = false,
+    historyRecentView = false;
   function currentCanvasDisplayName() {
     return state.currentCanvasSuggestedName || state.currentSnapshotName;
   }
@@ -142,6 +143,8 @@
     renderServerProjectUi();
   }
   function setSnapshotLocation(location, { refresh = true } = {}) {
+    historyRecentView = false;
+    updateHistoryNavigation();
     if (!SNAPSHOT_LOCATIONS.has(location) || state.snapshotLocation === location) {
       updateSnapshotLocationUi();
       if (snapshotItemsLocation !== location && restoreHistoryPage()) renderSnapshotList();
@@ -268,7 +271,7 @@
       const active = snapshotLoadInProgress && button.dataset.snapshotId === snapshotLoadingId;
       const label = button.querySelector(".history-open-label");
       if (label) label.textContent = t(active ? "snapshotLoadingShort" : "historyOpenCanvas");
-      else button.textContent = t(active ? "snapshotLoadingShort" : "loadSnapshot");
+      else button.textContent = t(active ? "snapshotLoadingShort" : "historyOpenNow");
       if (active) button.setAttribute("aria-busy", "true");
       else button.removeAttribute("aria-busy");
     });
@@ -319,6 +322,7 @@
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
     const location = state.currentSnapshotLocation || (window.PENECHO_CONFIG?.browserCanvasEditing ? "cloud" : state.snapshotLocation),
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
@@ -1033,6 +1037,13 @@
   async function importCommunityCanvasArtifact(artifact, origin = null) {
     const parsed = await readSnapshotBundle(artifact),stamp=Date.now(),id=`community-${crypto.randomUUID?.() || stamp}`,
       item={ ...parsed.item,id,createdAt:stamp,updatedAt:stamp,name:String(parsed.item.name || "Community Canvas").slice(0,160),projectId:null };
+    const extensions=snapshotExtensionObject(item.bundleExtensions),
+      sourceDocument=canvasDocumentIdentity.normalizeMetadata(extensions.penechoDocument);
+    extensions.penechoWorkspace={version:1};
+    if(sourceDocument) {
+      extensions.penechoDocument={...sourceDocument,documentId:canvasClientId(),title:item.name,bindings:[],locators:[],processor:{kind:"penecho"}};
+    }
+    item.bundleExtensions=extensions;
     if (origin?.id && /^[0-9a-f-]{36}$/i.test(origin.id)) {
       item.bundleExtensions = {
         ...snapshotExtensionObject(item.bundleExtensions),
@@ -1262,7 +1273,9 @@
         id,
         createdAt,
         updatedAt,
-        name: requestedName || (overwriteId ? (existing ? existing.name : state.currentSnapshotName) : location === "cloud" ? "Untitled Canvas" : ""),
+        name: requestedName || (overwriteId
+          ? (existing ? existing.name : state.currentSnapshotName)
+          : (state.currentSnapshotHasExplicitName ? state.currentSnapshotName : "") || (location === "cloud" ? "Untitled Canvas" : "")),
         projectId:location === "server"
           ? overwriteId
             ? existing?.projectId || state.currentSnapshotProjectId || SERVER_DEFAULT_PROJECT_ID
@@ -1315,6 +1328,7 @@
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     return storedId;
   }
   async function readDeviceSnapshot(id) {
@@ -1440,6 +1454,7 @@
     updateHistoryReadControls();
     setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadRequesting"), 4);
     const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision,
+      loadIsApplying = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision+1,
       requireCurrent = () => { if (!loadIsCurrent()) throw Error(t("snapshotLoadChanged")); };
     let decodedTiles = null;
     try {
@@ -1496,7 +1511,8 @@
       restoreWidgets(item.widgets);
       applyTheme(item.theme);
       restoreImages(images);
-      await restoreTextBoxes(item.textBoxes, 1);
+      const textRestored=await restoreTextBoxes(item.textBoxes, 1, loadIsApplying);
+      if(textRestored===false||!loadIsApplying()) throw Error(t("snapshotLoadChanged"));
       if(typeof canvasDocumentsApplyView==="function")canvasDocumentsApplyView(item.view);
       else if (item.view) {
         state.scale = Math.max(0.03, Math.min(2, item.view.scale));
@@ -1516,13 +1532,15 @@
       restoreSnapshotCanvasObjectOrder(item.bundleExtensions);
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.snapshotSavedRevision = state.userRevision;
-      if(typeof canvasDocumentsAdopt==="function")await canvasDocumentsAdopt(item,location);
+      if(typeof canvasDocumentsAdopt==="function"&&!await canvasDocumentsAdopt(item,location,loadIsApplying))throw Error(t("snapshotLoadChanged"));
+      if(!loadIsApplying())throw Error(t("snapshotLoadChanged"));
       resetCanvasDefaultMode();
       const restoreStudioConversation=window.PenEchoStudioNavigator?.wantsConversationForCanvas?.({ id:item.id, location })===true;
       canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true,deferConversationStart:restoreStudioConversation});
       window.PenEchoStudioNavigator?.canvasDidLoad?.({ id:item.id, location });
       window.PenEchoStudioNavigator?.renderCanvases?.();
       window.PenEchoStudioNavigator?.updateDocument?.();
+      window.dispatchEvent(new Event("penecho:live-share-context-changed"));
       setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadApplying"), 100);
       render();
       void refreshVisibleTextBoxQuality();
@@ -1530,7 +1548,7 @@
       setStatusKey("snapshotLoaded");
       return true;
     } catch (error) {
-      window.PenEchoStudioNavigator?.cancelPendingConversation?.();
+      if(loadGeneration===state.snapshotLoadGeneration)window.PenEchoStudioNavigator?.cancelPendingConversation?.();
       if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
       if (loadGeneration !== state.snapshotLoadGeneration) return false;
       const message = t("snapshotLoadFailed").replace("{message}", String(error?.message || error));
@@ -1589,6 +1607,7 @@
     await refreshSnapshots();
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     setStatusKey("snapshotDeleted");
   }
   function requestSnapshotDelete(item, location = state.snapshotLocation) {
@@ -1657,7 +1676,7 @@
     const label = document.querySelector("#currentSnapshotLabel"),
       overwrite = document.querySelector("#newOverwrite"),
       title = document.querySelector("#newCanvasTitle"),
-      description = document.querySelector("#newCanvasDialog > form > p:not(.current-snapshot)"),
+      description = document.querySelector("#newCanvasDialog .pe-dialog-body > p:not(.current-snapshot)"),
       discard = document.querySelector("#newDiscard"),
       saveCopy = document.querySelector("#newSaveCopy"),
       loading = pendingCanvasTransition?.type === "load",
@@ -1705,6 +1724,9 @@
     if (state.selection) cancelSelection(true);
     clearTextEditors();
     state.snapshotLoadGeneration++;
+    snapshotLoadInProgress = false;
+    snapshotLoadingId = null;
+    if(typeof updateHistoryReadControls==="function")updateHistoryReadControls();
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
@@ -1736,6 +1758,7 @@
     canvasAgentCanvasDidChange(null,{clearProject:true});
     window.PenEchoStudioNavigator?.renderCanvases?.();
     window.PenEchoStudioNavigator?.updateDocument?.();
+    window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     state.viewInitialized = false;
     state.aiDraftReturnMode = null;
     state.pendingHistoryRestored = false;
@@ -1827,6 +1850,20 @@
     // used to surface a misleading 502 after an otherwise successful load.
     openHistoryPanel(false);
     return true;
+  }
+  async function saveLiveShareToCloud(widgetId = null) {
+    await finalizeCanvasForSnapshot();
+    if (!widgetId && !canvasHasShareableContent()) throw Error(t("emptyCanvas"));
+    const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
+    if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
+    setSnapshotLocation("cloud", { refresh:false });
+    await cloudSnapshotItems();
+    const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
+    if (!id) throw Error("The Canvas could not be saved to Cloud.");
+    return id;
+  }
+  function canvasHasShareableContent() {
+    return Boolean(tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length);
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");
@@ -2079,12 +2116,14 @@
       icon.setAttribute("aria-hidden", "true");
       path.setAttribute("d", isAll ? "M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z" : "M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z");
       icon.append(path);
-      label.textContent = option.textContent;
+      label.textContent = isAll ? t("all") : option.textContent;
       count.textContent = String(itemCount);
       count.hidden = snapshotItemsLocation !== location;
       button.append(icon, label, count);
       button.onclick = () => {
-        if (button.disabled || select.value === option.value) return;
+        if (button.disabled || select.value === option.value && !historyRecentView) return;
+        historyRecentView = false;
+        updateHistoryNavigation();
         select.value = option.value;
         if (isCloud) rememberSelectedCloudProject(option.value);
         else rememberSelectedServerProject(option.value);
@@ -2186,6 +2225,27 @@
         ? Number(b.createdAt || 0) - Number(a.createdAt || 0)
         : Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
   }
+  function updateHistoryNavigation() {
+    const panel = document.querySelector("#historyPanel");
+    if (panel) panel.dataset.historyScope = historyRecentView ? "recent" : "location";
+    document.querySelector("#historyRecentNav")?.setAttribute("aria-current", historyRecentView ? "page" : "false");
+  }
+  function openHistoryRecent() {
+    historyRecentView = true;
+    rememberSelectedServerProject(SERVER_ALL_PROJECTS_ID);
+    rememberSelectedCloudProject(CLOUD_ALL_PROJECTS_ID);
+    document.querySelector("#historySort").value = "modified";
+    updateHistoryNavigation();
+    historyFiltersChanged({ immediate:true });
+  }
+  function historyModifiedLabel(value) {
+    const elapsed = Math.max(0, Date.now() - Number(value)), minutes = Math.floor(elapsed / 60000);
+    if (minutes < 1) return t("historyEditedJustNow");
+    if (minutes < 60) return t("historyEditedMinutes").replace("{count}", String(minutes));
+    if (minutes < 1440) return t("historyEditedHours").replace("{count}", String(Math.floor(minutes / 60)));
+    if (minutes < 2880) return t("historyEditedYesterday");
+    return new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en", { month:"short", day:"numeric" }).format(value);
+  }
   function updateHistoryLibrarySummary(visibleCount, scopedCount = visibleCount) {
     const location = state.snapshotLocation,
       title = document.querySelector("#historySectionTitle"),
@@ -2196,7 +2256,8 @@
       countText = Number.isFinite(visibleCount) ? t("historyCanvasCount").replace("{count}", String(visibleCount)) : "",
       locationText = snapshotLocationLabel(location);
     if (snapshotItemsLocation === location && Number.isFinite(scopedCount)) snapshotLocationCountCache.set(location, scopedCount);
-    if (title) title.textContent = projectName;
+    if (title) title.textContent = historyRecentView ? t("historyRecent") : projectName;
+    updateHistoryNavigation();
     if (summary) summary.textContent = [countText, locationText].filter(Boolean).join(" · ");
     if (windowSummary) windowSummary.textContent = [locationText, projectName, countText].filter(Boolean).join(" · ");
     document.querySelectorAll(".history-location-count").forEach((node) => {
@@ -2224,30 +2285,39 @@
       card.classList.toggle("selected", selected);
       card.dataset.peState = selected ? "selected" : "default";
       card.querySelector(".history-card-select")?.setAttribute("aria-pressed", String(selected));
+      for (const control of card.querySelectorAll(".history-item-load, .history-more")) control.hidden = !selected;
     });
     return selectedItem;
   }
   function closeHistoryRowActions(except = null) {
     document.querySelectorAll(".history-row-actions:not([hidden])").forEach((row) => {
       if (row === except) return;
+      if (row.matches(":popover-open")) row.hidePopover();
       row.hidden = true;
       row.closest(".history-card")?.querySelector(".history-more")?.setAttribute("aria-expanded", "false");
     });
   }
   function positionHistoryRowActions(row, trigger) {
     if (!row || row.hidden || !trigger) return;
-    const list = row.closest("#historyList");
-    if (!list || list.classList.contains("grid-view")) {
-      row.dataset.pePlacement = "top";
-      return;
-    }
-    const listRect = list.getBoundingClientRect(),
+    // Top-layer popovers escape both the scrolling list and the cards' paint
+    // containment. Keep coordinates in CSS pixels, including page-scale zoom.
+    const panelRect = row.closest("#historyPanel").getBoundingClientRect(),
       triggerRect = trigger.getBoundingClientRect(),
-      menuHeight = row.offsetHeight,
-      gutter = 8,
-      spaceAbove = triggerRect.top - listRect.top,
-      spaceBelow = listRect.bottom - triggerRect.bottom;
-    row.dataset.pePlacement = spaceBelow >= menuHeight + gutter || spaceBelow >= spaceAbove ? "bottom" : "top";
+      scale = row.getBoundingClientRect().width / row.offsetWidth || 1,
+      gutter = 8 * scale,
+      topEdge = Math.max(0, panelRect.top) + gutter,
+      bottomEdge = Math.min(window.innerHeight, panelRect.bottom) - gutter;
+    row.style.maxHeight = `${Math.max(0, bottomEdge - topEdge) / scale}px`;
+    const menuRect = row.getBoundingClientRect(),
+      spaceAbove = triggerRect.top - topEdge,
+      spaceBelow = bottomEdge - triggerRect.bottom,
+      below = spaceBelow >= menuRect.height + gutter || spaceBelow >= spaceAbove,
+      top = below ? triggerRect.bottom + gutter : triggerRect.top - menuRect.height - gutter,
+      leftEdge = Math.max(0, panelRect.left) + gutter,
+      rightEdge = Math.min(window.innerWidth, panelRect.right) - gutter;
+    row.dataset.pePlacement = below ? "bottom" : "top";
+    row.style.left = `${Math.max(leftEdge, Math.min(triggerRect.right - menuRect.width, rightEdge - menuRect.width)) / scale}px`;
+    row.style.top = `${Math.max(topEdge, Math.min(top, bottomEdge - menuRect.height)) / scale}px`;
   }
   function selectHistorySnapshot(item, location = state.snapshotLocation, { focus = false } = {}) {
     if (!item || location !== state.snapshotLocation) return false;
@@ -2436,8 +2506,8 @@
     const selectedItem = ensureHistorySelection(items, location),
       renderGeneration = historyListRenderGeneration,
       locale = state.language === "zh" ? "zh-CN" : "en",
-      modifiedFormatter = new Intl.DateTimeFormat(locale, { dateStyle:"short", timeStyle:"short" }),
-      gridDateFormatter = new Intl.DateTimeFormat(locale, { month:"short", day:"numeric" });
+      modifiedFormatter = new Intl.DateTimeFormat(locale, { dateStyle:"short", timeStyle:"short" });
+
     setHistoryView(localStorage.getItem(HISTORY_VIEW_STORAGE_KEY) === "list" ? "list" : "grid");
     const appendHistoryCard = (item, fragment) => {
       const card = document.createElement("article"),
@@ -2516,16 +2586,16 @@
         beginSnapshotRename(item, location, titleRow, title, rename);
       });
       titleRow.append(title);
-      load.className = isCurrent ? "history-item-save history-save-current" : "history-item-load history-load";
+      load.className = "history-item-load history-load";
       load.type = "button";
+      load.hidden = true;
       peButton(load, "secondary", "compact");
       load.dataset.snapshotId = item.id;
-      load.textContent = t(isCurrent ? "saveCurrentSnapshot" : "loadSnapshot");
-      load.setAttribute("aria-label", `${t(isCurrent ? "saveCurrentSnapshot" : "loadSnapshot")}: ${title.textContent}`);
-      load.onclick = isCurrent ? () => saveCurrentHistoryItem(item, location) : () => loadHistorySnapshot(item, location, load);
+      load.textContent = t("historyOpenNow");
+      load.setAttribute("aria-label", `${t("historyOpenNow")}: ${title.textContent}`);
+      load.onclick = () => isCurrent ? closeHistoryPanel() : loadHistorySnapshot(item, location, load);
       const modifiedAt = item.updatedAt || item.createdAt,
-        modified = modifiedFormatter.format(modifiedAt),
-        gridDateText = gridDateFormatter.format(modifiedAt);
+        modified = modifiedFormatter.format(modifiedAt);
       const stats = document.createElement("div"),
         contentSummary = historyItemContentSummary(item);
       stats.className = "history-stats";
@@ -2538,13 +2608,15 @@
       description.className = "history-card-description";
       description.dataset.peRegion = "description";
       gridDate.className = "history-grid-date";
-      gridDate.textContent = gridDateText;
+      gridDate.textContent = `${snapshotLocationLabel(location)} · ${historyModifiedLabel(modifiedAt)}`;
+      gridDate.title = modified;
       description.append(gridDate, stats);
       const modifiedColumn = document.createElement("div");
       modifiedColumn.className = "history-modified";
       modifiedColumn.textContent = modified;
       more.className = "history-more";
       more.type = "button";
+      more.hidden = true;
       peButton(more, "toolbar", "compact");
       more.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>`;
       more.setAttribute("aria-expanded", "false");
@@ -2563,13 +2635,15 @@
       advancedActions.dataset.pePresentation = "anchored";
       advancedActions.dataset.peState = "default";
       advancedActions.setAttribute("aria-labelledby", more.id);
+      advancedActions.setAttribute("popover", "manual");
       advancedActions.hidden = true;
       more.onclick = (event) => {
         const willOpen = advancedActions.hidden;
-        closeHistoryRowActions(advancedActions);
-        advancedActions.hidden = !willOpen;
-        more.setAttribute("aria-expanded", String(!advancedActions.hidden));
-        if (!advancedActions.hidden) {
+        closeHistoryRowActions();
+        if (willOpen) {
+          advancedActions.hidden = false;
+          advancedActions.showPopover();
+          more.setAttribute("aria-expanded", "true");
           positionHistoryRowActions(advancedActions, more);
           if (event.detail === 0) rename.focus({ preventScroll:true });
         }
@@ -2578,15 +2652,13 @@
         if (event.key !== "Escape" || advancedActions.hidden) return;
         event.preventDefault();
         event.stopPropagation();
-        advancedActions.hidden = true;
-        more.setAttribute("aria-expanded", "false");
+        closeHistoryRowActions();
       });
       advancedActions.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
         event.stopPropagation();
-        advancedActions.hidden = true;
-        more.setAttribute("aria-expanded", "false");
+        closeHistoryRowActions();
         more.focus({ preventScroll:true });
       });
       remove.className = "history-delete";
@@ -2600,7 +2672,11 @@
       };
       advancedActions.append(rename);
       if (location === "server" || location === "cloud") {
-        const move = document.createElement("select");
+        const move = document.createElement("select"),
+          moveGroup = document.createElement("label"),
+          moveLabel = document.createElement("span");
+        moveGroup.className = "history-move-group";
+        moveLabel.textContent = t("canvasProjectMove");
         move.className = "history-move";
         move.dataset.peControl = "select";
         move.setAttribute("aria-label", t("canvasProjectMove"));
@@ -2609,12 +2685,16 @@
         for (const project of projects) {
           const option = document.createElement("option");
           option.value = project.id;
-          option.textContent = `${t("canvasProject")}: ${serverProjectName(project)}`;
+          option.textContent = serverProjectName(project);
           move.append(option);
         }
         move.value = item.projectId || (location === "cloud" ? cloudDefaultProjectId() || "" : SERVER_DEFAULT_PROJECT_ID);
-        move.onchange = () => runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
-        advancedActions.append(move);
+        move.onchange = () => {
+          closeHistoryRowActions();
+          runSnapshotAction(() => moveServerSnapshot(item.id, move.value));
+        };
+        moveGroup.append(moveLabel, move);
+        advancedActions.append(moveGroup);
       }
       const actionSeparator = document.createElement("div");
       actionSeparator.className = "menu-separator";
@@ -2626,9 +2706,16 @@
       footer.append(modifiedColumn, load, more);
       content.append(meta, footer);
       selectButton.onclick = () => selectHistorySnapshot(item, location);
+      selectButton.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          selectHistorySnapshot(item, location);
+          load.click();
+        }
+      });
       selectButton.ondblclick = () => {
         selectHistorySnapshot(item, location);
-        loadHistorySnapshot(item, location, load);
+        load.click();
       };
       content.onclick = (event) => {
         if (event.target.closest("button, input, select, textarea, a")) return;
@@ -2637,7 +2724,7 @@
       content.ondblclick = (event) => {
         if (event.target.closest("button, input, select, textarea, a")) return;
         selectHistorySnapshot(item, location);
-        loadHistorySnapshot(item, location, load);
+        load.click();
       };
       card.append(selectButton, content, advancedActions);
       fragment.append(card);
@@ -2791,6 +2878,7 @@
     const panel = document.querySelector("#historyPanel"),
       backdrop = document.querySelector("#historyBackdrop"),
       button = document.querySelector("#historyBtn");
+    closeHistoryRowActions();
     closeHistorySavePanel();
     historyOpenWorkGeneration++;
     cancelHistoryListRender();
@@ -3170,6 +3258,13 @@
       setStatusKey(state.pending?.items ? "batchDraftReady" : "draftReady");
     }
   }
+  function updateHistoryButtons() {
+    const pending = state.historyBefore.size || state.animationHistoryBefore || state.widgetHistoryBefore || state.imageHistoryBefore || state.textBoxHistoryBefore;
+    for (const action of ["undo", "redo"]) {
+      const button = document.querySelector(`[data-action="${action}"]`);
+      if (button) button.disabled = action === "undo" ? !(state.history.length || pending) : !state.future.length;
+    }
+  }
   function save() {
     if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) return null;
     const changes = [];
@@ -3204,6 +3299,7 @@
     state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
+    updateHistoryButtons();
     window.PenEchoStudioNavigator?.updateDocument?.();
     return entry;
   }

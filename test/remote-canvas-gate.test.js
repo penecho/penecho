@@ -584,7 +584,7 @@ test("hosted Cloud commands stop after the active Canvas changes while the fence
   assert.equal(run.fetchCalls.filter((call) => call.url.includes("/execution-fence")).length, 1);
   assert.equal(run.fetchCalls.filter((call) => call.url === "/api/v1/hosted/commands").length, 0);
   activeCanvasId = SWITCHED_CANVAS_ID;
-  releaseFence({ ok:true, status:200 });
+  releaseFence({ ok:true, status:200, json:async () => ({ stale:false }) });
   const response = await request;
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {

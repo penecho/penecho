@@ -15,6 +15,15 @@
     canvasAgentProjectLabel = document.querySelector("#canvasAgentProjectLabel"),
     canvasAgentConnectionButton = document.querySelector("#canvasAgentConnection"),
     canvasAgentConnectionLabel = document.querySelector("#canvasAgentConnectionLabel"),
+    canvasAgentConnectionClip = document.querySelector(".canvas-agent-model-split .canvas-agent-connection-label-clip"),
+    canvasAgentModelControl = document.querySelector("#canvasAgentModelControl"),
+    canvasAgentThinkingButton = document.querySelector("#canvasAgentThinkingButton"),
+    canvasAgentThinkingLabel = document.querySelector("#canvasAgentThinkingLabel"),
+    canvasAgentThinkingPopover = document.querySelector("#canvasAgentThinkingPopover"),
+    canvasAgentThinkingModel = document.querySelector("#canvasAgentThinkingModel"),
+    canvasAgentThinkingCustom = document.querySelector("#canvasAgentThinkingCustom"),
+    canvasAgentThinkingNotice = document.querySelector("#canvasAgentThinkingNotice"),
+    canvasAgentThinkingNoticeText = document.querySelector("#canvasAgentThinkingNoticeText"),
     canvasAgentProjectPopover = document.querySelector("#canvasAgentProjectPopover"),
     canvasAgentProjectClose = document.querySelector("#canvasAgentProjectClose"),
     canvasAgentProjectList = document.querySelector("#canvasAgentProjectList"),
@@ -133,13 +142,13 @@
     CANVAS_AGENT_COMFORT_BODY_PX = 15,
     CANVAS_AGENT_PREFERRED_BODY_MIN_PX = 11,
     CANVAS_AGENT_COMPACT_TEXT_MIN_PX = 8,
-    CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentAutoAIRequestPaused","canvasAgentExternalAIPaused"]),
+    CANVAS_AGENT_AUTO_AI_STATUS_KEYS = new Set(["canvasAgentAutoAIFocusPaused","canvasAgentExternalAIPaused"]),
     CANVAS_AGENT_LAYOUT_CAPTURE_POLICY = Object.freeze({id:"canvas-layout-v1",maxLongEdge:1024,maxPixels:520000,quality:.72,maxBytes:700*1024}),
     CANVAS_AGENT_DETAIL_CAPTURE_POLICY = Object.freeze({id:"canvas-detail-v1",maxLongEdge:1440,maxPixels:1800000,quality:.88,maxBytes:1200*1024}),
     CANVAS_AGENT_PROMPT_LIBRARY = Object.freeze({
       simpleDiagram:{category:"notes",prompt:"canvasAgentPromptSimpleDiagram",title:"canvasAgentPromptSimpleDiagramTitle",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
-      sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"architecture"},
-      workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"sequence"},
+      workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"workflow"},
       organize:{category:"notes",prompt:"canvasAgentPromptOrganize",title:"canvasAgentPromptOrganizeTitle",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
       applyAnnotations:{category:"notes",prompt:"canvasAgentPromptApplyAnnotations",title:"canvasAgentPromptApplyAnnotationsTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       followCanvasCues:{category:"notes",prompt:"canvasAgentPromptFollowCanvasCues",title:"canvasAgentPromptFollowCanvasCuesTitle",focus:"canvasAgentPromptFocusFollowCanvasCues",icon:"revise"},
@@ -151,9 +160,9 @@
       releaseReadiness:{category:"files",prompt:"canvasAgentPromptReleaseReadiness",title:"canvasAgentPromptReleaseReadinessTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       transformer:{category:"notes",prompt:"canvasAgentPromptTransformer",title:"canvasAgentPromptTransformerTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
       ukTrip:{category:"create",prompt:"canvasAgentPromptUkTrip",title:"canvasAgentPromptUkTripTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
-      interactivePrototype:{category:"create",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"visual"},
+      interactivePrototype:{category:"create",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"prototype"},
       interactiveCalculator:{category:"create",prompt:"canvasAgentPromptInteractiveCalculator",title:"canvasAgentPromptInteractiveCalculatorTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
-      selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
+      selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"quiz"},
       file:{category:"files",prompt:"canvasAgentPromptFile",title:"canvasAgentPromptFileTitle",focus:"canvasAgentPromptFocusExplain",icon:"file"},
       architecture:{category:"create",prompt:"canvasAgentPromptArchitecture",title:"canvasAgentPromptArchitectureTitle",focus:"canvasAgentPromptFocusArchitecture",icon:"architecture"},
       handwriting:{category:"notes",prompt:"canvasAgentPromptHandwriting",title:"canvasAgentPromptHandwritingTitle",focus:"canvasAgentPromptFocusEnhance",icon:"handwriting"},
@@ -194,12 +203,16 @@
       plan:["M6 4h12v16H6z","m9 2 3 3M9 10h6M9 14h6M9 18h4"],
       file:["M6 3h8l4 4v14H6z","M14 3v5h5M9 12h6M9 16h6"],
       architecture:["M12 4v5M6 20v-5h12v5M6 15v-3h12v3","M9 4h6v5H9zM3 20h6v-5H3zM15 20h6v-5h-6z"],
+      sequence:["M5 3v18M19 3v18M5 8h11m-3-3 3 3-3 3M19 16H8m3-3-3 3 3 3"],
+      workflow:["M3 3h7v6H3zM14 15h7v6h-7zM6.5 9v9H14"],
+      prototype:["M3 3h18v18H3zM3 8h18M9 8v13"],
+      quiz:["M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0","M9.5 8a2.5 2.5 0 1 1 4 2c-1.5 1-1.5 1.5-1.5 3M12 17h.01"],
       handwriting:["M4 18c4-1 5-4 8-9 1.3-2.2 3.2-4 5-2.5 1.7 1.3-.2 3.7-2 5.7-2.4 2.7-4.4 4.1-8.5 5.8","M4 21h16"],
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
       revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactivePrototype","interactiveCalculator","selfCheckQuiz"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","interactivePrototype","selfCheckQuiz","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactiveCalculator"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -237,6 +250,7 @@
     outgoingSeq:0,
     incomingSeq:0,
     running:false,
+    thinkingChangedWhileRunning:false,
     requestPending:false,
     activeEvaluationContext:null,
     lastTurnError:null,
@@ -365,7 +379,7 @@
   }
   function canvasAgentSyncSendAvailability() {
     const unavailable = !(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) && !canvasAgentExecutionAvailable();
-    canvasAgentSend.disabled = unavailable || canvasAgentInput.disabled || canvasAgent.attachmentBusy || canvasAgent.projectUploadBusy;
+    canvasAgentSend.disabled = unavailable || canvasAgentInput.disabled || canvasAgent.attachmentBusy || canvasAgent.projectUploadBusy || !canvasAgentPromptHasDraft();
     if (unavailable) canvasAgentSend.setAttribute("aria-describedby","canvasAgentStatus");
     else canvasAgentSend.removeAttribute("aria-describedby");
   }
@@ -376,16 +390,19 @@
     return !canvasAgentPanel.hidden && document.body.classList.contains("canvas-agent-open");
   }
   function canvasAgentSuppressesAutomaticAI() {
-    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgent.requestPending || canvasAgent.running || canvasAgentIsOpen();
+    return (typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) || canvasAgentIsOpen();
   }
   function canvasAgentAutomaticAIStatusKey() {
     if (!state.auto) return null;
     if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal())return "canvasAgentExternalAIPaused";
-    if (canvasAgent.requestPending || canvasAgent.running) return "canvasAgentAutoAIRequestPaused";
     return canvasAgentIsOpen() ? "canvasAgentAutoAIFocusPaused" : null;
   }
   function canvasAgentSyncAutomaticAIStatus() {
     const nextKey = canvasAgentAutomaticAIStatusKey();
+    const notice = document.querySelector("#canvasAutoPausedNotice");
+    notice.hidden = !nextKey;
+    document.body.classList.toggle("canvas-auto-paused", Boolean(nextKey));
+    notice.querySelector("span").textContent = nextKey ? t(nextKey) : "";
     if (nextKey) {
       if (!canvasAgent.automaticAIStatusRestore) canvasAgent.automaticAIStatusRestore = { key:state.statusKey, text:status.textContent };
       if (state.statusKey !== nextKey) setStatusKey(nextKey);
@@ -420,7 +437,6 @@
     canvasAgent.requestPending = true;
     canvasAgentSyncTriggerState();
     canvasAgentPauseAutomaticAI();
-    stopActiveAutomaticAI("canvas-agent-request");
     canvasAgentSyncAutomaticAIStatus();
   }
   function canvasAgentRequestDidNotSend() {
@@ -474,6 +490,8 @@
     canvasAgentStatus.textContent = message === t("canvasAgentConnectionStale") ? t("canvasAgentChooseConnection") : message;
     canvasAgentStatus.title = message;
     canvasAgentPanel.dataset.status = unavailable ? "unavailable" : kind;
+    document.querySelector("#canvasAgentConnectionNotice").hidden = !unavailable && allAiConnections().length > 0;
+    if (unavailable || !allAiConnections().length || kind === "ready" && !canvasAgent.currentConversation?.items?.length) canvasAgentStatus.textContent = t("canvasAgentNewCanvasStatus");
   }
   function canvasAgentSetComposerActionLabel(button,key) {
     const label=t(key),text=button.querySelector(".canvas-agent-action-label");
@@ -590,7 +608,9 @@
         copy.dataset.peRegion="copy";
         title.dataset.peRegion="title";
         title.textContent=titleText;
-        copy.append(title);
+        const summary = document.createElement("small");
+        summary.textContent = t(`${suggestion.prompt}Summary`);
+        copy.append(title, summary);
         button.append(icon,copy);
         button.setAttribute("title",titleText);
         button.setAttribute("aria-label",titleText);
@@ -644,17 +664,18 @@
       && canvasAgentApproval.hidden);
   }
   function canvasAgentShouldShowPromptSuggestions() {
-    return canvasAgentPromptSuggestionsAvailable();
+    return canvasAgentPromptSuggestionsAvailable() && !canvasAgentPromptHasDraft() && !canvasAgentTranscript.querySelector(".canvas-agent-message, .canvas-agent-tool-row");
   }
   function canvasAgentSyncPromptSuggestions() {
     if(!canvasAgentPromptSuggestions)return;
+    canvasAgentSyncSendAvailability();
     const suggestionSet=canvasAgentPromptSuggestionSet();
     if(suggestionSet.key!==canvasAgent.promptSuggestionContextKey)canvasAgentRenderPromptSuggestions(suggestionSet);
     const visible=canvasAgentShouldShowPromptSuggestions();
     if(canvasAgentPromptControl)canvasAgentPromptControl.hidden=!visible;
     if(visible){
       canvasAgentInputHint.hidden=true;
-      canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
+      canvasAgentSetPromptSuggestionsExpanded(true, {manual:false});
     }
     else{
       canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
@@ -692,13 +713,64 @@
   }
   function canvasAgentUpdateConnectionButton() {
     if(!canvasAgentConnectionButton||!canvasAgentConnectionLabel)return;
-    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection)}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentNoConnections"),action=t("canvasAgentChooseConnection");
+    document.querySelector("#canvasAgentConnectionNotice").hidden = canvasAgentExecutionAvailable() && allAiConnections().length > 0;
+    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),label=connection&&(connection.hosted||canvasAgentExecutionAvailable())?`${connectionTitle(connection).replace(/^☁️\s*/,"")}${connection.hosted ? ` · ${hostedMultiplierLabel(connection.multiplier)}` : ""}`:t(canvasAgentExecutionAvailable() && allAiConnections().length ? "canvasAgentChooseConnection" : "canvasAgentChooseModel"),action=t("canvasAgentChooseConnection");
     canvasAgentConnectionLabel.textContent=label;
     canvasAgentConnectionButton.setAttribute("aria-label",`${action}: ${label}`);
     canvasAgentConnectionButton.setAttribute("title",`${action}: ${label}`);
+    canvasAgentUpdateModelScroll();
+    canvasAgentUpdateThinkingControl();
     canvasAgentSyncSendAvailability();
   }
+  function canvasAgentUpdateModelScroll() {
+    if (!canvasAgentConnectionClip) return;
+    const overflow=Math.max(0,canvasAgentConnectionLabel.scrollWidth-canvasAgentConnectionClip.clientWidth);
+    canvasAgentConnectionClip.classList.toggle("is-overflowing",overflow>2);
+    canvasAgentConnectionClip.style.setProperty("--canvas-agent-model-scroll-distance",`${-overflow}px`);
+    canvasAgentConnectionClip.style.setProperty("--canvas-agent-model-scroll-duration",`${Math.max(3.5,Math.min(10,2+overflow/36))}s`);
+  }
+  function canvasAgentThinkingAvailable(connection) {
+    if (!connection) return true;
+    if (connection.supportsThinking === false || connection.reasoningSupported === false) return false;
+    if (connection.provider !== "api") return true;
+    const model=String(connection.modelId || connection.apiModel || "").trim().toLowerCase().split("/").pop();
+    return !/^(?:gpt-4o(?:-mini)?|gpt-4\.1(?:-mini|-nano)?|gpt-3\.5-turbo)(?:$|[-/])/.test(model);
+  }
+  function canvasAgentThinkingLevelLabel(effort=state.reasoningEffort) {
+    const key={none:"canvasAgentThinkingOff",low:"effortLow",medium:"effortMediumShort",high:"effortHigh",max:"effortMaximum",config:"canvasAgentThinkingDefault"}[effort];
+    return key ? t(key) : effort;
+  }
+  function canvasAgentUpdateThinkingNotice() {
+    const show=canvasAgent.thinkingChangedWhileRunning && (canvasAgent.running || canvasAgent.requestPending) && canvasAgentModelControl.dataset.thinkingUnavailable !== "true";
+    canvasAgentThinkingNotice.hidden=!show;
+    if (show) canvasAgentThinkingNoticeText.textContent=t("canvasAgentThinkingNextMessage").replace("{level}",canvasAgentThinkingLevelLabel());
+  }
+  function canvasAgentUpdateThinkingControl() {
+    const connection=allAiConnections().find(item=>item.id===selectedAiConnectionId()),available=canvasAgentThinkingAvailable(connection),effort=normalizeToolbarReasoningEffort(state.reasoningEffort)||"config";
+    if (!available) canvasAgentHideThinkingPopover();
+    canvasAgentModelControl.dataset.thinkingUnavailable=String(!available);
+    canvasAgentThinkingLabel.textContent=available?canvasAgentThinkingLevelLabel(effort):"—";
+    canvasAgentThinkingButton.dataset.effort=available?effort:"unavailable";
+    canvasAgentThinkingButton.setAttribute("aria-disabled",String(!available));
+    canvasAgentThinkingButton.setAttribute("aria-label",available?`${t("canvasAgentThinking")}: ${canvasAgentThinkingLevelLabel(effort)}`:t("canvasAgentThinkingUnavailable"));
+    canvasAgentThinkingButton.title=available?t("canvasAgentThinking"):t("canvasAgentThinkingUnavailable");
+    canvasAgentThinkingModel.textContent=connection?String(connection.apiModel || connection.cliModel || ""):"";
+    canvasAgentThinkingPopover.querySelectorAll("[data-effort]").forEach(option=>option.setAttribute("aria-selected",String(option.dataset.effort===effort)));
+    if (document.activeElement !== canvasAgentThinkingCustom) canvasAgentThinkingCustom.value=["config","none","low","medium","high","max"].includes(effort)?"":effort;
+    canvasAgentUpdateThinkingNotice();
+  }
+  function canvasAgentHideThinkingPopover({restoreFocus=false}={}) {
+    if (canvasAgentThinkingPopover.hidden) return;
+    canvasAgentThinkingPopover.hidden=true;
+    canvasAgentThinkingButton.setAttribute("aria-expanded","false");
+    if (restoreFocus) canvasAgentThinkingButton.focus({preventScroll:true});
+  }
+  function canvasAgentEffortDidChange() {
+    if (canvasAgent.running || canvasAgent.requestPending) canvasAgent.thinkingChangedWhileRunning=true;
+    canvasAgentUpdateThinkingControl();
+  }
   function canvasAgentOpenConnectionSettings() {
+    canvasAgentHideThinkingPopover();
     selectSettingsPage("connections");
     openSettings();
   }
@@ -737,6 +809,7 @@
     canvasAgentProjectButton.setAttribute("aria-label",t("canvasAgentProject"));
     canvasAgentProjectButton.setAttribute("title",t("canvasAgentProject"));
     canvasAgentUpdateConnectionButton();
+    canvasAgentUpdateThinkingControl();
     canvasAgentProjectClose.setAttribute("aria-label",t("canvasAgentProjectClose"));
     canvasAgentProjectRootBack.setAttribute("aria-label",t("canvasAgentRootBack"));
     canvasAgentProjectRootSelect.textContent=t("canvasAgentRootSelect");
@@ -1750,7 +1823,7 @@
     } else canvasAgentDropSessionIdentity();
     canvasAgentSyncPromptSuggestions();
     if (!window.PenEchoStudioNavigator?.isMcpDocked?.()) {
-      if (state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
+      if (!window.PENECHO_CONFIG?.guestCanvas && state.canvasAgentAutoOpen && (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open"))) openCanvasAgent({focus:false});
     }
   }
   function canvasAgentDidStartUserConversation() {
@@ -2001,13 +2074,13 @@
     });
   }
   function canvasAgentWorkbenchNeedsSync(theme = state.theme) {
-    const docked = theme === "studio" && Boolean(window.matchMedia?.("(min-width: 701px)").matches),
+    const docked = theme === "studio",
       dockedClass = document.body.classList.contains("studio-agent-docked"),
       expectedParent = docked ? canvasAgentFrame : view;
     return dockedClass !== docked || canvasAgentPanel.parentElement !== expectedParent;
   }
   function syncStudioWorkbench(theme = state.theme) {
-    const docked = theme === "studio" && Boolean(window.matchMedia?.("(min-width: 701px)").matches);
+    const docked = theme === "studio";
     document.body.classList.toggle("studio-agent-docked", docked);
     if (docked && canvasAgentPanel.parentElement !== canvasAgentFrame) canvasAgentFrame.append(canvasAgentPanel);
     else if (!docked && canvasAgentPanel.parentElement !== view) canvasAgentHome.after(canvasAgentPanel);
@@ -2535,6 +2608,7 @@
     canvasAgentInkContext.restore();
     canvasAgent.inkPresent=true;
     canvasAgentSyncInputHint();
+    canvasAgentSyncSendAvailability();
     event.preventDefault();
   }
   function canvasAgentInkPointerMove(event) {
@@ -3454,6 +3528,8 @@
   }
   function canvasAgentSetRunning(running) {
     canvasAgent.running = running;
+    if (!running) canvasAgent.thinkingChangedWhileRunning=false;
+    canvasAgentUpdateThinkingNotice();
     canvasAgentStop.hidden = !running;
     canvasAgentSetComposerActionLabel(canvasAgentSend,running ? "canvasAgentSteer" : "canvasAgentSend");
     canvasAgentSetStatus(t(running ? "canvasAgentWorking" : "canvasAgentReady"),running ? "running" : "ready");
@@ -4012,16 +4088,28 @@
       canvas = document.createElement("canvas"), context = canvas.getContext("2d");
     canvas.width = width;
     canvas.height = height;
-    await prepareVisibleWidgetSnapshots(region,false,signal);
-    assertCurrent?.();
-    const unavailableWidgetIds=capturableWidgets(region)
-      .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion)
-      .map(widget=>widget.id);
-    if(unavailableWidgetIds.length)throw canvasAgentToolError(
-      "WIDGET_CAPTURE_UNAVAILABLE",
-      "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
-      {objectIds:unavailableWidgetIds},
-    );
+    const widgetCaptureDeadline=performance.now()+WIDGET_SNAPSHOT_TIMEOUT_MS;
+    for(let attempt=0;attempt<3;attempt++){
+      const remaining=widgetCaptureDeadline-performance.now();
+      if(remaining<1000)throw canvasAgentToolError("WIDGET_CAPTURE_TIMEOUT","Canvas capture could not finish while Widgets were loading.");
+      try{
+        await prepareVisibleWidgetSnapshots(region,false,signal,false,remaining);
+      }catch(error){
+        assertCurrent?.();
+        if(error?.code==="WIDGET_CONTENT_CHANGED"&&attempt<2)continue;
+        throw error;
+      }
+      assertCurrent?.();
+      const unavailable=capturableWidgets(region)
+        .filter(widget=>!widget.snapshotImage||widget.snapshotVersion<widget.contentVersion);
+      if(!unavailable.length)break;
+      if(attempt<2&&unavailable.every(widget=>widget.snapshotImage&&widget.snapshotVersion<widget.contentVersion))continue;
+      throw canvasAgentToolError(
+        "WIDGET_CAPTURE_UNAVAILABLE",
+        "Canvas capture stopped because one or more Widgets did not become ready. Refresh the Canvas and retry.",
+        {objectIds:unavailable.map(widget=>widget.id)},
+      );
+    }
     context.fillStyle = state.paint.paper;
     context.fillRect(0,0,width,height);
     context.save();
@@ -4175,7 +4263,7 @@
   }
   function canvasAgentMutationIdle(execution) {
     canvasAgentAssertToolExecution(execution);
-    if (state.drawing || state.pending || state.pendingWidget || state.pendingWidgetReplacement || state.selection || state.selectionGesture
+    if (state.drawing || state.selection || state.selectionGesture
       || state.imageEdit || state.imageGesture || state.imageImporting || state.widgetEdit || state.widgetGesture || state.animationEdit || state.animationGesture || state.textEditors.size) {
       throw canvasAgentToolError("CANVAS_BUSY","Finish the active canvas edit or draft before Agent changes the canvas.");
     }
@@ -4692,7 +4780,7 @@
   const CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS=320;
   let canvasAgentDockedTransitionHandler=null,canvasAgentDockedOpenTimer=0;
   function canvasAgentCancelDockedOpenWork() {
-    if(canvasAgentDockedTransitionHandler)canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    if(canvasAgentDockedTransitionHandler){canvasAgentPanel.removeEventListener("transitionend",canvasAgentDockedTransitionHandler);canvasAgentPanel.removeEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);}
     if(canvasAgentDockedOpenTimer)clearTimeout(canvasAgentDockedOpenTimer);
     canvasAgentDockedTransitionHandler=null;
     canvasAgentDockedOpenTimer=0;
@@ -4705,9 +4793,10 @@
     };
     if(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches){finish();return;}
     canvasAgentDockedTransitionHandler=event=>{
-      if(event.target===canvasAgentPanel&&event.propertyName==="transform")finish();
+      if(event.target===canvasAgentPanel&&(event.type==="penecho-sidebar-motion-end"||["transform","margin-right"].includes(event.propertyName)))finish();
     };
     canvasAgentPanel.addEventListener("transitionend",canvasAgentDockedTransitionHandler);
+    canvasAgentPanel.addEventListener("penecho-sidebar-motion-end",canvasAgentDockedTransitionHandler);
     canvasAgentDockedOpenTimer=setTimeout(finish,CANVAS_AGENT_DOCKED_SETTLE_FALLBACK_MS);
   }
   function canvasAgentPrepareOpenState() {
@@ -4776,12 +4865,14 @@
   }
   function openCanvasAgent({focus=false}={}) {
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
+    if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
     if (!canvasAgentAvailable()) return;
     restoreCanvasAgentAfterNavigation();
     restoreCanvasChromeMaterial();
     canvasAgentCancelInitialAutoHide();
     canvasAgentCancelPanelMotion();
     canvasAgentCancelDockedOpenWork();
+    const motion=canvasAgentDockedPanel()?window.PenEchoShellMotion?.capture(animate):null;
     canvasAgentPanel.hidden = false;
     canvasAgentToggle.setAttribute("aria-expanded","true");
     const docked=canvasAgentDockedPanel();
@@ -4791,6 +4882,7 @@
     document.body.classList.add("canvas-agent-open");
     canvasAgentPauseAutomaticAI();
     window.PenEchoStudioNavigator?.agentWillOpen?.();
+    if(docked)window.PenEchoShellMotion?.play(motion);
     if(animate&&docked){
       canvasAgentScheduleDockedOpenWork(focus,connect);
       return;
@@ -4845,6 +4937,7 @@
     canvasAgentCancelDockedOpenWork();
     const docked=canvasAgentDockedPanel();
     if(docked){
+      const motion=window.PenEchoShellMotion?.capture(animate);
       if(!animate){
         canvasAgentPanel.classList.add("canvas-agent-no-motion");
         requestAnimationFrame(()=>canvasAgentPanel.classList.remove("canvas-agent-no-motion"));
@@ -4852,6 +4945,7 @@
       canvasAgentToggle.setAttribute("aria-expanded","false");
       document.body.classList.remove("canvas-agent-open");
       canvasAgentResumeAutomaticAI();
+      window.PenEchoShellMotion?.play(motion);
       if(focus)canvasAgentToggle.focus();
       else if(canvasAgentPanel.contains(document.activeElement))document.activeElement.blur();
       if(animate){canvasAgentScheduleDockedCloseWork();return;}
@@ -4878,6 +4972,7 @@
       renderConnectionLists();
     }
     canvasAgentToggle.hidden = !canvasAgentAvailable();
+    if(window.PENECHO_CONFIG?.guestCanvas)canvasAgentToggle.title=state.language==="zh"?"登录后使用 PenEcho Agent":"Sign in to use PenEcho Agent";
     if (!canvasAgentAvailable() && !canvasAgentPanel.hidden) closeCanvasAgent({ focus:false, animate:false });
     canvasAgentUpdateConnectionButton();
     canvasAgentSyncSendAvailability();
@@ -4894,7 +4989,7 @@
   }
   canvasAgentSyncRuntimeAvailability();
   window.addEventListener("penecho:capabilities-changed", canvasAgentSyncRuntimeAvailability);
-  canvasAgentToggle.addEventListener("click",()=>canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
+  canvasAgentToggle.addEventListener("click",()=>window.PENECHO_CONFIG?.guestCanvas ? window.PenEchoBrowserDraft?.signIn() : canvasAgentPanel.hidden||!document.body.classList.contains("canvas-agent-open") ? openCanvasAgent({focus:false}) : closeCanvasAgent());
   canvasAgentClose.addEventListener("click",closeCanvasAgent);
   canvasAgentProjectButton.addEventListener("click",()=>{
     if(canvasAgentProjectDialogOpen()){canvasAgentHideProjectPopover({restoreFocus:true});return;}
@@ -4904,6 +4999,26 @@
     void canvasAgentEnsureProjects({refresh:true}).catch(error=>canvasAgentSetProjectError(String(error?.message||error)));
   });
   canvasAgentConnectionButton?.addEventListener("click",canvasAgentOpenConnectionSettings);
+  if (typeof ResizeObserver === "function" && canvasAgentConnectionClip) {
+    canvasAgent.modelScrollObserver=new ResizeObserver(canvasAgentUpdateModelScroll);
+    canvasAgent.modelScrollObserver.observe(canvasAgentConnectionClip);
+    canvasAgent.modelScrollObserver.observe(canvasAgentConnectionLabel);
+  }
+  canvasAgentThinkingButton.addEventListener("click",()=>{
+    if (canvasAgentThinkingButton.getAttribute("aria-disabled")==="true") return;
+    const open=canvasAgentThinkingPopover.hidden;
+    canvasAgentThinkingPopover.hidden=!open;
+    canvasAgentThinkingButton.setAttribute("aria-expanded",String(open));
+    if (open) canvasAgentUpdateThinkingControl();
+  });
+  canvasAgentThinkingPopover.querySelectorAll("[data-effort]").forEach(option=>option.addEventListener("click",()=>{
+    if (setEffort(option.dataset.effort)) canvasAgentHideThinkingPopover({restoreFocus:true});
+  }));
+  canvasAgentThinkingCustom.addEventListener("keydown",event=>{
+    if (event.key!=="Enter") return;
+    event.preventDefault();
+    if (setEffort(canvasAgentThinkingCustom.value)) canvasAgentHideThinkingPopover({restoreFocus:true});
+  });
   canvasAgentProjectClear.addEventListener("click",event=>{
     event.preventDefault();event.stopPropagation();
     if(canvasAgent.projectId)void canvasAgentSelectProject("");
@@ -4959,6 +5074,11 @@
   document.addEventListener("keydown",event=>{
     if (event.key !== "Escape" || canvasAgentPanel.hidden) return;
     if (canvasAgentProjectRemoveDialog.open) return;
+    if (!canvasAgentThinkingPopover.hidden) {
+      event.preventDefault();
+      canvasAgentHideThinkingPopover({restoreFocus:true});
+      return;
+    }
     if (canvasAgent.promptSuggestionsExpanded) {
       event.preventDefault();
       canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
@@ -4986,6 +5106,7 @@
     closeCanvasAgent();
   });
   document.addEventListener("pointerdown",event=>{
+    if (!canvasAgentThinkingPopover.hidden&&!canvasAgentModelControl.contains(event.target)) canvasAgentHideThinkingPopover();
     if (!canvasAgentHistoryPopover.hidden&&!canvasAgentHistoryPopover.contains(event.target)&&!canvasAgentHistory.contains(event.target)) canvasAgentHideHistoryPopover();
     if (canvasAgentProjectDialogOpen()&&!canvasAgentProjectPopover.contains(event.target)&&!canvasAgentProjectRemoveDialog.contains(event.target)&&!canvasAgentProjectButton.contains(event.target)) canvasAgentHideProjectPopover();
     if (!canvasAgentReferencePicker.hidden&&!canvasAgentReferencePicker.contains(event.target)&&!canvasAgentReference.contains(event.target)) canvasAgentToggleReferencePicker(false);

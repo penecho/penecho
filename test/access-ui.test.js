@@ -48,10 +48,12 @@ function makeDocument() {
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement()]));
   elements["#accessSetup"].choiceList = new FakeElement();
   const dots = Array.from({ length:6 }, () => new FakeElement());
+  const focusCalls = [];
   const keypadDigits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     .map((digit) => {
       const button = new FakeElement({ digit });
       button.closest = () => button;
+      button.focus = () => focusCalls.push(digit);
       return button;
     });
   elements["#accessKeypad"].querySelector = (selector) => selector === "button[data-digit]" ? keypadDigits[0] : null;
@@ -73,11 +75,11 @@ function makeDocument() {
     },
     listeners: {},
   };
-  return { document, elements, body, themeColor };
+  return { document, elements, body, themeColor, focusCalls };
 }
 
 async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {}) {
-  const { document, elements, body, themeColor } = makeDocument();
+  const { document, elements, body, themeColor, focusCalls } = makeDocument();
   const calls = [];
   const storedSession = new Map();
   const storedAppearance = new Map([
@@ -107,7 +109,7 @@ async function boot(mode, { palette="indigo", theme=null, legacyTheme=null } = {
   };
   vm.runInNewContext(accessScript, context, { filename:"public/access.js" });
   await new Promise((resolve) => setImmediate(resolve));
-  return { document, elements, body, themeColor, calls, redirected, storedSession, storedAppearance };
+  return { document, elements, body, themeColor, focusCalls, calls, redirected, storedSession, storedAppearance };
 }
 
 function clickDigits(keypad, value) {
@@ -138,6 +140,18 @@ test("access PIN setup and unlock submit once on the sixth digit", async () => {
   assert.equal(unlockRequests.length, 1);
   assert.deepEqual(JSON.parse(unlockRequests[0].options.body), { pin:"271828" });
   assert.equal(unlock.storedSession.get("penecho-access-session"),"test-access-session");
+});
+
+test("unlock opens without focusing a keypad button while keyboard entry still works", async () => {
+  const run = await boot("pin");
+  assert.deepEqual(run.focusCalls, []);
+  for (const key of "271828") {
+    let prevented = false;
+    run.document.listeners.keydown({ key, preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(run.calls.filter((call) => call.url === "/api/local-access/unlock").length, 1);
 });
 
 test("access setup follows the current Studio palette with accessible workbench states", async () => {

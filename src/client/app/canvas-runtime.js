@@ -303,11 +303,14 @@
       return prepared;
     }catch(error){for(const item of prepared)if(!items.some(original=>original.image===item.image))releaseTextRaster(item.image);throw error;}
   }
-  async function restoreTextBoxes(items, pixelRatio = 1) {
+  async function restoreTextBoxes(items, pixelRatio = 1, isCurrent = () => true) {
+    if (!isCurrent()) return false;
     canvasTextQualityGeneration++;
     clearHandToolbarTargets("text-box");
     clearTextEditors();
-    state.textBoxes = [];
+    // List ownership is independent of background raster quality refreshes.
+    const restored = [];
+    state.textBoxes = restored;
     state.nextTextBoxId = 1;
     state.selectedTextBoxId = null;
     for (const item of Array.isArray(items) ? items.slice(0, MAX_VISIBLE_TEXT_BOXES) : []) {
@@ -315,16 +318,23 @@
       try {
         if (item?.image && textImageRasterRatio(item.image) >= pixelRatio / 1.05) record = textBoxHistoryRecord(item);
         else {
-          record = await renderedTextBoxRecord(item, pixelRatio);
+          // Allocate an identity only when this restore commits to its own list.
+          const id = typeof item?.id === "string" && /^text-box-\d+$/.test(item.id) ? item.id : `text-box-${state.nextTextBoxId}`;
+          record = await renderedTextBoxRecord({ ...item, id }, pixelRatio);
           // Raster dimensions describe typography; the saved frame describes
           // world placement. Rehydrating pixels must not reset their mapping.
           if(record&&[item.x,item.y,item.w,item.h].every(Number.isFinite)&&item.x>=0&&item.y>=0&&item.w>0&&item.h>0&&item.x+item.w<=SIZE&&item.y+item.h<=SIZE)
             Object.assign(record,{x:item.x,y:item.y,w:item.w,h:item.h});
         }
       } catch {
+        if (state.textBoxes !== restored || !isCurrent()) return false;
         // One invalid or unsupported text box must not make an otherwise valid
         // saved Canvas impossible to restore.
         continue;
+      }
+      if (state.textBoxes !== restored || !isCurrent()) {
+        if (record?.image && record.image !== item?.image) releaseTextRaster(record.image);
+        return false;
       }
       if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
       const numbered = /^text-box-(\d+)$/.exec(record.id);
@@ -334,6 +344,7 @@
     positionTextEditors();
     requestRender();
     void refreshVisibleTextBoxQuality();
+    return true;
   }
 
   function imageBox(item) {
@@ -381,8 +392,8 @@
     if (!n(naturalW, 1, MAX_IMAGE_DIMENSION) || !n(naturalH, 1, MAX_IMAGE_DIMENSION) || naturalW * naturalH > MAX_IMAGE_PIXELS) return null;
     return {
       id:typeof item.id === "string" && /^image-\d+$/.test(item.id) ? item.id : `image-${state.nextImageId++}`,
-      x:Math.round(item.x),
-      y:Math.round(item.y),
+      x:Math.min(Math.round(item.x),SIZE-Math.round(item.w)),
+      y:Math.min(Math.round(item.y),SIZE-Math.round(item.h)),
       w:Math.round(item.w),
       h:Math.round(item.h),
       naturalW:Math.round(naturalW),
@@ -1015,7 +1026,7 @@
       start:imageLayout(result.image),
       changed:false,
     };
-    setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
+    setCanvasCursor(["resize-ne", "resize-sw"].includes(result.hit) ? "nesw-resize" : result.hit.startsWith("resize") ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     requestInteractionLayerRender();
     return true;
   }
@@ -1291,6 +1302,7 @@
       title: widget.title,
       refreshSeconds: widget.refreshSeconds,
       favoriteSourceId: widget.favoriteSourceId,
+      shareSourceId: widget.shareSourceId,
       ...(widget.favorite ? { favorite:true } : {}),
       ...(widget.favoriteArtifactSha256 ? { favoriteArtifactSha256:widget.favoriteArtifactSha256 } : {}),
       ...(widget.favoriteCloudId ? { favoriteCloudId:widget.favoriteCloudId } : {}),
@@ -1378,6 +1390,7 @@
       communityRootItemId,
       communityOriginName,
       communityOriginGeneration,
+      shareSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.shareSourceId || "")) ? item.shareSourceId : newPrivateWidgetFavoriteId(),
       favoriteSourceId: PRIVATE_WIDGET_FAVORITE_ID.test(String(item.favoriteSourceId || "")) ? item.favoriteSourceId : newPrivateWidgetFavoriteId(),
       favorite: item.favorite === true,
       favoriteArtifactSha256: /^[0-9a-f]{64}$/i.test(String(item.favoriteArtifactSha256 || "")) ? item.favoriteArtifactSha256.toLowerCase() : "",
@@ -1425,6 +1438,7 @@
     const publicWidget = { ...serialized };
     delete publicWidget.favorite;
     delete publicWidget.favoriteSourceId;
+    delete publicWidget.shareSourceId;
     delete publicWidget.favoriteArtifactSha256;
     delete publicWidget.favoriteCloudId;
     delete publicWidget.favoriteCommunityItemId;
@@ -1464,6 +1478,7 @@
     // the stable logical source identity and the current storage references.
     delete source.favorite;
     delete source.favoriteSourceId;
+    delete source.shareSourceId;
     delete source.favoriteArtifactSha256;
     delete source.favoriteCloudId;
     delete source.favoriteCommunityItemId;
@@ -1528,7 +1543,7 @@
   }
   function createWidgetResizeHandle(widget, hit) {
     const handle = document.createElement("div");
-    handle.className = `canvas-widget-resize-handle ${hit === "width" ? "width" : hit === "height" ? "height" : "corner"}`;
+    handle.className = `canvas-widget-resize-handle ${hit === "width" ? "width" : hit === "height" ? "height" : hit.startsWith("resize-") ? `corner ${hit}` : "corner resize-se"}`;
     handle.addEventListener("pointerdown", (event) => {
       if (state.viewMode || state.spacePan || !["hand", "select"].includes(state.mode) || Number(event.button) !== 0) return;
       const pending = widget === state.pendingWidget && widget.pending === true;
@@ -1621,6 +1636,7 @@
       createWidgetResizeHandle(widget, "width"),
       createWidgetResizeHandle(widget, "height"),
       createWidgetResizeHandle(widget, "resize"),
+      ...["nw", "ne", "sw"].map(corner => createWidgetResizeHandle(widget, `resize-${corner}`)),
     );
     widgetLayer.append(shell);
     widget.shell = shell;
@@ -1711,19 +1727,25 @@
   }
   function positionWidget(widget) {
     if (!widget.shell) return;
-    const localX = widget.x * state.scale,
-      localY = widget.y * state.scale,
+    // Entry and read-only Live Clay presentation resize the existing iframe without rewriting Canvas geometry.
+    const liveClayEntry = document.body.classList.contains("playground-entry") && widget.sourceFormat === "penecho-liveclay+json" && state.interactingWidgetId === widget.id,
+      liveClayViewer = window.PENECHO_CONFIG?.runtime === "viewer" && widget.sourceFormat === "penecho-liveclay+json",
+      entryMetrics = liveClayEntry ? canvasViewportMetrics() : null,
+      displayW = entryMetrics ? Math.max(1, entryMetrics.width - 24) : liveClayViewer ? Math.max(1, widget.w * state.scale) : widget.contentW,
+      displayH = entryMetrics ? Math.max(160, entryMetrics.height - 64 - (playground.open ? Math.min(300, entryMetrics.height * .4) : 64)) : liveClayViewer ? Math.max(1, widget.h * state.scale) : widget.contentH;
+    const localX = entryMetrics ? 12 - state.panX : widget.x * state.scale,
+      localY = entryMetrics ? 64 - state.panY : widget.y * state.scale,
       screenX = state.panX + localX,
       screenY = state.panY + localY,
-      scaleX = state.scale * widget.w / widget.contentW,
-      scaleY = state.scale * widget.h / widget.contentH,
+      scaleX = entryMetrics || liveClayViewer ? 1 : state.scale * widget.w / widget.contentW,
+      scaleY = entryMetrics || liveClayViewer ? 1 : state.scale * widget.h / widget.contentH,
       declaration = widget.styleRule?.style;
     if (!declaration) return;
-    const sizeKey = `${widget.contentW}x${widget.contentH}`;
+    const sizeKey = `${displayW}x${displayH}`;
     if (widget.styleSizeKey !== sizeKey) {
       widget.styleSizeKey = sizeKey;
-      declaration.width = `${widget.contentW}px`;
-      declaration.height = `${widget.contentH}px`;
+      declaration.width = `${displayW}px`;
+      declaration.height = `${displayH}px`;
       declaration.setProperty("--widget-natural-width", `${widget.contentW}px`);
       declaration.setProperty("--widget-natural-height", `${widget.contentH}px`);
     }
@@ -1775,11 +1797,8 @@
   }
   window.addEventListener("penecho:languagechange",event=>syncWidgetHostLanguages(event.detail?.language));
   function sendWidgetHostState(widget, scaleX = state.scale * widget.w / widget.contentW, scaleY = state.scale * widget.h / widget.contentH, force = false) {
-    if (widget.maximized) {
-      const shellStyle = getComputedStyle(widget.shell);
-      const available = widget.shell.clientWidth - parseFloat(shellStyle.paddingLeft) - parseFloat(shellStyle.paddingRight);
-      scaleX = scaleY = available / Math.max(widget.contentW, widget.presentationWidth || 0) * (widget.presentationZoom || 100) / 100;
-    }
+    // Presentation fits the saved page width, independently of Canvas zoom.
+    if (widget.maximized) scaleX = scaleY = widgetPresentationScale(widget);
     const interactive = canvasWidgetInteractive(widget),
       selectable = canvasWidgetSelectionEnabled(),
       selected = !state.viewMode && ["hand", "select"].includes(state.mode) && !interactive && (widget.pending === true || (state.widgetEdit?.id === widget.id && state.selectedWidgetId === widget.id)),
@@ -1907,20 +1926,6 @@
       }
     }
   }
-  function applyWidgetPresentationSize(widget, message) {
-    if (!widget.maximized || !widget.styleRule?.style) return false;
-    const width = Number(message.width), height = Number(message.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 100000 || height > 100000) return false;
-    const nextWidth = Math.max(widget.contentW, Math.ceil(width));
-    const nextHeight = Math.max(widget.contentH, Math.ceil(height));
-    if (widget.presentationWidth === nextWidth && widget.presentationHeight === nextHeight) return false;
-    widget.presentationWidth = nextWidth;
-    widget.presentationHeight = nextHeight;
-    widget.styleRule.style.setProperty("--widget-presentation-width", `${nextWidth}px`);
-    widget.styleRule.style.setProperty("--widget-presentation-height", `${nextHeight}px`);
-    sendWidgetHostState(widget);
-    return true;
-  }
   async function handleWidgetMessage(event) {
     const widget = [...state.widgets, ...(state.pendingWidget ? [state.pendingWidget] : []), ...(typeof mcpRuntime!=="undefined"?[...(mcpRuntime?.previews?.values()||[])]:[])].find((item) => item.frame?.contentWindow === event.source);
     if (!widget || event.origin !== (widget.hostOrigin || location.origin) || !event.data || typeof event.data !== "object") return;
@@ -1930,7 +1935,25 @@
       canvasDocumentsWidgetAction(widget,message);return;
     }
     if (message.type === "penecho-widget-presentation-size") {
-      applyWidgetPresentationSize(widget, message);
+      // Ignore reports from an older host: page content must not resize its viewport.
+      return;
+    }
+    if (message.type === "penecho-widget-presentation-scroll") {
+      if (!widget.maximized) return;
+      if (message.action === "extent" && [message.width, message.height, message.viewportWidth, message.viewportHeight].every(value => Number.isFinite(value) && value > 0 && value <= 1000000)) {
+        widget.presentationScrollContent = message;
+        updateWidgetPresentationScroll(widget);
+      } else if (message.action === "wheel" && [message.dx, message.dy].every(value => Number.isFinite(value) && Math.abs(value) <= 100000)) {
+        const scale = widget.presentationScrollMetrics?.scale || 1;
+        widget.shell.scrollBy(message.dx * scale, message.dy * scale);
+      } else if (message.action === "position" && [message.left, message.top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
+        const metrics = widget.presentationScrollMetrics;
+        if (metrics) widget.shell.scrollTo(message.left * metrics.scale, metrics.outside + message.top * metrics.scale);
+      } else if (message.action === "key" && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(message.key)) {
+        const shell = widget.shell;
+        if (message.key === "Home" || message.key === "End") shell.scrollTo(shell.scrollLeft, message.key === "Home" ? 0 : shell.scrollHeight);
+        else shell.scrollBy(0, (message.key.startsWith("Arrow") ? 40 : shell.clientHeight * .8) * (["ArrowUp", "PageUp"].includes(message.key) || message.key === " " && message.shift ? -1 : 1));
+      }
       return;
     }
     if (message.type === "penecho-widget-fit-result") {
@@ -2023,7 +2046,9 @@
     try {
       const snapshotImage=await decodeWidgetSnapshot(message.dataUrl);
       if(pending.signal?.aborted)throw widgetSnapshotAbortError(pending.signal);
-      if(widget.contentVersion!==pending.contentVersion)throw Error(t("widgetExportFailed"));
+      if(widget.contentVersion!==pending.contentVersion)throw Object.assign(Error(t("widgetExportFailed")),{
+        code:"WIDGET_CONTENT_CHANGED",details:{widgetId:widget.id,stage:"content-version"},
+      });
       if(!finishPending())return;
       if (pending.fullContent) {
         pending.resolve({ image:snapshotImage, dataUrl:message.dataUrl, contentWidth:message.contentWidth, contentHeight:message.contentHeight, overflow:message.overflow });
@@ -2237,6 +2262,14 @@
         height = Math.max(minimum, Math.min(maximum, point.y - start.y));
       return { ...start, h:height, contentH:height / displayScale };
     }
+    if (["resize-nw", "resize-ne", "resize-sw"].includes(hit)) {
+      const west = hit.endsWith("w"), north = hit.includes("-n"), right = start.x + start.w, bottom = start.y + start.h,
+        requested = Math.max((west ? right - point.x : point.x - start.x) / start.w, (north ? bottom - point.y : point.y - start.y) / start.h),
+        maximum = Math.min((west ? right : limit - start.x) / start.w, (north ? bottom : limit - start.y) / start.h),
+        minimum = Math.max(minimumWidth / start.w, minimumHeight / start.h),
+        scale = Math.min(maximum, Math.max(minimum, requested)), w = start.w * scale, h = start.h * scale;
+      return { ...start, x:west ? right - w : start.x, y:north ? bottom - h : start.y, w, h };
+    }
     const minimumScale = Math.max(minimumWidth / contentW, minimumHeight / contentH),
       maximumScale = Math.min((limit - start.x) / start.w, (limit - start.y) / start.h),
       requestedScale = Math.max((point.x - start.x) / start.w, (point.y - start.y) / start.h),
@@ -2261,7 +2294,7 @@
       start:widgetLayout(result.widget),
       changed:false,
     };
-    setCanvasCursor(result.hit === "resize" ? "nwse-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
+    setCanvasCursor(["resize", "resize-nw"].includes(result.hit) ? "nwse-resize" : ["resize-ne", "resize-sw"].includes(result.hit) ? "nesw-resize" : result.hit === "width" ? "ew-resize" : result.hit === "height" ? "ns-resize" : "grabbing");
     requestInteractionLayerRender();
     return true;
   }
@@ -2500,9 +2533,9 @@
     if (!widget) return;
     const replacement = state.pendingWidgetReplacement;
     const pendingBefore = capturePendingHistoryState();
-    if (!options.allowRevisionMismatch && widget.revision !== state.userRevision) {
+    if ((widget.recognitionGeneration !== undefined && widget.recognitionGeneration !== state.recognitionGeneration) || aiWidgetEditChanged(replacement?.edit)) {
       rejectPendingWidget(AI_CANCELLED);
-      setStatusKey("canvasChanged");
+      setStatusKey(replacement ? "aiWidgetChanged" : "canvasChanged");
       return;
     }
     recordWidgetsBefore();
@@ -2523,6 +2556,7 @@
         return;
       }
       state.widgets.splice(index, 1, widget);
+      if (replacement.edit) replacement.edit.committed = true;
       mountWidget(widget);
     } else {
       state.widgets.push(widget);
@@ -2582,6 +2616,7 @@
     if (!widget || !pluginEnabled(widget.pluginId)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     state.pendingWidget = widget;
     enterAIDraftHandMode();
     mountWidget(widget);
@@ -2607,16 +2642,17 @@
       favorite:false,
     };
   }
-  function startPendingWidgetReplacement(command, target, revision) {
+  function startPendingWidgetReplacement(command, target, revision, edit = aiWidgetEditSnapshot(target, revision)) {
     if (state.pendingWidget || state.pendingWidgetReplacement || !target || !state.widgets.includes(target) || target.hiddenForReplacement || target.pluginId !== command.pluginId) return Promise.resolve(false);
     const widget = widgetRecord(widgetReplacementRecordInput(command, target));
-    if (!widget || !pluginEnabled(widget.pluginId) || revision !== state.userRevision) return Promise.resolve(false);
+    if (!widget || !pluginEnabled(widget.pluginId) || aiWidgetEditChanged(edit)) return Promise.resolve(false);
     widget.pending = true;
     widget.revision = revision;
+    widget.recognitionGeneration = state.recognitionGeneration;
     target.hiddenForReplacement = true;
     unmountWidget(target);
     state.pendingWidget = widget;
-    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision };
+    state.pendingWidgetReplacement = { target, targetId:target.id, pluginId:target.pluginId, revision, edit };
     acceptPendingWidget({ restoreMode:false });
     return Promise.resolve(state.widgets.includes(widget));
   }
@@ -2631,14 +2667,14 @@
       context.drawImage(widget.snapshotImage, widget.x, widget.y, widget.w, widget.h);
     }
   }
-  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false) {
+  async function prepareVisibleWidgetSnapshots(region = null, bestEffort = true, signal = null, highResolution = false, timeoutMs = WIDGET_SNAPSHOT_TIMEOUT_MS) {
     let widgets = [];
     try {
       widgets = capturableWidgets(region);
       const captured = await Promise.all(widgets.map(async (widget) => {
         try {
           if(signal?.aborted)throw widgetSnapshotAbortError(signal);
-          const request = requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, signal, highResolution);
+          const request = requestWidgetSnapshot(widget, timeoutMs, true, signal, highResolution);
           if (bestEffort) await Promise.race([
             request,
             new Promise((_, reject) => setTimeout(() => reject(Error("snapshot-wait-expired")), WIDGET_HISTORY_SNAPSHOT_WAIT_MS)),
@@ -3182,6 +3218,7 @@
       renderInteractionLayer();
     });
   }
+  window.addEventListener("penecho:live-share-status-changed", requestInteractionLayerRender);
   function forTiles(x, y, w, h, fn, create = true) {
     if (w <= 0 || h <= 0) return;
     const x0 = Math.max(0, Math.floor(x / TILE)),
@@ -3466,6 +3503,8 @@
       y = point ? point.y : (height / 2 - state.panY) / state.scale,
       text = `x ${Math.round(x)} · y ${Math.round(y)} · ${Math.round(state.scale * 100)}%`;
     if (coords.textContent !== text) coords.textContent = text;
+    const zoomText = `${Math.round(state.scale * 100)}%`;
+    if (canvasZoomLevel && canvasZoomLevel.textContent !== zoomText) canvasZoomLevel.textContent = zoomText;
   }
   function requestCoordinatesUpdate(point = null) {
     coordinatesUpdatePending = true;
@@ -3493,11 +3532,25 @@
   function drawCanvasLineGrid(context, region, renderScale) {
     if (!region || region.w <= 0 || region.h <= 0) return;
     const scale = Math.max(0.03, Number(renderScale) || 1),
-      step = 500,
+      baseStep = state.gridStyle === "lines" ? 250 : 48,
+      step = baseStep * Math.pow(2, Math.max(0, Math.ceil(Math.log2(16 / (baseStep * scale))))),
       right = region.x + region.w,
       bottom = region.y + region.h;
     context.save();
+    if (state.gridStyle !== "lines") {
+      const radius = 1.125 / scale;
+      context.fillStyle = state.paint.paperGrid;
+      context.beginPath();
+      for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
+        for (let y = Math.floor(region.y / step) * step; y <= bottom; y += step) {
+          context.moveTo(x + radius, y);
+          context.arc(x, y, radius, 0, Math.PI * 2);
+        }
+      }
+      context.fill(); context.restore(); return;
+    }
     context.strokeStyle = state.paint.paperGrid;
+    context.globalAlpha *= 0.65;
     context.lineWidth = 1 / scale;
     context.beginPath();
     for (let x = Math.floor(region.x / step) * step; x <= right; x += step) {
@@ -3577,6 +3630,7 @@
     canvasRenderTimedStage(record, "selectionToolbarMs", updateSelectionToolbar);
   }
   function render() {
+    updateHistoryButtons();
     if (!canvasRenderTiming.enabled) {
       renderCanvasBackground();
       renderCanvasContent();
@@ -4195,7 +4249,9 @@
   }
   const WIDGET_COPY_ICON_FEEDBACK_MS = 2000;
   const OBJECT_CHROME_ICONS = Object.freeze({
-    interact:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>',
+    askagent:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z"/></svg>',
+    delete:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>',
+    interact:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 3 6 17 3-7 7-3L4 3Z"/></svg>',
     move:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9V3M9 6l3-3 3 3M12 15v6M9 18l3 3 3-3M9 12H3M6 9l-3 3 3 3M15 12h6M18 9l3 3-3 3"/></svg>',
     accept:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     cancel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -4203,6 +4259,7 @@
     copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
     refine:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.3 4.2L17.5 8.5l-4.2 1.3L12 14l-1.3-4.2-4.2-1.3 4.2-1.3L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>',
     favorite:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7Z"/></svg>',
+    echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
   });
@@ -4279,9 +4336,17 @@
         },
       });
       items.push({
+        key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
+        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
+      });
+      const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
+      items.push({
         key:`widget:${widget.id}:tool-share`,
         kind:"share",
-        label:window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        label:liveShared
+          ? t("sharedWidget")
+          : window.PenEchoCommunityUI.label?.("shareWidget") || "Share",
+        shared:liveShared,
         baseWidth:28,
         iconOnly:true,
         activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
@@ -4296,6 +4361,11 @@
       busy:widget.downloadBusy === true,
       activate:() => void downloadWidgetImage(widget),
     });
+    if (options.objectToolbarKey && !widget.pending) {
+      items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
+      const order = ["interact", "favorite", "copy", "echo", "share", "download", "delete"];
+      items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
+    }
     if (!items.length) return;
     const gap = 4,
       groupHorizontalWidth = items.reduce((sum, item) => sum + item.baseWidth, 0) + gap * (items.length - 1),
@@ -4357,6 +4427,24 @@
     for (const spec of specs) {
       if (!spec.objectToolbar) continue;
       const decisions = spec.toolbarHasDecisions !== false;
+      if (spec.target === "widget" && !decisions) {
+        const items = specs.filter(item => item.objectToolbarKey === spec.key);
+        let offset = 34, row = 0;
+        const maxWidth = Math.max(160, view.clientWidth - 12);
+        for (const item of items) {
+          const divider = ["askagent", "interact", "favorite", "echo", "delete"].includes(item.kind);
+          if (offset + item.baseWidth + 8 > maxWidth) { row++; offset = 8; }
+          else if (divider && offset > 34) offset += 10;
+          item.toolbarCompactOffset = offset;
+          item.toolbarCompactRow = row;
+          item.toolbarDivider = divider;
+          offset += item.baseWidth + 4;
+        }
+        spec.floatingWidgetToolbar = true;
+        spec.minimumWidth = row ? maxWidth : offset + 4;
+        spec.baseHeight = 40 + row * 34;
+        continue;
+      }
       spec.minimumWidth = objectToolbarMinimumWidth(toolCounts.get(spec.key) || 0, decisions);
       if (centeredToolbars.has(spec.key)) {
         // Keep the labeled action at screen size even when its Widget is tiny.
@@ -4443,12 +4531,17 @@
     const clampX = (value) => Math.max(6, Math.min(Math.max(6, viewportWidth - width - 6), value)),
       clampY = (value) => Math.max(6, Math.min(Math.max(6, viewportHeight - height - 6), value));
     if (spec?.objectToolbar) {
+      if (spec.floatingWidgetToolbar) {
+        const toolbarWidth = spec.minimumWidth;
+        return { x:Math.max(6, Math.min(screenBox.left, viewportWidth - toolbarWidth - 6)), y:Math.max(6, screenBox.top - baseHeight - 10), scale:1, baseWidth:toolbarWidth, baseHeight };
+      }
       const toolbarWidth = Math.max(spec.minimumWidth || 100, screenBox.width);
       return { x:screenBox.left, y:screenBox.top - baseHeight, scale:1, baseWidth:toolbarWidth, baseHeight };
     }
     if (spec?.objectToolbarItem) {
       const toolbar = knownPositions?.get?.(spec.objectToolbarKey);
       if (!toolbar) return null;
+      if (spec.toolbarCompactOffset !== undefined) return { x:toolbar.x + spec.toolbarCompactOffset, y:toolbar.y + 6 + spec.toolbarCompactRow * 34, scale:1, baseWidth, baseHeight };
       const hasDecisions = spec.toolbarHasDecisions !== false,
         toolbarWidth = toolbar.baseWidth * (toolbar.scale || 1),
         toolbarHeight = toolbar.baseHeight * (toolbar.scale || 1),
@@ -4622,7 +4715,7 @@
     button.className = kind === "toolbar" ? "object-chrome-button" : `object-chrome-button ${kind}`;
     button.dataset.objectChromeKey = key;
     button.innerHTML = OBJECT_CHROME_ICONS[kind] || "";
-    if (kind === "interact") {
+    if (kind === "interact" || kind === "askagent") {
       const label = document.createElement("span");
       label.className = "widget-interact-label";
       button.append(label);
@@ -4936,12 +5029,20 @@
       button.classList.toggle("object-toolbar-surface", Boolean(spec.objectToolbar));
       button.classList.toggle("object-toolbar-shell", Boolean(spec.objectToolbar));
       button.classList.toggle("widget-object-toolbar", Boolean(spec.objectToolbar && ["widget", "pending-widget"].includes(spec.target)));
+      button.classList.toggle("has-decisions", Boolean(spec.objectToolbar && spec.toolbarHasDecisions !== false));
       button.classList.toggle("object-toolbar-item", Boolean(spec.objectToolbarItem));
-      button.classList.toggle("icon-only", Boolean(spec.iconOnly || (spec.objectToolbarItem && spec.kind !== "interact")));
+      button.classList.toggle("icon-only", Boolean(spec.iconOnly || (spec.objectToolbarItem && !["interact", "askagent"].includes(spec.kind))));
+      button.classList.toggle("toolbar-group-start", Boolean(spec.toolbarDivider));
+      button.classList.toggle("floating-widget-toolbar", Boolean(spec.floatingWidgetToolbar));
       button.classList.toggle("solo-widget-tool", Boolean(spec.widgetTool && spec.groupItemCount === 1));
       button.classList.toggle("hand-toolbar-control", Boolean(spec.handToolbar));
       button.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
       button.classList.toggle("is-favorite", Boolean(spec.kind === "favorite" && spec.pressed));
+      if (spec.kind === "share") {
+        button.dataset.peState = "default";
+        button.classList.remove("active");
+        button.classList.toggle("is-shared", Boolean(spec.shared));
+      }
       button.classList.toggle("loading", Boolean(spec.busy));
       button.classList.toggle("refine-no-input", Boolean(spec.refineCandidate?.instructionMode === "implicit-polish"));
       button.classList.toggle("refine-hovered", Boolean(spec.refineCandidate && widgetRefineHintHovered(spec.refineCandidate)));
@@ -4955,6 +5056,7 @@
       else button.removeAttribute("aria-busy");
       if (spec.kind === "refine" || spec.objectToolbar) button.removeAttribute("title");
       else button.title = spec.tooltip || label;
+      if (spec.kind === "askagent") button.querySelector(".widget-interact-label").textContent = t("widgetAskAgent");
       if (spec.kind === "interact") button.querySelector(".widget-interact-label").textContent = t("widgetInteractShort");
       if (spec.kind === "refine") {
         const buttonLabel = button.querySelector(".widget-refine-button-label"),
@@ -5005,13 +5107,14 @@
     }
     const { spec, position } = record,
       screenBox = screenObjectBox(spec.box),
-      toolbarWidth = Math.max(screenBox.width, position.baseWidth || 0),
-      toolbarHeight = position.baseHeight || 34,
-      materialX = position.x - state.panX,
-      materialY = position.y - state.panY,
+      toolbarWidth = spec.floatingWidgetToolbar ? screenBox.width : Math.max(screenBox.width, position.baseWidth || 0),
+      toolbarHeight = spec.floatingWidgetToolbar ? 0 : position.baseHeight || 34,
+      materialX = (spec.floatingWidgetToolbar ? screenBox.left : position.x) - state.panX,
+      materialY = (spec.floatingWidgetToolbar ? screenBox.top : position.y) - state.panY,
       widgetStackIndex = state.widgets.length + (state.pendingWidget ? 2 : 1),
       declaration = runtimeElementStyle(selectedWidgetMaterial, "selected-widget-material");
     selectedWidgetMaterial.hidden = false;
+    selectedWidgetMaterial.classList.toggle("floating-toolbar-selection", Boolean(spec.floatingWidgetToolbar));
     selectedWidgetMaterial.classList.toggle("hand-toolbar-hiding", Boolean(spec.handToolbar && spec.handToolbarHiding));
     syncWidgetLayerOrder();
     if (spec.object?.styleRule?.style) spec.object.styleRule.style.zIndex = String(widgetStackIndex);
@@ -6172,6 +6275,19 @@
   }
   function valid(p) {
     return p.x >= 0 && p.x <= SIZE && p.y >= 0 && p.y <= SIZE;
+  }
+  function zoomCanvasBy(factor) {
+    if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return false;
+    const rect = view.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    // zoomCanvasAt clamps one wheel step to +/-300, so larger jumps (reset to 100%) take a few steps.
+    let remaining = -Math.log(factor) / .002, changed = false;
+    for (let step = 0; step < 8 && Math.abs(remaining) > 1e-6; step += 1) {
+      const delta = Math.max(-300, Math.min(300, remaining));
+      if (!zoomCanvasAt(x, y, delta)) break;
+      changed = true;
+      remaining -= delta;
+    }
+    return changed;
   }
   function mergeDirty(x, y, p = 10) {
     const a = {

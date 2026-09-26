@@ -376,6 +376,7 @@ function createMcpService(options) {
         if (message.type !== "hello") return ws.close(1008, "Canvas hello required");
         try {
           connection.canvasId = safeString(message.canvasId, 128, "canvasId");
+          if(ws.mcpExpectedCanvasId && connection.canvasId !== ws.mcpExpectedCanvasId)throw Error("Wrong workspace");
           connection.title = safeString(message.title, 200, "title");
           connection.documents = message.documents === undefined ? null : canvasCatalog(message.documents);
           connection.documentRename = message.documentRename === true;

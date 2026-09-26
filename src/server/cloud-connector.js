@@ -339,7 +339,7 @@ class CloudConnector {
 
   async cloudRequest(pathname, { method = "GET", body } = {}) {
     const configuration = this.requireCloudAccount();
-    if (!(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
+    if (!(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/share(?:\?widgetId=[0-9a-f-]{36})?$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
     let response;
     try {
       response = await fetch(`${configuration.origin}${pathname}`, {

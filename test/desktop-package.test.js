@@ -61,13 +61,13 @@ test("desktop settings support CLI providers without exposing API secrets", () =
   assert.equal(JSON.stringify(visible).includes("never-return-this"), false);
   assert.equal(publicSettings({ env:{} }).host, "0.0.0.0");
   assert.equal(publicSettings({ env:{} }).autoDelay, "5");
-  assert.equal(publicSettings({ env:{} }).canvasAgentAutoOpen, true);
+  assert.equal(publicSettings({ env:{} }).canvasAgentAutoOpen, false);
   assert.equal(publicSettings({ env:{} }).canvasAgentTurnLimit,"100");
   assert.equal(publicSettings({ env:{ PENECHO_CANVAS_AGENT_TURN_LIMIT:"275" } }).canvasAgentTurnLimit,"275");
   assert.equal(publicSettings({ env:{ PENECHO_CANVAS_AGENT_AUTO_OPEN:"false" } }).canvasAgentAutoOpen, false);
   assert.equal(normalizeSettings(base({ autoDelay:undefined })).updates.AUTO_AI_DELAY_SECONDS, "5");
   assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:false })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "false");
-  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:undefined })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "true");
+  assert.equal(normalizeSettings(base({ canvasAgentAutoOpen:undefined })).updates.PENECHO_CANVAS_AGENT_AUTO_OPEN, "false");
   const visibleKimi = publicSettings({ provider:"kimi-cli", env:{ KIMI_CLI_PATH:"kimi", KIMI_CLI_MODEL:"kimi-code/k3" } });
   assert.equal(visibleKimi.provider, "kimi-cli");
   assert.equal(visibleKimi.kimiCliPath, "kimi");
@@ -428,8 +428,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /TimeStamperCertificate/);
   assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
   assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
-  assert.equal(rootPackage.version, "1.3.3");
-  assert.equal(rootPackage.config.desktopVersion, "1.3.3");
+  assert.equal(rootPackage.version, "1.3.5");
+  assert.equal(rootPackage.config.desktopVersion, "1.3.5");
   assert.ok(rootPackage.files.includes("src/"));
   for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
     assert.ok(rootPackage.files.includes(asset), asset);

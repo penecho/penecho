@@ -3172,7 +3172,10 @@ test("static page keeps strict styles while allowing the pinned MathJax CDN", ()
   const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), pageScale=fs.readFileSync(path.join(ROOT,"public","page-scale.js"),"utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"), elementStyleWrites=[...app.matchAll(/([A-Za-z_$][\w$?.]*)\.style\.(?:setProperty|removeProperty|[A-Za-z_$][\w$]*\s*=)/g)].filter(([,owner])=>!owner.endsWith(".styleRule")).map(([write])=>write);
   assert.doesNotMatch(html, /\sstyle=/i);
   assert.match(css, /\.color-blue\s*\{/);
-  assert.deepEqual(elementStyleWrites,[]);
+  // CSP permits individual CSSOM property writes, but blocks inline style text:
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src-attr
+  assert.equal(elementStyleWrites.some(write=>/\.style\.cssText\s*=/.test(write)),false);
+  assert.doesNotMatch(app, /\.style\s*=/);
   assert.doesNotMatch(app, /setAttribute\(\s*["']style["']/);
   assert.doesNotMatch(pageScale,/\.style\.|setAttribute\(\s*["']style["']/);
   assert.match(html, /https:\/\/cdn\.jsdelivr\.net\/npm\/mathjax@3\.2\.2\/es5\/tex-svg\.js/);

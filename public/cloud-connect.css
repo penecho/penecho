@@ -24,6 +24,9 @@
 .cloud-account-dot { background: #8b94a1; border: 2px solid var(--panel, #fff); border-radius: 50%; height: .55rem; width: .55rem; }
 .cloud-account-button[data-state="connected"] .cloud-account-dot { background: #10b981; }
 .cloud-share-canvas { color: var(--studio-accent-strong, #4338ca); }
+#shareCanvasBtn[data-live-shared="true"] svg circle,
+#canvasViewShareBtn[data-live-shared="true"] svg circle,
+.object-chrome-button.share.is-shared svg circle { fill: currentColor; }
 
 .object-chrome-button.favorite { color: #9b611e; }
 .object-chrome-button.share { color: var(--studio-accent-strong, #4338ca); }
@@ -310,7 +313,7 @@
 .cloud-share-actions .cloud-button:not(.primary):hover { background: var(--ai-hover); border-color: transparent; color: var(--ai-ink); }
 .cloud-share-status { color: var(--ai-muted); font-size: .73rem; margin-right: auto; }
 .cloud-lineage-notice { background: rgb(19 122 80 / 7%); border-left: 3px solid var(--ai-ok); border-radius: .25rem; color: var(--ai-ok); font-size: .74rem; line-height: 1.5; margin: .65rem 0 .2rem; padding: .55rem .65rem; }
-.cloud-publication-consent { align-items: center; background: var(--ai-well); border-radius: .625rem; color: var(--ai-muted); display: flex; font-size: .72rem; gap: 8px; line-height: 1.55; margin-top: .75rem; overflow-wrap: anywhere; padding: .65rem .7rem; padding-inline-start: 0; }
+.cloud-publication-consent { align-items: center; background: var(--ai-well); border-radius: .625rem; color: var(--ai-muted); display: flex; font-size: .72rem; gap: 8px; line-height: 1.55; margin-top: .75rem; overflow-wrap: anywhere; padding: .65rem .7rem; }
 .cloud-publication-consent input { accent-color: var(--ai-accent); flex: 0 0 15px; height: 15px; margin: 0; width: 15px; }
 .cloud-publication-consent > span { min-width: 0; }
 .cloud-publication-consent .cloud-publication-link { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--cloud-link); border: 0; border-radius: 0; background: transparent; font-weight: 500; line-height: inherit; text-decoration: none; vertical-align: baseline; }
@@ -635,3 +638,20 @@ html.penecho-web-page-scale .penecho-cloud-dialog.cloud-center {
   width: min(1120px, calc(var(--penecho-canvas-page-viewport-width, 100vw) - 40px));
   height: min(760px, calc(var(--penecho-canvas-page-dynamic-height, 100dvh) - 40px));
 }
+
+/* penecho_design #dialogs: M/single; header/body/footer geometry and compact form controls. */
+.penecho-live-share-dialog { position:relative; display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(520px,100%); max-height:calc(100dvh - 32px); overflow:hidden; border:1px solid var(--studio-line,var(--line)); border-radius:8px; background:var(--studio-panel,var(--panel)); color:var(--studio-text,var(--ink)); font:400 13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.penecho-live-share-dialog > [data-pe-region="header"] { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px 12px 18px; border-bottom:1px solid var(--studio-line,var(--line)); }
+.penecho-live-share-dialog h2 { margin:0; font-size:15px; font-weight:500; line-height:1.3; }
+.penecho-live-share-dialog > [data-pe-region="body"] { min-height:0; overflow:auto; padding:16px 18px 18px; }
+.penecho-live-share-dialog p { margin:0 0 12px; }
+.penecho-live-share-dialog [role="status"]:empty { display:none; }
+.penecho-live-share-dialog > footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; padding:10px 16px; border-top:1px solid var(--studio-line,var(--line)); }
+.penecho-live-share-dialog [data-pe-region="field"] { display:grid; gap:6px; margin-bottom:12px; }
+.penecho-live-share-dialog input { box-sizing:border-box; width:100%; min-width:0; height:30px; padding:0 8px; border:1px solid var(--studio-line,var(--line)); border-radius:5px; background:transparent; color:inherit; font:inherit; }
+.penecho-live-share-dialog button { box-sizing:border-box; height:30px; padding:0 9px; border:1px solid var(--studio-line,var(--line)); border-radius:5px; background:transparent; color:inherit; font-family:inherit; font-size:13px; font-weight:500; line-height:1; cursor:pointer; }
+.penecho-live-share-dialog button[data-pe-button="primary"] { background:var(--studio-accent,var(--gold)); color:var(--studio-primary-ink,#fff); border-color:transparent; }
+.penecho-live-share-dialog button:disabled { opacity:.5; cursor:default; }
+.penecho-live-share-dialog :is(button,input):focus-visible { outline:2px solid var(--studio-accent,var(--gold)); outline-offset:2px; }
+.penecho-live-share-dialog button:not(:disabled):hover { border-color:var(--studio-accent,var(--gold)); }
+.penecho-live-share-dialog [hidden] { display:none; }

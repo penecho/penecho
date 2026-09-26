@@ -1028,7 +1028,7 @@
       const operation = scienceMode && hooks ? scienceSnapshot(message, hooks) : snapshotDocument(message, false);
       activeSnapshot = operation;
       try { return await operation; }
-      finally { if(activeSnapshot===operation)activeSnapshot=null; schedulePresentationSize(); }
+      finally { if(activeSnapshot===operation)activeSnapshot=null; reportPresentationScrollExtent(); }
     }
     async function snapshotPrimarySvg(requestedWidth, requestedHeight, scale) {
       const visible = [...document.querySelectorAll("svg")].map((svg) => ({ svg, rect:svg.getBoundingClientRect() }))
@@ -1189,7 +1189,7 @@
         };
         const rendering=render();
         activeSnapshotRender=rendering;
-        const release=()=>{if(activeSnapshotRender===rendering)activeSnapshotRender=null;schedulePresentationSize();};
+        const release=()=>{if(activeSnapshotRender===rendering)activeSnapshotRender=null;reportPresentationScrollExtent();};
         rendering.then(release,release);
         const remainingMs=Math.max(1,timeoutMs-(clock()-snapshotStartedAt));
         const canvas = await withTimeout(rendering, remainingMs, () => (captureExpired = true));
@@ -1239,15 +1239,11 @@
       if (fitContentStyle) fitContentStyle.disabled = true;
       restoreFitContentMarkers();
       // Read first, then apply one stylesheet. Preserve authored styles and live DOM.
-      const axes = widgetState.maximized || widgetState.fitContent ? "resize" : widgetState.fitContentAxes;
+      const axes = widgetState.fitContent ? "resize" : widgetState.fitContentAxes;
       const fitWidth = axes !== "height", fitHeight = axes !== "width";
-      const rootOverflow = widgetState.maximized
-        ? "overflow:hidden!important;overflow:clip!important;"
-        : (fitHeight ? "overflow-y:visible!important;" : "") + (fitWidth ? "overflow-x:visible!important;" : "");
       const rules = ["html,body{"
-        + (fitHeight ? "height:auto!important;min-height:0!important;max-height:none!important;" : "")
-        + (fitWidth ? "max-width:none!important;" : "") + rootOverflow + "}"
-        + (widgetState.maximized ? "html,body{overscroll-behavior:auto!important}" : "")];
+        + (fitHeight ? "height:auto!important;min-height:0!important;max-height:none!important;overflow-y:visible!important;" : "")
+        + (fitWidth ? "max-width:none!important;overflow-x:visible!important;" : "") + "}"];
       const containers = [];
       for (const element of document.body?.querySelectorAll("*") || []) {
         if (!(element instanceof HTMLElement) || element.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
@@ -1257,23 +1253,17 @@
         const style = getComputedStyle(element);
         const vertical = fitHeight && /^(auto|scroll)$/.test(style.overflowY);
         const horizontal = fitWidth && /^(auto|scroll)$/.test(style.overflowX);
-        // Viewport minimums inside padded documents otherwise grow with every
-        // presentation resize. Remove them only for ordinary maximized layouts.
-        const viewportMinimum = widgetState.maximized && innerHeight > 0
-          && element.children.length > 0 && parseFloat(style.minHeight) >= innerHeight;
-        const viewportHeight = widgetState.maximized && innerHeight > 0
-          && element.children.length > 0 && parseFloat(style.height) >= innerHeight
-          && (/^(hidden|clip)$/.test(style.overflowY) || Math.abs(parseFloat(style.height) - innerHeight) <= 1);
-        if (!vertical && !horizontal && !viewportMinimum && !viewportHeight) continue;
-        containers.push({ element, vertical, horizontal, viewportMinimum, viewportHeight,
+        // A height equal to the viewport is not evidence of a scrolling panel.
+        // Keep authored height/min-height on ordinary containers: descendants
+        // may use them as their percentage-position or flex/grid layout basis.
+        if (!vertical && !horizontal) continue;
+        containers.push({ element, vertical, horizontal,
           width:element.scrollWidth > element.clientWidth ? element.scrollWidth + element.offsetWidth - element.clientWidth : 0 });
       }
       for (const [index, item] of containers.entries()) {
         fitContentElements.set(item.element, item.element.getAttribute("data-penecho-fit-scroll"));
         if (item.element.getAttribute("data-penecho-fit-scroll") !== String(index)) item.element.setAttribute("data-penecho-fit-scroll", String(index));
         rules.push('[data-penecho-fit-scroll="' + index + '"]{'
-          + (item.viewportMinimum ? "min-height:0!important;" : "")
-          + (item.viewportHeight ? "height:auto!important;max-height:none!important;overflow-y:visible!important;" : "")
           + (item.vertical ? "height:auto!important;min-height:0!important;max-height:none!important;overflow-y:visible!important;flex-shrink:0!important;" : "")
           + (item.horizontal ? "max-width:none!important;overflow-x:visible!important;" + (item.width ? "min-width:" + item.width + "px!important;" : "") : "")
           + "}");
@@ -1286,86 +1276,124 @@
       if (fitContentStyle.textContent !== css) fitContentStyle.textContent = css;
       fitContentStyle.disabled = false;
     }
-    // One presentation owner: refresh authored scrolling layouts only when dirty,
-    // then measure their natural extent without using the iframe viewport height.
-    let presentationFrame = 0, presentationObserver = null, presentationMutations = null;
-    let presentationLayoutDirty = false, lastPresentationSize = "", presentationViewportWidth = 0;
-    function schedulePresentationSize(refresh = false) {
-      if (!widgetState.maximized) return;
-      presentationLayoutDirty ||= refresh;
-      if (presentationFrame) return;
-      presentationFrame = nativeRequestAnimationFrame(() => {
-        presentationFrame = 0;
-        if (!widgetState.maximized || !document.body || activeSnapshot || activeSnapshotRender) return;
-        if (presentationLayoutDirty) {
-          presentationLayoutDirty = false;
-          setFitContentLayout(true, true);
-        }
-        const body = document.body, rect = body.getBoundingClientRect();
-        let width = Math.max(1, rect.right + scrollX, body.scrollWidth);
-        // The body border box excludes its trailing margin, but that margin
-        // contributes to the document's extent. Include it so the outer
-        // presentation scroller can reach all trailing content.
-        const bottomMargin = Math.max(0, parseFloat(getComputedStyle(body).marginBottom) || 0);
-        let height = Math.max(1, rect.bottom + scrollY + bottomMargin);
-        // Out-of-flow content contributes to the presentation without making the
-        // viewport-sized document scrollHeight the next iframe height.
-        for (const element of body.querySelectorAll("*")) {
-          if (element.parentElement?.closest("textarea,input,select,iframe,[contenteditable],[role=grid],[role=tree],[role=treegrid],[role=listbox],[role=combobox],[role=slider],[role=spinbutton],[role=textbox],[role=menu],[role=menubar],[role=tablist]")) continue;
-          if (element.parentElement?.closest("[data-penecho-architecture] .pa-map, [data-penecho-sequence] .pa-map, [data-penecho-workflow] .pa-map")) continue;
-          const child = element.getBoundingClientRect();
-          width = Math.max(width, child.right + scrollX);
-          height = Math.max(height, child.bottom + scrollY);
-        }
-        width = Math.min(100000, Math.ceil(width));
-        height = Math.min(100000, Math.ceil(height));
-        if (!Number.isFinite(width) || !Number.isFinite(height)) return;
-        const key = width + ":" + height;
-        if (key === lastPresentationSize) return;
-        lastPresentationSize = key;
-        parent.postMessage({ type:"penecho-widget-presentation-size", runtimeVersion, width, height }, "*");
+    let presentationScrollStyle = null, presentationScrollObserver = null, presentationScrollMutations = null;
+    let presentationScrollFrame = 0, presentationScrollKey = "", presentationScrollTarget = null;
+    function presentationDocumentScroller() {
+      const root = document.scrollingElement || document.documentElement, body = document.body;
+      // Some full-height apps put their page scrollbar on body, rather than
+      // the document. It is still the page scroll owner, not a nested control.
+      if (body && body !== root && root.scrollHeight <= root.clientHeight + 1
+        && /^(auto|scroll)$/.test(getComputedStyle(body).overflowY) && body.scrollHeight > body.clientHeight + 1) return body;
+      return root;
+    }
+    function reportPresentationScrollExtent() {
+      if (!widgetState.maximized || presentationScrollFrame) return;
+      presentationScrollFrame = nativeRequestAnimationFrame(() => {
+        presentationScrollFrame = 0;
+        if (!widgetState.maximized || activeSnapshot || activeSnapshotRender) return;
+        const root = presentationDocumentScroller();
+        const extent = { width:innerWidth + Math.max(0, root.scrollWidth - root.clientWidth), height:innerHeight + Math.max(0, root.scrollHeight - root.clientHeight), viewportWidth:innerWidth, viewportHeight:innerHeight };
+        const key = Object.values(extent).join(":");
+        if (key === presentationScrollKey) return;
+        presentationScrollKey = key;
+        parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"extent", ...extent }, "*");
       });
     }
-    function setPresentationLayout(refresh = true) {
-      if (!widgetState.maximized) {
-        setFitContentLayout(Boolean(widgetState.fitContent || widgetState.fitContentAxes), refresh);
-        if (presentationFrame) nativeCancelAnimationFrame(presentationFrame);
-        presentationFrame = 0;
-        presentationObserver?.disconnect();
-        presentationMutations?.disconnect();
-        presentationObserver = presentationMutations = null;
-        lastPresentationSize = "";
-        presentationViewportWidth = 0;
-        presentationLayoutDirty = false;
+    function setPresentationScrolling(enabled) {
+      if (!enabled) {
+        if (presentationScrollStyle) presentationScrollStyle.disabled = true;
+        presentationScrollObserver?.disconnect();
+        presentationScrollMutations?.disconnect();
+        presentationScrollObserver = presentationScrollMutations = null;
+        if (presentationScrollFrame) nativeCancelAnimationFrame(presentationScrollFrame);
+        presentationScrollFrame = 0;
+        presentationScrollKey = "";
+        presentationScrollTarget = null;
         return;
       }
-      if (document.body && !presentationObserver && typeof ResizeObserver === "function") {
-        presentationViewportWidth = innerWidth;
-        presentationObserver = new ResizeObserver(() => schedulePresentationSize());
-        presentationObserver.observe(document.body);
+      if (!document.body) return;
+      if (!presentationScrollStyle) {
+        presentationScrollStyle = document.createElement("style");
+        // Retain all authored dimensions. The outer presentation owns document
+        // scrolling; nested controls/panels still use their native scrolling.
+        presentationScrollStyle.textContent = "html{overflow:hidden!important;overscroll-behavior:auto!important}html,body{scrollbar-width:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important}";
+        document.head.append(presentationScrollStyle);
       }
-      if (document.body && !presentationMutations && typeof MutationObserver === "function") {
-        presentationMutations = new MutationObserver(records => {
-          if (records.some(record => record.target !== fitContentStyle
-            && record.attributeName !== "data-penecho-fit-scroll")) schedulePresentationSize(true);
-        });
-        presentationMutations.observe(document.body, { subtree:true, childList:true, characterData:true, attributes:true });
+      presentationScrollStyle.disabled = false;
+      if (!presentationScrollObserver) {
+        presentationScrollObserver = new ResizeObserver(reportPresentationScrollExtent);
+        presentationScrollObserver.observe(document.documentElement);
+        presentationScrollObserver.observe(document.body);
+        presentationScrollMutations = new MutationObserver(reportPresentationScrollExtent);
+        presentationScrollMutations.observe(document.body, { subtree:true, childList:true, attributes:true, characterData:true });
       }
-      if (refresh) schedulePresentationSize(true);
+      reportPresentationScrollExtent();
     }
-    addEventListener("resize", () => {
-      if (!widgetState.maximized) return;
-      const widthChanged = presentationViewportWidth !== innerWidth;
-      presentationViewportWidth = innerWidth;
-      // Our measured height is written back to the iframe. Reclassifying the
-      // authored containers against that new height can alternately expand and
-      // restore the same container forever. Only width changes require reflow
-      // classification here; authored mutations already invalidate it above.
-      schedulePresentationSize(widthChanged);
+    function nestedPresentationScroller(target, dx, dy) {
+      for (let element = target?.nodeType === 1 ? target : target?.parentElement; element && element !== document.body && element !== document.documentElement; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        if ((dy && /^(auto|scroll)$/.test(style.overflowY) && (dy < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight - 1))
+          || (dx && /^(auto|scroll)$/.test(style.overflowX) && (dx < 0 ? element.scrollLeft > 0 : element.scrollLeft + element.clientWidth < element.scrollWidth - 1))) return true;
+      }
+      return false;
+    }
+    addEventListener("wheel", event => {
+      if (!widgetState.maximized || event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+      let dx = event.deltaX * unit, dy = event.deltaY * unit;
+      if (event.shiftKey && !dx) { dx = dy; dy = 0; }
+      if (nestedPresentationScroller(event.target, dx, dy)) return;
+      event.preventDefault();
+      parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"wheel", dx, dy }, "*");
+    }, { passive:false });
+    let presentationTouch = null;
+    addEventListener("touchstart", event => {
+      presentationTouch = widgetState.maximized && event.touches.length === 1
+        ? { x:event.touches[0].clientX, y:event.touches[0].clientY } : null;
+    }, { passive:true });
+    addEventListener("touchmove", event => {
+      if (!widgetState.maximized || !presentationTouch || event.touches.length !== 1) return;
+      const touch = event.touches[0], dx = presentationTouch.x - touch.clientX, dy = presentationTouch.y - touch.clientY;
+      presentationTouch = { x:touch.clientX, y:touch.clientY };
+      if (event.defaultPrevented || getComputedStyle(event.target).touchAction === "none" || nestedPresentationScroller(event.target, dx, dy)) return;
+      event.preventDefault();
+      parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"wheel", dx, dy }, "*");
+    }, { passive:false });
+    addEventListener("touchend", () => { presentationTouch = null; }, { passive:true });
+    addEventListener("keydown", event => {
+      if (!widgetState.maximized || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
+        || !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)
+        || event.target?.closest?.("input,textarea,select,button,[contenteditable],[role=slider],[role=spinbutton]")) return;
+      if (nestedPresentationScroller(event.target, 0, ["ArrowUp", "PageUp", "Home"].includes(event.key) || event.shiftKey ? -1 : 1)) return;
+      event.preventDefault();
+      parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"key", key:event.key, shift:event.shiftKey }, "*");
     });
-    addEventListener("load", () => { if (widgetState.maximized) setPresentationLayout(); });
+    addEventListener("scroll", event => {
+      if (!widgetState.maximized) return;
+      const root = presentationDocumentScroller();
+      if (event.target !== root && event.target !== document) return;
+      if (presentationScrollTarget && Math.abs(root.scrollTop - presentationScrollTarget.top) < 1 && Math.abs(root.scrollLeft - presentationScrollTarget.left) < 1) return;
+      parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"position", left:root.scrollLeft, top:root.scrollTop }, "*");
+    }, { passive:true, capture:true });
+    addEventListener("resize", reportPresentationScrollExtent);
+    function setPresentationLayout(refresh = true) {
+      // A maximized widget is an ordinary browser viewport. Keep authored CSS,
+      // including fixed sizes and native scrolling. Explicit Canvas Fit remains
+      // a separate action and is restored when returning to the Canvas.
+      setFitContentLayout(!widgetState.maximized && Boolean(widgetState.fitContent || widgetState.fitContentAxes), refresh);
+      setPresentationScrolling(widgetState.maximized);
+    }
+    addEventListener("load", () => setPresentationLayout());
     addEventListener("message", (event) => {
       if (event.source !== parent) return;
+      if (event.data?.type === "penecho-widget-presentation-scroll-to") {
+        const {left, top} = event.data;
+        if (!widgetState.maximized || ![left, top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) return;
+        const root = presentationDocumentScroller();
+        presentationScrollTarget = { left:Math.min(left, root.scrollWidth - root.clientWidth), top:Math.min(top, root.scrollHeight - root.clientHeight) };
+        root.scrollTo({ ...presentationScrollTarget, behavior:"instant" });
+        return;
+      }
       if (event.data?.type === PUBLIC_FETCH_RESPONSE && publicFetchRequests.has(event.data.requestId)) {
         const pending = publicFetchRequests.get(event.data.requestId);
         publicFetchRequests.delete(event.data.requestId);
@@ -1399,7 +1427,8 @@
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
         const becameVisible = event.data.active && (!widgetStateReceived || !widgetState.active);
         const layoutChanged = widgetState.maximized !== (event.data.maximized === true) || widgetState.fitContent !== (event.data.fitContent === true) || widgetState.fitContentAxes !== event.data.fitContentAxes;
-        widgetState = { fitContent:event.data.fitContent === true, fitContentAxes:event.data.fitContentAxes, maximized:event.data.maximized === true, selected:event.data.selected, interactive:Boolean(event.data.interactive), active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
+        const viewportWidth = Number.isFinite(event.data.viewportWidth) && event.data.viewportWidth > 0 && event.data.viewportWidth <= 100000 ? event.data.viewportWidth : undefined;
+        widgetState = { fitContent:event.data.fitContent === true, fitContentAxes:event.data.fitContentAxes, maximized:event.data.maximized === true, viewportWidth, selected:event.data.selected, interactive:Boolean(event.data.interactive), active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
         setPresentationLayout(layoutChanged);
         widgetStateReceived = true;
         if (!widgetState.selected) setControlCursor();
@@ -1532,7 +1561,7 @@
 
   function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false, workflowMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
-    const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl]
+    const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl, new URL("playground/liveclay-v1.js", location.href).href]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
       .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
       .concat(sequenceMode ? [sequenceRuntimeUrl] : [])
@@ -1823,6 +1852,7 @@
     const mcpPreview = sourceFormat === "penecho-mcp+html";
     parsed.querySelectorAll(mcpPreview ? "base, iframe, object, embed, meta[http-equiv]" : "base, iframe, object, embed, form, meta[http-equiv]").forEach((element) => element.remove());
     parsed.querySelectorAll("script[src]").forEach((element) => {
+      if(element.getAttribute("src")==="https://penecho.ai/canvas/playground/liveclay-v1.js"){element.src=new URL("playground/liveclay-v1.js",location.href).href;return;}
       if (!safeHttpsResource(element, "src")) element.remove();
     });
     parsed.querySelectorAll("link").forEach((element) => {
@@ -2046,12 +2076,17 @@
     if (receiveParentPublicFetch(event) || respondToWidgetHostProbe(event)) return;
     const message = event.data;
     if (event.source === parent && event.origin === parentOrigin) {
+      if (message?.type === "penecho-widget-presentation-scroll-to" && widgetState.maximized
+        && [message.left, message.top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
+        inner.contentWindow?.postMessage(message, "*");
+        return;
+      }
       if (message?.type === "penecho-widget-init") {
         mcpProgressState = null;
         if (typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         snapshotDebugLog("init-received", { nextRuntimeVersion:runtimeVersion + 1, htmlLength:message.html.length });
-        for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot");
+        for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot", "WIDGET_CONTENT_CHANGED");
         initialized = true;
         widgetLanguage = normalizeWidgetLanguage(message.language);
         runtimeVersion++;
@@ -2064,6 +2099,8 @@
         inner.removeAttribute("src");
         inner.srcdoc = documentSource;
         snapshotDebugLog("inner-srcdoc-assigned", { documentLength:documentSource.length });
+      } else if (message?.type === "penecho-liveclay-update" && message.document?.version === 1 && JSON.stringify(message.document).length <= 100000) {
+        inner.contentWindow?.postMessage(message,"*");
       } else if (message?.type === "penecho-widget-language") {
         widgetLanguage = normalizeWidgetLanguage(message.language);
         inner.contentWindow?.postMessage({type:"penecho-diagram-language",language:widgetLanguage},"*");
@@ -2072,7 +2109,8 @@
         inner.contentWindow?.postMessage({type:"penecho-mcp-progress",progress:message.progress},"*");
       } else if (message?.type === "penecho-widget-state" && typeof message.selected === "boolean" && typeof message.active === "boolean"
         && Number.isFinite(message.scaleX) && message.scaleX > 0 && Number.isFinite(message.scaleY) && message.scaleY > 0) {
-        widgetState = { fitContent:message.fitContent === true, fitContentAxes:message.fitContentAxes, maximized:message.maximized === true, selected:message.selected, interactive:Boolean(message.interactive), active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
+        const viewportWidth = Number.isFinite(message.viewportWidth) && message.viewportWidth > 0 && message.viewportWidth <= 100000 ? message.viewportWidth : undefined;
+        widgetState = { fitContent:message.fitContent === true, fitContentAxes:message.fitContentAxes, maximized:message.maximized === true, viewportWidth, selected:message.selected, interactive:Boolean(message.interactive), active:message.active, navigationLocked:Boolean(message.navigationLocked), scaleX:message.scaleX, scaleY:message.scaleY };
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-fit-request") {
         if (typeof message.requestId !== "string" || message.requestId.length > 128 || !["width", "height", "resize"].includes(message.hit)) return;
@@ -2097,6 +2135,10 @@
       return;
     }
     if (event.source !== inner.contentWindow || !message || typeof message !== "object") return;
+    if (message.type === "penecho-widget-presentation-scroll" && widgetState.maximized && message.runtimeVersion === runtimeVersion) {
+      parent.postMessage(message, parentOrigin);
+      return;
+    }
     if (["penecho-widget-document-ready", "penecho-widget-snapshot", "penecho-widget-snapshot-error"].includes(message.type)) {
       snapshotDebugLog("inner-message", {
         type:message.type,
@@ -2106,11 +2148,7 @@
         requestPending:typeof message.requestId === "string" ? pendingSnapshots.has(message.requestId) : null,
       });
     }
-    if (message.type === "penecho-widget-presentation-size" && widgetState.maximized
-      && message.runtimeVersion === runtimeVersion
-      && [message.width, message.height].every(value => Number.isFinite(value) && value > 0 && value <= 100000)) {
-      parent.postMessage({ type:message.type, width:message.width, height:message.height }, parentOrigin);
-    } else if (message.type === "penecho-widget-fit-result" && typeof message.requestId === "string" && message.requestId.length <= 128
+    if (message.type === "penecho-widget-fit-result" && typeof message.requestId === "string" && message.requestId.length <= 128
       && Number.isFinite(message.width) && message.width > 0 && Number.isFinite(message.height) && message.height > 0) {
       parent.postMessage({ type:message.type, requestId:message.requestId, width:message.width, height:message.height }, parentOrigin);
     } else if (message.type === "penecho-widget-exit-interaction" && widgetState.interactive) {

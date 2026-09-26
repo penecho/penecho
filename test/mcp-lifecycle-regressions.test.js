@@ -167,3 +167,23 @@ test('MCP history image decode revokes its object URL when image loading stalls'
   assert.deepEqual(revoked,['blob:history']);assert.equal(images[0].src,'');
   assert.equal(images[0].onload,null);assert.equal(images[0].onerror,null);
 });
+
+
+test('draft authorization and window replacement notices stay distinct from account login expiry',()=>{
+  for(const [draft,code,notice,authRequired] of [[true,4401,'workspaceAccessRequired',false],[true,4001,'workspaceReplaced',false],[false,4401,null,true]]){
+    const h=harness(),messages=[];
+    h.context.window.PENECHO_CONFIG={runtime:'cloud',...(draft?{browserDraftId:'draft'}:{})};
+    h.context.mcpText=key=>key;
+    h.context.mcpConnectionNotice=()=>h.mcpRuntime.connectionNotice;
+    h.context.setStatus=text=>messages.push(text);
+    const socket=h.connect(),event=new Event('close');Object.defineProperty(event,'code',{value:code});socket.dispatchEvent(event);
+    assert.equal(h.mcpRuntime.authRequired,authRequired);
+    assert.equal(h.mcpRuntime.connectionNotice,notice);
+    assert.equal(messages.at(-1),notice||'cloudSignInRequired');
+    assert.equal(h.mcpRuntime.wanted,false,'terminal authorization failures do not retry automatically');
+    assert.equal(h.mcpRuntime.connectionLost,true);
+    h.connect();
+    assert.equal(h.mcpRuntime.connectionNotice,null,'a fresh attempt clears the previous explanation');
+    assert.equal(h.mcpRuntime.authRequired,false);
+  }
+});
