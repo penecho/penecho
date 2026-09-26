@@ -364,9 +364,10 @@
     else if(view){state.scale=Math.max(.03,Math.min(2,Number(view.scale)||1));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
     setCanvasNavigationLocked(view?.navigationLocked===true);
   }
-  async function canvasDocumentsAdopt(item,location) {
+  async function canvasDocumentsAdopt(item,location,isCurrent=()=>true) {
     const previous=canvasDocuments.records.get(canvasDocuments.activeId);
     const locator={location,id:item.id},meta=canvasDocumentIdentity.normalizeMetadata(item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:item.name||""};
+    if(!isCurrent())return false;
     const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta,{item});
     doc.title=item.name||doc.title;doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(item);doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
     canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
@@ -374,6 +375,7 @@
     canvasDocumentsRetireEmptyPlaceholder(previous);
     mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;doc.revision=state.userRevision;doc.savedRevision=state.snapshotSavedRevision;
     canvasDocumentsSyncExtension(doc);canvasDocumentsRender();
+    return true;
   }
   function canvasDocumentsSaveMetadata({copy=false}={}) {
     const doc=canvasDocumentsCurrent(),metadata=canvasDocumentsMetadata(doc);

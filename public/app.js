@@ -6754,7 +6754,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return prepared;
     }catch(error){for(const item of prepared)if(!items.some(original=>original.image===item.image))releaseTextRaster(item.image);throw error;}
   }
-  async function restoreTextBoxes(items, pixelRatio = 1) {
+  async function restoreTextBoxes(items, pixelRatio = 1, isCurrent = () => true) {
+    if (!isCurrent()) return false;
     canvasTextQualityGeneration++;
     clearHandToolbarTargets("text-box");
     clearTextEditors();
@@ -6777,14 +6778,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
             Object.assign(record,{x:item.x,y:item.y,w:item.w,h:item.h});
         }
       } catch {
-        if (state.textBoxes !== restored) return;
+        if (state.textBoxes !== restored || !isCurrent()) return false;
         // One invalid or unsupported text box must not make an otherwise valid
         // saved Canvas impossible to restore.
         continue;
       }
-      if (state.textBoxes !== restored) {
+      if (state.textBoxes !== restored || !isCurrent()) {
         if (record?.image && record.image !== item?.image) releaseTextRaster(record.image);
-        return;
+        return false;
       }
       if (!record || state.textBoxes.some((existing) => existing.id === record.id)) continue;
       const numbered = /^text-box-(\d+)$/.exec(record.id);
@@ -6794,6 +6795,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     positionTextEditors();
     requestRender();
     void refreshVisibleTextBoxQuality();
+    return true;
   }
 
   function imageBox(item) {
@@ -14380,6 +14382,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     updateHistoryReadControls();
     setHistoryActivity(t("snapshotLoading").replace("{name}", displayName), t("snapshotLoadRequesting"), 4);
     const loadIsCurrent = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision,
+      loadIsApplying = () => loadGeneration===state.snapshotLoadGeneration && state.userRevision===expectedRevision+1,
       requireCurrent = () => { if (!loadIsCurrent()) throw Error(t("snapshotLoadChanged")); };
     let decodedTiles = null;
     try {
@@ -14436,7 +14439,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       restoreWidgets(item.widgets);
       applyTheme(item.theme);
       restoreImages(images);
-      await restoreTextBoxes(item.textBoxes, 1);
+      const textRestored=await restoreTextBoxes(item.textBoxes, 1, loadIsApplying);
+      if(textRestored===false||!loadIsApplying()) throw Error(t("snapshotLoadChanged"));
       if(typeof canvasDocumentsApplyView==="function")canvasDocumentsApplyView(item.view);
       else if (item.view) {
         state.scale = Math.max(0.03, Math.min(2, item.view.scale));
@@ -14456,7 +14460,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       restoreSnapshotCanvasObjectOrder(item.bundleExtensions);
       state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
       state.snapshotSavedRevision = state.userRevision;
-      if(typeof canvasDocumentsAdopt==="function")await canvasDocumentsAdopt(item,location);
+      if(typeof canvasDocumentsAdopt==="function"&&!await canvasDocumentsAdopt(item,location,loadIsApplying))throw Error(t("snapshotLoadChanged"));
+      if(!loadIsApplying())throw Error(t("snapshotLoadChanged"));
       resetCanvasDefaultMode();
       const restoreStudioConversation=window.PenEchoStudioNavigator?.wantsConversationForCanvas?.({ id:item.id, location })===true;
       canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true,deferConversationStart:restoreStudioConversation});
@@ -14471,7 +14476,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setStatusKey("snapshotLoaded");
       return true;
     } catch (error) {
-      window.PenEchoStudioNavigator?.cancelPendingConversation?.();
+      if(loadGeneration===state.snapshotLoadGeneration)window.PenEchoStudioNavigator?.cancelPendingConversation?.();
       if (decodedTiles?.size) releaseSnapshotTileCanvases(decodedTiles);
       if (loadGeneration !== state.snapshotLoadGeneration) return false;
       const message = t("snapshotLoadFailed").replace("{message}", String(error?.message || error));
@@ -14647,6 +14652,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (state.selection) cancelSelection(true);
     clearTextEditors();
     state.snapshotLoadGeneration++;
+    snapshotLoadInProgress = false;
+    snapshotLoadingId = null;
+    if(typeof updateHistoryReadControls==="function")updateHistoryReadControls();
     state.userRevision++;
     invalidateRecognition();
     cancelPendingForRevision();
@@ -27756,9 +27764,10 @@ var canvasDocumentIdentity = (() => {
     else if(view){state.scale=Math.max(.03,Math.min(2,Number(view.scale)||1));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
     setCanvasNavigationLocked(view?.navigationLocked===true);
   }
-  async function canvasDocumentsAdopt(item,location) {
+  async function canvasDocumentsAdopt(item,location,isCurrent=()=>true) {
     const previous=canvasDocuments.records.get(canvasDocuments.activeId);
     const locator={location,id:item.id},meta=canvasDocumentIdentity.normalizeMetadata(item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:item.name||""};
+    if(!isCurrent())return false;
     const doc=canvasDocuments.records.get(meta.documentId)||canvasDocumentsRecord(meta,{item});
     doc.title=item.name||doc.title;doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(item);doc.locators=[...doc.locators.filter(l=>canvasDocumentIdentity.locatorKey(l)!==canvasDocumentIdentity.locatorKey(locator)),locator].slice(-16);
     canvasDocumentsRestoreWorkspace(doc,item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
@@ -27766,6 +27775,7 @@ var canvasDocumentIdentity = (() => {
     canvasDocumentsRetireEmptyPlaceholder(previous);
     mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;doc.revision=state.userRevision;doc.savedRevision=state.snapshotSavedRevision;
     canvasDocumentsSyncExtension(doc);canvasDocumentsRender();
+    return true;
   }
   function canvasDocumentsSaveMetadata({copy=false}={}) {
     const doc=canvasDocumentsCurrent(),metadata=canvasDocumentsMetadata(doc);

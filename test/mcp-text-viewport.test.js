@@ -143,3 +143,20 @@ test('a failed superseded text restore does not begin rendering later stale item
  await c.restoreTextBoxes([]);reject(Error('render failed'));await pending;
  assert.equal(rendered,1);assert.equal(c.state.textBoxes.length,0);
 });
+
+for(const rejected of [false,true])test(`cancelled snapshot load stops text restoration without replacing its list (${rejected?'rejected':'resolved'} raster)`,async()=>{
+ const {context:c}=harness(),released=[],effects=[];
+ let finish,fail,current=true,rendered=0;
+ c.renderTextBoxImage=()=>{rendered++;return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});};
+ c.releaseTextRaster=image=>released.push(image);
+ c.positionTextEditors=()=>effects.push('position');c.requestRender=()=>effects.push('render');c.refreshVisibleTextBoxQuality=()=>effects.push('quality');
+ const item={fontSize:20,maxWidth:240,x:100,y:100};
+ const pending=c.restoreTextBoxes([{...item,text:'First'},{...item,text:'Second'}],1,()=>current);
+ const list=c.state.textBoxes,image={width:240,height:40,logicalWidth:240,logicalHeight:40};
+ current=false;
+ if(rejected)fail(Error('render failed'));else finish({image});
+ assert.equal(await pending,false);
+ assert.equal(c.state.textBoxes,list,'load cancellation must work independently of list replacement');
+ assert.equal(list.length,0);assert.equal(c.state.nextTextBoxId,1);assert.equal(rendered,1);
+ assert.deepEqual(released,rejected?[]:[image]);assert.deepEqual(effects,[]);
+});
