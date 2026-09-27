@@ -7,6 +7,7 @@ const { fileURLToPath, pathToFileURL } = require("node:url");
 const {
   app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell, powerSaveBlocker,
 } = require("electron");
+const { COMMANDS, createMenuTemplate, normalizeMenuState, canvasOwnsShortcut } = require("./menu.js");
 const { createMcpPowerLease } = require("./mcp-power.js");
 const mcpPowerLease = createMcpPowerLease(powerSaveBlocker);
 const {
@@ -75,6 +76,7 @@ let mainWindow = null,
   updateManager = null,
   currentLanUrls = [],
   desktopLanguage = "en",
+  desktopMenuState = normalizeMenuState(null),
   cliOperation = null,
   quitting = false,
   desktopProjectStore = null;
@@ -175,18 +177,14 @@ async function revealMainWindow(window, focus = false) {
   if (focus) window.focus();
 }
 
-function showSettings() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    if (!server?.listening) return;
-    const address = server.address(), port = typeof address === "object" && address ? address.port : 3888,
-      host = process.env.HOST === "0.0.0.0" ? "127.0.0.1" : process.env.HOST || "127.0.0.1";
-    const window = createMainWindow(`http://${host}:${port}/`);
-    window.webContents.once("did-finish-load", () => window.webContents.send("penecho:show-connections"));
-    return;
-  }
-  void revealMainWindow(mainWindow, true).then(() => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("penecho:show-connections");
-  });
+function dispatchCanvasCommand(command) {
+  if (!COMMANDS.includes(command) || !mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) return;
+  if (desktopMenuState.enabled[command]) mainWindow.webContents.send("penecho:menu-command", command);
+}
+
+function editFromMenu(command, window) {
+  if (window === mainWindow) dispatchCanvasCommand(command);
+  else if (window && !window.isDestroyed()) window.webContents[command]();
 }
 
 function createMainWindow(url) {
@@ -206,11 +204,23 @@ function createMainWindow(url) {
   restrictNavigation(mainWindow, candidate => {
     try { return new URL(candidate).origin === origin; } catch { return false; }
   });
+  mainWindow.on("focus", installMenu);
+  mainWindow.on("blur", installMenu);
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    // Let the existing renderer shortcut system retain text/modal guards and
+    // user-customized bindings; menu clicks still use the command bridge.
+    mainWindow.webContents.setIgnoreMenuShortcuts(canvasOwnsShortcut(input, desktopMenuState));
+  });
+  mainWindow.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
+    if (!isMainFrame || inPlace) return;
+    desktopMenuState = normalizeMenuState(null);
+    installMenu();
+  });
   mainWindow.once("ready-to-show", () => void revealMainWindow(mainWindow));
   mainWindow.webContents.once("did-finish-load", updateDesktopUpdateUi);
   mainWindow.webContents.on("render-process-gone",()=>mcpPowerLease.release());
   mainWindow.webContents.on("did-start-navigation",(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace)mcpPowerLease.release();});
-  mainWindow.on("closed", () => { mcpPowerLease.release();mainWindow = null; });
+  mainWindow.on("closed", () => { mcpPowerLease.release();mainWindow = null; desktopMenuState = normalizeMenuState(null); installMenu(); });
   void mainWindow.loadURL(url);
   return mainWindow;
 }
@@ -266,7 +276,7 @@ function updateDesktopUpdateUi() {
   if (!updateManager) return;
   const state = updateManager.getState(),
     updateWindowVisible = Boolean(updateWindow && !updateWindow.isDestroyed() && updateWindow.isVisible());
-  sendUpdateState(mainWindow, { ...state, visible:state.visible && !updateWindowVisible });
+  sendUpdateState(mainWindow, { ...state, windowOpen:updateWindowVisible });
   sendUpdateState(updateWindow, state);
 }
 
@@ -284,12 +294,12 @@ function showUpdateWindow() {
     void revealMainWindow(updateWindow, true).then(updateDesktopUpdateUi);
   } else {
     updateWindow = new BrowserWindow(secureWindowOptions({
-      width:440,
-      height:330,
+      width:520,
+      height:580,
       minWidth:400,
-      minHeight:300,
-      maxWidth:560,
-      maxHeight:440,
+      minHeight:480,
+      maxWidth:720,
+      maxHeight:860,
       title:desktopLanguage === "zh" ? "PenEcho 更新" : "PenEcho Update",
       autoHideMenuBar:true,
       maximizable:false,
@@ -312,39 +322,13 @@ function showUpdateWindow() {
 }
 
 function installMenu() {
-  const template = [
-    ...(process.platform === "darwin" ? [{
-      label:"PenEcho",
-      submenu:[
-        { role:"about" },
-        { type:"separator" },
-        { label:"Settings…", accelerator:"CmdOrCtrl+,", click:showSettings },
-        { type:"separator" },
-        { role:"hide" }, { role:"hideOthers" }, { role:"unhide" },
-        { type:"separator" },
-        { role:"quit" },
-      ],
-    }] : []),
-    {
-      label:"File",
-      submenu:[
-        ...(process.platform !== "darwin" ? [{ label:"Settings…", accelerator:"Ctrl+,", click:showSettings }, { type:"separator" }] : []),
-        { role:process.platform === "darwin" ? "close" : "quit" },
-      ],
-    },
-    { label:"Edit", submenu:[{ role:"undo" }, { role:"redo" }, { type:"separator" }, { role:"cut" }, { role:"copy" }, { role:"paste" }, { role:"selectAll" }] },
-    { label:"View", submenu:[{ role:"reload" }, { role:"togglefullscreen" }] },
-    { label:"Window", submenu:[{ role:"minimize" }, { role:"zoom" }] },
-    { label:"Local Access", submenu:currentLanUrls.length
-      ? currentLanUrls.map(url => ({ label:url, click:() => { clipboard.writeText(url); void shell.openExternal(url); } }))
-      : [{ label:"Enable local network access in Settings", enabled:false }],
-    },
-    { label:"Help", submenu:[
-      { label:"Getting started", click:() => void shell.openExternal(HELP_URL) },
-      { type:"separator" },
-      { label:desktopLanguage === "zh" ? "检查更新…" : "Check for Updates…", click:showUpdateWindow },
-    ] },
-  ];
+  const template = createMenuTemplate({
+    platform:process.platform, language:desktopLanguage, state:desktopMenuState,
+    canvasFocused:Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()),
+    dispatch:dispatchCanvasCommand, edit:editFromMenu, checkUpdates:showUpdateWindow,
+    openHelp:() => void shell.openExternal(HELP_URL), lanUrls:currentLanUrls,
+    openLan:url => { clipboard.writeText(url); void shell.openExternal(url); },
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -447,6 +431,16 @@ function registerIpc() {
     if (updateWindow && !updateWindow.isDestroyed()) updateWindow.setTitle(language === "zh" ? "PenEcho 更新" : "PenEcho Update");
     updateDesktopUpdateUi();
   });
+  ipcMain.on("penecho:menu-state", (event, value) => {
+    if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame) return;
+    desktopMenuState = normalizeMenuState(value);
+    installMenu();
+  });
+  ipcMain.handle("penecho:menu-native-edit", (event, command) => {
+    if (!fromCanvas(event) || event.senderFrame !== event.sender.mainFrame || !["undo", "redo"].includes(command)) return false;
+    event.sender[command]();
+    return true;
+  });
   ipcMain.handle("penecho:mcp-keep-awake",(event,enabled)=>{
     if(!fromCanvas(event)||event.senderFrame!==event.sender.mainFrame)return false;
     return mcpPowerLease.set(enabled===true,event.sender);
@@ -502,6 +496,11 @@ function registerIpc() {
     return { canceled:false, path:selectedPath, pickerToken:issueNativePickerGrant({ selectedPath, kind:"file" }) };
   });
   ipcMain.handle("penecho:get-update-state", event => fromUpdateSurface(event) && updateManager ? { ...updateManager.getState(), language:desktopLanguage } : null);
+  ipcMain.handle("penecho:update-show-window", event => {
+    if (!fromCanvas(event) || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
+    showUpdateWindow();
+    return true;
+  });
   ipcMain.handle("penecho:update-check", event => fromUpdateSurface(event) ? updateManager?.check(true) : false);
   ipcMain.handle("penecho:update-download", event => fromUpdateSurface(event) ? updateManager?.download() : false);
   ipcMain.handle("penecho:update-dismiss", event => fromCanvas(event) ? updateManager?.dismiss() : false);

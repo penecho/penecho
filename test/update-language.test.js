@@ -6,17 +6,10 @@ const vm = require("node:vm");
 const path = require("node:path");
 
 test("update window follows app language across states, independently of system language", async () => {
-  const nodes = new Map();
-  function element(selector) {
-    if (!nodes.has(selector)) nodes.set(selector, {
-      textContent:"", style:{}, attributes:{},
-      setAttribute(key, value) { this.attributes[key] = value; },
-      addEventListener() {}, querySelector:element,
-    });
-    return nodes.get(selector);
-  }
+  const { parseHTML } = require("linkedom");
+  const { document } = parseHTML(fs.readFileSync(path.join(__dirname, "../desktop/update-window.html"), "utf8"));
+  const element = selector => document.querySelector(selector);
   let listener;
-  const document = { querySelector:element, documentElement:{}, body:{ dataset:{} } };
   const api = {
     onStateChange(fn) { listener = fn; },
     getState:async () => ({ status:"checking", currentVersion:"1.0", language:"zh" }),
@@ -33,7 +26,7 @@ test("update window follows app language across states, independently of system 
   }
   listener({ status:"downloading", language:"zh", version:"2.0", progress:42 });
   assert.equal(element("#progress-label").textContent, "正在下载 · 42%");
-  assert.equal(element("[role='progressbar']").attributes["aria-label"], "下载进度");
+  assert.equal(element("[role='progressbar']").getAttribute("aria-label"), "下载进度");
   listener({ status:"ready", language:"en", version:"2.0" });
   assert.equal(document.title, "PenEcho Update");
   assert.equal(element("#primary-button").textContent, "Install");
@@ -46,12 +39,14 @@ test("update window follows app language across states, independently of system 
 test("native update menu accepts language changes only from the Canvas main frame", () => {
   const source = fs.readFileSync(path.join(__dirname, "../desktop/main.js"), "utf8");
   const menuFunction = source.slice(source.indexOf("function installMenu()"), source.indexOf("const CANVAS_AGENT_CLIPBOARD_FILE_LIMIT"));
-  const handler = source.slice(source.indexOf('  ipcMain.on("penecho:set-language"'), source.indexOf('  ipcMain.handle("penecho:mcp-keep-awake"'));
+  const handler = source.slice(source.indexOf('  ipcMain.on("penecho:set-language"'), source.indexOf('  ipcMain.on("penecho:menu-state"'));
   let receive, menu, updates = 0;
   const frame = {}, sender = { mainFrame:frame };
   const context = vm.createContext({
     desktopLanguage:"en", process:{ platform:"darwin" }, currentLanUrls:[], updateWindow:null,
-    showSettings() {}, showUpdateWindow() {}, HELP_URL:"https://example.com",
+    mainWindow:null, desktopMenuState:{},
+    createMenuTemplate:require("../desktop/menu.js").createMenuTemplate,
+    dispatchCanvasCommand() {}, editFromMenu() {}, showUpdateWindow() {}, HELP_URL:"https://example.com",
     shell:{}, clipboard:{},
     Menu:{ buildFromTemplate:template => template, setApplicationMenu:template => { menu = template; } },
     fromCanvas:event => event.sender === sender,
@@ -59,7 +54,7 @@ test("native update menu accepts language changes only from the Canvas main fram
     updateDesktopUpdateUi() { updates++; },
   });
   vm.runInContext(menuFunction + handler + "\ninstallMenu();", context);
-  const label = () => menu.find(item => item.label === "Help").submenu.at(-1).label;
+  const label = () => menu[0].submenu.find(item => item.id === "check-updates").label;
   assert.equal(label(), "Check for Updates…");
   receive({ sender:{}, senderFrame:frame }, "zh");
   receive({ sender, senderFrame:{} }, "zh");

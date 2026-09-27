@@ -1,104 +1,71 @@
-main > footer { position: relative; }
+/* Injected by the native desktop preload only; web and CLI clients have no entry. */
 #desktopUpdatePrompt.desktop-update-prompt {
-  position: absolute;
-  z-index: 70;
-  top: 50%;
-  right: 4px;
-  width: max-content;
-  max-width: min(360px, calc(100vw - 16px));
-  height: 22px;
-  overflow: visible;
-  color: #172033;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  font: 400 11px/18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  box-shadow: none;
-  transform: translateY(-50%);
-}
-#desktopUpdatePrompt.desktop-update-prompt[hidden] { display: none; }
-#desktopUpdatePrompt .desktop-update-row {
-  display: flex;
-  height: 22px;
-  min-width: 0;
+  position: relative;
+  z-index: 72;
+  display: inline-flex;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
   align-items: center;
-  gap: 5px;
-  padding: 0;
+  order: -2;
+  margin-inline: 2px 4px;
 }
-#desktopUpdatePrompt .desktop-update-title {
-  min-width: 0;
-  overflow: hidden;
-  font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#desktopUpdatePrompt .desktop-update-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-}
-#desktopUpdatePrompt .desktop-update-primary {
+#desktopUpdatePrompt[hidden] { display: none; }
+#desktopUpdatePrompt .desktop-update-button {
   position: relative;
   display: inline-flex;
-  box-sizing: border-box;
-  width: auto;
-  min-width: 0;
-  height: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
   margin: 0;
-  padding: 0 7px;
+  padding: 5px;
+  border: 0;
+  border-radius: 50%;
+  color: #397bea;
+  background: #e8f0ff;
+  box-shadow: none;
+  cursor: pointer;
+}
+#desktopUpdatePrompt .desktop-update-button:hover { background: #dbe8ff; }
+#desktopUpdatePrompt .desktop-update-button:focus-visible { outline: 2px solid #759ff0; outline-offset: 3px; }
+#desktopUpdatePrompt .desktop-update-button:disabled { cursor: default; }
+#desktopUpdatePrompt svg { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+#desktopUpdatePrompt .desktop-update-icon { width: 15px; height: 15px; }
+#desktopUpdatePrompt .desktop-update-ring { display: none; position: absolute; inset: -1px; width: 28px; height: 28px; transform: rotate(-90deg); }
+#desktopUpdatePrompt .desktop-update-ring circle { stroke-dasharray: 75.4; }
+#desktopUpdatePrompt[data-state="downloading"] .desktop-update-ring { display: block; }
+#desktopUpdatePrompt[data-state="downloading"] .desktop-update-icon { width: 12px; height: 12px; }
+#desktopUpdatePrompt[data-state="downloading"][data-progress="unknown"] .desktop-update-ring { animation: desktop-update-spin 1.5s linear infinite; }
+#desktopUpdatePrompt[data-state="downloading"][data-progress="unknown"] .desktop-update-ring circle { stroke-dasharray: 22 54; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button { color: #238452; background: #e4f3e9; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button:hover { background: #d7ecdf; }
+#desktopUpdatePrompt[data-state="ready"] .desktop-update-button::after { content: ""; position: absolute; top: -1px; right: -1px; width: 5px; height: 5px; border: 1.5px solid var(--studio-titlebar, #f8f8f9); border-radius: 50%; background: #2d985b; }
+#desktopUpdatePrompt[data-state="error"] .desktop-update-button { color: #9a5b16; background: #fff0d9; }
+#desktopUpdatePrompt .desktop-update-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  visibility: hidden;
+  width: max-content;
+  max-width: 240px;
+  padding: 5px 9px;
   color: #fff;
-  border: 0;
+  background: #303644;
   border-radius: 5px;
-  background: #0f5e5c;
-  font: 600 10.5px/18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  letter-spacing: 0;
-  cursor: pointer;
+  font: 400 11px/1.5 system-ui, sans-serif;
+  white-space: nowrap;
 }
-#desktopUpdatePrompt .desktop-update-primary::after { position: absolute; inset: -3px 0; border: 0; background: none; content: ""; }
-#desktopUpdatePrompt .desktop-update-primary:hover { color: #fff; border: 0; background: #0b4f4d; }
-#desktopUpdatePrompt .desktop-update-primary:active { color: #fff; border: 0; background: #083f3e; }
-#desktopUpdatePrompt .desktop-update-primary:focus-visible,
-#desktopUpdatePrompt .desktop-update-close:focus-visible { outline: 2px solid #315efb; outline-offset: 1px; box-shadow: none; }
-#desktopUpdatePrompt .desktop-update-actions .desktop-update-close {
-  display: grid;
-  box-sizing: border-box;
-  width: 18px;
-  min-width: 18px;
-  max-width: 18px;
-  height: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  flex: 0 0 18px;
-  margin: 0;
-  padding: 0;
-  place-items: center;
-  color: #53637a;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-}
-#desktopUpdatePrompt .desktop-update-close:hover { color: #172033; border: 0; background: transparent; }
-#desktopUpdatePrompt .desktop-update-close:active { color: #172033; border: 0; background: transparent; }
-#desktopUpdatePrompt .desktop-update-close svg { width: 11px; height: 11px; min-width: 0; flex: 0 0 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
-body[data-theme="arcane"] .desktop-update-prompt,
-body[data-theme="scifi"] .desktop-update-prompt {
-  color: #edf3ff;
-}
-body[data-theme="arcane"] #desktopUpdatePrompt .desktop-update-close,
-body[data-theme="scifi"] #desktopUpdatePrompt .desktop-update-close { color: #b9c8de; }
-body[data-theme="arcane"] #desktopUpdatePrompt .desktop-update-close:hover,
-body[data-theme="scifi"] #desktopUpdatePrompt .desktop-update-close:hover { color: #fff; background: transparent; }
-@media (max-width: 420px) {
-  #desktopUpdatePrompt.desktop-update-prompt { right: 2px; max-width: calc(100vw - 8px); }
-}
+#desktopUpdatePrompt:not(.tooltip-dismissed):hover .desktop-update-tooltip,
+#desktopUpdatePrompt:not(.tooltip-dismissed):focus-within .desktop-update-tooltip { visibility: visible; }
+#desktopUpdatePrompt .desktop-update-announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes desktop-update-spin { to { transform: rotate(270deg); } }
+@media (prefers-reduced-motion: reduce) { #desktopUpdatePrompt .desktop-update-ring { animation: none !important; } }
 @media (forced-colors: active) {
-  #desktopUpdatePrompt .desktop-update-primary { border: 1px solid ButtonText; }
-  #desktopUpdatePrompt .desktop-update-close:focus-visible { outline-color: Highlight; }
+  #desktopUpdatePrompt .desktop-update-button { border: 1px solid ButtonText; }
+  #desktopUpdatePrompt .desktop-update-tooltip { border: 1px solid CanvasText; color: CanvasText; background: Canvas; }
 }

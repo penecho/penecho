@@ -221,6 +221,7 @@ function createUpdateManager(options) {
     supported = Boolean(expectedAssetName(platform, arch, currentVersion)),
     updateDirectory = options.updateDirectory || path.join(app.getPath?.("temp") || os.tmpdir(), "penecho-updates");
   let checkingMetadata = false,
+    updateAvailable = false,
     downloadActive = false,
     downloadReady = false,
     dismissed = false,
@@ -235,7 +236,7 @@ function createUpdateManager(options) {
     });
 
   function getState() {
-    return { ...state };
+    return { ...state, updateAvailable };
   }
 
   function publish(status, updates = {}) {
@@ -318,14 +319,16 @@ function createUpdateManager(options) {
     try {
       const latest = await fetchLatestRelease();
       release = latest;
-      if (compareVersions(latest.version, currentVersion) <= 0) {
+      const newer = compareVersions(latest.version, currentVersion) > 0,
+        asset = newer ? releaseAsset(latest, platform, arch) : null;
+      updateAvailable = Boolean(asset);
+      if (!newer) {
         publish("up-to-date", {
           visible:Boolean(manual), version:latest.version, title:latest.title, notes:latest.notes,
           publishedAt:latest.publishedAt, releaseUrl:latest.releaseUrl,
         });
         return true;
       }
-      const asset = releaseAsset(latest, platform, arch);
       if (!asset) throw new Error(`PenEcho v${latest.version} does not include ${expectedAssetName(platform, arch, latest.version) || "a compatible installer"}.`);
       publish("available", {
         visible:true, version:latest.version, title:latest.title, notes:latest.notes,

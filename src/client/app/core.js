@@ -559,6 +559,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       shortcutFocusAgent: "Toggle PenEcho Agent",
       shortcutFocusAgentHelp: "Open or close Agent while Canvas has focus.",
       shortcutSaveCanvasHelp: "Save or overwrite the current Canvas using its existing location.",
+      shortcutNewCanvasHelp: "Create a new Canvas and keep the current one in your workspace.",
       shortcutUndoHelp: "Undo the latest Canvas change.",
       shortcutRedoHelp: "Redo the latest undone Canvas change.",
       shortcutCanvasLibrary: "Canvas Library",

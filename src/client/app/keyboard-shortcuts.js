@@ -1,5 +1,6 @@
   const KEYBOARD_SHORTCUT_STORAGE_KEY = "penecho-keyboard-shortcuts-v1";
   const KEYBOARD_SHORTCUT_COMMANDS = Object.freeze([
+    ...(window.penechoDesktop ? [{ id:"new-canvas", group:"workspace", labelKey:"newCanvasTitle", descriptionKey:"shortcutNewCanvasHelp", defaultChord:"Mod+n" }] : []),
     { id:"pen-tool", group:"essential", labelKey:"pen", descriptionKey:"shortcutPenHelp", defaultChord:"p" },
     { id:"search-work", group:"essential", labelKey:"shortcutSearchWork", descriptionKey:"shortcutSearchWorkHelp", defaultChord:"Mod+k" },
     { id:"focus-agent", group:"essential", labelKey:"shortcutFocusAgent", descriptionKey:"shortcutFocusAgentHelp", defaultChord:"Tab" },
@@ -37,6 +38,7 @@
       // Migrate the previous default while retaining explicitly customized bindings.
       if (!("search-work" in saved) && saved["focus-agent"] === "Mod+k") saved["focus-agent"] = "Tab";
       if (!("search-work" in saved) && Object.values(saved).includes("Mod+k")) bindings["search-work"] = "";
+      if (typeof window !== "undefined" && window.penechoDesktop && !("new-canvas" in saved) && Object.values(saved).includes("Mod+n")) bindings["new-canvas"] = "";
       for (const command of KEYBOARD_SHORTCUT_COMMANDS) {
         if (Object.prototype.hasOwnProperty.call(saved, command.id) && typeof saved[command.id] === "string") bindings[command.id] = saved[command.id];
       }
@@ -116,6 +118,7 @@
     requestAnimationFrame(() => document.querySelector(`[data-shortcut-edit="${commandId}"]`)?.focus({ preventScroll:true }));
   }
   function renderKeyboardShortcuts() {
+    window.dispatchEvent(new CustomEvent("penecho:shortcutschange"));
     const penShortcut = document.querySelector('[data-welcome-shortcut="pen"]');
     if (penShortcut) { penShortcut.textContent = keyboardShortcutDisplay(keyboardShortcutBindings["pen-tool"] || ""); penShortcut.hidden = !keyboardShortcutBindings["pen-tool"]; }
     const shortcut = document.querySelector('[data-welcome-shortcut="focusAgent"]');
@@ -284,6 +287,7 @@
     return true;
   }
   function keyboardShortcutPerform(commandId) {
+    if (commandId === "new-canvas") { document.querySelector("#newCanvasBtn")?.click(); return true; }
     if (commandId === "search-work") { window.PenEchoStudioNavigator?.focusSearch(); return true; }
     if (commandId === "pen-tool") { setCanvasMode("pen"); return true; }
     if (commandId === "focus-agent") {

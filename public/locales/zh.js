@@ -1131,6 +1131,7 @@ window.PENECHO_LOCALES.zh = {
   shortcutFocusAgent: "切换 PenEcho Agent",
   shortcutFocusAgentHelp: "Canvas 获得焦点时，打开或关闭 Agent。",
   shortcutSaveCanvasHelp: "沿用当前存储位置保存或覆盖当前画布。",
+  shortcutNewCanvasHelp: "新建画布，并将当前画布保留在工作区。",
   shortcutUndoHelp: "撤销最近一次画布更改。",
   shortcutRedoHelp: "重做最近一次被撤销的画布更改。",
   shortcutCanvasLibrary: "画布资料库",

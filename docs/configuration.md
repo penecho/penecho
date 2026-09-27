@@ -122,7 +122,7 @@ Provider entries below describe the legacy import inputs and transient process s
 | `CODEX_CLI_MODEL` | Optional model override for Codex CLI mode |
 | `CLAUDE_CLI_MODEL` | Optional alias or model-ID override for Claude CLI mode |
 | `AUTO_AI_DELAY_SECONDS` | Initial delay before automatic recognition; the browser control can override it from 0 to 10 seconds |
-| `PENECHO_CANVAS_AGENT_AUTO_OPEN` | Open PenEcho Agent whenever a canvas opens; defaults to `true`, including for existing users whose configuration does not contain this setting |
+| `PENECHO_CANVAS_AGENT_AUTO_OPEN` | Open PenEcho Agent whenever a canvas opens; defaults to `false` for the macOS app, Windows app, and PenEcho CLI. Without an explicit auto-open preference, the right sidebar stays closed on startup and when opening or creating a canvas. Users can open it with the Agent button or its configured shortcut. An explicitly enabled configuration or saved auto-open preference can still open it automatically. |
 | `PENECHO_REQUEST_TRACE` | Save local per-request image, outbound request, response, and outcome traces; disabled by default |
 | `PENECHO_REQUEST_TRACE_LIMIT` | Number of local request traces retained, default 100 and maximum 1000 |
 | `PENECHO_CANVAS_AGENT_ALLOWED_ROOTS` | JSON array of absolute PenEcho-host folders that Cloud may browse through opaque IDs and relative paths; omitted by default |

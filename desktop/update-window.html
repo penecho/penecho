@@ -10,14 +10,14 @@
 <body>
   <main class="update-shell" aria-labelledby="update-title">
     <header class="update-header">
-      <img class="update-mark" src="../public/penecho-readme-header.webp" alt="" width="56" height="46">
+      <img class="update-mark" src="../public/penecho-mark.png" alt="" width="44" height="44">
       <div>
         <h1 id="update-title">PenEcho Update</h1>
         <p id="update-version" class="update-version"></p>
       </div>
     </header>
 
-    <section class="update-content" aria-live="polite" aria-atomic="true">
+    <section class="update-content" aria-live="polite">
       <h2 id="status-title">Checking for updates…</h2>
       <p id="status-detail" class="status-detail">This usually takes only a moment.</p>
       <div id="progress-region" class="progress-region" hidden>
@@ -27,6 +27,11 @@
         <span id="progress-label" class="progress-label">Starting download…</span>
       </div>
       <p id="error-detail" class="error-detail" hidden></p>
+    </section>
+
+    <section id="release-notes-region" class="release-notes-region" aria-labelledby="release-notes-title" hidden>
+      <h2 id="release-notes-title">What's new</h2>
+      <div id="release-notes" class="release-notes" tabindex="0"></div>
     </section>
 
     <footer class="update-footer">

@@ -302,14 +302,14 @@
     const rect=button.getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
   }
   let mcpStatusOpenAtPointerDown=false;
-  async function mcpOpenStatus(event) {
+  async function mcpOpenStatus(event, { connect = true } = {}) {
     const panel=mcpEl("mcpStatusPopover");if(!panel)return mcpToolbarClick();
     const closingPointerClick=event?.detail>0&&mcpStatusOpenAtPointerDown;
     mcpStatusOpenAtPointerDown=false;
     // An auto popover may light-dismiss on pointer release before the button's click.
     if(closingPointerClick){if(panel.matches(":popover-open"))panel.hidePopover();mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded","false");return;}
     if(panel.matches(":popover-open")){panel.hidePopover();return;}
-    if(!mcpRuntime.wanted&&!mcpRuntime.socket&&!mcpRuntime.connectionLost&&!mcpRuntime.authRequired)void mcpToolbarClick();
+    if(connect&&!mcpRuntime.wanted&&!mcpRuntime.socket&&!mcpRuntime.connectionLost&&!mcpRuntime.authRequired)void mcpToolbarClick();
     mcpRenderStatusPopover();mcpPositionStatusPopover();panel.showPopover();
     if(!mcpRuntime.status)void mcpRefreshSettings();
   }

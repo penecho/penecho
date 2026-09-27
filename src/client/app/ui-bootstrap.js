@@ -1909,10 +1909,7 @@
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
   });
-  window.penechoDesktop?.onShowConnections?.(() => {
-    selectSettingsPage("connections");
-    openSettings();
-  });
+  installDesktopMenuBridge();
   setPluginTemplate("simple");
   applyLanguage();
   setWidgetShadowEnabled(state.widgetShadowEnabled);

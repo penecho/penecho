@@ -59,13 +59,15 @@ test("selection falls back to first saved connection and preserves explicit save
   Object.assign(context.window.PENECHO_CONFIG,{browserCanvasEditing:true,linkedDeviceOnline:false});
   context.syncLocalConnectionSelection();assert.equal(context.selectedAiConnectionId(),second,"offline must not silently select a different local model");
 });
-test("desktop Settings menu reveals the existing Canvas and sends the shared-page event",async()=>{
+test("desktop menu routes only allowed commands to the focused Canvas",()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[];
-  const context=vm.createContext({squirrelFirstRunComplete:Promise.resolve(),mainWindow:{isDestroyed:()=>false,show:()=>calls.push("show"),focus:()=>calls.push("focus"),webContents:{send:channel=>calls.push(channel)}}});
-  vm.runInContext(main.slice(main.indexOf("async function revealMainWindow("),main.indexOf("function createMainWindow(")),context);
-  context.showSettings();
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(calls,["show","focus","penecho:show-connections"]);
+  const context=vm.createContext({COMMANDS:["open-settings"],desktopMenuState:{enabled:{"open-settings":true}},mainWindow:{isDestroyed:()=>false,isFocused:()=>true,webContents:{send:(...args)=>calls.push(args)}}});
+  vm.runInContext(main.slice(main.indexOf("function dispatchCanvasCommand("),main.indexOf("function editFromMenu(")),context);
+  context.dispatchCanvasCommand("open-settings");
+  context.dispatchCanvasCommand("unknown");
+  context.mainWindow.isFocused=()=>false;
+  context.dispatchCanvasCommand("open-settings");
+  assert.deepEqual(calls,[["penecho:menu-command","open-settings"]]);
 });
 test("desktop bootstrap starts Canvas without checking whether AI is configured",async()=>{
   const main=fs.readFileSync(path.join(__dirname,"../desktop/main.js"),"utf8"),calls=[],configuration={};

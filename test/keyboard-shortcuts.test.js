@@ -42,16 +42,17 @@ test("shortcut defaults cover Agent focus, save, history, editing, and workspace
     ["redo", "Mod+Shift+z"], ["canvas-library", "Mod+o"],
     ["toggle-fullscreen", "Mod+Shift+f"], ["open-settings", "Mod+,"],
   ]) assert.match(source, new RegExp(`id:\\"${id}\\"[^\\n]*defaultChord:\\"${chord.replace(/[+]/g, "\\+")}\\"`));
-  for (const hiddenId of ["tool-pen", "tool-hand", "tool-eraser", "tool-select", "tool-text", "toggle-grid", "new-canvas"]) {
+  for (const hiddenId of ["tool-pen", "tool-hand", "tool-eraser", "tool-select", "tool-text", "toggle-grid"]) {
     assert.doesNotMatch(source, new RegExp(`id:\\"${hiddenId}\\"`));
   }
-  assert.doesNotMatch(source, /settingsShortcutGroupTools|group:"tools"|defaultChord:"g"|defaultChord:"Mod\+n"/);
+  assert.doesNotMatch(source, /settingsShortcutGroupTools|group:"tools"|defaultChord:"g"/);
+  assert.match(source, /window\.penechoDesktop \? \[\{ id:"new-canvas"[^\n]*defaultChord:"Mod\+n"/);
   const perform = functionSource(source, "keyboardShortcutPerform");
   assert.match(perform, /if \(opening\) openCanvasAgent\(\{ focus:false, animate:true \}\)/);
   assert.match(perform, /else closeCanvasAgent\(\{ focus:false \}\)/);
   assert.match(perform, /void saveCurrentCanvas\(\)/);
   assert.match(perform, /querySelector\(`\[data-action="\$\{commandId\}"\]`\)\?\.click\(\)/);
-  assert.doesNotMatch(perform, /selectCanvasToolMode|gridToggle|newCanvasBtn/);
+  assert.doesNotMatch(perform, /selectCanvasToolMode|gridToggle/);
   assert.match(perform, /openHistoryPanel\(\)/);
 });
 

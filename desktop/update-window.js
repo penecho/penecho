@@ -11,7 +11,10 @@ const statusTitle = document.querySelector("#status-title"),
   errorDetail = document.querySelector("#error-detail"),
   releaseButton = document.querySelector("#release-button"),
   closeButton = document.querySelector("#close-button"),
-  primaryButton = document.querySelector("#primary-button");
+  primaryButton = document.querySelector("#primary-button"),
+  notesRegion = document.querySelector("#release-notes-region"),
+  notesTitle = document.querySelector("#release-notes-title"),
+  notesContent = document.querySelector("#release-notes");
 
 const translations = Object.freeze({
   en:{
@@ -25,6 +28,7 @@ const translations = Object.freeze({
     error:["The update could not be completed", "Try checking again. Your current PenEcho installation has not changed."],
     download:"Download", install:"Install", retry:"Check again", close:"Close", release:"Open release page",
     starting:"Starting download…", progress:value => `Downloading · ${value}%`, unknownError:"Please try again later.",
+    whatsNew:"What's new", noNotes:"No release notes were provided for this version. You can open the release page for more details.",
   },
   zh:{
     progressLabel:"下载进度", windowTitle:"PenEcho 更新", installedVersion:version => `当前版本：v${version}`,
@@ -37,10 +41,71 @@ const translations = Object.freeze({
     error:["更新未能完成", "请重新检查；当前 PenEcho 安装不会受影响。"],
     download:"下载", install:"安装", retry:"重新检查", close:"关闭", release:"打开更新页面",
     starting:"正在开始下载…", progress:value => `正在下载 · ${value}%`, unknownError:"请稍后重试。",
+    whatsNew:"更新内容", noNotes:"此版本暂未提供更新说明，可以打开更新页面查看详情。",
   },
 });
 
-let currentState = null, language = null, copy = translations.en;
+let currentState = null, language = null, copy = translations.en, renderedNotesKey = "";
+
+// GitHub release text is untrusted. Build a small Markdown subset with text nodes;
+// links use the existing validated release-page action instead of frame navigation.
+function appendInline(parent, text) {
+  const tokens = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g;
+  let offset = 0;
+  for (const match of text.matchAll(tokens)) {
+    parent.append(document.createTextNode(text.slice(offset, match.index)));
+    const node = document.createElement(match[1] ? "strong" : match[2] ? "code" : "span");
+    node.textContent = match[1] || match[2] || match[3];
+    parent.append(node);
+    offset = match.index + match[0].length;
+  }
+  parent.append(document.createTextNode(text.slice(offset)));
+}
+
+function renderReleaseNotes(state) {
+  const notes = String(state.notes || "").trim().slice(0, 8000),
+    key = JSON.stringify([language, state.version, notes]);
+  notesRegion.hidden = !state.version;
+  notesTitle.textContent = copy.whatsNew + (state.version ? ` · v${state.version}` : "");
+  if (renderedNotesKey === key) return;
+  renderedNotesKey = key;
+  notesContent.replaceChildren();
+  notesContent.scrollTop = 0;
+  if (!notes) {
+    notesContent.textContent = copy.noNotes;
+    return;
+  }
+  let list = null, paragraph = null, code = null;
+  for (const line of notes.split(/\r?\n/)) {
+    if (/^\s*```/.test(line)) {
+      list = paragraph = null;
+      if (code) code = null;
+      else { code = document.createElement("pre"); notesContent.append(code); }
+      continue;
+    }
+    if (code) { code.append(document.createTextNode(line + "\n")); continue; }
+    const heading = line.match(/^#{1,6}\s+(.+)/), item = line.match(/^\s*(?:([-*+])|\d+[.)])\s+(.+)/);
+    if (!line.trim() || /^\s*[-*_]{3,}\s*$/.test(line)) { list = paragraph = null; continue; }
+    if (heading) {
+      list = paragraph = null;
+      const node = document.createElement("h3");
+      appendInline(node, heading[1]);
+      notesContent.append(node);
+    } else if (item) {
+      paragraph = null;
+      const tag = item[1] ? "ul" : "ol";
+      if (!list || list.tagName.toLowerCase() !== tag) { list = document.createElement(tag); notesContent.append(list); }
+      const node = document.createElement("li");
+      appendInline(node, item[2]);
+      list.append(node);
+    } else {
+      list = null;
+      if (!paragraph) { paragraph = document.createElement("p"); notesContent.append(paragraph); }
+      else paragraph.append(document.createTextNode(" "));
+      appendInline(paragraph, line.trim());
+    }
+  }
+}
 
 function setLanguage(value) {
   const next = value === "zh" ? "zh" : "en";
@@ -74,6 +139,7 @@ function render(state) {
   const [title, detail] = stateCopy(state);
   statusTitle.textContent = title;
   statusDetail.textContent = detail;
+  renderReleaseNotes(state);
 
   const downloading = state.status === "downloading", progress = state.progress;
   progressRegion.hidden = !downloading;

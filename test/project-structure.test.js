@@ -36,6 +36,7 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/keyboard-shortcuts.js",
     "src/client/app/canvas-navigation.js",
     "src/client/app/playground.js",
+    "src/client/app/desktop-menu.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
