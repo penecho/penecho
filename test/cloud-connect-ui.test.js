@@ -236,7 +236,7 @@ const signedOutStatus = (device = {}) => ({
   browserSignIn:{ pending:false },
 });
 
-function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, lineage = null, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], cloudFavoriteSaveError = null, cloudFavoriteFeedError = null, serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, widgetArtifactPromise = null, widgetArtifactError = null, navigatorOverrides = {}, withCrafts = false, sessionStorageEntries = {}, liveShares = new Map() } = {}) {
+function boot({ status, startupAccount = null, remoteCloudStatus = null, cloudOrigin = "https://internaltest.penecho.ai", runtime, language = "en", communityItem, communityArtifact, lineage = null, library, communityFavorites = [], widgetFavorites = [], localFavoriteItems = [], cloudFavoriteSaveError = null, cloudFavoriteFeedError = null, serverDesktopApp = false, rendererDesktopBridge = false, publishItem, canvasShareArtifact, widgetShareArtifact, widgetArtifactPromise = null, widgetArtifactError = null, navigatorOverrides = {}, withCrafts = false, sessionStorageEntries = {}, liveShares = new Map() } = {}) {
   const timers = makeTimers();
   const documentListeners = new Map();
   const document = {
@@ -316,6 +316,7 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
   const clipboardWrites = [];
   const fetchCalls = [];
   const windowListeners = new Map();
+  const events = [];
   const jsonResponse = (body, status = 200) => ({ ok:true, status, json:async () => body });
   const fetch = (url, options = {}) => {
     const target = String(url);
@@ -425,7 +426,7 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
     disconnect() { this.active = false; }
   }
   const windowObject = {
-    PENECHO_CONFIG:{ accessSessionToken:"test-session", cloudOrigin, cloudEnvironment:cloudOrigin.includes("internaltest") ? "uat" : "prod", desktopApp:serverDesktopApp, ...(runtime ? { runtime } : {}) },
+    PENECHO_CONFIG:{ accessSessionToken:"test-session", cloudOrigin, cloudEnvironment:cloudOrigin.includes("internaltest") ? "uat" : "prod", desktopApp:serverDesktopApp, ...(runtime ? { runtime } : {}), ...(startupAccount ? {cloudAccountSignedIn:startupAccount.signedIn,connectionAccountId:startupAccount.id}: {}) },
     PENECHO_REMOTE_CLOUD_STATUS:remoteCloudStatus,
     ...(rendererDesktopBridge ? { penechoDesktop:{} } : {}),
     PenEchoCommunityCanvas:{
@@ -451,6 +452,7 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
     async dispatch(type, event = {}) {
       for (const handler of windowListeners.get(type) || []) await handler({ type, ...event });
     },
+    dispatchEvent(event) { events.push(event); for (const handler of windowListeners.get(event.type) || []) handler(event); return true; },
     open(...args) { opened.push(args); return null; },
     confirm() { return true; },
     alert(message) { alerts.push(String(message)); },
@@ -466,12 +468,12 @@ function boot({ status, remoteCloudStatus = null, cloudOrigin = "https://interna
       return digest.buffer.slice(digest.byteOffset,digest.byteOffset+digest.byteLength);
     } } }, TextEncoder, Uint8Array, ArrayBuffer,
     fetch, setTimeout:timers.setTimeout, clearTimeout:timers.clearTimeout, queueMicrotask, IntersectionObserver:FakeIntersectionObserver,
-    URL, URLSearchParams, Date, console, Blob, File:FakeFile, Image:FakeImage,
+    URL, URLSearchParams, Date, console, Blob, File:FakeFile, Image:FakeImage, Event:class {constructor(type){this.type=type;}}, CustomEvent:class {constructor(type,options={}){this.type=type;this.detail=options.detail;}},
   };
   vm.runInNewContext(cloudScript, context, { filename:"public/cloud-connect.js" });
   const statusCalls = () => fetchCalls.filter((call) => call.url === "/api/cloud/status").length;
   return {
-    document, cloudButton, shareButton, echoButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink, timers, fetchCalls, statusCalls, alerts, clipboardWrites, imported, opened, openedLocal, favoriteStates, favoriteReferences, window:windowObject,
+    document, cloudButton, shareButton, echoButton, craftsButton, craftsPopover, craftsClose, craftsList, craftsSearch, craftsCount, craftsRefreshStatus, craftsFilters, craftsFilterAll, craftsFilterWidgets, craftsFilterCanvases, craftsViewSwitch, craftsViewList, craftsViewGrid, craftsEchoesLink, timers, fetchCalls, statusCalls, alerts, clipboardWrites, imported, opened, openedLocal, favoriteStates, favoriteReferences, events, window:windowObject,
     overlay:() => document.querySelector(".penecho-cloud-overlay"),
     setStatus(next) { statusPayload = next; },
     setStatusError(error) { statusError = error; },
@@ -2285,4 +2287,27 @@ test("an unavailable local status cannot retain a green connected badge", async 
   await run.timers.advance(2_000);
   await run.flush();
   assert.equal(flatten(overlay).find(node => node.className === "cloud-device-state").textContent, "Connected");
+});
+
+test("startup account publication and balance refresh do not restart account-bound loaders", async () => {
+  const status={...deviceStatus(),account:{id:'account-a',name:'Ada',credits:10}};
+  const run=boot({status,startupAccount:{signedIn:true,id:'account-a'}});
+  await run.flush();
+  const changes=()=>run.events.filter(event=>event.type==='penecho:cloud-account-changed');
+  assert.equal(changes().length,1);
+  assert.deepEqual(plain(changes()[0].detail),{initial:true,changed:false});
+  run.setStatus({...status,account:{...status.account,name:'Ada Updated',credits:20},device:{...status.device,connected:true}});
+  await run.window.dispatch('message',{origin:'http://127.0.0.1:3888',data:{type:'penecho:cloud-sign-in-result',ok:true}});
+  await run.flush();
+  assert.equal(changes().length,1);
+  assert.equal(run.events.filter(event=>event.type==='penecho:cloud-status-changed').length,2);
+  run.setStatus({...status,account:{id:'account-b',name:'Other',credits:30}});
+  await run.window.dispatch('message',{origin:'http://127.0.0.1:3888',data:{type:'penecho:cloud-sign-in-result',ok:true}});
+  await run.flush();
+  assert.deepEqual(plain(changes().at(-1).detail),{initial:false,changed:true});
+  run.setStatus(signedOutStatus());
+  await run.window.dispatch('message',{origin:'http://127.0.0.1:3888',data:{type:'penecho:cloud-sign-in-result',ok:true}});
+  await run.flush();
+  assert.equal(changes().length,3);
+  assert.equal(changes().at(-1).detail.changed,true);
 });

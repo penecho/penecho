@@ -123,6 +123,7 @@ function createHarness({ frontPlacedCanvasObjectKind = "image", selected = true 
     logicalWidth: (value) => value,
     captureDrawingTransform: () => ({ scale: 1 }),
     noteCanvasChromeInteraction: () => calls.push(["chrome-interaction"]),
+    noteInkForLassoNudge: () => {},
     updateCanvasPointerPreview: () => calls.push(["pointer-preview"]),
     clearTimeout: () => {},
     setCanvasCursor: () => {},
@@ -203,11 +204,12 @@ test("drawing retains the last clicked Widget order below ink and clears only Wi
   }
 });
 
-test("deselect removes the temporary lift while preserving Widget order below ink", () => {
+test("selection and inline interaction preserve Widget order below ink", () => {
   const harness = createHarness();
   const order = harness.state.widgets.map((item) => item.id);
   harness.functions.syncCanvasObjectLayerOrder();
-  assert.equal(harness.layers.widgetLayer.style.zIndex, "3");
+  assert.equal(harness.layers.widgetLayer.style.zIndex, "2");
+  assert.equal(harness.layers.textEditorLayer.style.properties.get("--text-editor-layer-z"), "3");
   harness.state.selectedWidgetId = null;
   harness.state.interactingWidgetId = null;
   harness.functions.syncSelectedWidgetMaterial(null);
@@ -216,5 +218,24 @@ test("deselect removes the temporary lift while preserving Widget order below in
   assert.deepEqual(harness.state.widgets.map((item) => item.id), order);
   const html = read("public/index.html");
   assert.ok(html.indexOf('id="widgetLayer"') < html.indexOf('id="inkLayer"'));
+  assert.ok(html.indexOf('id="textContentLayer"') < html.indexOf('id="inkLayer"'));
   assert.match(read("public/style.css"), /\.ink-layer\s*\{[^}]*z-index:\s*2/);
+});
+
+test("hover, pending, dragging and resizing never promote Widget content above ink", () => {
+  const harness = createHarness({ selected:false });
+  for (const front of ["widget", "image", "text-box"]) {
+    for (const materialVisible of [false, true]) {
+      for (const interacting of [false, true]) {
+        harness.state.frontCanvasObjectKind = front;
+        harness.selectedWidgetMaterial.hidden = !materialVisible;
+        harness.state.interactingWidgetId = interacting ? harness.widgetObject.id : null;
+        harness.state.pendingWidget = widget("pending-widget");
+        harness.state.widgetGesture = { widget:harness.widgetObject, hit:"resize-se" };
+        harness.functions.syncCanvasObjectLayerOrder();
+        assert.equal(harness.layers.widgetLayer.style.zIndex, front === "widget" ? "2" : "1");
+        assert.equal(harness.layers.textEditorLayer.style.properties.get("--text-editor-layer-z"), "3");
+      }
+    }
+  }
 });

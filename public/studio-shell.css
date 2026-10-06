@@ -616,6 +616,7 @@ body[data-theme="studio"] #historyPanel[data-library-design="reference"] > .hist
 /* Library ↔ Favorites links (studio-shell.js forwards to the existing buttons). */
 .shell-library-links { display: none; }
 body[data-theme="studio"] .shell-library-links { display: grid; gap: 2px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--studio-line) 80%, transparent); }
+body[data-theme="studio"] .shell-library-divider { margin: 6px 0; border-top: 1px solid color-mix(in srgb, var(--studio-line) 45%, transparent); }
 body[data-theme="studio"] .shell-library-link {
   display: flex;
   width: 100%;
@@ -634,6 +635,11 @@ body[data-theme="studio"] .shell-library-link {
 }
 body[data-theme="studio"] .shell-library-link:hover { color: var(--studio-text); background: var(--pe-hover, color-mix(in srgb, var(--studio-text) 5.5%, transparent)); }
 body[data-theme="studio"] .shell-library-link > svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+@container history-library (max-width: 700px) {
+  body[data-theme="studio"] #historyPanel .shell-library-links { flex: 1 0 100%; min-width: 0; flex-wrap: wrap; }
+  body[data-theme="studio"] #historyPanel .shell-library-link { flex: none; width: auto; }
+  body[data-theme="studio"] #historyPanel .shell-library-divider { flex: 1 0 100%; }
+}
 body[data-theme="studio"] .crafts-library-link { width: auto; margin: 8px 0 0; }
 
 /* Navigators: selection reads clearly against the neutral rail. */
@@ -1265,7 +1271,6 @@ body[data-theme="studio"] #canvasDocumentSaveState:focus-visible { outline: 2px 
 body[data-theme="studio"] .primary-tools > .view-tools { display: none; }
 body[data-theme="studio"] .primary-tools .mode-tools { display: flex; }
 body[data-theme="studio"] .mode-tools #canvasViewBtn { order: -3; }
-body[data-theme="studio"] .mode-tools [data-mode="select"] { order: -2; }
 body[data-theme="studio"] .mode-tools #handToolBtn { order: -1; }
 body[data-theme="studio"] .ai-tools-section > [data-color-control="ai"] { display: flex; align-items: center; margin-left: 4px; padding-left: 5px; border-left: 1px solid var(--studio-line); }
 body[data-theme="studio"] .ai-tools-section .color-orb-trigger { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
@@ -1336,8 +1341,7 @@ body[data-theme="studio"] .canvas-agent-head { min-height: 64px; padding: 12px 1
 body[data-theme="studio"] .canvas-agent-mark { display: none; }
 body[data-theme="studio"] .canvas-agent-heading strong { font-size: 16px; }
 body[data-theme="studio"] .canvas-agent-heading small { font-size: 13px; }
-body[data-theme="studio"] #canvasAgentPromptControl { display: none; }
-body[data-theme="studio"] .canvas-agent-panel[data-prompt-suggestions-open="true"] .canvas-agent-transcript { display: none; }
+body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="welcome"][data-prompt-suggestions-open="true"] .canvas-agent-transcript { display: none; }
 body[data-theme="studio"] .canvas-agent-connection-notice { display: flex; flex: 0 0 auto; gap: 12px; margin: 18px 18px 6px; padding: 16px; border-radius: 12px; background: color-mix(in srgb, #a55b09 7%, var(--studio-panel)); }
 body[data-theme="studio"] .canvas-agent-connection-notice[hidden] { display: none; }
 .canvas-agent-connection-notice > svg { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 1px; color: #a55b09; fill: none; stroke: currentColor; stroke-width: 1.7; }
@@ -1351,6 +1355,8 @@ body[data-theme="studio"] .canvas-agent-prompt-categories { display: flex; flex:
 body[data-theme="studio"] .canvas-agent-prompt-categories > button { flex: none; padding: 8px 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--studio-muted); font-size: 13px; white-space: nowrap; box-shadow: none; }
 body[data-theme="studio"] .canvas-agent-prompt-categories > button[aria-selected="true"] { color: var(--studio-text); background: transparent; border-bottom-color: var(--studio-accent); }
 body[data-theme="studio"] .canvas-agent-prompt-popup { margin-top: 14px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="conversation"] .canvas-agent-prompt-suggestions { padding-block: 8px; }
+body[data-theme="studio"] .canvas-agent-panel[data-prompt-presentation="conversation"] .canvas-agent-prompt-popup { margin-top: 0; }
 body[data-theme="studio"] .canvas-agent-prompt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; min-height: 58px; margin: 0 0 3px; padding: 10px; border: 0; border-radius: 11px; }
 body[data-theme="studio"] .canvas-agent-prompt-row:hover { background: var(--studio-toolbar); }
 body[data-theme="studio"] .canvas-agent-prompt-row > .canvas-agent-prompt-icon { width: 34px; height: 34px; color: var(--studio-muted); border: 1px solid var(--studio-line); border-radius: 6px; background: var(--studio-panel); }
@@ -1379,7 +1385,24 @@ body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-
 body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.floating-widget-toolbar):hover {
   border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); box-shadow: 0 4px 14px #00000016; backdrop-filter: none;
 }
-body[data-theme="studio"] .object-chrome-button.toolbar-group-start::after { content: ""; position: absolute; left: -5px; top: 4px; bottom: 4px; width: 1px; background: var(--studio-line); pointer-events: none; }
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.object-toolbar-surface.floating-widget-toolbar)::before { top: 19px; }
+/* A divider is centered in the 16 px group gap. Override the shared button's
+   expanded pseudo-element insets, including the coarse-pointer touch rules. */
+body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.toolbar-group-start)[data-pe-button]::after {
+  display: block;
+  content: "";
+  position: absolute;
+  left: -8.5px;
+  right: auto;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  height: auto;
+  border-radius: 0;
+  background: var(--studio-line);
+  opacity: 1;
+  pointer-events: none;
+}
 body[data-theme="studio"] .selected-widget-material.floating-toolbar-selection { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; clip-path: none; filter: none; outline: 2px solid var(--studio-accent); outline-offset: 4px; border-radius: 12px; }
 body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached { border-radius: 10px; }
 body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached::after { border: 1px solid var(--studio-line); border-radius: 10px; }
@@ -1420,7 +1443,6 @@ body[data-theme="studio"] .canvas-agent-panel .canvas-agent-resize-edge { box-sh
 
 body[data-theme="studio"] .selected-widget-material.floating-toolbar-selection { background: var(--studio-panel); }
 body[data-theme="studio"] :is(#pe-button-contract, .object-chrome-button.interact)[data-pe-button] { color: var(--pe-accent-label, var(--studio-accent-strong)); font-weight: 500; }
-body[data-theme="studio"] .object-chrome-button.toolbar-group-start::after { display: block !important; background: var(--studio-line) !important; opacity: 1 !important; }
 body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached { overflow: visible; contain: layout style; }
 body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached .canvas-widget-frame { border-radius: 10px; }
 body[data-theme="studio"] #viewport .canvas-widget.object-toolbar-attached .canvas-widget-resize-handle.corner { width: 12px; height: 12px; right: -7px; bottom: -7px; box-sizing: border-box; border: 2px solid var(--studio-accent); border-radius: 2px; background: var(--studio-panel); }
@@ -1988,3 +2010,124 @@ body[data-theme="studio"] #canvasAgentForm #canvasAgentConnection .canvas-agent-
 
 /* The prompt starts where the header text starts. */
 body[data-theme="studio"] #canvasAgentForm #canvasAgentInput { padding-inline: 5px; }
+
+/* Agent panel polish (2026-10-04): one spacing rhythm (16 px gutter, 4 px steps),
+   quieter chrome and lighter tool rows so the conversation and the prompts lead.
+   Layout and behaviour are unchanged; sizes that shrink are fine-pointer only, so
+   touch keeps its 44 px targets. */
+body[data-theme="studio"] #canvasAgentPanel {
+  --agent-gutter: 16px;
+  --agent-hairline: color-mix(in srgb, var(--studio-line) 72%, transparent);
+  --agent-row-hover: color-mix(in srgb, var(--studio-text) 4%, transparent);
+  --agent-warn: #a55b09;
+}
+
+/* Header: same surface as the panel, a calmer title and a status dot. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head { gap: 2px; padding: 9px 10px 9px var(--agent-gutter); background: var(--studio-panel) !important; border-bottom: 1px solid var(--agent-hairline); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading { gap: 1px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading strong { color: var(--studio-text); font-size: 14.5px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading small { color: var(--studio-muted); font-size: 12px; line-height: 1.4; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-heading small::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: color-mix(in srgb, var(--studio-muted) 55%, transparent); }
+body[data-theme="studio"] #canvasAgentPanel[data-status="ready"] .canvas-agent-heading small::before { background: #2f9e5b; }
+body[data-theme="studio"] #canvasAgentPanel[data-status="running"] .canvas-agent-heading small::before { background: var(--studio-accent); animation: agent-status-pulse 1.4s ease-in-out infinite; }
+body[data-theme="studio"] #canvasAgentPanel:is([data-status="unavailable"], [data-status="offline"]) .canvas-agent-heading small::before { background: var(--agent-warn); }
+body[data-theme="studio"] #canvasAgentPanel[data-status="error"] .canvas-agent-heading small::before { background: #c2410c; }
+@keyframes agent-status-pulse { 50% { opacity: .35; } }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button { color: var(--studio-muted); border-color: transparent; background: transparent; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button:is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
+
+/* No-connection notice: compact, outlined, actions on one baseline. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice { gap: 10px; margin: 14px var(--agent-gutter) 2px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--agent-warn) 18%, var(--studio-line)); border-radius: 10px; background: color-mix(in srgb, var(--agent-warn) 4%, var(--studio-panel)); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice[hidden] { display: none; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice > svg { width: 17px; height: 17px; flex-basis: 17px; margin-top: 1px; color: var(--agent-warn); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice strong { display: block; color: var(--studio-text); font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-connection-notice p { margin: 2px 0 10px; font-size: 12.5px; line-height: 1.45; }
+body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions { align-items: center; gap: 6px 4px; }
+body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button { height: 28px; min-height: 28px; padding: 0 11px; border-radius: 7px; font-size: 12.5px; font-weight: 500; line-height: 26px; }
+body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button:not(#canvasAgentSignIn) { color: var(--studio-text); border-color: color-mix(in srgb, var(--studio-line) 90%, var(--studio-text)); background: var(--studio-panel); box-shadow: 0 1px 1px rgba(16, 24, 40, .04); }
+body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions button:not(#canvasAgentSignIn):hover { background: var(--studio-toolbar); }
+body[data-theme="studio"] #canvasAgentPanel .connection-notice-actions #canvasAgentSignIn:hover { background: color-mix(in srgb, var(--studio-accent) 8%, transparent); }
+
+/* Prompt tabs and lists share the panel gutter; icons line up with the tab text. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-suggestions { padding: 14px var(--agent-gutter) 0; }
+body[data-theme="studio"] #canvasAgentPanel[data-prompt-presentation="conversation"] .canvas-agent-prompt-suggestions { padding-block: 8px 0; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories { border-bottom-color: var(--agent-hairline); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button { padding: 6px 0 10px; border-bottom: 0; font-size: 13px; transition: color .15s ease; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button:hover { color: var(--studio-text); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-categories > button[aria-selected="true"]::after { border-radius: 2px 2px 0 0; background: var(--studio-accent); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-popup {
+  margin: 8px -8px 0; padding: 0 0 18px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+}
+body[data-theme="studio"] #canvasAgentPanel[data-prompt-presentation="conversation"] .canvas-agent-prompt-popup { margin-top: 0; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row { align-items: start; gap: 12px; min-height: 0; margin: 0 0 2px; padding: 10px 8px; border-radius: 10px; transition: background-color .12s ease; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row:hover { background: var(--agent-row-hover); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row > .canvas-agent-prompt-icon { width: 32px; height: 32px; margin-top: 1px; color: var(--studio-muted); border-color: var(--agent-hairline); border-radius: 8px; background: var(--studio-panel); box-shadow: 0 1px 1px rgba(16, 24, 40, .03); transition: color .12s ease, border-color .12s ease; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row:is(:hover, :focus-visible) > .canvas-agent-prompt-icon { color: var(--studio-accent-strong); border-color: var(--studio-accent-border); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row .canvas-agent-prompt-icon svg { width: 18px; height: 18px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy { gap: 2px; padding-top: 1px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy > strong { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-copy > small { font-size: 12.5px; line-height: 1.45; }
+
+/* Ranked suggestions: a soft tint and a pill instead of the side bar. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header { padding: 0 0 6px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > strong { font-size: 13.5px; font-weight: 600; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > button { width: 28px; min-width: 28px; height: 28px; min-height: 28px; color: var(--studio-muted); border-color: transparent; border-radius: 7px; background: transparent; box-shadow: none; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-header > button:is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-status { margin: 0 0 6px; padding: 4px 8px 8px; border-bottom: 0; font-size: 12px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-suggest[aria-busy="true"] .canvas-agent-suggest-status::after { left: 8px; right: 8px; bottom: 0; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row[data-recommended="true"] { background: color-mix(in srgb, var(--studio-accent) 5%, var(--studio-panel)); box-shadow: none; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-prompt-row.canvas-agent-suggest-row[data-recommended="true"]:hover { background: color-mix(in srgb, var(--studio-accent) 9%, var(--studio-panel)); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-row[data-recommended="true"] > .canvas-agent-prompt-icon { color: var(--studio-accent-strong); border-color: var(--studio-accent-border); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-row .canvas-agent-prompt-copy > [data-pe-region="title"] { font-weight: 500; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-meta { align-self: start; padding-top: 1px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-suggest-badge { padding: 2px 7px; color: var(--studio-accent-strong); border-radius: 999px; background: color-mix(in srgb, var(--studio-accent) 11%, var(--studio-panel)); font-size: 10.5px; font-weight: 600; line-height: 1.35; letter-spacing: .01em; }
+
+/* Conversation: no "You" label, lighter bubbles, tool steps as quiet one-liners. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-transcript { gap: 10px; padding: 16px var(--agent-gutter) 12px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user { max-width: 86%; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user .canvas-agent-message-role { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user .canvas-agent-message-body { padding: 8px 12px; color: var(--studio-text); border-color: transparent; border-radius: 14px 14px 4px 14px; background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-panel)); line-height: 1.5; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user + .canvas-agent-message.assistant,
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.user + .canvas-agent-tool { margin-top: 2px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message.assistant + .canvas-agent-message.user { margin-top: 6px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool { border: 1px solid var(--agent-hairline); border-radius: 8px; background: transparent; transition: background-color .12s ease; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool + .canvas-agent-tool { margin-top: -5px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool:hover,
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool[open] { background: color-mix(in srgb, var(--studio-text) 2.5%, transparent); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head { padding-inline: 30px 28px; color: var(--studio-muted); font-weight: 400; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head::before { content: ""; position: absolute; left: 11px; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; background: #2f9e5b; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running > .canvas-agent-tool-head::before { box-sizing: border-box; width: 10px; height: 10px; margin-top: -5px; border: 1.5px solid var(--studio-accent); border-right-color: transparent; background: transparent; -webkit-mask: none; mask: none; animation: penecho-llm-orbit 1s linear infinite; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.error > .canvas-agent-tool-head::before { width: 7px; height: 7px; margin: -3.5px 0 0 2px; background: #c2410c; -webkit-mask: none; mask: none; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head::after { right: 12px; width: 6px; height: 6px; opacity: .55; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-intent { color: color-mix(in srgb, var(--studio-text) 55%, var(--studio-muted)); font-size: 12.5px; line-height: 1.35; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running .canvas-agent-tool-intent { color: var(--studio-text); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.error .canvas-agent-tool-intent { color: #b42318; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-status { color: var(--studio-muted); font-size: 11.5px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool:not(.running):not(.error) .canvas-agent-tool-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-body { padding: 8px 12px 10px 30px; border-top-color: var(--agent-hairline); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-actions { margin-top: -2px; gap: 0; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button]:not(.copied, .error, [data-pe-state="selected"]) { color: var(--studio-muted); border-color: transparent; background: transparent; box-shadow: none; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button]:not(.copied, .error, [data-pe-state="selected"], :disabled):is(:hover, :focus-visible) { color: var(--studio-text); background: var(--agent-row-hover); }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button] svg { width: 15px; height: 15px; }
+
+/* Composer: a soft lift at rest and an accent ring while typing. */
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer { padding: 8px 14px 14px; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer-surface { padding: 8px; border-color: color-mix(in srgb, var(--studio-line) 92%, transparent); border-radius: 14px; background: var(--studio-panel); box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 16px -10px rgba(16, 24, 40, .16) !important; transition: border-color .15s ease, box-shadow .15s ease; }
+body[data-theme="studio"] #canvasAgentPanel .canvas-agent-composer-surface:focus-within { border-color: var(--studio-accent-border); box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-accent) 12%, transparent), 0 1px 2px rgba(16, 24, 40, .05) !important; }
+body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput { min-height: 64px; padding-block: 10px 8px; }
+body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { color: color-mix(in srgb, var(--studio-muted) 82%, transparent); }
+
+@media (pointer: fine) {
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head { min-height: 56px; }
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button { width: 30px; min-width: 30px; height: 30px; min-height: 30px; margin: 0; padding: 0; border-radius: 7px; }
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-head button svg { width: 16px; height: 16px; }
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool-head { min-height: 30px; padding-block: 5px; }
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-message-action[data-pe-button] { width: 26px; min-width: 26px; height: 26px; min-height: 26px; flex-basis: 26px; border-radius: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-theme="studio"] #canvasAgentPanel[data-status="running"] .canvas-agent-heading small::before,
+  body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running > .canvas-agent-tool-head::before { animation: none; }
+}

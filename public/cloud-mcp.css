@@ -91,3 +91,68 @@
 .cloud-mcp-copy-action { display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; }
 .cloud-mcp-copy-action > button { flex-shrink:0; }
 .cloud-mcp-copy-status { color:var(--pe-ink-2,var(--ai-muted,var(--ink-2))); font:400 13px/1.5 var(--pe-font-ui,system-ui); overflow-wrap:anywhere; min-width:0; }
+
+/* Local IP direct uses catalog #settings grouped rows, #forms fields/disclosure,
+   #current-screens alert body/footer, and the existing Cloud MCP setup flow. */
+.mcp-local-methods { display:flex; flex-wrap:wrap; gap:16px; margin:0 0 20px; border-bottom:1px solid var(--pe-line); }
+.mcp-ip-direct { container:mcp-ip / inline-size; color:var(--pe-ink); font:400 13px/1.6 var(--pe-font-ui,system-ui); min-width:0; }
+.mcp-ip-direct [hidden],.mcp-local-methods[hidden],#mcpAutoPanel[hidden],#mcpIpPanel[hidden] { display:none; }
+.mcp-ip-heading,.mcp-ip-title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.mcp-ip-heading { align-items:flex-start; margin-bottom:20px; }
+.mcp-ip-heading h2,.mcp-ip-dialog h2 { font:500 15px/1.4 var(--pe-font-ui,system-ui); margin:0 0 6px; }
+.mcp-ip-direct h3 { margin:0; font:500 13px/1.6 var(--pe-font-ui,system-ui); }
+.mcp-ip-direct .mcp-hint { margin:6px 0 12px; font:400 12px/1.6 var(--pe-font-ui,system-ui); color:var(--pe-ink-2); }
+.mcp-ip-direct small { font-size:12px; color:var(--pe-ink-2); }
+.mcp-ip-flow { border:1px solid var(--pe-line); border-radius:var(--pe-r-group,10px); background:var(--pe-surface); }
+.mcp-ip-step { display:grid; grid-template-columns:20px minmax(0,1fr); gap:12px; padding:20px; }
+.mcp-ip-step + .mcp-ip-step { border-top:1px solid var(--pe-line); }
+.mcp-ip-step > div { min-width:0; }
+.mcp-ip-step > .mcp-step-badge { display:block; width:auto; height:auto; padding:0; margin:0; color:var(--pe-ink-3); border:0; border-radius:0; background:transparent; font:400 13px/1.6 var(--pe-font-ui,system-ui); }
+.mcp-ip-fields { display:grid; grid-template-columns:76px minmax(120px,1fr) 88px; gap:10px; margin:12px 0; }
+.mcp-ip-fields.edit { grid-template-columns:minmax(0,1fr) 88px; }
+.mcp-ip-fields label { display:grid; min-width:0; gap:4px; }
+.mcp-ip-fields input { width:100%; min-width:0; box-sizing:border-box; }
+.mcp-ip-fields label > span { font-size:12px; color:var(--pe-ink-2); }
+/* Catalog .field-control: shared form geometry, focus and disabled states. */
+:is(.mcp-ip-direct,.mcp-ip-dialog) input[data-pe-control="input"] { box-sizing:border-box; height:30px; min-height:30px; padding:0 9px; appearance:none; color:var(--pe-ink); border:1px solid var(--pe-line-strong); border-radius:5px; outline:0; background:var(--pe-surface); font:400 13px/1.35 var(--pe-font-ui,system-ui); }
+:is(.mcp-ip-direct,.mcp-ip-dialog) input[data-pe-control="input"]:focus { border-color:var(--pe-accent); box-shadow:0 0 0 2px var(--pe-accent-focus); }
+:is(.mcp-ip-direct,.mcp-ip-dialog) input[data-pe-control="input"]:disabled { color:var(--pe-ink-3); background:var(--pe-surface-muted); opacity:.62; }
+.mcp-ip-endpoint { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 8px; }
+.mcp-ip-endpoint > div { display:grid; min-width:0; gap:2px; }
+.mcp-ip-direct code { font:400 12px/1.6 ui-monospace,monospace; overflow-wrap:anywhere; }
+.mcp-ip-actions,.mcp-ip-token { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:10px 0; }
+.mcp-ip-token > input { flex:1; min-width:100px; font-family:ui-monospace,monospace; }
+.mcp-ip-title > .mcp-hint { margin:0; }
+.mcp-ip-direct button[data-pe-button] { white-space:normal; }
+.mcp-ip-details { margin:14px 0; }
+.mcp-ip-details > summary { width:fit-content; max-width:100%; cursor:pointer; color:var(--pe-ink-2); }
+.mcp-ip-details[open] > summary { margin-bottom:10px; }
+.mcp-ip-details dl { display:grid; grid-template-columns:100px minmax(0,1fr); gap:6px 12px; margin:12px 0; }
+.mcp-ip-details dt { color:var(--pe-ink-2); }
+.mcp-ip-details dd { min-width:0; margin:0; overflow-wrap:anywhere; }
+.mcp-ip-service { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 0 8px; }
+.mcp-ip-service strong { font-weight:500; }
+.mcp-ip-service .mcp-hint { margin:4px 0; }
+.mcp-ip-notice { margin:10px 0; color:var(--pe-warning,#9a5b12); font:400 12px/1.6 var(--pe-font-ui,system-ui); }
+.mcp-ip-feedback { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:30px; }
+.mcp-ip-feedback > p { margin:0; font-size:12px; color:var(--pe-ink-2); overflow-wrap:anywhere; }
+.mcp-ip-feedback .error,.mcp-ip-dialog [role="alert"] { color:var(--pe-danger); }
+.mcp-ip-feedback > button { flex-shrink:0; }
+.mcp-ip-direct .mcp-pill { flex-shrink:0; max-width:40%; white-space:normal; height:auto; font-weight:400; }
+.mcp-ip-direct .mcp-pill[data-state="on"] { color:var(--pe-success); }
+/* Reuse the product's native alert frame, copy and actions. These dialogs do
+   not have a form wrapper, so apply its existing 24px body/action spacing. */
+.mcp-ip-dialog:not([open]) { display:none; }
+.mcp-ip-dialog > [data-pe-region="body"] { padding:24px 24px 0; }
+.mcp-ip-dialog > [data-pe-region="footer"] { flex-wrap:wrap; margin:0; padding:24px; }
+.mcp-ip-dialog .mcp-ip-notice { margin:12px 0 0; color:var(--pe-warning,#9a5b12); }
+.mcp-ip-dialog [role="alert"]:empty { display:none; }
+.mcp-ip-dialog [role="alert"]:not(:empty) { margin:10px 0 0; }
+@container mcp-ip (max-width:400px) {
+  .mcp-ip-step { padding:16px 12px; gap:8px; }
+  .mcp-ip-fields { grid-template-columns:60px minmax(0,1fr); }
+  .mcp-ip-fields label:last-child { grid-column:2; }
+  .mcp-ip-title { align-items:flex-start; flex-wrap:wrap; }
+  .mcp-ip-details dl { grid-template-columns:1fr; gap:2px; }
+  .mcp-ip-details dd { margin-bottom:6px; }
+}

@@ -1,0 +1,524 @@
+{
+  "engine": "motion",
+  "size": [
+    960,
+    540
+  ],
+  "loop": false,
+  "controls": true,
+  "actors": [
+    {
+      "id": "frame",
+      "type": "rect",
+      "x": 284,
+      "y": 74,
+      "w": 392,
+      "h": 392,
+      "fill": "none",
+      "stroke": "#1c1f27",
+      "width": 2.5
+    },
+    {
+      "id": "hole",
+      "type": "polygon",
+      "points": [
+        [
+          452,
+          74
+        ],
+        [
+          676,
+          242
+        ],
+        [
+          508,
+          466
+        ],
+        [
+          284,
+          298
+        ]
+      ],
+      "fill": "#d5f4ee",
+      "stroke": "#0f766e",
+      "width": 2.5,
+      "dash": "7 5"
+    },
+    {
+      "id": "sqA",
+      "type": "rect",
+      "x": 284,
+      "y": 74,
+      "w": 168,
+      "h": 168,
+      "fill": "#fdeacb",
+      "stroke": "#b45309",
+      "width": 2.5,
+      "dash": "7 5",
+      "hidden": true
+    },
+    {
+      "id": "sqB",
+      "type": "rect",
+      "x": 452,
+      "y": 242,
+      "w": 224,
+      "h": 224,
+      "fill": "#fdeacb",
+      "stroke": "#b45309",
+      "width": 2.5,
+      "dash": "7 5",
+      "hidden": true
+    },
+    {
+      "id": "tri1",
+      "type": "polygon",
+      "points": [
+        [
+          284,
+          74
+        ],
+        [
+          452,
+          74
+        ],
+        [
+          284,
+          298
+        ]
+      ],
+      "fill": "#dfe4ff",
+      "stroke": "#4338ca",
+      "width": 2.5
+    },
+    {
+      "id": "tri2",
+      "type": "polygon",
+      "points": [
+        [
+          676,
+          74
+        ],
+        [
+          676,
+          242
+        ],
+        [
+          452,
+          74
+        ]
+      ],
+      "fill": "#dfe4ff",
+      "stroke": "#4338ca",
+      "width": 2.5
+    },
+    {
+      "id": "tri3",
+      "type": "polygon",
+      "points": [
+        [
+          676,
+          466
+        ],
+        [
+          508,
+          466
+        ],
+        [
+          676,
+          242
+        ]
+      ],
+      "fill": "#dfe4ff",
+      "stroke": "#4338ca",
+      "width": 2.5
+    },
+    {
+      "id": "tri4",
+      "type": "polygon",
+      "points": [
+        [
+          284,
+          466
+        ],
+        [
+          284,
+          298
+        ],
+        [
+          508,
+          466
+        ]
+      ],
+      "fill": "#dfe4ff",
+      "stroke": "#4338ca",
+      "width": 2.5
+    },
+    {
+      "id": "rightangle",
+      "type": "polyline",
+      "points": [
+        [
+          312,
+          74
+        ],
+        [
+          312,
+          102
+        ],
+        [
+          284,
+          102
+        ]
+      ],
+      "fill": "none",
+      "stroke": "#1c1f27",
+      "width": 2
+    },
+    {
+      "id": "lblA",
+      "type": "text",
+      "x": 368,
+      "y": 48,
+      "text": "a = 3",
+      "size": 20,
+      "fill": "#1c1f27"
+    },
+    {
+      "id": "lblB",
+      "type": "text",
+      "x": 244,
+      "y": 186,
+      "text": "b = 4",
+      "size": 20,
+      "fill": "#1c1f27"
+    },
+    {
+      "id": "lblC",
+      "type": "text",
+      "x": 402,
+      "y": 236,
+      "text": "c = 5",
+      "size": 20,
+      "fill": "#0f766e"
+    },
+    {
+      "id": "lblSide",
+      "type": "text",
+      "x": 480,
+      "y": 46,
+      "text": "边长 a + b = 7",
+      "size": 18,
+      "fill": "#666d7d"
+    },
+    {
+      "id": "lblC2",
+      "type": "text",
+      "x": 480,
+      "y": 234,
+      "text": "c²",
+      "size": 22,
+      "fill": "#0f766e"
+    },
+    {
+      "id": "numC",
+      "type": "text",
+      "x": 480,
+      "y": 274,
+      "text": "25",
+      "size": 30,
+      "fill": "#0f766e"
+    },
+    {
+      "id": "lblA2",
+      "type": "text",
+      "x": 368,
+      "y": 136,
+      "text": "a²",
+      "size": 20,
+      "fill": "#b45309",
+      "hidden": true
+    },
+    {
+      "id": "numA",
+      "type": "text",
+      "x": 368,
+      "y": 174,
+      "text": "9",
+      "size": 30,
+      "fill": "#b45309",
+      "hidden": true
+    },
+    {
+      "id": "lblB2",
+      "type": "text",
+      "x": 564,
+      "y": 322,
+      "text": "b²",
+      "size": 20,
+      "fill": "#b45309",
+      "hidden": true
+    },
+    {
+      "id": "numB",
+      "type": "text",
+      "x": 564,
+      "y": 360,
+      "text": "16",
+      "size": 30,
+      "fill": "#b45309",
+      "hidden": true
+    },
+    {
+      "id": "lgdTri",
+      "type": "text",
+      "x": 36,
+      "y": 86,
+      "text": "蓝：四个全等直角三角形",
+      "size": 15,
+      "fill": "#666d7d",
+      "anchor": "start"
+    },
+    {
+      "id": "lgdLegs",
+      "type": "text",
+      "x": 36,
+      "y": 110,
+      "text": "橙框：直角边上的正方形",
+      "size": 15,
+      "fill": "#666d7d",
+      "anchor": "start"
+    },
+    {
+      "id": "lgdHyp",
+      "type": "text",
+      "x": 36,
+      "y": 134,
+      "text": "青框：斜边上的正方形 c²",
+      "size": 15,
+      "fill": "#666d7d",
+      "anchor": "start"
+    },
+    {
+      "id": "eq",
+      "type": "text",
+      "x": 480,
+      "y": 506,
+      "text": "a² + b² = c²",
+      "size": 24,
+      "fill": "#4338ca"
+    }
+  ],
+  "beats": [
+    {
+      "caption": "① 直角三角形：直角边 a = 3、b = 4，斜边 c = 5",
+      "steps": [
+        {
+          "do": "draw",
+          "target": "tri1",
+          "dur": 1
+        },
+        {
+          "do": "draw",
+          "target": "rightangle",
+          "dur": 0.5,
+          "with": true
+        },
+        {
+          "do": "write",
+          "target": "lblA",
+          "dur": 0.4
+        },
+        {
+          "do": "write",
+          "target": "lblB",
+          "dur": 0.4
+        },
+        {
+          "do": "write",
+          "target": "lblC",
+          "dur": 0.4
+        }
+      ]
+    },
+    {
+      "caption": "② 四个全等三角形铺进边长为 a + b = 7 的大正方形，中间空出边长 c 的正方形",
+      "steps": [
+        {
+          "do": "write",
+          "target": "lgdTri",
+          "dur": 0.4
+        },
+        {
+          "do": "write",
+          "target": "lgdLegs",
+          "dur": 0.4
+        },
+        {
+          "do": "write",
+          "target": "lgdHyp",
+          "dur": 0.4
+        },
+        {
+          "do": "draw",
+          "target": "frame",
+          "dur": 0.7
+        },
+        {
+          "do": "write",
+          "target": "lblSide",
+          "dur": 0.4
+        },
+        {
+          "do": "draw",
+          "target": "tri2",
+          "dur": 0.6
+        },
+        {
+          "do": "draw",
+          "target": "tri3",
+          "dur": 0.6
+        },
+        {
+          "do": "draw",
+          "target": "tri4",
+          "dur": 0.6
+        },
+        {
+          "do": "draw",
+          "target": "hole",
+          "dur": 0.9
+        },
+        {
+          "do": "fadeIn",
+          "target": "lblC2",
+          "dur": 0.4
+        },
+        {
+          "do": "count",
+          "target": "numC",
+          "from": 0,
+          "to": 25,
+          "dur": 1.2
+        }
+      ]
+    },
+    {
+      "caption": "③ 四个三角形整体滑动换位：形状和面积都没有变",
+      "steps": [
+        {
+          "do": "fadeOut",
+          "target": "hole",
+          "dur": 0.5
+        },
+        {
+          "do": "fadeOut",
+          "target": "lblC2",
+          "dur": 0.5,
+          "with": true
+        },
+        {
+          "do": "fadeOut",
+          "target": "numC",
+          "dur": 0.5,
+          "with": true
+        },
+        {
+          "do": "move",
+          "target": "tri1",
+          "by": [
+            0,
+            168
+          ],
+          "dur": 1.4,
+          "ease": "inOutQuad"
+        },
+        {
+          "do": "move",
+          "target": "tri4",
+          "by": [
+            168,
+            -224
+          ],
+          "dur": 1.4,
+          "ease": "inOutQuad",
+          "with": true
+        },
+        {
+          "do": "move",
+          "target": "tri3",
+          "by": [
+            -224,
+            0
+          ],
+          "dur": 1.4,
+          "ease": "inOutQuad",
+          "with": true
+        },
+        {
+          "do": "pulse",
+          "target": "tri2",
+          "dur": 0.8
+        }
+      ]
+    },
+    {
+      "caption": "④ 空出的面积变成两个正方形：a² = 9 与 b² = 16",
+      "steps": [
+        {
+          "do": "fadeIn",
+          "target": "sqA",
+          "dur": 0.6
+        },
+        {
+          "do": "fadeIn",
+          "target": "sqB",
+          "dur": 0.6,
+          "with": true
+        },
+        {
+          "do": "fadeIn",
+          "target": "lblA2",
+          "dur": 0.3
+        },
+        {
+          "do": "count",
+          "target": "numA",
+          "from": 0,
+          "to": 9,
+          "dur": 1
+        },
+        {
+          "do": "fadeIn",
+          "target": "lblB2",
+          "dur": 0.3
+        },
+        {
+          "do": "count",
+          "target": "numB",
+          "from": 0,
+          "to": 16,
+          "dur": 1.2
+        }
+      ]
+    },
+    {
+      "caption": "⑤ 同一块面积 = 9 + 16 = 25 = c²，所以 a² + b² = c²",
+      "steps": [
+        {
+          "do": "write",
+          "target": "eq",
+          "dur": 1
+        },
+        {
+          "do": "pulse",
+          "target": [
+            "sqA",
+            "sqB"
+          ],
+          "dur": 1.2
+        }
+      ]
+    }
+  ]
+}

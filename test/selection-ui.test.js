@@ -20,7 +20,7 @@ function viewportSource(html) {
   assert.fail("Canvas viewport closes after its nested sections");
 }
 
-test("selection toolbar is an accessible viewport overlay with stable action hooks", () => {
+test("legacy selection action hooks remain hidden while Assist owns the visible controls", () => {
   const html = read("public/index.html"),
     viewport = viewportSource(html),
     layer = viewport.match(/<div id="selectionOverlayLayer"[\s\S]*?<\/div>\s*<\/div>/)?.[0] || "";
@@ -28,6 +28,10 @@ test("selection toolbar is an accessible viewport overlay with stable action hoo
   assert.match(layer, /class="selection-overlay-layer"[^>]*hidden/);
   assert.match(layer, /id="selectionToolbar"[^>]*role="toolbar"[^>]*data-i18n-aria="selectionTools"/);
   assert.match(layer, /id="selectionScopeNotice"[^>]*data-i18n="selectionScopeNotice"/);
+  const update = functionSource(read("src/client/app/persistence.js"), "updateSelectionToolbar");
+  assert.match(update, /selectionOverlayLayer\.hidden = true/);
+  assert.match(update, /selectionToolbar\.hidden = true/);
+  assert.match(update, /syncSelectionSuggestions\(\)/);
   for (const [id, key] of [
     ["selectionTypesetBtn", "selectionTypeset"],
     ["selectionDeleteBtn", "selectionDelete"],

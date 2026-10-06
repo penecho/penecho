@@ -58,14 +58,12 @@ tools/mobile/web/penecho-mark.png
 *.swo
 .trash/
 
-# Generated README review output; keep the authored preview and renderer.
-docs/design-previews/readme-diagram-table-20260919/canvas-session.json
-docs/design-previews/readme-diagram-table-20260919/canvas.html
-docs/design-previews/readme-diagram-table-20260919/*-canvas.png
-docs/design-previews/readme-diagram-table-20260919/readme.*.html
-docs/design-previews/readme-diagram-table-20260919/readme-checks.json
-docs/design-previews/readme-diagram-table-20260919/verification.json
-docs/design-previews/readme-20260915/preview.local.html
+# Keep local QA evidence and design explorations out of release commits.
+# Maintained regression tests belong in test/; retain the manual test guide.
+docs/verification/
+docs/design-previews/
+docs/testing/*
+!docs/testing/penecho-regression-guide-20260929-20260930.md
 docs/codex-0.157.0-cache-smoke.json
 
 # Demo videos are hosted externally; commit URLs and metadata only.

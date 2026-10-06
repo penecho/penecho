@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const host=fs.readFileSync('public/widget-host.js','utf8'),client=fs.readFileSync('src/client/app/canvas-runtime.js','utf8');
-const captureSource=host.slice(host.indexOf('    function snapshotContentOverflow('),host.indexOf('    // Compatibility for canvases saved'));
+const captureSource=host.slice(host.indexOf('    function snapshotContentOverflow('),host.indexOf('    let fitContentStyle = null;'));
 for(const fullContent of [false,true])test(`snapshot fullContent=${fullContent} respects document extent independently of presentation zoom`,async()=>{
  for(const scaleX of [.5,1]){
  const messages=[],sizes=[];
@@ -34,10 +34,14 @@ test('full content response leaves every preview cache field intact',async()=>{
 test('download requests complete content and uses its returned PNG instead of cached preview',async()=>{
  const start=client.indexOf('  async function downloadWidgetImage('),end=client.indexOf('  function widgetEditContext(',start);
  const link={click(){},remove(){}},calls=[],widget={snapshotDataUrl:'data:image/png;base64,old'};
- const context={syncObjectChrome(){},setStatusKey(){},setStatus(){},t:x=>x,WIDGET_SNAPSHOT_TIMEOUT_MS:18000,
+ const blobs=[],revoked=[];
+ const context={syncObjectChrome(){},setStatusKey(){},setStatus(){},t:x=>x,WIDGET_SNAPSHOT_TIMEOUT_MS:18000,setTimeout:fn=>fn(),
+ URL:{createObjectURL:blob=>{blobs.push(blob);return 'blob:full';},revokeObjectURL:url=>revoked.push(url)},dataUrlBlob:value=>({value}),
  requestWidgetSnapshot:async(...args)=>{calls.push(args);return {dataUrl:'data:image/png;base64,full'};},document:{createElement:()=>link,body:{append(){}}},widgetImageFilename:()=> 'widget.png'};
  vm.createContext(context);vm.runInContext(client.slice(start,end),context);
- assert.equal(await context.downloadWidgetImage(widget),true);assert.equal(calls[0][5],true);assert.equal(link.href,'data:image/png;base64,full');assert.equal(widget.downloadBusy,false);
+ assert.equal(await context.downloadWidgetImage(widget),true);assert.equal(calls[0][5],true);
+ // A large full-content PNG downloads through a Blob URL, never a data: URL navigation.
+ assert.equal(link.href,'blob:full');assert.equal(blobs[0].value,'data:image/png;base64,full');assert.deepEqual(revoked,['blob:full']);assert.equal(widget.downloadBusy,false);
 });
 
 test('full document overflow includes clipped nested panels without changing their scrolling',()=>{
@@ -66,5 +70,25 @@ test('scrolled full captures use document coordinates while viewport captures ke
   assert.deepEqual([options.scrollX,options.scrollY],fullContent?[25,500]:[0,0]);
   assert.deepEqual([options.windowWidth,options.windowHeight],[800,400]);
   assert.deepEqual([context.scrollX,context.scrollY],[25,500]);
+ }
+});
+
+test('graph download expands its formula list and restores it after success or failure',async()=>{
+ for (const fullContent of [false,true]) for (const fail of [false,true]) {
+  const order=[],messages=[],sizes=[];
+  const root={clientWidth:800,clientHeight:400,scrollWidth:800,scrollHeight:400};
+  const context={clock:()=>0,document:{documentElement:root,body:{scrollWidth:800,scrollHeight:400,querySelectorAll:()=>[]}},
+   HIGH_RESOLUTION_SNAPSHOT_SCALE:1.5,MAX_HIGH_RESOLUTION_SNAPSHOT_DIMENSION:3600,MAX_HIGH_RESOLUTION_SNAPSHOT_PIXELS:10800000,MAX_SNAPSHOT_DIMENSION:2400,MAX_SNAPSHOT_PIXELS:4800000,
+   snapshotDebugLog(){},mcpPreviewMode:false,settleSnapshotFrame:async()=>true,
+   __penechoPrepareGraphSnapshot(){order.push('expand');root.scrollHeight=1200;return ()=>{order.push('restore');root.scrollHeight=400;};},
+   inlineSvgComputedStyles:()=>()=>{},inlineSnapshotCompatibleColors:()=>()=>{},reportPresentationScrollExtent(){},
+   snapshotPrimarySvg:async(w,h)=>{sizes.push([w,h]);return {width:w,height:h,toDataURL:()=> 'data:image/png;base64,new'};},
+   withTimeout:async p=>{const result=await p;if(fail)throw Error('Capture failed');return result;},parent:{postMessage:m=>messages.push(m)},runtimeVersion:1,activeSnapshotRender:null};
+  vm.createContext(context);vm.runInContext(captureSource,context);
+  await context.snapshotDocument({requestId:'graph',width:800,height:400,fullContent});
+  assert.deepEqual(sizes,[[800,fullContent?1200:400]]);
+  assert.deepEqual(order,fullContent?['expand','restore']:[]);
+  assert.equal(root.scrollHeight,400);
+  assert.equal(messages[0].type,fail?'penecho-widget-snapshot-error':'penecho-widget-snapshot');
  }
 });

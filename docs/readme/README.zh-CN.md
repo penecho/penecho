@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
-    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">随手画下想法。PenEcho 内置 Agent，或 Codex、Claude Code 及任何 MCP 客户端，都能在笔记旁生成图表、文档和可运行的组件。</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">1.4 新功能</a> ·
   <a href="#quick-start">快速开始</a> ·
   <a href="#connect-your-ai-agent-mcp">连接你的 AI Agent（MCP）</a> ·
   <a href="../">文档</a> ·
@@ -45,6 +46,30 @@
 </p>
 <p align="center"><em>从手绘草图到交互成果，都在同一块画布上。</em></p>
 
+<a name="new-in-1-4"></a>
+
+## 1.4 新功能：写下一笔，它就懂你所需
+
+<p align="center">
+  <a href="https://penecho.ai/?lang=zh#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="观看 PenEcho 1.4 功能导览（2:30）" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/?lang=zh#knows-you"><strong>▶ 观看带声音和章节的完整版</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">下载 MP4</a><br><sub>智能建议 · PenEchoLLM · 笔记与卡片 · 实时图像 · 物理模拟 · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?lang=zh&amp;t=16#knows-you"><img src="../assets/release-1.4/penechollm-suggest.webp" alt="PenEchoLLM 为手写积分推荐「求解」，轻点一下，答案就落在原处" width="100%"></a><br>
+      <strong>PenEchoLLM 推荐下一步</strong><br>
+      停笔片刻，PenEchoLLM 就会为你排好下一步：求解、规范书写、绘制函数图像、生成图表、整理为笔记等。轻点一下，答案落在你书写的位置，下一步建议也已就绪。它会从你选择的建议中学习习惯，数据保存在本机；每天免费试用，无需 API Key。
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?lang=zh&amp;t=43#knows-you"><img src="../assets/release-1.4/notes-cards.webp" alt="在画布上圈选手写笔记，生成知识卡片，并出现在可搜索的资料库中" width="100%"></a><br>
+      <strong>笔记与卡片，留住要点</strong><br>
+      圈选一个公式、一张草图或一段解答，即可保存为知识卡片或工作笔记，并保留你的原始笔迹。卡片会自动归类并收进资料库，支持搜索、收藏、复习，也能加入任意画布。
+    </td>
+  </tr>
+</table>
+
 ## 你可以做什么
 
 <table width="100%">
@@ -52,7 +77,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="画下想法，再向 AI 提问" width="100%"><br>
       <strong>画下想法，再向 AI 提问</strong><br>
-      在无限画布上写字、列公式、放置文字和图片。停笔后自动获得 AI 回应。
+      在无限画布上写字、列公式、放置文字和图片。停笔后，PenEchoLLM 会推荐下一步。
     </td>
     <td width="33%" valign="top">
       <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 集群" width="100%"></a><br>
@@ -178,12 +203,15 @@ npm start
 
 </details>
 
-## 1.3.5 新内容
+## 1.4.0 新内容
 
-- **界面 UI：** 修复了一些界面小问题。
-- **画布并发编辑：** 支持 Canvas AI、Agent 和 MCP 同时修改同一个画布。
+- **智能建议与 PenEchoLLM：** 根据手写、文字和图片推荐操作，由 PenEchoLLM 排序，支持快捷回答、可视化创作和继续追问。
+- **Lasso AI：** 圈选画布任意局部，针对选中内容求解、可视化、制作动画或整理笔记。
+- **笔记与卡片：** 将画布内容整理为可复用的笔记和知识卡片，支持浏览、搜索并加入其他画布。
+- **Widget 优化：** 通过手写反馈和相关操作继续完善结果，控件操作更清晰，内容尺寸更贴合。
+- **画布体验：** 改进笔手势、笔迹删除、画布导航，以及与 Agent、MCP 的协作。
 
-[完整更新记录 →](../../CHANGELOG.md#135)
+[观看 1.4 功能导览 →](https://penecho.ai/?lang=zh#knows-you) · [完整更新记录 →](../../CHANGELOG.md#140)
 
 ## 社区
 

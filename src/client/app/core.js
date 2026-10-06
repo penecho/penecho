@@ -198,6 +198,7 @@
     settingsEditorCancel = document.querySelector("#settingsEditorCancel"),
     settingsSaveStatus = document.querySelector("#settingsSaveStatus"),
     settingsAutoToggle = document.querySelector("#settingsAutoToggle"),
+    settingsCanvasHintsToggle = document.querySelector("#settingsCanvasHintsToggle"),
     settingsCanvasAgentAutoOpenToggle = document.querySelector("#settingsCanvasAgentAutoOpenToggle"),
     settingsWidgetShadowToggle = document.querySelector("#settingsWidgetShadowToggle"),
     summonToggle = document.querySelector("#summonToggle"),
@@ -245,11 +246,13 @@
     kimi:Object.freeze(["k3", "kimi-k3"]),
     minimax:Object.freeze(["MiniMax-M3", "MiniMax-M2.7"]),
   });
+  const ILLUSTRATION_STYLE_STORAGE_KEY = "penecho-illustration-style", ILLUSTRATION_BACKGROUND_STORAGE_KEY = "penecho-illustration-background";
   const AI_FONT_STORAGE_KEY = "penecho-ai-font",
+    AI_FONT_DEFAULT = "ui-rounded, system-ui, sans-serif",
     AI_FONT_HANDWRITTEN = "Bradley Hand, Segoe Print, Comic Sans MS, cursive",
     AI_FONT_HANDWRITTEN_LEGACY = "Segoe Print, Comic Sans MS, cursive",
     AI_FONT_OPTIONS = new Set([
-      "ui-rounded, system-ui, sans-serif",
+      AI_FONT_DEFAULT,
       AI_FONT_HANDWRITTEN,
       "Georgia, serif",
       "system-ui, sans-serif",
@@ -261,7 +264,6 @@
     TEXT_EDITOR_FONT_CSS = 17,
     TEXT_EDITOR_PREVIEW_INTERVAL_MS = 80,
     TEXT_EDITOR_FONT_FAMILY = "ui-rounded, system-ui, sans-serif",
-    TEXT_INPUT_GUARD_MS = 500,
     TEXT_INPUT_MAX_LENGTH = 2000,
     MAX_VISIBLE_TEXT_BOXES = 50,
     MIXED_FORMULA_MAX_LENGTH = 512,
@@ -290,7 +292,16 @@
     MAX_DIAGRAM_SOURCE_BYTES = 100 * 1024,
     MAX_WIDGET_CONTENT_DIMENSION = 1000000,
     WIDGET_SNAPSHOT_TIMEOUT_MS = 20000,
-    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000;
+    WIDGET_HISTORY_SNAPSHOT_WAIT_MS = 3000,
+    // Widget hosts share one renderer; more parallel DOM renders only slow all.
+    WIDGET_SNAPSHOT_CONCURRENCY = 2,
+    // PenEchoLLM classification waits this long for Widget pixels before it
+    // keeps the local suggestions instead of sending an incomplete image.
+    WIDGET_CLASSIFY_SNAPSHOT_TIMEOUT_MS = 8000,
+    // Automatic ink/result ranking may share a same-version image this recent.
+    WIDGET_CLASSIFY_SNAPSHOT_REUSE_MS = 2000,
+    // Canvas AI proceeds after this wait and marks unavailable Widgets.
+    AI_WIDGET_SNAPSHOT_WAIT_MS = 6000;
   const PLUGIN_TEMPLATE_DOCUMENTS = Object.freeze({
     simple: `---
 penecho-plugin: 1
@@ -369,7 +380,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       eraser: "Eraser",
       eraserOptions: "Eraser options",
       areaEraser: "Area erase",
-      select: "Select objects or lasso ink (V)",
+      select: "Lasso (V)",
+      lassoToolPurpose: "Lasso · circle anything, then Solve, Plot, Animate or Ask (V)",
       text: "Text input",
       textMixedMode: "Preview Markdown + LaTeX formatting",
       textMixedModeShort: "Preview",
@@ -428,6 +440,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       researchGridDefault: "Research grid (off by default)",
       font: "Font",
       aiFont: "AI handwriting",
+      illustrationStyle: "Illustration style",
+      illustrationStyleStorybook: "Storybook",
+      illustrationStyle3d: "3D",
+      illustrationBackground: "Illustration background",
+      illustrationBackgroundAuto: "Auto",
+      illustrationBackgroundNone: "None",
       reasoningEffort: "Reasoning effort",
       reasoningEffortDisplay: "Reasoning ({level})",
       effortCustom: "Custom reasoning effort",
@@ -496,9 +514,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourEffortTitle: "Choose how deeply AI reasons",
       tourEffortBody: "AI Effort controls the reasoning depth used for each request. Higher levels suit difficult derivations and multi-step problems, but can take longer. Configured uses the default selected in your local setup.",
       tourHandTitle: "Move the canvas anywhere",
-      tourHandBody: "Hand moves the canvas even over a large widget. Click a widget for its toolbar. Use Select to arrange objects or enter widget interaction.",
-      tourLassoTitle: "Work with exactly the content you select",
-      tourLassoBody: "With a mouse or stylus, draw a closed loop around handwriting. Drag the selected region to move it; use the right edge, bottom edge, or lower-right corner to resize it. The selection toolbar can typeset handwriting, delete it, or cancel. Selection-scoped AI requests do not reference the rest of the canvas.",
+      tourHandBody: "Hand pans the canvas even over large widgets. Click an object to show its toolbar, then use the header to move it or the handles to resize it. Double-click a widget to interact.",
+      tourLassoTitle: "Lasso: circle anything and let AI act on it",
+      tourLassoBody: "Draw a closed loop around handwriting, images or part of a Widget. Choose Solve, Plot, Animate or Organize as Note in the Assist bar, or use Ask for your own question; AI receives only the selected content. Drag or resize the selection to move or scale ink, merged images and enclosed objects. Widgets stay in place. Hold your pen's side button to lasso from any drawing tool.",
       tourTextTitle: "Add editable text and formulas",
       tourTextBody: "Choose Text, then click the canvas to create an input box. Markdown and likely LaTeX are formatted automatically; Preview shows the exact placement before confirmation. Confirm with the check button or Ctrl/Cmd + Enter.",
       tourImageTitle: "Add images and photos",
@@ -507,6 +525,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourFullscreenBody: "Fullscreen hides surrounding browser space and expands the drawing area. Use the same button—or your browser's fullscreen shortcut—to return.",
       tourFavoritesTitle: "Add something from Favorites",
       tourFavoritesBody: "Use the star button to open your Echoes favorites. Add a favorite Widget to the current Canvas, or open a favorite Canvas here as a new Canvas.",
+      tourNotesCardsTitle: "Keep useful ideas in Notes & Cards",
+      tourNotesCardsBody: "Use Organize as Note on selected content, then save the result to Notes & Cards. Open More → Notes & cards, or Library → Notes & cards, to read, search and add saved notes to another canvas. Saved notes remain available independently of their original canvas.",
+      tourAssistTitle: "Choose your next step with Assist",
+      tourAssistBody: "Pause after writing or adding text and images to see suggested actions near your content. Choose an action, open More for other options, or use Ask to write your own question. You can also lasso existing content to get suggestions for that selection.",
       tourShareCanvasTitle: "Share this Canvas",
       tourShareCanvasBody: "Share creates a read-only link to the latest Cloud Canvas. Anyone with the link can see future saved changes. Use Echo to publish a separate Craft to Echoes.",
       tourCloudTitle: "Keep private work in PenEcho Cloud",
@@ -520,13 +542,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Create with Canvas Agent and MCP",
-      changelogCanvasAgent: "Canvas Agent works with your canvas, files, and web sources to create and refine editable visual content. Continue the conversation to build on your results.",
-      changelogMcpCanvases: "Connect external AI tools through MCP to create and update Canvas documents. Find their canvases in the Navigator and follow the latest updates.",
-      changelogCloudMcp: "New Cloud MCP lets external AI agents such as Codex and Claude connect to your enabled PenEcho Cloud canvases to read content, create and edit results, and follow your handwritten feedback. Cloud MCP and Local MCP are optional connection paths.",
-      changelogFrostedStudio: "A simpler frosted Studio brings the toolbar, Navigator, Agent, settings, and dialogs into one restrained visual system. Translucent materials, fine hairlines, and lighter controls keep the Canvas visible and the workspace easy to scan.",
-      changelogPerformance: "Drawing, erasing, panning, and zooming feel more immediate. Low-latency live ink and coordinated frame work keep Widgets live and restore sharper text after movement.",
-      changelogKeyboardShortcuts: "Customizable keyboard shortcuts are now available in Settings for focusing the Agent, saving, undo and redo, opening the Canvas Library, fullscreen, and Settings.",
+      changelogTitle: "Smarter help, reusable notes",
+      changelogAssist: "Smart Assist suggests useful next steps for handwriting, text and images, with quick actions and your own follow-up questions.",
+      changelogLasso: "Circle handwriting, images or part of a Widget to solve, visualize, animate or organize just the selected content.",
+      changelogNotesCards: "Turn canvas content into reusable notes and knowledge cards. Browse, search and bring saved notes into other canvases.",
+      changelogWidgetRefine: "Refine Widgets with written feedback and contextual actions, with clearer controls and better content fitting.",
+      changelogCanvasPolish: "Improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP make working on the canvas smoother.",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsSubtitle: "Choose a category, then adjust its settings without leaving this window.",
@@ -564,6 +585,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       shortcutRedoHelp: "Redo the latest undone Canvas change.",
       shortcutCanvasLibrary: "Canvas Library",
       shortcutCanvasLibraryHelp: "Open saved Canvases and storage locations.",
+      libraryCanvas: "Canvas",
+      libraryNotes: "Notes & cards",
+      libraryNotesTitle: "Notes and knowledge cards",
+      shortcutNotesLibrary: "Notes library",
+      shortcutNotesLibraryHelp: "Browse, search and review note cards from every Canvas.",
       shortcutFullscreenHelp: "Enter or leave full-screen Canvas view.",
       shortcutSettingsHelp: "Open Settings from the Canvas workspace.",
       settingsAppearance: "Appearance",
@@ -806,8 +832,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonPhrase12: "An answer is not an ending. It is where the next stroke begins.",
       summonTip1: "Tip: create professional diagrams for engineering, science, software, and business.",
       summonTip2: "Tip: professional diagrams preserve editable source that you can copy into other tools.",
-      summonTip3: "Tip: add a few strokes beside a diagram, then use AI Refine to update only that diagram.",
-      summonTip4: "Tip: AI Refine tries to preserve the diagram’s format, layout, terminology, and visual style.",
+      summonTip3: "Tip: add a few strokes beside a diagram, then choose Apply my marks in its header to update only that diagram.",
+      summonTip4: "Tip: Refine tries to preserve the diagram’s format, layout, terminology, and visual style.",
       summonTip5: "Tip: professional diagram renderers load only when needed; simply viewing them uses no model tokens.",
       summonTip6: "Tip: Professional Diagrams is on by default and can be turned off from Plugins.",
       summonTip7: "Tip: Real Photo Search places sourced web photos directly on the canvas.",
@@ -824,10 +850,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       summonTip18: "Tip: History can update the current snapshot or save a separate new copy.",
       summonTip19: "Tip: scroll to pan; pinch or Ctrl/Cmd + scroll to zoom.",
       summonTip20: "Tip: AI ink color lives in the toolbar; AI font lives in this Settings panel.",
-      summonTip21: "Tip: write changes anywhere in this view, then choose a widget and use AI Refine.",
-      summonTip22: "Tip: tap a widget, or hover it with a mouse, to reveal AI Refine.",
-      summonTip23: "Tip: AI Refine uses the newest strokes, text, and images in this view as instructions.",
-      summonTip24: "Tip: use AI Refine to update a widget in place; regular AI adds a new widget.",
+      summonTip21: "Tip: open Refine in a widget header and type a change, or tap one of its suggestions.",
+      summonTip22: "Tip: hover a widget to show its header: Interact in place, tap a suggestion, or open Refine.",
+      summonTip23: "Tip: Refine uses the newest strokes, text, and images in this view as instructions.",
+      summonTip24: "Tip: use Refine to update a widget in place; regular AI adds a new widget.",
       debugTitle: "PenEcho debug",
       openLocalLog: "Open local server log",
       history: "Canvas Library",
@@ -906,6 +932,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       studioNavigatorSort: "Sort canvases",
       shortcutSearchWork: "Search canvases and chats",
       shortcutSearchWorkHelp: "Open sidebar search.",
+      shortcutCanvasContentSearch: "Search canvas content",
+      shortcutCanvasContentSearchHelp: "Find formulas, diagrams and sketches across canvases by word or drawing.",
       studioNavigatorSearch: "Search canvases, chats…",
       studioNavigatorAll: "All",
       studioNavigatorAgents: "Chats",
@@ -973,7 +1001,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasSaveStateSaving: "Saving…",
       canvasWelcomeKicker: "start here",
       canvasWelcomeDraw: "Draw by hand",
-      canvasWelcomeDrawBody: "Ink, text and images. Auto AI answers when you pause.",
+      canvasWelcomeDrawBody: "Ink, text and images. Choose a suggestion or ask AI.",
       canvasWelcomeAgent: "Ask PenEcho Agent",
       canvasWelcomeAgentBody: "Describe a diagram, plan, prototype or quiz.",
       canvasWelcomeMcp: "Connect your AI",
@@ -984,7 +1012,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       settingsDisplay: "Display and navigation",
       settingsAutoHelp: "Respond to your handwriting after you pause.",
       settingsAiFontHelp: "The lettering AI uses when it writes onto the canvas.",
+      settingsIllustrationStyleHelp: "How sketch illustration suggestions look: Storybook uses soft pastel picture-book art; 3D uses glossy soft volumes like a toy figure.",
+      settingsIllustrationBackgroundHelp: "Auto adds a simple fitting scene when you drew none. None illustrates only what you drew. A background you draw is always kept.",
       settingsThinkingHelp: "Show a quiet pulse while AI is working.",
+      settingsCanvasHints: "Tool and shortcut hints",
+      settingsCanvasHintsHelp: "Show tool tips and keyboard shortcuts at the bottom of the canvas.",
       settingsAgentAutoOpenHelp: "Auto AI pauses while the Agent panel is open.",
       settingsWheelHelp: "Off: scroll pans; pinch or Ctrl/⌘ + scroll zooms.",
       settingsGridHelp: "Choose the background for your canvas.",
@@ -1079,7 +1111,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       deleteSnapshotConfirmDevice: "Delete this snapshot from this device?",
       deleteSnapshotConfirmServer: "Delete this shared snapshot from the PenEcho server?",
       deleteSnapshotConfirmCloud: "Move this Cloud Canvas to Trash? It remains recoverable from PenEcho Cloud.",
-      canvasHintWidgetAdded: "Mark a widget with Pen, then choose AI Refine.",
+      canvasHintWidgetAdded: "Hover the widget: Interact in place, or open Refine for suggestions.",
       canvasHintWidgetFullscreen: "Double-click a widget to maximize it.",
       canvasHintWidgetInline: "Double-click a widget to interact.",
       canvasHintShortcutAgent: "{shortcut} Open or close Agent",
@@ -1092,12 +1124,20 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
       canvasHintHand: "Drag to pan · click an object to select",
       canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
-      canvasHintWidgetTouchHand: "Select → Interact: use widget content.",
-      canvasHintLasso: "Click an object to move or resize; drag empty canvas to lasso.",
-      canvasHintLassoAlt: "Double-click a widget to interact.",
+      canvasHintWidgetTouchHand: "Pen: double-tap to interact. Hand: choose Interact.",
+      canvasHintLasso: "Circle any area, including part of a Widget, to work with its image.",
+      canvasHintLassoFirstUse: "Circle the part you want, then pick Solve, Plot, Note or another action — or Ask.",
+      canvasHintLassoFirstUseCompact: "Circle content, then pick an action.",
+      canvasHintLassoDiscover: "Circle anything, then Solve, Plot, Animate, save as Note or Ask · handwriting, images, Widgets.",
+      canvasHintLassoDiscoverCompact: "Circle anything and let AI act on it.",
+      canvasHintLassoNudge: "Try Lasso {shortcut}: circle any part to Solve, Plot, Animate or save it as a Note.",
+      canvasHintLassoNudgeCompact: "Try Lasso {shortcut}: circle, then let AI act.",
+      canvasHintLassoCaptured: "Pick an action below, or drag to move. Tip: hold the pen's side button to lasso from any tool.",
+      canvasHintLassoCapturedCompact: "Pick an action, or drag to move.",
+      canvasHintLassoAlt: "Drag or resize selected content. Widgets stay in place.",
       canvasHintText: "Markdown/LaTeX; Ctrl/Cmd + Enter to confirm.",
       canvasHintTextAlt: "Click the canvas to add text.",
-      canvasHintEraser: "Eraser removes ink; Select deletes objects.",
+      canvasHintEraser: "Eraser removes ink; select objects with Hand to delete them.",
       canvasHintEraserAlt: "Erase AI marks without affecting widgets.",
       canvasHintAreaEraser: "Drag a box to erase ink inside.",
       canvasHintAreaEraserAlt: "Area Eraser affects ink only.",
@@ -1138,10 +1178,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       rejectBatch: "Discard all AI drafts",
       acceptBatch: "Accept all AI drafts",
       outsideCanvas: "This is outside the canvas. Write on the paper.",
-      selectionEmpty: "The selected area has no ink",
-      selectionTooSmall: "Draw a larger closed lasso around some ink",
+      selectionEmpty: "The selected area could not be captured",
+      selectionTooSmall: "Draw a larger closed lasso around the area you want",
       selectionReady: "Move or resize the selected lasso region",
-      selectionCommitted: "Selection applied locally",
+      selectionCommitted: "Selection closed",
       selectionCancelled: "Selection cancelled",
       selectionRecolored: "Selection color changed locally",
       selectionTools: "Selection tools",
@@ -1149,6 +1189,50 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selectionTypeset: "Typeset",
       selectionDelete: "Delete",
       selectionCancel: "Cancel",
+      selectionDownload: "Download image",
+      selectionDownloadChanged: "The selection changed. Download the current selection again.",
+      smartSuggestions: "Suggestions for the newest ink",
+      assistAsk: "Ask",
+      assistAskPlaceholder: "Ask about this…",
+      assistSend: "Send",
+      assistAsking: "Answering your question",
+      assistStop: "Stop",
+      assistKeep: "Keep",
+      assistRetry: "Retry",
+      assistNext: "Next:",
+      assistDone: "Done",
+      assistTools: "Shapes, graph and tools",
+      assistToolHint: "Drag to draw · Shift keeps proportions · Esc to finish",
+      assistGraph: "Graph",
+      assistGraph3d: "3D graph",
+      assistGraphInserted: "Graph added. Tap it to type a function; letters become sliders.",
+      assistSourceLocal: "Instant suggestion",
+      assistSourcePenEchoLLM: "Ranked by PenEchoLLM",
+      suggestPaidEnabled:"Use credits after 500 free daily suggestions (0.1 each)",
+      suggestDailyLimit:"Daily suggestion spending limit (credits)",
+      shapeTool_rectangle: "Rectangle",
+      shapeTool_ellipse: "Ellipse",
+      shapeTool_line: "Line",
+      shapeTool_arrow: "Arrow",
+      shapeTool_triangle: "Triangle",
+      shapeTool_axes: "Axes",
+      smartSuggestMore: "More suggestions",
+      smartSuggestDismiss: "Dismiss suggestions",
+      smartShapesSnapped: "Shapes cleaned up. Undo restores the sketch.",
+      smartShape_circle: "Circle",
+      smartShape_ellipse: "Ellipse",
+      smartShape_rectangle: "Rectangle",
+      smartShape_square: "Square",
+      smartShape_triangle: "Triangle",
+      smartShape_quadrilateral: "Quadrilateral",
+      smartShape_line: "Line",
+      smartShape_arrow: "Arrow",
+      settingsSmartSuggest: "Automatic suggestions",
+      settingsSmartSuggestHelp: "Suggest actions beside new ink and in widget toolbars. When off, select ink or open Refine to ask for help.",
+      settingsPenGestures: "Pen gestures",
+      settingsPenGesturesHelp: "Circle + ? explains, a double underline typesets, a small L plots, and crossing out offers Delete.",
+      settingsStepCheck: "Step checker",
+      settingsStepCheckHelp: "Marks a derivation line that looks wrong. Nothing is checked until you tap the mark.",
       selectionTypesetting: "Typesetting selection...",
       selectionDeleted: "Selected region deleted",
       areaEraseTooSmall: "Drag a larger area to erase",
@@ -1281,6 +1365,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentHistoryEmpty: "No saved conversations for this canvas",
       canvasAgentHistoryCurrent: "Current",
       canvasAgentHistoryViewing: "Viewing saved conversation",
+      canvasAgentHistorySaveFailed: "Agent history could not be saved in this browser. Free device storage and retry before closing this page.",
       canvasAgentHistoryReturn: "Back to current conversation",
       canvasAgentHistoryUntitled: "New conversation",
       canvasAgentHistoryAttachments: "{count} attachments",
@@ -1311,7 +1396,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentErrorMessage: "Original message",
       canvasAgentEmptyTitle: "Turn your ideas into professional diagrams.",
       canvasAgentEmptyBody: "Describe your content and include a diagram type, such as architecture diagram, sequence diagram, or workflow diagram. Agent will draw it on Canvas.",
-      canvasAgentInputHint: "Type or use the Pen button to write by hand. Reference a Widget, then ask Agent to extract canvas handwriting, inspect source, arrange content, or edit the Widget.",
       canvasAgentPlaceholder: "Describe what to make, or write on the canvas and ask about it",
       canvasAgentMessage: "Message PenEcho Agent",
       canvasAgentChooseConnection: "Choose AI connection",
@@ -1497,6 +1581,87 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasAgentPromptCanvasVisualSummary: "Explain the canvas content, structure, relationships, and gaps at a glance.",
       canvasAgentPromptCanvasLayerSummary: "Preserve canvas meaning, improve layout, and add explanations in open space.",
       canvasAgentPromptCanvasPublishSummary: "Organize the canvas summary, conclusions, actions, and copy-ready recap.",
+      canvasAgentPromptSolveProblemTitle: "Solve It Step by Step",
+      canvasAgentPromptSolveProblem: "Keep my original work unchanged. Solve the problem shown on the current Canvas or selection step by step: write each step and the final answer clearly next to the problem on Canvas, then briefly explain the method in chat.",
+      canvasAgentPromptSolveProblemSummary: "Work through the problem on Canvas with clear steps and a final answer.",
+      canvasAgentPromptExplainStepTitle: "Explain This Step by Step",
+      canvasAgentPromptExplainStep: "Do not return only text. Explain the selected or most recent dense content (notation, code, or a diagram) on Canvas step by step: annotate each part in plain language, define the symbols, and connect it to the overall idea.",
+      canvasAgentPromptExplainStepSummary: "Unpack dense notation, code, or a diagram in plain language.",
+      canvasAgentPromptAnswerQuestionTitle: "Answer My Question on Canvas",
+      canvasAgentPromptAnswerQuestion: "Answer the question or request I wrote on the current Canvas or selection. Place a clear answer next to it on Canvas, using math, a sketch, or a small diagram where it helps, and keep my original writing unchanged.",
+      canvasAgentPromptAnswerQuestionSummary: "Answer the written question beside it, with visuals where helpful.",
+      canvasAgentPromptHintTitle: "Give Me a Hint",
+      canvasAgentPromptHint: "Do not solve it for me. Look at my current problem and attempt on Canvas and give one helpful hint or approach next to it, without revealing the final answer or the full solution.",
+      canvasAgentPromptHintSummary: "A clue for how to continue, without revealing the answer.",
+      canvasAgentPromptNextStepTitle: "Continue with the Next Step",
+      canvasAgentPromptNextStep: "Keep my existing work unchanged. Continue my current derivation, calculation, or proof with only the next step, written in my notation directly below the last line on Canvas, and briefly say why it follows.",
+      canvasAgentPromptNextStepSummary: "Write only the next line of my derivation or calculation.",
+      canvasAgentPromptPracticeProblemsTitle: "Create Practice Problems",
+      canvasAgentPromptPracticeProblems: "Do not only list questions in chat. Create and display 3 new practice problems on Canvas that match the topic and level of my current content, ordered from easier to harder, with the answers in a collapsed section so I can try them first.",
+      canvasAgentPromptPracticeProblemsSummary: "New problems at my level, with answers kept hidden.",
+      canvasAgentPromptTypesetTitle: "Typeset My Handwriting",
+      canvasAgentPromptTypeset: "Typeset my handwritten text, math, or code on the current Canvas or selection into clean, readable content. Preserve its meaning, order, and notation exactly; do not solve, answer, or add new content. Place the result beside the original.",
+      canvasAgentPromptTypesetSummary: "Turn handwriting and math into clean typeset text, same meaning.",
+      canvasAgentPromptTranslateNotesTitle: "Translate My Notes",
+      canvasAgentPromptTranslateNotes: "Keep my original notes unchanged. Translate the text on the current Canvas or selection into English, or into Chinese if it is already in English. Place the translation beside the original, keeping the layout, terms, and formulas aligned.",
+      canvasAgentPromptTranslateNotesSummary: "Place a faithful translation beside the original notes.",
+      canvasAgentPromptActionItemsTitle: "Extract Action Items and Decisions",
+      canvasAgentPromptActionItems: "Do not return only a list in chat. Extract the decisions, action items, owners, and deadlines from the attached files, project, or current Canvas notes, and create and display a visual task board on Canvas grouped by owner or status; flag anything without an owner or date.",
+      canvasAgentPromptActionItemsSummary: "Pull decisions, owners, and deadlines into a visual task board.",
+      canvasAgentPromptTimelineTitle: "Build a Timeline",
+      canvasAgentPromptTimeline: "Do not return only text. Find the dates, events, and milestones in the attached files, project, or current Canvas, and create and display a clear visual timeline on Canvas in chronological order, marking dependencies, gaps, and anything overdue.",
+      canvasAgentPromptTimelineSummary: "Arrange dates, events, and milestones in order on Canvas.",
+      canvasAgentPromptGlossaryTitle: "Build a Key-Term Glossary",
+      canvasAgentPromptGlossary: "Do not return only a list in chat. Build and display a visual glossary on Canvas of the key terms, acronyms, and symbols in the attached files, project, or current notes, with a one-sentence definition and the source of each, grouping related terms.",
+      canvasAgentPromptGlossarySummary: "Key terms with short definitions and where they appear.",
+      canvasAgentPromptCodeReviewTitle: "Review Code for Risks",
+      canvasAgentPromptCodeReview: "Do not return only written comments. Review the attached code or selected project for bugs, security risks, edge cases, and missing tests, and create and display a visual review board on Canvas that ranks each finding by severity and links it to the exact file and location; summarize the top fixes in chat.",
+      canvasAgentPromptCodeReviewSummary: "A visual review board of bugs, risks, and missing tests.",
+      canvasAgentPromptStructureDiagramTitle: "Turn Content into a Diagram",
+      canvasAgentPromptStructureDiagram: "Do not return only text. Turn the current Canvas content or selection into the most fitting structured diagram on Canvas (flowchart, mind map, state, or relationship diagram), preserving every label, relationship, direction, and order from the original.",
+      canvasAgentPromptStructureDiagramSummary: "Convert notes or steps into a clean flowchart or mind map.",
+      canvasAgentPromptPlotGraphTitle: "Plot Functions and Graphs",
+      canvasAgentPromptPlotGraph: "Do not only describe the graph. Plot the functions or equations on the current Canvas or selection as an interactive graph on Canvas with labeled axes, key points such as intercepts, extrema, and intersections, and a short legend.",
+      canvasAgentPromptPlotGraphSummary: "Draw an interactive graph of the functions or equations shown.",
+      canvasAgentPromptAnimateConceptTitle: "Explain with an Animation",
+      canvasAgentPromptAnimateConcept: "Do not return only text. Create and display an animated explanation on Canvas that teaches how the concept, process, or problem in the current content works, using timed stages, motion, or changing quantities, with play controls and short captions.",
+      canvasAgentPromptAnimateConceptSummary: "Teach the idea through timed visual stages and motion.",
+      canvasAgentPromptCreateVisualTitle: "Create the Visual I Described",
+      canvasAgentPromptCreateVisual: "Do not return only text. Using my notes as the brief, create and display the visual I described or requested (an illustration, chart, scene, or figure) in open space on Canvas without changing existing content.",
+      canvasAgentPromptCreateVisualSummary: "Draw the picture, chart, or scene described on Canvas.",
+      canvasAgentPromptIllustrateTitle: "Illustrate My Sketch",
+      canvasAgentPromptIllustrate: "Keep my original sketch unchanged. Beside it on Canvas, create and display a cute children's picture-book illustration of the same subject, pose and drawn details, with soft pastel colors, thin hand-drawn outlines and a simple background that suits the subject.",
+      canvasAgentPromptIllustrate3d: "Keep my original sketch unchanged. Beside it on Canvas, create and display a soft 3D illustration of the same subject, pose and drawn details, like a glossy toy figure, with a simple studio backdrop.",
+      canvasAgentPromptIllustrateSummary: "A finished illustration with the same subject and pose, in your illustration style.",
+      canvasAgentPromptAnimateSketchTitle: "Bring My Drawing to Life",
+      canvasAgentPromptAnimateSketch: "Keep my original drawing unchanged. Create and display an animated version of it on Canvas in which the drawn subject itself moves naturally (walking, flying, swaying, or blinking) while keeping its look and line style.",
+      canvasAgentPromptAnimateSketchSummary: "Animate the drawn character or object itself.",
+      canvasAgentPromptFinishDrawingTitle: "Finish My Drawing",
+      canvasAgentPromptFinishDrawing: "Complete my unfinished drawing on the current Canvas in place: add only the missing contours and features in the same line style, stroke weight, and composition, without redrawing what is already there.",
+      canvasAgentPromptFinishDrawingSummary: "Complete missing contours in the same line style.",
+      canvasAgentPromptCleanShapesTitle: "Clean Up My Shapes",
+      canvasAgentPromptCleanShapes: "Clean up the rough hand-drawn shapes on the current Canvas or selection: turn them into precise boxes, circles, triangles, lines, and arrows at the same positions and sizes, keeping their connections and labels.",
+      canvasAgentPromptCleanShapesSummary: "Straighten rough boxes, circles, lines, and arrows.",
+      canvasAgentPromptComparisonTableTitle: "Compare Options in a Table",
+      canvasAgentPromptComparisonTable: "Do not return only text. Create and display a visual comparison table on Canvas of the options, products, or approaches in my notes or files, with clear criteria, pros and cons, highlighted differences, and a short recommendation.",
+      canvasAgentPromptComparisonTableSummary: "Weigh options side by side with a clear recommendation.",
+      canvasAgentPromptFlashcardsTitle: "Create Review Flashcards",
+      canvasAgentPromptFlashcards: "Do not only list terms in chat. Build and display interactive review flashcards on Canvas from the current notes or attached material, one key term, formula, or fact per card, with flip-to-reveal answers, shuffle, and progress.",
+      canvasAgentPromptFlashcardsSummary: "Interactive cards for terms, formulas, and facts.",
+      canvasAgentPromptCategorySuggest: "Suggest",
+      canvasAgentPromptCategoryFilesShort: "Files",
+      canvasAgentPromptCategoryCreateShort: "Diagrams",
+      canvasAgentSuggestLoading: "PenEchoLLM is reading your Canvas, files, and project…",
+      canvasAgentSuggestRefreshing: "Updating for the latest changes…",
+      canvasAgentSuggestIdle: "Click the message box to get suggestions for the current Canvas, files, and project.",
+      canvasAgentSuggestStale: "The Canvas, files, or project changed since these suggestions.",
+      canvasAgentSuggestRefresh: "Refresh",
+      canvasAgentSuggestEmpty: "No strong suggestions for this context. Try the other tabs, or add ink, a file, or a project.",
+      canvasAgentSuggestFailed: "PenEchoLLM did not answer. Click Refresh to try again.",
+      canvasAgentSuggestBlocked: "Today's PenEchoLLM allowance is used.",
+      canvasAgentSuggestOff: "Smart suggestions are off. Turn them on in Settings to rank requests for this context.",
+      canvasAgentSuggestRecommended: "Recommended",
+      canvasAgentSuggestUsage: "PenEchoLLM usage",
       canvasAgentType: "Type with keyboard",
       canvasAgentHandwrite: "Write by hand",
       canvasAgentClearInk: "Clear",
@@ -1704,16 +1869,34 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       unfavoriteWidget: "Remove widget favorite",
       widgetFavorited: "Widget added to Favorites",
       widgetUnfavorited: "Widget removed from Favorites",
-      widgetRefine: "AI Refine",
+      widgetRefine: "Refine",
+      widgetRefinePanelTitle: "Refine this widget",
+      widgetRefineApplyMarks: "Refine with my marks",
+      assistAgentExpand: "Expand PenEcho Agent",
+      assistAgentClose: "Stop and close",
+      assistAgentBusy: "PenEcho Agent is already working. Finish or stop that task before starting this suggestion.",
+      assistAgentUnavailable: "This task needs PenEcho Agent. Connect an AI model on an editable Canvas to continue.",
+      assistRouting: "Choosing how to help",
+      widgetAssistSuggested: "Suggested",
+      widgetAssistGetSuggestions: "PenEchoLLM suggestions",
+      widgetAssistGetSuggestionsHint: "Get suggestions for this widget",
+      widgetAssistNone: "No changes to suggest right now.",
+      widgetAssistFailed: "Could not get suggestions. Click PenEchoLLM suggestions to retry.",
+      widgetAssistUnavailable: "PenEchoLLM suggestions are currently unavailable.",
+      widgetAssistRanking: "PenEchoLLM is ranking…",
+      widgetAssistRankedByLLM: "Ranked by PenEchoLLM",
+      widgetAssistLocalHint: "Runs instantly, no AI call",
+      widgetAskPlaceholder: "Describe a change…",
+      widgetAskSend: "Send",
       widgetRefineHint: "Refine and replace this widget using its content and the current canvas",
-      widgetRefineNearbyHint: "New annotations were detected near this widget. Use AI Refine to update it from those instructions.",
-      widgetRefineViewportHint: "New instructions are present in this view. Use AI Refine to update this widget from them.",
-      widgetRefineNoInputHint: "AI Refine needs a clear instruction. Add a note or drawing to show what should change.",
+      widgetRefineNearbyHint: "New annotations were detected near this widget. Refine applies all pending Canvas input to this widget.",
+      widgetRefineViewportHint: "New instructions are present on the Canvas. Refine applies all pending input to this widget.",
+      widgetRefineNoInputHint: "Refine needs a clear instruction. Add a note or drawing to show what should change.",
       widgetRefineConfirmDirty: "Update this widget using the new instructions?",
       widgetRefineConfirmNoInput: "No change request was found. Continue anyway? AI may not know what you want changed.",
       widgetRefineConfirm: "Update widget",
       widgetRefineCancel: "Cancel",
-      widgetRefinePending: "New marks detected near this diagram. Use its AI Refine button to update it, or choose a manual AI action above. Auto AI is paused.",
+      widgetRefinePending: "New marks detected near this widget. Use Refine to apply them. Auto AI is paused.",
       widgetRefining: "AI is refining this widget",
       widgetReplacementReady: "Review the refined replacement",
       widgetExportFailed: "A live widget could not be captured. Wait for it to finish loading and try again.",
@@ -1786,7 +1969,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function normalizeAiFont(value) {
     const font = String(value || "").trim();
     if (font === AI_FONT_HANDWRITTEN_LEGACY) return AI_FONT_HANDWRITTEN;
-    return AI_FONT_OPTIONS.has(font) ? font : AI_FONT_HANDWRITTEN;
+    return AI_FONT_OPTIONS.has(font) ? font : AI_FONT_DEFAULT;
   }
   function normalizeTextBoxFontFamily(value) {
     const font = String(value || "").trim();
@@ -1801,9 +1984,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     storedAutoEnabled = localStorage.getItem("penecho-auto-ai"),
     storedAutoDelayText = localStorage.getItem("penecho-auto-delay-ms"),
     storedSummonEnabled = localStorage.getItem("penecho-summon-enabled"),
+    storedCanvasHintsEnabled = localStorage.getItem("penecho-canvas-hints-enabled"),
     storedCanvasAgentAutoOpen = localStorage.getItem("penecho-canvas-agent-auto-open"),
     storedWidgetShadowEnabled = localStorage.getItem("penecho-widget-shadow"),
     storedAiFont = localStorage.getItem(AI_FONT_STORAGE_KEY),
+    storedIllustrationStyle = localStorage.getItem(ILLUSTRATION_STYLE_STORAGE_KEY),
+    storedIllustrationBackground = localStorage.getItem(ILLUSTRATION_BACKGROUND_STORAGE_KEY),
     storedSnapshotLocation = localStorage.getItem("penecho-snapshot-location"),
     storedEraserMode = localStorage.getItem(ERASER_MODE_STORAGE_KEY),
     storedAiEffort = normalizeToolbarReasoningEffort(localStorage.getItem("penecho-ai-effort")),
@@ -1820,8 +2006,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     configuredAccessSession = String(window.PENECHO_CONFIG?.accessSessionToken || sessionStorage.getItem("penecho-access-session") || ""),
     serverAutoDelay = Number.isFinite(configuredAutoDelay) && configuredAutoDelay >= 0 ? configuredAutoDelay : DEFAULT_AUTO_DELAY,
     initialAutoDelay = Number.isFinite(storedAutoDelay) && storedAutoDelay >= 0 && storedAutoDelay <= 10000 ? storedAutoDelay : Math.min(10000, serverAutoDelay),
-    initialAutoEnabled = storedAutoEnabled === null ? true : storedAutoEnabled === "true",
+    initialAutoEnabled = storedAutoEnabled === "true",
     initialSummonEnabled = storedSummonEnabled === null ? true : storedSummonEnabled === "true",
+    initialCanvasHintsEnabled = storedCanvasHintsEnabled !== "false",
     initialCanvasAgentAutoOpen = window.PENECHO_CONFIG?.desktopApp === true && configuredCanvasAgentAutoOpen !== null
       ? configuredCanvasAgentAutoOpen
       : storedCanvasAgentAutoOpen === null ? configuredCanvasAgentAutoOpen === true : storedCanvasAgentAutoOpen === "true",
@@ -1833,8 +2020,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // history location: the read-only shell has no /api/cloud/library route.
     initialSnapshotLocation = window.PENECHO_CONFIG?.browserDraftId ? "device" : window.PENECHO_CONFIG?.runtime === "viewer"
       ? "device"
-      : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : "device",
-    initialAiEffort = storedAiEffort || configuredAiEffort || "config",
+      : ["device", "server", "cloud"].includes(storedSnapshotLocation) ? storedSnapshotLocation : window.PENECHO_CONFIG?.runtime === "cloud" ? "cloud" : "server",
+    initialAiEffort = storedAiEffort || configuredAiEffort || (window.PENECHO_CONFIG?.runtime === "cloud" && !window.PENECHO_CONFIG?.guestCanvas ? "high" : "config"),
     initialAiTimeout = Number.isFinite(configuredAiTimeout) && configuredAiTimeout >= 10000 ? configuredAiTimeout : DEFAULT_AI_TIMEOUT;
   function canvasClientId() {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -1897,7 +2084,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     syncLocalConnectionSelection();
     renderConnectionLists();
     const valid = settings.connections.some(connection => connection.id === connectionId);
-    if (!valid && !(window.PENECHO_CONFIG?.runtime !== "cloud" && connectionId === "default" && settings.connections.length)) throw aiConnectionSelectionError();
+    if (!valid) throw aiConnectionSelectionError();
   }
   function authenticatedApiHeaders(headers = {}) {
     const csrf = window.PENECHO_CONFIG?.runtime === "cloud"
@@ -1909,7 +2096,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function aiRequestHeaders(headers = {}) {
     const id = selectedAiConnectionId();
-    if (window.PENECHO_CONFIG?.runtime === "cloud" && id === "default") throw aiConnectionSelectionError();
+    if (id === "default" && (window.PENECHO_CONFIG?.runtime === "cloud" || settings.connectionScope !== aiConnectionScope()
+      || !settings.connections.some(connection => connection.id === "default"))) throw aiConnectionSelectionError();
     return { ...authenticatedApiHeaders(headers), "X-PenEcho-Connection":id };
   }
   function canvasAssetUrl(name) {
@@ -1932,6 +2120,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pen: 4,
       eraser: 35,
       aiFont: initialAiFont,
+      illustrationStyle: PenEchoIllustrationStyle.normalize(storedIllustrationStyle),
+      illustrationBackground: PenEchoIllustrationStyle.normalizeBackground(storedIllustrationBackground),
       inkColor: "#1f2937",
       aiColor: "#2563eb",
       drawing: null,
@@ -1951,9 +2141,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       viewMode: false,
       viewTool: "hand",
       interactingWidgetId: null,
+      widgetInteractionInPlace: false,
       widgetInteractionReturnTool: null,
       widgetActivationTap: null,
       handToolbarTap: null,
+      widgetTouchLastTap: null,
       spacePan: false,
       wheelZoom: localStorage.getItem("penecho-wheel-zoom") === "true",
       viewModeNavigationLocked: false,
@@ -1976,6 +2168,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       pendingWidget: null,
       pendingWidgetReplacement: null,
       selectedWidgetId: null,
+      viewerSelectedWidgetId: null,
       widgetEdit: null,
       widgetGesture: null,
       widgetHistoryBefore: null,
@@ -1988,6 +2181,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetRefinePointer: null,
       widgetRefineHoverTimer: 0,
       widgetRefineHintTimer: 0,
+      widgetHeaderHoverId: null,
+      widgetHeaderPendingId: null,
+      widgetHeaderHoverTimer: 0,
+      widgetHeaderLeaveTimer: 0,
       widgetMessageHooked: false,
       plugins: { ...initialPlugins },
       animationFrame: 0,
@@ -2027,6 +2224,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       hotspotTrail: [],
       auto: initialAutoEnabled,
       summonEnabled: initialSummonEnabled,
+      canvasHintsEnabled: initialCanvasHintsEnabled,
       canvasAgentAutoOpen: initialCanvasAgentAutoOpen,
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
@@ -2055,6 +2253,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       history: [],
       future: [],
       historyBefore: new Map(),
+      dirtyHistoryBefore: null,
+      dirtyHistorySequence: 0,
       inkBounds: new Map(),
       busy: false,
       activeAI: null,
@@ -2110,14 +2310,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "1.3.0";
+  const CHANGELOG_VERSION = "1.4.0";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
     { id: "favorites-add-v1", targets: ["#craftsButton"], titleKey: "tourFavoritesTitle", bodyKey: "tourFavoritesBody", placement: "bottom", radius: 8 },
+    { id: "notes-cards-v1", targets: ["#canvasMoreBtn", "#historyBtn"], titleKey: "tourNotesCardsTitle", bodyKey: "tourNotesCardsBody", placement: "bottom", radius: 8 },
     { id: "hand-v1", targets: ["#handToolBtn"], titleKey: "tourHandTitle", bodyKey: "tourHandBody", placement: "bottom", radius: 7 },
-    { id: "core-lasso-v1", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
     { id: "core-text-v1", targets: ["#textToolBtn"], titleKey: "tourTextTitle", bodyKey: "tourTextBody", placement: "bottom", radius: 7 },
+    { id: "smart-assist-v1", targets: ["#viewport"], titleKey: "tourAssistTitle", bodyKey: "tourAssistBody", placement: "center", radius: 10, padding: 5 },
+    { id: "core-lasso-v3", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
     { id: "core-image-v1", targets: ["#imagePickerBtn"], titleKey: "tourImageTitle", bodyKey: "tourImageBody", placement: "bottom", radius: 7 },
     { id: "core-fullscreen-v1", targets: ["#fullscreenBtn"], titleKey: "tourFullscreenTitle", bodyKey: "tourFullscreenBody", placement: "bottom", radius: 7 },
     { id: "cloud-share-canvas-v1", targets: ["#shareCanvasBtn"], titleKey: "tourShareCanvasTitle", bodyKey: "tourShareCanvasBody", placement: "bottom", radius: 7 },
@@ -2246,7 +2448,40 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     t,
     currentLanguage:() => state.language,
   });
-  let canvasHintTimer = null;
+  let canvasHintTimer = null, canvasHintDeferred = false, canvasHintNativePopoverOpen = false;
+  function syncCanvasHintVisibility(restart = false) {
+    if (!canvasHint) return;
+    const blocked = canvasHintNativePopoverOpen || Boolean(document.querySelector(
+      "#eraserToolMenu:not([hidden]), #inkColorPopover:not([hidden]), #aiColorPopover:not([hidden]), " +
+      "#autoDelayPopover:not([hidden]), #effortPopover:not([hidden]), " +
+      '#smartSuggestLayer > .assist-bar:is([data-mode="tools"], [data-mode="tool"])'
+    ));
+    document.querySelector("#pageHintSlot")?.setAttribute("data-toolbar-popover-open", String(blocked));
+    if (!state.canvasHintsEnabled) {
+      clearTimeout(canvasHintTimer);
+      canvasHintTimer = null;
+      canvasHintDeferred = false;
+      canvasHint.hidden = true;
+      return;
+    }
+    if (restart || blocked && canvasHintTimer !== null) {
+      canvasHintDeferred = true;
+      clearTimeout(canvasHintTimer);
+      canvasHintTimer = null;
+    }
+    if (blocked) {
+      canvasHint.hidden = true;
+      return;
+    }
+    if (!canvasHintDeferred) return;
+    // Give deferred guidance its full reading time after the last panel closes.
+    canvasHintDeferred = false;
+    canvasHint.hidden = false;
+    canvasHintTimer = setTimeout(() => {
+      canvasHint.hidden = true;
+      canvasHintTimer = null;
+    }, 5000);
+  }
   function renderCanvasHint(restart = false) {
     if (!canvasHint || !state.canvasHintKey) return;
     const values = state.canvasHintValues || (state.canvasHintKey === "canvasHintHandAlt" ? { shortcut:"Space" } : {}),
@@ -2260,15 +2495,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       } else content.append(part);
     }
     canvasHint.replaceChildren(content);
-    if (!restart) return;
-    clearTimeout(canvasHintTimer);
-    canvasHint.hidden = false;
-    canvasHintTimer = setTimeout(() => {
-      canvasHint.hidden = true;
-      canvasHintTimer = null;
-    }, 5000);
+    if (restart) syncCanvasHintVisibility(true);
   }
   function showCanvasHint(keys) {
+    if (!state.canvasHintsEnabled) return;
     const candidates = (Array.isArray(keys) ? keys : [keys])
       .map((candidate) => typeof candidate === "string" ? { key:candidate, values:null } : candidate)
       .filter((candidate) => candidate?.key && (I18N[state.language][candidate.key] || I18N.zh[candidate.key]));
@@ -2279,6 +2509,24 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.canvasHintKey = choice.key;
     state.canvasHintValues = choice.values || null;
     renderCanvasHint(true);
+  }
+  let lassoFirstUseHintSeen = false;
+  function showLassoGuidance(key) {
+    showCanvasHint(key);
+    if (canvasHint && !canvasHint.hidden && canvasHint.scrollWidth > canvasHint.clientWidth) showCanvasHint(`${key}Compact`);
+  }
+  function showLassoCanvasHint(shortcutHint) {
+    if (!state.canvasHintsEnabled) return;
+    try { lassoFirstUseHintSeen ||= localStorage.getItem("penecho-lasso-guidance-seen-v1") === "true"; }
+    catch {}
+    if (!lassoFirstUseHintSeen) {
+      showLassoGuidance("canvasHintLassoFirstUse");
+      lassoFirstUseHintSeen = true;
+      try { localStorage.setItem("penecho-lasso-guidance-seen-v1", "true"); }
+      catch {}
+      return;
+    }
+    showCanvasHint(["canvasHintLasso", "canvasHintLassoAlt", shortcutHint]);
   }
   const statusHintRotation = new Map();
   function showHandStatusHint(action, keys) {
@@ -2531,7 +2779,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     featureTour.replay = Boolean(options.replay);
     featureTour.newOnly = Boolean(options.newOnly);
     featureTour.shownIds = new Set();
-    featureTour.restoreFocus = document.activeElement;
+    featureTour.restoreFocus = options.replay && document.activeElement !== document.body ? document.activeElement : screen;
     featureTour.restoreScrollX = window.scrollX;
     featureTour.restoreScrollY = window.scrollY;
     tourMain.inert = true;
@@ -2555,8 +2803,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     stopActiveFeatureTourObserver();
     featureTour.targets = [];
     tourMain.inert = false;
-    const restoreTarget = focusTargetAvailableOutsideLayer(tourLayer, restoreFocus) ? restoreFocus : settingsButton;
-    hideLayerWithoutRetainedFocus(tourLayer, restore ? restoreTarget : settingsButton, settingsButton);
+    const restoreTarget = focusTargetAvailableOutsideLayer(tourLayer, restoreFocus) ? restoreFocus : screen;
+    hideLayerWithoutRetainedFocus(tourLayer, restore ? restoreTarget : screen, screen);
     syncFeatureTourPreview(null);
     document.body.classList.remove("tour-open");
     runtimeElementStyle(tourHighlight, "tour-highlight")?.setProperty("visibility", "hidden");
@@ -2677,7 +2925,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     hideEffortControl();
     hidePluginControl();
     const active = document.activeElement;
-    changelog.restoreFocus = active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : settingsButton;
+    changelog.restoreFocus = force && active?.isConnected && active !== document.body && !tourLayer.contains(active) ? active : screen;
     changelog.active = true;
     tourMain.inert = true;
     document.body.classList.add("changelog-open");
@@ -2694,8 +2942,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     markChangelogSeen();
     document.body.classList.remove("changelog-open");
     tourMain.inert = featureTour.active || !pluginPopover.hidden;
-    const restoreTarget = focusTargetAvailableOutsideLayer(changelogLayer, restoreFocus) ? restoreFocus : settingsButton;
-    hideLayerWithoutRetainedFocus(changelogLayer, restoreTarget, settingsButton);
+    const restoreTarget = focusTargetAvailableOutsideLayer(changelogLayer, restoreFocus) ? restoreFocus : screen;
+    hideLayerWithoutRetainedFocus(changelogLayer, restoreTarget, screen);
     requestAnimationFrame(() => {
       if (!featureTour.active && !changelog.active && document.activeElement !== restoreTarget) restoreTarget?.focus({ preventScroll: true });
     });
@@ -2817,35 +3065,72 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     hostedSettings.loadPromise = wrapped;
     return wrapped;
   }
-  async function loadHostedModelsOnce({ accountChanged = false } = {}) {
+  async function loadHostedModelsOnce({ accountChanged = false, force = false } = {}) {
     if (window.PENECHO_CONFIG?.runtime === "viewer" || (hostedSettings.loading && !accountChanged)) return;
     if (accountChanged) { hostedSettings.models = []; hostedSettings.credits = null; hostedSettings.signedIn = false; }
+    hostedSettings.controller?.abort();
+    const controller = new AbortController();
+    hostedSettings.controller = controller;
     const generation = ++hostedSettings.generation, cloud = window.PENECHO_CONFIG?.runtime === "cloud";
     hostedSettings.loading = true; hostedSettings.error = false; renderHostedModels();
     try {
-      const response = await fetch(cloud ? "/api/v1/models" : "/api/cloud/models", { headers:authenticatedApiHeaders(), signal:AbortSignal.timeout(12_000) });
-      if (generation !== hostedSettings.generation) return;
-      if ([401, 403].includes(response.status)) { window.PENECHO_CONFIG.connectionAccountId = ""; hostedSettings.signedIn = false; hostedSettings.models = []; return; }
-      if (!response.ok) throw new Error("catalog_unavailable");
+      const response = await fetch(cloud ? "/api/v1/models" : `/api/cloud/models${force ? "?refresh=1" : ""}`, { headers:authenticatedApiHeaders(), signal:AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
+      if (generation !== hostedSettings.generation) { await response.body?.cancel(); return; }
+      if ([401, 403].includes(response.status)) { await response.body?.cancel(); window.PENECHO_CONFIG.connectionAccountId = ""; hostedSettings.signedIn = false; hostedSettings.models = []; return; }
+      if (!response.ok) { await response.body?.cancel(); throw new Error("catalog_unavailable"); }
       const body = await response.json();
       if (generation !== hostedSettings.generation) return;
       window.PENECHO_CONFIG.connectionAccountId = String(body.accountId || window.PENECHO_CONFIG.connectionAccountId || "");
       if (!cloud && body.origin) window.PENECHO_CONFIG.cloudOrigin = body.origin;
       hostedSettings.signedIn = true;
-      hostedSettings.models = (Array.isArray(body.models) ? body.models : []).filter(model => model.available === true && model.enabled !== false && !model.retiredAt && Number(model.multiplier) > 0).slice(0, 100);
+      hostedSettings.models = (Array.isArray(body.models) ? body.models : [])
+        .filter(model => model.available === true && model.enabled !== false && !model.retiredAt && Number(model.multiplier) > 0)
+        .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)).slice(0, 100);
       const hostedKey = aiConnectionStorageKey(true), localKey = aiConnectionStorageKey(), legacy = localStorage.getItem(AI_CONNECTION_STORAGE_KEY);
-      // Migrate history only before a scoped choice exists. A catalog arriving
-      // after the user selects a local connection must never select Cloud.
+      // Initialize only before a scoped choice exists. A catalog arriving
+      // after the user selects a connection must never replace that choice.
       if (hostedKey && !localStorage.getItem(hostedKey) && localStorage.getItem(`${hostedKey}:selected`) === null
-        && !(localKey && localStorage.getItem(localKey)) && legacy?.startsWith("hosted:")
-        && hostedSettings.models.some(model => `hosted:${model.id}` === legacy)) storeAiConnectionSelection(legacy);
+        && !(localKey && localStorage.getItem(localKey))) {
+        if (legacy?.startsWith("hosted:")) {
+          if (hostedSettings.models.some(model => `hosted:${model.id}` === legacy)) storeAiConnectionSelection(legacy);
+        } else if (cloud && !legacy && !window.PENECHO_CONFIG?.guestCanvas && hostedSettings.models.length) {
+          // First-time Cloud users can start immediately with the lowest-order
+          // available model. Saved selections, including unavailable ones, stay put.
+          storeAiConnectionSelection(`hosted:${hostedSettings.models[0].id}`);
+        }
+      }
       if (body.credits) hostedSettings.credits = body.credits.availableCredits ?? body.credits.available ?? body.credits.balance ?? 0;
       else {
-        const balance = await fetch("/api/v1/credits", { headers:authenticatedApiHeaders(), signal:AbortSignal.timeout(8_000) });
+        const balance = await fetch("/api/v1/credits", { headers:authenticatedApiHeaders(), signal:AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) });
         if (balance.ok && generation === hostedSettings.generation) { const payload = await balance.json(); if (generation === hostedSettings.generation) hostedSettings.credits = payload.credits?.availableCredits ?? payload.credits?.available ?? payload.credits?.balance ?? 0; }
+        else await balance.body?.cancel();
       }
     } catch { if (generation === hostedSettings.generation) { hostedSettings.error = true; hostedSettings.models = []; } }
-    finally { if (generation === hostedSettings.generation) { hostedSettings.loading = false; renderHostedModels(); } }
+    finally { if (generation === hostedSettings.generation) { hostedSettings.controller = null; hostedSettings.loading = false; renderHostedModels(); } }
+  }
+  function hasSelectedAiConnection() {
+    const selected = selectedAiConnectionId();
+    // A remembered ID is not a usable selection if its model was removed,
+    // disabled, or belongs to a device that is no longer connected.
+    if (selected.startsWith("hosted:")) return hostedSettings.models.some(model => `hosted:${model.id}` === selected);
+    if (window.PENECHO_CONFIG?.runtime === "cloud" && (selected === "default" || window.PENECHO_CONFIG?.linkedDeviceOnline !== true)) return false;
+    const connection = settings.connectionScope === aiConnectionScope() && settings.connections.find(item => item.id === selected);
+    return Boolean(connection && (connection.provider === "api"
+      ? connection.hasApiKey && connection.apiUrl && connection.apiModel
+      : ["kimi-cli", "codex-cli", "claude-cli"].includes(connection.provider)));
+  }
+  function promptForAiConnectionSelection(expected = null) {
+    // A late failure must not interrupt a different account/model selection.
+    if (expected && (selectedAiConnectionId() !== expected.id || aiConnectionScope(expected.id.startsWith("hosted:")) !== expected.scope)) return false;
+    if (window.PENECHO_CONFIG?.runtime === "viewer" || window.PENECHO_CONFIG?.guestCanvas || settings.configurationMode) return false;
+    selectSettingsPage("connections");
+    openSettings();
+    return true;
+  }
+  function requireAiConnectionSelection() {
+    if (hasSelectedAiConnection()) return true;
+    promptForAiConnectionSelection();
+    return false;
   }
   function syncLocalConnectionSelection() {
     const scope = aiConnectionScope(), key = aiConnectionStorageKey();
@@ -2860,10 +3145,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         storeAiConnectionSelection(legacy);
         selected = legacy;
       }
-    }
-    if (window.PENECHO_CONFIG?.runtime !== "cloud" && selected === "default" && key && !localStorage.getItem(key)) {
-      selected = settings.connections[0]?.id || "default";
-      storeAiConnectionSelection(selected);
     }
     settings.activeConnectionId = selected;
     settings.connections = settings.connections.map(connection => ({ ...connection, active:connection.id === selected }));
@@ -3722,6 +4003,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     selectSettingsPage(settings.activePage);
     settingsAutoToggle.classList.toggle("on", state.auto);
     settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    settingsCanvasHintsToggle.classList.toggle("on", state.canvasHintsEnabled);
+    settingsCanvasHintsToggle.setAttribute("aria-checked", String(state.canvasHintsEnabled));
     settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
     settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
     summonToggle.classList.toggle("on", state.summonEnabled);
@@ -3729,6 +4012,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
     settingsWidgetShadowToggle.setAttribute("aria-checked", String(state.widgetShadowEnabled));
     document.querySelector("#aiFont").value = state.aiFont;
+    const illustrationStyle = document.querySelector("#illustrationStyle");
+    if (illustrationStyle) illustrationStyle.value = state.illustrationStyle;
+    const illustrationBackground = document.querySelector("#illustrationBackground");
+    if (illustrationBackground) illustrationBackground.value = state.illustrationBackground;
     void loadCanvasSettings();
   }
   function openSettings() {
@@ -3768,11 +4055,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     localStorage.setItem(AI_FONT_STORAGE_KEY, state.aiFont);
     document.querySelector("#aiFont").value = state.aiFont;
   }
+  // Selects the look of sketch illustrations (Canvas AI, Agent and Widget Refine).
+  function setIllustrationStyle(value) {
+    state.illustrationStyle = PenEchoIllustrationStyle.normalize(value);
+    try { localStorage.setItem(ILLUSTRATION_STYLE_STORAGE_KEY, state.illustrationStyle); } catch {}
+    const select = document.querySelector("#illustrationStyle");
+    if (select) select.value = state.illustrationStyle;
+  }
+  // Auto adds a fitting scene only when none was drawn; None illustrates only the drawing.
+  function setIllustrationBackground(value) {
+    state.illustrationBackground = PenEchoIllustrationStyle.normalizeBackground(value);
+    try { localStorage.setItem(ILLUSTRATION_BACKGROUND_STORAGE_KEY, state.illustrationBackground); } catch {}
+    const select = document.querySelector("#illustrationBackground");
+    if (select) select.value = state.illustrationBackground;
+  }
   function setCanvasAgentAutoOpen(enabled) {
     state.canvasAgentAutoOpen = Boolean(enabled);
     localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpen));
     settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
     settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
+  }
+  function setCanvasHintsEnabled(enabled) {
+    state.canvasHintsEnabled = Boolean(enabled);
+    localStorage.setItem("penecho-canvas-hints-enabled", String(state.canvasHintsEnabled));
+    settingsCanvasHintsToggle.classList.toggle("on", state.canvasHintsEnabled);
+    settingsCanvasHintsToggle.setAttribute("aria-checked", String(state.canvasHintsEnabled));
+    syncCanvasHintVisibility();
   }
   function setWidgetShadowEnabled(enabled) {
     state.widgetShadowEnabled = Boolean(enabled);
@@ -3783,7 +4091,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     requestRender();
   }
   function maybeStartOnboarding() {
-    if (window.PENECHO_CONFIG?.runtime === "viewer" || settings.open || state.theme === "studio") return false;
+    if (window.PENECHO_CONFIG?.runtime === "viewer" || settings.open) return false;
     if (!maybeStartFeatureTour()) maybeShowChangelog();
   }
   function autoDelayText() {
@@ -4774,6 +5082,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     document.querySelectorAll("[data-i18n]").forEach((node) => (node.textContent = t(node.dataset.i18n)));
     document.querySelectorAll("[data-i18n-aria]").forEach((node) => node.setAttribute("aria-label", t(node.dataset.i18nAria)));
     document.querySelectorAll("[data-i18n-title]").forEach((node) => node.setAttribute("title", t(node.dataset.i18nTitle)));
+    // Lasso guidance shares the existing hint line rather than a separate tooltip.
+    document.querySelector("#lassoToolBtn")?.removeAttribute("title");
     document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder)));
     document.querySelectorAll("[data-language]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.language === state.language)));
     updateAutoControl();
@@ -4879,16 +5189,18 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     fit();
     window.dispatchEvent(new Event("resize"));
   }
-  function setBusy(value) {
+  function setBusy(value, showThinking = true) {
     state.busy = Boolean(value);
     embodiment.classList.toggle("working", state.busy);
     embodiment.setAttribute("aria-busy", String(state.busy));
     if (state.busy) {
       revealAIOrb();
-      showSummon();
+      if (showThinking) showSummon();
+      else hideSummon();
     } else {
       hideSummon();
       scheduleAIOrbIdle();
+      if (typeof resumeSmartSuggest === "function") resumeSmartSuggest();
     }
     updateEmbodimentLabel();
   }
@@ -5011,20 +5323,42 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function selectionAIStatusKey(selection = state.selection) {
     return selectionIsTypesetting(selection) ? "selectionTypesetting" : "observing";
   }
-  function requestSelectionAI(action, selection, packed) {
+  function requestSelectionAI(action, selection, packed, options = null) {
     if (!selection || selection.phase !== "active" || !packed) return false;
-    const token = {};
+    const token = {}, returnToHand = state.mode === "select" && !state.viewMode;
     selection.aiRequest = { token, action };
     supersedeActiveAI("selection-scoped-action");
+    // Callers with a captured source own its lifetime, including local fallback
+    // commits after the model request settles.
+    const inputSnapshot=options?.inputSnapshot || captureSelectionDirtyInput(selection);
     setStatusKey(selectionAIStatusKey(selection));
     updateSelectionToolbar();
-    requestAI(action, packed, { isolatedSelection: true, selection, selectionRequestToken: token }).finally(() => {
+    renderInteractionLayer();
+    // onSettled always runs once, also when the request never started.
+    const onSettled = typeof options?.onSettled === "function" ? options.onSettled : null;
+    let settled = false, result = null;
+    const request = requestAI(action, packed, {
+      ...(options || {}), isolatedSelection: true, selection, selectionRequestToken: token, inputSnapshot,
+      // The thinking frame follows the captured lasso, including saved ink
+      // with no recent input and selections away from the latest strokes.
+      thinkingBox: { ...packed.sourceRect },
+      onSettled:outcome => { settled = true; result = outcome; onSettled?.(outcome); },
+    }), generation = aiPreparationGeneration;
+    request.finally(() => {
+      if (!options?.inputSnapshot) releaseDirtyInput(inputSnapshot);
       if (selection.aiRequest?.token === token) selection.aiRequest = null;
-      if (state.selection === selection) updateSelectionToolbar();
+      if (returnToHand && result?.completed && !result.superseded && state.mode === "select" && !state.viewMode
+        && !selection.aiRequest && !state.pending && !state.pendingWidget && !state.drawing && !state.selectionGesture
+        && (!state.selection || state.selection === selection)) setCanvasMode("hand");
+      if (state.selection === selection) {
+        updateSelectionToolbar();
+        renderInteractionLayer();
+      }
+      if (onSettled && !settled) { settled = true; try { onSettled({ completed:false, superseded:generation !== aiPreparationGeneration, started:false }); } catch {} }
     });
     return true;
   }
-  function invokeAIAction(action) {
+  function invokeAIAction(action, options = null) {
     cancelWidgetRefinement("manual-action");
     clearTimeout(state.timer);
     state.timer = 0;
@@ -5032,11 +5366,11 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       const selection = state.selection,
         packed = buildSelectionTypesetRequest(selection);
       if (!packed) return;
-      requestSelectionAI(action, selection, packed);
+      requestSelectionAI(action, selection, packed, options);
       return;
     }
     supersedeActiveAI("manual-action");
-    requestAI(action, null, { captureCurrentViewport: true });
+    requestAI(action, null, { ...options, captureCurrentViewport: true });
   }
   const AI_ORB_IDLE_DELAY_MS = 5000;
   function revealAIOrb() {

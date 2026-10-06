@@ -29,6 +29,7 @@ body {
   width: 72px;
   height: 72px;
   object-fit: contain;
+  border-radius: 16px;
   margin-bottom: 20px;
 }
 

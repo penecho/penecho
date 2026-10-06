@@ -117,7 +117,7 @@
         {x0:right+margin,y0:margin,x1:width-margin,y1:height-margin},
         {x0:margin,y0:margin,x1:width-margin,y1:top-margin},
         {x0:margin,y0:bottom+margin,x1:width-margin,y1:height-margin},
-      ].map(space=>({...space,w:space.x1-space.x0,h:space.y1-space.y0})).filter(space=>space.w>80&&space.h>54)
+      ].map(space=>({...space,w:space.x1-space.x0,h:space.y1-space.y0})).filter(space=>space.w>=Math.min(330,width-margin*2)&&space.h>=112)
         .sort((a,b)=>((b.w>=390&&b.h>=210?2:1)*b.w*b.h)-((a.w>=390&&a.h>=210?2:1)*a.w*a.h)),
       best=spaces[0]||{x0:margin,y0:margin,x1:width-margin,y1:height-margin,w:width-margin*2,h:height-margin*2};
     return {x:(best.x0+best.x1)/2,y:(best.y0+best.y1)/2,compact:best.w<500||best.h<260};
@@ -127,9 +127,10 @@
     const width=Math.max(1,Number(viewRect?.width)||1),height=Math.max(1,Number(viewRect?.height)||1),viewLeft=Number(viewRect?.left)||0,viewTop=Number(viewRect?.top)||0,compact=Boolean(position?.compact),boxW=Math.min(compact?330:500,Math.max(1,width-(compact?20:32))),boxH=Math.min(compact?112:260,height),idealX=Number(position?.x)||width/2,idealY=Number(position?.y)||height/2,candidates=[16,28,40,50,60,72,84];
     const panel=panelVisible&&panelRect?{left:(Number(panelRect.left)||0)-viewLeft-12,top:(Number(panelRect.top)||0)-viewTop-12,right:(Number(panelRect.right)||0)-viewLeft+12,bottom:(Number(panelRect.bottom)||0)-viewTop+12}:null;
     let best=null;
+    // Keep the card on screen even when the Agent leaves no unobscured space.
     for(const y of candidates)for(const x of candidates){
-      const centerX=width*x/100,centerY=height*y/100,left=centerX-boxW/2,top=centerY-boxH/2,right=left+boxW,bottom=top+boxH,overflow=Math.max(0,-left)*boxH+Math.max(0,right-width)*boxH+Math.max(0,-top)*boxW+Math.max(0,bottom-height)*boxW,overlap=panel?Math.max(0,Math.min(right,panel.right)-Math.max(left,panel.left))*Math.max(0,Math.min(bottom,panel.bottom)-Math.max(top,panel.top)):0,distance=(centerX-idealX)**2+(centerY-idealY)**2,clear=overflow===0&&overlap===0,score=overflow*6+overlap*10+distance;
-      if(!best||clear&&!best.clear||clear===best.clear&&score<best.score)best={x,y,clear,score,box:{left,top,right,bottom}};
+      const centerX=width*x/100,centerY=height*y/100,left=centerX-boxW/2,top=centerY-boxH/2,right=left+boxW,bottom=top+boxH,overflow=Math.max(0,-left)*boxH+Math.max(0,right-width)*boxH+Math.max(0,-top)*boxW+Math.max(0,bottom-height)*boxW,overlap=panel?Math.max(0,Math.min(right,panel.right)-Math.max(left,panel.left))*Math.max(0,Math.min(bottom,panel.bottom)-Math.max(top,panel.top)):0,distance=(centerX-idealX)**2+(centerY-idealY)**2,fits=overflow===0,clear=fits&&overlap===0,score=overflow*6+overlap*10+distance;
+      if(!best||fits&&!best.fits||fits===best.fits&&(clear&&!best.clear||clear===best.clear&&score<best.score))best={x,y,fits,clear,score,box:{left,top,right,bottom}};
     }
     return best;
   }
@@ -138,8 +139,8 @@
     return Boolean(requestPending) || String(status || "") === "running" || stopHidden === false;
   }
 
-  function activityPresentationVisible(agentRunning, panelHidden, agentFocused) {
-    return Boolean(agentRunning) && !panelHidden && Boolean(agentFocused);
+  function activityPresentationVisible(agentRunning) {
+    return Boolean(agentRunning);
   }
 
   const exported={activityLocale,activityPhaseFromIntent,activityDialogPhase,activitySafeLabel,extractActivityCue,activityCueOnly,activityPosition,activityPlacement,activityShouldBeVisible,activityPresentationVisible};
@@ -147,10 +148,13 @@
   if (typeof document === "undefined") return;
   if (window.PENECHO_CONFIG?.runtime === "viewer" || window.PENECHO_CONFIG?.canvasAgent === false) return;
 
-  const viewport=document.querySelector("#viewport"), panel=document.querySelector("#canvasAgentPanel"), picker=document.querySelector("#canvasAgentWidgetPickerLayer"),
+  const viewport=document.querySelector("#viewport"), panel=document.querySelector("#canvasAgentPanel"),
     transcript=document.querySelector("#canvasAgentTranscript"), stopButton=document.querySelector("#canvasAgentStop"), form=document.querySelector("#canvasAgentForm"),
     input=document.querySelector("#canvasAgentInput"), sendButton=document.querySelector("#canvasAgentSend");
   if (!viewport || !panel || !transcript || !stopButton) return;
+  // Studio docks the Agent beside a narrowed, clipped viewport. Share its outer
+  // stage so the activity can remain whole and above either surface.
+  const stage=viewport.closest(".canvas-frame")||viewport;
 
   const root=document.createElement("section");
   root.id="canvasAgentActivityOverlay";
@@ -166,11 +170,11 @@
       <small class="canvas-agent-activity-detail"></small>
       <div class="canvas-agent-activity-trail"></div>
     </div>`;
-  viewport.insertBefore(root,picker||panel);
+  stage.append(root);
 
   const kicker=root.querySelector(".canvas-agent-activity-kicker span"),title=root.querySelector(".canvas-agent-activity-title"),detail=root.querySelector(".canvas-agent-activity-detail"),
     trail=root.querySelector(".canvas-agent-activity-trail"),toolStates=new WeakMap(),
-    activity={active:false,requestPending:false,stopping:false,agentFocused:!panel.hidden&&panel.contains(document.activeElement),phase:"start",milestones:[],cueText:"",cueCount:0,cueBodies:new WeakSet(),cueRow:null,cueObserver:null,cueFrame:0,positionFrame:0,dialogDidMutate:false,dialogLastPhase:"",dialogNoteCount:0,dialogCurrent:null,dialogPendingCue:null,dialogGroups:new WeakMap()};
+    activity={active:false,requestPending:false,stopping:false,phase:"start",milestones:[],cueText:"",cueCount:0,cueBodies:new WeakSet(),cueRow:null,cueObserver:null,cueFrame:0,positionFrame:0,dialogDidMutate:false,dialogLastPhase:"",dialogNoteCount:0,dialogCurrent:null,dialogPendingCue:null,dialogGroups:new WeakMap()};
 
   function language(){return activityLocale(document.documentElement.lang);}
   function copy(){return COPY[language()];}
@@ -191,6 +195,7 @@
     detail.textContent=activity.cueText||description;
     root.dataset.phase=activity.phase;
     renderTrail();
+    window.dispatchEvent(new window.CustomEvent("penecho:agent-progress",{detail:{heading,label:activity.cueText||description,milestones:activity.milestones,phase:activity.phase}}));
   }
   function addMilestone(text,kind="done"){
     if(!activity.active)return;
@@ -236,8 +241,7 @@
     if(["create","edit","revert"].includes(phase))activity.dialogDidMutate=true;
   }
   function syncPresentation(){
-    const visible=activityPresentationVisible(activity.active,panel.hidden,!panel.hidden&&activity.agentFocused);
-    root.classList.toggle("is-suppressed",activity.active&&!visible);
+    const visible=activityPresentationVisible(activity.active);
     root.classList.toggle("is-visible",visible);
     if(visible)schedulePosition();
   }
@@ -256,7 +260,7 @@
     if(activity.dialogCurrent)activity.dialogCurrent.finished=true;
     updateDialogGroup(activity.dialogCurrent);
     renderPhase();
-    root.classList.remove("is-suppressed","is-visible");
+    root.classList.remove("is-visible");
   }
   function syncAgentState(){
     const status=String(panel.dataset.status||"");
@@ -277,7 +281,7 @@
       if(next==="running"){
         if(!activityShouldBeVisible(panel.dataset.status,stopButton.hidden,activity.requestPending))continue;
         if(!activity.active)startActivity();
-        if(!activity.stopping){activity.phase=activityPhaseFromIntent(label);dialogToolStarted(row,activity.phase);renderPhase();}
+        if(!activity.stopping){activity.phase=activityPhaseFromIntent(label);dialogToolStarted(row,activity.phase);renderPhase();window.dispatchEvent(new window.CustomEvent("penecho:agent-progress",{detail:{label,milestones:activity.milestones,phase:activity.phase}}));}
       }else if(label){
         addMilestone(`${next==="error"?copy().needsRetry:copy().completed} · ${label}`,next==="error"?"error":"done");
         updateDialogGroup(activity.dialogGroups.get(row));
@@ -289,7 +293,7 @@
     if(activity.positionFrame)return;
     activity.positionFrame=requestAnimationFrame(()=>{
       activity.positionFrame=0;
-      const viewRect=viewport.getBoundingClientRect(),panelVisible=!panel.hidden,panelRect=panelVisible?panel.getBoundingClientRect():null,position=activityPosition(viewRect,panelRect,panelVisible);
+      const viewRect=stage.getBoundingClientRect(),panelVisible=!panel.hidden,panelRect=panelVisible?panel.getBoundingClientRect():null,position=activityPosition(viewRect,panelRect,panelVisible);
       const placement=activityPlacement(viewRect,position,panelRect,panelVisible);
       root.dataset.placementX=String(placement.x);root.dataset.placementY=String(placement.y);
       root.classList.toggle("is-compact",position.compact);
@@ -385,7 +389,6 @@
   form?.addEventListener("submit",()=>{
     queueMicrotask(()=>{
       if(!(input?.disabled||sendButton?.disabled))return;
-      activity.agentFocused=true;
       activity.requestPending=!activityShouldBeVisible(panel.dataset.status,stopButton.hidden);
       startActivity();
     });
@@ -394,19 +397,10 @@
     if(!activity.active)return;
     activity.cueObserver?.disconnect();activity.cueObserver=null;activity.stopping=true;activity.cueText="";activity.phase="stop";renderPhase();
   });
-  document.addEventListener("pointerdown",event=>{
-    if(!activity.active)return;
-    activity.agentFocused=!panel.hidden&&event.target instanceof Element&&panel.contains(event.target);
-    syncPresentation();
-  },true);
-  document.addEventListener("focusin",event=>{
-    activity.agentFocused=!panel.hidden&&event.target instanceof Element&&panel.contains(event.target);
-    if(activity.active)syncPresentation();
-  });
   window.addEventListener("penecho:languagechange",()=>{if(activity.active)renderPhase();});
   window.addEventListener("resize",schedulePosition,{passive:true});
   if(typeof ResizeObserver==="function"){
-    const resizeObserver=new ResizeObserver(schedulePosition);resizeObserver.observe(viewport);resizeObserver.observe(panel);
+    const resizeObserver=new ResizeObserver(schedulePosition);resizeObserver.observe(stage);resizeObserver.observe(viewport);resizeObserver.observe(panel);
   }
   syncAgentState();
   if(activity.active)watchAssistantBody([...transcript.querySelectorAll(".canvas-agent-message.assistant .canvas-agent-message-body")].at(-1));

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/penecho-readme-header-dark.webp">
-    <img src="public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">Sketch by hand. PenEcho's built-in Agent — or Codex, Claude Code and any MCP<br>client — turns it into diagrams, documents and working widgets right beside your<br>notes.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Join Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">What's new in 1.4</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#connect-your-ai-agent-mcp">Connect your AI (MCP)</a> ·
   <a href="docs/">Docs</a> ·
@@ -47,6 +48,30 @@
 </p>
 <p align="center"><em>From a hand sketch to an interactive result in one canvas.</em></p>
 
+<a name="new-in-1-4"></a>
+
+## New in 1.4: it knows what you need
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="Watch the PenEcho 1.4 tour (2:30)" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ Watch with sound and chapters</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">Download MP4</a><br><sub>Smart Assist · PenEchoLLM · Notes &amp; Cards · live graphs · simulations · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="docs/assets/release-1.4/penechollm-suggest.webp" alt="PenEchoLLM suggests Solve for a handwritten integral; one tap and the answer lands in place" width="100%"></a><br>
+      <strong>PenEchoLLM suggests the next step</strong><br>
+      Pause after writing and PenEchoLLM ranks what you need next: Solve, Typeset, Plot graph, Make diagram, Organize as Note and more. One tap and the answer lands where you wrote, with the next step already suggested. It learns from the suggestions you choose, on your device. Free to try every day, no API key needed.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="docs/assets/release-1.4/notes-cards.webp" alt="Handwritten notes circled on the canvas become a knowledge card, then appear in the searchable Library" width="100%"></a><br>
+      <strong>Notes &amp; Cards keep what matters</strong><br>
+      Circle a formula, sketch or answer and keep it as a knowledge card or work note, with your original handwriting. Cards are categorized automatically and collected in the Library, where you can search, bookmark, review and bring them into any canvas.
+    </td>
+  </tr>
+</table>
+
 ## What you can do
 
 <table width="100%">
@@ -54,7 +79,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="PenEcho responding to notes and sketches on a canvas" width="100%"><br>
       <strong>Sketch, then ask</strong><br>
-      Handwriting, equations, text and images on an endless canvas. Auto AI answers when you pause.
+      Handwriting, equations, text and images on an endless canvas. PenEchoLLM suggests the next step when you pause.
     </td>
     <td width="33%" valign="top">
       <a href="docs/assets/professional-diagrams/kubernetes.webp"><img src="docs/assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes architecture diagram" width="100%"></a><br>
@@ -180,12 +205,15 @@ These recommendations balance answer quality against the latency of PenEcho's re
 
 </details>
 
-## What's new in 1.3.5
+## What's new in 1.4.0
 
-- **UI:** minor interface fixes.
-- **Concurrent canvas editing:** support Canvas AI, Agent, and MCP modifying the same canvas simultaneously.
+- **Smart Assist with PenEchoLLM:** context-aware actions for handwriting, text and images, ranked by PenEchoLLM, with quick answers, visual creation and follow-up questions.
+- **Lasso AI:** circle any part of the canvas to solve, visualize, animate or organize just the selected content.
+- **Notes & Cards:** turn canvas content into reusable notes and knowledge cards; browse, search and bring them into other canvases.
+- **Widget refinement:** refine results through written feedback and contextual actions, with clearer controls and better content fitting.
+- **Canvas polish:** improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP.
 
-[Full changelog →](CHANGELOG.md#135)
+[Watch the 1.4 tour →](https://penecho.ai/#knows-you) · [Full changelog →](CHANGELOG.md#140)
 
 ## Community
 

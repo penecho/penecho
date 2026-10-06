@@ -289,7 +289,7 @@ test("science snapshot hooks are bounded and failures do not displace the ordina
 
   const snapshotCalls = [],
     snapshot = vm.runInNewContext(`(async ${functionSource(host, "snapshot")})`, {
-      scienceMode:false,activeSnapshot:null,activeSnapshotRender:null,
+      scienceMode:false,activeSnapshot:null,activeSnapshotRender:null,clock:() => 0,
       globalThis:{ __penechoScienceSnapshotHooks:{ beforeSnapshot() { throw Error("collision"); } } },
       snapshotDebugLog() {},
       reportPresentationScrollExtent() {},

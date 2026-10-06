@@ -25,7 +25,9 @@ async function prepareUploadedImage(bytes,name,{signal}={}) {
   const run=async fn=>{
     signal?.throwIfAborted();
     const image=sharp(bytes,{limitInputPixels:MAX_PIXELS,failOn:'warning',pages:1}).timeout({seconds:20});
-    const abort=()=>image.destroy(fail('upload_cancelled','Upload cancelled',408));
+    // Sharp's promise APIs do not consume stream error events. Let the native
+    // operation settle and normalize cancellation below instead of emitting one.
+    const abort=()=>image.destroy();
     signal?.addEventListener('abort',abort,{once:true});
     try { const result=await fn(image); signal?.throwIfAborted(); return result; }
     finally { signal?.removeEventListener('abort',abort); image.destroy(); }

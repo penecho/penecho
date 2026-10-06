@@ -54,3 +54,33 @@ test('draft execution is stable within a document and isolated across new docume
  assert.match(c.canvasAgentCloudFilesPath(c.canvasAgentCloudFileScope(),'cloud-file-id'),/cloud-file-id\?draft=1$/);
  c.replaceDocument();assert.notEqual(c.canvasAgentCloudCanvasId(),first);
 });
+
+function restoredSessionFixture(saved, canvasKey=`cloud:${B}`, conversationId='conversation-B') {
+ const c=fixture();
+ Object.assign(c.state,{canvasAgentCanvasKey:canvasKey});
+ Object.assign(c.canvasAgent,{sessionId:'',projectId:'',accessMode:'controlled',pendingStoredSession:saved,currentConversation:{id:conversationId}});
+ vm.runInContext(fn('canvasAgentRestoreScopedSession'),c);
+ c.canvasAgentRestoreScopedSession('account:hosted',`hosted:${A}`);
+ return c;
+}
+const storedSession=()=>({scope:'account:hosted',connectionId:`hosted:${A}`,projectId:'',accessMode:'controlled',sessionId:'session-A',resumeToken:'test-resume-A',canvasKey:`cloud:${A}`,conversationId:'conversation-A'});
+
+test('a new Cloud Canvas cannot restore another Canvas session from the same account and model',()=>{
+ const c=restoredSessionFixture(storedSession());
+ assert.equal(c.canvasAgent.sessionId,'');
+ assert.equal(c.canvasAgent.pendingStoredSession,null);
+});
+test('a new conversation on the same Cloud Canvas cannot restore the previous conversation session',()=>{
+ const c=restoredSessionFixture(storedSession(),`cloud:${A}`,'new-conversation');
+ assert.equal(c.canvasAgent.sessionId,'');
+});
+test('reopening the original Canvas conversation can restore its matching session',()=>{
+ const c=restoredSessionFixture(storedSession(),`cloud:${A}`,'conversation-A');
+ assert.equal(c.canvasAgent.sessionId,'session-A');
+ assert.equal(c.canvasAgent.resumeToken,'test-resume-A');
+});
+test('legacy sessions without a Canvas binding cannot replay into a new Cloud Canvas',()=>{
+ const saved=storedSession();delete saved.canvasKey;delete saved.conversationId;
+ const c=restoredSessionFixture(saved);
+ assert.equal(c.canvasAgent.sessionId,'');
+});

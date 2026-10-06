@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
-    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">손으로 스케치하세요. PenEcho의 내장 Agent나 Codex, Claude Code, 모든 MCP 클라이언트가 메모 옆에 다이어그램, 문서, 작동하는 위젯을 만듭니다.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">1.4 새 기능</a> ·
   <a href="#quick-start">빠른 시작</a> ·
   <a href="#connect-your-ai-agent-mcp">AI 에이전트 연결(MCP)</a> ·
   <a href="../">문서</a> ·
@@ -45,6 +46,30 @@
 </p>
 <p align="center"><em>손그림에서 상호작용하는 결과까지, 하나의 캔버스에서.</em></p>
 
+<a name="new-in-1-4"></a>
+
+## 1.4 새 기능: 쓰기만 하면 다음 단계를 압니다
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="PenEcho 1.4 소개 영상 보기(2:30)" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ 소리와 챕터와 함께 보기</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">MP4 다운로드</a><br><sub>스마트 제안 · PenEchoLLM · 노트와 카드 · 실시간 그래프 · 시뮬레이션 · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="../assets/release-1.4/penechollm-suggest.webp" alt="손으로 쓴 적분에 PenEchoLLM이 풀이를 제안하고, 한 번 탭하면 답이 제자리에 표시되는 모습" width="100%"></a><br>
+      <strong>PenEchoLLM이 다음 단계를 제안</strong><br>
+      쓰다가 잠시 멈추면 PenEchoLLM이 다음에 필요한 작업의 순위를 매깁니다. 풀이, 정서, 그래프 그리기, 다이어그램 만들기, 노트로 정리 등. 한 번 탭하면 답이 쓴 자리에 나타나고 다음 제안도 이미 준비되어 있습니다. 선택한 제안을 기기에서 학습하며, API 키 없이 매일 무료로 써 볼 수 있습니다.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="../assets/release-1.4/notes-cards.webp" alt="캔버스의 손글씨 노트를 둘러싸면 지식 카드가 되고, 검색 가능한 라이브러리에 표시되는 모습" width="100%"></a><br>
+      <strong>노트와 카드로 핵심을 남기기</strong><br>
+      수식, 스케치, 답을 둘러싸면 원래 손글씨를 그대로 담은 지식 카드나 작업 노트로 저장됩니다. 카드는 자동으로 분류되어 라이브러리에 모이며, 검색, 북마크, 복습하거나 다른 캔버스에 추가할 수 있습니다.
+    </td>
+  </tr>
+</table>
+
 ## 할 수 있는 일
 
 <table width="100%">
@@ -52,7 +77,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="스케치하고 질문하기" width="100%"><br>
       <strong>스케치하고 질문하기</strong><br>
-      무한 캔버스에 손글씨, 수식, 텍스트, 이미지를 놓으세요. 잠시 멈추면 AI가 자동으로 답합니다.
+      무한 캔버스에 손글씨, 수식, 텍스트, 이미지를 놓으세요. 잠시 멈추면 PenEchoLLM이 다음 단계를 제안합니다.
     </td>
     <td width="33%" valign="top">
       <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes 클러스터" width="100%"></a><br>
@@ -178,12 +203,15 @@ npm start
 
 </details>
 
-## 1.3.5의 새로운 기능
+## 1.4.0의 새로운 기능
 
-- **UI:** 인터페이스의 사소한 문제를 수정했습니다.
-- **캔버스 동시 편집:** Canvas AI, Agent, MCP가 같은 캔버스를 동시에 수정할 수 있도록 지원합니다.
+- **스마트 제안과 PenEchoLLM:** 손글씨, 텍스트, 이미지에 맞는 작업을 PenEchoLLM이 순위를 매겨 제안하며 빠른 답변, 시각 자료 생성, 추가 질문을 지원합니다.
+- **Lasso AI:** 캔버스의 일부를 둘러싸 선택한 내용만 풀이, 시각화, 애니메이션 제작 또는 노트로 정리할 수 있습니다.
+- **노트와 카드:** 캔버스 내용을 재사용 가능한 노트와 지식 카드로 정리하고, 찾아보거나 검색해 다른 캔버스에 추가할 수 있습니다.
+- **Widget 개선:** 손글씨 피드백과 관련 작업으로 결과를 다듬을 수 있으며 조작이 명확해지고 크기가 내용에 더 잘 맞습니다.
+- **캔버스 사용성:** 펜 제스처, 필기 삭제, 탐색, Agent 및 MCP와의 협업을 개선했습니다.
 
-[전체 변경 기록 →](../../CHANGELOG.md#135)
+[1.4 소개 영상 보기 →](https://penecho.ai/#knows-you) · [전체 변경 기록 →](../../CHANGELOG.md#140)
 
 ## 커뮤니티
 

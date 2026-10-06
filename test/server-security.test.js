@@ -1652,6 +1652,49 @@ test("enabled plugin documents reach the model and gate html_widget commands", {
   }
 });
 
+test("Canvas AI preserves multiple valid widgets while rejecting invalid plugin commands", { timeout:20000 }, async () => {
+  const clocks = [
+      { title:"Beijing time", x:13746, zone:"Asia/Shanghai" },
+      { title:"New York time", x:14258, zone:"America/New_York" },
+      { title:"London time", x:14781, zone:"Europe/London" },
+    ].map(({ title, x, zone }) => ({
+      tool:"html_widget", pluginId:"general", x, y:10600, w:440, h:600,
+      title, refreshSeconds:0, html:`<!doctype html><html><body><p data-zone="${zone}">${title}</p></body></html>`,
+    })),
+    diagram = {
+      tool:"diagram_source", pluginId:"flowchart", x:100, y:200, w:1200, h:700,
+      title:"Clock zones", sourceFormat:"dot", source:"digraph G { Beijing -> London }", refreshSeconds:0,
+    },
+    upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({
+      intent:"answer", commands:index === 0 ? clocks : [
+        { tool:"write_text", x:100, y:100, text:"Clock zones", fontSize:100, maxWidth:1000 },
+        clocks[0],
+        { ...clocks[1], html:"" },
+        { ...clocks[2], pluginId:"disabled-plugin" },
+        diagram,
+      ],
+    }) }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general"), builtInPluginDescriptor("flowchart")] };
+  try {
+    const post = async () => {
+      const response = await fetch(`${running.origin}/api/ai/command`, {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    assert.deepEqual((await post()).commands, clocks);
+    assert.deepEqual((await post()).commands, [clocks[0], diagram]);
+    assert.equal(upstream.requests.length, 2, "valid widget batches need no retry");
+    const outbound = JSON.parse(upstream.requests[0]);
+    assert.match(outbound.messages[0].content, /A plugin command must be the only returned command/);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
 test("html_widget commands fill required fields and discard invalid optional metadata", { timeout:20000 }, async () => {
   const response = index => JSON.stringify({
       intent:"answer",
@@ -2309,7 +2352,7 @@ test("widget host CSP permits on-demand HTTPS resources inside the isolated widg
 
 test("local plugin discovery is constrained and widget prompting is conditional", () => {
   const source = fs.readFileSync(path.join(ROOT, "src", "server", "main.js"), "utf8"),
-    basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const ACTIVE_SYSTEM_PROMPT_BASE/.exec(source)?.[1] || "";
+    basePrompt = /const SYSTEM_PROMPT = `([\s\S]*?)`;\s*\n\s*const JSON_RESPONSE_SCHEMA_PROMPT/.exec(source)?.[1] || "";
   assert.doesNotMatch(basePrompt, /html_widget|enabledPlugins/);
   assert.match(basePrompt, /If the newest input is non-empty but unclear, incomplete, or lacks enough context, return one short write_text clarification question stating what is missing\./);
   assert.match(basePrompt, /Use intent none with an empty commands array only when there is genuinely no new input\./);
@@ -2331,13 +2374,13 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /clamp\(36px,1\.2cqw,52px\)[\s\S]*?at least 28px[\s\S]*?clamp\(52px,2cqw,80px\)[\s\S]*?14–16px are too small/);
   assert.match(source, /Width-only or height-only resizing changes the layout viewport[\s\S]*?SVG or professional-graphic bounds tight on every side with only slight padding/);
   assert.match(source, /Public HTTPS reference links are allowed[\s\S]*?target="_blank"[\s\S]*?noopener noreferrer[\s\S]*?never navigate the widget itself/);
-  assert.match(source, /const PLUGIN_ROUTING_PROMPT = `General HTML is mandatory and always enabled/);
+  assert.match(source, /const PLUGIN_ROUTING_PROMPT = `Apply the Explain presentation rule[\s\S]*General HTML is otherwise always available as a fallback, not the default drawing route/);
   assert.match(source, /Choose exactly one command path by the defining deliverable[\s\S]*never return speculative alternatives/);
   assert.match(source, /does not expose the PenEcho Agent Visual Explainer tool[\s\S]*General HTML as its explicit compatibility fallback/);
   assert.match(source, /custom behavior is primary[\s\S]*faithful quantitative chart with axes and scales[\s\S]*diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
   assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
-  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT\)/);
+  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT\)/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
   assert.match(source, /function localPluginCatalog\(scope = "all"\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);
   assert.match(source, /process\.env\.PENECHO_PRIVATE_PLUGIN_DIR[\s\S]*?path\.resolve\(process\.env\.PENECHO_PRIVATE_PLUGIN_DIR\)/);
@@ -2503,6 +2546,125 @@ test("debug mode captures the raw model exchange and upstream request identifier
     await stopServer(child);
     await new Promise(resolve=>upstream.server.close(resolve));
   }
+});
+
+test("local suggestion status preserves upstream failure status, Retry-After and no-store caching", { timeout:20000 }, async () => {
+  for (const status of [401,404,429,503]) {
+    let probes=0;
+    const upstreamServer=http.createServer((req,res)=>{
+      if(req.url!=="/api/v1/apps/penecho-llm/suggest/status") { res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({account:{id:"status-test-account"}}));return; }
+      probes++;
+      res.writeHead(status,{"Content-Type":"application/json",...(status===429||status===503?{"Retry-After":"120"}:{})});
+      res.end(JSON.stringify({error:`status_${status}`,details:{access:{remaining:0}}}));
+    });
+    await new Promise(resolve=>upstreamServer.listen(0,"127.0.0.1",resolve));
+    const upstreamOrigin=`http://127.0.0.1:${upstreamServer.address().port}`,directory=testStateDir({});
+    fs.writeFileSync(path.join(directory,"cloud-device.json"),JSON.stringify({version:2,origin:upstreamOrigin,accountToken:"status-test-session",enabled:false}));
+    let child;
+    try {
+      const local=await startServer(apiServerEnv(upstreamOrigin,{PENECHO_STATE_DIR:directory,PENECHO_JEVISION_ENABLED:"true",PENECHO_JEVISION_MOCK:"false"}));
+      child=local.child;
+      const session=await(await fetch(`${local.origin}/api/local-access/status`)).json(),headers={Origin:local.origin,"x-penecho-session":session.accessSessionToken};
+      const first=await fetch(`${local.origin}/api/suggest/status`,{headers});
+      assert.equal(first.status,status);
+      assert.equal(first.headers.get("cache-control"),"no-store");
+      if(status===429||status===503)assert.equal(first.headers.get("retry-after"),"120");
+      const data=await first.json();assert.equal(data.configured,false);assert.equal(data.reason,`status_${status}`);assert.equal(data.access.remaining,0);
+      const second=await fetch(`${local.origin}/api/suggest/status`,{headers});
+      assert.equal(second.status,status);assert.equal(probes,1,"another local window reuses the failure/cooldown");
+      const refreshed=await fetch(`${local.origin}/api/suggest/status`,{headers:{...headers,"X-PenEcho-Suggest-Refresh":"1"}});
+      assert.equal(refreshed.status,status);
+      assert.equal(probes,status===429||status===503?1:2,"explicit retry refreshes unavailable status while preserving Retry-After");
+    } finally {
+      if(child)await stopServer(child);
+      await new Promise(resolve=>upstreamServer.close(resolve));
+    }
+  }
+});
+
+test("LAN Canvas forwards all PenEchoLLM modes without client questions and rejects foreign page origins", { timeout:20000 }, async () => {
+  const address=Object.values(os.networkInterfaces()).flat().find(item=>item.family==="IPv4"&&!item.internal&&/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(item.address))?.address;
+  const answers={action:{type:"choice",choice:"typeset",confidence:.9}};
+  const requests=[],server=http.createServer((req,res)=>{
+    const chunks=[];
+    req.on("data",chunk=>chunks.push(chunk));
+    req.on("end",()=>{
+      const body=chunks.length?JSON.parse(Buffer.concat(chunks)):null;
+      requests.push({headers:req.headers,path:req.url,method:req.method,body});
+      const invalid=body?.mode==="custom";
+      res.writeHead(invalid?400:200,{"Content-Type":"application/json"});
+      res.end(JSON.stringify(invalid?{error:"invalid_action_space",message:"Outside the action space"}:req.url.endsWith("/status")?{configured:true,model:"PenEchoLLM",access:{remaining:500},guestToken:"lan-trial-secret"}:{ok:true,model:"PenEchoLLM",answers}));
+    });
+  });
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const upstream={server,requests,origin:`http://127.0.0.1:${server.address().port}`};
+  const directory=testStateDir({});
+  fs.writeFileSync(path.join(directory,"cloud-device.json"),JSON.stringify({version:2,origin:upstream.origin,accountToken:"lan-cloud-session",enabled:false}));
+  const {child,origin}=await startServer(apiServerEnv(upstream.origin,{HOST:"0.0.0.0",PENECHO_STATE_DIR:directory,PENECHO_JEVISION_ENABLED:"true",PENECHO_JEVISION_MOCK:"false"}));
+  try {
+    const lan=`http://${address||"127.0.0.1"}:${new URL(origin).port}`;
+    const session=await (await fetch(`${lan}/api/local-access/status`)).json();
+    const headers={Origin:lan,"x-penecho-session":session.accessSessionToken,"Content-Type":"application/json"};
+    const status=await (await fetch(`${lan}/api/suggest/status`,{headers})).json();
+    assert.equal(status.model,"PenEchoLLM");
+    assert.equal(status.access.remaining,500);
+    assert.equal(status.guestToken,undefined);
+    for (const [mode,context] of Object.entries({ink:{shapesFit:false},selection:{shapesFit:true},widget:{actions:["animate","scene_replay"],marks:true},gesture:{shape:"double_underline"},step:{},index:{},handwriting:{script:"latin"}})) {
+      const payload={version:1,mode,image:PNG,context};
+      const response=await fetch(`${lan}/api/suggest`,{method:"POST",headers,body:JSON.stringify(payload)});
+      assert.equal(response.status,200,`${mode}: ${await response.clone().text()}`);
+      assert.equal((await response.json()).model,"PenEchoLLM");
+      const forwarded=upstream.requests.at(-1);
+      assert.equal(forwarded.path,"/api/v1/apps/penecho-llm/suggest");
+      assert.equal(forwarded.method,"POST");
+      assert.deepEqual(forwarded.body,payload);
+      assert.equal(forwarded.headers.authorization,"Bearer lan-cloud-session");
+      assert.equal(forwarded.headers["x-penecho-guest"],"lan-trial-secret");
+      assert.equal(forwarded.headers.origin,undefined);
+    }
+    assert.equal(upstream.requests.length,8);
+    const invalid=await fetch(`${lan}/api/suggest`,{method:"POST",headers,body:JSON.stringify({version:1,mode:"custom",image:PNG,context:{}})});
+    assert.equal(invalid.status,400);
+    assert.equal((await invalid.json()).reason,"invalid_action_space");
+    const denied=await fetch(`${lan}/api/suggest`,{method:"POST",headers:{...headers,Origin:"https://third-party.example"},body:"{}"});
+    assert.equal(denied.status,403);
+    assert.equal(upstream.requests.length,9);
+  } finally { await stopServer(child);await new Promise(resolve=>upstream.server.close(resolve)); }
+});
+
+test("JeVision request recording follows the existing trace switch and keeps failed inputs separately", { timeout:20000 }, async () => {
+  const upstream = await startApiServer("JeVision unavailable", { status:503 });
+  try {
+    for (const enabled of [false, true]) {
+      const directory = testStateDir({});
+      fs.writeFileSync(path.join(directory, "cloud-device.json"), JSON.stringify({version:2, origin:upstream.origin, accountToken:"local-account-session", enabled:false}));
+      fs.writeFileSync(path.join(directory,"suggestion-guests.json"),JSON.stringify({[upstream.origin]:"trace-trial-secret"}));
+      const { child, origin } = await startServer(apiServerEnv(upstream.origin, {
+        PENECHO_STATE_DIR:directory, PENECHO_REQUEST_TRACE:String(enabled), PENECHO_DEBUG_ARTIFACTS:"false",
+        PENECHO_JEVISION_ENABLED:"true", PENECHO_JEVISION_MOCK:"false", PENECHO_JEVISION_KEY:"unused-legacy-key", PENECHO_JEVISION_URL:"https://unused-legacy.example",
+      }));
+      try {
+        const response = await fetch(`${origin}/api/suggest`, { method:"POST", headers:{ "Content-Type":"application/json", Origin:origin }, body:JSON.stringify({
+          version:1,mode:"ink",image:PNG,context:{shapesFit:true},
+        }) });
+        assert.equal((await response.json()).reason, "upstream");
+        const root = path.join(directory, "logs", "jevision-requests");
+        assert.equal(fs.existsSync(root), enabled);
+        if (enabled) {
+          const names = fs.readdirSync(root);
+          assert.equal(names.length, 1);
+          const traceDirectory = path.join(root, names[0]), trace = JSON.parse(fs.readFileSync(path.join(traceDirectory, "trace.json")));
+          assert.equal(trace.status, "failed");
+          assert.equal(trace.response.status, 503);
+          assert.equal(trace.response.body, "JeVision unavailable");
+          assert.deepEqual(fs.readFileSync(path.join(traceDirectory, "image.png")), Buffer.from(PNG.split(",")[1], "base64"));
+          assert.ok(fs.readFileSync(path.join(traceDirectory, "prompt.txt"), "utf8").includes("shapesFit"));
+          assert.ok(!JSON.stringify(trace).includes("local-account-session"));
+          assert.equal(trace.endpoint, `${upstream.origin}/api/v1/apps/penecho-llm/suggest`);
+        }
+      } finally { await stopServer(child); }
+    }
+  } finally { await new Promise(resolve => upstream.server.close(resolve)); }
 });
 
 test("request tracing retains the configured number of complete image and model exchanges", { timeout: 20000 }, async () => {
@@ -2852,6 +3014,234 @@ test("API mode accepts a valid simple native draw", { timeout: 20000 }, async ()
   }
 });
 
+test("Practice reaches Canvas AI as one unsolved question and rejects a mismatched action", {timeout:20000}, async()=>{
+  const command={tool:"write_text",x:0,y:0,text:"练一题：求解 2x + 5 = 17。",fontSize:80,maxWidth:1200,lineHeight:1.35},
+    upstream=await startApiServer(JSON.stringify({intent:"answer",commands:[command]})),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try{
+    const payload={...validPayload(),trigger:"manual",userAction:"answer",suggestion:"practice"};
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    assert.equal(response.status,200);
+    assert.deepEqual((await response.json()).commands,[command]);
+    const request=JSON.parse(upstream.requests[0]),input=JSON.parse(request.messages[1].content.find(part=>part.type==="text").text);
+    assert.match(input.actionMeaning,/Create exactly one new, self-contained practice question/);
+    assert.match(input.actionMeaning,/privately check that it is solvable/);
+    assert.match(input.actionMeaning,/Do not solve the source or include an answer, worked solution, hint, answer key or hidden solution/);
+    assert.match(input.actionMeaning,/Preserve the original content/);
+    const invalid=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,userAction:"hint"})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  }finally{
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("Create visual reaches Canvas AI as visual creation and rejects a mismatched action", {timeout:20000}, async()=>{
+  const command={tool:"draw",origin:[100,100],types:["rect"],items:[[0,0,200,120]]},
+    upstream=await startApiServer(JSON.stringify({intent:"plot",commands:[command]})),
+    {child,origin}=await startServer(apiServerEnv(upstream.origin));
+  try{
+    const payload={...validPayload(),trigger:"manual",userAction:"plot",suggestion:"create_visual"};
+    const response=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    assert.equal(response.status,200);
+    assert.deepEqual((await response.json()).commands,[command]);
+    const request=JSON.parse(upstream.requests[0]),input=JSON.parse(request.messages[1].content.find(part=>part.type==="text").text);
+    assert.match(input.actionMeaning,/Create the new visual content requested/);
+    assert.match(input.actionMeaning,/Preserve existing content/);
+    assert.doesNotMatch(input.actionMeaning,/Return exactly one plot_function/);
+    const invalid=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,userAction:"answer"})});
+    assert.equal(invalid.status,400);
+    assert.equal(upstream.requests.length,1);
+  }finally{
+    await stopServer(child);
+    await new Promise(resolve=>upstream.server.close(resolve));
+  }
+});
+
+test("Sketch illustration sends the selected style and background policy to the model", { timeout: 20000 }, async () => {
+  const ILLUSTRATION = require("../src/shared/illustration-style.js");
+  const command = { tool:"html_widget", pluginId:"general", x:1200, y:1000, w:400, h:300, title:"Illustration", html:"<!doctype html><html><body style=\"background:transparent\"><svg viewBox=\"0 0 400 300\"></svg></body></html>" },
+    upstream = await startApiServer(JSON.stringify({ intent:"plot", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), trigger:"manual", userAction:"plot", suggestion:"vivid", plugins:[builtInPluginDescriptor("general")] },
+      post = body => fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }),
+      sent = index => JSON.parse(JSON.parse(upstream.requests[index]).messages[1].content.find(part => part.type === "text").text).actionMeaning;
+    const first = await post(payload);
+    assert.equal(first.status, 200, await first.text());
+    assert.ok(sent(0).endsWith(`Suggestion chosen by the user: ${ILLUSTRATION.canvasPrompt("storybook", "auto")}`), "older clients get the Storybook style with an automatic background");
+    assert.equal((await post({ ...payload, illustrationStyle:"3d", illustrationBackground:"none" })).status, 200);
+    assert.ok(sent(1).endsWith(ILLUSTRATION.canvasPrompt("3d", "none")));
+    assert.match(sent(1), /Add no scenery of your own/);
+    for (const invalid of [
+      { ...payload, illustrationStyle:"neon" },
+      { ...payload, illustrationBackground:"forest" },
+      { ...payload, illustrationStyle:"vivid" },
+      { ...payload, suggestion:"plot", illustrationStyle:"3d" },
+      { ...payload, suggestion:null, illustrationBackground:"none" },
+    ]) assert.equal((await post(invalid)).status, 400);
+    assert.equal(upstream.requests.length, 2, "an invalid style never reaches the provider");
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("Finish drawing preserves a multi-stroke completion and native routing through the API", { timeout: 20000 }, async () => {
+  // 12 paths with 12 segments each exceeded the old prompt's whole-figure limit.
+  const command = { tool:"draw", origin:[1000,1000], width:8,
+    types:Array(12).fill("smooth"),
+    items:Array.from({ length:12 }, (_, row) => Array.from({ length:13 }, (_, point) => [point*20,row*20+(point%2)*5]).flat()) },
+    upstream = await startApiServer(JSON.stringify({ intent:"continue", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const sourceInk = { coordinateSpace:"canvas-world", strokeWidth:6, strokes:[{ width:6, points:[[0,0],[0.5,0.8],[1,1]] }] },
+      payload = { ...validPayload(), trigger:"manual", userAction:"continue", suggestion:"finish_drawing", sourceInk, plugins:[builtInPluginDescriptor("general")] },
+      response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.attempts, 1);
+    assert.deepEqual(body.commands, [command]);
+    const request = JSON.parse(upstream.requests[0]), system = request.messages[0].content,
+      input = JSON.parse(request.messages[1].content.find(part => part.type === "text").text);
+    assert.match(system, /Prefer native draw for static drawings and for completing existing freehand ink/);
+    assert.match(system, /align only the new marks with the selected source in place/);
+    assert.doesNotMatch(system, /10 or fewer|counts as n-1 segments|mandatory and always enabled/);
+    assert.match(input.actionMeaning, /in the same hand-drawn style/);
+    assert.match(input.actionMeaning, /Do not create a separate illustration or replace the drawing with HTML/);
+    assert.match(input.actionMeaning, /without moving, erasing or redrawing existing strokes/);
+    assert.match(input.actionMeaning, /missing repeated parts/);
+    assert.deepEqual(input.sourceInk,sourceInk,'source world coordinates reach the actual provider without image scaling');
+    for (const invalid of [
+      { ...payload, suggestion:null },
+      { ...payload, sourceInk:{ ...sourceInk, instruction:"Do another task" } },
+      { ...payload, sourceInk:{ ...sourceInk, strokes:[{ width:6, points:[[0,0],[2,2]] }] } },
+      { ...payload, sourceInk:{ ...sourceInk, strokes:Array(33).fill(sourceInk.strokes[0]) } },
+      { ...payload, selectionContext:{ box:payload.sourceRect, path:[[0,0],[1,0],[1,1],[0,1]], closed:true } },
+    ]) {
+      const rejected=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(invalid)});
+      assert.equal(rejected.status,400);
+    }
+    assert.equal(upstream.requests.length,1,'invalid geometry never reaches the provider');
+    const fallback=await fetch(`${origin}/api/ai/command`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,sourceInk:null})});
+    assert.equal(fallback.status,200,'raster-only drawings remain supported');
+    const general = input.enabledPlugins.find(plugin => plugin.id === "general");
+    assert.ok(general);
+    assert.doesNotMatch(general.document, /10 or fewer/);
+    assert.match(general.document, /More than 10 marks or many curve points does not require HTML/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("Delete suggestion reaches Canvas AI as scoped crossed-content erasure", { timeout:20000 }, async () => {
+  const command = { tool:"erase", mode:"rect", x:1000, y:1000, w:140, h:50 },
+    upstream = await startApiServer(JSON.stringify({ intent:"erase", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ ...validPayload(), trigger:"manual", userAction:"answer", suggestion:"delete" }) }),
+      result = await response.json();
+    assert.equal(response.status, 200); assert.deepEqual(result.commands, [command]);
+    const request = JSON.parse(upstream.requests[0]), input = JSON.parse(request.messages[1].content.find(part => part.type === "text").text);
+    assert.match(input.actionMeaning, /Delete crossed-out content/);
+    assert.match(input.actionMeaning, /preserving every neighboring word, line and object/);
+    assert.match(input.actionMeaning, /patch only the crossed-out content inside that existing widget/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("3D illustration accepts compact scene input without model-authored HTML", { timeout: 20000 }, async () => {
+  const command = { tool:"html_widget", pluginId:"general", x:1000, y:1000, w:960, h:540,
+    title:"Cube", sourceFormat:"penecho-scene+json",
+    scene:{ engine:"3d", shapes:[{ id:"cube", type:"box", width:100, height:100, depth:100, color:"blue" }] } },
+    upstream = await startApiServer(JSON.stringify({ intent:"plot", commands:[command] })),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), trigger:"manual", userAction:"plot", plugins:[builtInPluginDescriptor("general")] },
+      response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+      body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.attempts, 1);
+    assert.equal(body.commands[0]?.sourceFormat, "penecho-scene+json");
+    assert.equal(JSON.parse(body.commands[0].copyText).engine, "3d");
+    assert.match(body.commands[0].html, /data-penecho-scene/);
+    const request = JSON.parse(upstream.requests[0]);
+    assert.match(request.messages[0].content, /For 3D illustrations, choose engine:"3d" and send shapes, not renderer code/);
+    assert.match(request.messages[0].content, /omit html and copyText/);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("automatic physics scenes render despite a missing or mistyped format label", { timeout:20000 }, async () => {
+  const command = { tool:"html_widget", pluginId:"general", x:8400, y:9330, w:1200, h:680,
+    title:"Falling ball", refreshSeconds:0,
+    scene:{ engine:"physics", gravity:[0,1], walls:"floor", duration:6, bodies:[
+      { id:"ball", shape:"circle", x:480, y:60, r:26, restitution:0.72, friction:0.05, fill:"orange", label:"Ball" },
+      { id:"ground", shape:"segment", x:100, y:500, to:[860,500], static:true },
+    ], labels:[{ text:"Free fall and bounce", x:480, y:40 }] } },
+    formats = ["penecho-scene+", undefined],
+    upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({ intent:"answer", message:"Simulation created.", commands:[{ ...command, sourceFormat:formats[index] }] }) }) }),
+    { child, origin } = await startServer(apiServerEnv(upstream.origin));
+  try {
+    const payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general")] };
+    for (const sourceFormat of formats) {
+      const response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+        body = await response.json();
+      assert.equal(response.status,200);
+      assert.equal(body.attempts,1,`format ${sourceFormat} should not require another model call`);
+      assert.equal(body.commands.length,1);
+      const widget = body.commands[0], scene = JSON.parse(widget.copyText);
+      assert.equal(widget.sourceFormat,"penecho-scene+json");
+      assert.match(widget.html,/data-penecho-scene-engine="physics"/);
+      assert.equal(scene.bodies[0].restitution,0.72);
+      assert.equal(scene.bodies[1].x2,860);
+      assert.deepEqual([widget.x,widget.y],[8400,9330]);
+    }
+    assert.equal(upstream.requests.length,2);
+  } finally {
+    await stopServer(child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
+test("automatic invalid scenes retry once and never report empty output as success", { timeout:20000 }, async () => {
+  const invalid = { tool:"html_widget", pluginId:"general", sourceFormat:"penecho-scene+",
+    scene:{ engine:"physics", bodies:[{ id:"ball", shape:"unsupported" }] } },
+    corrected = { ...invalid, scene:{ engine:"physics", bodies:[{ id:"ball", shape:"circle", x:100, y:50, r:20 }] } };
+  for (const retryCommands of [[corrected], [invalid], []]) {
+    const upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({ intent:"answer", message:"Simulation created.", commands:index === 0 ? [invalid] : retryCommands }) }) }),
+      { child, origin } = await startServer(apiServerEnv(upstream.origin));
+    try {
+      const payload = { ...validPayload(), plugins:[builtInPluginDescriptor("general")] },
+        response = await fetch(`${origin}/api/ai/command`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }),
+        body = await response.json();
+      assert.equal(upstream.requests.length,2);
+      assert.match(upstream.requests[1],/Your scene failed PenEcho validation/);
+      if (retryCommands[0] === corrected) {
+        assert.equal(response.status,200,JSON.stringify(body));
+        assert.equal(body.attempts,2);
+        assert.equal(body.commands.length,1);
+        assert.match(body.commands[0].html,/data-penecho-scene-engine="physics"/);
+      } else {
+        assert.equal(response.status,502);
+        assert.match(body.error,/scene that could not be rendered after retry/);
+        assert.equal(body.message,undefined);
+        assert.equal(body.commands,undefined);
+      }
+    } finally {
+      await stopServer(child);
+      await new Promise(resolve => upstream.server.close(resolve));
+    }
+  }
+});
+
 test("API mode retries an invalid native draw without restoring legacy animation", { timeout: 20000 }, async () => {
   const invalid=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["circle","line"],items:[[0,0,100,200],[0,0,200]]}]}),
     corrected=JSON.stringify({intent:"continue",observedText:"draw a dog",commands:[{tool:"draw",origin:[1000,1000],types:["ellipse","circle"],items:[[0,0,100,200],[0,0,20]]}]}),
@@ -2867,7 +3257,8 @@ test("API mode retries an invalid native draw without restoring legacy animation
     assert.deepEqual(body.commands[0]?.types,["ellipse","circle"]);
     const retryRequest=JSON.parse(upstream.requests[1]),retryText=retryRequest.messages[1].content.find(part=>part.type==="text")?.text||"";
     assert.match(retryText,/previous response contained a draw command/);
-    assert.match(retryText,/10 or fewer basic primitives or line segments/);
+    assert.match(retryText,/Keep the native draw route for static drawings and Finish drawing/);
+    assert.doesNotMatch(retryText,/10 or fewer|use General HTML SVG instead/);
     assert.doesNotMatch(retryText,/animate_scene/);
   } finally {
     await stopServer(child);
@@ -3168,17 +3559,20 @@ test("debug persistence redacts recognized and generated text", { timeout: 20000
   }
 });
 
-test("static page keeps strict styles while allowing the pinned MathJax CDN", () => {
+test("static page keeps strict styles while serving pinned MathJax locally", () => {
   const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "public", "style.css"), "utf8"), app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"), pageScale=fs.readFileSync(path.join(ROOT,"public","page-scale.js"),"utf8"), config=fs.readFileSync(path.join(ROOT,"public","mathjax-config.js"),"utf8"), server=fs.readFileSync(path.join(ROOT,"src","server","main.js"),"utf8"), elementStyleWrites=[...app.matchAll(/([A-Za-z_$][\w$?.]*)\.style\.(?:setProperty|removeProperty|[A-Za-z_$][\w$]*\s*=)/g)].filter(([,owner])=>!owner.endsWith(".styleRule")).map(([write])=>write);
   assert.doesNotMatch(html, /\sstyle=/i);
   assert.match(css, /\.color-blue\s*\{/);
   // CSP permits individual CSSOM property writes, but blocks inline style text:
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src-attr
   assert.equal(elementStyleWrites.some(write=>/\.style\.cssText\s*=/.test(write)),false);
-  assert.doesNotMatch(app, /\.style\s*=/);
+  // Note-card source records use a data field named style, not a DOM style.
+  const styleAssignments = [...app.matchAll(/([A-Za-z_$][\w$?.]*)\.style\s*=(?!=)/g)];
+  assert.deepEqual(styleAssignments.map(([, owner]) => owner).filter(owner => !["value", "note"].includes(owner)), []);
+  assert.match(app, /noteCardUpdate\(widget, value => \{ value\.style = value\.style === "card" \? "note" : "card"/);
   assert.doesNotMatch(app, /setAttribute\(\s*["']style["']/);
   assert.doesNotMatch(pageScale,/\.style\.|setAttribute\(\s*["']style["']/);
-  assert.match(html, /https:\/\/cdn\.jsdelivr\.net\/npm\/mathjax@3\.2\.2\/es5\/tex-svg\.js/);
+  assert.match(html, /src="vendor\/mathjax-3\.2\.2\/es5\/tex-svg\.js"/);
   assert.match(html, /integrity="sha384-KKWa9jJ1MZvssLeOoXG6FiOAZfAgmzsIIfw8BXwI9\+kYm0lPCbC6yTQPBC00F1\/L"/);
   assert.match(html, /crossorigin="anonymous"/);
   assert.match(config, /fontCache:\s*"none"/);

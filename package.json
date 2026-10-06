@@ -1,9 +1,9 @@
 {
   "name": "penecho",
-  "version": "1.3.5",
+  "version": "1.4.0",
   "config": {
     "forge": "./forge.config.js",
-    "desktopVersion": "1.3.5"
+    "desktopVersion": "1.4.0"
   },
   "description": "Turn research, files, and canvas context into editable visual work with AI",
   "author": "PenEcho contributors",
@@ -37,6 +37,11 @@
     "public/access.css",
     "public/access.js",
     "public/cloud-connect.css",
+    "public/remote-canvas.css",
+    "public/remote-canvas.js",
+    "public/viewer.css",
+    "public/viewer.js",
+    "public/viewer-fetch.js",
     "public/cloud-mcp.js",
     "public/cloud-mcp.css",
     "public/mcp-cloud-transport.js",
@@ -57,6 +62,11 @@
     "public/animation.js",
     "public/plugins.js",
     "public/summon.js",
+    "public/smart-suggest.js",
+    "public/pen-intel.js",
+    "public/note-card.js",
+    "public/scene-spec.js",
+    "public/scene-runtime.js",
     "public/widget-host.html",
     "public/widget-host.js",
     "public/visual-explainer-runtime.js",
@@ -93,7 +103,15 @@
     "docs/sequence-local-renderer.md",
     "docs/architecture-local-renderer.md",
     "scripts/build-workflow.js",
-    "docs/workflow-local-renderer.md"
+    "docs/workflow-local-renderer.md",
+    "scripts/build-ink-lab.cjs",
+    "scripts/ink-lab-preview.cjs",
+    "docs/ink-lab.md",
+    "public/living-ink-model.js",
+    "public/living-ink.js",
+    "public/vendor/ink-lab-vendor.js",
+    "public/vendor/ink-lab-LICENSE.txt",
+    "scripts/build-canvas-command-prompt.cjs"
   ],
   "repository": {
     "type": "git",
@@ -106,16 +124,17 @@
   "scripts": {
     "start": "node cli.js",
     "dev": "node server.js",
-    "build:client": "npm run build:playground && node scripts/build-client.js",
+    "build:client": "node scripts/build-canvas-command-prompt.cjs && npm run build:playground && npm run build:ink-lab && node scripts/build-client.js",
     "build:visual-explainer-vendor": "node scripts/build-visual-explainer-vendor.js",
     "build:harness-backports": "node scripts/build-harness-backports.cjs",
     "check:harness-backports": "node scripts/build-harness-backports.cjs --check",
-    "check:client": "node scripts/build-client.js --check",
+    "check:client": "node scripts/build-canvas-command-prompt.cjs --check && node scripts/build-client.js --check",
     "check:visual-explainer-vendor": "node scripts/build-visual-explainer-vendor.js --check",
     "preinstall": "node src/cli/node-version.js",
     "prepack": "npm run build:client && npm run build:visual-explainer-vendor && npm run build:architecture && npm run build:sequence && npm run build:workflow",
-    "check": "npm run check:workflow && npm run check:sequence && npm run check:architecture && npm run check:harness-backports && npm run check:playground && npm run check:client && npm run check:visual-explainer-vendor && node --check cli.js && node --check server.js && node --check scripts/build-client.js && node --check scripts/build-visual-explainer-vendor.js && node --check src/cli/main.js && node --check src/cli/node-version.js && node --check src/cli/configure-ui.js && node --check src/cli/update.js && node --check src/server/main.js && node --check src/server/model-evaluation.js && node --check src/server/public-fetch.js && node --check src/server/cloud-connector.js && node --check src/server/activity-timeout.js && node --check src/server/api-config.js && node --check src/server/api-stream.js && node --check src/server/widget-patch.js && node --check src/server/typeset.js && node --check src/server/canvas-agent/http.js && node --check src/server/canvas-agent/request-trace.js && node --check src/server/canvas-agent/protocol.mjs && node --check src/server/canvas-agent/decision-admission.mjs && node --check src/server/canvas-agent/cli-adapter.mjs && node --check src/server/canvas-agent/codex-native-host.mjs && node --check src/server/canvas-agent/runtime.mjs && node --check src/providers/reasoning-effort.js && node --check src/providers/kimi-cli.js && node --check src/providers/kimi-acp.js && node --check src/providers/codex-cli.js && node --check src/providers/claude-cli.js && node --check tools/electron/run-forge.js && node --check tools/mobile/build-mobile.js && node --check desktop/main.js && node --check desktop/canvas-preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/settings-contract.js && node --check public/access.js && node --check public/cloud-connect.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/summon.js && node --check public/page-scale.js && node --check public/widget-host.js && node --check public/visual-explainer-runtime.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
+    "check": "npm run check:workflow && npm run check:sequence && npm run check:architecture && npm run check:harness-backports && npm run check:playground && npm run check:ink-lab && npm run check:client && npm run check:visual-explainer-vendor && node --check cli.js && node --check server.js && node --check scripts/build-client.js && node --check scripts/build-visual-explainer-vendor.js && node --check src/cli/main.js && node --check src/cli/node-version.js && node --check src/cli/configure-ui.js && node --check src/cli/update.js && node --check src/server/main.js && node --check src/server/model-evaluation.js && node --check src/server/public-fetch.js && node --check src/server/cloud-connector.js && node --check src/server/activity-timeout.js && node --check src/server/api-config.js && node --check src/server/api-stream.js && node --check src/server/widget-patch.js && node --check src/server/typeset.js && node --check src/server/canvas-agent/http.js && node --check src/server/canvas-agent/request-trace.js && node --check src/server/canvas-agent/protocol.mjs && node --check src/server/canvas-agent/decision-admission.mjs && node --check src/server/canvas-agent/cli-adapter.mjs && node --check src/server/canvas-agent/codex-native-host.mjs && node --check src/server/canvas-agent/runtime.mjs && node --check src/providers/reasoning-effort.js && node --check src/providers/kimi-cli.js && node --check src/providers/kimi-acp.js && node --check src/providers/codex-cli.js && node --check src/providers/claude-cli.js && node --check tools/electron/run-forge.js && node --check tools/mobile/build-mobile.js && node --check desktop/main.js && node --check desktop/canvas-preload.js && node --check desktop/cli-installer.js && node --check desktop/update-manager.js && node --check desktop/settings-contract.js && node --check public/access.js && node --check public/cloud-connect.js && node --check public/draw.js && node --check public/selection.js && node --check public/tour.js && node --check public/mixed-text.js && node --check public/animation.js && node --check public/plugins.js && node --check public/summon.js && node --check public/smart-suggest.js && node --check public/pen-intel.js && node --check public/note-card.js && node --check public/scene-spec.js && node --check public/scene-runtime.js && node --check src/server/jevision.js && node --check scripts/jevision-probe.js && node --check public/page-scale.js && node --check public/widget-host.js && node --check public/visual-explainer-runtime.js && node --check public/vendor/penecho-dom-renderer.js && node --check public/app.js && node --test",
     "test": "node --test",
+    "jevision:probe": "node scripts/jevision-probe.js",
     "icons": "node scripts/generate-icons.js",
     "desktop": "node tools/electron/run-forge.js start",
     "predesktop": "npm run icons",
@@ -135,7 +154,10 @@
     "build:workflow": "node scripts/build-workflow.js",
     "check:workflow": "node scripts/build-workflow.js --check",
     "build:playground": "node scripts/build-playground.cjs",
-    "check:playground": "node scripts/build-playground.cjs --check"
+    "check:playground": "node scripts/build-playground.cjs --check",
+    "build:ink-lab": "node scripts/build-ink-lab.cjs",
+    "check:ink-lab": "node scripts/build-ink-lab.cjs --check",
+    "preview:ink-lab": "node scripts/ink-lab-preview.cjs"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -189,15 +211,22 @@
     "jszip": "3.10.1",
     "mammoth": "1.12.1",
     "manim-web": "0.3.24",
+    "nerdamer": "1.1.13",
     "pdf-parse": "2.4.5",
+    "pptxgenjs": "4.0.0",
     "read-excel-file": "9.3.10",
     "sharp": "0.35.4",
-    "ws": "^8.21.3",
-    "three": "0.184.0"
+    "three": "0.184.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "elkjs": "0.12.0",
     "esbuild": "0.25.12",
     "png2icons": "2.0.1"
+  },
+  "overrides": {
+    "pptxgenjs": {
+      "image-size": "2.0.4"
+    }
   }
 }

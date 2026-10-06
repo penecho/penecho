@@ -12,7 +12,7 @@ test("release note translation keys resolve to prose in English and Chinese", ()
   const app = read("public/app.js");
   const section = html.slice(html.indexOf('id="changelogLayer"'), html.indexOf('<script src="remote-canvas.js"'));
   const keys = [...section.matchAll(/data-i18n="([^"]+)"/g)].map(match => match[1]);
-  assert.ok(keys.includes("changelogCloudMcp"));
+  assert.ok(keys.includes("changelogNotesCards"));
   const en = Object.fromEntries([...app.matchAll(/^\s+(changelog\w+): (".*"),?$/gm)].map(match => [match[1], JSON.parse(match[2])]));
   const context = { window: {} };
   vm.runInNewContext(read("public/locales/zh.js"), context);
@@ -25,6 +25,6 @@ test("release note translation keys resolve to prose in English and Chinese", ()
       assert.ok(I18N[language][key], `${language} translation missing for ${key}`);
       assert.notEqual(t(key), key, `${language} must not show a translation key`);
     }
-    assert.match(t("changelogCloudMcp"), /Cloud MCP/);
+    assert.match(t("changelogNotesCards"), /notes|笔记/);
   }
 });

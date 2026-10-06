@@ -87,7 +87,7 @@ function harness(options = {}) {
     widgetRecord: value => ({ ...value }), widgetUsesHtmlCopySource: () => false,
     renderedTextBoxRecord: async value => ({ id: value.id || `text-box-${state.nextTextBoxId++}`, text: value.text, fontSize:value.fontSize, maxWidth:value.maxWidth, x: value.x || 0, y: value.y || 0, w: value.w || value.maxWidth || 240, h: value.h || 48 }),
     canvasAgentHash: async value => crypto.createHash("sha256").update(String(value)).digest("hex"),
-    canvasAgentAssertToolExecution: () => {}, canvasAgentMutationIdle: () => {},
+    canvasAgentAssertToolExecution: () => {}, canvasAgentMutationIdle: () => {}, canvasAgentBeginMutation:()=>()=>{},
     canvasAgentObject: id => {
       const item = state.widgets.find(entry => entry.id === id) || state.textBoxes.find(entry => entry.id === id) || state.images.find(entry => entry.id === id);
       return item ? { kind: state.widgets.includes(item) ? "widget" : state.textBoxes.includes(item) ? "text" : "image", item } : null;
@@ -107,7 +107,7 @@ function harness(options = {}) {
     canvasAgentFrameRegion: () => { control.frames += 1; }, canvasAgentViewFacts: () => ({}),
     canvasAgentSelectionIds: () => [], canvasAgentSyncState: () => {}, canvasAgentSyncAutomaticAIStatus: () => {},
     canvasAgentCanvasDidChange: () => {}, canvasAgentCapture: async () => { throw Error("capture was not expected"); },
-    canvasAgentInput: { value: "" }, canvasAgent: { attachments: [], references: [], inkPresent: false }, canvasAgentResizeInput: () => {},
+    canvasAgentInput: { value: "" }, canvasAgent: { attachments: [], references: [], inkPresent: false }, canvasAgentResizeInput: () => {}, canvasAgentSyncPromptSuggestions: () => {},
     visibleInkBounds: () => null, viewportRect: () => ({ x: 0, y: 0, w: 1200, h: 800 }),
     intersection: (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y,
     unionDirtyBounds: (a, b) => !a ? { ...b } : a, tiles: new Map(),
@@ -138,6 +138,51 @@ function harness(options = {}) {
   context.api.canvasDocuments.db = memoryDb(records, control);
   return { ...context.api, context, control, records, state, listeners };
 }
+
+function rasterTile(rectangles) {
+  const pixels=new Uint8ClampedArray(512*512*4);
+  for(const rect of rectangles)for(let y=rect.y;y<rect.y+rect.h;y++)for(let x=rect.x;x<rect.x+rect.w;x++)pixels[(y*512+x)*4+3]=255;
+  return {width:512,height:512,getContext:()=>({getImageData:()=>({data:pixels})}),pixels};
+}
+
+test('active raster collisions inspect pixels, reuse bounded masks and invalidate after ink/history/document changes',()=>{
+ const h=harness(),doc=h.canvasDocumentsCurrent(),t=rasterTile([{x:20,y:20,w:20,h:20},{x:400,y:400,w:20,h:20}]);
+ h.context.tiles.set('0,0',t);
+ const query=box=>h.context.canvasDocumentsCollisions(doc,box);
+ assert.equal(query({x:100,y:100,w:200,h:200}).length,0,'same-tile blank between separate marks stays free');
+ assert.equal(query({x:0,y:0,w:80,h:80}).length,1);
+ t.pixels.fill(0);h.state.inkBounds.delete('0,0');h.state.userRevision++;
+ assert.equal(query({x:0,y:0,w:80,h:80}).length,0,'erase invalidates cached pixels');
+ t.pixels[(25*512+25)*4+3]=255;h.state.history.push({});
+ assert.equal(query({x:0,y:0,w:80,h:80}).length,1,'history change invalidates cached pixels');
+ const restored=rasterTile([{x:50,y:50,w:10,h:10}]);h.context.tiles.set('0,0',restored);
+ assert.equal(query({x:20,y:20,w:20,h:20}).length,0,'Undo/redo tile replacement invalidates cached pixels');
+ assert.equal(query({x:45,y:45,w:20,h:20}).length,1);
+ restored.pixels.fill(0);h.canvasDocuments.epoch++;
+ assert.equal(query({x:45,y:45,w:20,h:20}).length,0,'document epoch invalidates masks');
+ for(let x=0;x<25;x++){h.context.tiles.set(`${x},0`,rasterTile([{x:2,y:2,w:1,h:1}]));h.context.canvasDocumentsInkCollision(doc,`${x},0`,{x:x*512,y:0,w:512,h:512});}
+ assert.equal(vm.runInContext('canvasDocumentsInkMasks.size',h.context),16);
+ const parked={id:'parked',revision:1,stored:{item:{widgets:[],textBoxes:[],images:[]},tileEntries:[{k:'0,0'}]}};
+ assert.equal(h.context.canvasDocumentsCollisions(parked,{x:100,y:100,w:20,h:20}).length,1,'parked documents retain conservative occupancy');
+});
+
+test('shared create_text retry stays below its trusted source with scattered ink and occupied neighbors',async()=>{
+ const h=harness(),doc=h.canvasDocumentsCurrent(),source={box:{x:100,y:100,w:80,h:35},viewport:{x:0,y:0,w:1200,h:800},scale:1},execution={assistContext:source};
+ h.context.tiles.set('0,0',rasterTile([{x:100,y:100,w:80,h:35},{x:400,y:20,w:40,h:20}]));
+ await assert.rejects(h.context.canvasDocumentsEdit(doc,{action:'create_text',text:'Hi!',region:{x:100,y:100}},execution),{code:'LAYOUT_CONFLICT'});
+ const reply=await h.context.canvasDocumentsEdit(doc,{action:'create_text',text:'Hi!'},execution);
+ assert.equal(reply.box.x,100);assert.equal(reply.box.y,167);assert.equal(reply.sourcePlacement.relation,'below');
+ assert.equal(reply.sourcePlacement.inViewport,true);assert.deepEqual(Object.keys(reply.sourcePlacement.output),['x','y','w','h']);
+ const next=await h.context.canvasDocumentsEdit(doc,{action:'create_text',text:'How can I help?'},execution);
+ assert.ok(next.box.y>=reply.box.y+reply.box.h+32);assert.equal(next.sourcePlacement.relation,'below');
+ h.context.canvasDocumentsValidateGeometry(doc,next.box,next.objectId);
+ const explicit=await h.context.canvasDocumentsEdit(doc,{action:'create_text',text:'5',region:{x:600,y:300}},execution);
+ assert.equal(explicit.box.x,600);assert.equal(explicit.box.y,300,'explicit in-place coordinates are preserved');
+ const ordinary=h.context.canvasDocumentsPlace(doc,400,48).placement,external=await h.context.canvasDocumentsEdit(doc,{action:'create_text',text:'Independent work'},{});
+ assert.equal(external.sourcePlacement,null);assert.equal(external.box.x,ordinary.x);assert.equal(external.box.y,ordinary.y,'later unrelated MCP work uses ordinary placement');
+ const relative=h.context.mcpArrange(100,60,{artifacts:new Map([['given',{objectId:'other'}]])},{relativeTo:'given',relation:'below'},{x:0,y:0,w:1200,h:800,scale:1},()=>({x:800,y:500,w:100,h:60}),()=>[],source);
+ assert.equal(relative.placement.x,800);assert.equal(relative.placement.y,592,'explicit artifact-relative placement takes precedence');
+});
 
 async function createHidden(h, requestId, title) {
   return h.canvasDocumentsExecute("mcp_open_canvas", { instanceId: "instance", canvasId: "bridge", create: true, title, requestId, show: false }, {});
@@ -277,6 +322,26 @@ test("New and Load retain the dirty document and Undo history without opening th
     assert.equal(h.state.userRevision,4);assert.equal(h.state.snapshotSavedRevision,2);
     assert.equal(h.context.canvasHasUnsavedChanges(),true);
   }
+});
+
+test("workspace switching restores the target draft and synchronizes the Agent composer", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const previous = h.canvasDocumentsCurrent();
+  const opened = await createHidden(h, "suggestion-target", "Target");
+  const target = h.canvasDocuments.records.get(opened.documentId);
+  target.stored.item.widgets.push({ id: "widget-1", html: "<p>Target content</p>", x: 100, y: 100, w: 400, h: 200 });
+  h.context.canvasAgentInput.value = "Unsent previous Canvas draft";
+  const events = [];
+  h.context.canvasAgentSyncPromptSuggestions = () => events.push({ event: "sync", draft: h.context.canvasAgentInput.value, switching: h.canvasDocuments.switching });
+  await h.context.canvasDocumentsShow(target.id);
+  assert.deepEqual(events, [
+    { event: "sync", draft: "", switching: true },
+  ]);
+  assert.equal(h.canvasDocuments.switching, false);
+  assert.equal(h.state.widgets[0].html, "<p>Target content</p>");
+  assert.equal(previous.agentDraft, "Unsent previous Canvas draft");
+  assert.equal(h.records.get(previous.id).agentDraft, previous.agentDraft);
 });
 
 test("MCP finds only open workspace records, excludes closed provider copies, and filters documentId", async () => {
@@ -420,6 +485,20 @@ test("two documents route hidden sessions without changing or mounting the visib
   assert.equal(h.canvasDocuments.activeId, initial);
   assert.equal(h.control.mounts, 0);
   assert.equal(h.control.frames, 0);
+});
+test("background notes reach the independent backup before MCP acknowledges success", async () => {
+  const h=harness(),initial=h.canvasDocumentsCurrent().id,opened=await createHidden(h,"note-backup-create","Notes background");
+  await startHidden(h,opened.documentId,"note-backup-session");
+  const writes=[],NOTE=require('../public/note-card.js');
+  h.context.window.PENECHO_NOTE_CARD=NOTE;h.context.noteCategories=()=>NOTE.CATEGORIES;h.context.noteCardDocument=note=>NOTE.documentFor(note);
+  Object.assign(h.context,{noteCardWidget:item=>item.sourceFormat==="penecho-note-card+json",noteLibraryUpsertWidget:async(item,options)=>writes.push({item:structuredClone(item),options:structuredClone(options)}),noteLibraryPersist:async()=>writes.push({ack:true})});
+  const source=NOTE.formatSource({title:"Independent source",blocks:[{type:"markdown",text:"Preserve this"}]}),args={sessionId:"note-backup-session",artifactId:"note",title:"Independent source",html:NOTE.documentFor(NOTE.parseSource(source)),sourceFormat:"penecho-note-card+json",copyText:source};
+  const shown=await h.canvasDocumentsExecute("mcp_present_widget",args,{});
+  assert.equal(writes[0].item.copyText,source);assert.equal(writes[0].options.document.documentId,opened.documentId);assert.equal(writes[1].ack,true);
+  assert.equal(h.canvasDocuments.activeId,initial);assert.equal(h.control.mounts,0);
+  writes.length=0;
+  const next=source.replace("Independent source","Updated source");await h.canvasDocumentsExecute("mcp_present_widget",{...args,copyText:next,html:NOTE.documentFor(NOTE.parseSource(next))},{});
+  assert.equal(writes[0].item.id,shown.objectId);assert.equal(writes[0].options.sourceChanged,true);assert.equal(writes[1].ack,true);
 });
 
 test("hidden writes after visible additions allocate fresh identities and persist the exact acknowledged source", async () => {
@@ -958,7 +1037,7 @@ test("explicit current attaches populated Canvas, preserves title, and stays pin
 
 test("draw_ink validates before mutation, preserves brush selection, and seals one undo edit", async () => {
   const calls=[],state={userRevision:4,inkColor:"#ff0000",pen:19},doc={revision:4},active={value:true};
-  const context=vm.createContext({state,SIZE:20000,canvasDocumentsIsActive:()=>active.value,canvasAgentMutationIdle:()=>{},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),canvasAgentAssertToolExecution:()=>{},save:()=>calls.push("save-before"),stroke:(...args)=>calls.push(args),dot:(...args)=>calls.push(args),canvasDocumentsEndEdit:(target,kind)=>{calls.push(kind);target.revision=++state.userRevision;}});
+  const context=vm.createContext({state,SIZE:20000,canvasDocumentsIsActive:()=>active.value,canvasAgentMutationIdle:()=>{},canvasAgentBeginMutation:()=>()=>{},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),canvasAgentAssertToolExecution:()=>{},save:()=>calls.push("save-before"),stroke:(...args)=>calls.push(args),dot:(...args)=>calls.push(args),canvasDocumentsEndEdit:(target,kind)=>{calls.push(kind);target.revision=++state.userRevision;}});
   vm.runInContext(`async ${clientFunction("canvas-documents.js","canvasDocumentsEdit")};globalThis.edit=canvasDocumentsEdit;`,context);
   const args={action:"draw_ink",baseRevision:4,strokes:[{color:"#123abc",width:8,points:[{x:10,y:10},{x:30,y:30}]}]};
   await assert.rejects(context.edit(doc,{...args,baseRevision:3},{}),{code:"REVISION_CONFLICT"});
@@ -975,8 +1054,8 @@ test("draw_ink canonical raster tiles round trip through real save undo and redo
   const state={userRevision:0,historyBefore:new Map(),history:[],future:[],inkBounds:new Map()},tiles=new Map(),doc={revision:0};
   const canvas=()=>({marks:[],getContext(){const owner=this;return {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},stroke(){owner.marks.push({color:this.strokeStyle,width:this.lineWidth});}};}});
   const cloneCanvas=value=>{if(!value)return null;const next=canvas();next.marks=structuredClone(value.marks);return next;};
-  const context=vm.createContext({state,tiles,SIZE:20000,TILE:512,MAX_HISTORY:50,window:{},key:(x,y)=>`${x},${y}`,cloneCanvas,tile:(x,y,create=true)=>{const key=`${x},${y}`;if(create&&!tiles.has(key))tiles.set(key,canvas());return tiles.get(key);},valid:p=>p.x>=0&&p.y>=0&&p.x<=20000&&p.y<=20000,invalidateSharpOverlays(){},canvasDocumentsIsActive:()=>true,canvasAgentMutationIdle(){},canvasAgentAssertToolExecution(){},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),invalidateRecognition(){},restorePendingHistoryState(){},clearSharpOverlays(){},requestAnimationLayerRender(){},updateHistoryButtons(){},render(){}});
-  for(const name of ["recordBefore","unionLocalBounds","extendInkBounds","lineIntersectsRect","stroke","dot","save","applyHistory","undo","redo"])vm.runInContext(clientFunction("persistence.js",name),context);
+  const context=vm.createContext({state,tiles,SIZE:20000,TILE:512,MAX_HISTORY:50,window:{},key:(x,y)=>`${x},${y}`,cloneCanvas,tile:(x,y,create=true)=>{const key=`${x},${y}`;if(create&&!tiles.has(key))tiles.set(key,canvas());return tiles.get(key);},valid:p=>p.x>=0&&p.y>=0&&p.x<=20000&&p.y<=20000,invalidateSharpOverlays(){},canvasDocumentsIsActive:()=>true,canvasAgentMutationIdle(){},canvasAgentBeginMutation:()=>()=>{},canvasAgentAssertToolExecution(){},canvasDocumentsError:(code,message)=>Object.assign(Error(message),{code}),invalidateRecognition(){},restorePendingHistoryState(){},clearSharpOverlays(){},requestAnimationLayerRender(){},updateHistoryButtons(){},render(){}});
+  for(const name of ["recordBefore","unionLocalBounds","extendInkBounds","lineIntersectsRect","stroke","dot","hasPendingHistoryChanges","save","applyHistory","undo","redo"])vm.runInContext(clientFunction("persistence.js",name),context);
   vm.runInContext(`function canvasDocumentsEndEdit(doc){state.userRevision++;save();doc.revision=state.userRevision;} async ${clientFunction("canvas-documents.js","canvasDocumentsEdit")}`,context);
   await context.canvasDocumentsEdit(doc,{action:"draw_ink",baseRevision:0,strokes:[{color:"#42b983",width:5,points:[{x:100,y:100},{x:200,y:200}]},{color:"#abc123",width:9,points:[{x:110,y:100}]}]},{});
   assert.equal(state.history.length,1);assert.equal(tiles.get("0,0").marks.length,2);
@@ -1066,6 +1145,54 @@ test("shared document tools preserve retired plugin content without allowing sou
     h.mcpRuntime.sessions.get(id).artifacts.set("saved-artifact",{objectId:"saved"});
     await assert.rejects(run("mcp_present_widget",{artifactId:"saved-artifact",title:"Overwrite",html:"<p>Replacement</p>"}),{code:"READ_ONLY_FILE"});
     assert.equal(h.state.widgets[0].source||h.state.widgets[0].html,widget.source||widget.html);
+  }
+});
+
+test("derived Widget actions read the source, prevent all source writes and present a separate nearby object", async () => {
+  const h=harness(),id=`agent-${"e".repeat(64)}`;await h.canvasDocumentsReady();
+  const widget={id:"original",widgetType:"html_widget",pluginId:"general",x:100,y:100,w:500,h:350,html:"<main>Original subject</main>"};h.state.widgets.push(widget);
+  const before=JSON.stringify(widget),owned={box:{x:100,y:100,w:500,h:350},viewport:{x:0,y:0,w:1400,h:1100},scale:1,owner:{inputTarget:{widget,variant:{guidance:["scene"]}}}},execution={assistContext:owned};
+  h.context.assistAgentToolContextCurrent=context=>context===owned;
+  const run=(operation,args={})=>h.canvasAgentDocumentOperation({operation,arguments:{sessionId:id,...args},bindingKey:id},execution);
+  const listing=await run("mcp_list_files");
+  for(const entry of listing.entries.filter(item=>item.objectId===widget.id)) {
+    assert.equal(entry.writable,false);
+    const source=await run("mcp_read_file",{path:entry.path});assert.ok(source.content);
+    const next=entry.path.endsWith("widget.html")?"<p>Changed</p>":JSON.stringify(entry.path.endsWith("geometry.json")?{x:700,y:100,w:500,h:350}:{title:"Changed"});
+    await assert.rejects(run("mcp_patch_file",{path:entry.path,expectedHash:source.contentHash,patch:patchText(entry.path,source.content,next),requestId:entry.path}),{code:"READ_ONLY_FILE"});
+  }
+  h.mcpRuntime.sessions.get(id).artifacts.set("source-alias",{objectId:widget.id});
+  await assert.rejects(run("mcp_present_widget",{artifactId:"source-alias",title:"Overwrite",html:"<p>New</p>"}),{code:"READ_ONLY_FILE"});
+  const created=await run("mcp_present_widget",{artifactId:"derived",title:"Animated subject",html:"<main>New animated subject</main>",width:500,height:350});
+  assert.equal(h.state.widgets.length,2);assert.notEqual(created.objectId,widget.id);
+  assert.equal(JSON.stringify(widget),before);assert.ok(["below","beside"].includes(created.sourcePlacement.relation));
+  assert.equal(created.sourcePlacement.inViewport,true);
+  assert.ok(!h.context.intersection(created.box,owned.box));
+  assert.equal((await run("mcp_list_files")).entries.find(item=>item.objectId===created.objectId&&item.path.endsWith("widget.html")).writable,true);
+});
+
+test("owned Widget Refine can patch only its existing Professional Diagram and cannot replace it through presentation", async () => {
+  for(const widgetType of ["diagram_source","html_widget"]) {
+    const h=harness(),id=`agent-${"d".repeat(64)}`;await h.canvasDocumentsReady();
+    const widget={id:"professional",widgetType,pluginId:"flowchart",sourceFormat:"dot",x:10,y:20,w:500,h:400,source:"digraph { A -> B }",html:"<p>Existing diagram</p>"};
+    const other={...widget,id:"other",x:1000};h.state.widgets.push(widget,other);
+    const owned={owner:{inputTarget:{widget,refinement:{}}}},execution={assistContext:owned};let current=true;
+    h.context.assistAgentToolContextCurrent=context=>current&&context===owned;
+    h.context.widgetEditContext=item=>({...item});h.context.canvasAgentWidgetSourceState=value=>value;
+    h.context.canvasAgentReplaceWidget=async ({objectId,command})=>{Object.assign(h.state.widgets.find(item=>item.id===objectId),command);return {revision:++h.state.userRevision};};
+    const run=(operation,args={})=>h.canvasAgentDocumentOperation({operation,arguments:{sessionId:id,...args},bindingKey:id},execution);
+    const listing=await run("mcp_list_files"),field=widgetType==="diagram_source"?"widget.source":"widget.html";
+    const entry=listing.entries.find(item=>item.objectId===widget.id&&item.path.endsWith(field));assert.equal(entry.writable,true);
+    assert.equal(listing.entries.find(item=>item.objectId===other.id&&item.path.endsWith(field)).writable,false);
+    const source=await run("mcp_read_file",{path:entry.path}),next=widgetType==="diagram_source"?"digraph { A -> C }":"<p>Updated diagram</p>";
+    const patched=await run("mcp_patch_file",{path:entry.path,expectedHash:source.contentHash,patch:patchText(entry.path,source.content,next),requestId:"refine-existing"});
+    assert.equal(patched.applied,true);assert.equal(widget[field==="widget.source"?"source":"html"],next);
+    assert.deepEqual([widget.id,widget.x,widget.y,widget.w,widget.h,widget.pluginId,widget.sourceFormat],["professional",10,20,500,400,"flowchart","dot"]);
+    h.mcpRuntime.sessions.get(id).artifacts.set("existing-artifact",{objectId:widget.id});
+    await assert.rejects(run("mcp_present_widget",{artifactId:"existing-artifact",title:"Overwrite",html:"<p>New</p>"}),{code:"READ_ONLY_FILE"});
+    current=false;
+    const fresh=await run("mcp_read_file",{path:entry.path});
+    await assert.rejects(run("mcp_patch_file",{path:entry.path,expectedHash:fresh.contentHash,patch:patchText(entry.path,fresh.content,source.content),requestId:"stale-refine"}),{code:"READ_ONLY_FILE"});
   }
 });
 
@@ -1198,6 +1325,9 @@ test("HTML patches retain canonical copy source above the independent source lim
   assert.equal(item.copyLabel,"Copy original");
   assert.equal(h.context.widgetRecord({...item,copyText:"x".repeat(16001)}),null);
   assert.ok(h.context.widgetRecord({...item,copyText:"x".repeat(16000)}));
+  const graph={...item,sourceFormat:"penecho-graph",copyText:"x".repeat(32000)};
+  assert.equal(h.context.widgetRecord(graph).copyText.length,32000,"complete multi-row graphs survive save/reopen above the ordinary copy limit");
+  assert.equal(h.context.widgetRecord({...graph,copyText:"x".repeat(40001)}),null,"graph copy data remains bounded");
 });
 
 test("closed conversation Canvas restores the same document and artifacts after browser restart", async()=>{
@@ -1364,14 +1494,16 @@ test('switching to a background Canvas installs attachments before Widget hydrat
   assert.equal(resolved[asset.source],assetTestImage);
 });
 
-test('image import rechecks active editing after asynchronous decode before changing the Canvas',async()=>{
+test('immutable image upload remains available during edits, while placement rechecks the gesture after decoding',async()=>{
   for(const operation of ['canvasDocumentsUploadImage','canvasDocumentsPlaceImage']) {
     const h=imageAssetHarness();await h.canvasDocumentsReady();const doc=h.canvasDocumentsCurrent();let busy=false,closed=0;
     h.context.canvasAgentMutationIdle=()=>{if(busy)throw Error('CANVAS_BUSY');};
     h.context.createImageBitmap=async()=>{busy=true;return {width:120,height:60,close(){closed++;}};};
     const revision=h.state.userRevision;
-    await assert.rejects(h.context[operation](doc,{name:'sample.png',source:assetTestImage},{}),/CANVAS_BUSY/);
-    assert.equal(h.state.userRevision,revision);assert.equal(h.state.images.length,0);assert.equal(h.state.currentSnapshotPreservedAssets.length,0);assert.equal(closed,1);
+    if(operation==='canvasDocumentsUploadImage'){
+      const result=await h.context[operation](doc,{name:'sample.png',source:assetTestImage},{});assert.ok(result.source);assert.equal(h.state.currentSnapshotPreservedAssets.length,1);
+    }else{await assert.rejects(h.context[operation](doc,{name:'sample.png',source:assetTestImage},{}),/CANVAS_BUSY/);assert.equal(h.state.userRevision,revision);assert.equal(h.state.currentSnapshotPreservedAssets.length,0);}
+    assert.equal(h.state.images.length,0);assert.equal(closed,1);
   }
 });
 
@@ -1925,4 +2057,197 @@ test('the same browser draft opens in two windows despite a held browser lock',a
  assert.equal(requests,0);
  assert.ok(first.canvasDocuments.activeId);
  assert.ok(second.canvasDocuments.activeId);
+});
+
+test("structured scenes retain editable JSON and geometry across patches and background persistence", async () => {
+  const SCENE=require('../public/scene-spec.js'),{validateToolArguments}=require('../src/server/mcp/schema.js');
+  const h=harness();h.context.window.PENECHO_SCENE=SCENE;
+  Object.assign(h.context,{diagramRuntime:()=>null,n:(v,min=0,max=32768)=>Number.isFinite(v)&&v>=min&&v<=max,MAX_WIDGET_HTML_LENGTH:800000,MAX_WIDGET_CONTENT_DIMENSION:32768,MAX_WIDGET_COPY_TEXT_LENGTH:800000,PRIVATE_WIDGET_FAVORITE_ID:/^[0-9a-f-]{36}$/i,newPrivateWidgetFavoriteId:()=>crypto.randomUUID()});
+  vm.runInContext(clientFunction('canvas-runtime.js','widgetRecord'),h.context);
+  const opened=await createHidden(h,'scene-doc','Scenes');await startHidden(h,opened.documentId,'scene-session');
+  const args=validateToolArguments('penecho_present_widget',{sessionId:'scene-session',artifactId:'scene',requestId:'scene-create',title:'Ball',scene:{engine:'motion',actors:[{id:'ball',type:'circle',x:100,y:100,r:20,fill:'blue'}],beats:[{steps:[{do:'move',target:'ball',to:[200,100]}]}]}});
+  const shown=await h.canvasDocumentsExecute('mcp_present_widget',args,{}),doc=h.canvasDocuments.records.get(opened.documentId),widget=doc.stored.item.widgets[0];
+  assert.equal(shown.sourcePath,`objects/${shown.objectId}/widget.source`);
+  assert.equal(widget.sourceFormat,SCENE.FORMAT);assert.equal(widget.copyText,args.copyText);
+  const geometry={x:widget.x,y:widget.y,w:widget.w,h:widget.h};
+  const listing=await h.canvasDocumentsExecute('mcp_list_files',{sessionId:'scene-session',path:`objects/${shown.objectId}`},{});
+  assert.equal(listing.entries.find(e=>e.path.endsWith('widget.html')).writable,false);
+  const after=args.copyText.replace('"blue"','"red"');
+  await h.canvasDocumentsExecute('mcp_patch_file',{sessionId:'scene-session',path:shown.sourcePath,expectedHash:shown.contentHash,requestId:'scene-edit',patch:patchText(shown.sourcePath,args.copyText,after)},{});
+  assert.equal(widget.copyText,after);assert.match(widget.html,/red/);assert.deepEqual({x:widget.x,y:widget.y,w:widget.w,h:widget.h},geometry);
+  const read=await h.canvasDocumentsExecute('mcp_read_file',{sessionId:'scene-session',path:shown.sourcePath},{});
+  await assert.rejects(h.canvasDocumentsExecute('mcp_patch_file',{sessionId:'scene-session',path:shown.sourcePath,expectedHash:read.contentHash,requestId:'scene-invalid',patch:patchText(shown.sourcePath,after,'{}')},{}),{code:'INVALID_WIDGET'});
+  assert.equal(widget.copyText,after);
+  const htmlPath=shown.sourcePath.replace('widget.source','widget.html'),html=await h.canvasDocumentsExecute('mcp_read_file',{sessionId:'scene-session',path:htmlPath},{});
+  await assert.rejects(h.canvasDocumentsExecute('mcp_patch_file',{sessionId:'scene-session',path:htmlPath,expectedHash:html.contentHash,requestId:'scene-html',patch:patchText(htmlPath,html.content,'<p>bad</p>')},{}),{code:'READ_ONLY_FILE'});
+  const stored=h.records.get(opened.documentId).stored.item.widgets[0];assert.equal(stored.copyText,after);assert.equal(stored.sourceFormat,SCENE.FORMAT);
+});
+
+function recoveryTitleRename(h, location) {
+ const calls=[];
+ Object.assign(h.context,{snapshotSaveInProgress:false,snapshotItems:[],snapshotItemsLocation:location,
+  t:key=>key,historyBusy:()=>false,setHistorySaveBusy:busy=>{h.context.snapshotSaveInProgress=busy;},
+  authenticatedApiHeaders:()=>({}),snapshotApiResponse:async value=>value,canvasAgentCanvasDidPersist:()=>{},
+  refreshSnapshots:async()=>{},cacheCloudHistory:()=>{},clearHistoryPages:()=>{},renderSnapshotList:()=>{},showHistoryNoticeKey:()=>{},
+  renameDeviceSnapshot:async(id,name)=>{calls.push({id,name,method:'metadata'});},
+  fetch:async(url,options)=>{calls.push({url,method:options.method,body:JSON.parse(options.body)});return {};},
+  saveSnapshot:async()=>assert.fail('a restored saved Canvas must not create another copy'),
+ });
+ h.state.snapshotLocation=location;
+ vm.runInContext(['renameSnapshot','renameCurrentCanvasFromTitle'].map(name=>'async '+clientFunction('persistence.js',name)).join('\n'),h.context);
+ return calls;
+}
+
+for(const location of ['device','server','cloud'])test(`first Save and successive title renames survive reload with the same ${location} identity`,async()=>{
+ const h=harness(),session=new Map();h.context.sessionStorage={getItem:key=>session.get(key),setItem:(key,value)=>session.set(key,value)};
+ await h.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.state.textBoxes.push({id:'text-1',text:'Retained work',x:20,y:30,w:180,h:40});await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.records.get('visible-document').locator,null);
+ const item={...h.context.canvasDocumentsActiveSnapshot(),id:'saved-1',name:'DNA',updatedAt:Date.now(),bundleExtensions:h.canvasDocumentsSaveMetadata()};
+ Object.assign(h.state,{currentSnapshotId:item.id,currentSnapshotLocation:location,currentSnapshotName:item.name,currentSnapshotHasExplicitName:true,snapshotSavedRevision:h.state.userRevision,currentSnapshotBundleExtensions:item.bundleExtensions});
+ await h.canvasDocumentsDidSave(item,location,item.id,[],h.context.canvasDocumentsDraft.commitVersion);clearTimeout(h.context.canvasDocumentsDraft.timer);
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),false,'a settled Save allows immediate reload');
+ assert.equal(h.records.get('visible-document').metadata.title,'DNA','Save persists without waiting for a recovery timer');
+ assert.deepEqual(h.records.get('visible-document').locator,{id:'saved-1',location});
+ for(const name of ['dna 333','dna 444']) {
+  const reloaded=harness({records:h.records,activeId:`boot-${name}`});reloaded.context.sessionStorage=h.context.sessionStorage;
+  await reloaded.context.canvasDocumentsStartDraft();clearTimeout(reloaded.context.canvasDocumentsDraft.timer);
+  assert.equal(reloaded.state.currentSnapshotId,'saved-1');assert.equal(reloaded.state.currentSnapshotLocation,location);
+  assert.equal(reloaded.state.textBoxes[0].text,'Retained work');
+  const calls=recoveryTitleRename(reloaded,location);
+  reloaded.context.canvasBlob=()=>assert.fail('metadata rename must reuse stored tiles');
+  reloaded.context.serializedWidgets=()=>assert.fail('metadata rename must not serialize Widgets');
+  assert.equal(await reloaded.context.renameCurrentCanvasFromTitle(name),true);clearTimeout(reloaded.context.canvasDocumentsDraft.timer);
+  assert.equal(calls.length,1);assert.equal(calls[0].method,location==='device'?'metadata':'PATCH');
+  assert.equal(h.records.get('visible-document').metadata.title,name);
+  assert.equal(h.records.get('visible-document').stored.item.name,name);
+  assert.equal(reloaded.context.canvasDocumentsDraftUnsaved(),false);
+ }
+});
+
+test('an empty Canvas first Save persists its title and locator even without recovery content',async()=>{
+ const h=harness();await h.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ const item={...h.context.canvasDocumentsActiveSnapshot(),id:'empty-saved',name:'Empty named',bundleExtensions:h.canvasDocumentsSaveMetadata()};
+ Object.assign(h.state,{currentSnapshotId:item.id,currentSnapshotLocation:'device',currentSnapshotName:item.name,currentSnapshotHasExplicitName:true});
+ await h.canvasDocumentsDidSave(item,'device',item.id);clearTimeout(h.context.canvasDocumentsDraft.timer);
+ assert.equal(h.context.canvasDocumentsDraftHasContent(),false);
+ assert.equal(h.records.get('visible-document').metadata.title,'Empty named');
+ assert.equal(h.records.get('visible-document').locator.id,item.id);
+});
+
+test('Save does not acknowledge an AI commit that arrived after its content capture',async()=>{
+ const h=harness();await h.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.state.textBoxes.push({id:'text-1',text:'Saved work',x:20,y:30,w:180,h:40});
+ const commit=h.context.canvasDocumentsDraft.commitVersion,item={...h.context.canvasDocumentsActiveSnapshot(),id:'saved-1',name:'After',bundleExtensions:h.canvasDocumentsSaveMetadata()};
+ h.state.widgets.push({id:'late-widget',title:'Arrived during Save',x:220,y:30,w:180,h:140});h.context.canvasDocumentsScheduleDraft();
+ Object.assign(h.state,{currentSnapshotId:item.id,currentSnapshotLocation:'server',currentSnapshotName:item.name,snapshotSavedRevision:h.state.userRevision});
+ await h.canvasDocumentsDidSave(item,'server',item.id,[],commit);clearTimeout(h.context.canvasDocumentsDraft.timer);
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),true,'new committed content still needs recovery');
+ await h.context.canvasDocumentsFlushDraft();assert.equal(h.records.get('visible-document').stored.item.widgets[0].id,'late-widget');
+});
+
+test('renaming preserves unfinished edits and leaves changed content eligible for recovery',async()=>{
+ const h=harness();await h.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ Object.assign(h.state,{currentSnapshotId:'saved-1',currentSnapshotLocation:'server'});h.canvasDocumentsCurrent().locator={id:'saved-1',location:'server'};
+ h.state.textBoxes.push({id:'text-1',text:'Settled work',x:20,y:30,w:180,h:40});await h.context.canvasDocumentsFlushDraft();
+ h.state.textBoxes.push({id:'text-2',text:'New work',x:220,y:30,w:180,h:40});h.state.userRevision++;
+ const pending={id:'unaccepted'};h.state.pending=pending;h.state.textEditors=new Map([['editor',{}]]);
+ recoveryTitleRename(h,'server');await h.context.renameCurrentCanvasFromTitle('After');clearTimeout(h.context.canvasDocumentsDraft.timer);
+ assert.equal(h.state.pending,pending);assert.equal(h.state.textEditors.size,1);
+ assert.equal(h.records.get('visible-document').stored.item.textBoxes.length,1,'rename preserves the settled recovery copy');
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),true);
+ h.state.pending=null;h.state.textEditors.clear();await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.records.get('visible-document').stored.item.textBoxes.length,2);
+ assert.equal(h.records.get('visible-document').metadata.title,'After');
+});
+
+test('Save waits for an earlier recovery write before persisting the saved locator',async()=>{
+ const h=harness();await h.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.state.textBoxes.push({id:'text-1',text:'Work',x:20,y:30,w:180,h:40});
+ const persist=h.context.canvasDocumentsPersist;let release,entered;
+ const started=new Promise(resolve=>{entered=resolve;});const gate=new Promise(resolve=>{release=resolve;});let first=true;
+ h.context.canvasDocumentsPersist=async(...args)=>{if(first){first=false;entered();await gate;}return persist(...args);};
+ const writing=h.context.canvasDocumentsFlushDraft();await started;
+ const item={...h.context.canvasDocumentsActiveSnapshot(),id:'saved-1',name:'After',bundleExtensions:h.canvasDocumentsSaveMetadata()};
+ Object.assign(h.state,{currentSnapshotId:item.id,currentSnapshotLocation:'server',currentSnapshotName:item.name,snapshotSavedRevision:h.state.userRevision});
+ const saving=h.canvasDocumentsDidSave(item,'server',item.id);await Promise.resolve();assert.equal(h.control.persistWrites,0);
+ release();await Promise.all([writing,saving]);clearTimeout(h.context.canvasDocumentsDraft.timer);
+ assert.equal(h.records.get('visible-document').locator.id,'saved-1');assert.equal(h.records.get('visible-document').metadata.title,'After');
+});
+
+test('recovery drafts persist settled content without accepting an editor or AI draft',async()=>{
+ const h=harness();await h.context.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.state.textBoxes.push({id:'text-1',text:'Keep my work',x:20,y:30,w:180,h:40});h.state.userRevision++;
+ h.state.pending={id:'unaccepted'};
+ await h.context.canvasDocumentsFlushDraft();assert.equal(h.control.persistWrites,0);assert.equal(h.state.pending.id,'unaccepted');
+ h.state.pending=null;h.state.textEditors=new Map([['editing',{}]]);
+ await h.context.canvasDocumentsFlushDraft();assert.equal(h.control.persistWrites,0);assert.equal(h.state.textEditors.size,1);
+ h.state.textEditors.clear();await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.control.persistWrites,1);assert.equal(h.records.get('visible-document').stored.item.textBoxes[0].text,'Keep my work');
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),false);assert.equal(h.state.snapshotSavedRevision,0,'recovery is not an explicit Save');
+ await h.context.canvasDocumentsFlushDraft();assert.equal(h.control.persistWrites,1,'unchanged data is not encoded again');
+});
+
+test('a recovery snapshot invalidated during encoding never replaces the settled document',async()=>{
+ const h=harness();await h.context.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.context.tiles.set('0,0',new Blob(['ink']));let finish;
+ h.context.canvasBlob=()=>new Promise(resolve=>{finish=resolve});
+ const writing=h.context.canvasDocumentsFlushDraft();await Promise.resolve();h.state.userRevision++;
+ finish(new Blob(['old ink']));await writing;assert.equal(h.control.persistWrites,0);
+ h.context.canvasBlob=async value=>value;await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.control.persistWrites,1);assert.equal(h.context.canvasDocumentsDraftUnsaved(),false);
+});
+
+test('committed AI widgets enter recovery even when the user revision does not change',async()=>{
+ const h=harness();await h.context.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.state.widgets.push({id:'graph',title:'Source graph',x:20,y:30,w:240,h:160});
+ await h.context.canvasDocumentsFlushDraft();
+ const revision=h.state.userRevision;
+ h.state.widgets.push({id:'note',title:'Generated note',x:280,y:30,w:300,h:400});
+ h.context.canvasDocumentsScheduleDraft();
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),true,'committed AI output needs a new recovery write');
+ await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.state.userRevision,revision,'AI output does not impersonate a user edit');
+ assert.equal(h.control.persistWrites,2);
+ assert.deepEqual(h.records.get('visible-document').stored.item.widgets.map(item=>item.id),['graph','note']);
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),false);
+ clearTimeout(h.context.canvasDocumentsDraft.timer);
+});
+
+test('an AI commit during recovery encoding invalidates the older snapshot',async()=>{
+ const h=harness();await h.context.canvasDocumentsReady();h.context.canvasDocumentsDraft.ready=true;
+ h.context.tiles.set('0,0',new Blob(['ink']));let finish;
+ h.context.canvasBlob=()=>new Promise(resolve=>{finish=resolve});
+ const writing=h.context.canvasDocumentsFlushDraft();await Promise.resolve();
+ h.state.widgets.push({id:'note',title:'Generated while encoding',x:20,y:30,w:300,h:400});
+ h.context.canvasDocumentsScheduleDraft();
+ finish(new Blob(['ink']));await writing;
+ assert.equal(h.control.persistWrites,0,'do not persist a snapshot from before the AI commit');
+ h.context.canvasBlob=async value=>value;await h.context.canvasDocumentsFlushDraft();
+ assert.equal(h.records.get('visible-document').stored.item.widgets[0].id,'note');
+ assert.equal(h.context.canvasDocumentsDraftUnsaved(),false);
+ clearTimeout(h.context.canvasDocumentsDraft.timer);
+});
+
+test('native Note animation file patches preserve source and geometry, reject invalid scenes, persist and clear',async()=>{
+ const Scene=require('../public/scene-spec'),Note=require('../public/note-card');
+ const h=harness();h.context.window.PENECHO_SCENE=Scene;h.context.window.PENECHO_NOTE_CARD=Note;
+ Object.assign(h.context,{diagramRuntime:()=>null,n:(v,min=0,max=32768)=>Number.isFinite(v)&&v>=min&&v<=max,MAX_WIDGET_HTML_LENGTH:800000,MAX_WIDGET_CONTENT_DIMENSION:32768,MAX_WIDGET_COPY_TEXT_LENGTH:800000,PRIVATE_WIDGET_FAVORITE_ID:/^[0-9a-f-]{36}$/i,newPrivateWidgetFavoriteId:()=>crypto.randomUUID(),noteCardDocument:value=>Note.documentFor(value),noteCardsHookMath:()=>{}});
+ vm.runInContext(clientFunction('canvas-runtime.js','widgetAnimationDocument')+'\n'+clientFunction('canvas-runtime.js','widgetRecord'),h.context);
+ const opened=await createHidden(h,'note-animation-doc','Notes');await startHidden(h,opened.documentId,'note-animation-session');
+ const doc=h.canvasDocuments.records.get(opened.documentId),source=JSON.stringify({title:'Sine',style:'note',blocks:[{type:'paragraph',text:'y = a sin(x)'}]}),widget=h.context.widgetRecord({id:'widget-1',pluginId:'general',widgetType:'html_widget',title:'Sine',x:50,y:60,w:450,h:600,contentW:900,contentH:1200,refreshSeconds:0,sourceFormat:Note.FORMAT,copyText:source});
+ assert.ok(widget);doc.stored.item.widgets.push(widget);
+ const file='objects/widget-1/widget.animation.json',args={sessionId:'note-animation-session',path:file},geometry={x:widget.x,y:widget.y,w:widget.w,h:widget.h};
+ const listing=await h.canvasDocumentsExecute('mcp_list_files',{sessionId:args.sessionId,path:'objects/widget-1'},{});
+ assert.equal(listing.entries.find(e=>e.path===file).writable,true);
+ let read=await h.canvasDocumentsExecute('mcp_read_file',args,{});assert.equal(read.content,'null\n');
+ const scene=Scene.normalize({engine:'motion',actors:[{id:'value',type:'text',text:'y = a sin(x)',x:100,y:100}],beats:[{steps:[{do:'write',target:'value'}]}]}),after=JSON.stringify(scene,null,2)+'\n';
+ await h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:read.contentHash,requestId:'add-note-animation',patch:patchText(file,read.content,after)},{});
+ assert.equal(widget.copyText,source);assert.deepEqual({x:widget.x,y:widget.y,w:widget.w,h:widget.h},geometry);assert.ok(widget.html.includes('data-penecho-widget-animation'));assert.ok(widget.html.includes('data-penecho-widget-original'));assert.equal(widget.widgetAnimation.actors[0].text,'y = a sin(x)');
+ assert.ok(h.records.get(opened.documentId).stored.item.widgets[0].widgetAnimation);
+ read=await h.canvasDocumentsExecute('mcp_read_file',args,{});
+ await assert.rejects(h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:read.contentHash,requestId:'invalid-note-animation',patch:patchText(file,read.content,'{}\n')},{}),{code:'INVALID_SCENE'});
+ await assert.rejects(h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:'stale',requestId:'stale-note-animation',patch:patchText(file,read.content,'null\n')},{}),{code:'SOURCE_CONFLICT'});
+ await h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:read.contentHash,requestId:'remove-note-animation',patch:patchText(file,read.content,'null\n')},{});
+ assert.equal(widget.widgetAnimation,null);assert.ok(!widget.html.includes('data-penecho-widget-animation'));assert.equal(widget.copyText,source);assert.equal((await h.canvasDocumentsExecute('mcp_read_file',args,{})).content,'null\n');
 });

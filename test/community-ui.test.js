@@ -76,7 +76,7 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /cloud-section-refresh-indicator/);
   assert.doesNotMatch(cloud, /refreshCurrentView/);
   assert.match(cloud, /remote \? Boolean\(remote\.deviceReady\) : Boolean\(state\.status\?\.device\?\.connected && !state\.statusUnavailable\)/);
-  assert.match(cloud, /if \(previouslySignedIn !== accountSignedIn\(\)\)/);
+  assert.match(cloud, /const changed = previousIdentity !== accountIdentity\(status\)/);
   assert.match(main, /desktopApp=process\.env\.PENECHO_DESKTOP_APP==="true"/);
   assert.match(css, /\.cloud-section-tab \{[^}]*min-height: 2\.25rem/);
   assert.match(css, /@media \(pointer: coarse\)[\s\S]*?\.cloud-section-tab[\s\S]*?min-height: 2\.75rem/);

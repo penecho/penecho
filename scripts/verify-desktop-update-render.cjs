@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), http = require("node:http");
 const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, ".."), output = path.resolve(process.argv[2] || path.join(root, "output", "desktop-update-smoke"));
+const releaseVersion = require(path.join(root, "package.json")).version;
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-update-smoke-"));
 app.setPath("userData", profile);
 app.setName("PenEcho Update Verification");
@@ -13,9 +14,9 @@ app.setName("PenEcho Update Verification");
 if (process.platform === "win32") app.disableHardwareAcceleration();
 fs.mkdirSync(output, { recursive:true });
 let server, updateWindow, canvasWindow, state = {
-  status:"idle", updateAvailable:false, visible:false, language:"zh", currentVersion:"1.1.0", version:"1.3.5", progress:0,
-  releaseUrl:"https://github.com/penecho/penecho/releases/tag/v1.3.5",
-  notes:fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8").split("## 1.3.5")[1].split("## 1.3.3")[0].trim(),
+  status:"idle", updateAvailable:false, visible:false, language:"zh", currentVersion:"1.1.0", version:releaseVersion, progress:0,
+  releaseUrl:`https://github.com/penecho/penecho/releases/tag/v${releaseVersion}`,
+  notes:fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8").split(`## ${releaseVersion}`)[1].split("\n## ")[0].trim(),
 };
 if (process.argv[3]) {
   const release = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));

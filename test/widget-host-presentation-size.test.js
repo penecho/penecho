@@ -11,7 +11,7 @@ function harness(){
  class Observer{constructor(cb){this.cb=cb;observers.push(this)}observe(){}disconnect(){this.disconnected=true}}
  const ctx={widgetState:{maximized:true,fitContent:true},activeSnapshot:null,activeSnapshotRender:null,HTMLElement:Object,innerWidth:900,innerHeight:1100,runtimeVersion:2,
   ResizeObserver:Observer,MutationObserver:Observer,nativeRequestAnimationFrame:cb=>frames.push(cb),nativeCancelAnimationFrame:()=>{},
-  parent:{postMessage:m=>messages.push(m)},document:{body,documentElement:root,scrollingElement:root,head:{append(){}},createElement:()=>{const sheet={disabled:false,textContent:''};sheets.push(sheet);return sheet}},
+  parent:{postMessage:m=>messages.push(m)},document:{body,documentElement:root,scrollingElement:root,querySelector:()=>null,head:{append(){}},createElement:()=>{const sheet={disabled:false,textContent:''};sheets.push(sheet);return sheet}},
   getComputedStyle:()=>({overflowY:'auto',overflowX:'scroll'}),addEventListener:(k,v)=>listeners.set(k,v)};
  vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);
  return {ctx,marks,sheets,listeners,messages,frames,observers,node,body,root,flush(){frames.splice(0).forEach(cb=>cb())}};
@@ -49,4 +49,13 @@ for(const axis of ['width','height','resize'])test(`legacy Canvas Fit ${axis} is
  assert.equal(fit.textContent.includes('min-width:904px!important'),axis!=='height');
  h.ctx.widgetState.maximized=true;h.ctx.setPresentationLayout();assert.equal(fit.disabled,true);assert.equal(h.marks.size,0);
  h.ctx.widgetState.maximized=false;h.ctx.setPresentationLayout();assert.equal(fit.disabled,false);
+});
+test('saved Scene Fit markers preserve the viewport and remove any flow-fit overrides',()=>{
+ const h=harness();h.ctx.widgetState={maximized:false,fitContentAxes:'height'};h.ctx.setPresentationLayout();
+ const fit=h.sheets[0];assert.equal(fit.disabled,false);assert.ok(h.marks.size);
+ h.ctx.document.querySelector=selector=>selector.includes('data-penecho-scene')?{}:null;
+ for(const state of [{fitContent:true},{fitContentAxes:'height'},{fitContentAxes:'resize'}]) {
+  h.ctx.widgetState={maximized:false,...state};h.ctx.setPresentationLayout();
+  assert.equal(fit.disabled,true);assert.equal(h.marks.size,0);
+ }
 });

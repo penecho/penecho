@@ -1,6 +1,6 @@
 # PenEcho Agent General HTML
 
-This contract is for ordinary General HTML only. Use it when the user explicitly asks for ordinary HTML or when custom browser behavior is the defining result: interaction that changes data or views, animation, simulation, a live display, a small browser-native tool, a freeform overlay, or a custom illustration. Do not use this route for a new Visual Explorer; that always-on contract has its own source markers and review workflow.
+This contract is for ordinary General HTML only. Use it when the user explicitly asks for ordinary HTML or when custom browser behavior outside the host scene vocabulary is the defining result: interaction that changes data or views, simulation, a live display, a small browser-native tool, a freeform overlay, or a custom illustration. For an explicit animated explanation, first read scene guidance and use `penecho_present_widget` with `scene` when its vocabulary can faithfully express the required stages. Loading this HTML contract does not override that route. Use custom HTML animation only for a concrete unsupported requirement; retain meaningful explanatory motion, pause and replay. Do not replace requested animation with static panels. Do not use this route for a new Visual Explorer; that always-on contract has its own source markers and review workflow.
 
 ## Authoring contract
 

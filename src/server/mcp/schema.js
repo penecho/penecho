@@ -3,6 +3,8 @@
 const { INVOCATION_INSTRUCTIONS, VISUAL_TOOL_INSTRUCTIONS } = require("./guidance.js");
 
 const { GUIDANCE_IDS } = require("./authoring-guidance.js");
+const SCENE = require("../../../public/scene-spec.js");
+const NOTE_CARD = require("../../../public/note-card.js");
 
 const MAX_TITLE_CHARS = 120;
 const MAX_SUMMARY_CHARS = 2_000;
@@ -517,10 +519,24 @@ const validators = {
   },
   penecho_present_widget(input) {
     object(input, "arguments");
-    exactKeys(input, new Set(["sessionId", "artifactId", "title", "html", "architecture", "sequence", "workflow", "width", "height", "capture", "quality", "presentation"]), "arguments");
-    if ([input.html,input.architecture,input.sequence,input.workflow].filter(value => value !== undefined).length !== 1) invalid("Provide exactly one of html, architecture, sequence or workflow. Load the matching guidance for semantic diagram fields.");
-    let html;
-    if (input.workflow !== undefined) {
+    exactKeys(input, new Set(["sessionId", "artifactId", "title", "html", "architecture", "sequence", "workflow", "scene", "note", "width", "height", "capture", "quality", "presentation"]), "arguments");
+    if ([input.html,input.architecture,input.sequence,input.workflow,input.scene,input.note].filter(value => value !== undefined).length !== 1) invalid("Provide exactly one of html, architecture, sequence, workflow, scene or note. Load the matching guidance.");
+    let html, sceneSource, noteSource;
+    if (input.note !== undefined) {
+      // A note card: PenEcho owns the fixed portrait card document.
+      object(input.note, "note");
+      try {
+        const note = NOTE_CARD.normalize({ ...input.note, title:input.note.title ?? input.title, source:{ kind:"mcp" } });
+        noteSource = NOTE_CARD.formatSource(note);
+        html = NOTE_CARD.documentFor(note);
+      } catch (error) { invalid(error.message); }
+    } else if (input.scene !== undefined) {
+      object(input.scene, "scene");
+      try {
+        sceneSource = SCENE.formatSource(input.scene);
+        html = SCENE.documentFor(sceneSource, { title:input.title });
+      } catch (error) { invalid(error.message); }
+    } else if (input.workflow !== undefined) {
       try { html = require("../../workflow/schema.js").workflowHtml(input.workflow); }
       catch (error) { invalid(error.message); }
     } else if (input.sequence !== undefined) {
@@ -541,6 +557,8 @@ const validators = {
       artifactId:string(input.artifactId, "artifactId"),
       title:string(input.title, "title", { max:MAX_TITLE_CHARS }),
       html,
+      ...(sceneSource ? {sourceFormat:SCENE.FORMAT,frameworkVersion:SCENE.FRAMEWORK_VERSION,copyText:sceneSource,copyLabel:SCENE.COPY_LABEL} : {}),
+      ...(noteSource ? {sourceFormat:NOTE_CARD.FORMAT,frameworkVersion:NOTE_CARD.FRAMEWORK_VERSION,copyText:noteSource,copyLabel:NOTE_CARD.COPY_LABEL} : {}),
       ...dimensions,
       ...(presentation === undefined ? {} : {presentation}),
       ...(input.capture === undefined ? {} : { capture:input.capture }),
@@ -655,8 +673,8 @@ const TOOLS = [
   },
   {
     name:"penecho_present_widget",
-    description:"Render rich explanations, sequence/flow diagrams (including static diagrams), and product UI as an HTML/CSS/SVG Widget. Create/update stable artifactId, preserving geometry; returned viewport is actual CSS size. relativeTo is a known artifactId. inspect requires capture:true and renders exact dimensions without saving an object. Capture failures may leave applied:true. Format source for patches.",
-    inputSchema:{ type:"object", additionalProperties:false, required:["sessionId","artifactId","title"], oneOf:["html","architecture","sequence","workflow"].map(key=>({required:[key]})), properties:{sessionId:{type:"string",minLength:1,maxLength:128},artifactId:{type:"string",minLength:1,maxLength:128},title:{type:"string",minLength:1,maxLength:MAX_TITLE_CHARS},html:{type:"string",minLength:1,maxLength:MAX_HTML_CHARS},architecture:{type:"object",description:"Semantic architecture/1 JSON for local rendering. Load architecture guidance for fields; omit html."},sequence:{type:"object",description:"Semantic sequence/1 JSON for local rendering. Load sequence guidance for fields; omit other content fields."},workflow:{type:"object",description:"Semantic workflow/1 JSON for local rendering. Load workflow guidance for fields; omit other content fields."},width:{type:"number",minimum:300,maximum:4096,description:"CSS width: capped on creation, exact for inspect."},height:{type:"number",minimum:200,maximum:4096,description:"CSS height: independently capped on creation, exact for inspect."},capture:{type:"boolean",default:false},quality:{type:"string",enum:["basic","detail"]},presentation:presentationSchema({allowInspect:true})}, allOf:[{if:{required:["quality"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{properties:{intent:{const:"inspect"}},required:["intent"]}},required:["presentation"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{required:["size"]}},required:["presentation"]},then:{not:{anyOf:[{required:["width"]},{required:["height"]}]}}}] },
+    description:"Render rich explanations, diagrams (including static diagrams) and product UI, a structured motion/physics/3d scene, or a note card (knowledge card / work note) as a Widget. Create/update stable artifactId, preserving geometry; returned viewport is actual CSS size. relativeTo is a known artifactId. inspect requires capture:true and renders exact dimensions without saving an object. Capture failures may leave applied:true. Format source for patches.",
+    inputSchema:{ type:"object", additionalProperties:false, required:["sessionId","artifactId","title"], oneOf:["html","architecture","sequence","workflow","scene","note"].map(key=>({required:[key]})), properties:{sessionId:{type:"string",minLength:1,maxLength:128},artifactId:{type:"string",minLength:1,maxLength:128},title:{type:"string",minLength:1,maxLength:MAX_TITLE_CHARS},html:{type:"string",minLength:1,maxLength:MAX_HTML_CHARS},architecture:{type:"object",description:"Semantic architecture/1 JSON for local rendering. Load architecture guidance for fields; omit html."},sequence:{type:"object",description:"Semantic sequence/1 JSON for local rendering. Load sequence guidance for fields; omit other content fields."},workflow:{type:"object",description:"Semantic workflow/1 JSON for local rendering. Load workflow guidance for fields; omit other content fields."},scene:{type:"object",description:"Host-rendered motion, physics or 3d scene JSON. Read scene guidance for actors/beats, bodies/constraints or shapes. Omit other content fields; the host generates HTML and retains editable scene source."},note:{type:"object",description:"Host-rendered note card / knowledge card: {title, style:card|note, category, tags, summary, bookmarked, blocks:[markdown|formula|keypoints|callout|qa|checklist|graph|code|quote|table|image|divider]}. Fixed portrait size; omit width/height. Read note-card guidance; omit other content fields."},width:{type:"number",minimum:300,maximum:4096,description:"CSS width: capped on creation, exact for inspect."},height:{type:"number",minimum:200,maximum:4096,description:"CSS height: independently capped on creation, exact for inspect."},capture:{type:"boolean",default:false},quality:{type:"string",enum:["basic","detail"]},presentation:presentationSchema({allowInspect:true})}, allOf:[{if:{required:["quality"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{properties:{intent:{const:"inspect"}},required:["intent"]}},required:["presentation"]},then:{required:["capture"],properties:{capture:{const:true}}}},{if:{properties:{presentation:{required:["size"]}},required:["presentation"]},then:{not:{anyOf:[{required:["width"]},{required:["height"]}]}}}] },
   },
 
   {

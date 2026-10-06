@@ -1,9 +1,0 @@
-{
-  "/healthz": 200,
-  "/readyz": 200,
-  "appSourceSha256": "9c2282fc33db83f35a4541620ba31d62bf605b37572153187f2e678c2e88e1da",
-  "appStagedSha256": "9c2282fc33db83f35a4541620ba31d62bf605b37572153187f2e678c2e88e1da",
-  "sameBytes": true,
-  "servedAppStatus": 200,
-  "servedAppSha256": "9c2282fc33db83f35a4541620ba31d62bf605b37572153187f2e678c2e88e1da"
-}

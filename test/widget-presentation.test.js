@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const NOTE=require('../public/note-card.js');
 
 const source=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-navigation.js'),'utf8');
 const helperSource=source.slice(0,source.indexOf('\n  function canvasNavigationTextTarget'));
@@ -48,6 +49,7 @@ function harness({stored=null,failGet=false,failSet=false,downloadImpl=()=>Promi
   state:{scale:1.5},
   location:{origin:'https://canvas.test'},
   getComputedStyle:()=>({paddingLeft:'20',paddingRight:'20',paddingBottom:'20'}),
+  noteCardWidget:widget=>NOTE.isNoteFormat(widget.sourceFormat),
   ResizeObserver:class{observe(){}disconnect(){}},
   localStorage,
   requestInteractionLayerRender(){renders.push(true);},
@@ -68,8 +70,10 @@ function widgetFixture({presentationToolbar={id:'existing-toolbar',offsetHeight:
  const classChanges=[];
  const shell={
   parentNode:parent,
+  focusCalls:0,focus(){this.focusCalls++;},
   clientWidth:1440,clientHeight:900,scrollTop:0,scrollLeft:0,
-  append(){},addEventListener(){},removeEventListener(){},
+  listeners:new Map(),
+  append(){},addEventListener(type,listener){this.listeners.set(type,listener);},removeEventListener(){},
   classList:{add(name){classChanges.push(['add',name]);},remove(name){classChanges.push(['remove',name]);}},
   attributes:new Map(),
   popoverOpen:false,
@@ -138,8 +142,50 @@ test('repeated maximize/minimize preserves the Widget shell and frame without re
  assert.equal(shell.showPopoverCalls,2);
  assert.equal(shell.hidePopoverCalls,1);
  assert.equal(widget.maximized,true);
- assert.equal(frame.focusCalls,3);
+ assert.equal(frame.focusCalls,1);
+ assert.equal(shell.focusCalls,2);
  assert.deepEqual(h.positions,[widget,widget,widget]);
+});
+
+test('interrupted native entry rolls back styles and preference, then permits a fresh attempt',()=>{
+ for (const entry of ['throw','closed']) {
+  const h=harness(),{widget,shell,frame}=widgetFixture(),show=shell.showPopover,properties=new Map();
+  widget.styleRule={style:{setProperty:(k,v)=>properties.set(k,v),removeProperty:k=>properties.delete(k)}};
+  shell.showPopover=()=>{if(entry==='throw')throw Error('interrupted');};
+  assert.equal(h.api.switchWidgetPresentation(widget,true),false,entry);
+  assert.equal(widget.maximized,false);assert.equal(shell.popoverOpen,false);
+  assert.equal(shell.attributes.has('popover'),false);assert.equal(shell.attributes.has('data-presentation-zoom'),false);
+  assert.equal(widget.presentationScrollExtent,null);assert.equal(properties.size,0);
+  assert.deepEqual(h.writes,[],'failed presentation never changes the saved preference');
+  shell.showPopover=show;
+  assert.equal(h.api.switchWidgetPresentation(widget,true),true);
+  assert.equal(shell.popoverOpen,true);assert.equal(widget.maximized,true);assert.equal(widget.frame,frame);
+ }
+});
+
+test('native dismissal clears presentation state and stale toggle delivery cannot close a reopened Widget',()=>{
+ const h=harness(),{widget,shell,frame}=widgetFixture();
+ h.api.setWidgetMaximized(widget,true);
+ shell.popoverOpen=false;
+ shell.listeners.get('toggle')();
+ assert.equal(widget.maximized,false);assert.equal(shell.attributes.has('popover'),false);
+ assert.equal(widget.presentationScrollExtent,null);assert.equal(widget.frame,frame);
+ h.api.setWidgetMaximized(widget,true);
+ const observer=widget.presentationScrollObserver;
+ shell.listeners.get('toggle')();
+ assert.equal(widget.maximized,true);assert.equal(widget.presentationScrollObserver,observer);
+ assert.equal(shell.popoverOpen,true);
+});
+
+test('repeated activation repairs a stale maximized flag when the native popover is closed',()=>{
+ const h=harness(),{widget,shell}=widgetFixture();
+ h.api.setWidgetMaximized(widget,true);
+ const oldExtent=widget.presentationScrollExtent,oldObserver=widget.presentationScrollObserver;
+ shell.popoverOpen=false;
+ assert.equal(h.api.setWidgetMaximized(widget,true),true);
+ assert.equal(shell.showPopoverCalls,2);assert.equal(shell.popoverOpen,true);
+ assert.equal(oldExtent.parentNode,null);
+ assert.notEqual(widget.presentationScrollObserver,oldObserver);
 });
 
 test('Widget presentation zoom clamps, updates controls, and notifies the host',()=>{
@@ -157,9 +203,9 @@ test('Widget presentation zoom clamps, updates controls, and notifies the host',
  assert.deepEqual(h.hostStateCalls,[fixture.widget]);
 
  h.api.setWidgetPresentationZoom(fixture.widget,0,false);
- assert.equal(fixture.widget.presentationZoom,50);
- assert.equal(fixture.shell.attributes.get('data-presentation-zoom'),'50');
- assert.equal(controls.label.textContent,'50%');
+ assert.equal(fixture.widget.presentationZoom,40);
+ assert.equal(fixture.shell.attributes.get('data-presentation-zoom'),'40');
+ assert.equal(controls.label.textContent,'40%');
  assert.equal(controls.zoomOut.disabled,true);
  assert.equal(controls.zoomIn.disabled,false);
  assert.equal(h.hostStateCalls.length,1,'notifyHost=false must not send another host state');
@@ -196,6 +242,16 @@ test('maximizing creates one zoom control set, resets it on re-entry, and preser
  zoomOut.dispatch('click');
  assert.equal(widget.presentationZoom,90);
  assert.equal(label.textContent,'90%');
+ for(let step=0;step<4;step++)zoomOut.dispatch('click');
+ assert.equal(widget.presentationZoom,50);
+ assert.equal(zoomOut.disabled,false);
+ zoomOut.dispatch('click');
+ assert.equal(widget.presentationZoom,40);
+ assert.equal(label.textContent,'40%');
+ assert.equal(zoomOut.disabled,true);
+ zoomIn.dispatch('click');
+ assert.equal(widget.presentationZoom,50);
+ assert.equal(zoomOut.disabled,false);
 
  h.api.setWidgetMaximized(widget,false);
  assert.equal(widget.presentationZoom,100);
@@ -283,4 +339,65 @@ test('content changes grow the scroll track without resizing the layout viewport
  widget.shell.scrollTop=widget.presentationScrollMetrics.outside+200*widget.presentationScrollMetrics.scale;h.api.syncWidgetPresentationScroll(widget);
  assert.ok(Math.abs(messages.at(-1).top-200)<1e-9);
  assert.equal(widget.contentH,1100);
+});
+
+test('viewport graphs fit a short presentation without changing saved Canvas dimensions',()=>{
+ const h=harness(),{widget}=widgetFixture(),properties=new Map();
+ widget.h=widget.contentH=1100;widget.w=widget.contentW=900;widget.presentationViewport=true;
+ widget.shell.clientHeight=500;
+ widget.styleRule.style.setProperty=(k,v)=>properties.set(k,v);
+ h.api.setWidgetMaximized(widget,true);
+ const scale=1400/900,available=500-52-20;
+ assert.ok(Math.abs(parseFloat(properties.get('--widget-presentation-frame-height'))-available/scale)<1e-9);
+ assert.equal(widget.presentationScrollMetrics.outside,0);
+ assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-available)<1e-9);
+ h.api.setWidgetPresentationZoom(widget,70);
+ assert.equal(widget.presentationScrollMetrics.outside,0);
+ assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-available)<1e-9);
+ assert.equal(widget.contentH,1100);assert.equal(widget.h,1100);
+});
+
+for(const style of ['card','note'])test(`${style} defaults to showing the full card height below 50% and refits on resize`,()=>{
+ const h=harness(),{widget}=widgetFixture({presentationToolbar:null}),properties=new Map();
+ Object.assign(widget,{sourceFormat:NOTE.FORMAT,note:{style},w:1800,h:6000,contentW:900,contentH:3000});
+ const geometry=[widget.w,widget.h,widget.contentW,widget.contentH],frame=widget.frame;
+ widget.styleRule.style.setProperty=(k,v)=>properties.set(k,v);
+ h.api.setWidgetMaximized(widget,true);
+ const available=900-52-20,fit=available/3000*900/1400*100;
+ assert.ok(widget.presentationZoom<50);
+ assert.ok(Math.abs(widget.presentationZoom-fit)<1e-9);
+ assert.equal(properties.get('--widget-presentation-frame-height'),'3000px');
+ assert.ok(widget.presentationScrollMetrics.outside<1e-9);
+ assert.ok(Math.abs(parseFloat(widget.presentationScrollExtent.style.height)-available)<1e-9);
+ const zoomOut=toolbarButton(widget.presentationToolbar,'imageZoomOut'),zoomIn=toolbarButton(widget.presentationToolbar,'imageZoomIn');
+ assert.equal(zoomOut.disabled,true);
+ zoomIn.dispatch('click');
+ assert.ok(Math.abs(widget.presentationZoom-fit-10)<1e-9);
+ assert.equal(widget.presentationAutoFit,false);
+ assert.ok(widget.presentationScrollMetrics.outside>0);
+ zoomOut.dispatch('click');
+ assert.ok(Math.abs(widget.presentationZoom-fit)<1e-9);
+ assert.equal(widget.presentationAutoFit,true);
+ widget.shell.clientHeight=500;widget.shell.clientWidth=700;
+ h.api.updateWidgetPresentationScroll(widget);
+ assert.ok(Math.abs(Number(properties.get('--widget-page-scale'))-(500-52-20)/3000)<1e-9);
+ assert.ok(widget.presentationScrollMetrics.outside<1e-9);
+ h.api.setWidgetMaximized(widget,false);
+ h.api.setWidgetMaximized(widget,true);
+ assert.equal(widget.presentationAutoFit,true);
+ assert.strictEqual(widget.frame,frame);
+ assert.deepEqual([widget.w,widget.h,widget.contentW,widget.contentH],geometry);
+});
+
+test('short and narrow notes fit the full card without stretching its authored height',()=>{
+ const h=harness(),{widget}=widgetFixture(),properties=new Map();
+ widget.sourceFormat=NOTE.FORMAT;widget.contentW=900;widget.contentH=300;
+ widget.shell.clientWidth=400;
+ widget.styleRule.style.setProperty=(k,v)=>properties.set(k,v);
+ h.api.setWidgetMaximized(widget,true);
+ assert.equal(widget.presentationZoom,100);
+ assert.equal(Number(properties.get('--widget-page-scale')),360/900);
+ assert.equal(properties.get('--widget-presentation-frame-height'),'300px');
+ assert.equal(widget.presentationScrollMetrics.outside,0);
+ assert.equal(parseFloat(widget.presentationScrollExtent.style.height),120);
 });

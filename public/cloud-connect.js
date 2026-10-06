@@ -841,6 +841,9 @@
   }
 
   let statusRequestSeq = 0;
+  const accountIdentity = status => JSON.stringify([String(status?.origin || configuredCloudOrigin), Boolean(status?.accountSession?.signedIn), String(status?.account?.id || "")]);
+  const startupAccountIdentity = typeof window.PENECHO_CONFIG?.cloudAccountSignedIn === "boolean"
+    ? accountIdentity({ origin:window.PENECHO_CONFIG.cloudAccountOrigin || window.PENECHO_CONFIG.cloudOrigin, accountSession:{ signedIn:window.PENECHO_CONFIG.cloudAccountSignedIn }, account:{ id:window.PENECHO_CONFIG.connectionAccountId } }) : null;
 
   async function refreshStatus(force = false) {
     if (isCloudRuntime()) {
@@ -857,6 +860,8 @@
     }
     const seq = ++statusRequestSeq;
     const previouslySignedIn = accountSignedIn();
+    const initial = !state.status;
+    const previousIdentity = initial ? startupAccountIdentity : accountIdentity(state.status);
     try {
       const status = await api(force ? "/api/cloud/account" : "/api/cloud/status");
       // A newer request already superseded this one; never let a stale,
@@ -864,8 +869,15 @@
       if (seq !== statusRequestSeq) return state.status;
       state.status = status;
       state.statusUnavailable = false;
-      if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("penecho:cloud-account-changed"));
-      if (previouslySignedIn !== accountSignedIn()) {
+      const changed = previousIdentity !== accountIdentity(status);
+      if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") {
+        window.dispatchEvent(new CustomEvent("penecho:cloud-status-changed"));
+        // The first status publishes cache identity to library consumers. Model
+        // and allowance loaders can reuse their initial request when it agrees
+        // with the authenticated configuration loaded before the app script.
+        if (initial || changed) window.dispatchEvent(new CustomEvent("penecho:cloud-account-changed", { detail:{ initial, changed } }));
+      }
+      if (changed) {
         state.library = null;
         state.favoriteCanvases = null;
         state.favoriteWidgets = null;
@@ -1567,7 +1579,7 @@
       if (event.detail?.page === "cloud") queueMicrotask(() => { if (cloudSettingsVisible()) renderCloudSettings(); });
       else stopDeviceConnectionWatch();
     });
-    window.addEventListener("penecho:cloud-account-changed", () => {
+    window.addEventListener("penecho:cloud-status-changed", () => {
       if (cloudSettingsVisible() && cloudSettingsRevision !== cloudSettingsStateRevision()) renderCloudSettings();
     });
   }
@@ -2820,9 +2832,11 @@
     craftsInLibrary = Boolean(active);
     if (!libraryPanel) return;
     if (craftsInLibrary) libraryPanel.dataset.libraryView = "favorites";
-    else delete libraryPanel.dataset.libraryView;
+    else if (libraryPanel.dataset.libraryView === "favorites") delete libraryPanel.dataset.libraryView;
     if (libraryFavoritesView) libraryFavoritesView.hidden = !craftsInLibrary;
     libraryFavoritesNav?.setAttribute("aria-current", craftsInLibrary ? "page" : "false");
+    document.getElementById("historyRecentNav")?.setAttribute("aria-current", !libraryPanel.dataset.libraryView && libraryPanel.dataset.historyScope === "recent" ? "page" : "false");
+    document.getElementById("historyCanvasNav")?.setAttribute("aria-current", !libraryPanel.dataset.libraryView && libraryPanel.dataset.historyScope !== "recent" ? "page" : "false");
     craftsButton?.setAttribute("aria-expanded", String(craftsInLibrary));
     if (!craftsInLibrary) {
       craftsObserver?.disconnect();
@@ -2851,12 +2865,13 @@
     if (craftsEchoesLink && librarySidebar) librarySidebar.append(craftsEchoesLink);
     libraryFavoritesNav?.addEventListener("click", () => openFavorites());
     librarySidebar?.addEventListener("click", (event) => {
-      if (craftsInLibrary && event.target?.closest?.(".snapshot-location-options label, .history-project-nav-item, #historyProjectCreate, #historyRecentNav")) setLibraryFavoritesView(false);
+      if (craftsInLibrary && event.target?.closest?.(".snapshot-location-options label, .history-project-nav-item, #historyProjectCreate, #historyRecentNav, #historyCanvasNav, #historyNotesNav")) setLibraryFavoritesView(false);
     });
-    // Every close of the Library ends its Favorites view.
+    // Sidebar and external entries share the active Library view. Cleanup may
+    // only clear Favorites, since the next destination can already be active.
     new MutationObserver(() => {
-      if (!libraryPanel.classList.contains("open") && craftsInLibrary) setLibraryFavoritesView(false);
-    }).observe(libraryPanel, { attributes:true, attributeFilter:["class"] });
+      if (craftsInLibrary && (!libraryPanel.classList.contains("open") || libraryPanel.dataset.libraryView !== "favorites")) setLibraryFavoritesView(false);
+    }).observe(libraryPanel, { attributes:true, attributeFilter:["class", "data-library-view"] });
   }
 
   craftsButton?.addEventListener("click", openFavorites);

@@ -63,24 +63,10 @@
       height = Math.max(1, Number(viewport.height) || 1),
       margin = Math.min(THINKING_LAYOUT.viewportMargin, width / 4, height / 4),
       normalized = normalizeRegion(region),
-      intersects = normalized && normalized.x < width && normalized.y < height
-        && normalized.x + normalized.w > 0 && normalized.y + normalized.h > 0,
-      source = intersects ? normalized : fallbackRegion(width, height),
-      visible = {
-        x:clamp(source.x, margin, Math.max(margin, width - margin)),
-        y:clamp(source.y, margin, Math.max(margin, height - margin)),
-        w:0,
-        h:0,
-      };
-    visible.w = Math.max(1, clamp(source.x + source.w, margin, Math.max(margin, width - margin)) - visible.x);
-    visible.h = Math.max(1, clamp(source.y + source.h, margin, Math.max(margin, height - margin)) - visible.y);
-
-    const padding = clamp(Math.max(visible.w, visible.h) * 0.1, THINKING_LAYOUT.minPadding, THINKING_LAYOUT.maxPadding),
-      left = clamp(visible.x - padding, margin, Math.max(margin, width - margin - 1)),
-      top = clamp(visible.y - padding, margin, Math.max(margin, height - margin - 1)),
-      right = clamp(visible.x + visible.w + padding, left + 1, Math.max(left + 1, width - margin)),
-      bottom = clamp(visible.y + visible.h + padding, top + 1, Math.max(top + 1, height - margin)),
-      outer = { x:left, y:top, w:right - left, h:bottom - top },
+      source = normalized || fallbackRegion(width, height),
+      padding = clamp(Math.max(source.w, source.h) * 0.1, THINKING_LAYOUT.minPadding, THINKING_LAYOUT.maxPadding),
+      // The viewport clips the effect; it must never move or reshape its anchor.
+      outer = { x:source.x - padding, y:source.y - padding, w:source.w + padding * 2, h:source.h + padding * 2 },
       innerInset = Math.min(THINKING_LAYOUT.innerGap, Math.max(7, Math.min(outer.w, outer.h) * 0.08)),
       inner = {
         x:outer.x + innerInset,
@@ -88,20 +74,15 @@
         w:Math.max(1, outer.w - innerInset * 2),
         h:Math.max(1, outer.h - innerInset * 2),
       },
-      below = outer.y + outer.h + THINKING_LAYOUT.statusGap,
-      above = outer.y - THINKING_LAYOUT.statusGap - THINKING_LAYOUT.statusHeight,
-      statusY = below + THINKING_LAYOUT.statusHeight <= height - margin
-        ? below
-        : above >= margin ? above : clamp(height - margin - THINKING_LAYOUT.statusHeight, margin, height),
       statusWidth = Math.min(THINKING_LAYOUT.statusWidth, Math.max(1, width - margin * 2));
     return {
       source,
       outer,
       inner,
-      fallback:!intersects,
+      fallback:!normalized,
       status:{
-        x:clamp(outer.x + outer.w / 2, margin + statusWidth / 2, Math.max(margin + statusWidth / 2, width - margin - statusWidth / 2)),
-        y:statusY,
+        x:outer.x + outer.w / 2,
+        y:outer.y + outer.h + THINKING_LAYOUT.statusGap,
         w:statusWidth,
       },
     };
@@ -374,6 +355,18 @@
       if (!ctx || !canvas || !textLayer) return false;
       stop();
       model = { region:normalizeRegion(region) };
+      if (!model.region) {
+        // Resolve an unanchored request once, so later pans also move its echo.
+        const transform = getTransform(),
+          source = echoLayout(null, transform).source,
+          scale = Math.max(0.03, Number(transform.scale) || 1);
+        model.region = {
+          x:(source.x - (Number(transform.panX) || 0)) / scale,
+          y:(source.y - (Number(transform.panY) || 0)) / scale,
+          w:source.w / scale,
+          h:source.h / scale,
+        };
+      }
       buildText();
       canvas.dataset.effect = "spatial-echo";
       canvas.hidden = false;

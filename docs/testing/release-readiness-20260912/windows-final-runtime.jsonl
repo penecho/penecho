@@ -1,1 +1,0 @@
-{"ok":true,"electron":"43.2.0","node":"24.18.0","tools":19,"patchExports":["validateCanvasFilePatch","applyCanvasFilePatch"],"sharp":"0.35.4","heif":"1.23.2","samples":{"webp":{"bytes":44,"decodedBytes":192},"avif":{"bytes":280,"decodedBytes":192}}}

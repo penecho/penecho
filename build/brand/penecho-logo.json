@@ -1,16 +1,22 @@
 {
-  "width": 1441,
-  "height": 1092,
+  "width": 1248,
+  "height": 1405,
   "logo": {
-    "left": 198,
-    "top": 90,
-    "width": 1047,
-    "height": 912
+    "left": 120,
+    "top": 120,
+    "width": 1008,
+    "height": 1165
   },
   "mark": {
-    "left": 394,
-    "top": 90,
-    "width": 669,
-    "height": 660
+    "left": 183,
+    "top": 120,
+    "width": 881,
+    "height": 874
+  },
+  "wordmark": {
+    "left": 120,
+    "top": 1100,
+    "width": 1008,
+    "height": 185
   }
 }

@@ -168,7 +168,7 @@ async function mountRuntimePlugin(ctx, id, plugin, config) {
 
 export const PERSONA = `You are PenEcho Agent inside a visual canvas.
 Introduce yourself as PenEcho Agent without volunteering a model or provider name. Harness and transport names do not identify the underlying model. If asked about the model, use only explicit current runtime model metadata; otherwise say the exact model is unavailable.
-Reason to the depth the task warrants, preserving accuracy, completeness, and necessary verification. Avoid repetitive reasoning that adds no new information. Aim to keep internal reasoning within about 20,000 tokens per response, and use much less for simpler tasks; this is a soft upper bound, not a quota to fill.
+Keep reasoning within the user's request, supplied targets and necessary dependencies. Use brief decision notes and reuse established facts. Once sufficient evidence determines a valid next action, execute it instead of exploring unrelated alternatives. Preserve required content, behavior, identity and source format. Resolve essential uncertainty with a focused read or clarification. Verify the requested outcome and directly affected behavior, then stop.
 Canvas is authoritative; file reads and captures return current state, never history. After source conflicts, read the changed file.
 initialCanvasState is authoritative. If empty:true: skip initial inspection/capture; use automatic placement. Otherwise reuse its overview and read only the relevant source or geometry.
 Use visible tools and report verified results.
@@ -1782,21 +1782,23 @@ export function publicSessionEvent(event, session) {
     const resultBlocks=Array.isArray(data.message?.content)?data.message.content.filter(block=>block?.type==='tool-result'&&block.toolCallId===data.message?.source?.callId):[]
     const resultText=messageText(data.message)||resultBlocks.map(block=>messageText(block)).join('\n')
     const failed=resultBlocks.some(block=>block.isError===true)
+    const busyStop=session?.canvasTurnBudget?.stop?.code==='CANVAS_BUSY'?session.canvasTurnBudget.stop:null
     return {
       kind:'tool_result',
       turn:data.turn,
       step:data.step,
       callId:data.message?.source?.callId,
-      text:redactRuntimePath(resultText, session),
-      error:redactPublicProjectValue(data.error || (failed?{message:resultText||'Canvas tool failed.'}:null), session),
+      text:redactRuntimePath(busyStop?.message || resultText, session),
+      error:redactPublicProjectValue(busyStop || data.error || (failed?{message:resultText||'Canvas tool failed.'}:null), session),
     }
   }
   if (event?.type === 'turn/start') return { kind:'turn_start', turn:data.turn }
   if (event?.type === 'turn/end') {
-    const reason=data.reason?.kind==='max-tokens'
+    const busyStop=session?.canvasTurnBudget?.stop?.code==='CANVAS_BUSY'?session.canvasTurnBudget.stop:null,
+      reason=busyStop ? {kind:'blocked',error:busyStop} : data.reason?.kind==='max-tokens'
       ? {kind:'error',terminationReason:'max-tokens',error:{code:'MODEL_OUTPUT_EXHAUSTED',message:'The model exhausted its output budget before completing this turn. Any Canvas changes already applied are preserved.'}}
       : data.reason
-    const projected={kind:'turn_end',turn:data.turn,reason},completed=data.reason?.kind==='completed'
+    const projected={kind:'turn_end',turn:data.turn,reason},completed=reason?.kind==='completed'
     if(completed&&session?.canvasTitleRequested&&session.canvasTitleCandidate)projected.canvasTitle=session.canvasTitleCandidate
     if(session){session.canvasTitleRequested=false;session.canvasTitleCandidate='';session.canvasTitleStreams?.clear()}
     return projected
@@ -2866,6 +2868,32 @@ const PLANNED_WIDGET_SCHEMA = Object.freeze({
   },
 })
 
+// Note cards: host-rendered portrait knowledge cards / work notes. The note
+// source is validated by public/note-card.js on the Canvas.
+const NOTE_BLOCK_SCHEMA = Object.freeze({
+  type:'object',
+  additionalProperties:false,
+  properties:{
+    type:{ type:'string', enum:['markdown','formula','keypoints','callout','qa','checklist','graph','code','quote','table','image','ink','divider'], required:true },
+    text:{ type:'string' }, latex:{ type:'string' }, caption:{ type:'string' }, title:{ type:'string' },
+    items:{ type:'array' }, question:{ type:'string' }, answer:{ type:'string' },
+    tone:{ type:'string', enum:['key','definition','tip','warning','example','question'] },
+    expression:{ type:'string' }, expressions:{ type:'array', items:{ type:'string' } }, parameters:{ type:'object', additionalProperties:true },
+    language:{ type:'string' }, source:{ type:'string' }, rows:{ type:'array', items:{ type:'array' } }, header:{ type:'boolean' },
+    src:{ type:'string' }, alt:{ type:'string' }, ref:{ type:'string' },
+  },
+})
+const NOTE_SCHEMA = Object.freeze({
+  type:'object',
+  additionalProperties:false,
+  description:'Note card source. title is required and searchable; style "card" for study knowledge, "note" for work notes; category is one id: concept|formula|example|reference|idea|work|meeting|todo or a user category; 1–24 blocks in reading order. Markdown supports $inline$ and $$display$$ LaTeX. qa blocks are flashcards. PenEcho renders the fixed portrait card; never send HTML.',
+  properties:{
+    title:{ type:'string', required:true }, subtitle:{ type:'string' }, style:{ type:'string', enum:['card','note'] }, category:{ type:'string' },
+    tags:{ type:'array', items:{ type:'string' } }, summary:{ type:'string' }, bookmarked:{ type:'boolean' },
+    blocks:{ type:'array', items:NOTE_BLOCK_SCHEMA, required:true },
+  },
+})
+
 const DRAWING_SCHEMA = Object.freeze({
   type:'object',
   additionalProperties:false,
@@ -3022,6 +3050,10 @@ export function createItemSchema(session) {
   oneOf.push({
       type:'object', additionalProperties:false,
       properties:{ type:{ type:'string', const:'image', required:true }, attachmentId:{ type:'string', required:true }, width:{ type:'number' }, height:{ type:'number' }, placement:PLACEMENT_SCHEMA },
+    })
+  oneOf.push({
+      type:'object', additionalProperties:false,
+      properties:{ type:{ type:'string', const:'note', required:true }, note:{ ...NOTE_SCHEMA, required:true }, placement:PLACEMENT_SCHEMA },
     })
   return { oneOf }
 }
@@ -3770,7 +3802,7 @@ export function createCanvasTools(session, attachments) {
   })
   const create = defineCanvasTool(session, {
     name:'canvas_create',
-    description:`Atomically create Canvas items. Plain function graph: host-native type="plot", never drawing points/Widget. Professional edit-only. Widgets: Visual Explorer or enabled HTML. Drawing: non-negative integer coordinates + parallel types/items, no strokes/points; flatten line/smooth point pairs once. Visual Explorer: one complete General HTML item: sourceFormat=${VISUAL_EXPLORER_SOURCE_FORMAT}, frameworkVersion=${VISUAL_EXPLORER_FRAMEWORK_VERSION}; progressive only at items[0].deliveryMode, never top-level. Empty Canvas: readable; placement.mode="auto", align="center"; review. Load Widget contracts; inspect/capture nonempty Canvas before placement.`,
+    description:`Atomically create Canvas items. Plain function graph: host-native type="plot", never drawing points/Widget. Professional edit-only. Widgets: Visual Explorer or enabled HTML. Note/knowledge card: type="note" with a note object (title, style, category, tags, blocks); the host renders one fixed portrait card. Drawing: non-negative integer coordinates + parallel types/items, no strokes/points; flatten line/smooth point pairs once. Visual Explorer: one complete General HTML item: sourceFormat=${VISUAL_EXPLORER_SOURCE_FORMAT}, frameworkVersion=${VISUAL_EXPLORER_FRAMEWORK_VERSION}; progressive only at items[0].deliveryMode, never top-level. Empty Canvas: readable; placement.mode="auto", align="center"; review. Load Widget contracts; inspect/capture nonempty Canvas before placement.`,
     parameters:{
       baseRevision:{ type:'integer', required:true },
       items:{ type:'array', required:true, items:createItemSchema(session) },
@@ -3779,7 +3811,7 @@ export function createCanvasTools(session, attachments) {
     output:jsonOutput(),
     timeoutMs:TOOL_TIMEOUT_MS,
     async execute(args, exec) {
-      const submittedItems=Array.isArray(args.items)?args.items:[],rawItems=submittedItems.map(item=>item?.type==='drawing'?{...item,drawing:canonicalizeCanvasAgentDrawing(item.drawing)}:item),createsWidget=rawItems.some(item=>item?.type==='widget'),
+      const submittedItems=Array.isArray(args.items)?args.items:[],rawItems=submittedItems.map(item=>item?.type==='drawing'?{...item,drawing:canonicalizeCanvasAgentDrawing(item.drawing)}:item),createsWidget=rawItems.some(item=>item?.type==='widget'||item?.type==='note'),
         visualExplorerIndexes=rawItems.flatMap((item,index)=>visualExplorerMarker(item)?[index]:[]),
         visualExplorerBudget=session.visualExplorerBudget || (session.visualExplorerBudget=freshVisualExplorerBudget())
       const deliveryModeIndexes=rawItems.flatMap((item,index)=>item?.deliveryMode!==undefined?[index]:[])

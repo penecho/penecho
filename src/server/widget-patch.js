@@ -15,6 +15,15 @@ const MAX_WIDGET_PATCH_AFTER_WINDOWS = 8;
 const MAX_WIDGET_PATCH_AFTER_LINES = 160;
 const MAX_WIDGET_PATCH_AFTER_CHARS = 24000;
 
+const HOST_COMPILED_FORMATS = new Set(["penecho-scene+json", "penecho-note-card+json"]);
+const HOST_COMPILED_PLACEHOLDER_HTML = "<!-- PenEcho renders this Widget from its scene source. -->";
+
+// Host-compiled Widgets (scenes) are refined through their source alone:
+// PenEcho owns and regenerates the HTML, so the model never sees or patches it.
+function hostCompiledWidget(widgetEdit) {
+  return widgetEdit?.widgetType === "html_widget" && HOST_COMPILED_FORMATS.has(String(widgetEdit.sourceFormat || "").trim().toLowerCase());
+}
+
 function normalizedWidgetSource(value) {
   return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim() : "";
 }
@@ -41,6 +50,14 @@ function widgetManifest(widgetEdit) {
   if (widgetEdit.widgetType === "diagram_source") {
     return {
       ...common,
+      sourceFile:WIDGET_SOURCE_PATH,
+    };
+  }
+  if (hostCompiledWidget(widgetEdit)) {
+    return {
+      ...common,
+      refreshSeconds:0,
+      frameworkVersion:widgetEdit.frameworkVersion || null,
       sourceFile:WIDGET_SOURCE_PATH,
     };
   }
@@ -71,7 +88,7 @@ function widgetPatchFile(path, originalContent) {
 function patchFilesForWidgetEdit(widgetEdit) {
   if (!widgetEdit) return [];
   const manifest = widgetPatchFile(WIDGET_MANIFEST_PATH,widgetManifestContent(widgetEdit));
-  if (widgetEdit.widgetType === "diagram_source") {
+  if (widgetEdit.widgetType === "diagram_source" || hostCompiledWidget(widgetEdit)) {
     return [manifest,widgetPatchFile(WIDGET_SOURCE_PATH,widgetEdit.source)];
   }
   return [
@@ -528,7 +545,9 @@ function parsedWidgetManifest(content, widgetEdit, diagnostics = null) {
   const commonKeys = ["tool","pluginId","title","refreshSeconds","diagramKind","sourceFormat"],
     typeKeys = widgetEdit.widgetType === "diagram_source"
       ? ["sourceFile"]
-      : ["frameworkVersion","htmlFile","copyTextFile","copyLabel"],
+      : hostCompiledWidget(widgetEdit)
+        ? ["frameworkVersion","sourceFile"]
+        : ["frameworkVersion","htmlFile","copyTextFile","copyLabel"],
     allowedKeys = new Set([...commonKeys,...typeKeys]),
     unsupportedKey = Object.keys(manifest).find(key => !allowedKeys.has(key));
   if (unsupportedKey !== undefined) {
@@ -536,13 +555,14 @@ function parsedWidgetManifest(content, widgetEdit, diagnostics = null) {
     setPatchDiagnostic(diagnostics,safeKey ? `unsupported-manifest-field:${safeKey}` : "unsupported-manifest-field");
     return null;
   }
-  for (const field of ["diagramKind","sourceFormat",...(widgetEdit.widgetType === "html_widget" ? ["frameworkVersion","copyLabel"] : [])]) {
+  for (const field of ["diagramKind","sourceFormat",...(widgetEdit.widgetType === "html_widget" ? ["frameworkVersion",...(hostCompiledWidget(widgetEdit) ? [] : ["copyLabel"])] : [])]) {
     const value = optionalManifestString(manifest[field]);
     if (value === false) return null;
     manifest[field] = value;
   }
-  if (widgetEdit.widgetType === "diagram_source") {
+  if (widgetEdit.widgetType === "diagram_source" || hostCompiledWidget(widgetEdit)) {
     if (manifest.sourceFile !== WIDGET_SOURCE_PATH) return null;
+    if (hostCompiledWidget(widgetEdit) && !HOST_COMPILED_FORMATS.has(String(manifest.sourceFormat || "").trim().toLowerCase())) return null;
   } else if (manifest.htmlFile !== WIDGET_HTML_PATH
     || ![null,WIDGET_HTML_PATH,WIDGET_SOURCE_PATH].includes(manifest.copyTextFile ?? null)) return null;
   return manifest;
@@ -572,6 +592,22 @@ function widgetCommandFromFiles(contents, widgetEdit, diagnostics = null) {
       sourceFormat,
       source:contents.get(WIDGET_SOURCE_PATH),
       ...(diagramKind ? { diagramKind } : {}),
+    };
+  }
+  if (hostCompiledWidget(widgetEdit)) {
+    const source = contents.get(WIDGET_SOURCE_PATH);
+    if (typeof source !== "string" || !source.trim()) return null;
+    return {
+      tool:"html_widget",
+      pluginId:widgetEdit.pluginId,
+      ...widgetEdit.box,
+      title:manifest.title,
+      refreshSeconds:0,
+      html:HOST_COMPILED_PLACEHOLDER_HTML,
+      sourceFormat,
+      ...(optionalCommandField(manifest.frameworkVersion) ? { frameworkVersion:manifest.frameworkVersion } : {}),
+      copyText:source,
+      ...(widgetEdit.copyLabel ? { copyLabel:widgetEdit.copyLabel } : {}),
     };
   }
   const frameworkVersion = optionalCommandField(manifest.frameworkVersion),
@@ -754,6 +790,7 @@ function resolveWidgetEditPatchCommands(commands, widgetEdit, diagnostics = null
 
 module.exports = {
   MAX_WIDGET_PATCH_BYTES,
+  hostCompiledWidget,
   commandFromWidgetPatch,
   resolveWidgetEditPatchCommands,
   widgetSourceMirrorsHtml,

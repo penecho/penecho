@@ -84,7 +84,7 @@ async function legacyKernelFixture() {
   };
 }
 
-test("PenEcho Agent applies only a same-turn LLM title and retries naming an unsaved Canvas",async()=>{
+test("PenEcho Agent applies only a same-turn LLM title and retries naming every unnamed Canvas",async()=>{
   const persistence=read("src/client/app/persistence.js"),agent=read("src/client/app/canvas-agent-runtime.js"),runtimeSource=read("src/server/canvas-agent/runtime.mjs"),
     native=read("src/server/canvas-agent/codex-native-host.mjs"),peer=read("src/server/canvas-agent/peer.mjs"),updates={document:0,agent:0},state={
     currentSnapshotName:"Aug 30, 2026, 9:00 AM",
@@ -101,21 +101,35 @@ test("PenEcho Agent applies only a same-turn LLM title and retries naming an uns
   state.currentCanvasSuggestedName="";
   state.currentSnapshotHasExplicitName=true;
   assert.equal(apply("已有名称不能覆盖"),false);
+  for(const placeholder of ["Untitled Canvas","untitled canvas","  Untitled Canvas  ","未命名画布",""]){
+    state.currentSnapshotName=placeholder;
+    assert.equal(apply("补充画布标题"),true,`name ${JSON.stringify(placeholder)} despite an explicit-name flag`);
+    assert.equal(apply("不能覆盖已生成标题"),false);
+    state.currentCanvasSuggestedName="";
+  }
+  state.currentSnapshotName="用户刚刚填写的标题";
+  assert.equal(apply("请求结束后不能覆盖手动名称"),false);
   const submit=functionSource(agent,"canvasAgentSubmitMessage"),applySource=functionSource(persistence,"applyCurrentCanvasGeneratedName"),requestState={
       currentSnapshotId:null,
+      currentSnapshotName:"",
       currentSnapshotHasExplicitName:false,
       currentCanvasSuggestedName:"",
     },
-    conversationNeedsTitle=vm.runInNewContext(`(${functionSource(agent,"canvasAgentConversationNeedsCanvasTitle")})`),
-    shouldRequestTitle=vm.runInNewContext(`(()=>{${functionSource(persistence,"currentCanvasNeedsAgentName")}\n${functionSource(agent,"canvasAgentConversationNeedsCanvasTitle")}\n${functionSource(agent,"canvasAgentShouldRequestCanvasTitle")}\nreturn canvasAgentShouldRequestCanvasTitle;})()`,{state:requestState}),
+    shouldRequestTitle=vm.runInNewContext(`(()=>{${functionSource(persistence,"currentCanvasNeedsAgentName")}\n${functionSource(agent,"canvasAgentShouldRequestCanvasTitle")}\nreturn canvasAgentShouldRequestCanvasTitle;})()`,{state:requestState}),
     visibleAssistantText=Function("CANVAS_AGENT_HISTORY_TEXT_LIMIT",`${functionSource(agent,"canvasAgentMessageText")}\n${functionSource(agent,"canvasAgentVisibleAssistantText")}\nreturn canvasAgentVisibleAssistantText;`)(20_000),
     {parseCanvasTitleEnvelope,publicSessionEvent}=await import("../src/server/canvas-agent/runtime.mjs");
-  assert.equal(conversationNeedsTitle({items:[{type:"message",role:"user",text:"请优化画布"}]}),true);
-  assert.equal(conversationNeedsTitle({items:[{type:"message",role:"assistant",text:"第一轮回复",final:true}]}),false);
   assert.equal(shouldRequestTitle({items:[{type:"message",role:"assistant",text:"第一轮回复",final:true}]}),true);
   requestState.currentSnapshotId="saved-canvas";
-  assert.equal(shouldRequestTitle({items:[{type:"message",role:"assistant",text:"第一轮回复",final:true}]}),false);
+  assert.equal(shouldRequestTitle({items:[{type:"message",role:"assistant",text:"第一轮回复",final:true}]}),true);
   assert.equal(shouldRequestTitle({items:[{type:"message",role:"user",text:"请优化画布"}]}),true);
+  requestState.currentSnapshotHasExplicitName=true;
+  for(const placeholder of ["Untitled Canvas","untitled canvas","  Untitled Canvas  ","未命名画布",""]){
+    requestState.currentSnapshotName=placeholder;
+    assert.equal(shouldRequestTitle(),true,`saved name ${JSON.stringify(placeholder)} remains eligible`);
+  }
+  requestState.currentSnapshotName="用户填写的标题";
+  assert.equal(shouldRequestTitle(),false);
+  requestState.currentSnapshotHasExplicitName=false;
   requestState.currentSnapshotId=null;
   requestState.currentCanvasSuggestedName="已有建议标题";
   assert.equal(shouldRequestTitle({items:[{type:"message",role:"assistant",text:"第一轮回复",final:true}]}),false);
@@ -124,7 +138,7 @@ test("PenEcho Agent applies only a same-turn LLM title and retries naming an uns
   assert.equal(visibleAssistantText("完成说明\n\n<penecho_canvas_title>旧标题</penecho_canvas_title>\n\n历史回答"),"完成说明\n\n历史回答");
   assert.equal(visibleAssistantText("<phenecho_canvas_title>拼写容错标题</penecho_canvas_title>\n历史回答"),"历史回答");
   assert.equal(visibleAssistantText("<penecho_canvas_title>格式错误但正常回答"),"<penecho_canvas_title>格式错误但正常回答");
-  assert.match(submit,/canvasTitleNeeded:canvasAgentShouldRequestCanvasTitle\(canvasAgent\.currentConversation\)/);
+  assert.match(submit,/canvasTitleNeeded:canvasAgentShouldRequestCanvasTitle\(\)/);
   assert.match(submit,/reasoningEffort:state\.reasoningEffort/);
   assert.doesNotMatch(submit,/applyCurrentCanvasGeneratedName|suggestCurrentCanvasNameFromQuestion/);
   assert.match(agent,/function canvasAgentHandleEvent[\s\S]*?event\.reason\?\.kind==="completed"[\s\S]*?applyCurrentCanvasGeneratedName\(event\.canvasTitle\)/);
@@ -248,7 +262,7 @@ test("PenEcho Agent treats ink as user-authored message text while ordinary imag
   assert.match(core,/canvasAgentInkPrompt: "The attached image named canvas-agent-message\.webp[\s\S]*?canvas-agent-message\.png when WebP is unavailable[\s\S]*?not an image-analysis request[\s\S]*?as if the user typed it[\s\S]*?Do not describe the handwriting image/);
   assert.match(zh,/canvasAgentInkPrompt: "附带的 canvas-agent-message\.webp 图片[\s\S]*?canvas-agent-message\.png[\s\S]*?不是图片分析请求[\s\S]*?不要描述手写图片/);
   assert.match(core,/canvasAgentImagePrompt: "Please inspect the attached image or images\."/);
-  assert.match(submit,/images:outgoingAttachments\.map\(attachment=>attachment\.wire\)/);
+  assert.match(submit,/images:\[\.\.\.outgoingAttachments\.map\(attachment=>attachment\.wire\),\.\.\.\(options\?\.imageOverrides\|\|\[\]\)\]/);
   assert.match(harness,/\.\.\.imageAttachments\.map\(attachment => \(\{ type:'image', attachment \}\)\)/);
   assert.match(native,/for \(const attachment of attachments\)[\s\S]*input\.push\(\{ type:'image', url:/);
 });
@@ -306,25 +320,24 @@ test("PenEcho Agent shows the complete model-bound handwriting image inside the 
   assert.match(css,/\.canvas-agent-message-images img\.canvas-agent-message-handwriting\s*\{[^}]*width: auto;[^}]*height: auto;[^}]*max-width: min\(100%, 360px\);[^}]*max-height: 220px;[^}]*object-fit: contain;/);
 });
 
-test("PenEcho Agent hides its empty-state hint as soon as handwriting mode expands",()=>{
+test("PenEcho Agent switches text and handwriting modes without a legacy composer hint",()=>{
   const source=read("src/client/app/canvas-agent-runtime.js"),classes=new Set(),makeModeButton=()=>({
     classList:{toggle(name,enabled){if(enabled)classes.add(name);else classes.delete(name);}},
     setAttribute(){},
-  }),canvasAgentInputHint={hidden:false},canvasAgentInput={hidden:false,value:"",focus(){}},canvasAgentInkInput={hidden:true},canvasAgentInkCanvas={focus(){}},canvasAgentForm={
+  }),canvasAgentInput={hidden:false,value:"",focus(){}},canvasAgentInkInput={hidden:true},canvasAgentInkCanvas={focus(){}},canvasAgentForm={
     classList:{toggle(name,enabled){if(enabled)classes.add(name);else classes.delete(name);}},
   },canvasAgentTextMode=makeModeButton(),canvasAgentInkMode=makeModeButton(),canvasAgent={
     inputMode:"text",currentConversation:null,inkPresent:false,attachments:[],references:[],viewingHistoryId:"",
   };
-  const syncSource=functionSource(source,"canvasAgentSyncInputHint"),setModeSource=functionSource(source,"canvasAgentSetInputMode"),setMode=vm.runInNewContext(`(()=>{${syncSource}\n${setModeSource}\nreturn canvasAgentSetInputMode;})()`,{
-    canvasAgent,canvasAgentInputHint,canvasAgentInput,canvasAgentInkInput,canvasAgentInkCanvas,canvasAgentForm,canvasAgentTextMode,canvasAgentInkMode,
+  const setModeSource=functionSource(source,"canvasAgentSetInputMode"),setMode=vm.runInNewContext(`(()=>{${setModeSource}\nreturn canvasAgentSetInputMode;})()`,{
+    canvasAgent,canvasAgentInput,canvasAgentInkInput,canvasAgentInkCanvas,canvasAgentForm,canvasAgentTextMode,canvasAgentInkMode,
     canvasAgentResizeInput(){},canvasAgentSyncPromptSuggestions(){},canvasAgentFinishInkStroke(){},
   });
   setMode("ink");
-  assert.equal(canvasAgentInputHint.hidden,true);
   assert.equal(canvasAgentInkInput.hidden,false);
   assert.equal(classes.has("canvas-agent-ink-expanded"),true);
   setMode("text");
-  assert.equal(canvasAgentInputHint.hidden,false);
+  assert.doesNotMatch(read("public/index.html"),/canvasAgentInputHint|Type or use the Pen button/);
 });
 
 test("PenEcho Agent dismisses the virtual keyboard after every successful send",()=>{
@@ -333,7 +346,7 @@ test("PenEcho Agent dismisses the virtual keyboard after every successful send",
   assert.match(setMode,/if\(focus\)\(ink\?canvasAgentInkCanvas:canvasAgentInput\)\.focus\?\.\(\)/);
   assert.match(submit,/requestSent = true;\s*focusComposerAfterSubmit=false;\s*if\(canvasAgentForm\.contains\(document\.activeElement\)\)document\.activeElement\.blur\(\);/);
   assert.match(submit,/canvasAgentSetInputMode\("text",focusComposerAfterSubmit\)/);
-  assert.match(submit,/if\(focusComposerAfterSubmit\)\(canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput\)\.focus\(\)/);
+  assert.match(submit,/if\(focusComposerAfterSubmit\)\{\s*canvasAgent\.promptSuggestionsSuppressFocus=true;\s*try\{\(canvasAgent\.inputMode==="ink"\?canvasAgentInkCanvas:canvasAgentInput\)\.focus\(\);\}\s*finally\{canvasAgent\.promptSuggestionsSuppressFocus=false;\}/);
 });
 
 test("PenEcho Agent panel movement and edge resizing accept pen and scoped touch input",()=>{
@@ -2936,22 +2949,23 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   }
   assert.match(readSource,/maximum=200000[\s\S]*contentFormat:"nl -ba -w6 -s TAB"[\s\S]*originalEndsWithNewline[\s\S]*terminalBoundary/);
   assert.match(runtime,/Returns revision, sourceHash, newline, truncation and EOF/);
-  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProjectControl","canvasAgentProject","canvasAgentProjectClear","canvasAgentConnection","canvasAgentConnectionLabel","canvasAgentProjectPopover","canvasAgentProjectTitle","canvasAgentProjectBoundary","canvasAgentProjectList","canvasAgentProjectCreate","canvasAgentProjectCount","canvasAgentFileList","canvasAgentFileCount","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootApproval","canvasAgentProjectRootApprovalReject","canvasAgentProjectRootApprovalAllow","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentReferenceCollapse","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentFileInput","canvasAgentInput","canvasAgentInputHint","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
+  for (const id of ["canvasAgentToggle","canvasAgentPanel","canvasAgentHead","canvasAgentProjectControl","canvasAgentProject","canvasAgentProjectClear","canvasAgentConnection","canvasAgentConnectionLabel","canvasAgentProjectPopover","canvasAgentProjectTitle","canvasAgentProjectBoundary","canvasAgentProjectList","canvasAgentProjectCreate","canvasAgentProjectCount","canvasAgentFileList","canvasAgentFileCount","canvasAgentProjectRoots","canvasAgentProjectRootBack","canvasAgentProjectRootList","canvasAgentProjectRootApproval","canvasAgentProjectRootApprovalReject","canvasAgentProjectRootApprovalAllow","canvasAgentProjectRootSelect","canvasAgentApproval","canvasAgentApprovalAllow","canvasAgentApprovalReject","canvasAgentHistory","canvasAgentHistoryPopover","canvasAgentHistoryList","canvasAgentHistoryReturn","canvasAgentResizeTop","canvasAgentResizeBottom","canvasAgentResizeLeft","canvasAgentResizeRight","canvasAgentTranscript","canvasAgentAttachments","canvasAgentAttach","canvasAgentReference","canvasAgentWidgetPickerLayer","canvasAgentReferencePicker","canvasAgentReferenceHelp","canvasAgentReferenceSearch","canvasAgentReferenceList","canvasAgentReferenceCollapse","canvasAgentTextMode","canvasAgentInkMode","canvasAgentInkInput","canvasAgentInkCanvas","canvasAgentClearInk","canvasAgentSearch","canvasAgentFileInput","canvasAgentInput","canvasAgentSend","canvasAgentStop"]) assert.match(html,new RegExp(`id="${id}"`));
   for(const removed of ["canvasAgentSize","canvasAgentProjectAdd","canvasAgentProjectActions","canvasAgentProjectAddFile","canvasAgentProjectAccess","canvasAgentProjectControlled","canvasAgentProjectFull","canvasAgentProjectUpload","canvasAgentProjectUploadInput","canvasAgentImageInput"])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));
   assert.match(html,/<dialog id="canvasAgentProjectPopover"[^>]*aria-labelledby="canvasAgentProjectTitle"/);
   assert.match(html,/<dialog id="canvasAgentProjectPopover"[^>]*aria-describedby="canvasAgentProjectDescription canvasAgentProjectBoundary"/);
   const projectDialog=html.slice(html.indexOf('<dialog id="canvasAgentProjectPopover"'),html.indexOf("</dialog>",html.indexOf('<dialog id="canvasAgentProjectPopover"'))+9);
   assert.match(projectDialog,/id="canvasAgentProjectBoundary"[\s\S]*?data-i18n="canvasAgentProjectBoundary"/);
   assert.doesNotMatch(projectDialog,/type="file"|Add local file|添加本地文件/);
-  assert.ok(html.indexOf('id="canvasAgentPromptSuggestions"')<html.indexOf('id="canvasAgentTranscript"'));
-  assert.ok(html.indexOf('id="canvasAgentProject"')<html.indexOf('id="canvasAgentPromptControl"'));
-  assert.ok(html.indexOf('id="canvasAgentPromptControl"')<html.indexOf('id="canvasAgentConnection"'));
+  assert.ok(html.indexOf('id="canvasAgentPromptSuggestions"')>html.indexOf('id="canvasAgentTranscript"'));
+  assert.ok(html.indexOf('id="canvasAgentProject"')<html.indexOf('id="canvasAgentConnection"'));
+  assert.doesNotMatch(html,/id="canvasAgentPromptControl"|id="canvasAgentPromptToggle"/);
+  assert.match(html,/id="canvasAgentSuggestClose"/);
   assert.ok(html.indexOf('id="canvasAgentConnection"')<html.indexOf('id="canvasAgentInput"'));
   assert.ok(html.indexOf('id="canvasAgentInput"')<html.indexOf('id="canvasAgentAttach"'));
   assert.ok(html.indexOf('id="canvasAgentAttach"')<html.indexOf('id="canvasAgentReference"'));
   assert.match(html,/id="canvasAgentFileInput"[^>]*type="file"[^>]*\smultiple(?:\s|=|>)/);
   assert.doesNotMatch(html,/id="canvasAgentFileInput"[^>]*\saccept=/);
-  assert.match(html,/id="canvasAgentInput"[^>]*aria-describedby="canvasAgentInputHint"/);
+  assert.doesNotMatch(html,/canvasAgentInputHint/);
   assert.match(html,/class="canvas-agent-composer-surface"[\s\S]*?id="canvasAgentInput"[^>]*rows="1"[\s\S]*?class="canvas-agent-composer-actions"[\s\S]*?id="canvasAgentSend"[^>]*>[\s\S]*?<svg/);
   assert.match(html,/class="canvas-agent-tool-actions"[\s\S]*?id="canvasAgentAttach"[\s\S]*?class="canvas-agent-primary-actions"[\s\S]*?id="canvasAgentStop"[\s\S]*?id="canvasAgentSend"/);
   assert.match(html,/id="canvasAgentStop"[^>]*aria-label="Stop"[\s\S]*?<svg[\s\S]*?id="canvasAgentSend"[^>]*aria-label="Send"[\s\S]*?<svg/);
@@ -2960,7 +2974,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(source,/CANVAS_AGENT_HISTORY_LIMIT = 5/);
   assert.match(source,/CANVAS_AGENT_INPUT_MAX_LINES = 10/);
   assert.match(functionSource(source,"canvasAgentResizeInput"),/lineHeight\*CANVAS_AGENT_INPUT_MAX_LINES[\s\S]*scrollHeight[\s\S]*canvas-agent-input-overflowing/);
-  assert.match(source,/canvasAgentInput\.addEventListener\("input",\(\)=>\{canvasAgentResizeInput\(\);canvasAgentSyncInputHint\(\);if\(canvasAgentPromptHasDraft\(\)\)canvasAgentSetPromptSuggestionsExpanded\(false\);canvasAgentSyncPromptSuggestions\(\);\}\)/);
+  assert.match(source,/canvasAgentInput\.addEventListener\("input",\(\)=>\{canvasAgentResizeInput\(\);canvasAgentSyncPromptSuggestions\(\);\}\)/);
   assert.doesNotMatch(source,/pickProjectDirectory|pickProjectFile|canvasAgentAddProject\b|canvasAgentAddProjectFile/);
   assert.match(source,/projectId:canvasAgentContextProjectId\(\)[\s\S]*?accessMode:canvasAgentEffectiveAccessMode\(\)/);
   assert.match(source,/CANVAS_AGENT_PROJECT_UPLOAD_LIMIT = 32 \* 1024 \* 1024/);
@@ -3084,7 +3098,8 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(source,/"new_conversation",\{handshakeId,connectionId,conversationId:canvasAgent\.currentConversation\?\.id\|\|"",webSearchEnabled:canvasAgent\.searchEnabled,widgetCapabilities,projectId:canvasAgentContextProjectId\(\),accessMode:canvasAgentEffectiveAccessMode\(\),\.\.\.\(conversationHistory\.length\?/);
   assert.match(source,/"change_context",\{[\s\S]*?conversationId:canvasAgent\.currentConversation\?\.id\|\|""/);
   assert.match(source,/sessionReady:false/);
-  assert.match(source,/sessionEngine = String\(saved\.engine \|\| ""\)/);
+  assert.match(functionSource(source,"canvasAgentHandleMessage"),/canvasAgent\.sessionEngine = String\(envelope\.payload\?\.engine \|\| ""\)/);
+  assert.doesNotMatch(functionSource(source,"canvasAgentRestoreScopedSession"),/sessionEngine|sessionReady/);
   assert.match(source,/canvasAgent\.sessionReady = true/);
   assert.match(functionSource(source,"canvasAgentHandleMessage"),/const socket = message\.target;\s*if \(socket && socket !== canvasAgent\.socket\) return;/);
   assert.match(functionSource(source,"canvasAgentHandleMessage"),/const readyHandshake = envelope\.type === "ready" && Boolean\(canvasAgent\.connectPromise\) && Boolean\(envelope\.canvasSessionId\)/);
@@ -3101,11 +3116,11 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(source,"canvasAgentToolExecutionCurrent"),/function canvasAgentToolExecutionCurrent\(execution=null\)/);
   assert.match(functionSource(source,"canvasAgentAssertToolExecution"),/function canvasAgentAssertToolExecution\(execution\)/);
   assert.doesNotMatch(functionSource(source,"canvasAgentToolExecutionCurrent"),/activeToolExecution/);
-  assert.match(functionSource(source,"canvasAgentMutationIdle"),/function canvasAgentMutationIdle\(execution\)[\s\S]*canvasAgentAssertToolExecution\(execution\)/);
-  assert.match(functionSource(source,"canvasAgentCreate"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareCreateItems[\s\S]*canvasAgentAssertToolExecution\(execution\);save\(\)/);
+  assert.match(functionSource(source,"canvasAgentMutationIdle"),/function canvasAgentMutationIdle\(execution,objectIds=\[\]\)[\s\S]*canvasAgentAssertToolExecution\(execution\)/);
+  assert.match(functionSource(source,"canvasAgentCreate"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareCreateItems[\s\S]*canvasAgentAssertToolExecution\(execution\);const restoreMutation=canvasAgentBeginMutation\(execution,\[\]\)/);
   assert.match(functionSource(source,"canvasAgentPrepareCreateItems"),/widgetType === "diagram_source"\|\|pluginId === "flowchart"\|\|frameworkVersion\.startsWith\("penecho-professional-diagrams"\)[\s\S]*cannot create a new Professional Diagram/);
   assert.match(functionSource(mainAi,"validate"),/acceptedTools\.push\("diagram_source"\)[\s\S]*c\.tool === "diagram_source"/);
-  assert.match(functionSource(source,"canvasAgentEdit"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareEditOperations[\s\S]*canvasAgentAssertToolExecution\(execution\);save\(\)/);
+  assert.match(functionSource(source,"canvasAgentEdit"),/canvasAgentMutationIdle\(execution\)[\s\S]*await canvasAgentPrepareEditOperations[\s\S]*canvasAgentAssertToolExecution\(execution\);const restoreMutation=canvasAgentBeginMutation\(execution,prepared\.flatMap/);
   const replaceWidgetSource=functionSource(source,"canvasAgentReplaceWidget");
   assert.doesNotMatch(replaceWidgetSource,/CANVAS_BUSY|canvasAgentWaitForSourceCommit/);
   assert.match(replaceWidgetSource,/sourceOnly=typeof args\.expectedSourceHash[\s\S]*canvasAgentAssertToolExecution\(execution\)[\s\S]*canvasAgentHash\(sourceOnly\?sourceState:currentEdit\)[\s\S]*SOURCE_CONFLICT[\s\S]*REVISION_CONFLICT/);
@@ -3147,8 +3162,9 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(peer,/envelope\.type === 'change_context' \|\| envelope\.type === 'change_connection'[\s\S]*method = envelope\.type === 'change_context' \? 'changeContext' : 'changeConnection'[\s\S]*owner\[method\]\(previous/);
   assert.match(functionSource(source,"canvasAgentSubmitMessage"),/canvasAgentBeginSubmitExecution\(selectedAiConnectionId\(\)\)[\s\S]*canvasAgentBindSubmitExecution\(submitExecution\)[\s\S]*canvasAgentInitialTurnState\(submitExecution\)[\s\S]*canvasAgentAssertSubmitExecution\(submitExecution\)[\s\S]*canvasAgentSendRequest/);
   assert.match(functionSource(source,"canvasAgentExecuteTool"),/canvasAgentCapture\(args,\{signal:execution\.controller\.signal,assertCurrent:\(\)=>canvasAgentAssertToolExecution\(execution\)\}\)/);
-  assert.match(functionSource(canvasRuntime,"requestWidgetSnapshot"),/signal\?\.aborted[\s\S]*pending=\{ widget, resolve, reject, timer, contentVersion:widget\.contentVersion, signal, abort, highResolution, fullContent \}[\s\S]*signal\?\.addEventListener\("abort",abort/);
-  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/requestWidgetSnapshot\(widget, timeoutMs, true, signal, highResolution\)/);
+  assert.match(functionSource(canvasRuntime,"requestWidgetSnapshot"),/signal\?\.aborted[\s\S]*waitForWidgetSnapshotUntil\(startWidgetSnapshotCapture\(widget, highResolution, fullContent, currentFrame\), signal, deadline, widget\)/);
+  assert.match(functionSource(canvasRuntime,"waitForWidgetSnapshotUntil"),/signal\?\.addEventListener\("abort", abort/);
+  assert.match(functionSource(canvasRuntime,"prepareVisibleWidgetSnapshots"),/ensureWidgetSnapshots\(widgets, \{ signal, highResolution, timeoutMs:bestEffort \? Math\.min\(timeoutMs, WIDGET_HISTORY_SNAPSHOT_WAIT_MS\) : timeoutMs \}\)/);
   assert.match(peer,/if \(!envelope\.canvasSessionId \|\| envelope\.canvasSessionId !== state\.session\.id\) return/);
   assert.match(peer,/const generation = state\.sessionGeneration, session = state\.session/);
   assert.match(peer,/sendForGeneration\(generation\)\('error', \{ message:String\(error\?\.message \|\| error \|\| 'PenEcho Agent failed\.'\), fatal:false \}, session\)/);
@@ -3208,8 +3224,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(source,/CANVAS_AGENT_INK_PADDING_MAX = 512/);
   assert.match(prepareInk,/fillStyle="#fff"[\s\S]*image\/webp[\s\S]*image\/png[\s\S]*canvasAgentPrepareAttachment/);
   assert.match(source,/canvasAgentInkCanvas\.addEventListener\("pointerdown",canvasAgentInkPointerDown\)/);
-  assert.match(functionSource(source,"canvasAgentSyncInputHint"),/inputMode==="ink"/);
-  assert.match(functionSource(source,"canvasAgentSetInputMode"),/canvas-agent-ink-expanded[\s\S]*canvasAgentSyncInputHint\(\)[\s\S]*canvasAgentInkCanvas:canvasAgentInput/);
+  assert.match(functionSource(source,"canvasAgentSetInputMode"),/canvas-agent-ink-expanded[\s\S]*canvasAgentInkCanvas:canvasAgentInput/);
   assert.match(source,/CANVAS_AGENT_INK_LINE_WIDTH = 12/);
   assert.match(source,/CANVAS_AGENT_INK_OUTPUT_SCALE = 1/);
   assert.match(functionSource(source,"canvasAgentInkPointerDown"),/arc\(point\.x,point\.y,CANVAS_AGENT_INK_LINE_WIDTH\/2/);
@@ -3223,7 +3238,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(source,/canvasAgentReferenceCollapse\.addEventListener\("click"[\s\S]*canvasAgentToggleReferencePicker\(false\)[\s\S]*canvasAgentReference\.focus\(\{preventScroll:true\}\)/);
   assert.match(functionSource(source,"canvasAgentRenderReferencePicker"),/canvas-agent-reference-item-icon[\s\S]*canvas-agent-reference-item-label[\s\S]*classList\.toggle\("has-message"[\s\S]*classList\.toggle\("is-message"[\s\S]*canvasAgentReferenceCountOne/);
   assert.match(source,/function canvasAgentCreateReferenceChip[\s\S]*?canvas-agent-reference-chip-icon[\s\S]*?dataset\.kind[\s\S]*?chip\.append\(icon,label,meta\)[\s\S]*?return chip;/);
-  assert.match(functionSource(source,"canvasAgentToggleReferencePicker"),/canvasAgentForm\.classList\.toggle\("canvas-agent-reference-open",open\)[\s\S]*canvasAgentSyncInputHint\(\)/);
+  assert.match(functionSource(source,"canvasAgentToggleReferencePicker"),/canvasAgentForm\.classList\.toggle\("canvas-agent-reference-open",open\)/);
   assert.doesNotMatch(functionSource(source,"canvasAgentToggleReferencePicker"),/canvasAgentReferenceSearch\.focus/);
   assert.match(core,/canvasAgentReferenceCountOne: "1 Widget"/);
   assert.match(zh,/canvasAgentReferenceCountOne: "1 个 Widget"/);
@@ -3232,7 +3247,7 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   assert.match(functionSource(source,"canvasAgentWidgetFromPickEvent"),/widgetPointerHit\(clientPoint\(event\),event\.pointerType\|\|"mouse",true\)/);
   assert.match(source,/canvasAgentWidgetPickerLayer\.addEventListener\("pointerdown"[\s\S]*canvasAgentToggleReference\(widget\.id,true\)[\s\S]*canvasAgentToggleReferencePicker\(false\)/);
   assert.match(functionSource(source,"canvasAgentSetWidgetPickActive"),/if \(!active\)[\s\S]*?canvasAgentWidgetPickerLayer\.width=1[\s\S]*?canvasAgentWidgetPickerLayer\.height=1[\s\S]*?if \(active\) canvasAgentDrawWidgetPick\(\)/);
-  assert.match(source,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"[\s\S]*images:outgoingAttachments\.map[\s\S]*canvasAgentClearReferences\(\)/);
+  assert.match(source,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"[\s\S]*images:\[\.\.\.outgoingAttachments\.map[\s\S]*canvasAgentClearReferences\(\)/);
   assert.match(source,/document\.createElement\("details"\)[\s\S]*?document\.createElement\("summary"\)/);
   assert.match(functionSource(source,"canvasAgentRenderMessageBody"),/canvasAgentFencedSegments[\s\S]*canvas-agent-copy-block-button[\s\S]*writeClipboardText\(segment\.text\)/);
   assert.match(source,/target\.messageText = canvasAgentVisibleAssistantText\(target\.messageText \+ \(event\.text \|\| ""\)\)[\s\S]*canvasAgentScheduleAssistantRender\(target\)/);
@@ -3354,8 +3369,8 @@ test("PenEcho Agent UI and browser Facade support local and Cloud runtimes and a
   const compactComposerStart=css.indexOf("@container (max-width: 520px)"),compactComposerRule=css.slice(compactComposerStart,css.indexOf("@media (prefers-reduced-motion: reduce)",compactComposerStart));
   assert.match(compactComposerRule,/--canvas-agent-action-size: clamp\(22px, calc\(14\.2857cqw - 21px\), 30px\)/);
   assert.match(compactComposerRule,/\.canvas-agent-composer \.canvas-agent-stop\s*\{ width: var\(--canvas-agent-action-size\); min-width: var\(--canvas-agent-action-size\); height: var\(--canvas-agent-action-size\); \}/);
-  assert.match(compactComposerRule,/\.canvas-agent-composer-toolbar\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(74px, \.82fr\) minmax\(0, 1fr\)/);
-  assert.match(compactComposerRule,/\.canvas-agent-project-button > span,[\s\S]*?\.canvas-agent-prompt-toggle-copy > \[data-pe-region="title"\]\s*\{ font-size: 11px; \}/);
+  assert.match(compactComposerRule,/\.canvas-agent-composer-toolbar\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(compactComposerRule,/\.canvas-agent-project-button > span,[\s\S]*?\.canvas-agent-connection-button > span\s*\{ font-size: 11px; \}/);
   assert.match(css,/\.canvas-agent-composer \.canvas-agent-project-clear\s*\{[^}]*width: 16px;[^}]*opacity: 0;[^}]*pointer-events: none/);
   for(const panelWidth of [304,320,360,422,522]){
     const actionSize=Math.min(30,Math.max(22,(panelWidth-149)/7)),requiredWidth=actionSize*6+7,availableWidth=panelWidth-30;
@@ -3397,7 +3412,7 @@ test("PenEcho Agent panel pauses new Auto AI scheduling without cancelling indep
     assert.doesNotMatch(source,/canvasAgentAutoAIRequestPaused/);
   }
   assert.match(agent,/canvasAgentPanel\.addEventListener\("focusin",canvasAgentPauseAutomaticAI\)/);
-  assert.match(agent,/canvasAgentPanel\.addEventListener\("focusout",\(\)=>queueMicrotask\(canvasAgentResumeAutomaticAI\)\)/);
+  assert.match(agent,/canvasAgentPanel\.addEventListener\("focusout",\(\)=>queueMicrotask\(\(\)=>\{[\s\S]*?canvasAgentResumeAutomaticAI\(\);\s*\}\)\)/);
   const syncTriggerState=functionSource(agent,"canvasAgentSyncTriggerState");
   assert.match(syncTriggerState,/busy = canvasAgent\.requestPending \|\| canvasAgent\.running[\s\S]*canvasAgentControl\.classList\.toggle\("is-busy",busy\)[\s\S]*canvasAgentControl\.setAttribute\("aria-busy",String\(busy\)\)/);
   assert.doesNotMatch(syncTriggerState,/canvasAgentToggle\.setAttribute\("aria-busy"/);
@@ -3405,7 +3420,7 @@ test("PenEcho Agent panel pauses new Auto AI scheduling without cancelling indep
   assert.match(functionSource(agent,"canvasAgentAnimatePanel"),/pageLayoutRect\(canvasAgentToggle\)[\s\S]*document\.body\.append\(proxy\)[\s\S]*proxy\.animate/);
   assert.match(functionSource(agent,"closeCanvasAgent"),/canvasAgentScheduleDockedCloseWork\(\);return[\s\S]*canvasAgentAnimatePanel\(false,panelRect,canvasAgentFinishDockedClose\)/);
   assert.match(functionSource(agent,"canvasAgentFinishDockedClose"),/canvasAgentPanel\.hidden=true[\s\S]*canvasAgentSyncTriggerState\(\)[\s\S]*canvasAgentPersistCurrentConversation\(\)/);
-  assert.match(agent,/let requestSent = false;[\s\S]*canvasAgentInput\.disabled = true[\s\S]*canvasAgentBeginRequest\(\)/);
+  assert.match(agent,/let requestSent = false;[\s\S]*canvasAgentInput\.disabled = true[\s\S]*canvasAgentBeginRequest\(options\)/);
   assert.match(agent,/canvasAgentSendRequest\(canvasAgent\.running \? "steer" : "user_turn"/);
 });
 
@@ -3508,7 +3523,7 @@ test("only a Canvas-first post-load action auto-hides Agent once",()=>{
   assert.match(agent,/canvasAgentCanvasDidChange\(\);\s*$/);
   assert.match(functionSource(persistence,"saveUserCanvasChange"),/allowAutoHide:canvasSnapshotFinalizationDepth === 0/);
   assert.match(functionSource(persistence,"finalizeCanvasForSnapshot"),/canvasSnapshotFinalizationDepth\+\+[\s\S]*?finally[\s\S]*?canvasSnapshotFinalizationDepth--/);
-  assert.match(functionSource(agent,"canvasAgentSubmitMessage"),/canvasAgentDidStartUserConversation\(\)[\s\S]*?canvasAgentBeginRequest\(\)/);
+  assert.match(functionSource(agent,"canvasAgentSubmitMessage"),/canvasAgentDidStartUserConversation\(\)[\s\S]*?canvasAgentBeginRequest\(options\)/);
   const finishDrawing=functionSource(ai,"finishDrawing");
   assert.ok(finishDrawing.indexOf("saveUserCanvasChange()")<finishDrawing.indexOf("schedule()"),"the first stroke closes Agent before Auto AI is scheduled");
   for(const name of ["addImageFile","confirmTextEditor"])assert.match(functionSource(canvas,name),/saveUserCanvasChange\(\)/);
@@ -3591,6 +3606,7 @@ test("PenEcho Agent validates capture delivery and browser target errors without
   assert.doesNotMatch(functionSource(runtime,"captureCacheKey"),/deliverToUser/);
 
   const targetContext={
+      state:{selection:null},
       viewportRect:()=>({x:0,y:0,w:100,h:80}),
       canvasAgentContentBounds:()=>({x:10,y:20,w:30,h:40}),
       canvasAgentValidatedRegion:region=>region?.width>0?region:null,
@@ -3602,7 +3618,8 @@ test("PenEcho Agent validates capture delivery and browser target errors without
   assert.deepEqual(target({target:"canvas"}),{x:10,y:20,w:30,h:40});
   assert.deepEqual(target({target:"object",objectId:"widget-current"}),{x:10,y:20,w:30,h:40});
   assert.throws(()=>target({target:"object",objectId:"widget-stale"}),error=>error.code==="OBJECT_NOT_FOUND"&&error.details.objectId==="widget-stale");
-  assert.throws(()=>target({target:"selection"}),error=>error.code==="INVALID_TARGET"&&error.details.target==="selection");
+  assert.throws(()=>target({target:"selection"}),error=>error.code==="SELECTION_REQUIRED");
+  assert.throws(()=>target({target:"unknown"}),error=>error.code==="INVALID_TARGET"&&error.details.target==="unknown");
   assert.match(functionSource(source,"canvasAgentCapture"),/object\.kind!=="widget"[\s\S]*?DETAIL_TARGET_REQUIRED/);
 });
 
@@ -3661,15 +3678,15 @@ test("PenEcho Agent completes the first capture when Widget load changes its sna
   assert.equal(widget.snapshotVersion,widget.contentVersion);
 });
 
-test("PenEcho Agent aborts stale Widget snapshot requests before they can update capture cache",async()=>{
+test("PenEcho Agent aborts its snapshot wait while a current caller can reuse the shared capture",async()=>{
   const source=read("src/client/app/canvas-runtime.js"),widgetSnapshotRequests=new Map();
   let requestId="";
   const context={
     AbortController,Error,Promise,setTimeout,clearTimeout,
     performance:{now:()=>0},crypto:{randomUUID:()=>"snapshot-request"},
-    WIDGET_SNAPSHOT_TIMEOUT_MS:5_000,widgetSnapshotRequests,
+    WIDGET_SNAPSHOT_TIMEOUT_MS:5_000,widgetSnapshotRequests,WIDGET_SNAPSHOT_ATTEMPTS:3,WIDGET_SNAPSHOT_RETRY_CODES:new Set(),
     t:key=>key,sendWidgetInit:()=>{},sendWidgetHostState:()=>{},
-  },request=vm.runInNewContext(`(() => { ${functionSource(source,"widgetSnapshotAbortError")} ${functionSource(source,"waitForWidgetSnapshot")} async ${functionSource(source,"requestWidgetSnapshot")} return requestWidgetSnapshot; })()`,context),
+  },request=vm.runInNewContext(`(() => { ${["widgetSnapshotAbortError","widgetSnapshotDeadlineError","waitForWidgetSnapshotUntil","widgetSnapshotFresh"].map(name=>functionSource(source,name)).join("\n")} ${["widgetSnapshotAttempt","startWidgetSnapshotCapture","requestWidgetSnapshot"].map(name=>"async "+functionSource(source,name)).join("\n")} return requestWidgetSnapshot; })()`,context),
     widget={
       contentVersion:7,snapshotVersion:-1,snapshotImage:null,snapshotDataUrl:"",snapshotPromise:null,
       hostReady:true,initialized:true,renderActive:true,hostOrigin:"https://widget.invalid",contentW:640,contentH:480,
@@ -3679,9 +3696,15 @@ test("PenEcho Agent aborts stale Widget snapshot requests before they can update
   assert.equal(requestId,"snapshot-request");
   controller.abort(Error("PenEcho Agent session changed."));
   await assert.rejects(pending,/session changed/);
-  assert.equal(widgetSnapshotRequests.size,0);
+  assert.equal(widgetSnapshotRequests.size,1,"caller cancellation must not orphan the shared host render");
   assert.equal(widget.snapshotImage,null);
   assert.equal(widget.snapshotDataUrl,"");
+  const current=request(widget,5_000,true),capture=widgetSnapshotRequests.get(requestId),image={width:640,height:480};
+  widgetSnapshotRequests.delete(requestId);clearTimeout(capture.timer);
+  widget.snapshotImage=image;widget.snapshotVersion=widget.contentVersion;capture.resolve(image);
+  assert.equal(await current,image);
+  assert.equal(widget.snapshotPromise,null);
+  assert.equal(widgetSnapshotRequests.size,0);
 });
 
 test("PenEcho Agent auto placement honors explicit center alignment",()=>{
@@ -3747,7 +3770,7 @@ test("PenEcho Agent replaces Widget content in place while preserving host and h
       state,
       canvasAgentAssertRevision(revision){if(Number(revision)!==state.userRevision)throw Error("Canvas changed.");},
       canvasAgentToolError(code,message,details){const error=Error(message);error.code=code;if(details!==undefined)error.details=details;return error;},
-      canvasAgentMutationIdle(){},canvasAgentObject:()=>({kind:"widget",item:widget}),
+      canvasAgentMutationIdle(){},canvasAgentBeginMutation:()=>()=>{},canvasAgentObject:()=>({kind:"widget",item:widget}),
       widgetEditContext:item=>({title:item.title,html:item.html}),
       canvasAgentHash:async()=>"widget-hash",canvasAgentAssertToolExecution(){},
       canvasAgentWidgetPluginAllowed:()=>true,

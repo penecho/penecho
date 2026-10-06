@@ -2052,7 +2052,8 @@ export class CodexNativeHost {
         if (!toolStillActive()) throw new Error('Codex Native PenEcho Agent session or turn changed during tool execution.')
         if (!contentItems.length) contentItems.push({ type:'inputText', text:'PenEcho tool completed.' })
         const resultText=value?.terminal===true?boundedText(String(value.message||'PenEcho Agent stopped the current turn.'),2_000):'PenEcho tool completed.'
-        this.emitPublicEvent(session, { kind:'tool_result', turn:session.turnNumber, callId, text:resultText, error:null })
+        this.emitPublicEvent(session, { kind:'tool_result', turn:session.turnNumber, callId, text:resultText,
+          error:value?.terminal===true&&value?.code==='CANVAS_BUSY'?{code:value.code,message:resultText,details:value.details}:null })
         const response={ success:true, contentItems }
         active.activityDiagnostics?.tool('result-ready')
         active.activityDiagnostics?.phase('tool-result-ready')

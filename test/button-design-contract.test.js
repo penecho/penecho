@@ -38,7 +38,6 @@ test("PenEcho Agent composer maps tint to the defined action hierarchy", () => {
   const expected = {
     canvasAgentAttach:"toolbar",
     canvasAgentProject:"toolbar",
-    canvasAgentPromptToggle:"ghost",
     canvasAgentConnection:"ghost",
     canvasAgentReference:"toolbar",
     canvasAgentTextMode:"toolbar",
@@ -161,7 +160,7 @@ test("Agent composer keeps the scale90 button set and layout while adopting tint
     "canvasAgentSend",
   ]);
   const toolbarIds = Array.from(document.querySelectorAll(".canvas-agent-composer-toolbar button:not([data-effort])"), (button) => button.id);
-  assert.deepEqual(toolbarIds, ["canvasAgentProject","canvasAgentProjectClear","canvasAgentPromptToggle","canvasAgentConnection","canvasAgentThinkingButton"]);
+  assert.deepEqual(toolbarIds, ["canvasAgentProject","canvasAgentProjectClear","canvasAgentConnection","canvasAgentThinkingButton"]);
   assert.equal(document.querySelector("#canvasAgentProjectLabel")?.parentElement?.className, "canvas-agent-project-content");
   assert.equal(document.querySelector("#canvasAgentProjectLabel")?.parentElement?.parentElement?.className, "canvas-agent-project-label-clip");
   assert.equal(document.querySelector("#canvasAgentConnectionLabel")?.parentElement?.className, "canvas-agent-connection-label-clip");
@@ -195,7 +194,7 @@ test("Agent composer keeps the scale90 button set and layout while adopting tint
   assert.doesNotMatch(connectionLabelRule, /ellipsis|mask-image:[^;]*%|mask-image:[^;]*calc\(/, "The connection label fades only inside the fixed 14px chevron rail");
   assert.match(css, /\.canvas-agent-connection-button\[data-pe-button\]\s*\{[^}]*justify-content:\s*center;[^}]*gap:\s*0;/s);
   assert.match(css, /\.canvas-agent-connection-button\[data-pe-button\] > svg\s*\{[^}]*margin-inline-start:\s*-14px;/s);
-  assert.match(css, /\.canvas-agent-composer-toolbar\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.canvas-agent-composer-toolbar\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /@container \(max-width: 520px\)[\s\S]*?\.canvas-agent-primary-actions\) \{ gap: 1px; \}/);
   assert.doesNotMatch(css, /\.canvas-agent-primary-actions\s*\) \{ gap: 4px; \}/);
 });

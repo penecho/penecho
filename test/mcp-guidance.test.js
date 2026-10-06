@@ -23,9 +23,19 @@ test("shared guidance preserves the complete authoritative design and scientific
     assert.equal(result.id, id);
     assert.equal(result.hash, crypto.createHash("sha256").update(result.document).digest("hex"));
     assert.equal(getAuthoringGuidance(id,"full"), result);
-    assert.doesNotMatch(result.document, /canvas_create|load_visual_skill|plannedWidget|professional.diagram|private.plugin/i);
+    assert.doesNotMatch(result.document, /canvas_create|load_visual_skill|plannedWidget/i);
+    if(id!=="professional-diagram-edit")assert.doesNotMatch(result.document,/professional.diagram|private.plugin/i);
   }
   assert.throws(() => getAuthoringGuidance("../private","full"), RangeError);
+});
+
+test("Professional Diagram guidance is edit-only and uses the shared source patch contract", () => {
+  const guide=getAuthoringGuidance("professional-diagram-edit","full").document;
+  assert.match(guide,/does not enable creating Professional Diagrams/);
+  assert.match(guide,/penecho_patch_file/);assert.match(guide,/contentHash/);
+  assert.match(guide,/sourceRef\/targetRef/);assert.match(guide,/incident edges/);
+  assert.match(guide,/Preserve object identity, geometry/);
+  assert.throws(()=>getAuthoringGuidance("professional-diagrams","full"),RangeError);
 });
 
 test("default and explicit brief deliver the complete Visual Explorer contract through Agent and MCP", async () => {

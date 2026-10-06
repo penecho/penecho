@@ -419,8 +419,8 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.match(desktopReleaseWorkflow, /TimeStamperCertificate/);
   assert.match(main, /credentialProtector = process\.platform === "darwin" \? null : safeStorage/);
   assert.match(main, /readSecret\(paths\.secretFile, credentialProtector\)/);
-  assert.equal(rootPackage.version, "1.3.5");
-  assert.equal(rootPackage.config.desktopVersion, "1.3.5");
+  assert.equal(rootPackage.version, "1.4.0");
+  assert.equal(rootPackage.config.desktopVersion, "1.4.0");
   assert.ok(rootPackage.files.includes("src/"));
   for (const asset of ["public/access.html", "public/access.css", "public/access.js"]) {
     assert.ok(rootPackage.files.includes(asset), asset);
@@ -429,7 +429,7 @@ test("desktop shell and Forge config keep the renderer isolated and package nati
   assert.ok(rootPackage.files.includes("public/penecho-mark.png"));
 });
 
-test("README logo is a compact WebP with transparent background and letter counters", async () => {
+test("README logo is a compact horizontal WebP: blue pen mark beside the PenEcho wordmark", async () => {
   const logo = path.join(ROOT, "public", "penecho-readme-header.webp"),
     metadata = await sharp(logo).metadata(),
     pixels = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
@@ -438,41 +438,65 @@ test("README logo is a compact WebP with transparent background and letter count
   assert.equal(metadata.width, 840);
   assert.equal(metadata.hasAlpha, true);
   assert.ok(require("../package.json").files.includes("public/penecho-readme-header.webp"));
-  const at = (x, y) => pixels.data[(y * pixels.info.width + x) * 4 + 3];
-  assert.equal(at(0, 0), 0);
-  assert.equal(at(Math.floor(metadata.width / 2), Math.floor(metadata.height / 3)), 0, "symbol interior stays transparent");
-  assert.equal(at(53, 630), 0, "the counter inside the P stays transparent");
-  let transparent = 0;
-  for (let i = 3; i < pixels.data.length; i += 4) if (pixels.data[i] === 0) transparent++;
-  assert.ok(transparent > metadata.width * metadata.height * .6);
+  assert.equal(pixels.data[3], 0, "outer corner stays transparent");
+  const counts = brandPixels(pixels.data);
+  assert.ok(counts.transparent > metadata.width * metadata.height * .6);
+  assert.ok(counts.blue > 5000, "blue pen mark and Echo lettering");
+  assert.ok(counts.ink > 2000, "ink Pen lettering");
+  const left = brandPixels(cropPixels(pixels, 0, 0, Math.floor(metadata.width / 4), metadata.height));
+  assert.ok(left.blue > 2000 && left.ink === 0, "the pen mark sits left of the wordmark");
   const readmes = ["README.md", ...fs.readdirSync(path.join(ROOT, "docs/readme")).filter(file => /^README.*\.md$/.test(file)).map(file => "docs/readme/" + file)];
-  for (const file of readmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /penecho-readme-header\.webp" alt="PenEcho" width="280"/);
+  for (const file of readmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /penecho-readme-header\.webp" alt="PenEcho" width="320"/);
   for (const file of readmes) assert.match(fs.readFileSync(path.join(ROOT, file), "utf8"), /prefers-color-scheme: dark[\s\S]*?penecho-readme-header-dark\.webp/);
   const dark = await sharp(path.join(ROOT, "public/penecho-readme-header-dark.webp")).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   assert.equal(dark.info.width, metadata.width);
   assert.equal(dark.info.height, metadata.height);
-  assert.ok(brandPixels(dark.data).white > 10000, "dark README must use light lettering");
+  const darkCounts = brandPixels(dark.data);
+  assert.ok(darkCounts.white > 2000 && darkCounts.ink === 0, "dark README must use light lettering");
+  assert.ok(darkCounts.lightBlue > 5000 && darkCounts.blue === 0, "dark README lifts the blue for dark backgrounds");
   const favicon = await sharp(path.join(ROOT, "public/penecho-favicon.png")).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   assert.equal(favicon.info.width, 256);
+  assert.equal(favicon.info.height, 256);
   assert.equal(favicon.data[3], 0, "favicon outer corners remain transparent");
-  assert.ok(brandPixels(favicon.data).white > 20000, "white favicon plate protects the black circular dot on dark tabs");
+  const faviconCounts = brandPixels(favicon.data);
+  assert.equal(faviconCounts.white, 0, "favicon must not have a white tile behind the blue pen");
+  assert.ok(faviconCounts.transparent > favicon.info.width * favicon.info.height * .75, "the pen's surrounding and interior background remains transparent");
+  assert.ok(faviconCounts.blue > 5000, "favicon shows the blue pen mark");
 });
 
+// Brand colors: blue #2350E6 (dark mode #7C9AFF), ink #1D1D1F, white tiles.
 function brandPixels(data, channels = 4) {
-  const counts = { transparent:0, ink:0, orange:0, pink:0, white:0 };
+  const counts = { transparent:0, ink:0, blue:0, lightBlue:0, white:0 };
   for (let i = 0; i < data.length; i += channels) {
     const [r, g, b, a] = data.subarray(i, i + 4);
     if (a === 0) counts.transparent++;
     if (a < 128) continue;
     if (r < 60 && g < 60 && b < 60) counts.ink++;
-    if (r > 190 && g > 70 && g < 195 && b < 100) counts.orange++;
-    if (r > 190 && g < 110 && b > 110) counts.pink++;
+    if (b > 180 && r < 90 && g < 130) counts.blue++;
+    if (b > 230 && r > 90 && r < 170 && g > 120 && g < 190) counts.lightBlue++;
     if (r > 240 && g > 240 && b > 240) counts.white++;
   }
   return counts;
 }
 
-test("Windows installer animation shows the full color logo and image-based wordmark", async () => {
+function cropPixels({ data, info }, left, top, width, height) {
+  const out = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) data.copy(out, y * width * 4, ((top + y) * info.width + left) * 4, ((top + y) * info.width + left + width) * 4);
+  return out;
+}
+
+function blueBox({ data, info }) {
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  for (let i = 0; i < data.length; i += 4) {
+    const [r, g, b, a] = data.subarray(i, i + 4);
+    if (a < 128 || !(b > 180 && r < 90 && g < 130)) continue;
+    const x = (i / 4) % info.width, y = Math.floor(i / 4 / info.width);
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  return { cx:(x0 + x1) / 2, cy:(y0 + y1) / 2 };
+}
+
+test("Windows installer animation shows the blue pen logo and image-based wordmark", async () => {
   const splash = path.join(ROOT, "build", "icons", "penecho-install.gif"),
     metadata = await sharp(splash, { animated:true }).metadata(),
     pixels = await sharp(splash, { animated:true }).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
@@ -484,18 +508,19 @@ test("Windows installer animation shows the full color logo and image-based word
     const framePixels = pixels.data.subarray(frame * 268 * 167 * 4, (frame + 1) * 268 * 167 * 4);
     assert.deepEqual([...framePixels.subarray(0, 4)], [255, 255, 255, 255]);
     const counts = brandPixels(framePixels);
-    assert.ok(counts.orange > 20 && counts.pink > 20, "installer must retain the brand gradient");
+    assert.ok(counts.blue > 300, "installer shows the blue pen mark");
     const lettering = framePixels.subarray(100 * 268 * 4, 126 * 268 * 4);
     assert.ok(brandPixels(lettering).ink > 80, "PenEcho letters remain visible below the symbol");
     assert.ok(counts.white > 35000, "background remains clean white");
   }
 });
 
-test("desktop icons retain the color symbol, white Mac tile and transparent Windows background", async () => {
+test("desktop icons show the blue pen mark on a white Mac tile and a transparent Windows background", async () => {
   const ico = fs.readFileSync(path.join(ROOT, "build/icons/penecho.ico")),
     icns = fs.readFileSync(path.join(ROOT, "build/icons/penecho.icns"));
   assert.equal(ico.readUInt16LE(2), 1);
   assert.ok(ico.readUInt16LE(4) >= 5, "Windows ICO includes multiple resolutions");
+  assert.equal(ico.readUInt8(6), 16, "Windows ICO starts with a 16px entry");
   assert.equal(icns.toString("ascii", 0, 4), "icns");
   assert.equal(icns.readUInt32BE(4), icns.length);
   // Inspect the shipped ICNS instead of an ignored, locally generated PNG.
@@ -514,15 +539,15 @@ test("desktop icons retain the color symbol, white Mac tile and transparent Wind
     assert.equal(pixels.info.width, 1024);
     assert.equal(pixels.info.height, 1024);
     const counts = brandPixels(pixels.data);
-    assert.ok(counts.orange > 1000 && counts.pink > 1000, "color gradient must survive icon generation");
-    assert.ok(counts.ink > 1000, "disconnected black circular dot remains visible");
+    assert.ok(counts.blue > 20000, "blue pen mark must survive icon generation");
+    const mark = blueBox(pixels);
+    assert.ok(Math.abs(mark.cx - 512) < 40 && Math.abs(mark.cy - 512) < 40, "pen mark stays centered");
     assert.equal(pixels.data[3], 0, "outer corners stay transparent");
   }
   assert.ok(brandPixels(windows.data).transparent > 600000);
   assert.ok(brandPixels(mac.data).white > 300000);
-  const center = (512 * 1024 + 512) * 4;
-  assert.equal(windows.data[center + 3], 0, "symbol center is empty rather than a pen or text");
-  assert.deepEqual([...mac.data.subarray(center, center + 4)], [255, 255, 255, 255]);
+  const tileEdge = (40 * 1024 + 512) * 4;
+  assert.deepEqual([...mac.data.subarray(tileEdge, tileEdge + 4)], [255, 255, 255, 255], "Mac tile is white behind the mark");
 });
 
 test("Windows first run waits for Squirrel to close before revealing PenEcho", async () => {

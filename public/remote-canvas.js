@@ -445,6 +445,18 @@
     }
   }
 
+  function syncCloudCanvasUrl(canvasId = window.PenEchoCloudProjects?.currentCanvasId?.()) {
+    if (!deviceIdPattern.test(String(canvasId || ""))) return;
+    const url = new URL(location.href);
+    const pathname = `/canvas/${canvasId}`;
+    if (url.pathname === pathname) return;
+    // The shared lifecycle event fires after Save/load adopts the active
+    // identity. Keep the loaded document and browser modes while fixing its URL.
+    url.pathname = pathname;
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  window.addEventListener("penecho:live-share-context-changed", () => syncCloudCanvasUrl());
+
   async function openRequestedCanvas() {
     if(isBrowserDraft){
       if(window.PENECHO_CONFIG.browserDraftBlocked)throw Error(zh?"此 MCP 连接属于另一个账号。请切换到授权账号后重新打开。":"This MCP connection belongs to another account. Switch to the authorized account and reopen it.");
@@ -464,7 +476,7 @@
         if (!deviceIdPattern.test(String(canvasId || ""))) throw Error("Cloud returned an invalid Canvas identity");
         // Saving already binds this loaded document to the owned Cloud copy.
         // Keep the gate up until completion, then reveal it without reloading.
-        window.history.replaceState(window.history.state, "", `/canvas/${canvasId}`);
+        syncCloudCanvasUrl(canvasId);
       }
     }
     else await window.PenEchoCloudProjects.openCanvas(requestedCanvasId);

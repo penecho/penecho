@@ -1,0 +1,95 @@
+'use strict';
+// Real suggestion requests and button clicks; model execution is intercepted.
+const {chromium}=require(process.env.PENECHO_PLAYWRIGHT||'playwright');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),cloud=process.argv.includes('--cloud');
+const clientRoot=cloud?path.resolve(root,'../penecho_cloud/public/canvas'):path.join(root,'public');
+const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'suggestion-execution-'));
+const output=path.resolve(process.env.PENECHO_VERIFY_OUTPUT||'docs/verification/suggestion-execution-20260929');
+fs.mkdirSync(output,{recursive:true});
+Object.assign(process.env,{NODE_ENV:'test',PENECHO_TEST_OPEN_ACCESS:'1',PENECHO_STATE_DIR:path.join(temporary,'state'),PENECHO_CONFIG_FILE:path.join(temporary,'config.env'),HOST:'127.0.0.1',PORT:'0',PENECHO_JEVISION_ENABLED:'false',PENECHO_CANVAS_AGENT_AUTO_OPEN:'false',PENECHO_REQUEST_TRACE:'false'});
+const choice=(choice,probabilities)=>({type:'choice',choice,confidence:.8,...(probabilities?{probabilities}:{})});
+const answers={kind:choice('notes',{notes:1}),action:choice('typeset',{typeset:.6,organize:.2,explain:.1,answer:.1}),finished:{type:'noul',noul:1},execution:choice('canvas_ai'),execution_organize:choice('penecho_agent'),execution_explain:choice('canvas_ai')};
+const server=require('../server.js');
+(async()=>{let browser;try{
+  await new Promise(resolve=>server.listening?resolve():server.once('listening',resolve));
+  browser=await chromium.launch({headless:true});
+  const page=await browser.newPage({viewport:{width:1440,height:900}}),requests=[],errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  const injection=`
+    if(${cloud})window.PENECHO_CONFIG.runtime='cloud';
+    window.executionAudit={state,smartSuggest,widgetAssist,canvasDocumentsReady,loadCanvasSettings,smartSuggestCluster,smartSuggestRecordStroke,runSmartSuggest,assistRefresh,renderAssist,assistView,hideAssist,stroke,captureSelection,cancelSelection,setCanvasMode,render,widgetAssistPrefetch,widgetAssistEntry,runWidgetAssistAction,calls:[],labels:[]};
+    assistAgentRun=async(id,target)=>{executionAudit.calls.push({executor:'agent',id,selection:!!target.selection,...(target.widget?{widget:target.widget.id}:{})});return 'submitted';};
+    requestAI=async(action)=>executionAudit.calls.push({executor:'canvas_ai',id:action});
+    requestSelectionAI=async(action)=>executionAudit.calls.push({executor:'canvas_ai',id:action,selection:true});
+    requestWidgetRefinement=(_widget,_mode,options)=>{executionAudit.calls.push({executor:'canvas_ai',id:options.actionId,widget:_widget.id});return true;};
+    const drawAssist=renderAssist;
+    renderAssist=model=>{executionAudit.labels.push(model.label||'');return drawAssist(model);};
+  `;
+  const app=fs.readFileSync(path.join(clientRoot,'app.js'),'utf8').replace(/\}\)\(\);\s*$/,injection+'})();');
+  await page.route(/^https:\/\//,route=>route.abort());
+  await page.route('**/app.js*',route=>route.fulfill({contentType:'application/javascript',body:app}));
+  await page.route('**/smart-suggest.js*',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(clientRoot,'smart-suggest.js'),'utf8')}));
+  await page.route('**/suggest/status',route=>route.fulfill({json:{configured:true,model:'PenEchoLLM'}}));
+  await page.route('**/suggest',route=>{
+    const request=route.request().postDataJSON();requests.push(request);
+    const result=request.mode==='widget'?{action:choice('larger_text',{larger_text:.6,fix_layout:.4}),execution:choice('canvas_ai'),execution_fix_layout:choice('penecho_agent')}:answers;
+    return route.fulfill({json:{ok:true,model:'PenEchoLLM',answers:result}});
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}`,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.executionAudit);
+  await page.evaluate(async()=>{
+    const t=executionAudit,s=t.state,a=t.smartSuggest;
+    await t.canvasDocumentsReady();await t.loadCanvasSettings();
+    document.querySelector('#tourSkip')?.click();document.querySelector('#changelogClose')?.click();
+    s.auto=false;s.mode='pen';s.scale=1;s.panX=0;s.panY=0;a.enabled=true;a.available=true;
+    t.smartSuggestCluster();
+    const entry={};s.history.push(entry);
+    const points=[{x:300,y:250},{x:300,y:320},{x:340,y:280},{x:370,y:320}];
+    for(let i=1;i<points.length;i++)t.stroke(points[i-1],points[i],false,8,true,'#111111');
+    t.smartSuggestRecordStroke({id:a.nextStrokeId++,points,box:{x:300,y:250,w:70,h:70},at:performance.now(),size:8,historyEntry:entry});
+    await t.runSmartSuggest();clearTimeout(a.timer);clearTimeout(a.localTimer);
+    t.render();window.PenEchoStudioNavigator?.updateDocument();
+  });
+  assert.equal(requests.length,1);assert.equal(requests[0].mode,'ink');
+  const clickSuggestion=async id=>{
+    const button=page.locator(`[data-suggestion="${id}"]`);
+    if(!await button.isVisible())await page.locator('.assist-more > button').click();
+    await button.click();
+  };
+  await page.locator('.assist-bar').hover();
+  await page.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.assist-bar')).opacity)>.99);
+  await page.screenshot({path:path.join(output,`${cloud?'cloud':'local'}-ranked.png`)});
+  await clickSuggestion('organize');
+  assert.deepEqual(await page.evaluate(()=>executionAudit.calls.at(-1)),{executor:'agent',id:'organize',selection:false});
+  assert.equal(requests.length,1,'non-primary Agent suggestion must use the original inference');
+  await page.evaluate(()=>{const t=executionAudit;t.smartSuggest.consumedStrokeId=0;t.assistRefresh('test');});
+  await clickSuggestion('explain');
+  assert.deepEqual(await page.evaluate(()=>executionAudit.calls.at(-1)),{executor:'canvas_ai',id:'explain'});
+  assert.equal(requests.length,1,'Canvas AI suggestion must use the original inference');
+  await page.evaluate(async()=>{
+    const t=executionAudit;t.hideAssist('test');t.setCanvasMode('select');
+    t.captureSelection([{x:280,y:230},{x:400,y:230},{x:400,y:350},{x:280,y:350},{x:280,y:230}]);
+    await t.runSmartSuggest();clearTimeout(t.smartSuggest.timer);clearTimeout(t.smartSuggest.localTimer);
+  });
+  assert.equal(requests.at(-1).mode,'selection');const selectionRequests=requests.length;
+  await clickSuggestion('organize');
+  assert.deepEqual(await page.evaluate(()=>executionAudit.calls.at(-1)),{executor:'agent',id:'organize',selection:true});
+  assert.equal(requests.length,selectionRequests);
+  await page.evaluate(async()=>{
+    const t=executionAudit;t.cancelSelection();
+    const image=new Image();image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250"><rect width="400" height="250" fill="white"/><text x="30" y="50">Notes</text></svg>');await image.decode();
+    const widget={id:'execution-widget',x:500,y:200,w:400,h:250,html:'<p>Notes</p>',title:'Notes',snapshotImage:image,contentW:400,contentH:250,runtimeDiagnostics:{layoutIssues:[{message:'clipped'}]}};
+    t.state.widgets.push(widget);t.widget=widget;
+    await t.widgetAssistPrefetch(widget);
+    if(!t.widgetAssistEntry(widget).cached)throw Error('Widget ranking was not cached');
+    await t.runWidgetAssistAction(widget,{id:'fix_layout'});
+  });
+  assert.equal(requests.at(-1).mode,'widget');
+  assert.deepEqual(await page.evaluate(()=>executionAudit.calls.at(-1)),{executor:'agent',id:'fix_layout',selection:false,widget:'execution-widget'});
+  assert.ok(requests.every(request=>request.mode!=='route'));
+  assert.ok((await page.evaluate(()=>executionAudit.labels)).every(label=>!label.includes('Choosing how to help')&&!label.includes('正在选择处理方式')));
+  assert.deepEqual(errors,[]);
+  const report={runtime:cloud?'cloud':'local',clientRoot,requestModes:requests.map(request=>request.mode),calls:await page.evaluate(()=>executionAudit.calls),routingRequests:0,errors};
+  fs.writeFileSync(path.join(output,`${report.runtime}.json`),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));fs.rmSync(temporary,{recursive:true,force:true});}})().catch(error=>{console.error(error);process.exitCode=1;});

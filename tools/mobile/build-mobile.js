@@ -49,13 +49,30 @@ async function writePng(source, target, width, height = width) {
   await sharp(source).resize(width, height, { fit:"contain", background:{ r:255, g:255, b:255, alpha:0 } }).png().toFile(target);
 }
 
+// The icon source is an opaque white square: round its corners where it sits on the dark splash.
+async function roundedIcon(sharp, size) {
+  const radius = Math.round(size * 0.225);
+  const mask = Buffer.from(`<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" rx="${radius}" fill="#fff"/></svg>`);
+  return sharp(ICON_SOURCE).resize(size, size, { fit:"contain" }).composite([{ input:mask, blend:"dest-in" }]).png().toBuffer();
+}
+
+// Adaptive launchers show only the centre of the foreground layer and may mask it to a circle:
+// inset the icon so the pen and both ripples stay inside the safe zone.
+async function writeAdaptiveForeground(target, size) {
+  const sharp = require("sharp");
+  ensureDir(path.dirname(target));
+  const icon = await sharp(ICON_SOURCE).resize(Math.round(size * 0.7), Math.round(size * 0.7), { fit:"contain" }).png().toBuffer();
+  await sharp({ create:{ width:size, height:size, channels:4, background:{ r:255, g:255, b:255, alpha:1 } } })
+    .composite([{ input:icon, gravity:"center" }]).png().toFile(target);
+}
+
 async function writeSplash(target) {
   const sharp = require("sharp");
   const metadata = await sharp(target).metadata();
   const width = metadata.width || 2732;
   const height = metadata.height || 2732;
   const logoSize = Math.max(96, Math.round(Math.min(width, height) * 0.28));
-  const logo = await sharp(ICON_SOURCE).resize(logoSize, logoSize, { fit:"contain" }).png().toBuffer();
+  const logo = await roundedIcon(sharp, logoSize);
   const temporary = `${target}.penecho.png`;
   await sharp({
     create:{ width, height, channels:4, background:{ r:16, g:24, b:39, alpha:1 } },
@@ -77,7 +94,7 @@ async function generateAndroidIcons() {
     const directory = path.join(MOBILE_ROOT, "android", "app", "src", "main", "res", `mipmap-${density}`);
     await writePng(ICON_SOURCE, path.join(directory, "ic_launcher.png"), size);
     await writePng(ICON_SOURCE, path.join(directory, "ic_launcher_round.png"), size);
-    await writePng(ICON_SOURCE, path.join(directory, "ic_launcher_foreground.png"), size);
+    await writeAdaptiveForeground(path.join(directory, "ic_launcher_foreground.png"), size);
   }
   const adaptiveDirectory = path.join(MOBILE_ROOT, "android", "app", "src", "main", "res", "mipmap-anydpi-v26");
   const adaptiveXml = [

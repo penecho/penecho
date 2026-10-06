@@ -1,5 +1,29 @@
 # PenEcho 标识替换与残留清单
 
+## 2026-10-05：统一改为笔形标识
+
+用户确认把 071 与 Cloud 的全部 Logo 换成 PenEcho 1.4 宣传片里的标识：蓝色钢笔笔尖落在水面上，下方两圈涟漪（#2350E6）。确认的选项：应用图标和浏览器页签用白底蓝笔；README 顶部用横排（笔 + PenEcho）；penecho.ai 网站顶部导航在文字标前加笔形图标。下方 2026-09-15 的记录保留为历史；其中的渐变图形、黑色圆点和“用户明确保留”各项已被本次替换取代。
+
+| 位置 | 素材及行为 |
+| --- | --- |
+| 母版 | `build/brand/penecho-logo-original.png`（1248 × 1405 竖排：笔形在上，Poppins Light 字样在下，“Pen” #1D1D1F、“Echo” #2350E6，文字已烘焙进图）。`penecho-logo.json` 记录 logo / mark / wordmark 三个裁切。`penecho-mark-small.png` 是加粗笔画版，用于 48 px 及以下的图标和网页小图标 |
+| 主 README 与 8 个译本 | `public/penecho-readme-header.webp` / `-dark.webp` 改为横排；深色版用 #7C9AFF 和近白文字；显示宽度 280 → 320 px。`public/penecho-readme-header.png` 同步改为白底横排 |
+| macOS 应用、Dock、DMG | `build/icons/penecho.icns`：白色圆角底板 + 蓝笔，外角透明 |
+| Windows EXE、任务栏、Setup | `build/icons/penecho.ico`（16–256 px 共 7 个尺寸，48 px 及以下用加粗版）、`penecho.png`、`penecho-desktop-1024.png`：透明底 |
+| Windows 安装/更新动画 | `build/icons/penecho-install.gif`：竖排标识 + 加载点 |
+| 桌面更新窗口 | `desktop/update-window.html` 引用的 `public/penecho-mark.png`（加粗版蓝笔） |
+| Canvas 页签、局域网密码页 | `public/penecho-favicon.png`：白色圆角底板 + 加粗蓝笔 |
+| Canvas 分享查看页 | `public/viewer.js` / `viewer.css`：文字标前加笔形，`penecho-mark.png` 作为 CSS mask，品牌蓝 |
+| 移动端 | `build/icons/penecho-1024.png` 改为白色方底 + 蓝笔，并改由 `npm run icons` 生成；Android 自适应图标前景内缩到安全区，启动图上的图标加圆角，连接页图标加圆角 |
+| 插件市场图标 | `integrations/penecho-cloud/assets/logo.png` 与 favicon 相同 |
+| Cloud | Canvas 同步文件（`penecho-favicon.png`、`penecho-mark.png`、`viewer.js`、`viewer.css`）；`public/media/brand-app-icon.png`、`brand-icon.png`、`brand-logo.png`、`penecho-mark.png`；网站顶部导航和首页页脚文字标前的笔形；README 顶部横排标识 |
+
+执行 `npm run icons` 可重新生成以上全部派生素材。`scripts/generate-icons.js` 直接写出 ICO/ICNS 的 PNG 条目，不再调用 png2icons。
+
+仍需注意：已安装的应用和线上安装包不会自动变化，需要重新打包、安装后才能在 Dock/任务栏看到新图标。GitHub 组织头像、社交账号、`og.png` 社交分享图等仓库外或非 Logo 素材不在本次范围内。Cloud `tools/make_brand_assets.py` 仍定义旧素材输出，本次未执行也未修改。`docs/design-previews/brand-20260915/` 是旧版预览截图，保留为历史。
+
+## 2026-09-15 记录（历史）
+
 核查日期：2026-09-15。修改范围为当前 071 正式源码目录中的 README、Windows/macOS 应用图标、Windows 安装动画，以及桌面更新窗口。用户随后确认追加 Canvas 页签和 Cloud 网站/下载页/Admin 的 favicon 与应用图标；其余位置及字体拼出的文字标保持原样。最终素材采用用户最后提供的透明 PNG（1441 × 1092，右上角为黑色圆点）；原生透明度、渐变和边缘直接保留，未进行去白底或重新绘制。
 
 ## 本次替换

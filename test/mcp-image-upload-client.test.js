@@ -35,7 +35,12 @@ test('HTTPS response limit and deadline terminate transport without mutation rep
 test('document IDs allow 256 characters but reject 257',async t=>{const {bytes,options}=fixture(t);const requestUpload=async(url,c,stream,size,args)=>{for await(const chunk of stream){}return receipt(bytes,args);};assert.equal((await uploadImage({...options,documentId:'d'.repeat(256),requestUpload})).documentId.length,256);await assert.rejects(uploadImage({...options,documentId:'d'.repeat(257),requestUpload}),{code:'INVALID_ARGUMENT'});});
 test('absolute timeout releases a custom upload transport that ignores AbortSignal',async t=>{
  const {options}=fixture(t);let started=false;
- await assert.rejects(uploadImage({...options,timeoutMs:20,requestUpload:async()=>{started=true;return new Promise(()=>{});}}),error=>error.code==='UPLOAD_TIMEOUT'&&error.outcome==='unknown');
+ t.mock.timers.enable({apis:['setTimeout']});
+ const pending=uploadImage({...options,timeoutMs:20,requestUpload:async()=>{started=true;return new Promise(()=>{});}});
+ const rejected=assert.rejects(pending,error=>error.code==='UPLOAD_TIMEOUT'&&error.outcome==='unknown');
+ while(!started)await new Promise(resolve=>setImmediate(resolve));
+ t.mock.timers.tick(20);
+ await rejected;
  assert.equal(started,true);
 });
 test('caller cancellation settles even when the custom upload transport ignores AbortSignal',async t=>{

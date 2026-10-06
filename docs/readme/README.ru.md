@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
-    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">Рисуйте от руки. Встроенный агент PenEcho, Codex, Claude Code или любой MCP-клиент создаст рядом с заметками схемы, документы и работающие виджеты.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">Новое в 1.4</a> ·
   <a href="#quick-start">Быстрый старт</a> ·
   <a href="#connect-your-ai-agent-mcp">Подключение ИИ-агента (MCP)</a> ·
   <a href="../">Документация</a> ·
@@ -45,6 +46,30 @@
 </p>
 <p align="center"><em>От наброска до интерактивного результата на одном холсте.</em></p>
 
+<a name="new-in-1-4"></a>
+
+## Новое в 1.4: он знает, что вам нужно
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="Смотреть обзор PenEcho 1.4 (2:30)" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ Смотреть со звуком и главами</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">Скачать MP4</a><br><sub>Умные подсказки · PenEchoLLM · Заметки и карточки · живые графики · симуляции · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="../assets/release-1.4/penechollm-suggest.webp" alt="PenEchoLLM предлагает решить рукописный интеграл; одно касание — и ответ появляется на месте" width="100%"></a><br>
+      <strong>PenEchoLLM подсказывает следующий шаг</strong><br>
+      Сделайте паузу после записи, и PenEchoLLM расставит по важности следующие действия: решить, оформить, построить график, сделать схему, сохранить как заметку и другие. Одно касание — и ответ появляется там, где вы писали, а следующий шаг уже предложен. Подсказки учатся на вашем выборе прямо на устройстве; пробуйте бесплатно каждый день без API-ключа.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="../assets/release-1.4/notes-cards.webp" alt="Рукописные заметки обводятся на холсте, превращаются в карточку знаний и появляются в библиотеке с поиском" width="100%"></a><br>
+      <strong>Заметки и карточки сохраняют главное</strong><br>
+      Обведите формулу, набросок или ответ и сохраните их как карточку знаний или рабочую заметку вместе с исходным почерком. Карточки автоматически распределяются по категориям и собираются в библиотеке: их можно искать, добавлять в закладки, повторять и переносить на любой холст.
+    </td>
+  </tr>
+</table>
+
 ## Возможности
 
 <table width="100%">
@@ -52,7 +77,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Нарисуйте и спросите" width="100%"><br>
       <strong>Нарисуйте и спросите</strong><br>
-      Рукописные заметки, формулы, текст и изображения на бесконечном холсте. ИИ автоматически отвечает, когда вы делаете паузу.
+      Рукописные заметки, формулы, текст и изображения на бесконечном холсте. Когда вы делаете паузу, PenEchoLLM подсказывает следующий шаг.
     </td>
     <td width="33%" valign="top">
       <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Кластер Kubernetes" width="100%"></a><br>
@@ -178,12 +203,15 @@ npm start
 
 </details>
 
-## Новое в 1.3.5
+## Новое в 1.4.0
 
-- **UI:** небольшие исправления интерфейса.
-- **Одновременное редактирование холста:** Canvas AI, Agent и MCP могут одновременно изменять один и тот же холст.
+- **Умные подсказки с PenEchoLLM:** действия по содержимому рукописного ввода, текста и изображений, упорядоченные PenEchoLLM: быстрые ответы, создание визуальных материалов и уточняющие вопросы.
+- **Lasso AI:** обведите часть холста, чтобы решить задачу, визуализировать, анимировать или упорядочить только выделенное содержимое.
+- **Заметки и карточки:** превращайте содержимое холста в заметки и карточки знаний, просматривайте, ищите и добавляйте их на другие холсты.
+- **Улучшение Widget:** уточняйте результаты рукописными комментариями и контекстными действиями; управление стало понятнее, а размеры лучше соответствуют содержимому.
+- **Работа с холстом:** улучшены жесты пера, удаление штрихов, навигация и совместная работа с Agent и MCP.
 
-[Полный список изменений →](../../CHANGELOG.md#135)
+[Смотреть обзор 1.4 →](https://penecho.ai/#knows-you) · [Полный список изменений →](../../CHANGELOG.md#140)
 
 ## Сообщество
 

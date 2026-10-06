@@ -1,3 +1,0 @@
-Post-deploy UAT acceptance PASS for Cloud9d1e872. Running app sharp0.35.4 / libheif1.23.2; hosted model, Agent and native canvas flags true. Worker healthy at private document-worker:8091 with configured token and no published host port.
-
-Existing isolated sandbox-paid account: one actual deepseek-4 completion returned OK; balance6999→6998, exactly one hosted_model_usage ledger row. Then actual Agent extracted exact markers from PDF and DOCX. Both files deleted204, subsequent read rejected; canvas permanently deleted204, project deleted200, new session revoked. No production or real-user writes, no new payment, no source changes. Detailed JSON and documents/final-read-frames.json retained.

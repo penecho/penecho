@@ -74,7 +74,7 @@ test("the title bar More menu forwards to the original Canvas buttons", () => {
   const menu = html.match(/<div id="canvasMoreMenu"[^>]*role="menu"[^>]*hidden>([\s\S]*?)<\/div>/);
   assert.ok(menu, "More menu starts hidden");
   const targets = [...menu[1].matchAll(/role="menuitem"[^>]*data-shell-forward="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(targets, ["#newCanvasBtn", "#historyBtn", "#exportPngBtn", "#echoCanvasBtn", "#clipboardCopyBtn", "#fullscreenBtn"]);
+  assert.deepEqual(targets, ["#newCanvasBtn", "#historyBtn", "#historyNotesNav", "#exportPngBtn", "#echoCanvasBtn", "#clipboardCopyBtn", "#fullscreenBtn"]);
   for (const id of ["newCanvasBtn", "historyBtn", "exportPngBtn", "echoCanvasBtn"]) assert.match(html, new RegExp(`<button id="${id}"`));
   // Menu items mirror hidden/disabled state of their targets and support keyboard navigation.
   assert.match(js, /item\.hidden = !target \|\| target\.hidden;/);

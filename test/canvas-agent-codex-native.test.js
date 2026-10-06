@@ -529,7 +529,7 @@ test("Codex Native uses a valid resolution.json candidate before every fallback"
 });
 
 test("Codex Native invalidates resolution caches from an earlier pin before installing the current pin", async () => {
-  for (const legacyPinnedVersion of [undefined, "0.149.1"]) {
+  for (const legacyPinnedVersion of [undefined, "0.149.1", "0.157.0"]) {
     const directory=fs.mkdtempSync(path.join(os.tmpdir(),"penecho-stale-resolution-test-")),stateDirectory=path.join(directory,"state"),cached=path.join(directory,"old","codex"),managed=path.join(directory,"managed","codex"),
       connection={id:`codex-stale-resolution-${legacyPinnedVersion ? "pinned" : "missing"}`,provider:"codex-cli",name:"Codex",cliPath:"codex",cliModel:"gpt-test",effort:"medium"},
       key=createHash("sha256").update(JSON.stringify({provider:connection.provider,cliPath:connection.cliPath})).digest("hex"),resolutionFile=path.join(stateDirectory,"tools","codex","resolution.json"),installCalls=[],inspectCalls=[];

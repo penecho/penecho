@@ -44,3 +44,19 @@ test("late catalog responses cannot cross a local account change", async () => {
     assert.deepEqual(connector.hostedConnections(), []);
   } finally { global.fetch = originalFetch; fs.rmSync(stateDir, { recursive:true, force:true }); }
 });
+
+test("catalog cache respects account identity, expiry and explicit refresh while balances remain fresh",async()=>{
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),'penecho-hosted-cache-')),originalFetch=global.fetch;
+  try{
+    const connector=new CloudConnector({stateDir,executeRequest:async()=>({}),defaultOrigin:'https://example.com'});
+    connector.writeConfiguration({version:2,origin:'https://example.com',accountToken:'first-session'});
+    let catalogs=0,wallets=0;
+    global.fetch=async url=>new Response(JSON.stringify(url.endsWith('/models')?(catalogs++,{models:[{id:modelId,apiFormat:'openai',available:true}]}):(wallets++,{credits:{balance:wallets}})));
+    await connector.hostedModels();const cached=await connector.hostedModels();
+    assert.equal(catalogs,1);assert.equal(wallets,2);assert.equal(cached.credits.balance,2);
+    await connector.hostedModels({refresh:true});assert.equal(catalogs,2);
+    connector.hostedCatalog.fetchedAt-=300001;await connector.hostedModels();assert.equal(catalogs,3);
+    connector.writeConfiguration({version:2,origin:'https://example.com',accountToken:'second-session'});
+    await connector.hostedModels();assert.equal(catalogs,4);
+  }finally{global.fetch=originalFetch;fs.rmSync(stateDir,{recursive:true,force:true});}
+});

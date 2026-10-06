@@ -35,6 +35,25 @@ AntV Infographic (npm package "@antv/infographic") is distributed under the
 MIT License. Copyright (c) 2025 AntV. The complete license text is included at
 public/vendor/antv-infographic.LICENSE.
 
+Host-rendered Widget scenes (public/scene-runtime.js) use three unmodified,
+version-pinned builds, each distributed under the MIT License:
+- anime.js 4.5.0, Copyright (c) 2025 Julian Garnier
+  (https://github.com/juliangarnier/anime), public/vendor/scene/anime.LICENSE
+- matter-js 0.20.0, Copyright (c) Liam Brummitt and contributors
+  (https://github.com/liabru/matter-js), public/vendor/scene/matter.LICENSE
+- Zdog 1.1.3, Copyright (c) 2020 Metafizzy
+  (https://github.com/metafizzy/zdog), public/vendor/scene/zdog.LICENSE
+Provenance and checksums are in public/vendor/scene/README.md and
+SOURCES.sha256. These files keep their MIT licenses; PenEcho's own
+integration remains AGPL-3.0-only.
+
+Authored General HTML Widgets may use unmodified three.js 0.184.0 files,
+Copyright (c) 2010-2026 three.js authors (https://github.com/mrdoob/three.js),
+distributed under the MIT License; the complete license text is included at
+public/vendor/three-0.184.0/LICENSE. Provenance and checksums are in
+public/vendor/three-0.184.0/README.md and SOURCES.sha256. These files keep
+their MIT license; PenEcho's own integration remains AGPL-3.0-only.
+
 eventsource-parser (npm package "eventsource-parser") is distributed under the
 MIT License:
 

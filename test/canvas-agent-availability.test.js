@@ -69,7 +69,7 @@ test("Canvas Agent availability separates browser-only UI from executable connec
 test("Canvas Agent browser-only mode keeps the panel launcher but disables sending with status linkage",()=>{
   const send=button(),input={disabled:false},context={
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
-    canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false},
+    hasSelectedAiConnection:()=>true,requireAiConnectionSelection:()=>true,canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false},
   },sync=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
     ${functionSource(source,"canvasAgentSyncSendAvailability")}
@@ -104,7 +104,7 @@ test("Canvas Agent browser-only mode keeps the panel launcher but disables sendi
 test("Canvas Agent enables Send on the first handwritten mark and respects execution and upload blockers",()=>{
   const send=button(),input={disabled:false,value:""},agent={inkPresent:false,inkStroke:null,attachments:[],references:[],attachmentBusy:false,projectUploadBusy:false},context={
     window:{PENECHO_CONFIG:{runtime:"local",canvasAgent:true}},
-    canvasAgent:agent,canvasAgentInput:input,canvasAgentSend:send,state:{inkColor:"#123456"},
+    hasSelectedAiConnection:()=>true,canvasAgent:agent,canvasAgentInput:input,canvasAgentSend:send,state:{inkColor:"#123456"},
     CANVAS_AGENT_INK_LINE_WIDTH:4,canvasPencilWritingActive:()=>false,
     canvasAgentInkCanvas:{width:1200,height:1040,getBoundingClientRect:()=>({left:0,top:0,width:600,height:520}),setPointerCapture(){},hasPointerCapture:()=>false},
     canvasAgentInkContext:{save(){},restore(){},beginPath(){},arc(){},fill(){},clearRect(){}},
@@ -140,7 +140,7 @@ test("Canvas Agent attachment sync restores sending after project upload and kee
   const attach=button(),send=button(),input={disabled:false},context={
     window:{PENECHO_CONFIG:{runtime:"local",canvasAgent:true}},
     canvasAgentUsesCloudHost:()=>false,t:localized,canvasAgentFileInput:{accept:""},
-    canvasAgentAttach:attach,canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,
+    canvasAgentAttach:attach,hasSelectedAiConnection:()=>true,requireAiConnectionSelection:()=>true,canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,
     canvasAgent:{attachmentBusy:false,projectUploadBusy:true},canvasAgentSyncPromptSuggestions() {},
   },sync=vm.runInNewContext(`(()=>{
     ${functionSource(source,"canvasAgentExecutionAvailable")}
@@ -339,7 +339,7 @@ test("Canvas Agent unavailable submission returns false without consuming the dr
   const send=button(),input={disabled:false,value:"keep this draft"},conversation={id:"conversation-before"},counts={begin:0,submit:0,conversation:0,connect:0,search:0,request:0,network:0},status=[];
   const context={
     window:{PENECHO_CONFIG:{runtime:"cloud",canvasAgent:false,browserCanvasEditing:true}},
-    canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false,attachments:[{id:"draft-image"}],inkPresent:true,currentConversation:conversation},
+    hasSelectedAiConnection:()=>true,requireAiConnectionSelection:()=>true,canvasAgentPromptHasDraft:()=>true,canvasAgentSend:send,canvasAgentInput:input,canvasAgent:{attachmentBusy:false,projectUploadBusy:false,attachments:[{id:"draft-image"}],inkPresent:true,currentConversation:conversation},
     canvasAgentSetStatus:(text,kind)=>status.push({text,kind}),canvasAgentSyncSendAvailability:null,
     canvasAgentBeginRequest:()=>counts.begin++,canvasAgentBeginSubmitExecution:()=>{counts.submit++;},canvasAgentDidStartUserConversation:()=>{counts.conversation++;},
     canvasAgentConnect:async()=>{counts.connect++;},canvasAgentEnsureSearchSession:async()=>{counts.search++;},canvasAgentSendRequest:()=>counts.request++,

@@ -21,6 +21,14 @@ test('rejects SVG, empty, spoofed signature, truncated payload, byte and pixel o
 test('cancelled work cannot return a source',async()=>{
  const controller=new AbortController();controller.abort();await assert.rejects(prepareUploadedImage(Buffer.from('test'),'x',{signal:controller.signal}));
 });
+test('cancelling active Sharp metadata rejects without an unhandled stream error',async t=>{
+ const bytes=await sharp({create:{width:8,height:8,channels:3,background:'red'}}).png().toBuffer();
+ const controller=new AbortController(),metadata=sharp.prototype.metadata;
+ t.mock.method(sharp.prototype,'metadata',function(...args){const pending=metadata.apply(this,args);controller.abort();return pending;});
+ await assert.rejects(prepareUploadedImage(bytes,'test.png',{signal:controller.signal}),{code:'upload_cancelled',status:408});
+ // node:test also catches any detached error emitted by Sharp.destroy().
+ await new Promise(resolve=>setImmediate(resolve));
+});
 for(const format of ['png','tiff']) test(`${format} larger than Canvas dimension limit resizes losslessly with transparency`,async()=>{
  const bytes=await sharp({create:{width:2500,height:40,channels:4,background:{r:10,g:50,b:77,alpha:0.4}}}).toFormat(format,format==='tiff'?{compression:'lzw'}:{}).toBuffer();
  const result=await prepareUploadedImage(bytes,`wide.${format}`);assert.equal(result.mimeType,'image/png');assert.equal(result.width,2048);assert.ok(result.height<=2048);

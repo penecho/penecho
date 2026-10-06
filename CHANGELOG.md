@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- **Smart Assist:** context-aware actions for handwriting, text and images, with quick answers, visual creation and follow-up questions.
+- **Lasso AI:** circle any part of the canvas to solve, visualize, animate or organize just the selected content.
+- **Notes & Cards:** turn canvas content into reusable notes and knowledge cards; browse, search and bring them into other canvases.
+- **Widget refinement:** refine results through written feedback and contextual actions, with clearer controls and better content fitting.
+- **Canvas polish:** improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP.
+
 ## 1.3.5
 
 - **UI:** minor interface fixes.

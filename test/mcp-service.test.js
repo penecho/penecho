@@ -722,7 +722,8 @@ test("canvas WebSocket answers browser JSON pings after hello", async () => {
   await closeServer(server);
 });
 
-test("native canvas heartbeat terminates clients that stop answering pong", async () => {
+test("native canvas heartbeat terminates clients that stop answering pong", async t => {
+  t.mock.timers.enable({apis:["Date"],now:Date.now()});
   const server = http.createServer(), service = createMcpService({
     server,
     authorizeBrowser:req => req.headers["x-test-browser"] === "allowed" ? null : "Forbidden",
@@ -745,11 +746,14 @@ test("native canvas heartbeat terminates clients that stop answering pong", asyn
     });
     let nativePings = 0;
     ws.on("ping", () => { nativePings += 1; });
+    const pinged = waitForSocketEvent(ws, "ping");
     const closed = waitForSocketEvent(ws, "close");
     ws.send(JSON.stringify({type:"hello",canvasId:"heartbeat-canvas",title:"Heartbeat board"}));
     await ready;
     const pending = service.callTool(crypto.randomUUID(), "penecho_start_session", {instanceId:service.instanceId,canvasId:"heartbeat-canvas",title:"Offline request"});
     const rejected = assert.rejects(pending,{code:"canvas_disconnected"});
+    await pinged;
+    t.mock.timers.tick(35);
     const [code] = await closed;
     await rejected;
     await delay(0);

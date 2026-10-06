@@ -421,8 +421,16 @@
   }
   // Semantic placement has one owner for visible and parked documents. It never
   // changes existing geometry, and searches downwards instead of a 4608px shelf.
-  function mcpArrange(width,height,session,presentation,view,boundsFor,collisions) {
-    const gap=32/(view?.scale||1),p= presentation||{},owned=[...(session?.artifacts.values()||[])],
+  function mcpSourcePlacement(source,box,gap=0) {
+    if(!source?.box||!box)return null;
+    const anchor=source.box,viewport=source.viewport,dx=Math.max(anchor.x-box.x-box.w,box.x-anchor.x-anchor.w,0),
+      dy=Math.max(anchor.y-box.y-box.h,box.y-anchor.y-anchor.h,0),distance=Math.hypot(dx,dy),
+      near=distance<=Math.max(gap*3,160/(source.scale||1)),below=box.y>=anchor.y+anchor.h;
+    return {source:{...anchor},output:{x:box.x,y:box.y,w:box.w,h:box.h},relation:near?(below?"below":"near"):"distant",distance,
+      inViewport:!!viewport&&box.x>=viewport.x&&box.y>=viewport.y&&box.x+box.w<=viewport.x+viewport.w&&box.y+box.h<=viewport.y+viewport.h};
+  }
+  function mcpArrange(width,height,session,presentation,view,boundsFor,collisions,source=null) {
+    const gap=32/(source?.scale||view?.scale||1),p= presentation||{},owned=[...(session?.artifacts.values()||[])],
       anchor=p.relativeTo?session?.artifacts.get(p.relativeTo):null;
     if(p.relativeTo&&!anchor){
       const matches=[...(session?.artifacts||[])].filter(([,a])=>a.objectId===p.relativeTo||a.objectIds?.includes(p.relativeTo)),
@@ -431,6 +439,34 @@
     }
     const reference=anchor?boundsFor(anchor):null;
     if(anchor&&!reference)throw Error("Related artifact was removed. Choose an existing artifact.");
+    if(source?.box&&!reference) {
+      const box=source.box,viewport=source.viewport||view,preferred={x:box.x,y:box.y+box.h+gap},
+        clampX=x=>Math.max(0,Math.min(SIZE-width,viewport&&width<=viewport.w?Math.max(viewport.x,Math.min(viewport.x+viewport.w-width,x)):x)),
+        candidates=[],seen=new Set(),add=(x,y)=>{
+          x=clampX(x);y=Math.max(0,Math.min(SIZE-height,y));const key=`${x}:${y}`;
+          if(seen.has(key))return;seen.add(key);candidates.push({x,y,w:width,h:height});
+        },clear=b=>!collisions({x:b.x-gap/2,y:b.y-gap/2,w:b.w+gap,h:b.h+gap}).length,
+        plan=b=>({placement:{mode:"absolute",x:b.x,y:b.y},layout:{zone:{...b},x:0,y:height+gap,rowHeight:height},sourcePlacement:mcpSourcePlacement(source,b,gap)});
+      add(preferred.x,preferred.y);
+      if(clear(candidates[0]))return plan(candidates[0]);
+      // Candidate boundaries come from real nearby occupancy; the source is
+      // fixed at invocation even when the user pans or zooms during the turn.
+      const reach=Math.max(width,height,240/(source.scale||1)),nearby={x:Math.max(0,box.x-reach),y:Math.max(0,box.y-reach),w:Math.min(SIZE,box.w+reach*2),h:Math.min(SIZE,box.h+reach*2)},
+        hits=collisions(nearby),xs=[box.x,box.x+(box.w-width)/2,box.x-width-gap,box.x+box.w+gap],
+        ys=[preferred.y,box.y-height-gap,box.y+(box.h-height)/2];
+      for(const hit of hits){xs.push(hit.x-width-gap,hit.x+hit.w+gap);ys.push(hit.y-height-gap,hit.y+hit.h+gap);}
+      for(const y of ys.slice(0,96))for(const x of xs.slice(0,96))add(x,y);
+      const distance=b=>Math.hypot(b.x-clampX(preferred.x),b.y-preferred.y),near=b=>mcpSourcePlacement(source,b,gap).relation!=="distant";
+      candidates.sort((a,b)=>Number(!near(a))-Number(!near(b))||Number(a.y<preferred.y)-Number(b.y<preferred.y)||distance(a)-distance(b));
+      for(const candidate of candidates)if(near(candidate)&&clear(candidate))return plan(candidate);
+      // Only after nearby alternatives are exhausted continue below the source.
+      for(let y=preferred.y,attempt=0;attempt<2048&&y+height<=SIZE;attempt++){
+        const candidate={x:clampX(preferred.x),y,w:width,h:height},obstacles=collisions({x:candidate.x-gap/2,y:y-gap/2,w:width+gap,h:height+gap});
+        if(!obstacles.length)return plan(candidate);
+        y=Math.max(y+gap,...obstacles.map(b=>b.y+b.h+gap));
+      }
+      for(const candidate of candidates)if(clear(candidate))return plan(candidate);
+    }
     const primary=owned.find(a=>a.presentation?.role!=="supporting"&&a.presentation?.role!=="alternative"),
       primaryBounds=primary&&boundsFor(primary),last=owned.map(boundsFor).filter(Boolean).at(-1),
       viewport=view||{x:0,y:0,w:1280,h:900},
@@ -469,8 +505,8 @@
     return stage?.w&&stage?.h?{x:(stage.x+24-panX)/scale,y:(stage.y+48-panY)/scale,
       w:Math.max(1,stage.w-48)/scale,h:Math.max(1,stage.h-72)/scale,readableWidth:Math.max(1,stage.w-48)/scale,scale}:null;
   }
-  function mcpPlanPlacement(width,height,session=null,presentation=null) {
-    if(typeof canvasDocumentsCurrent==="function")return canvasDocumentsPlace(canvasDocumentsCurrent(),width,height,session,presentation);
+  function mcpPlanPlacement(width,height,session=null,presentation=null,execution=null) {
+    if(typeof canvasDocumentsCurrent==="function")return canvasDocumentsPlace(canvasDocumentsCurrent(),width,height,session,presentation,false,execution);
     const occupied=canvasAgentAllObjects().map(item=>canvasAgentInternalRect(item.box)),ink=visibleInkBounds({x:0,y:0,w:SIZE,h:SIZE});if(ink)occupied.push(ink);
     return mcpArrange(width,height,session,presentation,mcpReadingWorldRect(),a=>mcpTaskBounds(session,a.objectIds||[a.objectId]),box=>occupied.filter(b=>intersection(box,b)));
   }
@@ -595,6 +631,7 @@
   }
   function mcpRenderSettings() {
     if(!mcpRuntime)return;
+    window.PenEchoMcpSettings?.setLocalStatus?.(mcpRuntime.status);
     document.querySelectorAll("[data-mcp-label]").forEach(node=>{const key=node.dataset.mcpLabel,text=mcpText(key);
       node.textContent=text;
       if(/^example.*Prompt$/.test(key)){
@@ -1007,6 +1044,20 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
     widget.frame?.contentWindow?.postMessage({type:"penecho-mcp-progress",progress:widget.mcpProgress},widget.hostOrigin||location.origin);
     widget.mcpSentVersion=widget.contentVersion;
   }
+  function mcpWidgetSource(args) {
+    const runtime=window.PENECHO_SCENE,noteRuntime=typeof window==="object"?window.PENECHO_NOTE_CARD:null;
+    if(noteRuntime?.isNoteFormat(args.sourceFormat)) {
+      if(typeof args.copyText !== "string")throw Error("Note source is unavailable.");
+      const note=noteRuntime.parseSource(args.copyText,{categories:noteCategories(),language:state.language}),copyText=noteRuntime.formatSource(note);
+      return {html:noteCardDocument(note),sourceFormat:noteRuntime.FORMAT,frameworkVersion:noteRuntime.FRAMEWORK_VERSION,copyText,copyLabel:noteRuntime.COPY_LABEL};
+    }
+    if(args.sourceFormat === "penecho-scene+json") {
+      if(!runtime || typeof args.copyText !== "string")throw Error("Scene runtime or source is unavailable.");
+      const copyText=runtime.formatSource(args.copyText);
+      return {html:runtime.documentFor(copyText,{title:args.title}),sourceFormat:runtime.FORMAT,frameworkVersion:runtime.FRAMEWORK_VERSION,copyText,copyLabel:runtime.COPY_LABEL};
+    }
+    return {html:args.html,sourceFormat:"penecho-mcp+html",frameworkVersion:"",copyText:undefined,copyLabel:undefined};
+  }
   async function mcpCreateWidget(item,execution) {
     const result=await canvasAgentCreate({baseRevision:state.userRevision,items:[{type:"widget",widgetType:"html_widget",pluginId:"general",sourceFormat:"penecho-mcp+html",...item}]},
       {...execution,widgetContentViewport:{width:item.contentWidth||item.width,height:item.contentHeight||item.height}});
@@ -1096,7 +1147,8 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
         board.shell?.setAttribute("aria-label",`${session.title}. ${t("widgetRefineHint")}`);if(board.frame)board.frame.title=session.title;
         board.snapshotVersion=-1;state.userRevision++;syncMcpWidgetProgress(board);}
       session.updatedAt=Date.now();
-      if(["done","error"].includes(session.status))save();
+      // Content tools commit their own history. Progress metadata must not
+      // accept a user's unrelated open edit or stroke when a task finishes.
       mcpRenderSettings();return {applied:true,visible:mcpSessionVisible(session),revision:state.userRevision};
     }
     if(name==="mcp_draw"||name==="mcp_plot")return mcpPresentPrimitives(session,args,name==="mcp_draw"?"drawing":"plot",execution);
@@ -1104,26 +1156,27 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(args.presentation?.intent==="inspect")return mcpInspectHtml(args,execution);
       if(session.artifacts.get(args.artifactId)?.kind)throw Error("This artifact is a drawing or plot. Use its original tool to update it.");
       let artifact=session.artifacts.get(args.artifactId),widget=artifact&&canvasAgentObject(artifact.objectId)?.item;
-      const presentation=mcpPresentation(args,artifact),size=mcpPresentationSize(args);
+      const presentation=mcpPresentation(args,artifact),noteDeck=typeof window==="object"&&window.PENECHO_NOTE_CARD?.isNoteFormat(args.sourceFormat)?noteCardDeckSize():null,
+        size=noteDeck?{width:noteDeck.w,height:noteDeck.h,contentWidth:window.PENECHO_NOTE_CARD.CONTENT.w,contentHeight:window.PENECHO_NOTE_CARD.CONTENT.h}:mcpPresentationSize(args);
       if(artifact&&!widget)throw Error("This preview was removed. Use a new artifactId to create another.");
       if(widget){
         const context=widgetEditContext(widget,"agent"),expectedHash=await canvasAgentHash(context);
         canvasAgentAssertToolExecution(execution);
-        const command={...context,tool:"html_widget",pluginId:"general",html:args.html,title:args.title,x:widget.x,y:widget.y,w:widget.w,h:widget.h};
+        const command={...context,...mcpWidgetSource(args),tool:"html_widget",pluginId:"general",title:args.title,x:widget.x,y:widget.y,w:widget.w,h:widget.h};
         await canvasAgentReplaceWidget({baseRevision:state.userRevision,objectId:widget.id,expectedHash,command},execution);
         canvasAgentAssertToolExecution(execution);
         // Source updates preserve the user's footprint. Explicit geometry edits use
         // penecho_edit_canvas and its revision/collision checks.
       }else{
-        const plan=mcpPlanPlacement(size.width,size.height,session,presentation);
-        widget=await mcpCreateWidget({title:args.title,html:args.html,width:size.width,height:size.height,contentWidth:size.contentWidth,contentHeight:size.contentHeight,placement:plan.placement},{...execution,preserveView:true});
+        const plan=mcpPlanPlacement(size.width,size.height,session,presentation,execution);
+        widget=await mcpCreateWidget({title:args.title,...mcpWidgetSource(args),width:size.width,height:size.height,contentWidth:size.contentWidth,contentHeight:size.contentHeight,placement:plan.placement},{...execution,preserveView:true});
         canvasAgentAssertToolExecution(execution);
         session.layout=plan.layout;mcpQueueView(session,widget,presentation);
         artifact={objectId:widget.id,title:args.title};session.artifacts.set(args.artifactId,artifact);
       }
       artifact.title=args.title;artifact.presentation=presentation;
       if(presentation.attention==="request")mcpQueueView(session,widget,presentation);
-      return {artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence,viewport:{width:widget.contentW,height:widget.contentH},runtimeDiagnostics:widget.runtimeDiagnostics||null,presentation};
+      return {artifactId:args.artifactId,objectId:widget.id,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence,viewport:{width:widget.contentW,height:widget.contentH},runtimeDiagnostics:widget.runtimeDiagnostics||null,presentation,box:canvasAgentBox({kind:"widget",item:widget}),sourcePlacement:mcpSourcePlacement(execution?.assistContext,canvasAgentBox({kind:"widget",item:widget}),32/(execution?.assistContext?.scale||state.scale))};
     }
     if(name==="mcp_capture_primitives"){
       const artifact=session.artifacts.get(args.artifactId);
@@ -1141,11 +1194,19 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(object.kind!=="widget")throw Error("This tool captures Widgets only. Read user annotations with penecho_inbox.");
       return mcpCaptureWidget(object.item,args,execution);
     }
-    if(name==="mcp_inspect_session")return {sessionId:session.sessionId,boardObjectId:board?.id||null,...mcpProgressData(session),attention:mcpAttentionState(session),artifacts:[...session.artifacts].map(([artifactId,value])=>{const object=canvasAgentObject(value.objectId);return {artifactId,title:value.title,presentation:value.presentation,kind:value.kind||"widget",objectId:value.objectId,...(value.objectIds?{objectIds:value.objectIds,elements:(value.elements||[]).map(([id,entry])=>{const child=canvasAgentObject(entry.objectId);return {id,objectId:entry.objectId,kind:entry.kind,...(child?{bounds:canvasAgentBox(child)}:{removed:true})};})}:{}),...(object?{bounds:value.objectIds?mcpTaskBounds(session,value.objectIds):canvasAgentBox(object)}:{removed:true})};}),revision:state.userRevision};
+    if(name==="mcp_inspect_session")return {sessionId:session.sessionId,boardObjectId:board?.id||null,...mcpProgressData(session),attention:mcpAttentionState(session),mutationState:canvasAgentMutationState(),artifacts:[...session.artifacts].map(([artifactId,value])=>{const object=canvasAgentObject(value.objectId);return {artifactId,title:value.title,presentation:value.presentation,kind:value.kind||"widget",objectId:value.objectId,...(value.objectIds?{objectIds:value.objectIds,elements:(value.elements||[]).map(([id,entry])=>{const child=canvasAgentObject(entry.objectId);return {id,objectId:entry.objectId,kind:entry.kind,...(child?{bounds:canvasAgentBox(child)}:{removed:true})};})}:{}),...(object?{bounds:value.objectIds?mcpTaskBounds(session,value.objectIds):canvasAgentBox(object)}:{removed:true})};}),revision:state.userRevision};
     if(name==="mcp_close_session"){session.status="done";await mcpExecute("mcp_update_session",{sessionId:args.sessionId,status:"done"},execution);canvasAgentAssertToolExecution(execution);session.closed=true;mcpRuntime.pendingView.delete(session.sessionId);mcpRenderSettings();return {closed:true,retainedOnCanvas:true};}
     throw Error(`Unsupported MCP Canvas operation: ${name}`);
   }
   mcpEl("mcpReconnectCancel")?.addEventListener("click",mcpCancelReconnect);
+  window.PenEchoLocalMcp = {
+    api:mcpApi,
+    status:()=>mcpRuntime.status,
+    refresh:mcpRefreshSettings,
+    enable:()=>{if(!mcpRuntime.wanted)mcpConnect();},
+    openCanvas:()=>{if(!mcpRuntime.wanted)mcpConnect();closeSettings();},
+    copy:writeClipboardText,
+  };
   addEventListener("penecho:open-cloud-mcp",()=>{if(!mcpRuntime.wanted)mcpConnect();});
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});

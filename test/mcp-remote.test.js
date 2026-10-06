@@ -2,14 +2,14 @@
 const assert = require("node:assert/strict");
 const {test} = require("node:test");
 const {createRemoteMcpChannels,MAX_CHANNELS,MAX_FRAME_BYTES} = require("../src/server/mcp/remote.js");
-const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
-test("remote browser lease expires despite host output and synthetic native pongs", async () => {
+test("remote browser lease expires despite host output and synthetic native pongs", async t => {
+  t.mock.timers.enable({apis:["setTimeout"]});
   let socket, closed=false;
   const remote=createRemoteMcpChannels({attach:ws=>{socket=ws;ws.on("close",()=>closed=true);},leaseMs:35,pollMs:10});
   const {channelId}=await remote.execute({operation:"canvas.mcp.open"});
-  await delay(20);
+  t.mock.timers.tick(20);
   socket.ping(); socket.send('{}');
-  await delay(25);
+  t.mock.timers.tick(25);
   assert.equal(closed,true);
   await assert.rejects(remote.execute({operation:"canvas.mcp.pull",channelId}),{code:"mcp_remote_session"});
   remote.close();

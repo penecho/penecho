@@ -27,6 +27,48 @@ test("Cloud Library forwards page, full-library search and metadata options",asy
   await connector.library();assert.equal(paths[1],"/api/v1/device-sync/library");
 });
 
+test("Notes use the local account session through the actual Cloud request boundary", async () => {
+  const connector = Object.create(CloudConnector.prototype), originalFetch = global.fetch, requests = [];
+  connector.requireCloudAccount = () => ({ origin:"https://internaltest.penecho.ai", accountToken:"notes-test-session" });
+  const id = "canvas:card /中文?", cursor = "next:card /中文?", entry = { id, note:{ title:"Complete card" } };
+  try {
+    global.fetch = async (url, options) => {
+      requests.push({ url, ...options });
+      assert.equal(options.headers.authorization, "Bearer notes-test-session");
+      assert.equal(options.redirect, "error");
+      return new Response(JSON.stringify(options.method === "PUT" ? { entry, version:3 } : { notes:[], nextCursor:null }), {
+        status:200, headers:{ "content-type":"application/json" },
+      });
+    };
+    assert.equal((await connector.saveNote(id, entry, 2)).version, 3);
+    await connector.listNotes();
+    await connector.listNotes(cursor);
+    await connector.getNote(id);
+    assert.deepEqual(requests.map(({ url, method }) => ({ url, method })), [
+      { url:`https://internaltest.penecho.ai/api/v1/notes/${encodeURIComponent(id)}`, method:"PUT" },
+      { url:"https://internaltest.penecho.ai/api/v1/notes", method:"GET" },
+      { url:`https://internaltest.penecho.ai/api/v1/notes?cursor=${encodeURIComponent(cursor)}`, method:"GET" },
+      { url:`https://internaltest.penecho.ai/api/v1/notes/${encodeURIComponent(id)}`, method:"GET" },
+    ]);
+    assert.deepEqual(JSON.parse(requests[0].body), { entry, expectedVersion:2 });
+    assert.equal(requests[0].headers["content-type"], "application/json");
+    assert.ok(requests.slice(1).every(request => request.body === undefined));
+  } finally { global.fetch = originalFetch; }
+});
+
+test("Notes request permission does not include unrelated paths or methods", async () => {
+  const connector = Object.create(CloudConnector.prototype), originalFetch = global.fetch;
+  connector.requireCloudAccount = () => ({ origin:"https://internaltest.penecho.ai", accountToken:"notes-test-session" });
+  try {
+    global.fetch = async () => { assert.fail("Unsupported Notes requests must never reach the network."); };
+    for (const [pathname, method] of [
+      ["/api/v1/notes", "PUT"], ["/api/v1/notes/card", "POST"], ["/api/v1/notes/card", "DELETE"],
+      ["/api/v1/notes/card", "PATCH"], ["/api/v1/notes-extra", "GET"], ["/api/v1/notes/card/extra", "GET"],
+      ["/api/v1/notes?other=value", "GET"], ["/api/v1/notes/card?other=value", "PUT"],
+    ]) await assert.rejects(connector.cloudRequest(pathname, { method }), /Unsupported cloud account request/);
+  } finally { global.fetch = originalFetch; }
+});
+
 test("account status drops expired or invalid membership without exposing billing fields", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-membership-status-"));
   try {

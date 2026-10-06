@@ -248,7 +248,7 @@ test("resize hover cursor is available in Hand and Select, but suppressed by tem
   }
 });
 
- test("Widget double-click fits every canvas resize cursor zone", () => {
+ test("Widget double-click fits resize zones outside Lasso and activates the body in Lasso", () => {
   const navigation = fs.readFileSync(path.join(root, "src/client/app/canvas-navigation.js"), "utf8");
   const listener = navigation.slice(navigation.indexOf("  view.addEventListener('dblclick'"), navigation.indexOf("  view.addEventListener('contextmenu'"));
   for (const scale of [0.25, 0.5, 1, 2, 4]) for (const mode of ["hand", "select"]) for (const pending of [false, true]) {
@@ -258,14 +258,17 @@ test("resize hover cursor is available in Hand and Select, but suppressed by tem
     const state = { scale, mode, widgetEdit:{}, pendingWidget:pending ? widget : null };
     vm.runInNewContext(`
       ${["widgetResizeHit", "widgetPointerHit", "widgetResizeCursor"].map(name => extractFunction(runtimeSource, name)).join("\n")}
+      ${extractFunction(navigation, "canvasLassoToolActive")}
       function widgetControlHit(widget, point, pointerType) { return widgetResizeHit(widget, point, pointerType); }
       ${listener}
     `, { state, selectedWidget:() => pending ? null : widget, widgetRuntimeEnabled:() => true,
       view:{ addEventListener:(name, handler) => { doubleClick = handler; } },
       clientPoint:event => event.point, canvasWidgetInteractionChromeTarget:target => target === "button",
-      handObjectToolbarTargetAtPoint:() => ({kind:"widget", object:widget}),
+      handObjectToolbarTargetAtPoint:point => point.x >= widget.x && point.x <= widget.x + widget.w && point.y >= widget.y && point.y <= widget.y + widget.h
+        ? {kind:"widget", object:widget} : null,
       enterWidgetInteraction:w => activations.push(w), requestWidgetContentFit:(w, hit) => fits.push({w, hit})
     });
+    const lassoActive = mode === "select" && !pending;
     for (const [point, hit] of [
       [{x:400+13/scale,y:250}, "width"],
       [{x:200,y:400+13/scale}, "height"],
@@ -274,19 +277,22 @@ test("resize hover cursor is available in Hand and Select, but suppressed by tem
       [{x:200,y:400-10/scale}, "height"],
     ]) {
       doubleClick({ point, preventDefault(){}, stopPropagation(){} });
-      assert.equal(fits.at(-1).hit, hit);
-      assert.equal(fits.at(-1).w, widget);
+      if (lassoActive) assert.equal(fits.length, 0, "Lasso cannot fit a Widget");
+      else {
+        assert.equal(fits.at(-1).hit, hit);
+        assert.equal(fits.at(-1).w, widget);
+      }
     }
-    assert.equal(fits.length, 5);
-    assert.equal(activations.length, 0);
+    assert.equal(fits.length, lassoActive ? 0 : 5);
+    assert.equal(activations.length, lassoActive ? 2 : 0, "Lasso treats inner edge hits as Widget body activation");
     doubleClick({point:{x:150,y:240}, preventDefault(){}});
-    assert.equal(activations.length, 1, "body double-click still enters interaction");
+    assert.equal(activations.length, lassoActive ? 3 : 1, "body double-click enters interaction in both Hand and Lasso");
     for (const guard of [{spacePan:true}, {viewMode:true,viewTool:"pen"}, {mode:"pen"}, {interactingWidgetId:widget.id}]) {
       const before = {...state}; Object.assign(state, guard);
       doubleClick({point:{x:400+13/scale,y:250}, preventDefault(){}, stopPropagation(){}});
       for (const key of Object.keys(guard)) { if (key in before) state[key] = before[key]; else delete state[key]; }
     }
     doubleClick({point:{x:400,y:250}, target:"button"});
-    assert.equal(fits.length, 5, "disabled tools and chrome never trigger fit");
+    assert.equal(fits.length, lassoActive ? 0 : 5, "disabled tools and chrome never trigger fit");
   }
 });

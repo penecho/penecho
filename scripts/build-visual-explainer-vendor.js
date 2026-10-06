@@ -78,6 +78,28 @@ const FILES = Object.freeze([
     source:"node_modules/typia/LICENSE",
     target:"public/vendor/manim-web-licenses/typia-LICENSE",
   },
+  // Unmodified three.js files that authored General HTML widgets import from jsDelivr;
+  // the Widget host serves them from one cached fetch (see public/widget-host.js).
+  {
+    source:"node_modules/three/build/three.core.min.js",
+    target:"public/vendor/three-0.184.0/build/three.core.min.js",
+  },
+  {
+    source:"node_modules/three/build/three.module.min.js",
+    target:"public/vendor/three-0.184.0/build/three.module.min.js",
+  },
+  {
+    source:"node_modules/three/examples/jsm/controls/OrbitControls.js",
+    target:"public/vendor/three-0.184.0/examples/jsm/controls/OrbitControls.js",
+  },
+  {
+    source:"node_modules/three/examples/jsm/renderers/CSS2DRenderer.js",
+    target:"public/vendor/three-0.184.0/examples/jsm/renderers/CSS2DRenderer.js",
+  },
+  {
+    source:"node_modules/three/LICENSE",
+    target:"public/vendor/three-0.184.0/LICENSE",
+  },
 ]);
 
 function expectedFiles() {

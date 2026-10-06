@@ -200,7 +200,7 @@ test("Canvas changes suppress automatic Agent opening only while MCP is docked",
   for(const docked of [false,true]){
     let opened=0;
     const context={window:{PenEchoStudioNavigator:{isMcpDocked:()=>docked}},canvasDocuments:{},canvasAgent:{},state:{canvasAgentAutoOpen:true},canvasAgentPanel:{hidden:true},WebSocket:{OPEN:1},
-      canvasAgentReconcileCloudCanvas(){},canvasAgentCancelInitialAutoHide(){},canvasAgentPersistCurrentConversation(){},canvasAgentCanvasIdentity:()=>"test",canvasAgentBeginLocalConversation(){},canvasAgentDropSessionIdentity(){},canvasAgentSyncPromptSuggestions(){},openCanvasAgent:()=>opened++,
+      canvasAgentReconcileCloudCanvas(){},canvasAgentCancelInitialAutoHide(){},canvasAgentPersistCurrentConversation(){},canvasAgentCanvasIdentity:()=>"test",canvasAgentBeginLocalConversation(){},canvasAgentRestoreLocalConversation:()=>false,canvasAgentDropSessionIdentity(){},canvasAgentSyncPromptSuggestions(){},openCanvasAgent:()=>opened++,
     };
     vm.runInNewContext(`(${extract("canvasAgentCanvasDidChange",agentSource)})()`,context);
     assert.equal(opened,docked?0:1);

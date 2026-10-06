@@ -67,14 +67,15 @@
     canvasAgentApprovalReject = document.querySelector("#canvasAgentApprovalReject"),
     canvasAgentApprovalAllow = document.querySelector("#canvasAgentApprovalAllow"),
     canvasAgentForm = document.querySelector("#canvasAgentForm"),
-    canvasAgentInputHint = document.querySelector("#canvasAgentInputHint"),
-    canvasAgentPromptControl = document.querySelector("#canvasAgentPromptControl"),
     canvasAgentPromptSuggestions = document.querySelector("#canvasAgentPromptSuggestions"),
-    canvasAgentPromptToggle = document.querySelector("#canvasAgentPromptToggle"),
-    canvasAgentPromptDisclosureCopy = document.querySelector("#canvasAgentPromptDisclosureCopy"),
-    canvasAgentPromptCategoryTabs = [...document.querySelectorAll("#canvasAgentPromptCategories [role=tab]")],
+    canvasAgentPromptCategories = document.querySelector("#canvasAgentPromptCategories"),
+    canvasAgentPromptCategoryTabs = [...document.querySelectorAll("#canvasAgentPromptCategories [role='tab']")],
+    canvasAgentPromptCategoryLists = [...document.querySelectorAll("#canvasAgentPromptPopup [role='tabpanel']")],
+    canvasAgentSuggestHeader = document.querySelector("#canvasAgentSuggestHeader"),
+    canvasAgentPromptSuggestList = document.querySelector("#canvasAgentPromptSuggestList"),
+    canvasAgentSuggestClose = document.querySelector("#canvasAgentSuggestClose"),
+    canvasAgentSuggestLoading = document.querySelector("#canvasAgentSuggestLoading"),
     canvasAgentPromptPopup = document.querySelector("#canvasAgentPromptPopup"),
-    canvasAgentPromptCategoryLists = [...document.querySelectorAll("#canvasAgentPromptPopup [role=tabpanel]")],
     canvasAgentInput = document.querySelector("#canvasAgentInput"),
     canvasAgentInkInput = document.querySelector("#canvasAgentInkInput"),
     canvasAgentInkCanvas = document.querySelector("#canvasAgentInkCanvas"),
@@ -149,10 +150,10 @@
       simpleDiagram:{category:"notes",prompt:"canvasAgentPromptSimpleDiagram",title:"canvasAgentPromptSimpleDiagramTitle",focus:"canvasAgentPromptFocusSimplify",icon:"visual"},
       sequenceDiagramSource:{category:"create",prompt:"canvasAgentPromptSequenceDiagramSource",title:"canvasAgentPromptSequenceDiagramSourceTitle",focus:"canvasAgentPromptFocusSequence",icon:"sequence"},
       workflow:{category:"create",prompt:"canvasAgentPromptWorkflow",title:"canvasAgentPromptWorkflowTitle",focus:"canvasAgentPromptFocusPlan",icon:"workflow"},
-      organize:{category:"notes",prompt:"canvasAgentPromptOrganize",title:"canvasAgentPromptOrganizeTitle",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
-      applyAnnotations:{category:"notes",prompt:"canvasAgentPromptApplyAnnotations",title:"canvasAgentPromptApplyAnnotationsTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
+      organize:{category:"notes",canvasAction:"organize",prompt:"canvasAgentPromptOrganize",title:"canvasAgentPromptOrganizeTitle",focus:"canvasAgentPromptFocusOrganize",icon:"organize"},
+      applyAnnotations:{category:"notes",canvasAction:"refine",prompt:"canvasAgentPromptApplyAnnotations",title:"canvasAgentPromptApplyAnnotationsTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       followCanvasCues:{category:"notes",prompt:"canvasAgentPromptFollowCanvasCues",title:"canvasAgentPromptFollowCanvasCuesTitle",focus:"canvasAgentPromptFocusFollowCanvasCues",icon:"revise"},
-      checkWork:{category:"notes",prompt:"canvasAgentPromptCheckWork",title:"canvasAgentPromptCheckWorkTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
+      checkWork:{category:"notes",canvasAction:"check_step",prompt:"canvasAgentPromptCheckWork",title:"canvasAgentPromptCheckWorkTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       ppt:{category:"files",prompt:"canvasAgentPromptPpt",title:"canvasAgentPromptPptTitle",focus:"canvasAgentPromptFocusSlides",icon:"slides"},
       excel:{category:"files",prompt:"canvasAgentPromptExcel",title:"canvasAgentPromptExcelTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       compareFiles:{category:"files",prompt:"canvasAgentPromptCompareFiles",title:"canvasAgentPromptCompareFilesTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"file"},
@@ -160,7 +161,7 @@
       releaseReadiness:{category:"files",prompt:"canvasAgentPromptReleaseReadiness",title:"canvasAgentPromptReleaseReadinessTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
       transformer:{category:"notes",prompt:"canvasAgentPromptTransformer",title:"canvasAgentPromptTransformerTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
       ukTrip:{category:"create",prompt:"canvasAgentPromptUkTrip",title:"canvasAgentPromptUkTripTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
-      interactivePrototype:{category:"create",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"prototype"},
+      interactivePrototype:{category:"create",canvasAction:"prototype",prompt:"canvasAgentPromptInteractivePrototype",title:"canvasAgentPromptInteractivePrototypeTitle",focus:"canvasAgentPromptFocusEnhance",icon:"prototype"},
       interactiveCalculator:{category:"create",prompt:"canvasAgentPromptInteractiveCalculator",title:"canvasAgentPromptInteractiveCalculatorTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"data"},
       selfCheckQuiz:{category:"create",prompt:"canvasAgentPromptSelfCheckQuiz",title:"canvasAgentPromptSelfCheckQuizTitle",focus:"canvasAgentPromptFocusLearn",icon:"quiz"},
       file:{category:"files",prompt:"canvasAgentPromptFile",title:"canvasAgentPromptFileTitle",focus:"canvasAgentPromptFocusExplain",icon:"file"},
@@ -193,6 +194,30 @@
       canvasVisual:{category:"notes",prompt:"canvasAgentPromptCanvasVisual",title:"canvasAgentPromptCanvasVisualTitle",focus:"canvasAgentPromptFocusVisual",icon:"visual"},
       canvasLayer:{category:"notes",prompt:"canvasAgentPromptCanvasLayer",title:"canvasAgentPromptCanvasLayerTitle",focus:"canvasAgentPromptFocusLayer",icon:"layer"},
       canvasPublish:{category:"create",prompt:"canvasAgentPromptCanvasPublish",title:"canvasAgentPromptCanvasPublishTitle",focus:"canvasAgentPromptFocusPublish",icon:"publish"},
+      // Canvas actions (canvasAction) and further Agent requests share one library:
+      // the tabs list them by category and the Suggest tab ranks them together.
+      solveProblem:{category:"notes",canvasAction:"solve",prompt:"canvasAgentPromptSolveProblem",title:"canvasAgentPromptSolveProblemTitle",focus:"canvasAgentPromptFocusLearn",icon:"solve"},
+      explainStep:{category:"notes",canvasAction:"explain",prompt:"canvasAgentPromptExplainStep",title:"canvasAgentPromptExplainStepTitle",focus:"canvasAgentPromptFocusExplain",icon:"study"},
+      answerQuestion:{category:"notes",canvasAction:"answer",prompt:"canvasAgentPromptAnswerQuestion",title:"canvasAgentPromptAnswerQuestionTitle",focus:"canvasAgentPromptFocusExplain",icon:"answer"},
+      hint:{category:"notes",canvasAction:"hint",prompt:"canvasAgentPromptHint",title:"canvasAgentPromptHintTitle",focus:"canvasAgentPromptFocusLearn",icon:"hint"},
+      nextStep:{category:"notes",canvasAction:"next_step",prompt:"canvasAgentPromptNextStep",title:"canvasAgentPromptNextStepTitle",focus:"canvasAgentPromptFocusLearn",icon:"next"},
+      practiceProblems:{category:"notes",canvasAction:"practice",prompt:"canvasAgentPromptPracticeProblems",title:"canvasAgentPromptPracticeProblemsTitle",focus:"canvasAgentPromptFocusLearn",icon:"quiz"},
+      typeset:{category:"notes",canvasAction:"typeset",prompt:"canvasAgentPromptTypeset",title:"canvasAgentPromptTypesetTitle",focus:"canvasAgentPromptFocusEnhance",icon:"typeset"},
+      translateNotes:{category:"notes",prompt:"canvasAgentPromptTranslateNotes",title:"canvasAgentPromptTranslateNotesTitle",focus:"canvasAgentPromptFocusExplain",icon:"translate"},
+      actionItems:{category:"files",prompt:"canvasAgentPromptActionItems",title:"canvasAgentPromptActionItemsTitle",focus:"canvasAgentPromptFocusPlan",icon:"plan"},
+      timeline:{category:"files",prompt:"canvasAgentPromptTimeline",title:"canvasAgentPromptTimelineTitle",focus:"canvasAgentPromptFocusPlan",icon:"timeline"},
+      glossary:{category:"files",prompt:"canvasAgentPromptGlossary",title:"canvasAgentPromptGlossaryTitle",focus:"canvasAgentPromptFocusLearn",icon:"study"},
+      codeReview:{category:"files",prompt:"canvasAgentPromptCodeReview",title:"canvasAgentPromptCodeReviewTitle",focus:"canvasAgentPromptFocusRevise",icon:"revise"},
+      structureDiagram:{category:"create",canvasAction:"diagram",prompt:"canvasAgentPromptStructureDiagram",title:"canvasAgentPromptStructureDiagramTitle",focus:"canvasAgentPromptFocusVisualize",icon:"workflow"},
+      plotGraph:{category:"create",canvasAction:"plot",prompt:"canvasAgentPromptPlotGraph",title:"canvasAgentPromptPlotGraphTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"graph"},
+      animateConcept:{category:"create",canvasAction:"animate",prompt:"canvasAgentPromptAnimateConcept",title:"canvasAgentPromptAnimateConceptTitle",focus:"canvasAgentPromptFocusExplain",icon:"animate"},
+      createVisual:{category:"create",canvasAction:"create_visual",prompt:"canvasAgentPromptCreateVisual",title:"canvasAgentPromptCreateVisualTitle",focus:"canvasAgentPromptFocusVisualize",icon:"visual"},
+      illustrate:{category:"create",canvasAction:"vivid",prompt:"canvasAgentPromptIllustrate",title:"canvasAgentPromptIllustrateTitle",focus:"canvasAgentPromptFocusEnhance",icon:"illustrate"},
+      animateSketch:{category:"create",canvasAction:"animate_sketch",prompt:"canvasAgentPromptAnimateSketch",title:"canvasAgentPromptAnimateSketchTitle",focus:"canvasAgentPromptFocusEnhance",icon:"animate"},
+      finishDrawing:{category:"create",canvasAction:"finish_drawing",prompt:"canvasAgentPromptFinishDrawing",title:"canvasAgentPromptFinishDrawingTitle",focus:"canvasAgentPromptFocusEnhance",icon:"handwriting"},
+      cleanShapes:{category:"create",canvasAction:"snap_shapes",prompt:"canvasAgentPromptCleanShapes",title:"canvasAgentPromptCleanShapesTitle",focus:"canvasAgentPromptFocusOrganize",icon:"shapes"},
+      comparisonTable:{category:"create",prompt:"canvasAgentPromptComparisonTable",title:"canvasAgentPromptComparisonTableTitle",focus:"canvasAgentPromptFocusAnalyze",icon:"table"},
+      flashcards:{category:"create",prompt:"canvasAgentPromptFlashcards",title:"canvasAgentPromptFlashcardsTitle",focus:"canvasAgentPromptFocusLearn",icon:"cards"},
     }),
     CANVAS_AGENT_PROMPT_ICON_PATHS = Object.freeze({
       visual:["M3.5 12s3.1-5 8.5-5 8.5 5 8.5 5-3.1 5-8.5 5-8.5-5-8.5-5Z","M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"],
@@ -211,8 +236,22 @@
       layer:["m12 3-9 5 9 5 9-5-9-5Z","m5 12 7 4 7-4M5 16l7 4 7-4"],
       publish:["M12 15V3m0 0-4 4m4-4 4 4","M5 14v7h14v-7"],
       revise:["M4 17.5V21h3.5L18 10.5 14.5 7 4 17.5Z","M13.5 9l3.5 3.5M4 5h6M4 9h5"],
+      solve:["M5 3h14v18H5z","M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2"],
+      answer:["M4 5h16v11H10l-5 4v-4H4z","M8 9h8M8 12h5"],
+      hint:["M9 18h6M10 21h4","M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z"],
+      next:["M4 6h10M4 11h7M4 16h5","m15 13 4 4-4 4M19 17h-8"],
+      typeset:["M5 5h14M12 5v14M9 19h6"],
+      translate:["M4 5h9M8.5 3v2c0 4-2 7-5 8.5","M6 9c1 2 3 3.5 5 4","m13 21 4-9 4 9M14.5 18h5"],
+      timeline:["M3 12h18","M7 8v8M12 8v8M17 8v8"],
+      graph:["M4 4v16h16","M7 15c2-6 4-6 6-2s4 4 6-3"],
+      animate:["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0","M10 8.5v7l6-3.5z"],
+      illustrate:["M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5Z","M7.5 11h.01M10 7h.01M15 7.5h.01"],
+      shapes:["M4 14h6v6H4z","M17 4l4 7h-8z","M17 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"],
+      table:["M4 5h16v14H4z","M4 10h16M4 15h16M10 5v14"],
+      cards:["M7 4h12v14H7z","M4 7v13h12"],
+      suggest:["M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z","M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"],
     }),
-    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","interactivePrototype","selfCheckQuiz","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactiveCalculator"]),
+    CANVAS_AGENT_PROMPT_ADDITIONAL = Object.freeze(["architecture","sequenceDiagramSource","workflow","interactivePrototype","selfCheckQuiz","simpleDiagram","organize","applyAnnotations","followCanvasCues","checkWork","ppt","excel","transformer","ukTrip","compareFiles","projectEvidence","releaseReadiness","interactiveCalculator","solveProblem","explainStep","answerQuestion","hint","nextStep","practiceProblems","typeset","translateNotes","actionItems","timeline","glossary","codeReview","structureDiagram","plotGraph","animateConcept","createVisual","illustrate","animateSketch","finishDrawing","cleanShapes","comparisonTable","flashcards"]),
     CANVAS_AGENT_PROMPT_PRIMARY = Object.freeze({
       blank:["file","architecture","handwriting"],
       image:["imageVisual","imageLayer","imagePublish"],
@@ -270,11 +309,14 @@
     referencePickActive:false,
     referenceHoverId:"",
     inputMode:"text",
-    promptSuggestionsExpanded:false,
-    promptSuggestionsManual:false,
-    promptSuggestionCategory:"notes",
+    promptSuggestionCategory:"create",
     promptSuggestionContextKey:"",
     promptSuggestions:[],
+    promptSuggestionsExpanded:false,
+    promptSuggestionsManual:false,
+    promptSuggestionsIntent:false,
+    promptSuggestionsDismissed:false,
+    promptSuggestionsSuppressFocus:false,
     inkPresent:false,
     inkStroke:null,
     searchConfigured:Boolean(window.PENECHO_CONFIG?.canvasAgentSearchConfigured),
@@ -322,17 +364,9 @@
   sessionStorage.setItem(CANVAS_AGENT_CLIENT_KEY,canvasAgent.clientId);
   try {
     const saved = JSON.parse(sessionStorage.getItem(CANVAS_AGENT_SESSION_KEY) || "null");
+    // A Cloud deep link has not loaded its document yet. Resume only after the
+    // active Canvas and its local conversation are known and can be checked.
     canvasAgent.pendingStoredSession = saved;
-    if (saved?.scope && saved.scope === aiConnectionScope(String(saved.connectionId || "").startsWith("hosted:")) && saved?.sessionId && saved?.resumeToken && String(saved.projectId || "") === canvasAgent.projectId && String(saved.accessMode || "controlled") === canvasAgent.accessMode) {
-      canvasAgent.sessionId = saved.sessionId;
-      canvasAgent.resumeToken = saved.resumeToken;
-      canvasAgent.connectionId = String(saved.connectionId || "");
-      canvasAgent.sessionEngine = String(saved.engine || "");
-      canvasAgent.sessionModel = String(saved.model || "");
-      canvasAgent.sessionChannel = String(saved.channel || "");
-      canvasAgent.sessionProjectId = String(saved.projectId || "");
-      canvasAgent.sessionAccessMode = String(saved.accessMode || "controlled");
-    }
   } catch {}
 
   function canvasAgentAvailable() {
@@ -368,6 +402,7 @@
     canvasAgentDropSessionIdentity();
     canvasAgent.requestPending=false;
     canvasAgentSetRunning(false);
+    if (typeof assistRequestFinished === "function") assistRequestFinished(canvasAgent, "superseded");
     try { socket?.close(1000,"PenEcho Agent Canvas changed"); } catch {}
   }
   function canvasAgentUsesCloudHost(connectionId = null) {
@@ -378,7 +413,8 @@
     return canvasAgentUsesCloudHost() ? "" : canvasAgent.projectId;
   }
   function canvasAgentSyncSendAvailability() {
-    const unavailable = !(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) && !canvasAgentExecutionAvailable();
+    const unavailable = !(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal()) && !canvasAgentExecutionAvailable()
+      && (window.PENECHO_CONFIG?.runtime === "viewer" || hasSelectedAiConnection());
     canvasAgentSend.disabled = unavailable || canvasAgentInput.disabled || canvasAgent.attachmentBusy || canvasAgent.projectUploadBusy || !canvasAgentPromptHasDraft();
     if (unavailable) canvasAgentSend.setAttribute("aria-describedby","canvasAgentStatus");
     else canvasAgentSend.removeAttribute("aria-describedby");
@@ -433,14 +469,17 @@
     canvasAgentControl.setAttribute("aria-busy",String(busy));
     canvasAgentSyncPromptSuggestions();
   }
-  function canvasAgentBeginRequest() {
+  function canvasAgentBeginRequest(options = null) {
+    canvasAgentDismissPromptSuggestions();
     canvasAgent.requestPending = true;
+    if (typeof assistRequestStarted === "function") assistRequestStarted(canvasAgent, { hideSuggestions:Boolean(options?.fromSuggestBar) });
     canvasAgentSyncTriggerState();
     canvasAgentPauseAutomaticAI();
     canvasAgentSyncAutomaticAIStatus();
   }
   function canvasAgentRequestDidNotSend() {
     canvasAgent.requestPending = false;
+    if (!canvasAgent.running && typeof assistRequestFinished === "function") assistRequestFinished(canvasAgent, "failed");
     canvasAgentSyncTriggerState();
     canvasAgentResumeAutomaticAI();
   }
@@ -530,7 +569,11 @@
   function canvasAgentPromptHasDraft() {
     return Boolean(canvasAgentInput.value.trim()||canvasAgent.inkPresent||canvasAgent.attachments.length||canvasAgent.references.length);
   }
+  function canvasAgentPromptHasConversation() {
+    return Boolean(canvasAgentTranscript.querySelector(".canvas-agent-message, .canvas-agent-tool"));
+  }
   function canvasAgentSetPromptSuggestionsExpanded(expanded,{manual=canvasAgent.promptSuggestionsManual}={}) {
+    const changed=canvasAgent.promptSuggestionsExpanded!==Boolean(expanded),followLatest=canvasAgent.followLatest;
     canvasAgent.promptSuggestionsExpanded=Boolean(expanded);
     canvasAgent.promptSuggestionsManual=canvasAgent.promptSuggestionsExpanded&&Boolean(manual);
     canvasAgentPromptSuggestions?.classList.toggle("expanded",canvasAgent.promptSuggestionsExpanded);
@@ -539,14 +582,29 @@
       canvasAgentPromptSuggestions.hidden=!canvasAgent.promptSuggestionsExpanded;
     }
     canvasAgentPanel.dataset.promptSuggestionsOpen=String(canvasAgent.promptSuggestionsExpanded);
-    if(canvasAgentPromptToggle){
-      const key=canvasAgent.promptSuggestionsExpanded?"canvasAgentPromptLess":"canvasAgentPromptMore",label=t(key);
-      canvasAgentPromptToggle.dataset.peState=canvasAgent.promptSuggestionsExpanded?"expanded":"collapsed";
-      canvasAgentPromptToggle.setAttribute("aria-expanded",String(canvasAgent.promptSuggestionsExpanded));
-      canvasAgentPromptToggle.setAttribute("aria-label",label);
-      canvasAgentPromptToggle.setAttribute("title",label);
-    }
-    if(canvasAgentPromptDisclosureCopy)canvasAgentPromptDisclosureCopy.textContent=t(canvasAgent.promptSuggestionsExpanded?"canvasAgentPromptDisclosureLess":"canvasAgentPromptDisclosureMore");
+    canvasAgentPanel.dataset.promptPresentation=canvasAgentPromptHasConversation()?"conversation":"welcome";
+    // Resize at the bottom without stealing the position of someone reading
+    // earlier messages. The existing transcript observer handles later sizing.
+    if(changed&&followLatest)canvasAgentScrollToLatest();
+  }
+  function canvasAgentDismissPromptSuggestions() {
+    canvasAgent.promptSuggestionsIntent=false;
+    canvasAgent.promptSuggestionsDismissed=true;
+    if(typeof agentSuggestCancelPending==="function")agentSuggestCancelPending();
+    canvasAgentSyncPromptPresentation(false);
+    if(canvasAgentSuggestLoading)canvasAgentSuggestLoading.hidden=true;
+  }
+  function canvasAgentPromptFocusInside(target) {
+    return Boolean(target&&(target===canvasAgentInput||canvasAgentPromptSuggestions?.contains(target)));
+  }
+  function canvasAgentFocusPromptSuggestions() {
+    if(canvasAgent.promptSuggestionsSuppressFocus)return;
+    if(typeof agentSuggestComposerFocused==="function")agentSuggestComposerFocused();
+  }
+  function canvasAgentRestoreSuggestionFocus(focusInput=true) {
+    canvasAgent.promptSuggestionsSuppressFocus=true;
+    try{(focusInput?canvasAgentInput:canvasAgentTranscript).focus({preventScroll:true});}
+    finally{canvasAgent.promptSuggestionsSuppressFocus=false;}
   }
   function canvasAgentCreatePromptIcon(iconName) {
     const preview=document.createElement("span"),svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -562,6 +620,7 @@
     preview.append(svg);
     return preview;
   }
+
   function canvasAgentDefaultPromptCategory(context) {
     if(context==="blank")return "create";
     return ["image","spreadsheet","presentation","document","code","file","project"].includes(context)?"files":"notes";
@@ -576,7 +635,7 @@
       item.tabIndex=selected?0:-1;
       item.dataset.peState=selected?"selected":"default";
     }
-    for(const list of canvasAgentPromptCategoryLists)list.hidden=list.dataset.promptCategory!==selectedCategory;
+    for(const list of canvasAgentPromptCategoryLists)list.hidden=canvasAgentPromptSuggestions.dataset.mode!=="default"||list.dataset.promptCategory!==selectedCategory;
     if(resetScroll&&canvasAgentPromptPopup)canvasAgentPromptPopup.scrollTop=0;
     if(focus){
       const selectedTab=canvasAgentPromptCategoryTabs.find(item=>item.dataset.promptCategory===selectedCategory);
@@ -591,7 +650,7 @@
     const last=canvasAgentPromptCategoryTabs.length-1,next=event.key==="Home"?0:event.key==="End"?last:(current+(event.key==="ArrowRight"?1:-1)+canvasAgentPromptCategoryTabs.length)%canvasAgentPromptCategoryTabs.length;
     canvasAgentSelectPromptCategory(canvasAgentPromptCategoryTabs[next].dataset.promptCategory,{focus:true});
   }
-  function canvasAgentRenderPromptSuggestions(suggestionSet=canvasAgentPromptSuggestionSet()) {
+  function canvasAgentRenderDefaultPromptSuggestions(suggestionSet=canvasAgentPromptSuggestionSet()) {
     if(!canvasAgentPromptCategoryLists.length)return;
     const renderList=(list,suggestions)=>{
       if(!list)return;
@@ -625,8 +684,31 @@
     if(contextChanged)canvasAgent.promptSuggestionCategory=canvasAgentDefaultPromptCategory(suggestionSet.key);
     canvasAgentSelectPromptCategory(canvasAgent.promptSuggestionCategory,{resetScroll:contextChanged});
     canvasAgentPromptSuggestions.setAttribute("aria-label",t("canvasAgentPromptSuggestions"));
-    canvasAgentSetPromptSuggestionsExpanded(canvasAgent.promptSuggestionsExpanded);
   }
+  function canvasAgentRenderPromptSuggestions() {
+    canvasAgentRenderDefaultPromptSuggestions();
+    if(typeof agentSuggestRender==="function")agentSuggestRender();
+    else canvasAgentSyncPromptPresentation(false);
+  }
+  function canvasAgentSyncPromptPresentation(suggestVisible=false) {
+    if(!canvasAgentPromptSuggestions)return;
+    // Default prompts are the welcome view. Ranked results temporarily replace
+    // them, or share the conversation area with existing messages.
+    const defaultsVisible=!suggestVisible&&canvasAgentShouldShowDefaultPrompts(),
+      mode=suggestVisible?"suggest":defaultsVisible?"default":"hidden",
+      changed=canvasAgentPromptSuggestions.dataset.mode!==mode;
+    canvasAgentPromptSuggestions.dataset.mode=mode;
+    canvasAgentPromptCategories.hidden=!defaultsVisible;
+    canvasAgentSuggestHeader.hidden=!suggestVisible;
+    canvasAgentPromptSuggestList.hidden=!suggestVisible;
+    if(defaultsVisible){
+      const suggestionSet=canvasAgentPromptSuggestionSet();
+      if(suggestionSet.key!==canvasAgent.promptSuggestionContextKey)canvasAgentRenderDefaultPromptSuggestions(suggestionSet);
+    }
+    canvasAgentSelectPromptCategory(canvasAgent.promptSuggestionCategory,{resetScroll:changed});
+    canvasAgentSetPromptSuggestionsExpanded(suggestVisible||defaultsVisible,{manual:false});
+  }
+
   function canvasAgentClearPromptSuggestionPointer() {
     if(canvasAgent.promptSuggestionPointerClearTimer)clearTimeout(canvasAgent.promptSuggestionPointerClearTimer);
     canvasAgent.promptSuggestionPointerClearTimer=0;
@@ -639,7 +721,7 @@
     canvasAgentClearPromptSuggestionPointer();
     canvasAgent.promptSuggestionPointerType=event.pointerType||"";
     canvasAgent.promptSuggestionPointerButton=button;
-    if(event.pointerType==="mouse"&&button!==canvasAgentPromptToggle){event.preventDefault();return;}
+    if(event.pointerType==="mouse"){event.preventDefault();return;}
     if(event.pointerType==="touch"||event.pointerType==="pen"){
       try{button.focus({preventScroll:true});}catch{button.focus();}
     }
@@ -663,46 +745,31 @@
       && canvasAgentReferencePicker.hidden
       && canvasAgentApproval.hidden);
   }
-  function canvasAgentShouldShowPromptSuggestions() {
-    return canvasAgentPromptSuggestionsAvailable() && !canvasAgentPromptHasDraft() && !canvasAgentTranscript.querySelector(".canvas-agent-message, .canvas-agent-tool-row");
+  function canvasAgentShouldShowDefaultPrompts() {
+    return canvasAgentPromptSuggestionsAvailable()&&!canvasAgentPromptHasDraft()&&!canvasAgentPromptHasConversation();
   }
   function canvasAgentSyncPromptSuggestions() {
     if(!canvasAgentPromptSuggestions)return;
     canvasAgentSyncSendAvailability();
-    const suggestionSet=canvasAgentPromptSuggestionSet();
-    if(suggestionSet.key!==canvasAgent.promptSuggestionContextKey)canvasAgentRenderPromptSuggestions(suggestionSet);
-    const visible=canvasAgentShouldShowPromptSuggestions();
-    if(canvasAgentPromptControl)canvasAgentPromptControl.hidden=!visible;
-    if(visible){
-      canvasAgentInputHint.hidden=true;
-      canvasAgentSetPromptSuggestionsExpanded(true, {manual:false});
-    }
-    else{
-      canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
-      canvasAgentSyncInputHint();
-    }
+    if(typeof agentSuggestSync==="function")agentSuggestSync();
+    else canvasAgentSyncPromptPresentation(false);
   }
-  function canvasAgentTogglePromptSuggestions() {
-    if(canvasAgent.promptSuggestionsExpanded)canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
-    else{
-      const composerFocused=document.activeElement===canvasAgentInput;
-      if(composerFocused)canvasAgentInput.blur();
-      canvasAgentSetPromptSuggestionsExpanded(true,{manual:true});
-      if(composerFocused){
-        try{canvasAgentPromptToggle.focus({preventScroll:true});}catch{canvasAgentPromptToggle.focus();}
-      }
-    }
+
+  // The sketch-illustration request follows the selected illustration style.
+  function canvasAgentPromptText(key) {
+    return t(key==="canvasAgentPromptIllustrate"&&state.illustrationStyle==="3d"?"canvasAgentPromptIllustrate3d":key);
   }
   function canvasAgentChoosePromptSuggestion(promptKey,{focus=true}={}) {
     const suggestion=canvasAgent.promptSuggestions.find(item=>item.prompt===promptKey);
     if(!suggestion||canvasAgentInput.disabled)return false;
-    canvasAgentInput.value=t(suggestion.prompt);
-    canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
+    canvasAgentInput.value=canvasAgentPromptText(suggestion.prompt);
+    canvasAgentDismissPromptSuggestions();
     canvasAgentInput.dispatchEvent(new Event("input",{bubbles:true}));
     if(focus){
-      canvasAgentInput.focus();
+      canvasAgentRestoreSuggestionFocus();
       canvasAgentInput.setSelectionRange?.(canvasAgentInput.value.length,canvasAgentInput.value.length);
     }
+    else canvasAgentRestoreSuggestionFocus(false);
     return true;
   }
   function canvasAgentActivatePromptSuggestion(promptKey,event) {
@@ -777,7 +844,6 @@
   function updateCanvasAgentLanguage() {
     canvasAgentSetComposerActionLabel(canvasAgentSend,canvasAgent.running ? "canvasAgentSteer" : "canvasAgentSend");
     canvasAgentSetComposerActionLabel(canvasAgentStop,"canvasAgentStop");
-    canvasAgentInputHint.textContent = t("canvasAgentInputHint");
     canvasAgentRenderPromptSuggestions();
     canvasAgentInput.setAttribute("placeholder",t("canvasAgentPlaceholder"));
     canvasAgentResizeInput();
@@ -843,7 +909,6 @@
     canvasAgentRenderHistoryList();
     canvasAgentRenderProjects();
     if (canvasAgentTranscript.querySelector(".canvas-agent-empty")) canvasAgentRenderEmpty();
-    canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
     canvasAgentSyncSendAvailability();
   }
@@ -1465,14 +1530,14 @@
   }
   function canvasAgentRememberCanvasMeta(store,canvasKey,{name="",updatedAt=Date.now()}={}) {
     const key=String(canvasKey||""),safeName=canvasAgentHistoryText(name,160).replace(/[\0-\x1f\x7f]/g,"").trim(),safeUpdatedAt=Number(updatedAt);
-    if(!key||key.startsWith("draft:"))return;
+    if(!key)return;
     if(!store.canvasMeta||typeof store.canvasMeta!=="object"||Array.isArray(store.canvasMeta))store.canvasMeta={};
     store.canvasMeta[key]={name:safeName,updatedAt:Number.isFinite(safeUpdatedAt)?safeUpdatedAt:Date.now()};
   }
   function canvasAgentStoredHistoryGroups() {
     const store=canvasAgentReadHistoryStore(),groups=[];
     for(const [canvasKey,value] of Object.entries(store.canvases)){
-      const conversations=(Array.isArray(value)?value:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,CANVAS_AGENT_HISTORY_LIMIT);
+      const conversations=(Array.isArray(value)?value:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt);
       if(!conversations.length)continue;
       const meta=store.canvasMeta?.[canvasKey],updatedAt=Math.max(Number(meta?.updatedAt)||0,...conversations.map(conversation=>conversation.updatedAt));
       groups.push({canvasKey,name:canvasAgentHistoryText(meta?.name,160).trim(),updatedAt,conversations});
@@ -1480,18 +1545,14 @@
     return groups.sort((a,b)=>b.updatedAt-a.updatedAt);
   }
   function canvasAgentHistoryForCanvas(canvasKey = state.canvasAgentCanvasKey) {
-    if(canvasAgent.projectId)return (canvasAgent.projectHistoryLoaded?canvasAgent.projectHistory:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,CANVAS_AGENT_HISTORY_LIMIT);
     const stored=canvasAgentReadHistoryStore().canvases[String(canvasKey||"")];
-    return (Array.isArray(stored)?stored:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,CANVAS_AGENT_HISTORY_LIMIT);
+    const project=canvasKey===state.canvasAgentCanvasKey&&canvasAgent.projectId&&canvasAgent.projectHistoryLoaded?canvasAgent.projectHistory:[];
+    const recent=[...(Array.isArray(stored)?stored:[]),...project].map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt);
+    const seen=new Set();
+    return recent.filter(conversation=>{if(seen.has(conversation.id))return false;seen.add(conversation.id);return true;});
   }
   function canvasAgentWriteHistoryForCanvas(canvasKey, conversations, store = canvasAgentReadHistoryStore()) {
-    const key=String(canvasKey||""), normalized=(Array.isArray(conversations)?conversations:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,CANVAS_AGENT_HISTORY_LIMIT);
-    if(canvasAgent.projectId){
-      if(!canvasAgent.projectHistoryLoaded)return false;
-      canvasAgent.projectHistory=normalized;
-      canvasAgentWriteProjectHistory(normalized);
-      return true;
-    }
+    const key=String(canvasKey||""), normalized=(Array.isArray(conversations)?conversations:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length).sort((a,b)=>b.updatedAt-a.updatedAt);
     if (!key) return false;
     if (normalized.length) {
       store.canvases[key]=normalized;
@@ -1500,11 +1561,17 @@
       delete store.canvases[key];
       if(store.canvasMeta)delete store.canvasMeta[key];
     }
-    try { localStorage.setItem(CANVAS_AGENT_HISTORY_KEY,JSON.stringify(store)); return true; }
+    // Browser history remains available even when project storage is offline.
+    try { localStorage.setItem(CANVAS_AGENT_HISTORY_KEY,JSON.stringify(store)); }
     catch { return false; }
+    if(key===state.canvasAgentCanvasKey&&canvasAgent.projectId&&canvasAgent.projectHistoryLoaded){
+      canvasAgent.projectHistory=normalized.slice(0,CANVAS_AGENT_HISTORY_LIMIT);
+      canvasAgentWriteProjectHistory(canvasAgent.projectHistory);
+    }
+    return true;
   }
   function canvasAgentDeleteStoredConversation(canvasKey, conversationId) {
-    const key=String(canvasKey||""),id=String(conversationId||""),deletingCurrent=!canvasAgent.projectId&&key===state.canvasAgentCanvasKey&&id===canvasAgent.currentConversation?.id;
+    const key=String(canvasKey||""),id=String(conversationId||""),deletingCurrent=key===state.canvasAgentCanvasKey&&id===canvasAgent.currentConversation?.id;
     if(!key||!id)return {deleted:false,reason:"missing"};
     if(deletingCurrent&&(canvasAgent.requestPending||canvasAgent.running))return {deleted:false,reason:"busy"};
     const store=canvasAgentReadHistoryStore(),previous=(Array.isArray(store.canvases[key])?store.canvases[key]:[]).map(canvasAgentNormalizeConversation).filter(conversation=>conversation?.items.length),remaining=previous.filter(conversation=>conversation.id!==id);
@@ -1518,6 +1585,10 @@
     }
     try{localStorage.setItem(CANVAS_AGENT_HISTORY_KEY,JSON.stringify(store));}
     catch{return {deleted:false,reason:"storage"};}
+    if(key===state.canvasAgentCanvasKey&&canvasAgent.projectId&&canvasAgent.projectHistoryLoaded){
+      canvasAgent.projectHistory=canvasAgent.projectHistory.filter(conversation=>conversation.id!==id);
+      canvasAgentWriteProjectHistory(canvasAgent.projectHistory);
+    }
     if(deletingCurrent){
       canvasAgentBeginLocalConversation({persistCurrent:false});
       canvasAgentDropSessionIdentity();
@@ -1529,17 +1600,14 @@
     const firstUser=conversation?.items?.find(item=>item.type==="message"&&item.role==="user"&&item.text.trim());
     return firstUser ? firstUser.text.replace(/\s+/g," ").trim().slice(0,72) : "";
   }
-  function canvasAgentConversationNeedsCanvasTitle(conversation) {
-    return !(conversation?.items||[]).some(item=>item?.type==="message"&&item.role==="assistant"&&String(item.text||"").trim());
-  }
-  function canvasAgentShouldRequestCanvasTitle(conversation) {
-    return currentCanvasNeedsAgentName() && (!state.currentSnapshotId || canvasAgentConversationNeedsCanvasTitle(conversation));
+  function canvasAgentShouldRequestCanvasTitle() {
+    return currentCanvasNeedsAgentName();
   }
   function canvasAgentPersistCurrentConversation() {
     clearTimeout(canvasAgent.historyPersistTimer);
     canvasAgent.historyPersistTimer=0;
     const conversation=canvasAgent.currentConversation;
-    if (!conversation?.items?.length || !state.canvasAgentCanvasKey || canvasAgent.projectId&&!canvasAgent.projectHistoryLoaded) {
+    if (!conversation?.items?.length || !state.canvasAgentCanvasKey) {
       canvasAgentRenderHistoryList();
       return false;
     }
@@ -1548,11 +1616,13 @@
     const recent=[conversation,...canvasAgentHistoryForCanvas().filter(item=>item.id!==conversation.id)];
     const stored=canvasAgentWriteHistoryForCanvas(state.canvasAgentCanvasKey,recent);
     canvasAgentRenderHistoryList();
+    if(!stored)canvasAgentSetStatus(t("canvasAgentHistorySaveFailed"),"error");
     return stored;
   }
   function canvasAgentScheduleHistoryPersist(delay = 180) {
     clearTimeout(canvasAgent.historyPersistTimer);
-    canvasAgent.historyPersistTimer=setTimeout(canvasAgentPersistCurrentConversation,delay);
+    if(delay<=0)canvasAgentPersistCurrentConversation();
+    else canvasAgent.historyPersistTimer=setTimeout(canvasAgentPersistCurrentConversation,delay);
   }
   function canvasAgentNewConversationRecord() {
     const now=Date.now();
@@ -1627,8 +1697,30 @@
     canvasAgent.viewingHistoryId=viewing?String(viewing):"";
     canvasAgentPanel.dataset.historyViewing=String(Boolean(viewing));
     canvasAgentHistoryView.hidden=!viewing;
-    canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
+  }
+  function canvasAgentRestoreLocalConversation() {
+    const conversation=canvasAgentHistoryForCanvas()[0];
+    if(!conversation)return false;
+    canvasAgent.currentConversation=conversation;
+    canvasAgent.pendingConversationHistory=canvasAgentConversationHistory(conversation);
+    // A restored transcript belongs to a previous transport session. Its event
+    // keys must not bind new turn/step counters to an old assistant or tool row.
+    canvasAgentRenderConversation(conversation,false);
+    canvasAgentRenderHistoryList();
+    canvasAgentDidStartUserConversation();
+    return true;
+  }
+  function canvasAgentPreviewStoredConversation(conversation) {
+    const stored=canvasAgentNormalizeConversation(conversation);
+    if(!stored?.items.length)return false;
+    canvasAgentPersistCurrentConversation();
+    canvasAgentHideHistoryPopover();
+    canvasAgentDismissPromptSuggestions();
+    canvasAgentSetHistoryViewing(stored.id);
+    canvasAgentRenderConversation(stored,false);
+    canvasAgentSetStatus(t("canvasAgentHistoryViewing"),"history");
+    return true;
   }
   async function canvasAgentViewStoredConversation(id) {
     canvasAgentPersistCurrentConversation();
@@ -1641,7 +1733,7 @@
     canvasAgentSetHistoryViewing("");
     canvasAgentDropSessionIdentity();
     canvasAgentClearTranscript();
-    canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
+    canvasAgentDismissPromptSuggestions();
     canvasAgentRenderConversation(conversation,false);
     canvasAgentClearAttachments();
     canvasAgentClearReferences();
@@ -1656,7 +1748,7 @@
   function canvasAgentReturnToCurrentConversation() {
     canvasAgentHideHistoryPopover();
     canvasAgentSetHistoryViewing("");
-    canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
+    canvasAgentDismissPromptSuggestions();
     canvasAgentRenderConversation(canvasAgent.currentConversation,true);
     if(!canvasAgent.running&&canvasAgent.lastTurnError)canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
     else canvasAgentSetStatus(t(canvasAgent.running?"canvasAgentWorking":canvasAgent.socket?.readyState===WebSocket.OPEN&&canvasAgent.sessionReady?"canvasAgentReady":"canvasAgentReadyConnect"),canvasAgent.running?"running":"ready");
@@ -1668,6 +1760,9 @@
     canvasAgentBeginSessionTransition();
     if (persistCurrent) canvasAgentPersistCurrentConversation();
     canvasAgent.currentConversation=canvasAgentNewConversationRecord();
+    canvasAgent.promptSuggestionsIntent=false;
+    canvasAgent.promptSuggestionsDismissed=false;
+    canvasAgent.promptSuggestionsManual=false;
     canvasAgent.pendingConversationHistory=[];
     canvasAgent.lastTurnError=null;
     canvasAgentSetHistoryViewing("");
@@ -1679,7 +1774,7 @@
       canvasAgentClearInkDraft();
     }
     canvasAgentRenderHistoryList();
-    canvasAgentSetPromptSuggestionsExpanded(true,{manual:false});
+    canvasAgentDismissPromptSuggestions();
     canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentDropSessionIdentity() {
@@ -1708,6 +1803,7 @@
   function canvasAgentBeginSessionTransition() {
     canvasAgent.sessionGeneration++;
     canvasAgent.sessionReady = false;
+    canvasAgent.retireSuggestionTurn?.();
     canvasAgent.pendingHandshakeId = "";
     canvasAgent.pendingProvider = "";
     canvasAgentResolveApproval(false);
@@ -1772,6 +1868,7 @@
       && execution.sessionId===canvasAgent.sessionId
       && execution.generation===canvasAgent.sessionGeneration
       && (execution.documentEpoch===undefined || execution.documentEpoch===canvasDocuments.epoch && execution.activeDocumentId===canvasDocuments.activeId)
+      && (!execution.assistContext || assistAgentToolContextCurrent(execution.assistContext))
       && !execution.controller.signal.aborted;
   }
   function canvasAgentAssertToolExecution(execution) {
@@ -1779,7 +1876,9 @@
     if (!canvasAgentToolExecutionCurrent(execution)) throw canvasAgentToolError("SESSION_EXPIRED","The PenEcho Agent session changed before this tool could finish.");
   }
   function canvasAgentCanvasIdentity({id,location}={}) {
-    return id&&location?`${location}:${id}`:`draft:${canvasClientId()}`;
+    if(id&&location)return `${location}:${id}`;
+    const doc=typeof canvasDocuments!=="undefined"?canvasDocumentsCurrent():null;
+    return doc?`workspace:${doc.id}`:`draft:${canvasClientId()}`;
   }
   function canvasAgentCancelInitialAutoHide() {
     if(canvasAgent.initialCanvasAutoHideFrame)cancelAnimationFrame(canvasAgent.initialCanvasAutoHideFrame);
@@ -1818,8 +1917,9 @@
     }
     state.canvasAgentCanvasKey=canvasAgentCanvasIdentity(identity||{});
     canvasAgentBeginLocalConversation({persistCurrent:false});
+    const restored=canvasAgentRestoreLocalConversation();
     if (!deferConversationStart&&(canvasAgent.socket?.readyState===WebSocket.OPEN||canvasAgent.connectPromise)) {
-      void canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false}).catch(canvasAgentReportAsyncError);
+      void canvasAgentStartNewConversation(selectedAiConnectionId(),{resetProjection:false,preserveConversation:restored}).catch(canvasAgentReportAsyncError);
     } else canvasAgentDropSessionIdentity();
     canvasAgentSyncPromptSuggestions();
     if (!window.PenEchoStudioNavigator?.isMcpDocked?.()) {
@@ -1849,7 +1949,6 @@
       window.PenEchoStudioNavigator?.renderAgent?.();
       return;
     }
-    if(canvasAgent.projectId){state.canvasAgentCanvasKey=nextKey;canvasAgentRenderHistoryList();return;}
     canvasAgentPersistCurrentConversation();
     const store=canvasAgentReadHistoryStore(), previous=(Array.isArray(store.canvases[previousKey])?store.canvases[previousKey]:[]).map(canvasAgentNormalizeConversation).filter(Boolean), next=(Array.isArray(store.canvases[nextKey])?store.canvases[nextKey]:[]).map(canvasAgentNormalizeConversation).filter(Boolean), merged=[];
     for (const conversation of [...previous,...next].sort((a,b)=>b.updatedAt-a.updatedAt)) if (conversation?.items.length&&!merged.some(item=>item.id===conversation.id)) merged.push(conversation);
@@ -1913,7 +2012,6 @@
     if (explicit.length!==canvasAgent.references.length) canvasAgent.references=explicit;
     canvasAgentSelection.replaceChildren(...explicit.map(id=>canvasAgentCreateReferenceChip(id)),...selected.map(id=>canvasAgentCreateReferenceChip(id,{selected:true})));
     canvasAgentSelection.hidden = !explicit.length&&!selected.length;
-    canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearReferences() {
@@ -1983,7 +2081,6 @@
     canvasAgentReference.setAttribute("aria-expanded",String(open));
     canvasAgentForm.classList.toggle("canvas-agent-reference-open",open);
     canvasAgentSetWidgetPickActive(open);
-    canvasAgentSyncInputHint();
     if (open) {
       canvasAgentReferenceSearch.value="";
       canvasAgentRenderReferencePicker("");
@@ -2481,7 +2578,6 @@
     canvasAgentAttachments.hidden = !canvasAgent.attachments.length;
     canvasAgentAttachmentCount.textContent = String(canvasAgent.attachments.length);
     canvasAgentAttachmentCount.hidden = !canvasAgent.attachments.length;
-    canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentClearAttachments() {
@@ -2549,11 +2645,6 @@
     }
     return true;
   }
-  function canvasAgentSyncInputHint() {
-    if (!canvasAgentInputHint) return;
-    const hasConversation=Boolean(canvasAgent.currentConversation?.items?.length), hasDraft=Boolean(canvasAgentInput.value.trim()||canvasAgent.inkPresent||canvasAgent.attachments.length||canvasAgent.references.length), referenceOpen=typeof canvasAgentReferencePicker!=="undefined"&&!canvasAgentReferencePicker.hidden;
-    canvasAgentInputHint.hidden=canvasAgent.inputMode==="ink"||hasConversation||hasDraft||referenceOpen||Boolean(canvasAgent.viewingHistoryId);
-  }
   function canvasAgentResizeInput() {
     if(!canvasAgentInput||canvasAgentInput.hidden)return;
     canvasAgentInput.dataset.rows="1";
@@ -2576,7 +2667,6 @@
     canvasAgentTextMode.setAttribute("aria-pressed",String(!ink));
     canvasAgentInkMode.setAttribute("aria-pressed",String(ink));
     if(!ink)canvasAgentResizeInput();
-    canvasAgentSyncInputHint();
     if(focus)(ink?canvasAgentInkCanvas:canvasAgentInput).focus?.();
     canvasAgentSyncPromptSuggestions();
   }
@@ -2585,7 +2675,6 @@
     canvasAgentInkContext?.clearRect(0,0,canvasAgentInkCanvas.width,canvasAgentInkCanvas.height);
     canvasAgent.inkPresent=false;
     canvasAgent.inkStroke=null;
-    canvasAgentSyncInputHint();
     canvasAgentSyncPromptSuggestions();
   }
   function canvasAgentInkPoint(event) {
@@ -2607,7 +2696,6 @@
     canvasAgentInkContext.fill();
     canvasAgentInkContext.restore();
     canvasAgent.inkPresent=true;
-    canvasAgentSyncInputHint();
     canvasAgentSyncSendAvailability();
     event.preventDefault();
   }
@@ -2701,7 +2789,7 @@
   }
   function canvasAgentContentBounds() {
     const full = { x:0,y:0,w:SIZE,h:SIZE };
-    return unionLocalBounds(
+    const bounds = unionLocalBounds(
       unionLocalBounds(
         unionLocalBounds(
           unionLocalBounds(visibleInkBounds(full),imageBounds()),
@@ -2711,6 +2799,10 @@
       ),
       widgetBounds(),
     );
+    const selection = state.selection;
+    return selection?.phase === "active" && selection.fragments?.length
+      ? unionLocalBounds(bounds, selectionContentBounds(selection))
+      : bounds;
   }
   function canvasAgentAllObjects() {
     return [
@@ -2753,6 +2845,7 @@
     return {
       revision:state.userRevision,
       viewRevision:viewFacts.viewRevision,
+      mutationState:canvasAgentMutationState(),
       canvas:{ width:SIZE, height:SIZE, contentBounds:canvasAgentExternalRect(canvasAgentContentBounds()) },
       appearance:canvasAgentAppearanceFacts(),
       viewport:canvasAgentExternalRect(viewFacts.viewport),
@@ -3259,7 +3352,6 @@
     const target=canvasAgentAppendErrorElement(item,!canvasAgent.viewingHistoryId);
     canvasAgentScheduleHistoryPersist(0);
     if(!canvasAgent.viewingHistoryId)canvasAgentScrollToLatest();
-    canvasAgentSyncInputHint();
     return target;
   }
   function canvasAgentAppendMessageElement(item, attachments = [], append = true) {
@@ -3372,7 +3464,6 @@
     const target=canvasAgentAppendMessageElement(item,attachments,!canvasAgent.viewingHistoryId);
     canvasAgentScheduleHistoryPersist(role==="assistant"?220:0);
     if (!canvasAgent.viewingHistoryId) canvasAgentScrollToLatest(role === "user");
-    canvasAgentSyncInputHint();
     return target;
   }
   function canvasAgentToolIntent(name,args = {}) {
@@ -3502,7 +3593,6 @@
     canvasAgent.toolRows.set(event.callId,target);
     canvasAgentScheduleHistoryPersist();
     if (!canvasAgent.viewingHistoryId) canvasAgentScrollToLatest();
-    canvasAgentSyncInputHint();
   }
   function canvasAgentRenderConversation(conversation, active = false) {
     canvasAgentTranscript.replaceChildren();
@@ -3524,7 +3614,6 @@
     if (!canvasAgentTranscript.childElementCount) canvasAgentRenderEmpty();
     canvasAgentSyncAssistantActions();
     canvasAgentScrollToLatest(true);
-    canvasAgentSyncInputHint();
   }
   function canvasAgentSetRunning(running) {
     canvasAgent.running = running;
@@ -3544,6 +3633,7 @@
       canvasAgent.requestPending = false;
       canvasAgent.lastTurnError = null;
       if(!replay&&typeof mcpBeginAgentTurn==="function")mcpBeginAgentTurn();
+      if (!replay && typeof assistRequestStarted === "function") assistRequestStarted(canvasAgent);
       canvasAgentSetRunning(true);
     }
     else if (event.kind === "user_message" && replay && event.text) canvasAgentRow("user",event.text);
@@ -3594,6 +3684,8 @@
       canvasAgent.activeEvaluationContext=null;
       canvasAgent.lastTurnError=event.reason?.kind==="error"?canvasAgentNormalizeError(event.reason?.error||event.reason):null;
       canvasAgentSetRunning(false);
+      if (!replay && typeof assistRequestFinished === "function") assistRequestFinished(canvasAgent, event.reason?.kind === "completed" ? "completed" : "stopped");
+      if (!replay && typeof assistAgentFinishResult === "function") assistAgentFinishResult(event.reason?.kind === "completed");
       if(canvasAgent.lastTurnError){
         canvasAgentErrorRow(canvasAgent.lastTurnError,{eventKey:`turn:${event.turn}`});
         canvasAgentSetStatus(canvasAgentErrorSummary(canvasAgent.lastTurnError),"error");
@@ -3649,7 +3741,7 @@
       canvasAgent.pendingConversationHistory=[];
       canvasAgentSetSearchConfigured(canvasAgent.sessionSearchConfigured);
       canvasAgentRenderProjects();
-      try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({scope:aiConnectionScope(canvasAgent.connectionId.startsWith("hosted:")),sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,engine:canvasAgent.sessionEngine,model:canvasAgent.sessionModel,channel:canvasAgent.sessionChannel,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
+      try { sessionStorage.setItem(CANVAS_AGENT_SESSION_KEY,JSON.stringify({scope:aiConnectionScope(canvasAgent.connectionId.startsWith("hosted:")),canvasKey:state.canvasAgentCanvasKey,conversationId:canvasAgent.currentConversation?.id||"",sessionId:canvasAgent.sessionId,resumeToken:canvasAgent.resumeToken,connectionId:canvasAgent.connectionId,engine:canvasAgent.sessionEngine,model:canvasAgent.sessionModel,channel:canvasAgent.sessionChannel,projectId:canvasAgent.sessionProjectId,accessMode:canvasAgent.sessionAccessMode})); } catch {}
       canvasAgentSetStatus(t(envelope.payload?.resumed ? "canvasAgentResumed" : "canvasAgentReady"),"ready");
       const replayBacklog=envelope.payload?.resumed&&!canvasAgent.currentConversation?.items?.length;
       if (replayBacklog) {
@@ -3688,6 +3780,7 @@
         return;
       }
       canvasAgent.requestPending = false;
+      if (!canvasAgent.running && typeof assistRequestFinished === "function") assistRequestFinished(canvasAgent, "failed");
       canvasAgent.lastTurnError=error;
       canvasAgentSyncTriggerState();
       canvasAgentResumeAutomaticAI();
@@ -3710,6 +3803,8 @@
     const saved = canvasAgent.pendingStoredSession;
     canvasAgent.pendingStoredSession = null;
     if (canvasAgent.sessionId || !saved?.sessionId || !saved?.resumeToken || saved.scope !== scope || saved.connectionId !== connectionId
+      || !saved.canvasKey || saved.canvasKey !== state.canvasAgentCanvasKey
+      || !saved.conversationId || saved.conversationId !== canvasAgent.currentConversation?.id
       || String(saved.projectId || "") !== canvasAgent.projectId || String(saved.accessMode || "controlled") !== canvasAgent.accessMode) return;
     canvasAgent.sessionId = saved.sessionId;
     canvasAgent.resumeToken = saved.resumeToken;
@@ -3865,17 +3960,23 @@
       // Keep the same conversation; the next hello carries its bounded history.
       try { previousSocket.close(1000,"PenEcho Agent execution host changed"); } catch {}
     }
-    if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId) {
+    // An existing handshake owns the transition. An open transport with a
+    // saved session ID is not sufficient evidence that its session is ready.
+    if (canvasAgent.connectPromise) {
+      await canvasAgent.connectPromise;
+      return canvasAgentConnect({submitExecution});
+    }
+    if (canvasAgent.socket?.readyState === WebSocket.OPEN && canvasAgent.sessionId && canvasAgent.sessionReady) {
       if (canvasAgent.sessionReady&&canvasAgent.connectionId === connectionId&&canvasAgentSessionContextMatches()) return;
       if(canvasAgent.sessionReady&&canvasAgent.connectionId!==connectionId){
         await canvasAgentChangeConnection(connectionId,{submitExecution});
         return canvasAgentConnect({submitExecution});
       }
       await canvasAgentChangeContext({submitExecution});
-      return canvasAgentConnect({submitExecution});
-    }
-    if (canvasAgent.connectPromise) {
-      await canvasAgent.connectPromise;
+      // Context changes during a turn are deliberately deferred until turn_end.
+      // Retrying here would only enqueue resolved promises, starving input,
+      // paint and the very socket event that can make progress.
+      if (!submitExecution && (canvasAgent.running || canvasAgent.requestPending)) return;
       return canvasAgentConnect({submitExecution});
     }
     canvasAgentSetStatus(t("canvasAgentConnecting"),"connecting");
@@ -3933,6 +4034,7 @@
         canvasAgentResolveApproval(false);
         canvasAgent.requestPending = false;
         canvasAgent.running = false;
+        if (typeof assistRequestFinished === "function") assistRequestFinished(canvasAgent, "failed");
         canvasAgentStop.hidden = true;
         canvasAgentSetComposerActionLabel(canvasAgentSend,"canvasAgentSend");
         canvasAgentSyncTriggerState();
@@ -4014,13 +4116,17 @@
   function canvasAgentTargetRegion(args) {
     if (args.target === "viewport") return viewportRect();
     if (args.target === "canvas") return canvasAgentContentBounds() || viewportRect();
+    if (args.target === "selection") {
+      if (state.selection?.phase !== "active") throw canvasAgentToolError("SELECTION_REQUIRED","Create an active lasso selection before capturing it.");
+      return canvasAgentValidatedRegion(state.selection.box);
+    }
     if (args.target === "region") return canvasAgentValidatedRegion(args.region);
     if (args.target === "object") {
       const object = canvasAgentObject(String(args.objectId || ""));
       if (!object) throw canvasAgentToolError("OBJECT_NOT_FOUND","Canvas object was not found.",{objectId:args.objectId});
       return canvasAgentBox(object);
     }
-    throw canvasAgentToolError("INVALID_TARGET","Canvas capture target is invalid. Use viewport, canvas, region, or one object id.",{target:args.target ?? null});
+    throw canvasAgentToolError("INVALID_TARGET","Canvas capture target is invalid. Use viewport, canvas, selection, region, or one object id.",{target:args.target ?? null});
   }
   function canvasAgentGridStep(span) {
     const rough = Math.max(1,span/6), power = 10 ** Math.floor(Math.log10(rough)), normalized = rough/power;
@@ -4082,6 +4188,8 @@
     }
     const region = canvasAgentTargetRegion(args);
     if (!region) throw canvasAgentToolError("EMPTY_CAPTURE_REGION","The current viewport does not include the Canvas. Move back onto the Canvas, or capture an existing object or explicit region.",{target:args.target});
+    const selection=args.target === "selection" ? state.selection : null,
+      selectionSignature=selection ? JSON.stringify({box:selection.box,path:selectionPathFor(selection)}) : null;
     const policy=quality === "detail" ? CANVAS_AGENT_DETAIL_CAPTURE_POLICY : CANVAS_AGENT_LAYOUT_CAPTURE_POLICY,
       scale = Math.min(policy.maxLongEdge/Math.max(region.w,region.h),Math.sqrt(policy.maxPixels/(region.w*region.h))),
       width = Math.max(1,Math.floor(region.w*scale)), height = Math.max(1,Math.floor(region.h*scale)),
@@ -4112,16 +4220,27 @@
     }
     context.fillStyle = state.paint.paper;
     context.fillRect(0,0,width,height);
-    context.save();
-    context.scale(scale,scale);
-    context.translate(-region.x,-region.y);
-    drawAnimationsToContext(context,region);
-    drawWidgetsToContext(context,region);
-    drawImagesToContext(context,region,false);
-    for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
-    forTiles(region.x,region.y,region.w,region.h,(tileCanvas,tx,ty)=>context.drawImage(tileCanvas,tx*TILE,ty*TILE),false);
-    drawSharpOverlays(context,region);
-    context.restore();
+    if (selection) {
+      if (state.selection !== selection || selection.phase !== "active" || selectionSignature !== JSON.stringify({box:selection.box,path:selectionPathFor(selection)})) {
+        throw canvasAgentToolError("SELECTION_CHANGED","The lasso changed while preparing its capture. Retry with the current selection.");
+      }
+      const rendered=renderSelectionImage(selection,policy.maxLongEdge);
+      if (!rendered) throw canvasAgentToolError("EMPTY_CAPTURE_REGION","The lasso contains no capturable content.");
+      context.drawImage(rendered.out,0,0,width,height);
+    } else {
+      context.save();
+      context.scale(scale,scale);
+      context.translate(-region.x,-region.y);
+      drawAnimationsToContext(context,region);
+      drawWidgetsToContext(context,region);
+      drawImagesToContext(context,region,false);
+      for (const item of state.textBoxes) if (intersection(textBoxBox(item),region)) context.drawImage(item.image,item.x,item.y,item.w,item.h);
+      forTiles(region.x,region.y,region.w,region.h,(tileCanvas,tx,ty)=>context.drawImage(tileCanvas,tx*TILE,ty*TILE),false);
+      drawSharpOverlays(context,region);
+      // Lifted lasso ink lives outside the backing tiles until committed.
+      if (state.selection?.phase === "active") drawSelectionContent(state.selection,context);
+      context.restore();
+    }
     const coordinates=["metadata","none"].includes(args.coordinates) ? args.coordinates : "grid", gridStep=coordinates === "grid" ? canvasAgentDrawCoordinateGrid(context,region,width,height) : canvasAgentGridStep(Math.max(region.w,region.h)),
       encoded=await canvasAgentCompressedCanvas(canvas,policy,execution);
     assertCurrent?.();
@@ -4189,6 +4308,7 @@
     const start=Math.max(0,Number.parseInt(args.cursor,10)||0), limit=Math.max(1,Math.min(100,Number(args.limit)||60)), page=filtered.slice(start,start+limit), next=start+page.length;
     return {
       revision:state.userRevision,viewRevision:viewFacts.viewRevision,scope,
+      mutationState:canvasAgentMutationState(),
       canvas:{width:SIZE,height:SIZE,contentBounds:canvasAgentExternalRect(canvasAgentContentBounds())},viewport:canvasAgentExternalRect(viewFacts.viewport),
       selection:{objectIds:[...selected],inkBounds:canvasAgentExternalRect(state.selection?.box)},counts:canvasAgentDigest("summary").counts,
       page:{cursor:String(start),nextCursor:next<filtered.length?String(next):null,returned:page.length,total:filtered.length},objects:page,
@@ -4261,23 +4381,87 @@
       ...(terminalBoundary?{terminalBoundary}:{}),
     };
   }
-  function canvasAgentMutationIdle(execution) {
-    canvasAgentAssertToolExecution(execution);
-    if (state.drawing || state.selection || state.selectionGesture
-      || state.imageEdit || state.imageGesture || state.imageImporting || state.widgetEdit || state.widgetGesture || state.animationEdit || state.animationGesture || state.textEditors.size) {
-      throw canvasAgentToolError("CANVAS_BUSY","Finish the active canvas edit or draft before Agent changes the canvas.");
+  function canvasAgentMutationState() {
+    // A region-only lasso holds context, not extracted ink or an Undo transaction.
+    // Gesture and draft transactions still own pending snapshots until settled.
+    const blockers=[], persistent=[],objectLocks=[];
+    for (const [key,active] of [["drawing",state.drawing],["selection-gesture",state.selectionGesture||state.selection?.phase==="lasso"],
+      ["image-gesture",state.imageGesture],
+      ["widget-gesture",state.widgetGesture],["animation-gesture",state.animationGesture]]) if(active)blockers.push(key);
+    if(state.selection&&!state.selection.regionOnly&&state.selection.phase!=="lasso"){blockers.push("selection-edit");persistent.push("selection-edit");}
+    for(const [kind,edit,items] of [["image",state.imageEdit,state.images],["widget",state.widgetEdit,state.widgets],["animation",state.animationEdit,state.animations]]){
+      const item=edit&&items.find(item=>item.id===edit.id);
+      if(item&&(edit.changed||["x","y","w","h","contentW","contentH"].some(key=>key in edit.before&&item[key]!==edit.before[key])))objectLocks.push({objectId:edit.id,reason:`${kind}-edit`});
     }
+    for(const editor of state.textEditors.values())if(editor.sourceTextBoxId)objectLocks.push({objectId:editor.sourceTextBoxId,reason:"text-draft"});
+    const signature=JSON.stringify({blockers,objectLocks}), previous=canvasAgent.mutationObservation;
+    if(!previous || previous.signature!==signature)canvasAgent.mutationObservation={signature,revision:(previous?.revision||0)+1};
+    return {revision:canvasAgent.mutationObservation.revision,blockers,objectLocks,transient:blockers.length>0&&!persistent.length};
+  }
+  function canvasAgentMutationIdle(execution,objectIds=[]) {
+    canvasAgentAssertToolExecution(execution);
+    const source=execution?.assistContext?.owner?.inputTarget;
+    if(source?.variant&&objectIds.includes(source.widget.id))throw canvasAgentToolError("READ_ONLY_SOURCE","This action creates a separate Widget. Preserve the source Widget unchanged.");
+    const mutationState=canvasAgentMutationState();
+    if(mutationState.blockers.length)throw canvasAgentToolError("CANVAS_BUSY",
+      `Canvas changes are waiting for the active edit: ${mutationState.blockers.join(", ")}.`,
+      {mutationGuard:"canvas-edit",mutationState,retry:mutationState.transient?"after_gesture":"after_state_change"});
+    const locked=mutationState.objectLocks.filter(lock=>objectIds.includes(lock.objectId));
+    if(locked.length)throw canvasAgentToolError("OBJECT_EDIT_CONFLICT","The requested object has an unfinished user edit. Other objects and new content remain writable.",{objectLocks:locked,retry:"after_object_edit",mutationState});
+  }
+  function canvasAgentBeginMutation(execution,objectIds=[]) {
+    // Call only at a synchronous commit boundary, after asynchronous preparation.
+    canvasAgentMutationIdle(execution,objectIds);
+    const suspended=[];
+    for(const [editKey,field,kind,snapshot] of [["widgetEdit","widgetHistoryBefore","widgets",serializedWidgets],["imageEdit","imageHistoryBefore","images",imageHistoryState],["animationEdit","animationHistoryBefore","animations",serializedAnimations]]){
+      const edit=state[editKey];if(!edit)continue;
+      const dirty=edit.changed||state[kind].some(item=>item.id===edit.id&&["x","y","w","h","contentW","contentH"].some(key=>key in edit.before&&item[key]!==edit.before[key]));
+      const before=state[field]||(dirty?snapshot().map(item=>item.id===edit.id?{...item,...edit.before}:item):null);
+      suspended.push({editKey,edit,field,kind,before,dirty});state[field]=null;
+    }
+    save();
+    if (typeof recordDirtyHistoryBefore === "function") recordDirtyHistoryBefore();
+    const previous=state.agentMutationHistory,transaction={entries:[]};state.agentMutationHistory=transaction;
+    return ()=>{
+      state.agentMutationHistory=previous;
+      if (execution && transaction.entries.length) execution.canvasWritten = true;
+      for(const pending of suspended){
+        if(state[pending.editKey]!==pending.edit)continue;
+        let before=pending.before;
+        for(const entry of transaction.entries){
+          const ids=entry.objectScope?.[pending.kind]||[];
+          if(before&&ids.length)before=canvasHistoryMergeObjects(before,entry[pending.kind+"After"],ids);
+          if(ids.includes(pending.edit.id)){
+            const item=state[pending.kind].find(item=>item.id===pending.edit.id);
+            if(item){for(const key of Object.keys(pending.edit.before))if(key in item)pending.edit.before[key]=item[key];pending.edit.beforeIndex=state[pending.kind].indexOf(item);}
+            else {state[pending.editKey]=null;const selected="selected"+pending.kind.slice(0,1).toUpperCase()+pending.kind.slice(1,-1)+"Id";state[selected]=null;}
+          }
+        }
+        if(state[pending.editKey]){
+          state[pending.field]=pending.dirty?before:null;
+          if(pending.dirty)pending.edit.changed=true;
+          pending.edit.beforeFrontCanvasObjectKind=state.frontCanvasObjectKind;
+          pending.edit.beforeFrontPlacedCanvasObjectKind=state.frontPlacedCanvasObjectKind;
+        }
+      }
+      updateHistoryButtons();
+    };
   }
   function canvasAgentFinite(value,name) {
     const number = Number(value);
     if (!Number.isFinite(number)) throw canvasAgentToolError("INVALID_ARGUMENT",`${name} must be a finite number.`);
     return number;
   }
-  function canvasAgentPlacementBox(width,height,placement,reserved=[]) {
+  function canvasAgentPlacementBox(width,height,placement,reserved=[],execution=null) {
     // A preplanned absolute slot needs no second global occupancy scan.
     if(placement?.mode === "absolute"){
       const w=Math.max(1,Math.min(SIZE,width)),h=Math.max(1,Math.min(SIZE,height));
       return {x:Math.max(0,Math.min(SIZE-w,canvasAgentFinite(placement.x,"placement.x"))),y:Math.max(0,Math.min(SIZE-h,canvasAgentFinite(placement.y,"placement.y"))),w,h,placement:"absolute",crowded:false};
+    }
+    if(execution?.assistContext && placement?.mode!=="relative") {
+      canvasAgentAssertToolExecution(execution);
+      const doc=canvasDocumentsCurrent(),plan=canvasDocumentsPlace(doc,width,height,null,null,true,execution,reserved);
+      return {x:plan.placement.x,y:plan.placement.y,w:width,h:height,placement:"auto:source",crowded:false,sourcePlacement:plan.sourcePlacement,offViewport:plan.sourcePlacement?.inViewport===false};
     }
     const visible=viewportRect() || {x:SIZE/2-800,y:SIZE/2-600,w:1600,h:1200}, gap=Math.max(24,Math.min(400,Number(placement?.gap)||Math.max(40,24/state.scale))),
       nonObjectBounds=[visibleInkBounds({x:0,y:0,w:SIZE,h:SIZE}),animationBounds()].filter(Boolean),
@@ -4338,8 +4522,9 @@
       note:"A complete-Canvas overview validates composition but may intentionally render text very small. Judge local typography from the focused viewport estimate and post-render viewport/detail evidence, not from the whole-Canvas thumbnail alone.",
     };
   }
-  function canvasAgentRecordChange(changeId,historyEntry) {
+  function canvasAgentRecordChange(changeId,historyEntry,execution=null) {
     canvasAgent.latestChange=historyEntry ? {changeId:String(changeId || ""),revision:state.userRevision,historyEntry} : null;
+    if (historyEntry && execution) execution.canvasWritten = true;
   }
   function canvasAgentWidgetPluginAllowed(pluginId,widgetType) {
     if(widgetType==="diagram_source")return pluginId==="flowchart"&&pluginEnabled("flowchart")&&pluginManifests.has("flowchart");
@@ -4348,6 +4533,12 @@
   }
   async function canvasAgentPrepareCreateItems(items,execution=null) {
     if (!Array.isArray(items)||!items.length||items.length>24) throw canvasAgentToolError("INVALID_BATCH","Provide between 1 and 24 create items.");
+    // Note cards arrive as a note source; PenEcho renders the card Widget.
+    items=items.map(item=>{
+      if(item?.type!=="note")return item;
+      try{return noteCardCreateItem(item,"agent");}
+      catch(error){throw canvasAgentToolError("INVALID_NOTE_CARD",String(error?.message||error));}
+    });
     const requested={widget:items.filter(item=>item?.type === "widget").length,text:items.filter(item=>item?.type === "text").length,image:items.filter(item=>["image","plot"].includes(item?.type)).length};
     if(state.widgets.length+requested.widget>MAX_VISIBLE_WIDGETS||state.textBoxes.length+requested.text>MAX_VISIBLE_TEXT_BOXES||state.images.length+requested.image>MAX_VISIBLE_IMAGES)throw canvasAgentToolError("OBJECT_LIMIT","This transaction would exceed a visible canvas object limit.",{requested});
     if (!state.pluginCatalogLoaded) await loadPluginDocuments();
@@ -4355,17 +4546,17 @@
     for (const raw of items) {
       const type=String(raw?.type || "");
       if (type === "text") {
-        const fontSize=Number.isFinite(Number(raw.fontSize))?Number(raw.fontSize):38,maxWidth=Number.isFinite(Number(raw.maxWidth))?Number(raw.maxWidth):Math.max(fontSize*3,Math.min(900,visible.w*.65));
+        const fontSize=Number.isFinite(Number(raw.fontSize))?Number(raw.fontSize):(execution?.assistContext?20/(execution.assistContext.scale||1):38),maxWidth=Number.isFinite(Number(raw.maxWidth))?Number(raw.maxWidth):Math.max(fontSize*3,Math.min(900,visible.w*.65));
         const record=await renderedTextBoxRecord({text:String(raw.text||""),x:0,y:0,fontSize,maxWidth,fontFamily:state.aiFont,color:typeof raw.color === "string"?raw.color:state.inkColor});
         if(!record)throw canvasAgentToolError("INVALID_TEXT","Text content or geometry was rejected.");
-        const placed=canvasAgentPlacementBox(record.w,record.h,raw.placement,reserved);record.x=Math.round(placed.x);record.y=Math.round(placed.y);reserved.push(canvasAgentBox({kind:"text",item:record}));prepared.push({type,kind:"text",record,placed});
+        const placed=canvasAgentPlacementBox(record.w,record.h,raw.placement,reserved,execution);record.x=Math.round(placed.x);record.y=Math.round(placed.y);reserved.push(canvasAgentBox({kind:"text",item:record}));prepared.push({type,kind:"text",record,placed});
       } else if (type === "widget") {
         const widgetType=String(raw.widgetType||"");
         if(!["html_widget","diagram_source"].includes(widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Widget type ${widgetType||"(missing)"} is unavailable to PenEcho Agent.`);
         const pluginId=String(raw.pluginId || (widgetType === "diagram_source"?"flowchart":"general")),frameworkVersion=String(raw.frameworkVersion||"").trim();
         if(widgetType === "diagram_source"||pluginId === "flowchart"||frameworkVersion.startsWith("penecho-professional-diagrams"))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE","PenEcho Agent may edit an existing Professional Diagram, but it cannot create a new Professional Diagram.");
         if(!canvasAgentWidgetPluginAllowed(pluginId,widgetType))throw canvasAgentToolError("CAPABILITY_UNAVAILABLE",`Plugin ${pluginId} is unavailable, disabled, or not available to PenEcho Agent.`);
-        const width=Math.max(execution?.widgetContentViewport?1:300,Math.min(SIZE,Number(raw.width)||Math.max(600,Math.min(1200,visible.w*.7)))),height=Math.max(execution?.widgetContentViewport?1:200,Math.min(SIZE,Number(raw.height)||Math.max(400,Math.min(800,visible.h*.7)))),placed=canvasAgentPlacementBox(width,height,raw.placement,reserved),
+        const width=Math.max(execution?.widgetContentViewport?1:300,Math.min(SIZE,Number(raw.width)||Math.max(600,Math.min(1200,visible.w*.7)))),height=Math.max(execution?.widgetContentViewport?1:200,Math.min(SIZE,Number(raw.height)||Math.max(400,Math.min(800,visible.h*.7)))),placed=canvasAgentPlacementBox(width,height,raw.placement,reserved,execution),
           record=widgetRecord({tool:widgetType,widgetType,pluginId,x:placed.x,y:placed.y,w:width,h:height,contentW:execution?.widgetContentViewport?.width??width,contentH:execution?.widgetContentViewport?.height??height,title:String(raw.title||"Canvas widget"),refreshSeconds:Number.isFinite(Number(raw.refreshSeconds))?Number(raw.refreshSeconds):0,html:typeof raw.html === "string"?raw.html:"",source:typeof raw.source === "string"?raw.source:"",sourceFormat:raw.sourceFormat,diagramKind:raw.diagramKind,frameworkVersion:raw.frameworkVersion,copyText:raw.copyText,copyLabel:raw.copyLabel});
         if(!record)throw canvasAgentToolError("INVALID_WIDGET","Widget content or geometry was rejected. Read the plugin capability contract and retry.");
         reserved.push(canvasAgentBox({kind:"widget",item:record}));prepared.push({type,kind:"widget",record,placed});
@@ -4376,12 +4567,12 @@
         let width=Number(raw.width),height=Number(raw.height);
         if(!Number.isFinite(width)&&!Number.isFinite(height)){const fit=importedImagePlacement(imported.naturalW,imported.naturalH);width=fit.w;height=fit.h;}
         else if(!Number.isFinite(width))width=height*naturalRatio;else if(!Number.isFinite(height))height=width/naturalRatio;
-        width=Math.max(80,Math.min(SIZE,width));height=Math.max(80,Math.min(SIZE,height));const placed=canvasAgentPlacementBox(width,height,raw.placement,reserved),record=imageRecord({...imported,x:placed.x,y:placed.y,w:width,h:height,sourceName:String(raw._imageName||"")});
+        width=Math.max(80,Math.min(SIZE,width));height=Math.max(80,Math.min(SIZE,height));const placed=canvasAgentPlacementBox(width,height,raw.placement,reserved,execution),record=imageRecord({...imported,x:placed.x,y:placed.y,w:width,h:height,sourceName:String(raw._imageName||"")});
         if(!record)throw canvasAgentToolError("INVALID_IMAGE","Image content or geometry was rejected.");
         reserved.push(canvasAgentBox({kind:"image",item:record}));prepared.push({type,kind:"image",record,placed});
       } else if (type === "plot") {
         const expression=String(raw.expression||"").trim(),preparedPlot=await plotObjectImage({expression,w:Math.max(240,Math.min(2400,Number(raw.width)||900)),h:Math.max(200,Math.min(1800,Number(raw.height)||650)),color:typeof raw.color === "string"?raw.color:state.inkColor,title:String(raw.title||raw.expression||"")}),
-          width=preparedPlot.logicalWidth,height=preparedPlot.logicalHeight,placed=canvasAgentPlacementBox(width,height,raw.placement,reserved),record=imageRecord({image:preparedPlot.image,blob:preparedPlot.blob,x:placed.x,y:placed.y,w:width,h:height,naturalW:preparedPlot.image.width,naturalH:preparedPlot.image.height,sourceName:"",plotExpression:expression});
+          width=preparedPlot.logicalWidth,height=preparedPlot.logicalHeight,placed=canvasAgentPlacementBox(width,height,raw.placement,reserved,execution),record=imageRecord({image:preparedPlot.image,blob:preparedPlot.blob,x:placed.x,y:placed.y,w:width,h:height,naturalW:preparedPlot.image.width,naturalH:preparedPlot.image.height,sourceName:"",plotExpression:expression});
         if(!record)throw canvasAgentToolError("INVALID_PLOT","Function plot content or geometry was rejected.");
         reserved.push(canvasAgentBox({kind:"image",item:record}));prepared.push({type,kind:"image",record,placed});
       } else if (["formula","drawing"].includes(type)) {
@@ -4389,26 +4580,31 @@
         if(type === "formula")image=await formulaImage(String(raw.latex||""),Number(raw.fontSize)||64,typeof raw.color === "string"?raw.color:state.inkColor);
         else {const normalized=DRAW?.normalize({...raw.drawing,tool:"draw"},SIZE),made=normalized?DRAW.render(normalized,offscreen,typeof raw.color === "string"?raw.color:state.inkColor):null;if(made){image=made.image;x=made.x;y=made.y;}}
         if(!image)throw canvasAgentToolError("INVALID_INK_CONTENT",`${type} could not be rendered.`);
-        const width=image.logicalWidth||image.width,height=image.logicalHeight||image.height,placed=raw.placement?canvasAgentPlacementBox(width,height,raw.placement,reserved):canvasAgentPlacementBox(width,height,{mode:"absolute",x,y},reserved);
+        const width=image.logicalWidth||image.width,height=image.logicalHeight||image.height,placed=raw.placement?canvasAgentPlacementBox(width,height,raw.placement,reserved,execution):canvasAgentPlacementBox(width,height,type==="formula"&&execution?.assistContext?null:{mode:"absolute",x,y},reserved,execution);
         reserved.push({x:placed.x,y:placed.y,w:width,h:height});prepared.push({type,kind:"ink",image,x:placed.x,y:placed.y,w:width,h:height,placed});
       } else throw canvasAgentToolError("UNSUPPORTED_CREATE_TYPE",`Unsupported create type: ${type || "(missing type)"}.`);
     }
     return prepared;
   }
   async function canvasAgentCreate(args,execution) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareCreateItems(args.items,execution);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);save();
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareCreateItems(args.items,execution);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);const restoreMutation=canvasAgentBeginMutation(execution,[]);try {save();
     const kinds=new Set(prepared.map(item=>item.kind));if(kinds.has("widget"))state.widgetHistoryBefore=serializedWidgets();if(kinds.has("text"))state.textBoxHistoryBefore=textBoxHistoryState();if(kinds.has("image"))state.imageHistoryBefore=imageHistoryState();
     const receipts=[];
     for(const item of prepared){
-      if(item.kind === "widget"){state.widgets.push(item.record);mountWidget(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"widget",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport)});}
-      else if(item.kind === "text"){state.textBoxes.push(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"text",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport)});}
-      else if(item.kind === "image"){state.images.push(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"image",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport)});}
-      else {blitSized(item.image,item.x,item.y,item.w,item.h);receipts.push({type:item.type,status:"created",region:{x:item.x,y:item.y,width:item.w,height:item.h},placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport)});}
+      if(item.kind === "widget"){state.widgets.push(item.record);mountWidget(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"widget",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport),sourcePlacement:mcpSourcePlacement(execution?.assistContext,{x:item.record?.x??item.x,y:item.record?.y??item.y,w:item.record?.w??item.w,h:item.record?.h??item.h},32/(execution?.assistContext?.scale||state.scale))});}
+      else if(item.kind === "text"){state.textBoxes.push(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"text",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport),sourcePlacement:mcpSourcePlacement(execution?.assistContext,{x:item.record?.x??item.x,y:item.record?.y??item.y,w:item.record?.w??item.w,h:item.record?.h??item.h},32/(execution?.assistContext?.scale||state.scale))});}
+      else if(item.kind === "image"){state.images.push(item.record);receipts.push({type:item.type,status:"created",objectId:item.record.id,box:canvasAgentExternalRect(canvasAgentBox({kind:"image",item:item.record})),placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport),sourcePlacement:mcpSourcePlacement(execution?.assistContext,{x:item.record?.x??item.x,y:item.record?.y??item.y,w:item.record?.w??item.w,h:item.record?.h??item.h},32/(execution?.assistContext?.scale||state.scale))});}
+      else {blitSized(item.image,item.x,item.y,item.w,item.h);receipts.push({type:item.type,status:"created",region:{x:item.x,y:item.y,width:item.w,height:item.h},placement:item.placed.placement,crowded:item.placed.crowded,offViewport:Boolean(item.placed.offViewport),sourcePlacement:mcpSourcePlacement(execution?.assistContext,{x:item.record?.x??item.x,y:item.record?.y??item.y,w:item.record?.w??item.w,h:item.record?.h??item.h},32/(execution?.assistContext?.scale||state.scale))});}
     }
-    state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);
+    state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry,execution);
+    for (const item of prepared) if (item.kind === "widget") item.record.autoContentHeight = {
+      start:widgetLayout(item.record), html:item.record.html, historyEntry:entry, documentReady:false,
+      defaultContentHeight:mcpPresentationSize({}).contentHeight || item.record.contentH,
+    };
     const singleWidget=prepared.length===1&&prepared[0].kind==="widget"?prepared[0]:null,viewResult=singleWidget&&!execution?.preserveView?canvasAgentFrameRegion(canvasAgentBox({kind:"widget",item:singleWidget.record}),48):null;
     if(!viewResult){requestRender();canvasAgentSyncState();}
     return{ok:true,previousRevision:args.baseRevision,revision:state.userRevision,changeId,receipts,...(viewResult?{viewport:viewResult.viewport}:{}),summary:String(args.summary||"")};
+    }finally{restoreMutation();}
   }
   async function canvasAgentVisualExplainerCreate(args,execution) {
     const item=visualExplainerWidgetItem(args.plan,{title:args.title,width:args.width,height:args.height,placement:args.placement}),
@@ -4459,7 +4655,7 @@
     return prepared;
   }
   async function canvasAgentEdit(args,execution) {
-    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareEditOperations(args.operations);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);save();
+    canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);const prepared=await canvasAgentPrepareEditOperations(args.operations);canvasAgentAssertRevision(args.baseRevision);canvasAgentAssertToolExecution(execution);const restoreMutation=canvasAgentBeginMutation(execution,prepared.flatMap(op=>op.positions?op.positions.map(item=>item.object.item.id):op.object?[op.object.item.id]:[]));try {save();
     const objectKinds=new Set(prepared.flatMap(op=>op.kind === "arrange"?op.positions.map(item=>item.object.kind):[op.kind]));if(objectKinds.has("widget"))state.widgetHistoryBefore=serializedWidgets();if(objectKinds.has("text"))state.textBoxHistoryBefore=textBoxHistoryState();if(objectKinds.has("image"))state.imageHistoryBefore=imageHistoryState();
     const receipts=[];
     for(const op of prepared){
@@ -4471,11 +4667,12 @@
       else if(op.type === "erase_ink"){eraseRect(op.region.x,op.region.y,op.region.w,op.region.h);receipts.push({type:op.type,status:"applied",region:{x:op.region.x,y:op.region.y,width:op.region.w,height:op.region.h}});}
       else if(op.type === "delete_object"){const item=op.object.item;if(op.object.kind === "widget"){unmountWidget(item);state.widgets.splice(state.widgets.indexOf(item),1);}else if(op.object.kind === "text")state.textBoxes.splice(state.textBoxes.indexOf(item),1);else state.images.splice(state.images.indexOf(item),1);if(state.selectedWidgetId===item.id)state.selectedWidgetId=null;if(state.selectedTextBoxId===item.id)state.selectedTextBoxId=null;if(state.selectedImageId===item.id)state.selectedImageId=null;receipts.push({type:op.type,status:"applied",objectId:item.id});}
     }
-    state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);positionTextEditors();
+    state.userRevision++;const entry=save(),changeId=String(args._changeId||canvasClientId());canvasAgentRecordChange(changeId,entry,execution);positionTextEditors();
     const resizedVisual=prepared.length===1&&prepared[0].type==="resize_widget"&&prepared[0].object.item.sourceFormat===VISUAL_EXPLAINER_SOURCE_FORMAT,
       viewResult=resizedVisual?canvasAgentFrameRegion(canvasAgentBox(prepared[0].object),48):null;
     if(!viewResult){requestRender();canvasAgentSyncState();}
     return{ok:true,previousRevision:args.baseRevision,revision:state.userRevision,changeId,receipts,...(viewResult?{viewport:viewResult.viewport}:{}),summary:String(args.summary||"")};
+    }finally{restoreMutation();}
   }
   async function canvasAgentHash(value) {
     const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -4503,6 +4700,7 @@
     const raw=value=>typeof value==="string"?value:"";
     if(edit.widgetType!=="diagram_source")files.push({path:"widget.html",content:raw(edit.html)});
     files.push({path:"widget.source",content:raw(edit.widgetType==="diagram_source"||!edit.sourceMirrorsHtml?edit.source:"")});
+    if(edit.widgetAnimation)files.push({path:"widget.animation.json",content:JSON.stringify(edit.widgetAnimation,null,2)+"\n"});
     return {version:1,files};
   }
   function canvasAgentIsolateSourceHistory() {
@@ -4562,6 +4760,8 @@
     else {canvasAgentAssertRevision(args.baseRevision);canvasAgentMutationIdle(execution);}
     const object = canvasAgentObject(String(args.objectId || ""));
     if (!object || object.kind !== "widget") throw Error("Widget was not found.");
+    const source=execution?.assistContext?.owner?.inputTarget;
+    if(source?.variant&&source.widget.id===object.item.id)throw canvasAgentToolError("READ_ONLY_SOURCE","This action creates a separate Widget. Preserve the source Widget unchanged.");
     const currentEdit = widgetEditContext(object.item,"agent"),
       sourceState=sourceOnly?canvasAgentWidgetSourceState(currentEdit):null,
       sourceSignature=sourceOnly?JSON.stringify(sourceState):null;
@@ -4579,7 +4779,7 @@
     const command = args.command;
     if (!command || command.pluginId !== object.item.pluginId || !["html_widget","diagram_source"].includes(command.tool)) throw Error("Patched widget command is invalid.");
     if(!canvasAgentWidgetPluginAllowed(command.pluginId,command.tool))throw Error("The Widget plugin is unavailable, disabled, or not available to PenEcho Agent.");
-    const record = widgetRecord({...command,...(sourceOnly?{x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h}:{}),id:object.item.id,widgetType:command.tool,contentW:object.item.contentW,contentH:object.item.contentH});
+    const record = widgetRecord({...command,...(sourceOnly?{x:object.item.x,y:object.item.y,w:object.item.w,h:object.item.h}:{}),id:object.item.id,widgetType:command.tool,contentW:object.item.contentW,contentH:object.item.contentH,fitContent:object.item.fitContent,fitContentAxes:object.item.fitContentAxes});
     if (!record) throw Error("Patched widget content was rejected by Canvas validation.");
     const sourceHash=sourceOnly?await canvasAgentHash(canvasAgentWidgetSourceState(widgetEditContext(record,"agent"))):null;
     if(sourceOnly) {
@@ -4588,14 +4788,14 @@
       if(!latest||latest.item!==object.item||JSON.stringify(canvasAgentWidgetSourceState(widgetEditContext(latest.item,"agent")))!==sourceSignature)throw canvasAgentToolError("SOURCE_CONFLICT","Widget source changed before commit.");
       for(const field of ["x","y","w","h","contentW","contentH"])record[field]=object.item[field];
     }
-    const restoreHistory=sourceOnly?canvasAgentIsolateSourceHistory():()=>{};
+    const restoreHistory=sourceOnly?canvasAgentIsolateSourceHistory():canvasAgentBeginMutation(execution,[object.item.id]);
     let result;
     try {
     if(sourceOnly)canvasAgentSealWidgetGeometryEdit();
     const previousRevision=state.userRevision;
     save();
     state.widgetHistoryBefore = serializedWidgets();
-    const contentFields = ["widgetType","pluginId","x","y","w","h","contentW","contentH","title","refreshSeconds","html","source","diagramKind","sourceFormat","frameworkVersion","copyText","copyLabel"];
+    const contentFields = ["widgetType","pluginId","x","y","w","h","contentW","contentH","title","refreshSeconds","html","source","diagramKind","sourceFormat","frameworkVersion","copyText","copyLabel","widgetAnimation"];
     for(const field of contentFields) object.item[field] = record[field];
     object.item.snapshotImage = null;
     object.item.snapshotDataUrl = "";
@@ -4612,7 +4812,7 @@
     sendWidgetInit(object.item);
     sendWidgetHostState(object.item, undefined, undefined, true);
     state.userRevision++;
-    const entry=save(),changeId=String(args.changeId||canvasClientId());canvasAgentRecordChange(changeId,entry);
+    const entry=save(),changeId=String(args.changeId||canvasClientId());canvasAgentRecordChange(changeId,entry,execution);
     if(sourceOnly&&state.widgetEdit)state.widgetHistoryBefore=serializedWidgets();
     requestRender();
     canvasAgentSyncState();
@@ -4658,7 +4858,16 @@
     const latest=canvasAgent.latestChange;
     if(!latest||String(args.changeId||"")!==latest.changeId)throw canvasAgentToolError("REVERT_NOT_LATEST","Only the latest PenEcho Agent change can be reverted.",{latestChangeId:latest?.changeId||null});
     if(state.userRevision!==latest.revision||state.history.at(-1)!==latest.historyEntry)throw canvasAgentToolError("REVERT_CONFLICT","Canvas changed after this Agent change, so it can no longer be reverted safely.",{changeRevision:latest.revision,currentRevision:state.userRevision});
-    const previousRevision=state.userRevision;state.userRevision++;undo();canvasAgent.latestChange=null;requestRender();canvasAgentSyncState();return{ok:true,revertedChangeId:latest.changeId,previousRevision,revision:state.userRevision};
+    const entry=latest.historyEntry;
+    if(!entry.objectScope&&(state.widgetEdit||state.imageEdit||state.animationEdit||state.textEditors.size))throw canvasAgentToolError("REVERT_CONFLICT","This older change contains a full Canvas snapshot. Finish the active edit before reverting it.");
+    const finish=canvasAgentBeginMutation(execution,Object.values(entry.objectScope||{}).flat());
+    try {
+      if(state.history.at(-1)!==entry)throw canvasAgentToolError("REVERT_CONFLICT","A newer user history entry precedes this revert.");
+      const previousRevision=state.userRevision;state.userRevision++;undo();
+      // Rebase suspended user snapshots onto the inverse Agent change as well.
+      if(entry.objectScope)state.agentMutationHistory.entries.push({...entry,widgetsAfter:entry.widgetsBefore,imagesAfter:entry.imagesBefore,textBoxesAfter:entry.textBoxesBefore});
+      canvasAgent.latestChange=null;requestRender();canvasAgentSyncState();return{ok:true,revertedChangeId:latest.changeId,previousRevision,revision:state.userRevision};
+    }finally{finish();}
   }
   async function canvasAgentExecuteTool(payload) {
     const name = String(payload?.name || ""), args = payload?.arguments || {};
@@ -4668,6 +4877,7 @@
       sessionId:canvasAgent.sessionId,
       generation:canvasAgent.sessionGeneration,
       controller:new AbortController(),
+      assistContext:typeof assistAgentToolContext==="function"?assistAgentToolContext():null,
     },requestId=String(payload?.requestId||"");
     if(requestId)canvasAgent.toolControllers.set(requestId,execution.controller);
     canvasAgent.activeToolExecution=execution;
@@ -4706,6 +4916,7 @@
       }
       canvasAgentAssertToolExecution(execution);
       const envelope={ok:true,result};
+      if (typeof assistAgentRecordResult === "function") assistAgentRecordResult(name, args, result, { canvasWritten:Boolean(execution.canvasWritten || name === "canvas_revert" && result?.revision > result?.previousRevision) });
       if(cacheKey&&signature&&canvasAgentToolExecutionCurrent(execution)){
         canvasAgent.toolResultCache.set(cacheKey,{signature,envelope});
         if(canvasAgent.toolResultCache.size>20)canvasAgent.toolResultCache.delete(canvasAgent.toolResultCache.keys().next().value);
@@ -4864,6 +5075,8 @@
     canvasAgentRunAfterDockedTransition(canvasAgentFinishDockedClose);
   }
   function openCanvasAgent({focus=false}={}) {
+    const mini=document.getElementById("assistAgentMini");if(mini)mini.hidden=true;
+    document.body.classList.remove("assist-agent-minimized");
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
     if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
     if (!canvasAgentAvailable()) return;
@@ -4929,6 +5142,7 @@
     }else canvasAgentSyncSelection();
   }
   function closeCanvasAgent(options) {
+    canvasAgentDismissPromptSuggestions();
     canvasAgentFinishInkStroke();
     const focus=options?.focus!==false,animate=options?.animate!==false;
     restoreCanvasAgentAfterNavigation();
@@ -5079,10 +5293,10 @@
       canvasAgentHideThinkingPopover({restoreFocus:true});
       return;
     }
-    if (canvasAgent.promptSuggestionsExpanded) {
+    if (canvasAgent.promptSuggestionsIntent || canvasAgentPromptSuggestions.dataset.mode === "suggest") {
       event.preventDefault();
-      canvasAgentSetPromptSuggestionsExpanded(false,{manual:false});
-      try{canvasAgentPromptToggle.focus({preventScroll:true});}catch{canvasAgentPromptToggle.focus();}
+      canvasAgentDismissPromptSuggestions();
+      canvasAgentRestoreSuggestionFocus();
       return;
     }
     if (!canvasAgentReferencePicker.hidden) {
@@ -5111,6 +5325,11 @@
     if (canvasAgentProjectDialogOpen()&&!canvasAgentProjectPopover.contains(event.target)&&!canvasAgentProjectRemoveDialog.contains(event.target)&&!canvasAgentProjectButton.contains(event.target)) canvasAgentHideProjectPopover();
     if (!canvasAgentReferencePicker.hidden&&!canvasAgentReferencePicker.contains(event.target)&&!canvasAgentReference.contains(event.target)) canvasAgentToggleReferencePicker(false);
   });
+  // Capture runs before the panel's pointer handlers stop propagation. Clicking
+  // a non-focusable transcript message still dismisses the temporary list.
+  document.addEventListener("pointerdown",event=>{
+    if(canvasAgent.promptSuggestionsIntent&&!canvasAgentPromptFocusInside(event.target))canvasAgentDismissPromptSuggestions();
+  },true);
   canvasAgentStop.addEventListener("click",()=>{
     canvasAgentResolveApproval(false);
     try { canvasAgentSendEnvelope("cancel",{}); } catch {}
@@ -5171,7 +5390,12 @@
     tab.addEventListener("click",()=>canvasAgentSelectPromptCategory(tab.dataset.promptCategory));
     tab.addEventListener("keydown",canvasAgentHandlePromptCategoryKeydown);
   }
-  canvasAgentPromptToggle?.addEventListener("click",canvasAgentTogglePromptSuggestions);
+  canvasAgentSuggestClose?.addEventListener("click",()=>{
+    const touch=["touch","pen"].includes(canvasAgent.promptSuggestionPointerType);
+    canvasAgentClearPromptSuggestionPointer();
+    canvasAgentDismissPromptSuggestions();
+    canvasAgentRestoreSuggestionFocus(!touch);
+  });
   canvasAgentClearInkButton.addEventListener("click",()=>canvasAgentClearInkDraft());
   canvasAgentInkCanvas.addEventListener("pointerdown",canvasAgentInkPointerDown);
   canvasAgentInkCanvas.addEventListener("pointermove",canvasAgentInkPointerMove);
@@ -5195,25 +5419,27 @@
     } catch (error) { canvasAgentSetStatus(String(error?.message||error),"error"); }
   });
   async function canvasAgentSubmitMessage(options) {
+    if(canvasAgent.viewingHistoryId)return false;
     if(typeof canvasDocumentsExternal==="function"&&canvasDocumentsExternal())return canvasDocumentsQueueMessage(options);
-    if (!canvasAgentExecutionAvailable()) {
-      canvasAgentSetStatus(t("canvasAgentNoConnections"),"unavailable");
-      canvasAgentSyncSendAvailability();
-      return false;
-    }
     const textOverride=options?.textOverride===undefined?null:options.textOverride,displayTextOverride=options?.displayTextOverride===undefined?null:options.displayTextOverride,includeDraftMedia=options?.includeDraftMedia!==false,clearInput=options?.clearInput!==false;
     if (canvasAgent.attachmentBusy) {
       canvasAgentSetStatus(t("canvasAgentImagePreparing"),"connecting");
       return false;
     }
     const text = textOverride===null?canvasAgentInput.value.trim():String(textOverride||"").trim(), attachments = includeDraftMedia?[...canvasAgent.attachments]:[], fileAttachments=attachments.filter(attachment=>attachment.kind==="file"), imageAttachments=attachments.filter(attachment=>attachment.kind!=="file"), hasInk=includeDraftMedia&&canvasAgent.inkPresent;
+    if (!text && !attachments.length&&!hasInk) return false;
+    if (!requireAiConnectionSelection()) return false;
+    if (!canvasAgentExecutionAvailable()) {
+      canvasAgentSetStatus(t("canvasAgentNoConnections"),"unavailable");
+      canvasAgentSyncSendAvailability();
+      return false;
+    }
     if(fileAttachments.length) {
       const cloud=canvasAgentUsesCloudHost(),scope=cloud?canvasAgentCloudFileScope():null;
       if(fileAttachments.some(file=>cloud ? !file.cloudScope||file.cloudScope.canvasId!==scope.canvasId||file.cloudScope.conversationId!==scope.conversationId : Boolean(file.cloudScope))) {
         canvasAgentSetStatus(t("canvasAgentCloudFileScopeChanged"),"error");return false;
       }
     }
-    if (!text && !attachments.length&&!hasInk) return false;
     if(fileAttachments.length&&!text){canvasAgentSetStatus(t("canvasAgentFileInstructionRequired"),"error");return false;}
     if (hasInk&&attachments.length>=CANVAS_AGENT_MAX_ATTACHMENTS) {
       canvasAgentSetStatus(t("canvasAgentInkImageLimit"),"error");
@@ -5221,6 +5447,7 @@
     }
     canvasAgentDidStartUserConversation();
     let requestSent = false;
+    let inputSnapshot = null;
     let focusComposerAfterSubmit=true;
     canvasAgentInput.disabled = true;
     canvasAgentInkCanvas.setAttribute("aria-disabled","true");
@@ -5229,7 +5456,7 @@
     canvasAgentReference.disabled = true;
     const submitExecution=canvasAgentBeginSubmitExecution(selectedAiConnectionId());
     try {
-      canvasAgentBeginRequest();
+      canvasAgentBeginRequest(options);
       const inkAttachment=hasInk?await canvasAgentPrepareInkAttachment():null, outgoingAttachments=inkAttachment?[...imageAttachments,inkAttachment]:imageAttachments,displayAttachments=inkAttachment?[...attachments,inkAttachment]:attachments;
       canvasAgentAssertSubmitExecution(submitExecution);
       const prompt=inkAttachment
@@ -5241,18 +5468,26 @@
       canvasAgentBindSubmitExecution(submitExecution);
       canvasAgent.activeEvaluationContext=canvasAgentEvaluationContext();
       canvasAgentSetStatus(t("canvasAgentInitialStatePreparing"),"connecting");
-      const initialState=await canvasAgentInitialTurnState(submitExecution);
+      // The initial Canvas capture is input to this turn. Keep later writing
+      // separate, and transfer ownership only after the request was sent.
+      if (!options?.omitInitialCapture && typeof captureDirtyInput === "function") inputSnapshot = captureDirtyInput({x:0,y:0,w:SIZE,h:SIZE});
+      const initialState=options?.omitInitialCapture?null:await canvasAgentInitialTurnState(submitExecution);
       canvasAgentAssertSubmitExecution(submitExecution);
+      options?.assertCurrent?.();
       canvasAgentSyncState();
       canvasAgentAssertSubmitExecution(submitExecution);
       canvasAgentRow("user",displayText,displayAttachments);
       canvasAgentAssertSubmitExecution(submitExecution);
       const taskContext=typeof canvasDocumentsCurrent==="function"?canvasDocumentsCurrent().context||"":"",
         contextualPrompt=taskContext?`${prompt}\n\nSaved Canvas task context (user-editable; check against the current instruction):\n${taskContext.slice(0,16000)}`:prompt;
-      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:contextualPrompt,references:canvasAgentTurnReferences(),images:outgoingAttachments.map(attachment=>attachment.wire),fileIds:fileAttachments.map(attachment=>attachment.projectId),initialState,webSearchEnabled:canvasAgent.searchEnabled,canvasTitleNeeded:canvasAgentShouldRequestCanvasTitle(canvasAgent.currentConversation),reasoningEffort:state.reasoningEffort});
+      options?.assertCurrent?.();
+      if(!canvasAgent.running)canvasAgent.retireSuggestionTurn?.();
+      options?.beforeSend?.();
+      canvasAgentSendRequest(canvasAgent.running ? "steer" : "user_turn",{text:contextualPrompt,references:options?.referencesOverride||canvasAgentTurnReferences(),images:[...outgoingAttachments.map(attachment=>attachment.wire),...(options?.imageOverrides||[])],fileIds:fileAttachments.map(attachment=>attachment.projectId),initialState,webSearchEnabled:canvasAgent.searchEnabled,canvasTitleNeeded:canvasAgentShouldRequestCanvasTitle(),reasoningEffort:state.reasoningEffort});
       requestSent = true;
       focusComposerAfterSubmit=false;
       if(canvasAgentForm.contains(document.activeElement))document.activeElement.blur();
+      if (inputSnapshot) { assistRequestInputCaptured(canvasAgent, inputSnapshot); inputSnapshot = null; }
       if(clearInput){canvasAgentInput.value = "";canvasAgentResizeInput();}
       if(includeDraftMedia){canvasAgentClearAttachments();canvasAgentClearInkDraft();canvasAgentClearReferences();}
       canvasAgentSetInputMode("text",focusComposerAfterSubmit);
@@ -5260,10 +5495,16 @@
     } catch (error) {
       const current=canvasAgentSubmitExecutionCurrent(submitExecution);
       if (!requestSent&&current) {canvasAgent.activeEvaluationContext=null;canvasAgentRequestDidNotSend();}
-      if(current)canvasAgentSetStatus(String(error?.message||error),"error");
+      if(current) {
+        if(error?.code==="CONNECTION_STALE"&&promptForAiConnectionSelection()) {
+          focusComposerAfterSubmit=false;
+          canvasAgentSetStatus(t("canvasAgentChooseConnection"),"unavailable");
+        } else canvasAgentSetStatus(String(error?.message||error),"error");
+      }
       return false;
     }
     finally {
+      if (inputSnapshot) releaseDirtyInput(inputSnapshot);
       const ownsComposer=canvasAgent.activeSubmitExecution===submitExecution||!canvasAgent.activeSubmitExecution;
       if(canvasAgent.activeSubmitExecution===submitExecution)canvasAgent.activeSubmitExecution=null;
       if(ownsComposer){
@@ -5272,16 +5513,24 @@
         canvasAgentSyncSendAvailability();
         canvasAgentAttach.disabled=false;
         canvasAgentReference.disabled=false;
-        if(focusComposerAfterSubmit)(canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();
+        if(focusComposerAfterSubmit){
+          canvasAgent.promptSuggestionsSuppressFocus=true;
+          try{(canvasAgent.inputMode==="ink"?canvasAgentInkCanvas:canvasAgentInput).focus();}
+          finally{canvasAgent.promptSuggestionsSuppressFocus=false;}
+        }
       }
     }
   }
   canvasAgentForm.addEventListener("submit",event=>{
     event.preventDefault();
+    canvasAgentDismissPromptSuggestions();
     if(canvasAgent.projectUploadBusy){canvasAgentSetStatus(t("canvasAgentFilePreparing"),"connecting");return;}
     void canvasAgentSubmitMessage();
   });
-  canvasAgentInput.addEventListener("input",()=>{canvasAgentResizeInput();canvasAgentSyncInputHint();if(canvasAgentPromptHasDraft())canvasAgentSetPromptSuggestionsExpanded(false);canvasAgentSyncPromptSuggestions();});
+  canvasAgentInput.addEventListener("input",()=>{canvasAgentResizeInput();canvasAgentSyncPromptSuggestions();});
+  // Focus starts ranking; a click can retry while the composer stays focused.
+  canvasAgentInput.addEventListener("focus",canvasAgentFocusPromptSuggestions);
+  canvasAgentInput.addEventListener("click",()=>{if(typeof agentSuggestComposerClicked==="function")agentSuggestComposerClicked();});
   canvasAgentInput.addEventListener("keydown",event=>{
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -5311,7 +5560,10 @@
   for (const type of ["pointerdown","pointermove","pointerup","pointercancel","wheel"]) canvasAgentPanel.addEventListener(type,event=>event.stopPropagation(),{passive:type === "wheel"});
   canvasAgentForm.addEventListener("focusin",canvasAgentSyncPromptSuggestions);
   canvasAgentPanel.addEventListener("focusin",canvasAgentPauseAutomaticAI);
-  canvasAgentPanel.addEventListener("focusout",()=>queueMicrotask(canvasAgentResumeAutomaticAI));
+  canvasAgentPanel.addEventListener("focusout",()=>queueMicrotask(()=>{
+    if(canvasAgent.promptSuggestionsIntent&&!canvasAgentPromptFocusInside(document.activeElement))canvasAgentDismissPromptSuggestions();
+    canvasAgentResumeAutomaticAI();
+  }));
   canvasAgentTranscript.addEventListener("scroll",canvasAgentSyncFollowLatest,{passive:true});
   document.addEventListener("paste",event=>{
     if (canvasAgentPanel.hidden||canvasAgentProjectDialogOpen()) return;
@@ -5337,6 +5589,8 @@
   canvasAgentResizeInput();
   window.addEventListener("resize",()=>requestAnimationFrame(()=>{syncStudioWorkbench();canvasAgentRestorePanelSize();canvasAgentRestorePanelPosition();}),{passive:true});
   window.addEventListener("beforeunload",canvasAgentPersistCurrentConversation);
+  window.addEventListener("pagehide",canvasAgentPersistCurrentConversation);
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")canvasAgentPersistCurrentConversation();});
   canvasAgentUpdateSearchButton();
   canvasAgentRenderProjects();
   canvasAgentCanvasDidChange();

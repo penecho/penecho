@@ -1,4 +1,5 @@
 // Canvas snapshots, export, drawing history, strokes, and lasso selection.
+  const dirtyHistoryMaskCopies = new WeakMap();
   const SNAPSHOT_DB = "penecho-canvas-history"+(window.PENECHO_CONFIG?.browserDraftId?`:${window.PENECHO_CONFIG.browserDraftId}`:""),
     SNAPSHOT_STORE = "snapshots",
     SNAPSHOT_TILE_STORE = "snapshot-tiles",
@@ -46,7 +47,9 @@
     return state.currentCanvasSuggestedName || state.currentSnapshotName;
   }
   function currentCanvasNeedsAgentName() {
-    return !state.currentSnapshotHasExplicitName && !state.currentCanvasSuggestedName;
+    const name=String(state.currentCanvasSuggestedName||state.currentSnapshotName||"").trim();
+    // Saving or restoring a default title does not make the Canvas named.
+    return !name || /^(untitled canvas|未命名画布)$/i.test(name) || (!state.currentSnapshotHasExplicitName && !state.currentCanvasSuggestedName);
   }
   function applyCurrentCanvasGeneratedName(value) {
     const name=String(value||"").replace(/\s+/g," ").trim().slice(0,48).trim();
@@ -330,7 +333,6 @@
     setHistorySaveBusy(true);
     showHistoryNoticeKey("snapshotSaving", "busy", 0);
     try {
-      if (location === "cloud" && !overwriteId) await cloudSnapshotItems();
       const selectionBusy = selectionAIBusy(),
         selectionBusyKey = selectionAIStatusKey(),
         id = await saveSnapshot({ overwriteId, name, location });
@@ -369,10 +371,23 @@
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null;
     if (!name) throw Error(t("canvasNameRequired"));
     if (name === state.currentSnapshotName) return true;
+    // A saved Canvas keeps its name as metadata. A content save would upload
+    // the whole bundle without renaming a Cloud Canvas, so rename it directly.
+    // Only an unsaved Canvas is saved here, so its name gains a stored identity.
+    if (overwriteId) {
+      try {
+        return await renameSnapshot(overwriteId, location, name);
+      } catch (error) {
+        const message = `${t("snapshotError")}${error.message}`;
+        setStatus(message);
+        showHistoryNotice(message, "error", { duration:5000 });
+        return false;
+      }
+    }
     setHistorySaveBusy(true);
     showHistoryNoticeKey("snapshotSaving", "busy", 0);
     try {
-      const id = await saveSnapshot({ overwriteId, name, location, allowEmpty:true });
+      const id = await saveSnapshot({ name, location, allowEmpty:true });
       if (!id) {
         showHistoryNoticeKey(selectionAIBusy() ? selectionAIStatusKey() : "emptyCanvas", "info");
         return false;
@@ -686,16 +701,16 @@
       bottom = Math.ceil(ink.y + ink.h) + TILE;
     return { x, y, w: right - x, h: bottom - y };
   }
-  async function renderExportCanvas() {
-    const region = exportRegion();
+  async function renderExportCanvas(selected = null, assertCurrent = null) {
+    const region = selected ? { ...selected.box } : exportRegion();
     if (!region) return null;
-    try { await prepareVisibleWidgetSnapshots(null, false, null, true); }
-    catch (error) {
-      // A fresh raster is optional when every Widget already has usable pixels.
-      // Never silently omit a Widget from an image download.
-      if (capturableWidgets(region).some(widget => !widget.snapshotImage || widget.snapshotVersion < widget.contentVersion)) throw error;
-      debug("widget-export-cached", {error:String(error?.message || error).slice(0,300)});
-    }
+    // Only Widgets that the lasso itself touches contribute pixels. Lasso
+    // downloads require a successful current-frame capture; ordinary Canvas
+    // exports retain their existing same-version fallback.
+    const prepared = await ensureWidgetSnapshots(selected ? widgetsRequiredForCapture(region, selectionPathFor(selected)) : capturableWidgets(null), { highResolution:true, currentFrame:Boolean(selected) });
+    if (!prepared.complete) throw widgetSnapshotsUnavailableError(prepared);
+    if (prepared.failures.length) debug("widget-export-cached", { error:String(prepared.failures[0]?.message || prepared.failures[0]).slice(0, 300) });
+    assertCurrent?.();
     const scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
       canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
@@ -706,11 +721,20 @@
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.save();
     context.setTransform(scale, 0, 0, scale, -region.x * scale, -region.y * scale);
+    if (selected) {
+      traceSelectionPath(context, selectionPathFor(selected));
+      context.clip("evenodd");
+    }
     if (state.gridVisible) drawCanvasLineGrid(context, region, scale);
     drawAnimationsToContext(context, region, captureTime);
-    drawWidgetsToContext(context, region);
-    drawImagesToContext(context, region);
-    drawTextBoxesToContext(context, region);
+    if (!selected || state.frontCanvasObjectKind !== "widget") {
+      drawWidgetsToContext(context, region);
+      drawImagesToContext(context, region);
+    } else {
+      drawImagesToContext(context, region);
+      drawWidgetsToContext(context, region);
+    }
+    if (!selected) drawTextBoxesToContext(context, region);
     for (const [tileKey, tileCanvas] of tiles) {
       const [tx, ty] = tileKey.split(",").map(Number),
         x = tx * TILE,
@@ -724,6 +748,7 @@
         const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
         context.drawImage(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
       }
+    if (selected) drawTextBoxesToContext(context, region);
     context.restore();
     return canvas;
   }
@@ -758,6 +783,43 @@
     } finally {
       if (canvas) canvas.width = canvas.height = 1;
       for (const button of buttons) button.disabled = false;
+    }
+  }
+  async function exportSelectionPng(target, button = null) {
+    if (!assistSelectionTargetValid(target) || target.selection.downloadBusy) return false;
+    const selection = target.selection, documentId = canvasDocumentsCurrent().id,
+      signature = JSON.stringify({ box:selection.box, path:selectionPathFor(selection) }),
+      assertCurrent = () => {
+        if (canvasDocumentsCurrent().id !== documentId || !assistSelectionTargetValid(target)
+          || signature !== JSON.stringify({ box:selection.box, path:selectionPathFor(selection) })) throw Error(t("selectionDownloadChanged"));
+      };
+    selection.downloadBusy = true;
+    if (button) button.disabled = true;
+    let canvas = null;
+    try {
+      canvas = await renderExportCanvas(selection, assertCurrent);
+      if (!canvas) throw Error(t("selectionEmpty"));
+      const blob = await canvasBlob(canvas);
+      assertCurrent();
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
+      link.href = url;
+      link.download = exportFilename().replace("penecho-", "penecho-selection-");
+      try {
+        document.body.append(link);
+        link.click();
+      } finally {
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      setStatusKey("exportComplete");
+      return true;
+    } catch (error) {
+      setStatus(`${t("exportError")}${error.message}`);
+      return false;
+    } finally {
+      if (canvas) canvas.width = canvas.height = 1;
+      selection.downloadBusy = false;
+      if (button) button.disabled = false;
     }
   }
   function imageFromBlob(blob, execution = null) {
@@ -1229,7 +1291,7 @@
       return { id:overwriteId, revisionId:body?.revision?.id || null };
     }
     const projectId = item.projectId || selectedCloudSaveProjectId();
-    if (!projectId) throw Error("Create a Cloud project before saving this Canvas");
+    if (!projectId) throw Error(t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel("cloud")));
     const response = await fetch(`/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
         method:"POST",
         credentials:"same-origin",
@@ -1252,9 +1314,14 @@
       setStatusKey("emptyCanvas");
       return null;
     }
+    // Every new Cloud save resolves its destination here. Deep links skip the
+    // Library prefetch, and title/close/copy saves may never open the Library.
+    // Fetch after any storage switch so it cannot clear the resolved projects.
+    if (location === "cloud" && !overwriteId) await cloudSnapshotItems();
     // Widget source is authoritative; preview failure must not prevent saving it.
     await prepareVisibleWidgetSnapshots(null, true);
-    const savedUserRevision = state.userRevision;
+    const savedUserRevision = state.userRevision,
+      savedRecoveryCommitVersion = typeof canvasDocumentsDraft!=="undefined" ? canvasDocumentsDraft?.commitVersion : null;
     const nameInput = document.querySelector("#historyName"),
       existing = overwriteId ? snapshotItems.find((item) => item.id === overwriteId) : null,
       id = overwriteId || `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -1322,7 +1389,7 @@
     state.currentSnapshotManifestExtensions = snapshotExtensionObject(item.manifestExtensions);
     state.currentSnapshotPreservedAssets = snapshotPreservedAssets(item.preservedAssets);
     state.snapshotSavedRevision = savedUserRevision;
-    if(typeof canvasDocumentsDidSave==="function")await canvasDocumentsDidSave(item,location,storedId,tileEntries);
+    if(typeof canvasDocumentsDidSave==="function")await canvasDocumentsDidSave(item,location,storedId,tileEntries,savedRecoveryCommitVersion);
     canvasAgentCanvasDidPersist(location, storedId);
     await refreshSnapshots();
     window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
@@ -1413,7 +1480,7 @@
       body = await snapshotApiResponse(response, onProgress);
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
-      metadata = snapshotItems.find((item) => item.id === id);
+      metadata = {...snapshotItems.find((item) => item.id === id),...(body.canvas?.id===id ? body.canvas : {})};
     parsed.item = {
       ...parsed.item,
       id,
@@ -1537,6 +1604,7 @@
       resetCanvasDefaultMode();
       const restoreStudioConversation=window.PenEchoStudioNavigator?.wantsConversationForCanvas?.({ id:item.id, location })===true;
       canvasAgentCanvasDidChange({ id:item.id, location },{clearProject:true,deferConversationStart:restoreStudioConversation});
+      if(typeof canvasDocumentsCurrent==="function") { canvasAgentInput.value=canvasDocumentsCurrent().agentDraft||"";canvasAgentResizeInput();canvasAgentSyncPromptSuggestions(); }
       window.PenEchoStudioNavigator?.canvasDidLoad?.({ id:item.id, location });
       window.PenEchoStudioNavigator?.renderCanvases?.();
       window.PenEchoStudioNavigator?.updateDocument?.();
@@ -1857,7 +1925,6 @@
     const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
     if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
     setSnapshotLocation("cloud", { refresh:false });
-    await cloudSnapshotItems();
     const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
     if (!id) throw Error("The Canvas could not be saved to Cloud.");
     return id;
@@ -1867,7 +1934,6 @@
   }
   async function saveEchoToCloud(name) {
     if (window.PENECHO_CONFIG?.runtime !== "cloud" || !window.PENECHO_CONFIG?.browserCanvasEditing) throw Error("Cloud browser editing is unavailable");
-    await cloudSnapshotItems();
     setSnapshotLocation("cloud", { refresh:false });
     const id = await saveSnapshot({ location:"cloud", overwriteId:null, name:String(name || currentCanvasDisplayName() || "Untitled Canvas"), allowEmpty:true });
     if (!id) throw Error("The Cloud copy could not be saved");
@@ -1925,7 +1991,16 @@
         if(typeof canvasDocumentsSyncExtension==="function"){canvasDocumentsSyncExtension();canvasDocumentsRender();}
         window.PenEchoStudioNavigator?.updateDocument?.();
       }
-      await refreshSnapshots();
+      if(typeof canvasDocumentsDidRename==="function")await canvasDocumentsDidRename(id,location,name);
+      if(snapshotItemsLocation===location) {
+        snapshotItems=snapshotItems.map(item=>item.id===id?{...item,name}:item);
+        if(location==="cloud")cacheCloudHistory(snapshotItems);
+        if(typeof clearHistoryPages==="function")clearHistoryPages(location);
+        renderSnapshotList();
+      }
+      // The metadata write is complete. A slow Library read must not keep the
+      // title editor busy or turn a successful rename into a reported failure.
+      void refreshSnapshots().catch(()=>{});
       showHistoryNoticeKey("canvasRenamed", "success");
       return true;
     } finally {
@@ -2228,7 +2303,15 @@
   function updateHistoryNavigation() {
     const panel = document.querySelector("#historyPanel");
     if (panel) panel.dataset.historyScope = historyRecentView ? "recent" : "location";
-    document.querySelector("#historyRecentNav")?.setAttribute("aria-current", historyRecentView ? "page" : "false");
+    document.querySelector("#historyRecentNav")?.setAttribute("aria-current", historyRecentView && !panel?.dataset.libraryView ? "page" : "false");
+    document.querySelector("#historyCanvasNav")?.setAttribute("aria-current", !historyRecentView && !panel?.dataset.libraryView ? "page" : "false");
+  }
+  function openHistoryCanvas() {
+    historyRecentView = false;
+    rememberSelectedServerProject(SERVER_ALL_PROJECTS_ID);
+    rememberSelectedCloudProject(CLOUD_ALL_PROJECTS_ID);
+    updateHistoryNavigation();
+    historyFiltersChanged({ immediate:true });
   }
   function openHistoryRecent() {
     historyRecentView = true;
@@ -2924,6 +3007,7 @@
     return false;
   }
   function recordBefore(tx, ty) {
+    if (typeof recordDirtyHistoryBefore === "function") recordDirtyHistoryBefore();
     const k = key(tx, ty);
     if (!state.historyBefore.has(k)) state.historyBefore.set(k, cloneCanvas(tiles.get(k)));
   }
@@ -3059,6 +3143,7 @@
         tileBox = { x:tx * TILE, y:ty * TILE, w:TILE, h:TILE },
         part = intersection(tileBox, box);
       if (!part) continue;
+      if (typeof invalidateDirtyHistoryMask === "function") invalidateDirtyHistoryMask(canvas);
       canvas.getContext("2d", { willReadFrequently:true }).clearRect(
         (part.x - tileBox.x) * DIRTY_MASK_SCALE,
         (part.y - tileBox.y) * DIRTY_MASK_SCALE,
@@ -3239,12 +3324,16 @@
       state.pending = clonePendingHistoryDraft(snapshot.pending);
       state.pending.revision = state.userRevision;
       state.pending.latestUserRevision = state.userRevision;
+      // Undo/redo invalidates the old request, but its restored draft is now
+      // current Canvas content. Confirmation must not reject that old generation.
+      state.pending.recognitionGeneration = state.recognitionGeneration;
     }
     if (snapshot.pendingWidget) {
       const widget = widgetRecord(snapshot.pendingWidget);
       if (widget) {
         widget.pending = true;
         widget.revision = state.userRevision;
+        widget.recognitionGeneration = state.recognitionGeneration;
         const numbered = /^widget-(\d+)$/.exec(widget.id);
         if (numbered) state.nextWidgetId = Math.max(state.nextWidgetId, Number(numbered[1]) + 1);
         state.pendingWidget = widget;
@@ -3265,8 +3354,155 @@
       if (button) button.disabled = action === "undo" ? !(state.history.length || pending) : !state.future.length;
     }
   }
-  function save() {
-    if (!state.historyBefore.size && !state.animationHistoryBefore && !state.widgetHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) return null;
+  function hasPendingHistoryChanges() {
+    return Boolean(state.historyBefore.size || state.animationHistoryBefore || state.widgetHistoryBefore || state.imageHistoryBefore || state.textBoxHistoryBefore);
+  }
+  // Input ownership belongs to the same transaction as Canvas content. Keep
+  // mask-sized copies: cloneCanvas is for full raster tiles and changes size.
+  function cloneDirtyHistoryMask(source) {
+    const copy = offscreen(source.width, source.height);
+    copy.getContext("2d").drawImage(source, 0, 0);
+    return copy;
+  }
+  function invalidateDirtyHistoryMask(canvas) {
+    dirtyHistoryMaskCopies.delete(canvas);
+  }
+  function captureDirtyHistoryMask(canvas) {
+    // Share immutable copies of untouched tiles between history snapshots.
+    // Writing, erasure and input consumption invalidate only the changed tile.
+    if (!dirtyHistoryMaskCopies.has(canvas)) dirtyHistoryMaskCopies.set(canvas, cloneDirtyHistoryMask(canvas));
+    return dirtyHistoryMaskCopies.get(canvas);
+  }
+  function dirtyHistoryEntryId(entry) {
+    if (!entry) return null;
+    if (!entry.dirtyHistoryId) entry.dirtyHistoryId = state.dirtyHistorySequence = (state.dirtyHistorySequence || 0) + 1;
+    return entry.dirtyHistoryId;
+  }
+  function captureDirtyHistorySuggest() {
+    if (typeof smartSuggest !== "object") return null;
+    return {
+      // IDs prevent snapshots from retaining an unbounded chain of evicted
+      // history entries through each stroke's historyEntry reference.
+      strokes:smartSuggest.strokes.map(({ historyEntry, ...record }) => ({ ...record, historyId:dirtyHistoryEntryId(historyEntry) })),
+      consumedStrokeId:smartSuggest.consumedStrokeId, dismissedStrokeId:smartSuggest.dismissedStrokeId,
+      dismissedObjectKey:smartSuggest.dismissedObjectKey, writingMs:smartSuggest.writingMs,
+    };
+  }
+  function captureDirtyHistoryState() {
+    return {
+      dirty:state.dirty ? { ...state.dirty } : null,
+      ink:new Map([...state.dirtyInkTiles || []].map(([k, canvas]) => [k, captureDirtyHistoryMask(canvas)])),
+      inkBounds:new Map([...state.dirtyInkBounds || []].map(([k, box]) => [k, box ? { ...box } : box])),
+      images:new Set(state.dirtyImageIds), texts:new Set(state.dirtyTextBoxIds),
+      hotspots:(state.hotspotTrail || []).map(point => ({ ...point })),
+      typed:state.latestTypedInput ? { ...state.latestTypedInput, box:{ ...state.latestTypedInput.box } } : null,
+      lastUserBox:state.lastUserBox ? { ...state.lastUserBox } : null,
+      autoEligible:Boolean(state.autoEligible),
+      suggest:captureDirtyHistorySuggest(),
+    };
+  }
+  function recordDirtyHistoryBefore() {
+    if (state.dirtyHistoryBefore && hasPendingHistoryChanges()) return;
+    // A response temporarily hides global attention before inserting its
+    // result. Its first commit still owns the input from before that clearing.
+    const run = state.activeAI;
+    state.dirtyHistoryBefore = run?.inputCleared && !run.inputConsumed && run.dirtyHistoryBefore
+      ? run.dirtyHistoryBefore : captureDirtyHistoryState();
+  }
+  function refreshDirtyHistoryAfter(entry = state.history.at(-1)) {
+    if (!entry || state.history.at(-1) !== entry || !entry.dirtyBefore) return;
+    entry.dirtyAfter = captureDirtyHistoryState();
+  }
+  function finishDirtyHistoryConsumption() {
+    // Raster drafts consume before save; Widgets and Agent results consume
+    // after save. Update the latter synchronously, before async continuations.
+    if (!hasPendingHistoryChanges()) refreshDirtyHistoryAfter();
+  }
+  function restoreDirtyHistoryState(snapshot) {
+    if (!snapshot) return;
+    state.dirtyHistoryBefore = null;
+    state.dirtyInkTiles = new Map([...snapshot.ink].map(([k, canvas]) => {
+      const live = cloneDirtyHistoryMask(canvas);
+      dirtyHistoryMaskCopies.set(live, canvas);
+      return [k, live];
+    }));
+    state.dirtyInkBounds = new Map([...snapshot.inkBounds].map(([k, box]) => [k, box ? { ...box } : box]));
+    state.dirtyImageIds = new Set(snapshot.images);
+    state.dirtyTextBoxIds = new Set(snapshot.texts);
+    state.hotspotTrail = snapshot.hotspots.map(point => ({ ...point }));
+    state.latestTypedInput = snapshot.typed ? { ...snapshot.typed, box:{ ...snapshot.typed.box } } : null;
+    state.lastUserBox = snapshot.lastUserBox ? { ...snapshot.lastUserBox } : null;
+    state.dirty = snapshot.dirty ? { ...snapshot.dirty } : null;
+    state.autoEligible = Boolean(state.dirty && snapshot.autoEligible);
+    if (typeof smartSuggest === "object" && snapshot.suggest) {
+      if (typeof smartSuggestSyncDocument === "function") smartSuggestSyncDocument();
+      if (typeof cancelSmartSuggest === "function") cancelSmartSuggest("history-changed");
+      const input = snapshot.suggest, entries = new Map(state.history.map(entry => [entry.dirtyHistoryId, entry]));
+      smartSuggest.strokes = input.strokes.filter(record => entries.has(record.historyId)).map(({ historyId, ...record }) => ({ ...record, historyEntry:entries.get(historyId) }));
+      Object.assign(smartSuggest, { consumedStrokeId:input.consumedStrokeId, dismissedStrokeId:input.dismissedStrokeId,
+        dismissedObjectKey:input.dismissedObjectKey, writingMs:input.writingMs,
+        evaluatedStrokeId:0, jev:null, analysis:null, analysisKey:"", lastKey:"", retryKey:"", retries:0 });
+      const now = performance.now();
+      smartSuggest.localReadyAt = now + ASSIST_LOCAL_DELAY_MS;
+      smartSuggest.inkReadyAt = smartSuggest.localReadyAt + SMART_SUGGEST_RANK_DELAY_MS;
+    }
+  }
+  function canvasHistoryChangedObjectIds(before,after) {
+    const a=new Map((before||[]).map(item=>[item.id,item])),b=new Map((after||[]).map(item=>[item.id,item]));
+    return [...new Set([...a.keys(),...b.keys()])].filter(id=>{
+      const left=a.get(id),right=b.get(id);if(!left||!right)return true;
+      return [...new Set([...Object.keys(left),...Object.keys(right)])].some(key=>
+        ["image","blob"].includes(key)?left[key]!==right[key]:JSON.stringify(left[key])!==JSON.stringify(right[key]));
+    });
+  }
+  function canvasHistoryMergeObjects(current,desired,ids) {
+    const selected=new Set(ids),result=current.filter(item=>!selected.has(item.id));
+    for(const [index,item] of (desired||[]).entries())if(selected.has(item.id))result.splice(Math.min(index,result.length),0,item);
+    return result;
+  }
+  async function canvasHistoryRestoreObjects(entry,side) {
+    const revision=state.userRevision;
+    for(const kind of ["widgets","images","textBoxes"]){
+      const ids=entry.objectScope[kind]||[];if(!ids.length)continue;
+      const wanted=entry[kind+(side==="before"?"Before":"After")]||[],records=[];
+      for(const item of wanted.filter(item=>ids.includes(item.id))){
+        const record=kind==="widgets"?widgetRecord(item):kind==="images"?imageRecord(item):item.image?textBoxHistoryRecord(item):await renderedTextBoxRecord(item);
+        if(state.userRevision!==revision)return;
+        if(record)records.push(record);
+      }
+      // Preserve unrelated live iframe instances and open text drafts.
+      for(const item of state[kind].filter(item=>ids.includes(item.id))){
+        if(kind==="widgets")unmountWidget(item);
+        clearHandToolbarTarget(kind==="textBoxes"?"text-box":kind.slice(0,-1),item.id);
+      }
+      if(kind==="textBoxes")for(const editor of [...state.textEditors.values()])if(ids.includes(editor.sourceTextBoxId))removeTextEditor(editor);
+      state[kind]=canvasHistoryMergeObjects(state[kind],wanted.filter(item=>!ids.includes(item.id)||records.some(record=>record.id===item.id)).map(item=>records.find(record=>record.id===item.id)||item),ids);
+      if(kind==="widgets")for(const record of records)if(pluginEnabled(record.pluginId))mountWidget(record);
+      const singular=kind==="textBoxes"?"TextBox":kind==="widgets"?"Widget":"Image",editKey=kind==="widgets"?"widgetEdit":kind==="images"?"imageEdit":null;
+      if(editKey&&ids.includes(state[editKey]?.id)){state[editKey]=null;state[editKey.replace("Edit","HistoryBefore")]=null;}
+      if(ids.includes(state["selected"+singular+"Id"]))state["selected"+singular+"Id"]=null;
+      // Never reuse an ID held by an unrelated draft or a future redo entry.
+      for(const record of records){const number=Number(record.id.split("-").at(-1));if(Number.isSafeInteger(number))state["next"+singular+"Id"]=Math.max(state["next"+singular+"Id"],number+1);}
+    }
+    requestRender();
+  }
+  function save(options = null) {
+    if (!hasPendingHistoryChanges()) return null;
+    // A native Widget interaction keeps its original before-state and updates
+    // its live after-state. Only the current entry may be extended: another
+    // action or Undo/Redo must never mutate an older or detached entry.
+    const coalesced = options?.coalesceWidgetsInto;
+    if (coalesced && state.history.at(-1) === coalesced && !state.future.length && state.widgetHistoryBefore
+      && !state.historyBefore.size && !state.animationHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) {
+      coalesced.widgetsAfter = serializedWidgets();
+      state.widgetHistoryBefore = null;
+      state.dirtyHistoryBefore = null;
+      if (typeof refreshDirtyHistoryAfter === "function") refreshDirtyHistoryAfter(coalesced);
+      updateHistoryButtons();
+      window.PenEchoStudioNavigator?.updateDocument?.();
+      if (typeof canvasDocumentsScheduleDraft === "function") canvasDocumentsScheduleDraft();
+      return coalesced;
+    }
     const changes = [];
     const animationsBefore = state.animationHistoryBefore,
       animationsAfter = animationsBefore ? serializedAnimations() : null,
@@ -3292,6 +3528,17 @@
     }
     state.historyBefore.clear();
     const entry = { tiles: changes, animationsBefore, animationsAfter, widgetsBefore, widgetsAfter, imagesBefore, imagesAfter, textBoxesBefore, textBoxesAfter };
+    if (typeof captureDirtyHistoryState === "function") {
+      dirtyHistoryEntryId(entry);
+      entry.dirtyBefore = state.dirtyHistoryBefore || captureDirtyHistoryState();
+      entry.dirtyAfter = captureDirtyHistoryState();
+      state.dirtyHistoryBefore = null;
+    }
+    if(state.agentMutationHistory){
+      entry.objectScope={};
+      for(const kind of ["widgets","images","textBoxes"])entry.objectScope[kind]=canvasHistoryChangedObjectIds(entry[kind+"Before"],entry[kind+"After"]);
+      state.agentMutationHistory.entries.push(entry);
+    }
     state.history.push(entry);
     state.animationHistoryBefore = null;
     state.widgetHistoryBefore = null;
@@ -3301,12 +3548,16 @@
     state.future = [];
     updateHistoryButtons();
     window.PenEchoStudioNavigator?.updateDocument?.();
+    if (typeof canvasDocumentsScheduleDraft === "function") canvasDocumentsScheduleDraft();
     return entry;
   }
-  function saveUserCanvasChange() {
-    return canvasAgentDidCommitUserCanvasChange(save(), { allowAutoHide:canvasSnapshotFinalizationDepth === 0 });
+  function saveUserCanvasChange(options = null) {
+    if (typeof noteLibraryUpsertWidget === "function") for (const widget of state.widgets || []) {
+      if (noteCardWidget(widget)) void noteLibraryUpsertWidget(widget).catch(error => debug("note-backup-pending", {error:String(error.message).slice(0,160)}));
+    }
+    return canvasAgentDidCommitUserCanvasChange(save(options), { allowAutoHide:canvasSnapshotFinalizationDepth === 0 });
   }
-  function applyHistory(entry, side) {
+  function applyHistory(entry, side, fallbackDirty = null) {
     const changes = Array.isArray(entry) ? entry : entry?.tiles || [];
     for (const change of changes) {
       const value = change[side];
@@ -3316,13 +3567,30 @@
     }
     const animationState = !Array.isArray(entry) ? entry?.[side === "before" ? "animationsBefore" : "animationsAfter"] : null;
     if (animationState) restoreAnimations(animationState);
-    const widgetState = !Array.isArray(entry) ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
+    let objectsRestored = entry?.objectScope ? canvasHistoryRestoreObjects(entry,side) : null;
+    const widgetState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
     if (widgetState) restoreWidgets(widgetState);
-    const imageState = !Array.isArray(entry) ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
+    const imageState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
-    const textBoxState = !Array.isArray(entry) ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
-    if (textBoxState) void restoreTextBoxes(textBoxState);
+    const textBoxState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
+    if (textBoxState) objectsRestored = restoreTextBoxes(textBoxState);
     restorePendingHistoryState(entry, side);
+    const dirty = entry?.[side === "before" ? "dirtyBefore" : "dirtyAfter"] || fallbackDirty;
+    if (typeof restoreDirtyHistoryState === "function") {
+      restoreDirtyHistoryState(dirty);
+      // Text rasterization can finish asynchronously. Reconcile object IDs
+      // only after restoration, and never touch a newer edit or history action.
+      const generation = state.recognitionGeneration, revision = state.userRevision;
+      const reconcile = () => {
+        if (generation !== state.recognitionGeneration || revision !== state.userRevision) return;
+        if (typeof recomputeDirtyBounds === "function") recomputeDirtyBounds();
+        if (typeof scheduleAssist === "function") scheduleAssist();
+        if (state.dirty && state.autoEligible && typeof schedule === "function") schedule();
+        requestRender();
+      };
+      if (objectsRestored) void objectsRestored.then(reconcile);
+      else reconcile();
+    }
     clearSharpOverlays();
     requestAnimationLayerRender();
     render();
@@ -3332,22 +3600,39 @@
     save();
     const change = state.history.pop();
     if (!change) return;
+    const dirty = !change.dirtyBefore && typeof captureDirtyHistoryState === "function" ? captureDirtyHistoryState() : null;
     invalidateRecognition();
     state.future.push(change);
-    applyHistory(change, "before");
+    applyHistory(change, "before", dirty);
   }
   function redo() {
     const change = state.future.pop();
     if (!change) return;
+    const dirty = !change.dirtyAfter && typeof captureDirtyHistoryState === "function" ? captureDirtyHistoryState() : null;
     invalidateRecognition();
     state.history.push(change);
-    applyHistory(change, "after");
+    applyHistory(change, "after", dirty);
   }
   function sameBox(a, b) {
     return a && b && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01 && Math.abs(a.w - b.w) < 0.01 && Math.abs(a.h - b.h) < 0.01;
   }
   function selectionHasChanges(selection) {
     return Boolean(selection?.color) || !sameBox(selection?.box, selection?.originalBox);
+  }
+  function invalidateSelectionInkTracking(selection) {
+    if (!selection.fragments.length || typeof smartSuggest !== "object") return;
+    // Raster cuts can split strokes. Discard their old vector hints so later
+    // local gestures use the current pixels rather than stale source positions.
+    smartSuggest.strokes = smartSuggest.strokes.filter(record => !intersection(record.box, selection.originalBox));
+    smartSuggest.jev = null;
+    smartSuggest.analysis = null;
+    smartSuggest.analysisKey = "";
+    smartSuggest.lastKey = "";
+    if (!smartSuggest.strokes.length) {
+      smartSuggest.writingMs = 0;
+      smartSuggest.localReadyAt = 0;
+      smartSuggest.inkReadyAt = 0;
+    }
   }
   function recolorSelectionImage(image, color) {
     const recolored = offscreen(image.width, image.height),
@@ -3375,7 +3660,30 @@
       const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
       bounds = SELECT.unionBox(bounds, target);
     }
-    return bounds;
+    for (const object of selection.objects || []) bounds = SELECT.unionBox(bounds, SELECT.mapFragment(object.box, selection.originalBox, selection.box));
+    return bounds || (selection.box ? { ...selection.box } : null);
+  }
+  function movableSelectionObjects(points) {
+    const objects = [];
+    // Keep editable content as objects. Widgets are context only and never move with a lasso.
+    for (const kind of ["images", "textBoxes", "animations"]) {
+      for (const item of state[kind] || []) {
+        const box = { x:item.x, y:item.y, w:item.w, h:item.h };
+        if (!SELECT.pointInPolygon({ x:box.x + box.w / 2, y:box.y + box.h / 2 }, points)) continue;
+        objects.push({ kind, item, box, ...(kind === "textBoxes" ? { maxWidth:item.maxWidth, fontSize:item.fontSize } : {}) });
+      }
+    }
+    return objects;
+  }
+  function updateSelectionObjects(selection) {
+    for (const object of selection.objects || []) {
+      Object.assign(object.item, SELECT.mapFragment(object.box, selection.originalBox, selection.box));
+      if (object.kind === "textBoxes") {
+        object.item.maxWidth = object.maxWidth * selection.box.w / selection.originalBox.w;
+        object.item.fontSize = object.fontSize * selection.box.h / selection.originalBox.h;
+      }
+    }
+    if (selection.objects?.some(object => object.kind === "animations")) requestAnimationLayerRender();
   }
   function drawSelectionAxisHandles(context, box, size) {
     context.moveTo(box.x + box.w, box.y + box.h / 2 - size * 0.48);
@@ -3407,14 +3715,17 @@
       return;
     }
     drawSelectionContent(selection, ctx);
-    const path = selectionPathFor(selection);
+    if (selectionAIBusy(selection)) return;
     ctx.save();
-    ctx.strokeStyle = "#2679b8";
+    ctx.strokeStyle = selection.origin === "lasso" ? "#2679b8" : state.paint?.muted || "#6b7280";
     ctx.lineWidth = 1.8 * unit;
-    ctx.setLineDash([7 * unit, 6 * unit]);
-    traceSelectionPath(ctx, path);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Only an explicit user lasso draws an outline; AI capture scopes stay frameless.
+    if (selection.origin === "lasso") {
+      ctx.setLineDash([7 * unit, 6 * unit]);
+      traceSelectionPath(ctx, selectionPathFor(selection));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.lineCap = "round";
     ctx.beginPath();
     drawResizeHandle(ctx, selection.box, size);
@@ -3425,13 +3736,14 @@
     // Keep the legacy call shape available for integrations that opt into the old controls.
     if (selection.legacyActions) drawDraftActions(ctx, selection.box, size);
   }
-  function captureSelection(points) {
+  // Lift ink only for an editing action; simply circling content stays read-only.
+  function captureInkSelection(points, regionSelection = null) {
     const box = SELECT.polygonBounds(points, SIZE);
     if (!box || points.length < 3 || SELECT.pathLength(points, state.scale) < 12 || box.w * state.scale < 4 || box.h * state.scale < 4) {
       setStatusKey("selectionTooSmall");
       return false;
     }
-    const fragments = [];
+    const fragments = [], objects = regionSelection ? movableSelectionObjects(points) : [];
     const originalBox = { ...box };
     forTiles(
       box.x,
@@ -3458,7 +3770,8 @@
       },
       false,
     );
-    if (!fragments.length) {
+    if (!fragments.length && !objects.length) {
+      if (regionSelection) return false;
       state.selection = null;
       setStatusKey("selectionEmpty");
       render();
@@ -3466,8 +3779,19 @@
     }
     invalidateSharpOverlays(box);
     save();
-    invalidateRecognition();
+    // Lifting moves existing content. Pending input elsewhere is unrelated;
+    // the lifted ink's own dirty mask moves or is dropped with the selection.
+    supersedeActiveAI("ink-selection");
+    // The tile loop below writes historyBefore directly; own the dirty
+    // before-state first so an abandoned transaction cannot supply it.
+    if (typeof recordDirtyHistoryBefore === "function") recordDirtyHistoryBefore();
     state.userRevision++;
+    const objectHistoryFields = [];
+    for (const kind of new Set(objects.map(object => object.kind))) {
+      if (kind === "images") { recordImagesBefore(); objectHistoryFields.push("imageHistoryBefore"); }
+      else if (kind === "textBoxes") { recordTextBoxesBefore(); objectHistoryFields.push("textBoxHistoryBefore"); }
+      else { recordAnimationsBefore(); objectHistoryFields.push("animationHistoryBefore"); }
+    }
     const beforeTiles = new Map();
     forTiles(
       box.x,
@@ -3500,15 +3824,45 @@
       },
       false,
     );
-    state.selection = {
+    const captured = {
       phase: "active",
       originalPath: points.map((point) => ({ ...point })),
       path: points.map((point) => ({ ...point })),
       originalBox,
       box: { ...originalBox },
       fragments,
-      contentBox: selectionContentBounds({ fragments, originalBox, box: originalBox }),
+      objects,
+      objectHistoryFields,
+      regionOnly: false,
+      contentBox: selectionContentBounds({ fragments, objects, originalBox, box: originalBox }),
       beforeTiles,
+      color: null,
+    };
+    state.selection = regionSelection ? Object.assign(regionSelection, captured) : captured;
+    if (!regionSelection) state.selectionGesture = null;
+    setStatusKey("selectionReady");
+    render();
+    return true;
+  }
+  function captureSelection(points) {
+    const box = SELECT.polygonBounds(points, SIZE);
+    if (!box || points.length < 3 || SELECT.pathLength(points, state.scale) < 12 || box.w * state.scale < 4 || box.h * state.scale < 4) {
+      setStatusKey("selectionTooSmall");
+      return false;
+    }
+    // Keep a live screenshot until the user actually transforms movable content.
+    const originalBox = { ...box };
+    state.selection = {
+      phase: "active",
+      origin: "lasso",
+      originalPath: points.map((point) => ({ ...point })),
+      path: points.map((point) => ({ ...point })),
+      originalBox,
+      box: { ...originalBox },
+      regionOnly: true,
+      fragments: [],
+      contentBox: { ...originalBox },
+      beforeTiles: new Map(),
       color: null,
     };
     state.selectionGesture = null;
@@ -3522,7 +3876,13 @@
       else tiles.delete(tileKey);
       state.inkBounds.delete(tileKey);
     }
-    state.historyBefore.clear();
+    if (selection.beforeTiles.size) state.historyBefore.clear();
+    for (const object of selection.objects || []) {
+      Object.assign(object.item, object.box);
+      if (object.kind === "textBoxes") Object.assign(object.item, { maxWidth:object.maxWidth, fontSize:object.fontSize });
+    }
+    for (const field of selection.objectHistoryFields || []) state[field] = null;
+    if (selection.objects?.some(object => object.kind === "animations")) requestAnimationLayerRender();
   }
   function cancelSelection(silent = false) {
     const selection = state.selection;
@@ -3540,6 +3900,65 @@
     if (!silent) setStatusKey("selectionCancelled");
     return true;
   }
+  // Lifted ink keeps its own pending-input state. Take only the dirty mask
+  // under the lasso; a moved selection carries it to the new box.
+  function takeSelectionDirtyInk(selection, keep) {
+    const from = selection.originalBox, path = selection.originalPath,
+      taken = keep ? offscreen(Math.max(1, Math.ceil(from.w * DIRTY_MASK_SCALE)), Math.max(1, Math.ceil(from.h * DIRTY_MASK_SCALE))) : null;
+    for (const [tileKey, canvas] of state.dirtyInkTiles) {
+      const [tx, ty] = tileKey.split(",").map(Number);
+      if (!intersection({ x:tx * TILE, y:ty * TILE, w:TILE, h:TILE }, from)) continue;
+      if (taken) {
+        const context = taken.getContext("2d");
+        context.save();
+        context.scale(DIRTY_MASK_SCALE, DIRTY_MASK_SCALE);
+        traceSelectionPath(context, path, from.x, from.y);
+        context.clip("evenodd");
+        context.drawImage(canvas, tx * TILE - from.x, ty * TILE - from.y, TILE, TILE);
+        context.restore();
+      }
+      if (typeof invalidateDirtyHistoryMask === "function") invalidateDirtyHistoryMask(canvas);
+      const context = canvas.getContext("2d", { willReadFrequently:true });
+      context.save();
+      context.globalCompositeOperation = "destination-out";
+      context.scale(DIRTY_MASK_SCALE, DIRTY_MASK_SCALE);
+      traceSelectionPath(context, path, tx * TILE, ty * TILE);
+      context.fill("evenodd");
+      context.restore();
+      state.dirtyInkBounds.delete(tileKey);
+    }
+    return taken;
+  }
+  function moveSelectionDirtyInk(selection) {
+    const from = selection.originalBox, to = selection.box, path = selection.originalPath;
+    if (!selection.fragments.length || !path?.length || sameBox(from, to)) return;
+    const taken = takeSelectionDirtyInk(selection, true);
+    if (dirtyMaskAlphaBounds(taken)) {
+      const x0 = Math.max(0, Math.floor(to.x / TILE)), y0 = Math.max(0, Math.floor(to.y / TILE)),
+        x1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.floor((to.x + to.w) / TILE)),
+        y1 = Math.min(Math.ceil(SIZE / TILE) - 1, Math.floor((to.y + to.h) / TILE));
+      for (let ty = y0; ty <= y1; ty++)
+        for (let tx = x0; tx <= x1; tx++) {
+          const canvas = dirtyMaskTile(tx, ty);
+          if (typeof invalidateDirtyHistoryMask === "function") invalidateDirtyHistoryMask(canvas);
+          canvas.getContext("2d", { willReadFrequently:true }).drawImage(taken, 0, 0, from.w * DIRTY_MASK_SCALE, from.h * DIRTY_MASK_SCALE,
+            (to.x - tx * TILE) * DIRTY_MASK_SCALE, (to.y - ty * TILE) * DIRTY_MASK_SCALE, to.w * DIRTY_MASK_SCALE, to.h * DIRTY_MASK_SCALE);
+          state.dirtyInkBounds.delete(key(tx, ty));
+        }
+    }
+    const sx = to.w / from.w, sy = to.h / from.h;
+    state.hotspotTrail = state.hotspotTrail.map(point => SELECT.pointInPolygon(point, path)
+      ? { ...point, x:to.x + (point.x - from.x) * sx, y:to.y + (point.y - from.y) * sy } : point);
+    recomputeDirtyBounds();
+  }
+  function dropSelectionDirtyInk(selection) {
+    const path = selection.originalPath;
+    if (selection.fragments.length && path?.length) {
+      takeSelectionDirtyInk(selection, false);
+      state.hotspotTrail = state.hotspotTrail.filter(point => !SELECT.pointInPolygon(point, path));
+    }
+    recomputeDirtyBounds();
+  }
   function commitSelection() {
     const selection = state.selection;
     if (!selection) return false;
@@ -3550,7 +3969,7 @@
       render();
       return false;
     }
-    if (!selectionHasChanges(selection)) {
+    if ((!selection.fragments.length && !selection.objects?.length) || !selectionHasChanges(selection)) {
       cancelSelection(true);
       setStatusKey("selectionCommitted");
       return false;
@@ -3561,6 +3980,8 @@
       const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
       blitSized(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
     }
+    moveSelectionDirtyInk(selection);
+    invalidateSelectionInkTracking(selection);
     state.userRevision++;
     saveUserCanvasChange();
     resetCanvasCursor();
@@ -3570,7 +3991,7 @@
   }
   function applySelectionColor(color) {
     const selection = state.selection;
-    if (!selection || selection.phase !== "active" || selection.color === color) return false;
+    if (!selection || selection.phase !== "active" || !selection.fragments.length || selection.color === color) return false;
     selection.color = color;
     for (const fragment of selection.fragments) fragment.renderImage = recolorSelectionImage(fragment.image, color);
     render();
@@ -3578,43 +3999,36 @@
     return true;
   }
   function updateSelectionToolbar() {
-    if (!selectionOverlayLayer || !selectionToolbar) return;
-    const selection = state.selection,
-      active = selection?.phase === "active";
-    selectionOverlayLayer.hidden = !active;
-    selectionOverlayLayer.setAttribute("aria-hidden", String(!active));
-    if (!active) return;
-    const { width:viewportWidth, height:viewportHeight } = canvasViewportMetrics(),
-      box = selection.box,
-      toolbarStyle = runtimeElementStyle(selectionToolbar, "selection-toolbar"),
-      selectionBusy = selectionAIBusy(selection),
-      isTypesetting = selectionIsTypesetting(selection);
-    selectionToolbar.hidden = false;
-    selectionToolbar.setAttribute("aria-busy", String(selectionBusy));
-    if (selectionTypesetButton) {
-      selectionTypesetButton.disabled = false;
-      selectionTypesetButton.setAttribute("aria-busy", String(isTypesetting));
-      selectionTypesetButton.textContent = t(isTypesetting ? "selectionTypesetting" : "selectionTypeset");
+    // Keep legacy action hooks for integrations, but the Assist bar is the
+    // only visible selection surface, including progress and cancellation.
+    if (selectionOverlayLayer) {
+      selectionOverlayLayer.hidden = true;
+      selectionOverlayLayer.setAttribute("aria-hidden", "true");
     }
-    if (selectionDeleteButton) selectionDeleteButton.disabled = selectionBusy;
-    const width = selectionToolbar.offsetWidth || 280,
-      height = selectionToolbar.offsetHeight || 36,
-      left = box.x * state.scale + state.panX,
-      top = box.y * state.scale + state.panY,
-      bottom = (box.y + box.h) * state.scale + state.panY,
-      maxX = Math.max(8, viewportWidth - width - 8),
-      x = Math.max(8, Math.min(maxX, left + (box.w * state.scale - width) / 2)),
-      preferredY = top - height - 8,
-      y = preferredY >= 8 ? preferredY : bottom + 8,
-      maxY = Math.max(8, viewportHeight - height - 8);
-    toolbarStyle?.setProperty("--selection-toolbar-x", `${x}px`);
-    toolbarStyle?.setProperty("--selection-toolbar-y", `${Math.max(8, Math.min(maxY, y))}px`);
+    if (selectionToolbar) selectionToolbar.hidden = true;
+    if (typeof syncSelectionSuggestions === "function") syncSelectionSuggestions();
   }
   function releaseSelectionAITransformLock(run = state.activeAI) {
     const selection = run?.isolatedSelection ? run.selection : null,
       token = run?.selectionRequestToken;
     if (!selection || !token || selection.aiRequest?.token !== token || state.selection !== selection) return;
     selection.aiRequest = null;
+    if (state.pending?.selection === selection || state.pendingWidget) {
+      // A visible AI result ends its source selection. Return lifted ink to
+      // the document without cancelling the request or its result controls.
+      state.selection = null;
+      state.selectionGesture = null;
+      if (selectionHasChanges(selection)) {
+        for (const fragment of selection.fragments) {
+          const target = SELECT.mapFragment(fragment, selection.originalBox, selection.box);
+          blitSized(fragment.renderImage || fragment.image, target.x, target.y, target.w, target.h);
+        }
+        invalidateSelectionInkTracking(selection);
+        state.userRevision++;
+        saveUserCanvasChange();
+      } else restoreSelectionSource(selection);
+      resetCanvasCursor();
+    }
     updateSelectionToolbar();
   }
   function preservePendingAfterSelectionDelete(selection, pending = state.pending, selectionRequest = false) {
@@ -3625,11 +4039,19 @@
   function deleteSelection() {
     const selection = state.selection;
     if (!selection || selection.phase !== "active") return false;
+    if (!selection.fragments.length && !selection.objects?.length) return cancelSelection();
     const pending = state.pending,
       selectionRequest = state.activeAI?.selection === selection || pending?.selection === selection;
     supersedeActiveAI("selection-deleted");
+    for (const object of selection.objects || []) {
+      state[object.kind] = state[object.kind].filter(item => item !== object.item);
+      if (object.kind === "images") state.dirtyImageIds.delete(object.item.id);
+      if (object.kind === "textBoxes") state.dirtyTextBoxIds.delete(object.item.id);
+    }
     state.selection = null;
     state.selectionGesture = null;
+    dropSelectionDirtyInk(selection);
+    invalidateSelectionInkTracking(selection);
     state.userRevision++;
     preservePendingAfterSelectionDelete(selection, pending, selectionRequest);
     saveUserCanvasChange();
@@ -3646,12 +4068,12 @@
     }
     return packed;
   }
-  function normalizeSelectionForAI() {
+  function normalizeSelectionForAI(options = null) {
     const selection = state.selection;
     if (!selection || selection.phase !== "active") return false;
     const packed = buildSelectionTypesetRequest(selection);
     if (!packed) return false;
-    return requestSelectionAI("normalize", selection, packed);
+    return requestSelectionAI("normalize", selection, packed, options);
   }
   function selectionHit(selection, event) {
     const point = clientPoint(event),
@@ -3695,9 +4117,17 @@
         minimumDistance = 0.75 / Math.max(0.03, state.scale);
       for (const sample of events) addLassoPoint(selection, SELECT.clipPoint(clientPoint(sample), SIZE), minimumDistance);
       selection.box = SELECT.polygonBounds(selection.points, SIZE);
-    } else if (gesture.hit === "move") selection.box = SELECT.moveBox(gesture.startBox, point.x - gesture.startPoint.x, point.y - gesture.startPoint.y, SIZE);
-    else if (gesture.hit === "resize") selection.box = SELECT.resizeBox(gesture.startBox, point, 24 / state.scale, SIZE);
-    else if (gesture.hit === "width" || gesture.hit === "height") selection.box = SELECT.resizeBoxAxis(gesture.startBox, point, gesture.hit, 24 / state.scale, SIZE);
+    } else {
+      const box = gesture.hit === "move" ? SELECT.moveBox(gesture.startBox, point.x - gesture.startPoint.x, point.y - gesture.startPoint.y, SIZE)
+        : gesture.hit === "resize" ? SELECT.resizeBox(gesture.startBox, point, 24 / state.scale, SIZE)
+        : SELECT.resizeBoxAxis(gesture.startBox, point, gesture.hit, 24 / state.scale, SIZE);
+      if (selection.regionOnly && !gesture.liftAttempted && !sameBox(box, selection.box)) {
+        gesture.liftAttempted = true;
+        captureInkSelection(selectionPathFor(selection), selection);
+      }
+      selection.box = box;
+      updateSelectionObjects(selection);
+    }
     if (selection.phase === "active") selection.path = selectionPathFor(selection);
     requestRender();
     return true;
@@ -3720,6 +4150,10 @@
       return true;
     }
     if (selection) {
+      if (event.type === "pointercancel") {
+        selection.box = { ...gesture.startBox };
+        updateSelectionObjects(selection);
+      }
       selection.path = selectionPathFor(selection);
       selection.changed = selectionHasChanges(selection);
     }

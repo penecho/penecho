@@ -54,7 +54,7 @@ Windows installers cannot be created reliably on this Mac without Wine/Mono and 
 
 ## Icons
 
-The latest owner-supplied transparent attachment is `build/brand/penecho-logo-original.png`; `scripts/prepare-brand-logo.js` validates its PNG alpha channel and copies it byte-for-byte to the desktop/README master `build/brand/penecho-logo.png`, with explicit full-logo and symbol-only crop bounds in `build/brand/penecho-logo.json`. Generate all derived assets with:
+The PenEcho mark is the blue pen nib touching water with two ripples (`#2350E6`). The checked-in transparent master `build/brand/penecho-logo-original.png` is the stacked lockup: the mark above the Poppins Light wordmark, with "Pen" in ink `#1D1D1F` and "Echo" in blue, lettering baked in. `scripts/prepare-brand-logo.js` validates its PNG alpha channel and copies it byte-for-byte to `build/brand/penecho-logo.png`; `build/brand/penecho-logo.json` documents the full-logo, mark and wordmark crops. `build/brand/penecho-mark-small.png` is the same mark with heavier strokes, used for icons drawn at 48 px and below and for the UI mark. Generate all derived assets with:
 
 ```bash
 npm run icons
@@ -62,19 +62,21 @@ npm run icons
 
 Generated production assets:
 
-- `public/penecho-readme-header.webp` and `public/penecho-readme-header-dark.webp` (transparent, lossless, 840 px wide; displayed at 280 px using automatic light/dark selection in every README)
-- `public/penecho-favicon.png` (256 px symbol on a white rounded tile with transparent outer corners for Canvas browser tabs)
-- `build/icons/penecho-desktop-1024.png`
-- `build/icons/penecho.png`
-- `build/icons/penecho.icns`
-- `build/icons/penecho.ico`
-- `build/icons/penecho-install.gif`
+- `public/penecho-readme-header.webp` and `public/penecho-readme-header-dark.webp`: horizontal lockup (mark beside the wordmark), transparent, lossless, 840 px wide, displayed at 320 px with automatic light/dark selection in every README. The dark variant uses `#7C9AFF` and near-white lettering.
+- `public/penecho-readme-header.png`: opaque white copy of the horizontal lockup for places that cannot show transparent WebP.
+- `public/penecho-favicon.png`: 256 px heavier mark on a white rounded tile with transparent outer corners (Canvas browser tabs, password page, Cloud app icon).
+- `public/penecho-mark.png`: 256 px heavier transparent mark (update window, Canvas viewer wordmark, Cloud header mask).
+- `build/icons/penecho-1024.png`: mobile icon source, an opaque white square with the mark at 70%. Android/iOS apply their own masks.
+- `build/icons/penecho-desktop-1024.png` and `build/icons/penecho.png`: Windows window icons on a transparent background.
+- `build/icons/penecho.icns`: macOS, white rounded tile with transparent outer corners; PNG payloads from 16 to 1024 px.
+- `build/icons/penecho.ico`: Windows, PNG entries at 16, 24, 32, 48, 64, 128 and 256 px.
+- `build/icons/penecho-install.gif`: Squirrel install/update animation, stacked logo and three loading dots on white.
 
-Application icons use only the supplied rounded-square symbol, preserving its pink/orange/magenta gradient and black circular dot. macOS places it on the existing white rounded app tile used by the Dock and DMG; Windows uses a transparent background for the executable, taskbar and Setup icon. Squirrel's `penecho-install.gif` uses the complete stacked logo, including its original PenEcho lettering, and three loading dots. All lettering comes from the checked-in artwork rather than build-host fonts.
+macOS places the mark on a white rounded tile for the Dock and DMG; Windows uses a transparent background for the executable, taskbar and Setup icon. All lettering comes from the checked-in artwork rather than build-host fonts. The script writes ICO and ICNS files directly, so it no longer calls png2icons.
 
-Both desktop platforms open the Canvas directly, without a separate startup logo window. Windows retains the existing Squirrel first-run gate before showing the Canvas. The update window uses the same full-logo WebP.
+Both desktop platforms open the Canvas directly, without a separate startup logo window. Windows retains the existing Squirrel first-run gate before showing the Canvas. The update window shows `public/penecho-mark.png`.
 
-The source has intentionally been separated from web/mobile branding. `public/penecho-mark.png`, the old `public/penecho-readme-header.png`, and the mobile source `build/icons/penecho-1024.png` are retained as explicitly requested by the owner. `npm run icons` no longer overwrites that mobile source. See `docs/branding-audit.md` for the remaining surfaces.
+`tools/mobile/build-mobile.js` builds the Android/iOS icons, the native splash and the mobile connection page from `build/icons/penecho-1024.png`, so `npm run icons` now updates mobile branding too. Installed apps keep their old icon until they are rebuilt and reinstalled. See `docs/branding-audit.md` for the full list of surfaces.
 
 ## Signing and notarization
 

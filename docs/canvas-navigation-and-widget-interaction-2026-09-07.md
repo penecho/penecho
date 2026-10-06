@@ -1,5 +1,27 @@
 # 画布导航与 Widget 交互
 
+## Lasso as a screenshot region (2026-09-30)
+
+This supersedes the ink-editing behavior in the dedicated Lasso update below. Lasso now defines only a screenshot boundary. Any valid region remains active, including part of a Widget, image, text, animation, ink or blank Canvas. Creating, moving, resizing, closing or cancelling the boundary never lifts, moves, recolors or deletes source content and does not create an Undo entry. The Assist menu offers Cancel without a content Delete action for these regions.
+
+The editing toolbar places Lasso between Eraser and Text, including the narrow-screen toolbar.
+
+Internal Typeset and scratch-out actions use a separate ink-extraction entry point so their existing replacement, deletion, cancellation and Undo behavior is preserved.
+
+The Lasso overlay renders above Canvas content and object controls. Model captures use the current boundary and its minimum bounding rectangle, with every pixel outside the polygon masked to white. Widget snapshots are refreshed before PenEchoLLM classification, Ask routing, Canvas AI execution or Agent handoff. Capture failure prevents an incomplete Widget image from being submitted. Captures exclude the Lasso outline, UI controls and unrelated Canvas input.
+
+Verification uses isolated local state and intercepted model transport in `scripts/verify-lasso-regions.cjs`. Evidence in `docs/verification/lasso-regions-20260930/` covers real mouse input over a Widget without strokes, live DOM changes in Widget snapshots, exact polygon masking in five model-bound images, overlay stacking and content/history preservation while moving and resizing the boundary. No physical stylus or tablet was tested, and no real model was contacted by this acceptance test.
+
+Final checks: 363 targeted tests passed; all five region acceptance groups, the existing selection/AI/layout browser regression and the Electron pointer/Hand regression passed without runtime errors. `npm run build:client`, `npm run check:client` and the scoped whitespace check passed. Internal ink extraction retains cancellation and Delete/Undo in browser acceptance. Source and generated client are local; no Cloud sync, push or deployment was performed. Test services were closed after verification.
+
+## Dedicated Lasso in the editing toolbar (2026-09-29)
+
+This update supersedes the editing-tool Select behavior below. The editing toolbar now shows a Lasso icon immediately after Text, with the label “Lasso (V)”. Mouse and stylus input starts an ink lasso even over an existing Widget, image or text object. Lasso no longer selects, raises, drags or activates those objects, and Widget hover/context controls stay hidden while it is active. Existing ink selections still move and resize. Finger input retains Canvas navigation.
+
+Hand retains Canvas panning, object selection through a tap, header dragging, resize handles and explicit Widget interaction. View mode retains its separate Widget interaction selector. Automatic AI draft, image and animation placement keep their existing controls; explicitly choosing Lasso finalizes placement before returning to ink selection.
+
+Verification: 196 targeted tests passed; the isolated Electron check in `scripts/verify-lasso-tool.cjs` passed seven groups covering layout, mouse/stylus lasso, touch navigation, selection Undo/Redo, Hand manipulation/native interaction and image placement. Evidence is in `docs/verification/lasso-tool-20260929/`. Touch and stylus events were injected; no physical iPad or Apple Pencil was tested. Local source and generated client only; no Cloud synchronization or deployment.
+
 实现日期：2026-09-07。由主代理亲自实现和验证，未委派子代理。
 
 ## 操作约定

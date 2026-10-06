@@ -9,11 +9,12 @@ function harness(){
  renderedTextBoxRecord:async raw=>({id:`text-${++next}`,w:raw.maxWidth,h:40,...raw,image:{width:raw.maxWidth,height:40}}),canvasBlob:async()=>({size:100}),
  imageRecord:raw=>({id:raw.id||`image-${++next}`,...raw}),canvasAgentBox:o=>({x:o.item.x,y:o.item.y,w:o.item.w,h:o.item.h}),
  canvasAgentObject:id=>{for(const [key,kind]of [['textBoxes','text'],['images','image']]){const item=context.state[key].find(i=>i.id===id);if(item)return{item,kind};}return null;},
- setCanvasObjectFrontKind:kind=>{context.state.frontCanvasObjectKind=kind;context.state.frontPlacedCanvasObjectKind=kind;},canvasAgentMutationIdle:()=>{},canvasAgentAssertRevision:r=>assert.equal(context.state.userRevision,r),canvasAgentAssertToolExecution:()=>{},
+ setCanvasObjectFrontKind:kind=>{context.state.frontCanvasObjectKind=kind;context.state.frontPlacedCanvasObjectKind=kind;},canvasAgentMutationIdle:()=>{},canvasAgentBeginMutation:()=>()=>{},canvasAgentAssertRevision:r=>assert.equal(context.state.userRevision,r),canvasAgentAssertToolExecution:()=>{},
  plotView:()=>({xMin:-5,xMax:5,yMin:-10,yMax:10}),mcpPresentation:(args,previous)=>args.presentation||previous?.presentation||{intent:"deliver",role:"primary",attention:"normal"},mcpPlanPlacement:()=>({placement:{x:1000,y:1000},layout:{}}),save:()=>saved.push(true),textBoxHistoryState:()=>[],imageHistoryState:()=>[],requestRender:()=>{},canvasAgentSyncState:()=>{},mcpQueueView:()=>{},mcpRuntime:{feedbackSequence:0},
  });
  const source=fs.readFileSync('src/client/app/ai-runtime.js','utf8'),start=source.indexOf('  function compileExpression('),end=source.indexOf('  async function plotObjectImage',start);
- vm.runInContext(source.slice(start,end)+fs.readFileSync('src/client/app/mcp-primitives.js','utf8')+';globalThis.api={mcpPrimitiveLayout,mcpPlotView,mcpPresentPrimitives};',context);
+ const runtime=fs.readFileSync('src/client/app/mcp-runtime.js','utf8'),bounds=runtime.slice(runtime.indexOf('  function mcpTaskBounds('),runtime.indexOf('  const MCP_PRESENTATION_SIZES')),placement=runtime.slice(runtime.indexOf('  function mcpSourcePlacement('),runtime.indexOf('  function mcpArrange('));
+ vm.runInContext(bounds+placement+source.slice(start,end)+fs.readFileSync('src/client/app/mcp-primitives.js','utf8')+';globalThis.api={mcpPrimitiveLayout,mcpPlotView,mcpPresentPrimitives};',context);
  return {context,...context.api,saved};
 }
 test('node layout and ID connectors require no client coordinates',()=>{
@@ -27,6 +28,11 @@ test('expression parsing is restricted and domains are sampled locally',()=>{
  assert.throws(()=>h.mcpPlotView({expression:'sqrt(-1)',xMin:0,xMax:2}),/no finite/);
  const view=h.mcpPlotView({expression:'sin(x)',xMin:-Math.PI,xMax:Math.PI});assert.ok(view.yMin<-1&&view.yMax>1);
  assert.equal(h.mcpPlotView({expression:'x^2',xMin:0,xMax:3,yMin:0,yMax:10}).yMax,10);
+});
+test('native plot parsing shares supported provider Math notation with live graphs',()=>{
+ const h=harness();h.context.SMART_SUGGEST=require('../public/smart-suggest.js');
+ for(const [source,x,expected]of [['x*Math.sin(x)',2,2*Math.sin(2)],['Math.log(Math.E)',0,1],['Math.log10(100)',0,2],['Math.sqrt(9)',0,3]])assert.equal(h.context.compileExpression(source)(x),expected,source);
+ for(const source of ['Math.random()','Math.sin.constructor(x)','window.Math.sin(x)'])assert.throws(()=>h.context.compileExpression(source),undefined,source);
 });
 test('native batches replace owned stable objects and preserve user moves without creating Widgets',async()=>{
  const h=harness(),session={artifacts:new Map()},args={artifactId:'flow',title:'Flow',items:[{id:'a',type:'rect',text:'Plan'},{id:'b',type:'text',text:'Verify'}]};

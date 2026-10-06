@@ -38,13 +38,15 @@ test("PenEcho Agent activity keeps cancellation visible until the authoritative 
   assert.equal(activity.activityShouldBeVisible("ready",true),false);
   assert.equal(activity.activityShouldBeVisible("idle",true),false);
   assert.equal(activity.activityPresentationVisible(true,false,true),true);
-  assert.equal(activity.activityPresentationVisible(true,true,true),false,"a minimized Agent suppresses the user-only overlay");
-  assert.equal(activity.activityPresentationVisible(true,false,false),false,"canvas focus suppresses the user-only overlay");
+  assert.equal(activity.activityPresentationVisible(true,true,true),true,"activity stays visible with the Agent minimized");
+  assert.equal(activity.activityPresentationVisible(true,false,false),true,"activity stays visible while working on the Canvas");
+  assert.equal(activity.activityPresentationVisible(false),false,"a finished request hides the overlay");
 });
 
 test("PenEcho Agent activity appears on submit and fades only after the running state ends",async()=>{
   const {document,window}=parseHTML(`<!doctype html><html lang="zh"><body><div id="viewport"><div id="canvasAgentWidgetPickerLayer"></div><aside id="canvasAgentPanel" data-status="ready"><div id="canvasAgentTranscript"></div><form id="canvasAgentForm"><textarea id="canvasAgentInput"></textarea><button id="canvasAgentSend" type="submit">Send</button></form><button id="canvasAgentStop" hidden>Stop</button></aside></div></body></html>`);
-  const form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop"),panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),viewport=document.querySelector("#viewport"),picker=document.querySelector("#canvasAgentWidgetPickerLayer");
+  const form=document.querySelector("#canvasAgentForm"),input=document.querySelector("#canvasAgentInput"),send=document.querySelector("#canvasAgentSend"),stop=document.querySelector("#canvasAgentStop"),panel=document.querySelector("#canvasAgentPanel"),transcript=document.querySelector("#canvasAgentTranscript"),viewport=document.querySelector("#viewport");
+  const stage=document.createElement("section");stage.className="canvas-frame";viewport.replaceWith(stage);stage.append(viewport,panel);
   form.addEventListener("submit",event=>{event.preventDefault();input.disabled=true;send.disabled=true;});
   window.PENECHO_CONFIG={};
   let frame=0;
@@ -52,8 +54,7 @@ test("PenEcho Agent activity appears on submit and fades only after the running 
   const context=vm.createContext({window,document,module:{exports:{}},Intl,Element:window.Element,MutationObserver:window.MutationObserver,ResizeObserver:TestResizeObserver,requestAnimationFrame(callback){const id=++frame;queueMicrotask(callback);return id;},queueMicrotask});
   vm.runInContext(read("public/canvas-agent-activity.js"),context,{filename:"canvas-agent-activity.js"});
   const root=document.querySelector("#canvasAgentActivityOverlay");
-  assert.equal(root.parentElement,viewport);
-  assert.equal(root.nextElementSibling,picker);
+  assert.equal(root.parentElement,stage,"activity shares the docked Agent stage outside the clipped viewport");
   assert.equal(root.classList.contains("is-visible"),false);
 
   input.value="整理这张画布的发布计划";
@@ -79,13 +80,12 @@ test("PenEcho Agent activity appears on submit and fades only after the running 
   stop.hidden=false;
   await new Promise(resolve=>setImmediate(resolve));
   viewport.dispatchEvent(new window.Event("pointerdown",{bubbles:true}));
-  assert.equal(root.classList.contains("is-visible"),false,"clicking the canvas suppresses the overlay without stopping the turn");
-  assert.equal(root.classList.contains("is-suppressed"),true);
+  assert.equal(root.classList.contains("is-visible"),true,"clicking the canvas keeps the running activity visible");
   input.dispatchEvent(new window.Event("focusin",{bubbles:true}));
   assert.equal(root.classList.contains("is-visible"),true,"refocusing the Agent restores a still-running activity");
   panel.hidden=true;
   await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(root.classList.contains("is-visible"),false,"minimizing the Agent suppresses the overlay");
+  assert.equal(root.classList.contains("is-visible"),true,"minimizing the Agent keeps the running activity visible");
   panel.hidden=false;
   input.dispatchEvent(new window.Event("focusin",{bubbles:true}));
   assert.equal(root.classList.contains("is-visible"),true);
@@ -96,7 +96,7 @@ test("PenEcho Agent activity appears on submit and fades only after the running 
   panel.dataset.status="ready";
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(root.classList.contains("is-visible"),false,"the node stays mounted while CSS performs the fade");
-  assert.equal(root.parentElement,viewport);
+  assert.equal(root.parentElement,stage);
 });
 
 test("PenEcho Agent dialog adds one bounded local explanation per observable tool phase",async()=>{
@@ -195,6 +195,11 @@ test("PenEcho Agent activity chooses free Canvas space and compacts around a lar
   assert.equal(mobile.compact,true);
   assert.ok(mobile.y<180,"mobile activity should use the compact space above the panel");
   assert.equal(activity.activityPlacement({left:0,top:0,width:390,height:844},mobile,{left:8,top:235,right:382,bottom:836},true).y,16);
+  const narrow=activity.activityPosition({left:0,top:0,width:390,height:844},{left:86,top:0,right:390,bottom:844},true);
+  assert.equal(narrow.x,195,"a narrow Canvas strip cannot squeeze the activity beside a docked panel");
+  assert.equal(narrow.compact,true);
+  const narrowPlacement=activity.activityPlacement({left:0,top:0,width:390,height:844},narrow,{left:86,top:0,right:390,bottom:844},true);
+  assert.ok(narrowPlacement.box.left>=0&&narrowPlacement.box.right<=390,"staying on screen takes priority over avoiding a wide Agent panel");
   const centerPanel={left:408,top:248,right:768,bottom:568},centerPosition=activity.activityPosition({left:0,top:0,width:1200,height:800},centerPanel,true),centerPlacement=activity.activityPlacement({left:0,top:0,width:1200,height:800},centerPosition,centerPanel,true),box=centerPlacement.box;
   assert.equal(Math.max(0,Math.min(box.right,centerPanel.right)-Math.max(box.left,centerPanel.left))*Math.max(0,Math.min(box.bottom,centerPanel.bottom)-Math.max(box.top,centerPanel.top)),0,"CSP-safe candidates still avoid a centrally dragged Agent panel");
   for(const [view,panel] of [[{left:0,top:0,width:1200,height:800},{left:264,top:72,right:864,bottom:572}],[{left:0,top:0,width:800,height:600},{left:72,top:72,right:432,bottom:392}]]){
@@ -208,11 +213,12 @@ test("PenEcho Agent activity is a removable user-only sibling outside capture an
   const html=read("public/index.html"),css=read("public/canvas-agent-activity.css"),source=read("public/canvas-agent-activity.js"),runtime=read("src/client/app/canvas-agent-runtime.js"),serverRuntime=read("src/server/canvas-agent/runtime.mjs"),pkg=require("../package.json");
   assert.match(html,/<link rel="stylesheet" href="canvas-agent-activity\.css">/);
   assert.match(html,/<script src="app\.js"><\/script>[\s\S]*?<script src="canvas-agent-activity\.js"><\/script>/);
-  assert.match(source,/viewport\.insertBefore\(root,picker\|\|panel\)/);
+  assert.match(source,/stage=viewport\.closest\("\.canvas-frame"\)\|\|viewport/);
+  assert.match(source,/stage\.append\(root\)/);
   assert.match(source,/dataset\.penechoModelHidden="true"/);
   assert.match(source,/dataset\.html2canvasIgnore="true"/);
   const baseRule=css.match(/\.canvas-agent-activity\s*\{[\s\S]*?\n\}/)?.[0]||"";
-  assert.match(baseRule,/z-index:\s*40;/);
+  assert.match(baseRule,/z-index:\s*70;/);
   assert.match(baseRule,/pointer-events:\s*none;/);
   assert.match(baseRule,/visibility:\s*hidden/);
   assert.match(baseRule,/contain:\s*layout style/);

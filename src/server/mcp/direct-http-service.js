@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const {loadDirectHttpIdentity, createDirectHttpLeaf, resetDirectHttpIdentity} = require('./direct-http-identity.js');
 const {lanAddresses, isPrivateAddress} = require('./network-addresses.js');
 const {createAnnouncer} = require('./lan-discovery.js');
+const {createIpDirectSettings} = require('./ip-direct-settings.js');
 const {INSTRUCTIONS, PROMPTS, PROTOCOL_VERSION, promptResult, captureToolResult} = require('./protocol.js');
 const {TOOLS, validateToolArguments} = require('./schema.js');
 const {RESOURCES, readResource} = require('./resources.js');
@@ -79,6 +80,9 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
   const hostnames=[...new Set(getHostnames())].filter(host=>typeof host==='string'&&/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.local)?$/i.test(host)).map(host=>host.toLowerCase());
   let identity, server, announcer, timer, startedAt, addresses = [], transition = Promise.resolve(), active = 0;
   const sessions = new Map(), sockets = new Set(), uploads = new Set();
+  let ipDirect;
+  const fixedSettings = () => ipDirect ||= createIpDirectSettings(stateDirectory);
+  const certificateAddresses = next => [...new Set([...next, ...(fixedSettings().get().host ? [fixedSettings().get().host] : [])])];
   const limits = {sessions:maxSessions,requestsPerSession:maxSessionRequests,requests:maxRequests,tcpConnections:512};
   const timeouts = {sessionIdleMs,pressureIdleMs:60000,keepAliveMs:30000,headersMs:10000,requestUploadMs:15000};
   const notify = () => { try { onChange(); } catch {} };
@@ -86,7 +90,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
   function refresh() {
     const next = currentAddresses();
     if (JSON.stringify(next) !== JSON.stringify(addresses)) {
-      if (server) server.setSecureContext(createDirectHttpLeaf(identity, next, hostnames));
+      if (server) server.setSecureContext(createDirectHttpLeaf(identity, certificateAddresses(next), hostnames));
       addresses = next; notify();
     }
   }
@@ -100,10 +104,17 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
   function status() {
     if (server?.listening) { refresh(); prune(); }
     const port = server?.address()?.port;
-    return {enabled:!!port, preferredUrl:port&&hostnames.length?`https://${hostnames[0]}:${port}/mcp`:'', urls:port ? addresses.map(a => `https://${a}:${port}/mcp`) : [], localUrl:port ? `https://127.0.0.1:${port}/mcp` : '', hostId:identity?.hostId || '', certificatePem:identity?.certificatePem || '', accessToken:identity?.accessToken || '', startedAt:startedAt || null, sessionCount:sessions.size,limits:{...limits},timeouts:{...timeouts}};
+    const fixed = fixedSettings().get();
+    return {enabled:!!port, preferredUrl:port&&hostnames.length?`https://${hostnames[0]}:${port}/mcp`:'', urls:port ? addresses.map(a => `https://${a}:${port}/mcp`) : [], localUrl:port ? `https://127.0.0.1:${port}/mcp` : '', hostId:identity?.hostId || '', certificatePem:identity?.certificatePem || '', accessToken:identity?.accessToken || '', startedAt:startedAt || null, sessionCount:sessions.size,
+      ipDirect:{...fixed,url:fixedSettings().endpoint(),listenerPort:port || null,serviceAvailable:!!port,sessionCount:[...sessions.values()].filter(session=>session.ipDirect).length},limits:{...limits},timeouts:{...timeouts}};
   }
   function toolFailure(error) {
-    const redact = value => String(value).split(identity.accessToken).join('[redacted]').split(identity.key).join('[redacted]').replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[redacted]');
+    const redact = value => {
+      let text = String(value).split(identity.accessToken).join('[redacted]').split(identity.key).join('[redacted]');
+      const token = fixedSettings().get().accessToken;
+      if (token) text = text.split(token).join('[redacted]');
+      return text.replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[redacted]');
+    };
     const failure = {code:redact(error.code || 'mcp_error').slice(0,80),message:redact(error.message || 'Tool failed').slice(0,1000)};
     // Walk a bounded plain JSON subset: details can guide recovery without carrying secrets or huge data.
     let budget = 8192;
@@ -125,7 +136,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     return failure;
   }
   const rpc = require("./rpc.js").createMcpRpc({callTool,toolFailure});
-  async function imageUpload(req,res) {
+  async function imageUpload(req,res,ipDirectRequest = false) {
     if(req.method!=='POST') throw fault(405,'Use POST');
     if(typeof uploadImage!=='function') throw fault(404,'Image upload is unavailable');
     if(req.url.includes('#') || /%(?![0-9a-f]{2})/i.test(req.url)) throw fault(400,'Invalid upload URL');
@@ -141,7 +152,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     if(req.headers['content-encoding'] && req.headers['content-encoding']!=='identity') throw fault(415,'Content encoding is unsupported');
     if(Number(req.headers['content-length'])>MAX_BYTES) throw fault(413,'Image exceeds 32 MiB');
     if(active>=maxRequests || uploads.size>=2) throw fault(429,'Busy');
-    const controller=new AbortController(); uploads.add(controller); active++;
+    const controller=new AbortController(); controller.ipDirect=ipDirectRequest; uploads.add(controller); active++;
     const abort=()=>controller.abort();
     const timer=setTimeout(abort,boundedMs(uploadTimeoutMs,30000)); timer.unref();
     req.once('aborted',abort);res.once('close',abort);
@@ -189,22 +200,30 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
       }
       const address = String(req.socket.remoteAddress || '').replace(/^::ffff:/,'');
       const port = server.address().port;
+      const fixed = fixedSettings().get();
+      const matches = token => {
+        if (!token) return false;
+        const expected = Buffer.from(`Bearer ${token}`), supplied = Buffer.from(req.headers.authorization || '');
+        return supplied.length === expected.length && crypto.timingSafeEqual(supplied,expected);
+      };
+      const fixedAuth = fixed.enabled && matches(fixed.accessToken);
       const hosts = new Set(['localhost','127.0.0.1',...hostnames,...addresses].map(a => `${a}:${port}`));
-      if (!(address === '127.0.0.1' || isPrivateAddress(address)) || !hosts.has(String(req.headers.host||'').toLowerCase())) throw fault(403,'Forbidden');
+      if (fixedAuth && fixed.host) { hosts.add(`${fixed.host}:${fixed.port}`); hosts.add(`${fixed.host}:${port}`); }
+      if (!(address === '127.0.0.1' || isPrivateAddress(address) || fixedAuth) || !hosts.has(String(req.headers.host||'').toLowerCase())) throw fault(403,'Forbidden');
       if (req.headers.origin !== undefined) {
         let origin; try { origin = new URL(req.headers.origin); } catch { throw fault(403,'Forbidden'); }
         if (origin.origin !== req.headers.origin || origin.protocol !== 'https:' || !hosts.has(origin.host)) throw fault(403,'Forbidden');
       }
-      const expected = Buffer.from(`Bearer ${identity.accessToken}`), supplied = Buffer.from(req.headers.authorization || '');
-      if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied,expected)) throw fault(401,'Unauthorized');
+      if (!fixedAuth && !matches(identity.accessToken)) throw fault(401,'Unauthorized');
       if (req.url === '/status' && req.method === 'GET') return send(res,200,{hostId:identity.hostId,startedAt,sessionCount:sessions.size,protocolVersion:PROTOCOL_VERSION,limits:{...limits},timeouts:{...timeouts}});
-      if (req.url === '/mcp/images' || req.url.startsWith('/mcp/images?')) return await imageUpload(req,res);
+      if (req.url === '/mcp/images' || req.url.startsWith('/mcp/images?')) return await imageUpload(req,res,fixedAuth);
       if (req.url !== '/mcp') throw fault(404,'Not found');
       if (!['POST','DELETE'].includes(req.method)) return send(res,405,{error:'Method Not Allowed'},{allow:'POST, DELETE'});
       const sessionId = req.headers['mcp-session-id'];
       if (sessionId !== undefined) {
         session = sessions.get(sessionId);
         if (!session) throw fault(404,'Session not found');
+        if (session.ipDirect !== fixedAuth) throw fault(403,'Session belongs to a different connection');
         session.lastSeen = now();
       }
       if (req.method === 'DELETE') {
@@ -225,7 +244,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
           if (!idle) throw fault(429,'Session limit');
           remove(idle);
         }
-        session = {id:crypto.randomBytes(32).toString('hex'),ownerId:crypto.randomUUID(),lastSeen:now(),active:0,pending:new Map()};
+        session = {id:crypto.randomBytes(32).toString('hex'),ownerId:crypto.randomUUID(),ipDirect:fixedAuth,lastSeen:now(),active:0,pending:new Map()};
         sessions.set(session.id,session); notify();
       } else if (!session) throw fault(400,'Mcp-Session-Id is required');
       if (!sessions.has(session.id)) throw fault(404,'Session not found');
@@ -285,7 +304,7 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     if (server?.listening) return status();
     try {
       identity = loadDirectHttpIdentity(stateDirectory); addresses = currentAddresses();
-      server = https.createServer({...createDirectHttpLeaf(identity,addresses,hostnames),minVersion:'TLSv1.2'},handle);
+      server = https.createServer({...createDirectHttpLeaf(identity,certificateAddresses(addresses),hostnames),minVersion:'TLSv1.2'},handle);
       server.requestTimeout = timeouts.requestUploadMs; server.headersTimeout = timeouts.headersMs; server.keepAliveTimeout = timeouts.keepAliveMs; server.maxConnections = limits.tcpConnections;
       server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
       await listenMcp(server, preferredPort);
@@ -301,6 +320,19 @@ function createDirectHttpService({preferredPort=3922,getHostnames=()=>{const hos
     identity = resetDirectHttpIdentity(stateDirectory);
     return performStart();
   }); }
-  return {start,reset,close:() => enqueue(stop),status};
+  function configureIpDirect(input) { return enqueue(async () => {
+    await performStart();
+    const previous = fixedSettings().get();
+    const next = fixedSettings().apply(input);
+    if (next.host !== previous.host) server.setSecureContext(createDirectHttpLeaf(identity,certificateAddresses(addresses),hostnames));
+    if (!next.enabled || next.accessToken !== previous.accessToken || next.host !== previous.host || next.port !== previous.port) {
+      for (const session of sessions.values()) if (session.ipDirect) remove(session);
+      // Stop already admitted uploads when fixed-IP authorization is revoked.
+      for (const controller of uploads) if (controller.ipDirect) controller.abort();
+    }
+    notify();
+    return status().ipDirect;
+  }); }
+  return {start,reset,configureIpDirect,close:() => enqueue(stop),status};
 }
 module.exports = {createDirectHttpService};

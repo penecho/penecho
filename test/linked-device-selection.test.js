@@ -5,7 +5,7 @@ const agent=fs.readFileSync(path.join(__dirname,'../src/client/app/canvas-agent-
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 function fn(source,name){const match=new RegExp(`  (?:async )?function ${name}\\(`).exec(source);assert.ok(match,name);return source.slice(match.index,source.indexOf('\n  }',match.index)+4);}
 function fixture(){
- const data=new Map(),c={window:{PENECHO_CONFIG:{runtime:'cloud',linkedDeviceId:'mac',connectionAccountId:'account-a'}},location:{origin:'https://cloud.test'},localStorage:{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)},AI_CONNECTION_STORAGE_KEY:'penecho-ai-connection-id',settings:{connections:[]},hostedSettings:{models:[]},t:k=>k,authenticatedApiHeaders:()=>({}),renderConnectionLists:()=>{},AbortSignal,fetch:async()=>({ok:true,json:async()=>({connections:[]})}),loadHostedModels:async()=>{},canvasAgent:{},canvasAgentRestoreScopedSession:()=>{},data};
+ const data=new Map(),c={window:{PENECHO_CONFIG:{runtime:'cloud',linkedDeviceId:'mac',linkedDeviceOnline:true,connectionAccountId:'account-a'}},location:{origin:'https://cloud.test'},localStorage:{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)},AI_CONNECTION_STORAGE_KEY:'penecho-ai-connection-id',settings:{connections:[]},hostedSettings:{models:[]},t:k=>k,authenticatedApiHeaders:()=>({}),renderConnectionLists:()=>{},AbortController,AbortSignal,fetch:async()=>({ok:true,json:async()=>({connections:[]})}),loadHostedModels:async()=>{},canvasAgent:{},canvasAgentRestoreScopedSession:()=>{},data};
  vm.createContext(c);
  for(const name of ['aiConnectionScope','aiConnectionStorageKey','selectedAiConnectionId','storeAiConnectionSelection','aiConnectionSelectionError','syncLocalConnectionSelection','validateAiConnectionSelection'])vm.runInContext(fn(core,name),c);
  return c;
@@ -77,8 +77,9 @@ test('preflight failure starts no handshake and concurrent callers share validat
 
 test('deferred resume restores only matching account/device/connection identity',()=>{
  const c=fixture();vm.runInContext(fn(agent,'canvasAgentRestoreScopedSession'),c);
- const scope=c.aiConnectionScope(),saved={scope,sessionId:'session-a',resumeToken:'resume-a',connectionId:A,projectId:'',accessMode:'controlled'};
- Object.assign(c.canvasAgent,{projectId:'',accessMode:'controlled',pendingStoredSession:saved});
+ c.state={canvasAgentCanvasKey:'cloud:canvas-a'};
+ const scope=c.aiConnectionScope(),saved={scope,sessionId:'session-a',resumeToken:'resume-a',connectionId:A,projectId:'',accessMode:'controlled',canvasKey:c.state.canvasAgentCanvasKey,conversationId:'conversation-a'};
+ Object.assign(c.canvasAgent,{projectId:'',accessMode:'controlled',pendingStoredSession:saved,currentConversation:{id:saved.conversationId}});
  c.canvasAgentRestoreScopedSession(scope,B);assert.equal(c.canvasAgent.sessionId,undefined);
  c.canvasAgent.pendingStoredSession=saved;c.canvasAgentRestoreScopedSession(scope,A);assert.equal(c.canvasAgent.sessionId,'session-a');
  c.canvasAgent.sessionId='';c.canvasAgent.pendingStoredSession=saved;c.canvasAgentRestoreScopedSession('different-account',A);assert.equal(c.canvasAgent.sessionId,'');

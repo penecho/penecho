@@ -8,6 +8,7 @@ const { createHash, randomBytes, timingSafeEqual } = require("crypto");
 const { WebSocket } = require("ws");
 const { forwardModelEvaluation } = require("./model-evaluation.js");
 const { localUsageRecord } = require("./local-request-usage.js");
+const { createSuggestionTransport } = require("./suggestion-transport.js");
 
 const MAX_RELAY_MESSAGE_BYTES = 140 * 1024 * 1024;
 const MAX_CLOUD_BUNDLE_BYTES = 32 * 1024 * 1024;
@@ -175,7 +176,7 @@ function accountSessionExpired(configuration, now = Date.now()) {
 }
 
 class CloudConnector {
-  constructor({ stateDir, executeRequest, executeHttpRequest = null, executeCanvasAgentRequest = null, executeMcpRequest = null, closeMcpChannels = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null, heartbeatTimeoutMs = null, helloTimeoutMs = 15_000 }) {
+  constructor({ stateDir, executeRequest, executeHttpRequest = null, executeCanvasAgentRequest = null, executeMcpRequest = null, closeMcpChannels = null, logger = null, defaultOrigin = "https://penecho.ai", capabilities = null, heartbeatTimeoutMs = null, helloTimeoutMs = 15_000, suggestionTransport = null }) {
     this.stateDir = stateDir;
     this.file = path.join(stateDir, "cloud-device.json");
     this.executeRequest = executeRequest;
@@ -186,6 +187,7 @@ class CloudConnector {
     this.cloudMcpBridge = new (require('./cloud-mcp-bridge.js').CloudMcpBridge)();
     this.logger = logger;
     this.defaultOrigin = normalizedOrigin(defaultOrigin);
+    this.suggestionTransport = suggestionTransport;
     this.helloTimeoutMs = Math.max(1, Number(helloTimeoutMs) || 15_000);
     this.capabilities = Object.freeze({ modelConfigured:Boolean(capabilities?.modelConfigured), ...(typeof executeMcpRequest === "function" ? { mcp:true } : {}), ...(typeof executeCanvasAgentRequest === "function" ? { canvasAgent:true } : {}) });
     this.configuration = this.readConfiguration();
@@ -245,6 +247,8 @@ class CloudConnector {
   }
 
   writeConfiguration(configuration) {
+    const nextOrigin = configuration?.origin && (deviceToken(configuration) || configuration.accountToken) ? normalizedOrigin(configuration.origin) : this.defaultOrigin;
+    if ((this.configuration?.origin || this.defaultOrigin) !== nextOrigin || (this.configuration?.accountToken || null) !== (configuration?.accountToken || null)) this.invalidateSuggestionStatus();
     if(!configuration?.cloudMcpEnabled||!configuration?.enabled||!configuration?.accountToken||configuration.origin!==this.configuration?.origin||deviceToken(configuration)!==deviceToken(this.configuration)||configuration.accountToken!==this.configuration?.accountToken)this.cloudMcpBridge?.close();
     if (!configuration?.origin || (!deviceToken(configuration) && !configuration.accountToken)) {
       this.configuration = null;
@@ -337,9 +341,11 @@ class CloudConnector {
     return { ...this.configuration, accountToken: token };
   }
 
-  async cloudRequest(pathname, { method = "GET", body } = {}) {
+  async cloudRequest(pathname, { method = "GET", body, signal, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS, responseTrace } = {}) {
     const configuration = this.requireCloudAccount();
-    if (!(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/share(?:\?widgetId=[0-9a-f-]{36})?$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
+    const notesRequest = method === "GET" && /^\/api\/v1\/notes(?:\?cursor=[^&#]+)?$/.test(pathname)
+      || ["GET", "PUT"].includes(method) && /^\/api\/v1\/notes\/[^/?#]+$/.test(pathname);
+    if (!notesRequest && !(/^\/api\/v1\/canvases\/[0-9a-f-]{36}\/share(?:\?widgetId=[0-9a-f-]{36})?$/i.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !(/^\/api\/v1\/mcp(?:\/(?:tokens|canvases)|\/grants\/[0-9a-f-]{36})?$/.test(pathname) && ["GET","POST","DELETE"].includes(method)) && !["/api/v1/device-sync/", "/api/v1/community/", "/api/v1/favorites"].some((prefix) => String(pathname).startsWith(prefix)) && !(method === "GET" && ["/api/v1/models", "/api/v1/credits"].includes(pathname))) throw new Error("Unsupported cloud account request.");
     let response;
     try {
       response = await fetch(`${configuration.origin}${pathname}`, {
@@ -351,12 +357,20 @@ class CloudConnector {
           ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal:AbortSignal.timeout(CLOUD_REQUEST_TIMEOUT_MS),
+        signal:signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      if (error.name === "TimeoutError") throw Object.assign(error, { status:504 });
       throw temporaryCloudError(error, configuration.origin);
     }
-    const payload = await response.json().catch(() => ({}));
+    let payload;
+    if (responseTrace) {
+      responseTrace.response(response.status);
+      const text = await response.text();
+      responseTrace.responseBody(text.split(configuration.accountToken).join("<redacted>"));
+      try { payload = JSON.parse(text); } catch { payload = {}; }
+    } else payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401) {
         if (!configuration.legacyAccountAccess) {
@@ -378,6 +392,127 @@ class CloudConnector {
     return payload;
   }
 
+  invalidateSuggestionStatus() {
+    this.suggestionStatusEpoch = (this.suggestionStatusEpoch || 0) + 1;
+    this.suggestionStatus?.controller?.abort();
+    this.suggestionStatus = null;
+  }
+
+  async suggestionRequest(suffix = "", {method=suffix==="/status"?"GET":"POST",body,signal,timeoutMs=6000,responseTrace,refresh=false} = {}) {
+    if(!["","/status","/preferences"].includes(suffix)||method!==(suffix==="/status"?"GET":"POST"))throw new Error("Unsupported suggestion request.");
+    this.expireAccountSessionIfNeeded();
+    const origin=this.configuration?.origin||this.defaultOrigin,sessionToken=this.configuration?.accountToken||null;
+    const identityCurrent=()=> (this.configuration?.accountToken||null)===sessionToken && (this.configuration?.origin||this.defaultOrigin)===origin;
+    const superseded=()=>Object.assign(new Error("The Cloud account or suggestion settings changed. Try again."),{status:409,code:"suggestion_status_superseded"});
+    this.suggestionGuests ||= (()=>{try{return JSON.parse(fs.readFileSync(path.join(this.stateDir,"suggestion-guests.json"),"utf8"));}catch{return {};}})();
+    const send=async(part,requestMethod,payload,requestSignal=signal)=>{
+      if(!identityCurrent())throw superseded();
+      const statusEpoch=part==="/status"?this.suggestionStatusEpoch:null;
+      this.suggestionTransport ||= createSuggestionTransport();
+      const response=await this.suggestionTransport.request(`${origin}/api/v1/apps/penecho-llm/suggest${part}`,{
+        method:requestMethod,redirect:"error",signal:requestSignal?AbortSignal.any([requestSignal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
+        headers:{accept:"application/json","x-penecho-client":"canvas",...(this.suggestionGuests[origin]?{"x-penecho-guest":this.suggestionGuests[origin]}:{}),
+          ...(sessionToken?{authorization:`Bearer ${sessionToken}`}:{ }),...(payload===undefined?{}:{"content-type":"application/json"})},
+        body:payload===undefined?undefined:JSON.stringify(payload),
+      });
+      const raw=await response.text();
+      if(!identityCurrent()||part==="/status"&&statusEpoch!==this.suggestionStatusEpoch)throw superseded();
+      if(part===""&&responseTrace) {
+        responseTrace.response(response.status);
+        let safe=raw;
+        for(const secret of [this.configuration?.accountToken,this.suggestionGuests[origin]])if(secret)safe=safe.split(secret).join("<redacted>");
+        responseTrace.responseBody(safe);
+      }
+      let value;try{value=JSON.parse(raw);}catch{value={};}
+      if(part==="/status"&&response.ok&&typeof value.configured!=="boolean")throw Object.assign(new Error("Cloud returned an invalid suggestion status."),{status:502,code:"invalid_suggestion_status"});
+      if(value.guestToken) {
+        this.suggestionGuests[origin]=value.guestToken;
+        if(this.stateDir){fs.mkdirSync(this.stateDir,{recursive:true});fs.writeFileSync(path.join(this.stateDir,"suggestion-guests.json"),JSON.stringify(this.suggestionGuests),{mode:0o600});}
+        delete value.guestToken;
+      }
+      if(!response.ok){let message=value.message||"PenEchoLLM is unavailable.";for(const secret of [sessionToken,this.suggestionGuests[origin]])if(secret)message=message.split(secret).join("<redacted>");const retryAfter=response.headers?.get("retry-after"),seconds=Number(retryAfter),until=retryAfter?(Number.isFinite(seconds)?Date.now()+Math.max(0,seconds)*1000:Date.parse(retryAfter)):0;throw Object.assign(new Error(message),{status:response.status,code:value.error,details:value.details,retryAfterAt:Number.isFinite(until)?until:0});}
+      return value;
+    };
+    if (suffix === "/status") {
+      signal?.throwIfAborted();
+      let entry = this.suggestionStatus;
+      if (!entry || entry.origin !== origin || entry.sessionToken !== sessionToken) {
+        this.invalidateSuggestionStatus();
+        entry = this.suggestionStatus = { origin, sessionToken, epoch:this.suggestionStatusEpoch, pending:null, controller:null, value:null, error:null, checkedAt:0, nextAt:0, retryAfterAt:0, failures:0, authRequired:false };
+      }
+      const now = Date.now(), retryUnavailable = refresh && (entry.error || entry.value?.configured === false);
+      if (!entry.pending && (now < entry.retryAfterAt || !retryUnavailable && entry.checkedAt && now < entry.checkedAt + 1000 || !refresh && (entry.authRequired || now < entry.nextAt))) {
+        if (entry.error) throw entry.error;
+        return structuredClone(entry.value);
+      }
+      if (!entry.pending) {
+        const controller = new AbortController();
+        entry.controller = controller;
+        entry.checkedAt = now;
+        const pending = send("/status", "GET", undefined, controller.signal)
+          .then(value => {
+            if (!identityCurrent() || this.suggestionStatus !== entry || entry.epoch !== this.suggestionStatusEpoch) throw superseded();
+            Object.assign(entry, { value, error:null, failures:0, authRequired:false, retryAfterAt:0, nextAt:Date.now() + (value.configured ? 30000 : 300000) });
+            return value;
+          })
+          .catch(error => {
+            if (!identityCurrent() || this.suggestionStatus !== entry || entry.epoch !== this.suggestionStatusEpoch) throw superseded();
+            const status = Number(error.status) || (error.name === "TimeoutError" ? 504 : 503), transient = status === 408 || status === 409 || status === 425 || status === 429 || status >= 500 && status !== 501;
+            error.status = status;
+            error.code ||= error.name === "TimeoutError" ? "timeout" : "unavailable";
+            entry.authRequired = status === 401 || status === 403;
+            entry.failures = transient ? entry.failures + 1 : 0;
+            entry.error = error;
+            entry.retryAfterAt = Number(error.retryAfterAt) || 0;
+            const backoff = transient ? Math.min(60000, Math.max(5000, 5000 * 2 ** Math.min(entry.failures - 1, 4) * (0.8 + Math.random() * 0.4))) : 300000;
+            entry.nextAt = Math.max(Date.now() + backoff, entry.retryAfterAt);
+            throw error;
+          })
+          .finally(() => { if (entry.pending === pending) { entry.pending = null; entry.controller = null; } });
+        entry.pending = pending;
+      }
+      // A caller may stop waiting without cancelling other windows' shared check.
+      const pending = entry.pending;
+      let abort;
+      try {
+        signal?.throwIfAborted();
+        const value = signal ? await Promise.race([pending, new Promise((_, reject) => {
+          abort = () => reject(signal.reason);
+          signal.addEventListener("abort", abort, { once:true });
+        })]) : await pending;
+        if (!identityCurrent() || this.suggestionStatus !== entry || entry.epoch !== this.suggestionStatusEpoch) throw superseded();
+        return structuredClone(value);
+      } finally { if (abort) signal.removeEventListener("abort", abort); }
+    }
+    if(!this.suggestionGuests[origin])await this.suggestionRequest("/status",{signal,timeoutMs});
+    let value;
+    try { value = await send(suffix,method,body); }
+    catch(error) {
+      if(error.code!=="trial_required") {
+        if (identityCurrent() && error.details?.access) {
+          this.invalidateSuggestionStatus();
+          this.suggestionStatus = { origin, sessionToken, epoch:this.suggestionStatusEpoch, pending:null, controller:null,
+            value:{ configured:true, model:"PenEchoLLM", access:error.details.access }, error:null, checkedAt:Date.now(), nextAt:Date.now()+30000, retryAfterAt:0, failures:0, authRequired:false };
+        }
+        throw error;
+      }
+      this.invalidateSuggestionStatus();
+      await this.suggestionRequest("/status",{signal,timeoutMs,refresh:true});
+      value = await send(suffix,method,body);
+    }
+    // Status responses can race a consumed allowance or a spending change.
+    // Reject that older check and keep only the allowance from the actual action.
+    if (suffix === "/preferences" || value.access) {
+      const cached = this.suggestionStatus?.value;
+      this.invalidateSuggestionStatus();
+      if (suffix !== "/preferences") this.suggestionStatus = {
+        origin, sessionToken, epoch:this.suggestionStatusEpoch, pending:null, controller:null,
+        value:{ ...cached, configured:true, model:"PenEchoLLM", access:value.access }, error:null, checkedAt:Date.now(), nextAt:Date.now()+30000, retryAfterAt:0, failures:0, authRequired:false,
+      };
+    }
+    return value;
+  }
+
   async refreshHostedCatalog({ force = false } = {}) {
     const configuration = this.requireCloudAccount();
     const matches = value => value?.token === configuration.accountToken && value.origin === configuration.origin;
@@ -395,9 +530,9 @@ class CloudConnector {
     finally { if (this.hostedCatalogRequest === pending) this.hostedCatalogRequest = null; }
   }
 
-  async hostedModels() {
+  async hostedModels({ refresh = false } = {}) {
     const configuration = this.requireCloudAccount();
-    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:true }), this.cloudRequest("/api/v1/credits")]);
+    const [catalog, wallet] = await Promise.all([this.refreshHostedCatalog({ force:refresh }), this.cloudRequest("/api/v1/credits")]);
     if (accountToken(this.configuration) !== configuration.accountToken || this.configuration?.origin !== configuration.origin) throw cloudSignInRequiredError("Cloud account changed. Refresh the model list.");
     return { models:catalog.models, credits:wallet.credits, origin:configuration.origin, accountId:this.account?.id || null };
   }
@@ -748,6 +883,13 @@ class CloudConnector {
     if (cursor) search.set("cursor", String(cursor));
     return this.cloudRequest(`/api/v1/favorites${search.size ? `?${search}` : ""}`);
   }
+  listNotes(cursor = "") {
+    return this.cloudRequest(`/api/v1/notes${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+  }
+  getNote(id) { return this.cloudRequest(`/api/v1/notes/${encodeURIComponent(id)}`); }
+  saveNote(id, entry, expectedVersion) {
+    return this.cloudRequest(`/api/v1/notes/${encodeURIComponent(id)}`, { method:"PUT", body:{ entry, expectedVersion } });
+  }
 
   favoriteFeed(query = {}) {
     const search = new URLSearchParams();
@@ -1056,6 +1198,8 @@ class CloudConnector {
   close() {
     this.stop();
     this.closed = true;
+    this.invalidateSuggestionStatus();
+    this.suggestionTransport?.close?.();
     clearInterval(this.accountRefreshTimer);
     this.accountRefreshTimer = null;
   }

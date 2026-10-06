@@ -1,14 +1,13 @@
 /* Read-only Canvas viewer mode.
    Activated only when html has .viewer-mode (set by viewer.js).
-   Everything interactive is hidden or made
-   pointer-transparent; only pan/zoom stays available. */
+   Editing controls are hidden or made pointer-transparent. Canvas navigation
+   forwards reading scroll gestures into maximized Widgets without enabling input. */
 
 html.viewer-mode .topbar,
 html.viewer-mode footer,
 html.viewer-mode #aiEmbodiment,
 html.viewer-mode #tourLayer,
 html.viewer-mode #textInputHint,
-html.viewer-mode #objectChromeLayer,
 html.viewer-mode #animationControls,
 html.viewer-mode .cloud-toolbar,
 html.viewer-mode #changelogLayer,
@@ -21,8 +20,11 @@ html.viewer-mode #tip,
 html.viewer-mode #canvasWelcome,
 html.viewer-mode .canvas-frame::after { display: none !important; }
 
-/* Widgets and placed content never capture the pointer: every gesture pans
-   or zooms the canvas, which is exactly what a presentation viewer needs. */
+/* A read-only selection exposes only its viewing action, never editor tools. */
+html.viewer-mode #objectChromeLayer > :not(.widget-maximize-control) { display: none !important; }
+
+/* Keep authored controls inert. Inline gestures navigate the Canvas; maximized
+   presentation forwards reading scroll gestures into the Widget host. */
 html.viewer-mode #widgetLayer iframe,
 html.viewer-mode #placedContentLayer,
 html.viewer-mode #placedContentLayer * { pointer-events: none !important; }
@@ -73,6 +75,16 @@ html.viewer-live-share .viewer-topbar { z-index: 600; }
 }
 /* Site wordmark: "Pen" regular + "Echo" bold, matching the public header. */
 .viewer-brand strong { font-weight: 700; }
+/* Pen mark: penecho-mark.png used as a mask so it always paints in the brand blue. */
+.viewer-brand-mark {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: .3em;
+  background: #2350e6;
+  -webkit-mask: url("penecho-mark.png") center / contain no-repeat;
+  mask: url("penecho-mark.png") center / contain no-repeat;
+}
 .viewer-brand:hover { opacity: 1; border-color: #d4d4d8; background: #fafafa; box-shadow: 0 6px 20px rgb(24 24 27 / .13); }
 .viewer-brand:focus-visible { outline: 3px solid rgb(37 99 235 / .32); outline-offset: 2px; }
 .viewer-brand:focus-visible { opacity: 1; }

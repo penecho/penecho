@@ -76,7 +76,7 @@
     const revision=state.userRevision,previous=session.artifacts.get(args.artifactId),textExecution=execution?.kind==="mcp"?{...execution,nextTextBoxId:state.nextTextBoxId}:execution;
     if(previous&&previous.kind!==kind)throw Error('This artifact belongs to a different tool. Use a new artifactId.');
     // An artifact keeps its original mapping even when the user later zooms.
-    const worldPerPixel=previous?(previous.worldPerPixel||1):1/(Number.isFinite(state.scale)&&state.scale>0?state.scale:1);
+    const worldPerPixel=previous?(previous.worldPerPixel||1):1/(execution?.assistContext?.scale||(Number.isFinite(state.scale)&&state.scale>0?state.scale:1));
     const old=new Map(previous?.elements||[]);
     for(const value of old.values())if(!canvasAgentObject(value.objectId))throw Error('An object in this artifact was removed. Use a new artifactId.');
     const prepared=[];let scene;
@@ -114,7 +114,7 @@
       }
     }
     canvasAgentAssertRevision(revision);canvasAgentMutationIdle(execution);
-    const worldBounds=mcpPrimitiveWorldBox(scene.bounds,worldPerPixel),plan=previous?null:mcpPlanPlacement(worldBounds.w,worldBounds.h,session,mcpPresentation(args,previous)),origin=previous?.origin||{x:plan.placement.x-worldBounds.x,y:plan.placement.y-worldBounds.y},elements=new Map(),records=[];
+    const worldBounds=mcpPrimitiveWorldBox(scene.bounds,worldPerPixel),plan=previous?null:mcpPlanPlacement(worldBounds.w,worldBounds.h,session,mcpPresentation(args,previous),execution),origin=previous?.origin||{x:plan.placement.x-worldBounds.x,y:plan.placement.y-worldBounds.y},elements=new Map(),records=[];
     for(const item of prepared){
       const former=old.get(item.id),object=former&&canvasAgentObject(former.objectId),box=mcpPrimitiveWorldBox(item.box,worldPerPixel,origin);
       if(object&&(kind==='plot'||item.preserveFrame))Object.assign(box,canvasAgentBox(object));
@@ -126,6 +126,7 @@
     for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('Canvas object limit reached. Remove unused objects before drawing.');
     // Prepare fully before one synchronous history transaction; never mark AI output as user feedback.
     if(textExecution?.kind==="mcp")state.nextTextBoxId=Math.max(state.nextTextBoxId,textExecution.nextTextBoxId);
+    const restoreMutation=canvasAgentBeginMutation(execution,[...old.values()].map(item=>item.objectId));try {
     save();state.textBoxHistoryBefore=textBoxHistoryState();state.imageHistoryBefore=imageHistoryState();
     for(const key of ['textBoxes','images'])state[key]=state[key].filter(item=>!removed.has(item.id));
     for(const item of records){if(item.object)Object.assign(item.object.item,item.record);else state[item.kind==='text'?'textBoxes':'images'].push(item.record);}
@@ -137,5 +138,6 @@
     state.userRevision++;save();requestRender();canvasAgentSyncState();
     const presentation=mcpPresentation(args,previous);
     for(const item of records.filter(item=>!item.object||presentation.attention==='request'))mcpQueueView(session,item.record,presentation);
-    return {artifactId:args.artifactId,objectId:objectIds[0],objectIds,kind,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence};
+    return {artifactId:args.artifactId,objectId:objectIds[0],objectIds,kind,revision:state.userRevision,feedbackCursor:mcpRuntime.feedbackSequence,box:mcpTaskBounds(session,objectIds),sourcePlacement:mcpSourcePlacement(execution?.assistContext,mcpTaskBounds(session,objectIds),32/(execution?.assistContext?.scale||state.scale))};
+    }finally{restoreMutation();}
   }

@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const MAX_HTML_LENGTH = 200000,
+    MAX_NOTE_HTML_LENGTH = 700000,
     MAX_PLUGIN_STYLES_LENGTH = 32000,
     MAX_SNAPSHOT_DIMENSION = 2400,
     MAX_SNAPSHOT_PIXELS = 4800000,
@@ -11,6 +12,7 @@
     MAX_HIGH_RESOLUTION_SNAPSHOT_DATA_URL_LENGTH = 64 * 1024 * 1024,
     SNAPSHOT_REQUEST_TIMEOUT_MS = 18000,
     UPDATE_FORWARD_INTERVAL_MS = 2000,
+    SNAPSHOT_LOAD_GRACE_MS = 4000,
     PUBLIC_FETCH_MAX_URL_LENGTH = 16 * 1024,
     accessSession = (() => {
       const value = new URL(location.href).searchParams.get("access-session") || "";
@@ -34,6 +36,17 @@
     workflowRuntimeUrl = new URL("workflow-runtime.js?v=aaa58af15792", location.href).href,
     sequenceRuntimeUrl = new URL("sequence-runtime.js?v=b06af01842e3", location.href).href,
     architectureWorkerUrl = new URL("architecture-worker.js?v=07e7dc2773da", location.href).href,
+    // Host-rendered scenes: the model writes a small scene source; these pinned
+    // MIT engines render it. Only the engine a scene needs is loaded.
+    sceneSpecUrl = new URL("scene-spec.js?v=2", location.href).href,
+    sceneRuntimeUrl = new URL("scene-runtime.js?v=2", location.href).href,
+    sceneEngineUrls = Object.freeze({
+      motion:new URL("scene-vendor/anime.js?v=4.5.0", location.href).href,
+      physics:new URL("scene-vendor/matter.js?v=0.20.0", location.href).href,
+      "3d":new URL("scene-vendor/zdog.js?v=1.1.3", location.href).href,
+      // Rigged user ink renders with plain SVG; no vendor engine is needed.
+      puppet:"",
+    }),
     remoteCanvas = new URL(location.href).searchParams.get("remote-canvas") === "1",
     snapshotDebugEnabled = remoteCanvas && (() => {
       try {
@@ -48,15 +61,35 @@
     inner = document.createElement("iframe");
   let mcpProgressState = null;
   let widgetLanguage = "en";
+  let widgetSourceFormat = "";
+  let nativeGraph = false;
   let initialized = false,
     lastUpdate = 0,
+    trailingUpdateTimer = 0,
     forwardedDragPointer = null,
     queuedDragMove = null,
     dragMoveFrame = 0,
     runtimeVersion = 0,
     innerDocumentReady = false,
+    innerCaptureBridgeReady = false,
+    // The inner window's load event: images, fonts and scripts have settled.
+    innerDocumentLoaded = false,
     widgetState = { selected:false, active:true, maximized:false, navigationLocked:false, scaleX:1, scaleY:1 };
   const pendingSnapshots = new Map();
+  // Authored General HTML imports pinned three.js from jsDelivr, so copied HTML stays
+  // standalone. Inside PenEcho the import map points those URLs at this server's copy, so
+  // widgets work offline and never depend on the CDN. The module build loads its core
+  // (build/three.core.min.js) relatively from the same place.
+  const threeCdnBase = "https://cdn.jsdelivr.net/npm/three@0.184.0/",
+    threeLocalBase = new URL("widget-vendor/three@0.184.0/", location.href).href,
+    // Authored path -> served URL; the minified module is the same build as the readable one.
+    threeServedUrls = Object.freeze({
+      "build/three.module.js":`${threeLocalBase}build/three.module.min.js`,
+      "build/three.module.min.js":`${threeLocalBase}build/three.module.min.js`,
+      "examples/jsm/controls/OrbitControls.js":`${threeLocalBase}examples/jsm/controls/OrbitControls.js`,
+      "examples/jsm/renderers/CSS2DRenderer.js":`${threeLocalBase}examples/jsm/renderers/CSS2DRenderer.js`,
+    }),
+    threeScriptSources = Object.freeze([...new Set(Object.values(threeServedUrls)), `${threeLocalBase}build/three.core.min.js`]);
 
   function widgetRendererUrl() {
     const value = document.querySelector('meta[name="penecho-widget-renderer-version"]')?.getAttribute("content") || "",
@@ -84,6 +117,13 @@
   inner.addEventListener("load", forwardWidgetState);
   inner.addEventListener("load", () => snapshotDebugLog("inner-frame-load"));
   document.body.append(inner);
+  // Explicit activation initially focuses this host iframe. Escape must work
+  // before the user clicks through into the authored inner document as well.
+  addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented || !widgetState.interactive) return;
+    event.preventDefault();
+    parent.postMessage({ type:"penecho-widget-exit-interaction" }, parentOrigin);
+  });
   snapshotDebugLog("host-start");
   function runtime(runtimeVersion, scienceMode = false, domRendererUrl = "", snapshotDebugEnabled = false, snapshotDebugId = "", mcpPreviewMode = false) {
     const UPDATED = "penecho-widget-updated",
@@ -1012,12 +1052,27 @@
     }
     let activeSnapshot = null, activeSnapshotRender = null;
     async function snapshot(message) {
-      if(activeSnapshot || activeSnapshotRender) {
-        parent.postMessage({type:"penecho-widget-snapshot-error",runtimeVersion,requestId:message.requestId,
-          code:"WIDGET_RENDER_BUSY",error:"The previous Widget capture is still finishing. Wait for it before retrying.",
-          details:{stage:activeSnapshotRender?"render-draining":"snapshot",runtimeVersion}},"*");
-        return;
+      // Captures are serialized. A request that arrives while an earlier
+      // render is still draining (for example after its caller gave up) waits
+      // for it within its own budget instead of failing immediately.
+      const queuedAt = clock(), budgetMs = Math.max(500, Math.min(17500, Number(message.timeoutMs) || 17500));
+      while(activeSnapshot || activeSnapshotRender) {
+        const waitMs = budgetMs - (clock() - queuedAt) - 750;
+        if(waitMs <= 0) {
+          parent.postMessage({type:"penecho-widget-snapshot-error",runtimeVersion,requestId:message.requestId,
+            code:"WIDGET_RENDER_BUSY",error:"The previous Widget capture is still finishing. Wait for it before retrying.",
+            details:{stage:activeSnapshotRender?"render-draining":"snapshot",runtimeVersion}},"*");
+          return;
+        }
+        snapshotDebugLog("snapshot-request-queued", { requestId:message.requestId, waitMs:Math.round(waitMs) });
+        let timer = 0;
+        await Promise.race([
+          Promise.allSettled([activeSnapshot, activeSnapshotRender].filter(Boolean)),
+          new Promise(resolve => { timer = setTimeout(resolve, waitMs); }),
+        ]);
+        clearTimeout(timer);
       }
+      if(clock() - queuedAt > 1) message = { ...message, timeoutMs:Math.max(500, budgetMs - (clock() - queuedAt)) };
       const hooks = globalThis.__penechoScienceSnapshotHooks;
       snapshotDebugLog("snapshot-request-received", {
         requestId:message.requestId,
@@ -1025,7 +1080,7 @@
         scienceHooks:Boolean(scienceMode && hooks),
         rendererAvailable:typeof globalThis.html2canvas === "function",
       });
-      const operation = scienceMode && hooks ? scienceSnapshot(message, hooks) : snapshotDocument(message, false);
+      const operation = scienceMode && hooks && !message.currentFrame ? scienceSnapshot(message, hooks) : snapshotDocument(message, false);
       activeSnapshot = operation;
       try { return await operation; }
       finally { if(activeSnapshot===operation)activeSnapshot=null; reportPresentationScrollExtent(); }
@@ -1076,7 +1131,8 @@
     }
     async function snapshotDocument(message, requirePresentedFrame = false) {
       let restoreSvgStyles = () => {},
-        restoreCompatibleColors = () => {};
+        restoreCompatibleColors = () => {},
+        restoreGraphLayout = () => {};
       const snapshotStartedAt = clock();
       let stage="presented-frame";
       try {
@@ -1099,23 +1155,26 @@
         // animation frames here can blank maps and canvases for the whole save.
         // OOPIF resize delivery may follow a source-update message. Capture the
         // requested responsive layout only after the actual iframe viewport agrees.
-        if (mcpPreviewMode) await waitForSnapshotViewport(requestedWidth, requestedHeight, timeoutMs);
+        if (mcpPreviewMode || message.waitForViewport === true) await waitForSnapshotViewport(requestedWidth, requestedHeight, timeoutMs);
         const presentedFrame = await settleSnapshotFrame();
         if (requirePresentedFrame && !presentedFrame) throw Error("Widget frame was not presented");
-        if (typeof globalThis.__penechoArchitectureWhenSettled === "function") {
+        if (!message.currentFrame && typeof globalThis.__penechoArchitectureWhenSettled === "function") {
           stage = "architecture-layout";
           await withTimeout(globalThis.__penechoArchitectureWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
-        if (typeof globalThis.__penechoWorkflowWhenSettled === "function") {
+        if (!message.currentFrame && typeof globalThis.__penechoWorkflowWhenSettled === "function") {
           stage = "workflow-layout";
           await withTimeout(globalThis.__penechoWorkflowWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
-        if (typeof globalThis.__penechoSequenceWhenSettled === "function") {
+        if (!message.currentFrame && typeof globalThis.__penechoSequenceWhenSettled === "function") {
           stage = "sequence-layout";
           await withTimeout(globalThis.__penechoSequenceWhenSettled(), Math.max(1,timeoutMs-(clock()-snapshotStartedAt)));
         }
         const viewportWidth = requestedWidth, viewportHeight = requestedHeight;
         if (message.fullContent === true) {
+          if (typeof globalThis.__penechoPrepareGraphSnapshot === "function") {
+            restoreGraphLayout = globalThis.__penechoPrepareGraphSnapshot();
+          }
           const root = document.documentElement, body = document.body;
           requestedWidth = Math.ceil(Math.max(requestedWidth, root.scrollWidth, body?.scrollWidth || 0));
           requestedHeight = Math.ceil(Math.max(requestedHeight, root.scrollHeight, body?.scrollHeight || 0));
@@ -1215,11 +1274,12 @@
         try {
           restoreCompatibleColors();
         } finally {
-          restoreSvgStyles();
+          try { restoreSvgStyles(); }
+          finally { restoreGraphLayout(); }
         }
       }
     }
-    // Compatibility for canvases saved while the retired Fit to content action was available.
+    // Expand scrolling containers for edge double-clicks and initial automatic height fitting.
     let fitContentStyle = null;
     const fitContentElements = new Map();
     function restoreFitContentMarkers() {
@@ -1230,6 +1290,9 @@
       fitContentElements.clear();
     }
     function setFitContentLayout(enabled, refresh = false) {
+      // Host scenes use a full-height stage with positioned SVG/canvas content.
+      // Preserve that viewport even for saved scenes with legacy Fit markers.
+      if (document.querySelector("script[type='application/json'][data-penecho-scene]")) enabled = false;
       if (!enabled) {
         if (fitContentStyle) fitContentStyle.disabled = true;
         restoreFitContentMarkers();
@@ -1275,6 +1338,35 @@
       const css = rules.join("\n");
       if (fitContentStyle.textContent !== css) fitContentStyle.textContent = css;
       fitContentStyle.disabled = false;
+    }
+    async function fitWidgetContent(request) {
+      const { requestId, hit, automatic } = request;
+      if (automatic && document.fonts?.ready) {
+        let timer;
+        try { await Promise.race([document.fonts.ready, new Promise(resolve => { timer = setTimeout(resolve, 1000); })]); }
+        finally { clearTimeout(timer); }
+      }
+      const previousState = { ...widgetState }, previous = widgetState.fitContent ? "resize" : widgetState.fitContentAxes;
+      widgetState.fitContentAxes = previous && previous !== hit ? "resize" : hit;
+      setFitContentLayout(true, true);
+      const body = document.body, root = document.documentElement;
+      let width = Math.max(root.clientWidth, root.scrollWidth, body.scrollWidth);
+      // Root clientHeight/scrollHeight have a viewport-height floor. Its auto-
+      // sized box includes body and collapsed margins without feeding that
+      // floor back into the next layout or missing the body's bottom margin.
+      let height = automatic ? Math.max(root.offsetHeight, root.getBoundingClientRect().bottom + scrollY,
+        body.offsetHeight, body.scrollHeight, body.getBoundingClientRect().bottom + scrollY)
+        : Math.max(root.clientHeight, root.scrollHeight, body.scrollHeight);
+      for (const element of body.querySelectorAll("*")) {
+        const rect = element.getBoundingClientRect();
+        width = Math.max(width, rect.right + scrollX);
+        height = Math.max(height, rect.bottom + scrollY);
+      }
+      if (automatic) {
+        widgetState = previousState;
+        setFitContentLayout(Boolean(widgetState.fitContent || widgetState.fitContentAxes), true);
+      }
+      parent.postMessage({ type:"penecho-widget-fit-result", requestId, width:Math.ceil(width), height:Math.max(1, Math.ceil(height)) }, "*");
     }
     let presentationScrollStyle = null, presentationScrollObserver = null, presentationScrollMutations = null;
     let presentationScrollFrame = 0, presentationScrollKey = "", presentationScrollTarget = null;
@@ -1337,6 +1429,25 @@
       }
       return false;
     }
+    function scrollViewerAtPoint(message) {
+      const { x, y, dx, dy } = message;
+      if (!widgetState.maximized || activeSnapshot || activeSnapshotRender || ![x, y, dx, dy].every(Number.isFinite)
+        || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight || Math.abs(dx) > 100000 || Math.abs(dy) > 100000) return false;
+      const root = document.scrollingElement || document.documentElement;
+      for (let element = document.elementFromPoint(x, y); element; element = element.parentElement) {
+        const style = getComputedStyle(element), page = element === root,
+          vertical = dy && element.scrollHeight > element.clientHeight + 1
+            && (page ? !/^(hidden|clip)$/.test(style.overflowY) : /^(auto|scroll)$/.test(style.overflowY)),
+          horizontal = dx && element.scrollWidth > element.clientWidth + 1
+            && (page ? !/^(hidden|clip)$/.test(style.overflowX) : /^(auto|scroll)$/.test(style.overflowX));
+        if (!vertical && !horizontal) continue;
+        element.scrollBy({ left:horizontal ? dx : 0, top:vertical ? dy : 0, behavior:"instant" });
+        // Keep a reading gesture on its scroll owner at either boundary.
+        // The frame stays inert, so this cannot activate authored controls.
+        return true;
+      }
+      return false;
+    }
     addEventListener("wheel", event => {
       if (!widgetState.maximized || event.defaultPrevented || event.ctrlKey || event.metaKey) return;
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
@@ -1363,7 +1474,7 @@
     addEventListener("keydown", event => {
       if (!widgetState.maximized || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
         || !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)
-        || event.target?.closest?.("input,textarea,select,button,[contenteditable],[role=slider],[role=spinbutton]")) return;
+        || event.target?.closest?.("input,textarea,select,button,[contenteditable],[role=button],[role=slider],[role=spinbutton]")) return;
       if (nestedPresentationScroller(event.target, 0, ["ArrowUp", "PageUp", "Home"].includes(event.key) || event.shiftKey ? -1 : 1)) return;
       event.preventDefault();
       parent.postMessage({ type:"penecho-widget-presentation-scroll", runtimeVersion, action:"key", key:event.key, shift:event.shiftKey }, "*");
@@ -1384,8 +1495,36 @@
       setPresentationScrolling(widgetState.maximized);
     }
     addEventListener("load", () => setPresentationLayout());
+    function setNoteImageInteraction() {
+      if (!document.querySelector('meta[name="penecho-note-card"]')) return;
+      const enabled = widgetState.maximized && widgetState.interactive;
+      document.querySelectorAll(".nc-ink img,.nc-image img").forEach(image => {
+        if (enabled) {
+          image.setAttribute("role", "button"); image.tabIndex = 0;
+          image.title = document.documentElement.lang.startsWith("zh") ? "点击放大查看" : "Click to enlarge";
+        } else { image.removeAttribute("role"); image.removeAttribute("tabindex"); image.removeAttribute("title"); }
+      });
+    }
+    function openNoteImage(event) {
+      if (!widgetState.maximized || !widgetState.interactive || !document.querySelector('meta[name="penecho-note-card"]')) return;
+      const image = event.target?.closest?.(".nc-ink img,.nc-image img");
+      if (!image || event.type === "keydown" && !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      const index = [...document.querySelectorAll(".nc-ink img,.nc-image img")].indexOf(image);
+      parent.postMessage({type:"penecho-note-image-open",runtimeVersion,index}, "*");
+    }
+    addEventListener("load", setNoteImageInteraction);
+    addEventListener("click", openNoteImage);
+    addEventListener("keydown", openNoteImage);
     addEventListener("message", (event) => {
       if (event.source !== parent) return;
+      if (event.data?.type === "penecho-widget-viewer-scroll") {
+        const message = event.data;
+        if (typeof message.requestId !== "string" || !/^viewer-scroll-\d+$/.test(message.requestId) || message.requestId.length > 64) return;
+        const handled = scrollViewerAtPoint(message);
+        parent.postMessage({ type:"penecho-widget-viewer-scroll-result", runtimeVersion, requestId:message.requestId, handled }, "*");
+        return;
+      }
       if (event.data?.type === "penecho-widget-presentation-scroll-to") {
         const {left, top} = event.data;
         if (!widgetState.maximized || ![left, top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) return;
@@ -1410,18 +1549,7 @@
       } else if (event.data?.type === "penecho-widget-fit-request") {
         const { requestId, hit } = event.data;
         if (typeof requestId !== "string" || requestId.length > 128 || !["width", "height", "resize"].includes(hit)) return;
-        const previous = widgetState.fitContent ? "resize" : widgetState.fitContentAxes;
-        widgetState.fitContentAxes = previous && previous !== hit ? "resize" : hit;
-        setFitContentLayout(true, true);
-        const body = document.body, root = document.documentElement;
-        let width = Math.max(root.clientWidth, root.scrollWidth, body.scrollWidth);
-        let height = Math.max(root.clientHeight, root.scrollHeight, body.scrollHeight);
-        for (const element of body.querySelectorAll("*")) {
-          const rect = element.getBoundingClientRect();
-          width = Math.max(width, rect.right + scrollX);
-          height = Math.max(height, rect.bottom + scrollY);
-        }
-        parent.postMessage({ type:"penecho-widget-fit-result", requestId, width:Math.ceil(width), height:Math.ceil(height) }, "*");
+        void fitWidgetContent({ requestId, hit, automatic:event.data.automatic === true });
       } else if (event.data?.type === "penecho-widget-snapshot-request") void snapshot(event.data);
       else if (event.data?.type === "penecho-widget-state" && typeof event.data.selected === "boolean" && typeof event.data.active === "boolean"
         && Number.isFinite(event.data.scaleX) && event.data.scaleX > 0 && Number.isFinite(event.data.scaleY) && event.data.scaleY > 0) {
@@ -1430,6 +1558,7 @@
         const viewportWidth = Number.isFinite(event.data.viewportWidth) && event.data.viewportWidth > 0 && event.data.viewportWidth <= 100000 ? event.data.viewportWidth : undefined;
         widgetState = { fitContent:event.data.fitContent === true, fitContentAxes:event.data.fitContentAxes, maximized:event.data.maximized === true, viewportWidth, selected:event.data.selected, interactive:Boolean(event.data.interactive), active:event.data.active, navigationLocked:Boolean(event.data.navigationLocked), scaleX:event.data.scaleX, scaleY:event.data.scaleY };
         setPresentationLayout(layoutChanged);
+        setNoteImageInteraction();
         widgetStateReceived = true;
         if (!widgetState.selected) setControlCursor();
         setRuntimeActive(widgetState.active);
@@ -1442,6 +1571,9 @@
       }
     });
     addEventListener("load", notifyReady, { once: true });
+    // The lasso captures what is already visible. Its bridge is ready before
+    // authored scripts, data, layout hooks, and the document load finish.
+    parent.postMessage({ type:"penecho-widget-capture-bridge-ready", runtimeVersion }, "*");
   }
 
   function snapshotError(requestId, message = "Widget snapshot failed", code = "WIDGET_CAPTURE_FAILED", details = {}) {
@@ -1453,6 +1585,7 @@
       durationMs:request ? Number((performance.now() - request.startedAt).toFixed(1)) : null,
     });
     clearTimeout(request?.timer);
+    clearTimeout(request?.loadTimer);
     pendingSnapshots.delete(requestId);
     const error = String(message || "Widget snapshot failed").replace(/[\r\n\t]+/g, " ").slice(0, 300);
     console.warn("PenEcho widget snapshot failed:", error);
@@ -1463,13 +1596,32 @@
   }
 
   function forwardSnapshotRequest(requestId, request) {
-    if (!innerDocumentReady || request.forwarded) {
+    if (!(request.currentFrame ? innerCaptureBridgeReady : innerDocumentReady) || request.forwarded) {
       snapshotDebugLog("snapshot-forward-deferred", {
         requestId,
         reason:request.forwarded ? "already-forwarded" : "inner-not-ready",
       });
       return;
     }
+    if (!request.currentFrame && !innerDocumentLoaded) {
+      // A capture taken before the load event can miss images and web fonts,
+      // and the load notification would then invalidate it. Wait for load, but
+      // never let a stuck resource consume the whole capture budget.
+      request.readyAt ??= performance.now();
+      const grace = Math.min(SNAPSHOT_LOAD_GRACE_MS, request.timeoutMs * 0.35), waited = performance.now() - request.readyAt;
+      if (waited < grace) {
+        if (!request.loadTimer) request.loadTimer = setTimeout(() => {
+          request.loadTimer = 0;
+          if (pendingSnapshots.get(requestId) === request) forwardSnapshotRequest(requestId, request);
+        }, Math.ceil(grace - waited) + 5);
+        snapshotDebugLog("snapshot-forward-deferred", { requestId, reason:"inner-not-loaded" });
+        return;
+      }
+      snapshotDebugLog("snapshot-load-grace-expired", { requestId, waitedMs:Math.round(waited) });
+    }
+    clearTimeout(request.loadTimer);
+    request.loadTimer = 0;
+    request.forwardedAfterLoad = innerDocumentLoaded;
     const remainingMs=request.timeoutMs-(performance.now()-request.startedAt)-250;
     if(remainingMs<500){snapshotError(requestId,"Widget snapshot readiness exhausted the capture budget","WIDGET_READY_TIMEOUT");return;}
     request.forwarded = true;
@@ -1485,6 +1637,8 @@
       timeoutMs:remainingMs,
       highResolution:request.highResolution,
       fullContent:request.fullContent,
+      currentFrame:request.currentFrame,
+      waitForViewport:request.waitForViewport,
     }, "*");
   }
 
@@ -1559,16 +1713,19 @@
     return html.replace(/penecho-asset:[a-f0-9]{64}/g,ref=>{const source=resolved.get(ref);if((expanded+=source.length-ref.length)>16000000)throw Error("Widget image expansion exceeds the supported limit");return source;});
   }
 
-  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false, workflowMode = false) {
+  function csp(allowNestedFrames = false, scienceMode = false, architectureMode = false, sequenceMode = false, workflowMode = false, inkMode = false, sceneEngine = "", threeMode = false) {
     const frameSource = allowNestedFrames ? "frame-src 'self' data: blob:" : "frame-src 'none'";
     const scriptSources = [rendererUrl, visualExplainerVendorUrl, visualExplainerRuntimeUrl, new URL("playground/liveclay-v1.js", location.href).href]
       .concat(scienceMode ? [visualExplorerManimWebUrl, visualExplorerManimMathJaxUrl] : [])
       .concat(architectureMode ? [architectureRuntimeUrl, architectureWorkerUrl] : [])
       .concat(sequenceMode ? [sequenceRuntimeUrl] : [])
       .concat(workflowMode ? [workflowRuntimeUrl, architectureWorkerUrl] : [])
+      .concat(inkMode ? [new URL("ink-lab-vendor.js", location.href).href] : [])
+      .concat(sceneEngine && Object.hasOwn(sceneEngineUrls, sceneEngine) ? [sceneSpecUrl, sceneRuntimeUrl, sceneEngineUrls[sceneEngine]].filter(Boolean) : [])
+      .concat(threeMode ? threeScriptSources : [])
       .map(url => url.replace(/[?#].*$/, ""))
       .join(" ");
-    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
+    return `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: ${scriptSources}; style-src 'unsafe-inline' https:; connect-src https:${inkMode ? " " + new URL("ink-lab-vendor.js", location.href).href : ""}; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; ${frameSource}; worker-src blob: https:; object-src 'none'; form-action 'none'; base-uri 'none'`;
   }
 
   function visualExplainerAllowsNestedFrames(planElement) {
@@ -1845,6 +2002,26 @@
     return String(value || "").toLowerCase().startsWith("zh") ? "zh" : "en";
   }
 
+  // Returns the import map with the pinned jsDelivr three.js URLs pointed at servedUrls, or null
+  // when the widget maps "three" to another build, so one widget never mixes two copies.
+  function threeImportMap(authored, cdnBase, servedUrls) {
+    const imports = { ...(authored?.imports || {}) },
+      served = (value) => typeof value === "string" && value.startsWith(cdnBase) ? servedUrls[value.slice(cdnBase.length)] : undefined;
+    if (imports.three !== undefined && !served(imports.three)) return null;
+    for (const [key, value] of Object.entries(imports)) {
+      if (served(value)) imports[key] = served(value);
+      else if (typeof value === "string" && key.endsWith("/") && value.endsWith("/") && value.startsWith(cdnBase)) {
+        // A prefix such as "three/addons/" keeps the CDN for other addons; the served ones win.
+        const prefix = value.slice(cdnBase.length);
+        for (const file of Object.keys(servedUrls)) if (file.startsWith(prefix)) imports[key + file.slice(prefix.length)] = servedUrls[file];
+      }
+    }
+    // Direct URL imports and the addons' own `import ... from "three"` resolve here too.
+    for (const [file, url] of Object.entries(servedUrls)) imports[cdnBase + file] = url;
+    imports.three = servedUrls["build/three.module.js"];
+    return { ...authored, imports };
+  }
+
   function widgetDocument(html, pluginStyles = "", documentVersion = 0, sourceFormat = "", frameworkVersion = "", language = "en") {
     const parsed = new DOMParser().parseFromString(html, "text/html");
     language = normalizeWidgetLanguage(language);
@@ -1893,6 +2070,9 @@
     const sequenceMode = !!parsed.querySelector("[data-penecho-sequence] script[type='application/json'][data-sequence-source]");
     const workflowMode = !!parsed.querySelector("[data-penecho-workflow] script[type='application/json'][data-workflow-source]");
     const localDiagrams = [architectureMode ? "architecture" : null, sequenceMode ? "sequence" : null, workflowMode ? "workflow" : null].filter(Boolean);
+    const sceneSource = parsed.querySelector("script[type='application/json'][data-penecho-scene]"),
+      requestedSceneEngine = parsed.querySelector("[data-penecho-scene-engine]")?.getAttribute("data-penecho-scene-engine") || "motion",
+      sceneEngine = sceneSource ? (Object.hasOwn(sceneEngineUrls, requestedSceneEngine) ? requestedSceneEngine : "motion") : "";
     const loadingCopy = language === "zh"
       ? {architecture:"正在布局架构图…",sequence:"正在布局时序图…",workflow:"正在布局流程图…"}
       : {architecture:"Laying out architecture diagram…",sequence:"Laying out sequence diagram…",workflow:"Laying out workflow…"};
@@ -1900,10 +2080,25 @@
       const loading=parsed.querySelector(`[data-penecho-${kind}] > p[role="status"]`);
       if(loading)loading.textContent=loadingCopy[kind];
     }
-    inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${localDiagrams.length ? " allow-downloads" : ""}`);
+    let threeServed = false;
+    if (html.includes(threeCdnBase)) {
+      const authoredMap = parsed.querySelector("script[type='importmap']");
+      let authored = {};
+      try { authored = authoredMap ? JSON.parse(authoredMap.textContent || "{}") : {}; } catch { authored = null; }
+      const importMap = authored && typeof authored === "object" && !Array.isArray(authored) && threeImportMap(authored, threeCdnBase, threeServedUrls);
+      if (importMap) {
+        const element = authoredMap || parsed.createElement("script");
+        element.type = "importmap";
+        element.textContent = JSON.stringify(importMap);
+        // An import map only applies when it precedes every module script.
+        if (!authoredMap) parsed.head.prepend(element);
+        threeServed = true;
+      }
+    }
+    inner.setAttribute("sandbox", `allow-scripts allow-popups allow-popups-to-escape-sandbox${localDiagrams.length || sourceFormat === "penecho-living-ink" ? " allow-downloads" : ""}`);
     const policy = parsed.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
-    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode, sequenceMode, workflowMode);
+    policy.content = csp(visualExplainerAllowsNestedFrames(visualPlan), scienceMode, architectureMode, sequenceMode, workflowMode, sourceFormat === "penecho-living-ink", sceneEngine, threeServed);
     parsed.head.prepend(policy);
     const viewport = parsed.createElement("meta");
     viewport.name = "viewport";
@@ -1947,6 +2142,19 @@
       const visualRuntime = parsed.createElement("script");
       visualRuntime.src = visualExplainerRuntimeUrl;
       parsed.body.append(visualRuntime);
+    }
+    if (sourceFormat === "penecho-living-ink") {
+      const inkUrl = new URL("ink-lab-vendor.js", location.href).href;
+      const inkConfig = parsed.createElement("script");inkConfig.textContent = `globalThis.PENECHO_INK_VENDOR_URL=${JSON.stringify(inkUrl)}`;parsed.head.append(inkConfig);
+      const inkVendor = parsed.createElement("script");inkVendor.src = inkUrl;
+      parsed.head.append(inkVendor);
+    }
+    if (sceneEngine) {
+      for (const url of [sceneSpecUrl, sceneEngineUrls[sceneEngine], sceneRuntimeUrl].filter(Boolean)) {
+        const script = parsed.createElement("script");
+        script.src = url;
+        parsed.body.append(script);
+      }
     }
     const renderer = parsed.createElement("script");
     renderer.src = rendererUrl;
@@ -2076,6 +2284,12 @@
     if (receiveParentPublicFetch(event) || respondToWidgetHostProbe(event)) return;
     const message = event.data;
     if (event.source === parent && event.origin === parentOrigin) {
+      if (message?.type === "penecho-widget-viewer-scroll" && typeof message.requestId === "string"
+        && /^viewer-scroll-\d+$/.test(message.requestId) && message.requestId.length <= 64
+        && [message.x, message.y, message.dx, message.dy].every(value => Number.isFinite(value) && Math.abs(value) <= 100000)) {
+        inner.contentWindow?.postMessage(message, "*");
+        return;
+      }
       if (message?.type === "penecho-widget-presentation-scroll-to" && widgetState.maximized
         && [message.left, message.top].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
         inner.contentWindow?.postMessage(message, "*");
@@ -2083,14 +2297,20 @@
       }
       if (message?.type === "penecho-widget-init") {
         mcpProgressState = null;
-        if (typeof message.html !== "string" || message.html.length > MAX_HTML_LENGTH) return;
+        if (typeof message.html !== "string" || message.html.length > (message.sourceFormat === "penecho-note-card+json" ? MAX_NOTE_HTML_LENGTH : MAX_HTML_LENGTH)) return;
         if (message.pluginStyles !== undefined && (typeof message.pluginStyles !== "string" || message.pluginStyles.length > MAX_PLUGIN_STYLES_LENGTH)) return;
         snapshotDebugLog("init-received", { nextRuntimeVersion:runtimeVersion + 1, htmlLength:message.html.length });
         for (const requestId of [...pendingSnapshots.keys()]) snapshotError(requestId, "Widget changed during snapshot", "WIDGET_CONTENT_CHANGED");
+        clearTimeout(trailingUpdateTimer);
+        trailingUpdateTimer = 0;
         initialized = true;
+        widgetSourceFormat = message.sourceFormat || "";
+        nativeGraph = message.html.includes('<meta name="penecho-graph-version" content="2">');
         widgetLanguage = normalizeWidgetLanguage(message.language);
         runtimeVersion++;
         innerDocumentReady = false;
+        innerCaptureBridgeReady = false;
+        innerDocumentLoaded = false;
         inner.title = String(message.title || "Dynamic canvas widget").slice(0, 120);
         parent.postMessage({ type:"penecho-widget-runtime-diagnostics", errors:[], truncated:false }, parentOrigin);
         let imageHtml;
@@ -2099,8 +2319,12 @@
         inner.removeAttribute("src");
         inner.srcdoc = documentSource;
         snapshotDebugLog("inner-srcdoc-assigned", { documentLength:documentSource.length });
+      } else if (message?.type === "penecho-scene-control" && ["replay", "play", "pause", "toggle"].includes(message.action)) {
+        inner.contentWindow?.postMessage({ type:"penecho-scene-control", action:message.action }, "*");
       } else if (message?.type === "penecho-liveclay-update" && message.document?.version === 1 && JSON.stringify(message.document).length <= 100000) {
         inner.contentWindow?.postMessage(message,"*");
+      } else if (message?.type === "penecho-living-ink-saved" && widgetSourceFormat === "penecho-living-ink") {
+        inner.contentWindow?.postMessage(message, "*");
       } else if (message?.type === "penecho-widget-language") {
         widgetLanguage = normalizeWidgetLanguage(message.language);
         inner.contentWindow?.postMessage({type:"penecho-diagram-language",language:widgetLanguage},"*");
@@ -2114,7 +2338,13 @@
         forwardWidgetState();
       } else if (message?.type === "penecho-widget-fit-request") {
         if (typeof message.requestId !== "string" || message.requestId.length > 128 || !["width", "height", "resize"].includes(message.hit)) return;
-        inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, hit:message.hit }, "*");
+        inner.contentWindow?.postMessage({ type:message.type, requestId:message.requestId, hit:message.hit, automatic:message.automatic === true }, "*");
+      } else if (message?.type === "penecho-widget-snapshot-current-frame") {
+        const request = pendingSnapshots.get(message.requestId);
+        if (request && !request.forwarded) {
+          request.currentFrame = true;
+          forwardSnapshotRequest(message.requestId, request);
+        }
       } else if (message?.type === "penecho-widget-snapshot-request") {
         const requestedWidth = Number(message.width), requestedHeight = Number(message.height),
           timeoutMs = Math.max(1000, Math.min(SNAPSHOT_REQUEST_TIMEOUT_MS, Number(message.timeoutMs) || SNAPSHOT_REQUEST_TIMEOUT_MS));
@@ -2127,7 +2357,7 @@
           return;
         }
         const timer = setTimeout(() => snapshotError(message.requestId, "Widget snapshot timed out", pendingSnapshots.get(message.requestId)?.forwarded?"WIDGET_CAPTURE_TIMEOUT":"WIDGET_READY_TIMEOUT"), timeoutMs);
-        const request = { requestedWidth, requestedHeight, timeoutMs, timer, forwarded:false, highResolution:message.highResolution === true, fullContent:message.fullContent === true, startedAt:performance.now() };
+        const request = { requestedWidth, requestedHeight, timeoutMs, timer, forwarded:false, highResolution:message.highResolution === true, fullContent:message.fullContent === true, currentFrame:message.currentFrame === true, waitForViewport:message.waitForViewport === true, startedAt:performance.now() };
         pendingSnapshots.set(message.requestId, request);
         snapshotDebugLog("snapshot-host-received", { requestId:message.requestId, timeoutMs, requestedWidth, requestedHeight });
         forwardSnapshotRequest(message.requestId, request);
@@ -2135,6 +2365,27 @@
       return;
     }
     if (event.source !== inner.contentWindow || !message || typeof message !== "object") return;
+    if (message.type === "penecho-note-image-open" && widgetSourceFormat === "penecho-note-card+json" && widgetState.maximized && widgetState.interactive
+      && message.runtimeVersion === runtimeVersion && Number.isInteger(message.index) && message.index >= 0 && message.index < 24) {
+      parent.postMessage({type:message.type,index:message.index},parentOrigin);return;
+    }
+    if (message.type === "penecho-graph-change" && nativeGraph && widgetState.interactive && message.document?.version === 2 && JSON.stringify(message.document).length <= 40000) {
+      const interaction=typeof message.interaction?.id==="string" && /^[a-zA-Z0-9_-]{1,80}$/.test(message.interaction.id)
+        && ["update","end"].includes(message.interaction.phase) ? {id:message.interaction.id,phase:message.interaction.phase} : null;
+      parent.postMessage({type:message.type,document:message.document,...(interaction ? {interaction} : {})},parentOrigin);return;
+    }
+    if (message.type === "penecho-living-ink-download" && widgetSourceFormat === "penecho-living-ink" && widgetState.interactive && message.bytes instanceof ArrayBuffer && message.bytes.byteLength <= 16 * 1024 * 1024) {
+      parent.postMessage({type:message.type,name:message.name,mime:message.mime,bytes:message.bytes},parentOrigin,[message.bytes]);return;
+    }
+    if (message.type === "penecho-living-ink-change" && widgetSourceFormat === "penecho-living-ink" && widgetState.interactive && Number.isInteger(message.revision) && message.document?.version === 1 && JSON.stringify(message.document).length <= 90000) {
+      parent.postMessage({type:message.type,revision:message.revision,document:message.document},parentOrigin);return;
+    }
+    if (message.type === "penecho-widget-viewer-scroll-result" && message.runtimeVersion === runtimeVersion
+      && typeof message.requestId === "string" && /^viewer-scroll-\d+$/.test(message.requestId)
+      && message.requestId.length <= 64 && typeof message.handled === "boolean") {
+      parent.postMessage({ type:message.type, requestId:message.requestId, handled:message.handled }, parentOrigin);
+      return;
+    }
     if (message.type === "penecho-widget-presentation-scroll" && widgetState.maximized && message.runtimeVersion === runtimeVersion) {
       parent.postMessage(message, parentOrigin);
       return;
@@ -2156,6 +2407,9 @@
     } else if (message.type === "penecho-widget-public-fetch-request") {
       if (typeof message.requestId !== "string" || !/^public-fetch-\d+$/.test(message.requestId) || message.requestId.length > 64 || typeof message.url !== "string" || message.url.length > PUBLIC_FETCH_MAX_URL_LENGTH) return;
       void proxyPublicFetch(message);
+    } else if (message.type === "penecho-widget-capture-bridge-ready" && message.runtimeVersion === runtimeVersion) {
+      innerCaptureBridgeReady = true;
+      for (const [requestId, request] of pendingSnapshots) if (request.currentFrame) forwardSnapshotRequest(requestId, request);
     } else if (message.type === "penecho-widget-document-ready" && message.runtimeVersion === runtimeVersion) {
       innerDocumentReady = true;
       if(mcpProgressState)inner.contentWindow?.postMessage({type:"penecho-mcp-progress",progress:mcpProgressState},"*");
@@ -2172,9 +2426,26 @@
       if(message.loaded && message.runtimeVersion !== runtimeVersion)return;
       forwardWidgetState();
       const now = Date.now();
-      if (!message.loaded && now - lastUpdate < UPDATE_FORWARD_INTERVAL_MS) return;
+      if (!message.loaded && now - lastUpdate < UPDATE_FORWARD_INTERVAL_MS) {
+        // Throttle, but never drop the last update: the Canvas would otherwise
+        // keep treating an outdated snapshot as current.
+        if (!trailingUpdateTimer) trailingUpdateTimer = setTimeout(() => {
+          trailingUpdateTimer = 0;
+          lastUpdate = Date.now();
+          parent.postMessage({ type:"penecho-widget-updated", loaded:false }, parentOrigin);
+        }, Math.max(1, UPDATE_FORWARD_INTERVAL_MS - (now - lastUpdate)));
+        return;
+      }
+      clearTimeout(trailingUpdateTimer);
+      trailingUpdateTimer = 0;
       lastUpdate = now;
       parent.postMessage({ type: "penecho-widget-updated", loaded:message.loaded===true }, parentOrigin);
+      if (message.loaded === true) {
+        // Announced to the Canvas first, so it can adopt the loaded version for
+        // captures that were waiting for exactly this moment.
+        innerDocumentLoaded = true;
+        for (const [requestId, request] of pendingSnapshots) forwardSnapshotRequest(requestId, request);
+      }
     } else if (message.type === "penecho-widget-snapshot" && message.runtimeVersion === runtimeVersion && pendingSnapshots.has(message.requestId)) {
       const request = pendingSnapshots.get(message.requestId);
       if (request.fullContent) {
@@ -2204,7 +2475,7 @@
           width:message.width,
           height:message.height,
         });
-        parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height,
+        parent.postMessage({ type:message.type, requestId:message.requestId, dataUrl:message.dataUrl, width:message.width, height:message.height, afterLoad:request.forwardedAfterLoad === true,
           ...(request.fullContent ? {contentWidth:message.contentWidth,contentHeight:message.contentHeight,
             overflow:{x:message.overflow?.x===true,y:message.overflow?.y===true}} : {}) }, parentOrigin);
       }

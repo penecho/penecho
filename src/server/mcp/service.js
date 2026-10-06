@@ -754,7 +754,13 @@ function createMcpService(options) {
       const result = await untrackedCallTool(ownerId,name,input,callOptions);
       if (name === "penecho_start_session" && result?.sessionId) {
         const http = direct.status();
-        if (http.enabled && http.hostId) result.imageUpload = {
+        if (callOptions.ipDirect && http.ipDirect?.enabled) result.imageUpload = {
+          url:http.ipDirect.url.replace(/\/mcp$/, "/mcp/images"), method:"POST", contentType:"application/octet-stream",
+          canvasId:result.canvasId, documentId:result.documentId,
+          query:["canvasId","documentId","requestId","name"], maxBytes:33554432,
+          instructions:"Upload original image bytes using the same Bearer token and HTTPS CA trust as this fixed-IP MCP connection. Do not disable TLS verification. Keep the exact target document current/open. Reuse requestId for identical retries. Reuse the returned document-owned source in Widget HTML or place_image."
+        };
+        else if (http.enabled && http.hostId) result.imageUpload = {
           hostId:http.hostId, canvasId:result.canvasId, documentId:result.documentId,
           clientPath:{windows:"%USERPROFILE%/.penecho/mcp/client.js",posix:"~/.penecho/mcp/client.js"},
           args:["--host-id",http.hostId,"--upload-image","ABSOLUTE_IMAGE_PATH","--canvas-id",result.canvasId,"--document-id",result.documentId,"--request-id","UNIQUE_UPLOAD_ID"],
@@ -816,7 +822,7 @@ function createMcpService(options) {
   async function handleHttp(req, res, suppliedUrl) {
     let url;
     try { url = suppliedUrl instanceof URL ? suppliedUrl : new URL(req.url, "http://localhost"); } catch { return false; }
-    if (!["/api/mcp/status", "/api/mcp/configure", "/api/mcp/rpc", "/api/mcp/http", "/api/mcp/discovery-client.js", "/api/mcp/session-client.js"].includes(url.pathname)) return false;
+    if (!["/api/mcp/status", "/api/mcp/configure", "/api/mcp/rpc", "/api/mcp/http", "/api/mcp/ip-direct", "/api/mcp/discovery-client.js", "/api/mcp/session-client.js"].includes(url.pathname)) return false;
     try {
       if (["/api/mcp/discovery-client.js","/api/mcp/session-client.js"].includes(url.pathname)) {
         if (req.method !== "GET") throw bridgeError("method_not_allowed", "Method Not Allowed", 405);
@@ -836,8 +842,9 @@ function createMcpService(options) {
       }
       if (!["GET", "POST"].includes(req.method) || ["/api/mcp/configure", "/api/mcp/http"].includes(url.pathname) && req.method !== "POST") throw bridgeError("method_not_allowed", "Method Not Allowed", 405);
       const canConfigureLocalClients = browserAddressAllowed(req.socket.remoteAddress);
-      if (["/api/mcp/configure", "/api/mcp/http"].includes(url.pathname) && !canConfigureLocalClients) throw localHostRequired();
+      if (["/api/mcp/configure", "/api/mcp/http", "/api/mcp/ip-direct"].includes(url.pathname) && !canConfigureLocalClients) throw localHostRequired();
       if (await browserAuthorization(req)) throw bridgeError("forbidden", "Forbidden", 403);
+      if (url.pathname === "/api/mcp/ip-direct" && options.cloudRuntime) throw bridgeError("local_host_required","Configure IP direct on the PenEcho host.",403);
       if(record&&options.autoStartHttp!==false&&url.pathname!=="/api/mcp/http")await startDirect();
       if (url.pathname === "/api/mcp/status") {
         // Only authenticated direct LAN requests receive pairing details. Remote
@@ -847,8 +854,14 @@ function createMcpService(options) {
         if (canConfigureLocalClients && url.searchParams.get("inspectClients") === "1") payload.configuredClients = await inspectConfiguredClients({ rootDirectory, stateDirectory });
         return sendJson(res, 200, payload), true;
       }
+      if (url.pathname === "/api/mcp/ip-direct" && req.method === "GET") return sendJson(res,200,{http:statusPayload().http}),true;
       if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) throw bridgeError("unsupported_media_type", "Use application/json.", 415);
       const body = await readJson(req, 4 * 1024);
+      if (url.pathname === "/api/mcp/ip-direct") {
+        try { await direct.configureIpDirect(body); }
+        catch (error) { if(error.status)throw bridgeError(error.code,error.message,error.status);throw error; }
+        return sendJson(res,200,{http:statusPayload().http}),true;
+      }
       if(url.pathname==="/api/mcp/http") {
         if(body?.action!=="reset-certificate")throw bridgeError("invalid_action","Unknown HTTP MCP action.");
         await direct.reset();directStart=null;await startDirect();

@@ -9,7 +9,8 @@
   --canvas-agent-activity-text: var(--studio-text, #1f2937);
   --canvas-agent-activity-muted: var(--studio-muted, #64748b);
   position: absolute;
-  z-index: 40;
+  /* Above Canvas content, object controls, navigation and the Agent panel. */
+  z-index: 70;
   top: 50%;
   left: 50%;
   width: min(500px, calc(100% - 32px));
@@ -46,10 +47,6 @@
   transition:
     transform .18s cubic-bezier(.22, .61, .36, 1),
     visibility 0s;
-}
-.canvas-agent-activity.is-suppressed {
-  transition-duration: .18s, .18s, 0s;
-  transition-delay: 0s, 0s, .18s;
 }
 .canvas-agent-activity[data-phase="search"],
 .canvas-agent-activity[data-phase="create"],

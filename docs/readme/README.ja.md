@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
-    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">手でスケッチ。PenEcho の内蔵 Agent や Codex、Claude Code、あらゆる MCP クライアントが、メモのそばに図、文書、動くウィジェットを作ります。</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">1.4 の新機能</a> ·
   <a href="#quick-start">クイックスタート</a> ·
   <a href="#connect-your-ai-agent-mcp">AI エージェントを接続（MCP）</a> ·
   <a href="../">ドキュメント</a> ·
@@ -45,6 +46,30 @@
 </p>
 <p align="center"><em>手描きのスケッチからインタラクティブな成果まで、ひとつのキャンバスで。</em></p>
 
+<a name="new-in-1-4"></a>
+
+## 1.4 の新機能：書くだけで、次の一手がわかる
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="PenEcho 1.4 の紹介動画を見る（2:30）" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ 音声とチャプター付きで見る</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">MP4 をダウンロード</a><br><sub>スマート提案 · PenEchoLLM · ノートとカード · ライブグラフ · シミュレーション · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="../assets/release-1.4/penechollm-suggest.webp" alt="手書きの積分に PenEchoLLM が「解く」を提案し、タップすると答えがその場に表示される様子" width="100%"></a><br>
+      <strong>PenEchoLLM が次の一手を提案</strong><br>
+      書いたあと手を止めると、PenEchoLLM が次に必要な操作を順位付けします。解く、清書、グラフ描画、図の作成、ノートに整理など。タップすると答えが書いた場所に表示され、次の提案もすでに用意されています。選んだ提案から端末内で好みを学習し、API キーなしで毎日無料で試せます。
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="../assets/release-1.4/notes-cards.webp" alt="キャンバス上の手書きノートを囲むと知識カードになり、検索できるライブラリに表示される様子" width="100%"></a><br>
+      <strong>ノートとカードで要点を残す</strong><br>
+      数式、スケッチ、回答を囲むだけで、元の手書きを残したまま知識カードや作業ノートとして保存できます。カードは自動で分類されてライブラリに集まり、検索、ブックマーク、復習、別のキャンバスへの追加ができます。
+    </td>
+  </tr>
+</table>
+
 ## できること
 
 <table width="100%">
@@ -52,7 +77,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="描いてから質問" width="100%"><br>
       <strong>描いてから質問</strong><br>
-      無限のキャンバスに手書き、数式、テキスト、画像を配置。手を止めると AI が自動で応答します。
+      無限のキャンバスに手書き、数式、テキスト、画像を配置。手を止めると PenEchoLLM が次の一手を提案します。
     </td>
     <td width="33%" valign="top">
       <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes クラスター" width="100%"></a><br>
@@ -178,12 +203,15 @@ npm start
 
 </details>
 
-## 1.3.5 の新機能
+## 1.4.0 の新機能
 
-- **UI：** インターフェースの軽微な不具合を修正しました。
-- **キャンバスの同時編集：** Canvas AI、Agent、MCP による同じキャンバスの同時編集に対応しました。
+- **スマート提案と PenEchoLLM：** 手書き、テキスト、画像に応じた操作を PenEchoLLM が順位付けして提案。すばやい回答、ビジュアル作成、追加の質問に対応します。
+- **Lasso AI：** キャンバスの一部を囲み、選択した内容だけを解いたり、可視化、アニメーション、ノートに整理できます。
+- **ノートとカード：** キャンバスの内容を再利用できるノートや知識カードに整理。閲覧、検索、別のキャンバスへの追加ができます。
+- **Widget の改善：** 手書きのフィードバックと関連操作で結果を改善。操作がわかりやすくなり、サイズも内容に合わせやすくなりました。
+- **キャンバス体験：** ペン操作、筆跡の削除、ナビゲーション、Agent や MCP との共同作業を改善しました。
 
-[変更履歴の全文 →](../../CHANGELOG.md#135)
+[1.4 の紹介動画を見る →](https://penecho.ai/#knows-you) · [変更履歴の全文 →](../../CHANGELOG.md#140)
 
 ## コミュニティー
 

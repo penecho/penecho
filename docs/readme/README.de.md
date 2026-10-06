@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../public/penecho-readme-header-dark.webp">
-    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="280">
+    <img src="../../public/penecho-readme-header.webp" alt="PenEcho" width="320">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
 <p align="center">Skizzieren Sie von Hand. Der integrierte Agent von PenEcho, Codex, Claude Code oder jeder MCP-Client erstellt Diagramme, Dokumente und funktionierende Widgets direkt neben Ihren Notizen.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.3.5-087f83" alt="Release v1.3.5"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="#new-in-1-4">Neu in 1.4</a> ·
   <a href="#quick-start">Schnellstart</a> ·
   <a href="#connect-your-ai-agent-mcp">KI-Agenten verbinden (MCP)</a> ·
   <a href="../">Dokumentation</a> ·
@@ -45,6 +46,30 @@
 </p>
 <p align="center"><em>Von der Handskizze zum interaktiven Ergebnis auf einer Leinwand.</em></p>
 
+<a name="new-in-1-4"></a>
+
+## Neu in 1.4: Es weiß, was Sie brauchen
+
+<p align="center">
+  <a href="https://penecho.ai/#knows-you"><img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.webp" alt="Die Tour durch PenEcho 1.4 ansehen (2:30)" width="100%"></a>
+</p>
+<p align="center"><a href="https://penecho.ai/#knows-you"><strong>▶ Mit Ton und Kapiteln ansehen</strong></a> · <a href="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_knowsyou.mp4">MP4 herunterladen</a><br><sub>Intelligente Vorschläge · PenEchoLLM · Notizen und Karten · Live-Graphen · Simulationen · 3D</sub></p>
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=16#knows-you"><img src="../assets/release-1.4/penechollm-suggest.webp" alt="PenEchoLLM schlägt vor, ein handgeschriebenes Integral zu lösen; ein Tippen, und die Antwort erscheint an Ort und Stelle" width="100%"></a><br>
+      <strong>PenEchoLLM schlägt den nächsten Schritt vor</strong><br>
+      Halten Sie nach dem Schreiben kurz inne, und PenEchoLLM ordnet, was Sie als Nächstes brauchen: Lösen, Reinschrift, Graph zeichnen, Diagramm erstellen, als Notiz ordnen und mehr. Ein Tippen, und die Antwort erscheint dort, wo Sie geschrieben haben; der nächste Schritt ist schon vorgeschlagen. Es lernt auf Ihrem Gerät aus den Vorschlägen, die Sie wählen. Täglich kostenlos ausprobieren, ohne API-Schlüssel.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://penecho.ai/?t=43#knows-you"><img src="../assets/release-1.4/notes-cards.webp" alt="Handschriftliche Notizen werden auf der Leinwand umkreist, zur Wissenskarte und erscheinen in der durchsuchbaren Bibliothek" width="100%"></a><br>
+      <strong>Notizen und Karten bewahren das Wichtige</strong><br>
+      Umkreisen Sie eine Formel, eine Skizze oder eine Antwort und behalten Sie sie als Wissenskarte oder Arbeitsnotiz, mit Ihrer ursprünglichen Handschrift. Karten werden automatisch kategorisiert und in der Bibliothek gesammelt, wo Sie sie durchsuchen, merken, wiederholen und jeder Leinwand hinzufügen können.
+    </td>
+  </tr>
+</table>
+
 ## Was Sie tun können
 
 <table width="100%">
@@ -52,7 +77,7 @@
     <td width="33%" valign="top">
       <img src="https://github.com/penecho/penecho/releases/download/v0.1.0/penecho_plugins_sub_x10.webp" alt="Skizzieren und fragen" width="100%"><br>
       <strong>Skizzieren und fragen</strong><br>
-      Handschrift, Formeln, Text und Bilder auf einer endlosen Leinwand. Wenn Sie pausieren, antwortet die KI automatisch.
+      Handschrift, Formeln, Text und Bilder auf einer endlosen Leinwand. Wenn Sie pausieren, schlägt PenEchoLLM den nächsten Schritt vor.
     </td>
     <td width="33%" valign="top">
       <a href="../assets/professional-diagrams/kubernetes.webp"><img src="../assets/professional-diagrams/previews/kubernetes.webp" alt="Kubernetes-Cluster" width="100%"></a><br>
@@ -178,12 +203,15 @@ Diese Empfehlungen gleichen Antwortqualität und Latenz bei echten PenEcho-Leinw
 
 </details>
 
-## Neu in 1.3.5
+## Neu in 1.4.0
 
-- **UI:** kleinere Fehler in der Benutzeroberfläche behoben.
-- **Gleichzeitige Leinwandbearbeitung:** Canvas AI, Agent und MCP können dieselbe Leinwand gleichzeitig bearbeiten.
+- **Intelligente Vorschläge mit PenEchoLLM:** passende Aktionen für Handschrift, Text und Bilder, von PenEchoLLM sortiert, mit schnellen Antworten, visueller Gestaltung und Folgefragen.
+- **Lasso AI:** umkreise einen Bereich der Leinwand, um nur den ausgewählten Inhalt zu lösen, zu visualisieren, zu animieren oder zu ordnen.
+- **Notizen und Karten:** verwandle Leinwandinhalte in wiederverwendbare Notizen und Wissenskarten; durchsuche sie und füge sie anderen Leinwänden hinzu.
+- **Widget-Verbesserungen:** verfeinere Ergebnisse mit handschriftlichem Feedback und passenden Aktionen, klareren Bedienelementen und besser angepassten Inhaltsgrößen.
+- **Leinwanderlebnis:** verbesserte Stiftgesten, Strichlöschung, Navigation und Zusammenarbeit mit Agent und MCP.
 
-[Vollständiges Änderungsprotokoll →](../../CHANGELOG.md#135)
+[Die 1.4-Tour ansehen →](https://penecho.ai/#knows-you) · [Vollständiges Änderungsprotokoll →](../../CHANGELOG.md#140)
 
 ## Community
 

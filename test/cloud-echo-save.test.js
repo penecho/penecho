@@ -58,13 +58,13 @@ function harness(overrides = {}) {
   return { ...functions, context, events };
 }
 
-test("saveEchoToCloud initializes the Cloud project list before creating a new snapshot", async () => {
+test("saveEchoToCloud selects Cloud before the shared save resolves its destination", async () => {
   const run = harness();
   const id = await run.saveEchoToCloud("Echoed Canvas");
   assert.equal(id, SAVED_CANVAS_ID);
-  assert.deepEqual(run.events.map((event) => event.type), ["cloud-projects", "location", "save"]);
-  assert.deepEqual(plain(run.events[1]), { type:"location", location:"cloud", options:{ refresh:false } });
-  assert.deepEqual(plain(run.events[2]), {
+  assert.deepEqual(run.events.map((event) => event.type), ["location", "save"]);
+  assert.deepEqual(plain(run.events[0]), { type:"location", location:"cloud", options:{ refresh:false } });
+  assert.deepEqual(plain(run.events[1]), {
     type:"save",
     options:{ location:"cloud", overwriteId:null, name:"Echoed Canvas", allowEmpty:true },
   });
@@ -73,13 +73,12 @@ test("saveEchoToCloud initializes the Cloud project list before creating a new s
 test("saveCurrentCanvas defaults an unsaved browser Canvas to Cloud", async () => {
   const run = harness({ state:{ currentSnapshotId:null, currentSnapshotLocation:null, snapshotLocation:"device" } });
   await run.saveCurrentCanvas();
-  assert.deepEqual(run.events.map((event) => event.type), ["busy", "notice-key", "cloud-projects", "save", "notice-key", "busy"]);
-  assert.deepEqual(plain(run.events[2]), { type:"cloud-projects" });
-  assert.deepEqual(plain(run.events[3]), {
+  assert.deepEqual(run.events.map((event) => event.type), ["busy", "notice-key", "save", "notice-key", "busy"]);
+  assert.deepEqual(plain(run.events[2]), {
     type:"save",
     options:{ overwriteId:null, name:"Browser Canvas", location:"cloud" },
   });
-  assert.deepEqual(plain(run.events[4]), { type:"notice-key", key:"snapshotSaved", tone:"success" });
+  assert.deepEqual(plain(run.events[3]), { type:"notice-key", key:"snapshotSaved", tone:"success" });
 });
 
 test("browser editing saves back to the current Library source even when the linked device goes offline", async () => {
@@ -121,14 +120,14 @@ test("saveCurrentCanvas reports a Cloud save failure without showing a success n
 test("live sharing saves local content to Cloud without requiring a linked device", async () => {
   const run = harness({window:{PENECHO_CONFIG:{runtime:"local"}}});
   assert.equal(await run.saveLiveShareToCloud(), SAVED_CANVAS_ID);
-  assert.deepEqual(run.events.map(event => event.type), ["finalize", "location", "cloud-projects", "save"]);
-  assert.equal(run.events[3].options.overwriteId,null);
+  assert.deepEqual(run.events.map(event => event.type), ["finalize", "location", "save"]);
+  assert.equal(run.events[2].options.overwriteId,null);
 });
 
 test("live sharing keeps the existing Cloud Canvas identity", async () => {
   const run = harness({state:{currentSnapshotLocation:"cloud",currentSnapshotId:SAVED_CANVAS_ID}});
   await run.saveLiveShareToCloud();
-  assert.equal(run.events[3].options.overwriteId,SAVED_CANVAS_ID);
+  assert.equal(run.events[2].options.overwriteId,SAVED_CANVAS_ID);
 });
 
 

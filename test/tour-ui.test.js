@@ -95,9 +95,11 @@ test("feature tour follows the requested concise order with stable targets", () 
     ordered = [
       "core-effort-v1",
       "favorites-add-v1",
+      "notes-cards-v1",
       "hand-v1",
-      "core-lasso-v1",
       "core-text-v1",
+      "smart-assist-v1",
+      "core-lasso-v3",
       "core-image-v1",
       "core-fullscreen-v1",
       "cloud-share-canvas-v1",
@@ -109,7 +111,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#craftsButton", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#craftsButton", "#historyBtn", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(app, /canvas-agent-panel-v2[^\n]*preview: "canvas-agent-panel"/);
   assert.match(app, /openCanvasAgent\(\{ focus:false, connect:false, animate:false \}\)/);
@@ -190,7 +192,7 @@ test("feature tour persists seen ids, supports replay, and repositions accessibl
   assert.doesNotMatch(app, /resolveInitialLanguage\([^)]*navigator/);
 });
 
-test("1.3.0 release notes include Canvas Agent and MCP in both languages", () => {
+test("1.4.0 release notes summarize the major updates in both languages", () => {
   const html = read("public/index.html"),
     app = read("public/app.js"),
     css = read("public/style.css"),
@@ -201,20 +203,19 @@ test("1.3.0 release notes include Canvas Agent and MCP in both languages", () =>
   assert.doesNotMatch(layer, /aria-describedby=/);
   for (const id of ["changelogClose", "changelogTitle"]) assert.match(layer, new RegExp(`id="${id}"`));
   for (const id of ["changelogIntro", "changelogCurrentVersion", "changelogDone"]) assert.doesNotMatch(layer, new RegExp(`id="${id}"`));
-  assert.match(layer, />1\.3\.0</);
+  assert.match(layer, />1\.4\.0</);
   assert.doesNotMatch(layer, /class="changelog-release changelog-earlier"/);
-  assert.match(layer, /<img src="penecho-architecture\.webp"[^>]*loading="lazy"/);
-  assert.ok(read("public/penecho-architecture.webp").length > 0);
+  assert.doesNotMatch(layer, /changelog-demo|penecho-architecture/);
   assert.match(app, /CHANGELOG_STORAGE_KEY = "penecho-changelog-seen"/);
-  assert.match(app, /CHANGELOG_VERSION = "1\.3\.0"/);
+  assert.match(app, /CHANGELOG_VERSION = "1\.4\.0"/);
   assert.match(app, /localStorage\.getItem\(CHANGELOG_STORAGE_KEY\) === CHANGELOG_VERSION/);
   assert.match(app, /localStorage\.setItem\(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION\)/);
-  assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer" \|\| settings\.open \|\| state\.theme === "studio"\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
+  assert.match(app, /function maybeStartOnboarding\(\)\s*\{\s*if \(window\.PENECHO_CONFIG\?\.runtime === "viewer" \|\| settings\.open\) return false;\s*if \(!maybeStartFeatureTour\(\)\) maybeShowChangelog\(\);/);
   assert.match(app, /function closeFeatureTour[\s\S]*?maybeShowChangelog\(\)/);
   assert.match(app, /changelogLayer\.addEventListener\("keydown", handleChangelogKeydown\)/);
   assert.match(css, /\.changelog-layer\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*place-items:\s*center/);
   assert.match(css, /\.changelog-dialog\s*\{[^}]*width:\s*min\(900px,[^}]*max-height:/);
-  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogCanvasAgent", "changelogMcpCanvases", "changelogCloudMcp", "changelogFrostedStudio", "changelogPerformance", "changelogKeyboardShortcuts"]) {
+  for (const key of ["changelogDialog", "changelogBadge", "changelogTitle", "changelogAssist", "changelogLasso", "changelogNotesCards", "changelogWidgetRefine", "changelogCanvasPolish"]) {
     assert.match(app, new RegExp(`${key}:`), `missing English ${key}`);
     assert.match(zh, new RegExp(`${key}:`), `missing Chinese ${key}`);
   }
@@ -222,14 +223,13 @@ test("1.3.0 release notes include Canvas Agent and MCP in both languages", () =>
     assert.doesNotMatch(app, new RegExp(`${key}:`));
     assert.doesNotMatch(zh, new RegExp(`${key}:`));
   }
-  assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 6);
-  assert.match(layer, /changelogFrostedStudio[\s\S]*changelogPerformance[\s\S]*changelogKeyboardShortcuts/);
-  assert.match(app, /changelogFrostedStudio:[^\n]*frosted Studio[^\n]*Translucent materials[^\n]*Canvas visible/);
-  assert.match(app, /changelogPerformance:[^\n]*Drawing, erasing, panning, and zooming[^\n]*Low-latency live ink/);
-  assert.match(app, /changelogKeyboardShortcuts:[^\n]*Customizable keyboard shortcuts[^\n]*undo and redo/);
-  assert.match(zh, /changelogFrostedStudio:[^\n]*磨砂 Studio[^\n]*半透明材质[^\n]*画布始终清晰可见/);
-  assert.match(zh, /changelogPerformance:[^\n]*书写、擦除、平移和缩放[^\n]*低延迟实时笔迹/);
-  assert.match(zh, /changelogKeyboardShortcuts:[^\n]*自定义键盘快捷键[^\n]*撤销与重做/);
+  assert.equal((layer.match(/<li data-i18n="changelog/g) || []).length, 5);
+  assert.match(app, /changelogAssist:[^\n]*handwriting, text and images/);
+  assert.match(app, /changelogLasso:[^\n]*selected content/);
+  assert.match(app, /changelogNotesCards:[^\n]*reusable notes and knowledge cards/);
+  assert.match(zh, /changelogAssist:[^\n]*手写、文字和图片/);
+  assert.match(zh, /changelogLasso:[^\n]*选中的内容/);
+  assert.match(zh, /changelogNotesCards:[^\n]*笔记与知识卡片/);
 });
 
 test("README version badges match the package version in every language", () => {
@@ -246,6 +246,44 @@ test("README version badges match the package version in every language", () => 
       `${readmePath} version badge must match package.json`,
     );
   }
+});
+
+test("returning users see only the 1.4.0 tour additions without losing earlier progress", () => {
+  const tour = require("../public/tour.js"),
+    core = read("src/client/app/core.js"),
+    steps = vm.runInNewContext(core.match(/const FEATURE_TOUR_STEPS = (Object\.freeze\(\[[\s\S]*?\]\));/)[1]),
+    oldIds = steps.map(step => step.id).filter(id => !["notes-cards-v1", "smart-assist-v1", "core-lasso-v3"].includes(id)),
+    progress = tour.parseProgress(JSON.stringify({ seen:[...oldIds, "core-lasso-v2"] })),
+    pending = tour.unseenSteps(steps, progress);
+  assert.deepEqual(Array.from(pending, step => step.id), ["notes-cards-v1", "smart-assist-v1", "core-lasso-v3"]);
+  const completed = tour.markSeen(progress, pending.map(step => step.id));
+  assert.equal(tour.unseenSteps(steps, completed).length, 0);
+  assert.ok(completed.seen.includes("core-lasso-v2"));
+  assert.ok(oldIds.every(id => completed.seen.includes(id)));
+});
+
+test("Studio shows unseen onboarding and release notes while settings and viewers stay undisturbed", () => {
+  const source = functionSource(read("src/client/app/core.js"), "maybeStartOnboarding"),
+    calls = [], settings = { open:false }, window = { PENECHO_CONFIG:{ runtime:"device" } };
+  let tourPending = true;
+  const start = vm.runInNewContext(`(${source})`, {
+    window, settings, state:{ theme:"studio" },
+    maybeStartFeatureTour() { calls.push("tour"); return tourPending; },
+    maybeShowChangelog() { calls.push("changelog"); },
+  });
+  start();
+  assert.deepEqual(calls, ["tour"]);
+  calls.length = 0;
+  tourPending = false;
+  start();
+  assert.deepEqual(calls, ["tour", "changelog"]);
+  calls.length = 0;
+  settings.open = true;
+  assert.equal(start(), false);
+  settings.open = false;
+  window.PENECHO_CONFIG.runtime = "viewer";
+  assert.equal(start(), false);
+  assert.deepEqual(calls, []);
 });
 
 test("feature tour copy is complete in English and Chinese", () => {
@@ -271,6 +309,10 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourHandBody",
       "tourLassoTitle",
       "tourLassoBody",
+      "tourAssistTitle",
+      "tourAssistBody",
+      "tourNotesCardsTitle",
+      "tourNotesCardsBody",
       "tourTextTitle",
       "tourTextBody",
       "tourImageTitle",
@@ -297,12 +339,12 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /闭合套索/);
   assert.doesNotMatch(app, /tourPlugins(?:Title|Body):|plugins-v3/);
   assert.doesNotMatch(zh, /tourPlugins(?:Title|Body):/);
-  assert.match(app, /tourHandBody:[^\n]*Hand moves the canvas[^\n]*Use Select[^\n]*widget interaction/);
-  assert.match(zh, /小手可在大控件上直接移动画布.*使用选择工具整理对象/);
-  assert.match(zh, /使用选择工具整理对象，或进入控件交互/);
+  assert.match(app, /tourHandBody:[^\n]*Hand pans the canvas[^\n]*header to move[^\n]*handles to resize[^\n]*Double-click a widget to interact/);
+  assert.match(zh, /tourHandBody:[^\n]*小手可在大控件上直接移动画布[^\n]*拖动顶部可移动对象[^\n]*拖动边缘手柄可调整大小[^\n]*双击控件进入内部交互/);
+  assert.match(app, /tourLassoBody:[^\n]*AI receives only the selected content[^\n]*Drag or resize the selection to move or scale ink[^\n]*Widgets stay in place/);
+  assert.match(zh, /tourLassoBody:[^\n]*AI 只接收选中的内容[^\n]*拖动或缩放选区可以移动或缩放笔迹[^\n]*Widget 保持原位/);
   assert.doesNotMatch(app, /tourAnimationPlugin/);
   assert.doesNotMatch(zh, /控制动态图讲解/);
-  assert.match(zh, /不会参考画布其他部分/);
   assert.match(app, /tourFavoritesBody:[^\n]*Echoes favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
   assert.match(zh, /tourFavoritesBody:[^\n]*Echoes[^\n]*收藏组件[^\n]*收藏画布/);
   assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*separate Craft to Echoes/);

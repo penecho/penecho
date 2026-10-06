@@ -493,9 +493,9 @@ test("configured CLI connection tests abort the model request at an explicit cal
   }), error => error.code === "PENECHO_CONNECTION_TEST_TIMEOUT" && /timed out/.test(error.message));
 });
 
-test("configured Codex Test upgrades 0.153.4 and checks GPT-6 Sol with the managed CLI", async () => {
+test("configured Codex Test upgrades 0.157.0 and checks GPT-6.1 Sol with the managed CLI", async () => {
   const configuration = isolatedConfiguration(parseArgs(["--codex"]), {
-    AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-6-sol", AI_EFFORT:"xhigh", CODEX_CLI_PATH:"placeholder", PATH:"",
+    AI_PROVIDER:"codex-cli", CODEX_CLI_MODEL:"gpt-6.1-sol", AI_EFFORT:"xhigh", CODEX_CLI_PATH:"placeholder", PATH:"",
   }), oldExecutable = fixtureExecutable(path.join(configuration.stateDir, "fixtures", "codex-old")),
     managedExecutable = managedCliPath("codex-cli", { ...configuration, platform:"darwin" }), events = [];
   configuration.env.CODEX_CLI_PATH = oldExecutable;
@@ -504,8 +504,8 @@ test("configured Codex Test upgrades 0.153.4 and checks GPT-6 Sol with the manag
     platform:"darwin",
     runner:async (launch, args) => {
       events.push(`run:${launch.command}:${args.join(" ")}`);
-      if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.153.4" : CODEX_CLI_PINNED_VERSION}\n`, stderr:"" };
-      if (args[0] === "debug") return { code:0, stdout:JSON.stringify({ models:[{ slug:"gpt-6-sol" }] }), stderr:"" };
+      if (args[0] === "--version") return { code:0, stdout:`codex ${launch.command === oldExecutable ? "0.157.0" : CODEX_CLI_PINNED_VERSION}\n`, stderr:"" };
+      if (args[0] === "debug") return { code:0, stdout:JSON.stringify({ models:[{ slug:"gpt-6.1-sol" }] }), stderr:"" };
       return { code:0, stdout:"logged in\n", stderr:"" };
     },
     onCliUpgrade:async event => events.push(`upgrade:${event.phase}`),
@@ -528,7 +528,7 @@ test("configured Codex Test upgrades 0.153.4 and checks GPT-6 Sol with the manag
     "upgrade:start", `install:codex-cli:${configuration.stateDir}`, "upgrade:complete",
     `run:${managedExecutable}:--version`, `run:${managedExecutable}:login status`,
     `run:${managedExecutable}:debug models --bundled`,
-    `model:${managedExecutable}:gpt-6-sol:xhigh`,
+    `model:${managedExecutable}:gpt-6.1-sol:xhigh`,
   ]);
 });
 

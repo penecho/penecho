@@ -8,6 +8,7 @@
     { id:"undo", group:"essential", labelKey:"undo", descriptionKey:"shortcutUndoHelp", defaultChord:"Mod+z" },
     { id:"redo", group:"essential", labelKey:"redo", descriptionKey:"shortcutRedoHelp", defaultChord:"Mod+Shift+z" },
     { id:"canvas-library", group:"workspace", labelKey:"shortcutCanvasLibrary", descriptionKey:"shortcutCanvasLibraryHelp", defaultChord:"Mod+o" },
+    { id:"notes-library", group:"workspace", labelKey:"shortcutNotesLibrary", descriptionKey:"shortcutNotesLibraryHelp", defaultChord:"Mod+Shift+e" },
     { id:"toggle-fullscreen", group:"workspace", labelKey:"fullscreen", descriptionKey:"shortcutFullscreenHelp", defaultChord:"Mod+Shift+f" },
     { id:"open-settings", group:"workspace", labelKey:"settingsTitle", descriptionKey:"shortcutSettingsHelp", defaultChord:"Mod+," },
   ]);
@@ -299,6 +300,7 @@
     if (commandId === "save-canvas") { void saveCurrentCanvas(); return true; }
     if (commandId === "undo" || commandId === "redo") { document.querySelector(`[data-action="${commandId}"]`)?.click(); return true; }
     if (commandId === "canvas-library") { openHistoryPanel(); return true; }
+    if (commandId === "notes-library") { if (typeof openNoteLibrary === "function") { if (noteCards.panel) closeNoteLibrary({ library:true }); else void openNoteLibrary(); } return true; }
     if (commandId === "toggle-fullscreen") { document.querySelector("#fullscreenBtn")?.click(); return true; }
     if (commandId === "open-settings") { if (settings.open) closeSettings(); else openSettings(); return true; }
     return false;

@@ -1,0 +1,453 @@
+{
+  "version": 1,
+  "title": "分布式电商平台",
+  "description": "示例架构 · 同步交易、异步事件与数据检索",
+  "direction": "DOWN",
+  "domains": [
+    {
+      "id": "access",
+      "label": "接入与身份",
+      "color": "blue"
+    },
+    {
+      "id": "business",
+      "label": "业务服务",
+      "color": "teal"
+    },
+    {
+      "id": "event",
+      "label": "异步任务",
+      "color": "orange"
+    },
+    {
+      "id": "data",
+      "label": "数据平台",
+      "color": "purple"
+    },
+    {
+      "id": "external",
+      "label": "外部服务",
+      "color": "slate"
+    },
+    {
+      "id": "ops",
+      "label": "可观测性",
+      "color": "green"
+    }
+  ],
+  "groups": [
+    {
+      "id": "clients",
+      "label": "用户终端",
+      "domain": "access"
+    },
+    {
+      "id": "edge",
+      "label": "公网接入边界",
+      "domain": "access"
+    },
+    {
+      "id": "services",
+      "label": "私有网络 · 业务服务",
+      "domain": "business"
+    },
+    {
+      "id": "async",
+      "label": "私有网络 · 事件处理",
+      "domain": "event"
+    },
+    {
+      "id": "storage",
+      "label": "私有网络 · 数据平台",
+      "domain": "data"
+    },
+    {
+      "id": "thirdparty",
+      "label": "外部提供商",
+      "domain": "external"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "label": "Web 客户端",
+      "subtitle": "商品浏览与下单",
+      "domain": "access",
+      "group": "clients",
+      "type": "frontend"
+    },
+    {
+      "id": "mobile",
+      "label": "移动客户端",
+      "subtitle": "订单追踪与通知",
+      "domain": "access",
+      "group": "clients",
+      "type": "frontend"
+    },
+    {
+      "id": "gateway",
+      "label": "API 网关",
+      "subtitle": "路由 · 限流 · 身份校验",
+      "domain": "access",
+      "group": "edge",
+      "type": "cloud",
+      "details": [
+        "校验令牌并转发请求。",
+        "向下游传递请求标识与用户上下文。"
+      ]
+    },
+    {
+      "id": "identity",
+      "label": "身份服务",
+      "subtitle": "登录与令牌签发",
+      "domain": "access",
+      "group": "edge",
+      "type": "security",
+      "details": [
+        "终端登录后获得访问令牌。",
+        "网关获取验签配置。"
+      ]
+    },
+    {
+      "id": "catalog",
+      "label": "商品服务",
+      "subtitle": "商品详情与搜索",
+      "domain": "business",
+      "group": "services"
+    },
+    {
+      "id": "orders",
+      "label": "订单服务",
+      "subtitle": "订单状态与交易编排",
+      "domain": "business",
+      "group": "services",
+      "details": [
+        "创建待支付订单并预留库存。",
+        "接收支付结果后更新状态并发布事件。"
+      ]
+    },
+    {
+      "id": "inventory",
+      "label": "库存服务",
+      "subtitle": "预留 · 确认 · 释放",
+      "domain": "business",
+      "group": "services",
+      "details": [
+        "库存预留随订单唯一标识幂等执行。",
+        "取消与超时通过事件释放预留。"
+      ]
+    },
+    {
+      "id": "payment",
+      "label": "支付服务",
+      "subtitle": "支付请求与回调验签",
+      "domain": "business",
+      "group": "services",
+      "details": [
+        "记录支付流水并调用支付提供商。",
+        "回调验签后发布支付状态事件。"
+      ]
+    },
+    {
+      "id": "bus",
+      "label": "事件总线",
+      "subtitle": "订单与支付领域事件",
+      "domain": "event",
+      "group": "async",
+      "type": "messagebus"
+    },
+    {
+      "id": "workflow",
+      "label": "交易任务",
+      "subtitle": "超时取消与补偿",
+      "domain": "event",
+      "group": "async"
+    },
+    {
+      "id": "notifier",
+      "label": "通知服务",
+      "subtitle": "订单状态通知",
+      "domain": "event",
+      "group": "async"
+    },
+    {
+      "id": "indexer",
+      "label": "索引任务",
+      "subtitle": "商品变更投影",
+      "domain": "event",
+      "group": "async"
+    },
+    {
+      "id": "db",
+      "label": "关系数据库",
+      "subtitle": "服务独立 schema",
+      "domain": "data",
+      "group": "storage",
+      "type": "database",
+      "details": [
+        "商品、订单、库存与支付分别拥有自己的 schema。",
+        "跨服务操作通过 API 与事件协调。"
+      ]
+    },
+    {
+      "id": "cache",
+      "label": "缓存",
+      "subtitle": "热门商品与短期数据",
+      "domain": "data",
+      "group": "storage",
+      "type": "database"
+    },
+    {
+      "id": "search",
+      "label": "搜索索引",
+      "subtitle": "可重建的商品投影",
+      "domain": "data",
+      "group": "storage",
+      "type": "database"
+    },
+    {
+      "id": "payprovider",
+      "label": "支付提供商",
+      "subtitle": "支付处理与结果回调",
+      "domain": "external",
+      "group": "thirdparty",
+      "type": "external"
+    },
+    {
+      "id": "msgprovider",
+      "label": "消息提供商",
+      "subtitle": "短信与推送通道",
+      "domain": "external",
+      "group": "thirdparty",
+      "type": "external"
+    },
+    {
+      "id": "telemetry",
+      "label": "监控与追踪",
+      "subtitle": "指标 · 日志 · 链路",
+      "domain": "ops",
+      "type": "cloud"
+    }
+  ],
+  "edges": [
+    {
+      "from": "web",
+      "to": "gateway",
+      "label": "HTTPS"
+    },
+    {
+      "from": "mobile",
+      "to": "gateway",
+      "label": "HTTPS"
+    },
+    {
+      "from": "web",
+      "to": "identity",
+      "label": "登录"
+    },
+    {
+      "from": "mobile",
+      "to": "identity",
+      "label": "登录"
+    },
+    {
+      "from": "gateway",
+      "to": "identity",
+      "label": "验签配置",
+      "kind": "config"
+    },
+    {
+      "from": "gateway",
+      "to": "catalog",
+      "label": "商品查询"
+    },
+    {
+      "from": "gateway",
+      "to": "orders",
+      "label": "下单 / 查询"
+    },
+    {
+      "from": "gateway",
+      "to": "payment",
+      "label": "支付回调"
+    },
+    {
+      "from": "orders",
+      "to": "inventory",
+      "label": "预留库存"
+    },
+    {
+      "from": "orders",
+      "to": "payment",
+      "label": "创建支付"
+    },
+    {
+      "from": "catalog",
+      "to": "db",
+      "label": "商品读写",
+      "kind": "data"
+    },
+    {
+      "from": "catalog",
+      "to": "cache",
+      "label": "缓存读写",
+      "kind": "data"
+    },
+    {
+      "from": "catalog",
+      "to": "search",
+      "label": "检索",
+      "kind": "data"
+    },
+    {
+      "from": "orders",
+      "to": "db",
+      "label": "订单读写",
+      "kind": "data"
+    },
+    {
+      "from": "inventory",
+      "to": "db",
+      "label": "库存读写",
+      "kind": "data"
+    },
+    {
+      "from": "payment",
+      "to": "db",
+      "label": "支付流水",
+      "kind": "data"
+    },
+    {
+      "from": "payment",
+      "to": "payprovider",
+      "label": "支付请求"
+    },
+    {
+      "from": "payprovider",
+      "to": "gateway",
+      "label": "签名回调",
+      "kind": "return"
+    },
+    {
+      "from": "orders",
+      "to": "bus",
+      "label": "订单事件",
+      "kind": "data"
+    },
+    {
+      "from": "payment",
+      "to": "bus",
+      "label": "支付事件",
+      "kind": "data"
+    },
+    {
+      "from": "catalog",
+      "to": "bus",
+      "label": "商品变更",
+      "kind": "data"
+    },
+    {
+      "from": "bus",
+      "to": "orders",
+      "label": "支付结果",
+      "kind": "data"
+    },
+    {
+      "from": "bus",
+      "to": "workflow",
+      "label": "交易事件",
+      "kind": "data"
+    },
+    {
+      "from": "bus",
+      "to": "inventory",
+      "label": "确认 / 释放",
+      "kind": "data"
+    },
+    {
+      "from": "workflow",
+      "to": "orders",
+      "label": "超时取消"
+    },
+    {
+      "from": "bus",
+      "to": "notifier",
+      "label": "状态事件",
+      "kind": "data"
+    },
+    {
+      "from": "notifier",
+      "to": "msgprovider",
+      "label": "发送通知"
+    },
+    {
+      "from": "bus",
+      "to": "indexer",
+      "label": "商品事件",
+      "kind": "data"
+    },
+    {
+      "from": "indexer",
+      "to": "search",
+      "label": "更新投影",
+      "kind": "data"
+    },
+    {
+      "from": "gateway",
+      "to": "telemetry",
+      "label": "入口追踪",
+      "kind": "data"
+    },
+    {
+      "from": "orders",
+      "to": "telemetry",
+      "label": "交易追踪",
+      "kind": "data"
+    },
+    {
+      "from": "workflow",
+      "to": "telemetry",
+      "label": "任务指标",
+      "kind": "data"
+    }
+  ],
+  "details": [
+    {
+      "title": "交易主路径",
+      "domain": "business",
+      "items": [
+        "终端 → 网关 → 订单服务 → 库存预留 / 创建支付。",
+        "支付提供商经网关回调支付服务；支付事件推动订单状态变更。"
+      ]
+    },
+    {
+      "title": "异步与补偿",
+      "domain": "event",
+      "items": [
+        "事件驱动库存确认、通知和索引更新。",
+        "超时任务取消未支付订单，随后释放库存。",
+        "消费者需要幂等处理；失败事件进入重试或人工处理。"
+      ]
+    },
+    {
+      "title": "数据边界",
+      "domain": "data",
+      "items": [
+        "数据库节点表示统一基础设施，各服务独立拥有 schema。",
+        "缓存与搜索索引可重建，不承担交易事实的最终存储。"
+      ]
+    },
+    {
+      "title": "接入与运维",
+      "domain": "ops",
+      "items": [
+        "公网请求通过网关进入业务服务。",
+        "请求标识贯穿交易链路，便于定位异步任务与回调。"
+      ]
+    }
+  ],
+  "notes": [
+    "这是用于测试画布自动高度的示例架构，不代表现有项目的实际部署。",
+    "为保持可读性，省略常规响应箭头和其余服务的监控连线。"
+  ]
+}

@@ -6,23 +6,43 @@
     try { return localStorage.getItem("penecho.widgetInteractionPresentation") || "maximized"; }
     catch { return "maximized"; }
   }
-  function switchWidgetPresentation(widget, maximized) {
-    try { localStorage.setItem("penecho.widgetInteractionPresentation", maximized ? "maximized" : "canvas"); } catch {}
-    setWidgetMaximized(widget, maximized);
+  function selectViewerWidget(widget) {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer") return false;
+    state.viewerSelectedWidgetId = widget && !widget.pending && state.widgets.includes(widget) ? widget.id : null;
     requestInteractionLayerRender();
+    return true;
   }
-  function setWidgetPresentationZoom(widget, percent, notifyHost = true) {
-    if (!widget?.shell) return;
-    const value = Number(percent),
-      zoom = Math.max(50, Math.min(100, Number.isFinite(value) ? value : 100));
+  function switchWidgetPresentation(widget, maximized) {
+    if (!setWidgetMaximized(widget, maximized)) return false;
+    try { localStorage.setItem("penecho.widgetInteractionPresentation", maximized ? "maximized" : "canvas"); } catch {}
+    requestInteractionLayerRender();
+    return true;
+  }
+  function widgetPresentationFitZoom(widget) {
+    const shell = widget.shell, style = getComputedStyle(shell),
+      width = Math.max(1, shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+      available = Math.max(1, shell.clientHeight - widget.presentationToolbar.offsetHeight - parseFloat(style.paddingBottom)),
+      pageWidth = Math.max(widget.contentW, widget.presentationScrollContent?.width || 0);
+    return Math.min(100, available / widget.contentH * pageWidth / width * 100);
+  }
+  function updateWidgetPresentationZoomControls(widget, zoom) {
     widget.presentationZoom = zoom;
     widget.shell.setAttribute("data-presentation-zoom", String(zoom));
     const controls = widget.presentationZoomControls;
     if (controls) {
-      controls.label.textContent = `${zoom}%`;
-      controls.zoomOut.disabled = zoom === 50;
+      controls.label.textContent = `${Math.round(zoom * 10) / 10}%`;
+      controls.zoomOut.disabled = zoom <= (noteCardWidget(widget) ? Math.min(40, widgetPresentationFitZoom(widget)) : 40);
       controls.zoomIn.disabled = zoom === 100;
     }
+  }
+  function setWidgetPresentationZoom(widget, percent, notifyHost = true) {
+    if (!widget?.shell) return;
+    const value = Number(percent), isNote = noteCardWidget(widget),
+      fitZoom = isNote ? widgetPresentationFitZoom(widget) : 100,
+      minimum = isNote ? Math.min(40, fitZoom) : 40,
+      zoom = Math.max(minimum, Math.min(100, Number.isFinite(value) ? value : 100));
+    widget.presentationAutoFit = isNote && Math.abs(zoom - fitZoom) < 1e-9;
+    updateWidgetPresentationZoomControls(widget, zoom);
     if (notifyHost) sendWidgetHostState(widget);
     if (widget.maximized) updateWidgetPresentationScroll(widget);
   }
@@ -42,11 +62,12 @@
   }
   function updateWidgetPresentationScroll(widget) {
     if (!widget.maximized || !widget.presentationScrollExtent) return;
+    if (widget.presentationAutoFit) updateWidgetPresentationZoomControls(widget, widgetPresentationFitZoom(widget));
     const shell = widget.shell, style = getComputedStyle(shell),
       scale = widgetPresentationScale(widget),
       toolbar = widget.presentationToolbar.offsetHeight,
       available = Math.max(1, shell.clientHeight - toolbar - parseFloat(style.paddingBottom)),
-      height = Math.max(widget.contentH, available / scale),
+      height = noteCardWidget(widget) ? widget.contentH : widget.presentationViewport ? available / scale : Math.max(widget.contentH, available / scale),
       outside = Math.max(0, height * scale - available),
       content = widget.presentationScrollContent,
       extraY = content ? Math.max(0, content.height - content.viewportHeight) : 0,
@@ -56,14 +77,56 @@
     declaration.setProperty("--widget-page-scale", String(scale));
     declaration.setProperty("--widget-presentation-frame-height", `${height}px`);
     declaration.setProperty("--widget-presentation-frame-top", `${(toolbar - outside) / scale}px`);
-    // Only the scroll track grows. The iframe viewport depends on the window
-    // and saved height, never on measured content (including vh/percentage CSS).
+    // Notes retain their card geometry; viewport applications (graphs) fill the
+    // available height, and other documents keep their saved minimum height.
     widget.presentationScrollExtent.style.height = `${(height + extraY) * scale}px`;
     widget.presentationScrollExtent.style.width = `${Math.max(width, (content?.width || 0) * scale)}px`;
     syncWidgetPresentationScroll(widget);
     sendWidgetHostState(widget);
   }
+  function setViewerWidgetPresentationScrolling(widget, enabled) {
+    const shell = widget.shell;
+    for (const [type, listener] of Object.entries(widget.viewerPresentationScrollListeners || {})) shell.removeEventListener(type, listener);
+    widget.viewerPresentationScrollListeners = null;
+    if (!enabled || typeof window === "undefined" || window.PENECHO_CONFIG?.runtime !== "viewer") return;
+    let touch = null;
+    const toolbarTarget = event => event.target?.closest?.(".widget-presentation-toolbar"),
+      scroll = (event, dx, dy) => {
+        const fallback = () => { if (widget.maximized) shell.scrollBy(dx, dy); };
+        if (!requestViewerWidgetScroll(event, dx, dy, fallback)) fallback();
+      };
+    const listeners = {
+      wheel:event => {
+        if (!widget.maximized || event.ctrlKey || event.metaKey || toolbarTarget(event)) return;
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? widget.frame.clientHeight : 1;
+        let dx = event.deltaX * unit, dy = event.deltaY * unit;
+        if (!Number.isFinite(dx) || !Number.isFinite(dy) || !dx && !dy) return;
+        if (event.shiftKey && !dx) { dx = dy; dy = 0; }
+        event.preventDefault();
+        event.stopPropagation();
+        scroll(event, dx, dy);
+      },
+      touchstart:event => {
+        const point = event.touches[0];
+        touch = widget.maximized && event.touches.length === 1 && !toolbarTarget(event)
+          ? { x:point.clientX, y:point.clientY, lastX:point.clientX, lastY:point.clientY } : null;
+      },
+      touchmove:event => {
+        if (!widget.maximized || !touch || event.touches.length !== 1) { touch = null; return; }
+        const point = event.touches[0], dx = touch.lastX - point.clientX, dy = touch.lastY - point.clientY;
+        touch.lastX = point.clientX; touch.lastY = point.clientY;
+        event.preventDefault();
+        event.stopPropagation();
+        scroll({ target:event.target, pointerType:"touch", clientX:touch.x, clientY:touch.y }, dx, dy);
+      },
+      touchend:() => { touch = null; },
+      touchcancel:() => { touch = null; },
+    };
+    widget.viewerPresentationScrollListeners = listeners;
+    for (const [type, listener] of Object.entries(listeners)) shell.addEventListener(type, listener, { passive:!["wheel", "touchmove"].includes(type) });
+  }
   function setWidgetPresentationScrolling(widget, enabled) {
+    setViewerWidgetPresentationScrolling(widget, enabled);
     if (!enabled) {
       widget.presentationScrollObserver?.disconnect();
       widget.presentationScrollObserver = null;
@@ -85,12 +148,27 @@
     widget.presentationScrollObserver.observe(widget.shell);
     updateWidgetPresentationScroll(widget);
   }
+  function clearWidgetPresentation(widget) {
+    const shell = widget.shell;
+    widget.maximized = false;
+    setWidgetPresentationScrolling(widget, false);
+    // A disconnected or browser-dismissed popover may already be closed.
+    // Always remove presentation styles, even when native hiding fails.
+    try { if (shell.matches(":popover-open")) shell.hidePopover(); } catch {}
+    shell.removeAttribute("popover");
+    shell.classList.remove("widget-maximized");
+    shell.removeAttribute("data-presentation-zoom");
+    widget.presentationZoom = 100;
+    widget.presentationAutoFit = false;
+  }
   function setWidgetMaximized(widget, maximized) {
     const shell = widget?.shell;
-    if (!shell || widget.maximized === maximized) return;
-    if (maximized && typeof shell.showPopover !== "function") return;
-    widget.maximized = maximized;
+    if (!shell) return false;
+    const open = typeof shell.showPopover === "function" && shell.matches(":popover-open");
+    if (widget.maximized === maximized && open === maximized) return true;
+    if (maximized && typeof shell.showPopover !== "function") return false;
     if (maximized) {
+      if (widget.maximized && !open) clearWidgetPresentation(widget);
       if (!widget.presentationToolbar) {
         const toolbar = document.createElement("div");
         toolbar.className = "widget-presentation-toolbar";
@@ -135,21 +213,43 @@
         shell.prepend(toolbar);
         widget.presentationToolbar = toolbar;
       }
-      setWidgetPresentationZoom(widget, 100, false);
-      shell.setAttribute("popover", "manual");
-      shell.classList.add("widget-maximized");
-      shell.showPopover();
-      setWidgetPresentationScrolling(widget, true);
+      if (!shell.penechoPresentationToggleListener) {
+        shell.penechoPresentationToggleListener = () => {
+          if (widget.shell !== shell || !widget.maximized || shell.matches(":popover-open")) return;
+          setWidgetMaximized(widget, false);
+          requestInteractionLayerRender();
+        };
+        shell.addEventListener("toggle", shell.penechoPresentationToggleListener);
+      }
+      try {
+        shell.setAttribute("popover", "manual");
+        shell.classList.add("widget-maximized");
+        if (!open) shell.showPopover();
+        if (!shell.matches(":popover-open")) throw Error("Widget presentation did not open");
+        // Commit only after native top-layer entry succeeds. Interrupted entry
+        // must leave the same live iframe usable on the Canvas.
+        widget.maximized = true;
+        setWidgetPresentationZoom(widget, 100, false);
+        widget.presentationAutoFit = noteCardWidget(widget);
+        shell.scrollTop = shell.scrollLeft = 0;
+        setWidgetPresentationScrolling(widget, true);
+      } catch {
+        clearWidgetPresentation(widget);
+        positionWidget(widget);
+        widget.frame?.focus({ preventScroll:true });
+        requestInteractionLayerRender();
+        return false;
+      }
     } else {
-      setWidgetPresentationScrolling(widget, false);
-      if (shell.matches(":popover-open")) shell.hidePopover();
-      shell.removeAttribute("popover");
-      shell.classList.remove("widget-maximized");
-      shell.removeAttribute("data-presentation-zoom");
-      widget.presentationZoom = 100;
+      clearWidgetPresentation(widget);
     }
     positionWidget(widget);
-    widget.frame?.focus({ preventScroll:true });
+    // Keep presentation shortcuts available immediately, while the host's
+    // asynchronous state message is still in flight. Clicking the content
+    // transfers focus into its existing iframe normally.
+    if (maximized) shell.focus({ preventScroll:true });
+    else widget.frame?.focus({ preventScroll:true });
+    return true;
   }
 
   function showImagePresentation(item) {
@@ -215,11 +315,20 @@
   function canvasNavigationTextTarget(target) {
     return keyboardShortcutTextEditingTarget(target);
   }
-  function canvasWidgetSelectionEnabled() {
-    return !state.spacePan && (state.viewMode ? state.viewTool === "select" : state.mode === "select");
+  function canvasLassoToolActive() {
+    // The persisted Select mode now exposes Lasso. Automatic placement still
+    // uses its existing draft/image/animation controls until they are committed.
+    return !state.viewMode && state.mode === "select" && !state.pending && !state.pendingWidget
+      && !state.imageEdit && !state.animationEdit;
   }
+  function canvasWidgetSelectionEnabled() {
+    return !state.spacePan && (state.viewMode ? state.viewTool === "select" : state.mode === "select" && !canvasLassoToolActive());
+  }
+  // A Widget is live either through the Select tool (View mode) or in place
+  // after an explicit Use gesture, which never changes the editing tool.
   function canvasWidgetInteractive(widget) {
-    return canvasWidgetSelectionEnabled() && state.interactingWidgetId === widget.id && !widget.hiddenForReplacement;
+    if (state.interactingWidgetId !== widget.id || widget.hiddenForReplacement || state.spacePan) return false;
+    return canvasWidgetSelectionEnabled() || (state.widgetInteractionInPlace === true && !state.viewMode);
   }
   function canvasWidgetAtEvent(event) {
     const shell = event.target?.closest?.('.canvas-widget');
@@ -245,13 +354,21 @@
     resetCanvasCursor();
   }
   function setWidgetInteraction(widget, options = {}) {
-    if (widget && (!canvasWidgetSelectionEnabled() || !visibleWidgets().includes(widget))) return false;
+    const inPlace = options.inPlace === true && !state.viewMode;
+    if (widget && ((!canvasWidgetSelectionEnabled() && !inPlace) || !visibleWidgets().includes(widget))) return false;
     const next = widget?.id || null;
-    if (state.interactingWidgetId === next) return true;
+    if (state.interactingWidgetId === next) {
+      if (next && inPlace && !state.widgetInteractionInPlace) {
+        state.widgetInteractionInPlace = true;
+        syncCanvasNavigation();
+      }
+      return true;
+    }
     const previous = state.widgets.find(item => item.id === state.interactingWidgetId);
     if (previous?.frame && document.activeElement === previous.frame) document.activeElement.blur();
     if (previous) setWidgetMaximized(previous, false);
     state.interactingWidgetId = next;
+    state.widgetInteractionInPlace = Boolean(next) && inPlace;
     if (!next) {
       const returnTool = state.widgetInteractionReturnTool;
       state.widgetInteractionReturnTool = null;
@@ -265,21 +382,22 @@
     requestInteractionLayerRender();
     return true;
   }
-  // One entry point for every explicit activation gesture (toolbar, double-click,
-  // context menu): it selects the tool that can own Widget interaction first.
+  // One entry point for every explicit activation gesture (header Use,
+  // double-click, context menu). In the editor the Widget becomes live in
+  // place without changing the current editing tool, including Lasso.
+  // View mode keeps its own Select tool.
   function enterWidgetInteraction(widget) {
     if (!widget || widget.pending || !visibleWidgets().includes(widget)) return false;
-    const returnTool = state.widgetInteractionReturnTool || {
-      viewMode:state.viewMode,
-      mode:state.viewMode ? "hand" : state.mode === "select" ? state.widgetReturnMode || "pen" : state.mode,
-    };
+    let entered;
     if (state.viewMode) {
+      const returnTool = state.widgetInteractionReturnTool || { viewMode:true, mode:"hand" };
       if (state.viewTool !== "select") setCanvasViewTool("select");
-    } else if (state.mode !== "select") {
-      setCanvasMode("select");
+      state.widgetInteractionReturnTool = returnTool;
+      entered = setWidgetInteraction(widget);
+    } else {
+      state.widgetInteractionReturnTool = null;
+      entered = setWidgetInteraction(widget, { inPlace:true });
     }
-    state.widgetInteractionReturnTool = returnTool;
-    const entered = setWidgetInteraction(widget);
     if (entered) setWidgetMaximized(widget, widgetInteractionPresentation() === "maximized");
     return entered;
   }
@@ -288,7 +406,7 @@
   }
   function showWidgetContextToolbar(event) {
     event.preventDefault();
-    if (state.viewMode || state.spacePan || state.interactingWidgetId) return false;
+    if (state.viewMode || state.spacePan || state.interactingWidgetId || canvasLassoToolActive()) return false;
     if (!["pen", "hand", "select"].includes(state.mode)) return false;
     if (canvasWidgetInteractionChromeTarget(event.target)) return false;
     const widget = canvasWidgetAtEvent(event);
@@ -310,6 +428,7 @@
     syncCanvasNavigation();
   }
   function beginCanvasObjectSelection(event, point) {
+    if (canvasLassoToolActive()) return false;
     if (!point || !valid(point) || event.button !== 0) return false;
     // Existing ink lasso takes priority when a lasso is already active.
     if (state.selection) return false;
@@ -348,6 +467,34 @@
     const shell = target.closest?.('.canvas-widget');
     return Boolean(shell && shell.dataset.widgetId !== state.interactingWidgetId);
   }
+  let viewerWidgetScrollSequence = 0;
+  function requestViewerWidgetScroll(event, dx, dy, fallback) {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer" || state.spacePan || event.ctrlKey || event.metaKey) return false;
+    const widget = canvasWidgetAtEvent(event), frame = widget?.frame;
+    if (!widget?.maximized || !widget.hostReady || !frame?.contentWindow) return false;
+    const rect = frame.getBoundingClientRect();
+    if (!rect.width || !rect.height || event.clientX < rect.left || event.clientX >= rect.right
+      || event.clientY < rect.top || event.clientY >= rect.bottom) return false;
+    const requestId = `viewer-scroll-${++viewerWidgetScrollSequence}`,
+      scaleX = (frame.clientWidth || widget.contentW) / rect.width, scaleY = (frame.clientHeight || widget.contentH) / rect.height,
+      requests = widget.viewerScrollRequests ||= new Map();
+    const finish = handled => {
+      const pending = requests.get(requestId);
+      if (!pending) return;
+      requests.delete(requestId);
+      clearTimeout(pending.timer);
+      if (!handled && state.widgets.includes(widget) && widget.html === pending.html && widget.maximized === pending.maximized) fallback();
+    };
+    requests.set(requestId, { html:widget.html, maximized:widget.maximized, finish, timer:setTimeout(() => finish(false), 500) });
+    frame.contentWindow.postMessage({ type:"penecho-widget-viewer-scroll", requestId,
+      x:(event.clientX - rect.left) * scaleX, y:(event.clientY - rect.top) * scaleY,
+      dx:dx * (event.pointerType === "touch" ? scaleX : 1), dy:dy * (event.pointerType === "touch" ? scaleY : 1) }, widget.hostOrigin || location.origin);
+    return true;
+  }
+  function finishViewerWidgetScroll(widget, message) {
+    if (window.PENECHO_CONFIG?.runtime !== "viewer" || typeof message.handled !== "boolean") return;
+    widget.viewerScrollRequests?.get(message.requestId)?.finish(message.handled);
+  }
   function handleCanvasWheel(event) {
     if (!canvasNavigationSurface(event.target)) return;
     event.preventDefault();
@@ -355,9 +502,10 @@
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvasViewportMetrics().height : 1;
     let dx = event.deltaX * unit, dy = event.deltaY * unit;
     if (!Number.isFinite(dx) || !Number.isFinite(dy) || !dx && !dy) return;
-    if (event.ctrlKey || event.metaKey || state.wheelZoom) zoomCanvasAt(event.clientX, event.clientY, dy);
+    const zoomDelta = dy;
+    if (event.shiftKey && !dx && !event.ctrlKey && !event.metaKey) { dx = dy; dy = 0; }
+    if (event.ctrlKey || event.metaKey || state.wheelZoom) zoomCanvasAt(event.clientX, event.clientY, zoomDelta);
     else {
-      if (event.shiftKey && !dx) { dx = dy; dy = 0; }
       moveCanvas(-dx, -dy);
       requestCoordinatesUpdate();
       wheelNavigating();
@@ -429,7 +577,7 @@
     // Canvas resize zones extend beyond the DOM handles. Use the same hit
     // test as the resize cursor and drag gesture before body activation.
     const point = clientPoint(event);
-    const resize = !state.viewMode && widgetPointerHit(point, event.pointerType || 'mouse', false);
+    const resize = !state.viewMode && !canvasLassoToolActive() && widgetPointerHit(point, event.pointerType || 'mouse', false);
     if (resize && ['width', 'height', 'resize'].includes(resize.hit)) {
       event.preventDefault();
       event.stopPropagation();
@@ -437,7 +585,7 @@
       return;
     }
     const target = handObjectToolbarTargetAtPoint(point);
-    if (target?.kind === "image") {
+    if (target?.kind === "image" && !canvasLassoToolActive()) {
       event.preventDefault();
       showImagePresentation(target.object);
     } else if (target?.kind === "widget") enterWidgetInteraction(target.object);
@@ -470,6 +618,10 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       setWidgetInteraction(null);
+    } else if (event.key === 'Escape' && state.viewerSelectedWidgetId) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      selectViewerWidget(null);
     } else if (!event.repeat && !state.drawing && !state.widgetGesture && !state.selectionGesture && ['h','v','p'].includes(event.key.toLowerCase())) {
       if (state.viewMode && event.key.toLowerCase() === 'p') return;
       event.preventDefault();

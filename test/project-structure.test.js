@@ -19,6 +19,9 @@ test("root JavaScript is limited to entry points and Electron Forge configuratio
 test("the browser application preserves its ordered source dependencies", () => {
   assert.deepEqual(SOURCES, [
     "src/providers/api-presets.js",
+    "src/shared/finish-drawing.js",
+    "src/shared/sketch-puppet.js",
+    "src/shared/illustration-style.js",
     "src/client/app/client-activity.js",
     "src/client/app/core.js",
     "src/client/app/canvas-runtime.js",
@@ -37,6 +40,14 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/canvas-navigation.js",
     "src/client/app/playground.js",
     "src/client/app/desktop-menu.js",
+    "src/client/app/assist-agent.js",
+    "src/client/app/smart-suggestions.js",
+    "src/client/app/agent-suggest.js",
+    "src/client/app/widget-assist.js",
+    "src/client/app/pen-intelligence.js",
+    "src/client/app/canvas-index.js",
+    "src/client/app/note-cards.js",
+    "src/client/app/living-ink.js",
     "src/client/app/ui-bootstrap.js",
   ]);
   for (const source of SOURCES) assert.ok(fs.statSync(path.join(ROOT, source)).isFile(), source);
@@ -82,4 +93,18 @@ test("the npm package includes the generated Live Clay runtime and its build inp
     "scripts/build-playground.cjs",
   ]) assert.ok(packageJson.files.includes(file), `${file} must ship in the npm package`);
   assert.match(packageJson.scripts.check, /npm run check:playground/);
+});
+
+test("the npm package includes every local startup script and stylesheet", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
+  const assets = [...new Set([...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+    .map(match => match[1])
+    .filter(url => /\.(?:js|css)(?:\?|$)/.test(url) && !/^(?:https?:|\/)/.test(url))
+    .map(url => `public/${url.split("?")[0]}`))];
+  assert.ok(assets.length > 30);
+  for (const asset of assets) {
+    assert.ok(packageJson.files.some(file => file === asset || file.endsWith("/") && asset.startsWith(file)),
+      `${asset} must ship in the npm package`);
+  }
 });

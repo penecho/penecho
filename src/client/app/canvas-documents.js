@@ -42,7 +42,7 @@
   async function canvasDocumentsUploadImage(doc,args,execution) {
     const assertUploadTarget=()=>{if(args.requireActiveDocument&&(!canvasDocumentsIsActive(doc)||canvasDocuments.switching||snapshotLoadInProgress))throw canvasDocumentsError("CANVAS_NOT_VISIBLE","The target Canvas is no longer the current open document. Reopen it and retry the same upload.");};
     assertUploadTarget();
-    if(canvasDocumentsIsActive(doc))canvasAgentMutationIdle(execution);
+    canvasAgentAssertToolExecution(execution);
     const decoded=await canvasImageSource(doc,args.source);
     try {
       const id=await canvasDocumentIdentity.sha256Hex(await decoded.blob.arrayBuffer());
@@ -55,10 +55,12 @@
       if(data.length>800000||entries.length>=CANVAS_IMAGE_ASSET_LIMIT||entries.reduce((sum,a)=>sum+(a.dataBase64?.length||0),0)+data.length>CANVAS_IMAGE_ASSET_BYTES)throw canvasDocumentsError("ASSET_LIMIT","This Canvas has reached its image attachment limit.");
       const asset={kind:"resource",contentType:decoded.blob.type,dataBase64:data.slice(data.indexOf(",")+1),metadata:{resourceType:CANVAS_IMAGE_ASSET_TYPE,resourceId:id,name:String(args.name||"image").slice(0,255),bytes:decoded.blob.size,width:decoded.naturalW,height:decoded.naturalH}};
       assertUploadTarget();
-      if(canvasDocumentsIsActive(doc))canvasAgentMutationIdle(execution);
+      canvasAgentAssertToolExecution(execution);
       // Immutable attachments remain available to objects restored by Undo.
       if(canvasDocumentsIsActive(doc))state.currentSnapshotPreservedAssets=[...assets,asset];else doc.stored.item.preservedAssets=[...assets,asset];
-      canvasDocumentsEndEdit(doc,"image_attachment",id);
+      // Immutable resources do not consume the user's pending edit history.
+      if(canvasDocumentsIsActive(doc))state.userRevision++;
+      canvasDocumentsChanged(doc,"image_attachment",id);
       return {...canvasImageAssetMetadata(asset),revision:doc.revision};
     }finally{decoded.image.close();}
   }
@@ -71,16 +73,17 @@
       const ratio=decoded.naturalW/decoded.naturalH,defaultScale=Math.max(80/decoded.naturalW,80/decoded.naturalH,Math.min(1,800/Math.max(decoded.naturalW,decoded.naturalH))),
         sourceW=args.width??(args.height?args.height*ratio:decoded.naturalW*defaultScale),sourceH=args.height??sourceW/ratio,scale=args.region?1:mcpPresentationViewport(doc).scale,w=sourceW/scale,h=sourceH/scale;
       if(![sourceW,sourceH].every(value=>Number.isFinite(value)&&value>=80)||![w,h].every(value=>Number.isFinite(value)&&value>0&&value<=SIZE))throw canvasDocumentsError("INVALID_GEOMETRY","Both image dimensions must be at least 80 Canvas units and within the Canvas. Supply compatible width/height.");
-      const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,w,h,session,null,true).placement,
+      const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,w,h,session,null,true,execution).placement,
         record=imageRecord({id:canvasDocumentsObjectId(doc,"image"),x:placement.x,y:placement.y,w,h,...decoded,sourceName:args.source.startsWith("data:")?"image":args.source});
       if(!record)throw canvasDocumentsError("INVALID_IMAGE","Image content or geometry was rejected.");
       if(canvasDocumentsIsActive(doc))canvasAgentMutationIdle(execution);
       canvasDocumentsCapacity(doc,"image");
-      canvasDocumentsValidateGeometry(doc,record);canvasDocumentsBeginEdit(doc);
+      canvasDocumentsValidateGeometry(doc,record);const restoreMutation=canvasDocumentsBeginEdit(doc,execution);try {
       if(canvasDocumentsIsActive(doc)){state.images.push(record);retained=true;}else {const {image,...stored}=record;doc.stored.item.images.push(stored);}
       canvasDocumentsEndEdit(doc,"image",record.id);
+      }finally{restoreMutation();}
       if(!args.region&&session&&canvasDocumentsIsActive(doc))mcpQueueView(session,record);
-      return {applied:true,objectId:record.id,source:args.source.startsWith("data:")?`penecho-ref:objects/${encodeURIComponent(record.id)}/image`:args.source,revision:doc.revision};
+      return {applied:true,objectId:record.id,source:args.source.startsWith("data:")?`penecho-ref:objects/${encodeURIComponent(record.id)}/image`:args.source,revision:doc.revision,box:{x:record.x,y:record.y,w,h},sourcePlacement:mcpSourcePlacement(execution?.assistContext,record,32/(execution?.assistContext?.scale||state.scale))};
     }finally{if(!retained)decoded.image.close();}
   }
   function canvasDocumentsCopy(en,zh) { return state.language === "zh" ? zh : en; }
@@ -207,7 +210,8 @@
     canvasDocuments.db=await canvasDocumentsBound(requestResult(request));return canvasDocuments.db;
   }
   async function canvasDocumentsReady() {
-    canvasDocumentsCurrent();
+    const active=canvasDocumentsCurrent();
+    if(state.canvasAgentCanvasKey?.startsWith("draft:"))canvasAgentCanvasDidPersist("workspace",active.id);
     if(!canvasDocuments.ready)canvasDocuments.ready=(async()=>{
       const db=await canvasDocumentsDb(),items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
       const conversationKeys=new Set(typeof canvasAgentStoredHistoryGroups==="function"?canvasAgentStoredHistoryGroups().map(group=>group.canvasKey):[]);
@@ -270,6 +274,7 @@
     const view=viewportRect();return {scale:state.scale,panX:state.panX,panY:state.panY,readingStage:mcpReadingScreenStage(),navigationLocked:state.navigationLocked,region:view?{x:view.x,y:view.y,w:view.w,h:view.h}:null};
   }
   async function canvasDocumentsPark(execution=null) {
+    if (canvasDocumentsDraft?.writing) await canvasDocumentsAwait(() => canvasDocumentsDraft.writing, execution);
     const doc=canvasDocumentsCurrent();
     await canvasDocumentsAwait(()=>finalizeCanvasForSnapshot(),execution);
     if(execution)canvasAgentAssertToolExecution(execution);
@@ -352,14 +357,15 @@
       canvasDocumentsSyncExtension(doc);canvasDocumentsApplyView(item.view);
       resetCanvasDefaultMode();
       canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});
-      if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();}
+      if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();canvasAgentSyncPromptSuggestions();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       canvasDocumentsRetireEmptyPlaceholder(previous);
       window.PenEchoStudioNavigator?.updateDocument?.();window.dispatchEvent(new Event("penecho:live-share-context-changed"));await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
   }
   function canvasDocumentsApplyView(view) {
-    if(view&&[view.scale,view.panX,view.panY].every(Number.isFinite)&&view.scale>0){state.scale=Math.max(.03,Math.min(2,view.scale));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
+    if(view===null){state.viewInitialized=false;fit();}
+    else if(view&&[view.scale,view.panX,view.panY].every(Number.isFinite)&&view.scale>0){state.scale=Math.max(.03,Math.min(2,view.scale));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
     else if(view?.region&&[view.region.x,view.region.y,view.region.w,view.region.h].every(Number.isFinite)&&view.region.w>0&&view.region.h>0)canvasAgentFrameRegion(view.region,0);
     else if(view){state.scale=Math.max(.03,Math.min(2,Number(view.scale)||1));state.panX=Number(view.panX)||0;state.panY=Number(view.panY)||0;updateCoordinates();}
     setCanvasNavigationLocked(view?.navigationLocked===true);
@@ -382,7 +388,10 @@
     if(copy){metadata.documentId=canvasDocumentsId();metadata.bindings=[];metadata.locators=[];metadata.processor={kind:"penecho"};}
     return {...snapshotCanvasObjectExtensions(),[CANVAS_DOCUMENT_EXTENSION]:metadata,[CANVAS_WORKSPACE_EXTENSION]:copy?{version:1}:canvasDocumentsWorkspaceData(doc)};
   }
-  async function canvasDocumentsDidSave(item,location,storedId,tileEntries=[]) {
+  async function canvasDocumentsDidSave(item,location,storedId,tileEntries=[],recoveryCommitVersion=null) {
+    // A recovery write started before Save must finish before its saved identity
+    // is persisted, otherwise it can put the old draft back after the save.
+    if(canvasDocumentsDraft?.writing)await canvasDocumentsDraft.writing;
     const previous=canvasDocumentsCurrent(),nextId=item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION]?.documentId;
     if(nextId&&nextId!==previous.id){
       previous.stored={item:{...item,id:previous.locator?.id||null,name:previous.title,bundleExtensions:{...item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:canvasDocumentsMetadata(previous),[CANVAS_WORKSPACE_EXTENSION]:canvasDocumentsWorkspaceData(previous)}},tileEntries};
@@ -392,6 +401,32 @@
     }
     await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location);
     const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId},tileEntries};canvasDocumentsSyncExtension(doc);
+    const epoch=canvasDocuments.epoch,settled=Number.isSafeInteger(recoveryCommitVersion)&&recoveryCommitVersion===canvasDocumentsDraft.commitVersion&&state.userRevision===state.snapshotSavedRevision;
+    // Save can leave userRevision unchanged, including an empty Canvas's first
+    // name. Persist now rather than relying on the content-only recovery timer.
+    canvasDocumentsScheduleDraft();
+    const key=canvasDocumentsDraftKey();
+    await canvasDocumentsPersist(doc);
+    // A completed Save is already a settled recovery copy. Only acknowledge
+    // it when no user edit or AI commit arrived while the content was saved.
+    if(settled&&epoch===canvasDocuments.epoch&&canvasDocumentsIsActive(doc)&&key===canvasDocumentsDraftKey())canvasDocumentsDraft.savedKey=key;
+  }
+  async function canvasDocumentsDidRename(id,location,name) {
+    if(canvasDocumentsDraft?.writing)await canvasDocumentsDraft.writing;
+    for(const doc of canvasDocuments.records.values()) {
+      if(doc.locator?.id!==id||doc.locator.location!==location)continue;
+      const active=canvasDocumentsIsActive(doc),epoch=canvasDocuments.epoch,
+        clean=active&&canvasDocumentsDraft.savedKey===canvasDocumentsDraftKey();
+      doc.title=name;
+      if(active){canvasDocumentsSyncExtension(doc);canvasDocumentsScheduleDraft();}
+      if(doc.stored)doc.stored={...doc.stored,item:{...doc.stored.item,name,bundleExtensions:{...doc.stored.item.bundleExtensions,[CANVAS_DOCUMENT_EXTENSION]:canvasDocumentsMetadata(doc)}}};
+      const key=canvasDocumentsDraftKey();
+      // Reuse the settled recovery content and tile Blobs. Renaming must not
+      // capture Widget previews, encode ink, or accept unfinished edits.
+      await canvasDocumentsPersist(doc);
+      if(clean&&epoch===canvasDocuments.epoch&&canvasDocumentsIsActive(doc)&&key===canvasDocumentsDraftKey())canvasDocumentsDraft.savedKey=key;
+    }
+    canvasDocumentsRender();
   }
   function canvasDocumentsObjects(doc) {
     if(canvasDocumentsIsActive(doc))return [...state.widgets.map(item=>({kind:"widget",item})),...state.textBoxes.map(item=>({kind:"text",item})),...state.images.map(item=>({kind:"image",item}))];
@@ -399,14 +434,21 @@
   }
   function canvasDocumentsBounds(object) { const {x,y,w,h}=object.item;return {x,y,w,h}; }
   function canvasDocumentsObject(doc,id) {return canvasDocumentsObjects(doc).find(o=>o.item.id===id);}
-  function canvasDocumentsSourceEditable(object) {return object.kind!=="widget"||object.item.widgetType==="html_widget"&&(!object.item.pluginId||object.item.pluginId==="general");}
-  function canvasDocumentsFilePaths(doc) {
+  function canvasDocumentsSourceEditable(object, execution = null) {
+    const target = execution?.assistContext?.owner?.inputTarget;
+    if (target?.variant && target.widget === object.item) return false;
+    if (object.kind !== "widget" || object.item.widgetType === "html_widget" && (!object.item.pluginId || object.item.pluginId === "general")) return true;
+    return Boolean(object.item.pluginId === "flowchart" && ["html_widget", "diagram_source"].includes(object.item.widgetType)
+      && target?.refinement && target.widget === object.item && assistAgentToolContextCurrent(execution.assistContext));
+  }
+  function canvasDocumentsFilePaths(doc, execution = null) {
     const entries=[{path:"assets/index.json",writable:false},{path:"canvas.json",writable:false},{path:"context.md",writable:true},{path:"layout.json",writable:false},{path:"view.json",writable:false},{path:"objects/index.json",writable:false},{path:"runtime/viewport.json",writable:false},{path:"runtime/selection.json",writable:false},{path:"runtime/changes.json",writable:false},{path:"runtime/messages.json",writable:false},{path:"ink/index.json",writable:false}];
     for(const object of canvasDocumentsObjects(doc)) {
       const root=`objects/${encodeURIComponent(object.item.id)}`,common={objectId:object.item.id,kind:object.kind,bounds:canvasDocumentsBounds(object)};
-      entries.push({...common,path:`${root}/geometry.json`,writable:true});
+      entries.push({...common,path:`${root}/geometry.json`,writable:!(execution?.assistContext?.owner?.inputTarget?.variant && execution.assistContext.owner.inputTarget.widget === object.item)});
       const names=object.kind==="widget"?["widget.json",...(object.item.widgetType==="diagram_source"?["widget.source"]:["widget.html",...(object.item.copyText&&object.item.copyText!==object.item.html?["widget.source"]:[])])]:object.kind==="text"?["content.txt"]:["image.json"];
-      for(const name of names)entries.push({...common,path:`${root}/${name}`,writable:object.kind!=="image"&&canvasDocumentsSourceEditable(object)});
+      for(const name of names)entries.push({...common,path:`${root}/${name}`,writable:object.kind!=="image"&&canvasDocumentsSourceEditable(object,execution)&&!(["penecho-scene+json","penecho-note-card+json"].includes(object.item.sourceFormat)&&name==="widget.html")});
+      if (object.kind === "widget" && (object.item.widgetType === "diagram_source" || object.item.sourceFormat === "penecho-note-card+json")) entries.push({...common,path:`${root}/widget.animation.json`,writable:canvasDocumentsSourceEditable(object,execution)});
     }
     return entries;
   }
@@ -433,7 +475,8 @@
     if(object.kind==="image"&&name==="image.json")return json({id:item.id,source:`penecho-ref:objects/${encodeURIComponent(item.id)}/image`,naturalW:item.naturalW,naturalH:item.naturalH,sourceName:item.sourceName||""});
     if(object.kind==="widget") {
       if(name==="widget.html"&&item.widgetType!=="diagram_source")return String(item.html||"");
-      if(name==="widget.source")return String(item.widgetType==="diagram_source"?item.source||"":item.copyText||"");
+      if(name==="widget.animation.json"&&(item.widgetType==="diagram_source"||item.sourceFormat==="penecho-note-card+json"))return json(item.widgetAnimation||null);
+      if(name==="widget.source")return item.sourceFormat==="penecho-note-card+json"?noteCardStripMedia(item.copyText).source:String(item.widgetType==="diagram_source"?item.source||"":item.copyText||"");
       if(name==="widget.json")return json({title:item.title||"",refreshSeconds:item.refreshSeconds||0,widgetType:item.widgetType,pluginId:item.pluginId,sourceFormat:item.sourceFormat||null,frameworkVersion:item.frameworkVersion||null,copyLabel:item.copyLabel||null});
     }
     throw canvasDocumentsError("FILE_NOT_FOUND","This resource does not exist for this object. List its files first.");
@@ -455,17 +498,52 @@
     index.boxes.delete(id);if(!box)return;index.boxes.set(id,box);
     for(const k of canvasDocumentsCells(box)){if(!index.cells.has(k))index.cells.set(k,new Set());index.cells.get(k).add(id);}
   }
+  // At most 16 bit-packed raster tiles (~512 KiB). Revision, history, document
+  // epoch and the ink-bounds marker revoke masks after drawing, erasing or Undo.
+  const canvasDocumentsInkMasks=new Map();
+  function canvasDocumentsInkCollision(doc,k,box) {
+    const canvas=tiles.get(k);if(!canvas)return null;
+    const [tx,ty]=k.split(",").map(Number),origin={x:tx*TILE,y:ty*TILE},
+      width=Math.min(canvas.width,TILE,SIZE-origin.x),height=Math.min(canvas.height,TILE,SIZE-origin.y),
+      left=Math.max(0,Math.floor(box.x-origin.x)),top=Math.max(0,Math.floor(box.y-origin.y)),
+      right=Math.min(width,Math.ceil(box.x+box.w-origin.x)),bottom=Math.min(height,Math.ceil(box.y+box.h-origin.y));
+    if(right<=left||bottom<=top)return null;
+    const marker=state.inkBounds.get(k),history=state.history.at(-1),revision=state.userRevision,epoch=canvasDocuments.epoch;
+    let mask=canvasDocumentsInkMasks.get(k);
+    if(!mask||mask.canvas!==canvas||mask.documentId!==doc.id||mask.epoch!==epoch||mask.revision!==revision||mask.history!==history||mask.marker!==marker){
+      const pixels=canvas.getContext("2d",{willReadFrequently:true}).getImageData(0,0,width,height).data,stride=Math.ceil(width/32),bits=new Uint32Array(stride*height);
+      for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;if(pixels[i+3]&&!(pixels[i]>248&&pixels[i+1]>248&&pixels[i+2]>248))bits[y*stride+(x>>>5)]|=1<<(x&31);}
+      mask={canvas,documentId:doc.id,epoch,revision,history,marker,bits,stride};
+      canvasDocumentsInkMasks.delete(k);canvasDocumentsInkMasks.set(k,mask);
+      if(canvasDocumentsInkMasks.size>16)canvasDocumentsInkMasks.delete(canvasDocumentsInkMasks.keys().next().value);
+    }
+    let minX=right,minY=bottom,maxX=-1,maxY=-1;
+    for(let y=top;y<bottom;y++)for(let word=left>>>5;word<=(right-1)>>>5;word++){
+      let value=mask.bits[y*mask.stride+word];
+      if(word===(left>>>5))value&=0xffffffff<<(left&31);
+      if(word===((right-1)>>>5))value&=0xffffffff>>>(31-((right-1)&31));
+      if(!value)continue;
+      minX=Math.min(minX,word*32+31-Math.clz32(value&-value));maxX=Math.max(maxX,word*32+31-Math.clz32(value));minY=Math.min(minY,y);maxY=y;
+    }
+    return maxX<0?null:{x:origin.x+minX,y:origin.y+minY,w:maxX-minX+1,h:maxY-minY+1};
+  }
   function canvasDocumentsCollisions(doc,box,exclude=new Set()) {
     const index=canvasDocumentsSpatial(doc),ids=new Set(),result=[];
     for(const k of canvasDocumentsCells(box))for(const id of index.cells.get(k)||[])ids.add(id);
-    for(const id of ids)if(!exclude.has(id)&&intersection(box,index.boxes.get(id)))result.push({id,...index.boxes.get(id)});
+    for(const id of ids)if(!exclude.has(id)&&intersection(box,index.boxes.get(id))){
+      const occupied=id.startsWith("ink:")&&canvasDocumentsIsActive(doc)?canvasDocumentsInkCollision(doc,id.slice(4),box):index.boxes.get(id);
+      if(occupied)result.push({id,...occupied});
+    }
     return result;
   }
-  function canvasDocumentsPlace(doc,w,h,session=null,presentation=null,preferViewport=false) {
+  function canvasDocumentsPlace(doc,w,h,session=null,presentation=null,preferViewport=false,execution=null,reserved=[]) {
+    if(execution)canvasAgentAssertToolExecution(execution);
+    const source=canvasDocumentsIsActive(doc)?execution?.assistContext:null;
     const readingView=mcpReadingWorldRect(doc);
-    return mcpArrange(w,h,session,presentation,readingView,a=>{
+    const plan=mcpArrange(w,h,session,presentation,readingView,a=>{
       let bounds=null;for(const id of a.objectIds||[a.objectId]){const object=canvasDocumentsObject(doc,id);if(object)bounds=unionDirtyBounds(bounds,canvasDocumentsBounds(object));}return bounds;
-    },box=>canvasDocumentsCollisions(doc,box));
+    },box=>[...canvasDocumentsCollisions(doc,box),...reserved.filter(b=>intersection(box,b))],source);
+    return source?{...plan,sourcePlacement:mcpSourcePlacement(source,{x:plan.placement.x,y:plan.placement.y,w,h},32/(source.scale||1))}:plan;
   }
   function canvasDocumentsValidateGeometry(doc,box,excludeId=null) {
     if(!box||![box.x,box.y,box.w,box.h].every(Number.isFinite)||box.x<0||box.y<0||box.w<1||box.h<1||box.x+box.w>SIZE||box.y+box.h>SIZE)throw canvasDocumentsError("INVALID_GEOMETRY","Geometry must stay within the Canvas bounds.");
@@ -473,9 +551,10 @@
     const hits=canvasDocumentsCollisions(doc,box,new Set(excludeId?[excludeId]:[])).filter(hit=>!old||!intersection(old,hit));
     if(hits.length)throw canvasDocumentsError("LAYOUT_CONFLICT","This placement overlaps existing content. Keep its position or choose a free region and retry.",{obstacles:hits.slice(0,20)});
   }
-  function canvasDocumentsBeginEdit(doc) {
-    if(canvasDocumentsIsActive(doc)){save();state.widgetHistoryBefore=serializedWidgets();state.imageHistoryBefore=imageHistoryState();state.textBoxHistoryBefore=textBoxHistoryState();}
+  function canvasDocumentsBeginEdit(doc,execution=null,objectIds=[]) {
+    if(canvasDocumentsIsActive(doc)){const restore=canvasAgentBeginMutation(execution,objectIds);state.widgetHistoryBefore=serializedWidgets();state.imageHistoryBefore=imageHistoryState();state.textBoxHistoryBefore=textBoxHistoryState();return restore;}
     else {const item=doc.stored.item;if(!item.view){const {stage,scale,panX,panY}=mcpPresentationViewport();item.view={scale,panX,panY,readingStage:stage};}doc.pendingUndo={tiles:[],widgetsBefore:item.widgets.map(w=>({...w})),imagesBefore:item.images.map(i=>({...i})),textBoxesBefore:item.textBoxes.map(t=>({...t}))};}
+    return ()=>{};
   }
   function canvasDocumentsCapacity(doc,kind,delta=1) {
     const limit=kind==="text"?50:100;
@@ -502,24 +581,32 @@
     const parts=canvasDocumentIdentity.parsePath(path),object=parts[0]==="objects"?canvasDocumentsObject(doc,decodeURIComponent(parts[1])):null;
     if(!object)throw canvasDocumentsError("READ_ONLY_FILE","This is a derived runtime file. Use a Canvas action instead.");
     const field=parts[2],item=object.item;let replacement={...item};
+    const target=execution?.assistContext?.owner?.inputTarget;
+    if(target?.variant&&target.widget===item)throw canvasDocumentsError("READ_ONLY_FILE","This action creates a separate Widget. Preserve the source Widget unchanged.");
+    if(item.sourceFormat==="penecho-scene+json"&&field==="widget.html")throw canvasDocumentsError("READ_ONLY_FILE","Scene HTML is generated. Patch widget.source instead.");
+    if(item.sourceFormat==="penecho-note-card+json"&&field==="widget.html")throw canvasDocumentsError("READ_ONLY_FILE","Note card HTML is generated. Patch widget.source (the note JSON) instead.");
     // Widget source commits use a source lock without waiting for gestures.
     // A selected Widget keeps widgetEdit after pointer-up; the generic mutation
     // gate would incorrectly reject every patch after a user drag/resize.
-    if(canvasDocumentsIsActive(doc)&&!(object.kind==="widget"&&field!=="geometry.json"))canvasAgentMutationIdle(execution);
-    if(field!=="geometry.json"&&!canvasDocumentsSourceEditable(object))throw canvasDocumentsError("READ_ONLY_FILE","Professional Diagram and private plugin source editing is unavailable. Existing content is preserved.");
+    if(canvasDocumentsIsActive(doc)&&!(object.kind==="widget"&&field!=="geometry.json"))canvasAgentMutationIdle(execution,[item.id]);
+    if(field!=="geometry.json"&&!canvasDocumentsSourceEditable(object,execution))throw canvasDocumentsError("READ_ONLY_FILE","Source editing is unavailable for this Widget in the current task. Existing content is preserved.");
     if(field==="geometry.json") {
       let geometry;try{geometry=JSON.parse(args.content);}catch{throw canvasDocumentsError("INVALID_JSON","Geometry must be valid JSON.");}
       if(Object.keys(geometry).some(k=>!["x","y","w","h"].includes(k)))throw canvasDocumentsError("INVALID_GEOMETRY","Geometry contains unsupported fields.");
       canvasDocumentsValidateGeometry(doc,geometry,item.id);Object.assign(replacement,geometry);
-      if(object.kind==="widget"){replacement.contentW=item.contentW*geometry.w/item.w;replacement.contentH=item.contentH*geometry.h/item.h;if(replacement.contentW<300||replacement.contentH<200)throw canvasDocumentsError("INVALID_GEOMETRY","This size is below the object's supported content minimum.");}
+      if(object.kind==="widget"){replacement.contentW=item.contentW*geometry.w/item.w;replacement.contentH=item.contentH*geometry.h/item.h;const minimumHeight=item.fitContent||["height","resize"].includes(item.fitContentAxes)?1:200;if(replacement.contentW<300||replacement.contentH<minimumHeight)throw canvasDocumentsError("INVALID_GEOMETRY","This size is below the object's supported content minimum.");}
     } else if(object.kind==="text"&&field==="content.txt") {
       const made=await renderedTextBoxRecord({...item,text:args.content});if(!made)throw canvasDocumentsError("INVALID_TEXT","Text could not be rendered. Shorten it and retry.");const original=await renderedTextBoxRecord(item);if(original){made.w*=item.w/original.w;made.h*=item.h/original.h;made.x=item.x;made.y=item.y;}replacement=made;
       canvasDocumentsValidateGeometry(doc,canvasDocumentsBounds({item:replacement}),item.id);
-    } else if(object.kind==="widget"&&["widget.html","widget.source","widget.json"].includes(field)) {
+    } else if(object.kind==="widget"&&["widget.html","widget.source","widget.json","widget.animation.json"].includes(field)) {
       const htmlCopySource=field==="widget.html"&&widgetUsesHtmlCopySource(item);
       if(field==="widget.html") {replacement.html=args.content;if(htmlCopySource)delete replacement.copyText;}
-      else if(field==="widget.source") {if(item.widgetType==="diagram_source")replacement.source=args.content;else replacement.copyText=args.content;}
-      else {
+      else if(field==="widget.source") {if(item.widgetType==="diagram_source")replacement.source=args.content;else replacement.copyText=item.sourceFormat==="penecho-note-card+json"?noteCardRestoreMedia(args.content,item.copyText):args.content;}
+      else if(field==="widget.animation.json") {
+        if(item.widgetType!=="diagram_source"&&item.sourceFormat!=="penecho-note-card+json")throw canvasDocumentsError("READ_ONLY_FILE","This Widget animates through its canonical source.");
+        try { const scene=JSON.parse(args.content);replacement.widgetAnimation=scene===null?null:window.PENECHO_SCENE.normalize(scene); }
+        catch { throw canvasDocumentsError("INVALID_SCENE","The animation must be null or a valid scene JSON object."); }
+      } else {
         let value;try{value=JSON.parse(args.content);}catch{throw canvasDocumentsError("INVALID_JSON","widget.json must remain valid JSON.");}
         const immutable={widgetType:item.widgetType,pluginId:item.pluginId,sourceFormat:item.sourceFormat||null,frameworkVersion:item.frameworkVersion||null};
         if(Object.keys(value).some(k=>![...Object.keys(immutable),"title","refreshSeconds","copyLabel"].includes(k))||Object.entries(immutable).some(([k,v])=>value[k]!==v)||typeof value.title!=="string"||value.title.length>120||!Number.isFinite(value.refreshSeconds)||value.refreshSeconds<0||value.refreshSeconds>86400)throw canvasDocumentsError("INVALID_MANIFEST","Keep the Widget type and source format unchanged; edit only title, refreshSeconds and copyLabel.");
@@ -527,6 +614,7 @@
       }
       const validated=canvasDocumentsWidgetRecord(replacement);if(!validated)throw canvasDocumentsError("INVALID_WIDGET","Patched Widget source was rejected. Check its format and retry.");
       replacement=validated;
+      if(field==="widget.animation.json"&&!replacement.widgetAnimation)replacement.widgetAnimation=null;
       // HTML remains the canonical copy source. Clear any old mirrored field
       // when merging into an inactive record without duplicating large HTML.
       if(htmlCopySource)replacement.copyText=undefined;
@@ -540,10 +628,12 @@
     } else throw canvasDocumentsError("READ_ONLY_FILE","This file is read-only. Use replace_image or a Canvas action.");
     canvasAgentAssertToolExecution(execution);
     if(canvasDocumentsFile(doc,path)!==before)throw canvasDocumentsError("SOURCE_CONFLICT","Content changed before applying. Read it again and retry.");
-    canvasDocumentsBeginEdit(doc);Object.assign(item,replacement);
+    const restoreMutation=canvasDocumentsBeginEdit(doc,execution,[item.id]);try {Object.assign(item,replacement);
     if(!canvasDocumentsIsActive(doc)&&object.kind==="text")delete item.image;
     if(canvasDocumentsIsActive(doc)&&object.kind==="widget")positionWidget(item);
-    canvasDocumentsEndEdit(doc,"edit",item.id);return {applied:true,objectId:item.id,revision:doc.revision,contentHash:await canvasAgentHash(canvasDocumentsFile(doc,path))};
+    canvasDocumentsEndEdit(doc,"edit",item.id);
+    }finally{restoreMutation();}
+    return {applied:true,objectId:item.id,revision:doc.revision,contentHash:await canvasAgentHash(canvasDocumentsFile(doc,path))};
   }
   async function canvasDocumentsReadFile(doc,args,whole=false) {
     const session=mcpRuntime.sessions.get(args.sessionId),content=canvasDocumentsPath(args.path)==="runtime/messages.json"&&session?JSON.stringify({latestCursor:doc.messageSequence,entries:doc.messages.filter(m=>m.bindingKey===session.sessionKey&&m.client===session.client)},null,2)+"\n":canvasDocumentsFile(doc,args.path),contentHash=await canvasAgentHash(content);
@@ -763,7 +853,7 @@
       if(!widget)canvasDocumentsCapacity(doc,"widget");
       const presentation=mcpPresentation(args,previous),size=mcpPresentationSize(args,doc);
       const plan=widget?null:canvasDocumentsPlace(doc,size.width,size.height,session,presentation);
-      const record=canvasDocumentsWidgetRecord({id:widget?.id||canvasDocumentsObjectId(doc,"widget"),widgetType:"html_widget",pluginId:"general",sourceFormat:"penecho-mcp+html",title:args.title,html:args.html,x:widget?.x??plan.placement.x,y:widget?.y??plan.placement.y,w:widget?.w||size.width,h:widget?.h||size.height,contentW:widget?.contentW||size.contentWidth||size.width,contentH:widget?.contentH||size.contentHeight||size.height,refreshSeconds:0});
+      const record=canvasDocumentsWidgetRecord({id:widget?.id||canvasDocumentsObjectId(doc,"widget"),widgetType:"html_widget",pluginId:"general",...mcpWidgetSource(args),title:args.title,x:widget?.x??plan.placement.x,y:widget?.y??plan.placement.y,w:widget?.w||size.width,h:widget?.h||size.height,contentW:widget?.contentW||size.contentWidth||size.width,contentH:widget?.contentH||size.contentHeight||size.height,fitContent:widget?.fitContent,fitContentAxes:widget?.fitContentAxes,refreshSeconds:0});
       if(!record)throw canvasDocumentsError("INVALID_WIDGET","Widget source is invalid. Correct it and retry.");
       canvasAgentAssertToolExecution(execution);canvasDocumentsBeginEdit(doc);
       if(widget)Object.assign(widget,record);else{widget=record;item.widgets.push(widget);session.layout=plan.layout;}
@@ -831,14 +921,15 @@
       canvasDocumentsCapacity(doc,"text");
       const record=await renderedTextBoxRecord({id:canvasDocumentsObjectId(doc,"text"),text:args.text,x:0,y:0,fontSize:20,maxWidth:args.width||400,fontFamily:state.aiFont,color:state.inkColor});
       if(!record)throw canvasDocumentsError("INVALID_TEXT","Text could not be rendered. Shorten it and retry.");
-      if(!args.region){const scale=mcpPresentationViewport(doc).scale;record.w/=scale;record.h/=scale;}
-      const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,record.w,record.h,session,null,true).placement;
+      if(!args.region){const scale=execution?.assistContext?.scale||mcpPresentationViewport(doc).scale;record.w/=scale;record.h/=scale;}
+      const session=mcpRuntime.sessions.get(args.sessionId),placement=args.region||canvasDocumentsPlace(doc,record.w,record.h,session,null,true,execution).placement;
       record.x=placement.x;record.y=placement.y;canvasDocumentsValidateGeometry(doc,canvasDocumentsBounds({item:record}));
-      canvasAgentAssertToolExecution(execution);canvasDocumentsBeginEdit(doc);
+      canvasAgentAssertToolExecution(execution);const restoreMutation=canvasDocumentsBeginEdit(doc,execution);try {
       if(canvasDocumentsIsActive(doc))state.textBoxes.push(record);else {const {image,...stored}=record;doc.stored.item.textBoxes.push(stored);}
       canvasDocumentsEndEdit(doc,"create_text",record.id);
+      }finally{restoreMutation();}
       if(!args.region&&session&&canvasDocumentsIsActive(doc))mcpQueueView(session,record);
-      return {applied:true,objectId:record.id,revision:doc.revision};
+      return {applied:true,objectId:record.id,revision:doc.revision,box:canvasDocumentsBounds({item:record}),sourcePlacement:mcpSourcePlacement(execution?.assistContext,record,32/(execution?.assistContext?.scale||state.scale))};
     }
     if(args.action==="draw_ink") {
       // Validate the browser boundary too: linked clients must not bypass resource limits.
@@ -851,12 +942,13 @@
         for(const point of entry.points){if(!point||!Number.isFinite(point.x)||!Number.isFinite(point.y)||point.x<entry.width/2||point.y<entry.width/2||point.x+entry.width/2>SIZE||point.y+entry.width/2>SIZE)throw canvasDocumentsError("INVALID_INK","Stroke points and brush radius must remain inside the Canvas.");minX=Math.min(minX,point.x);minY=Math.min(minY,point.y);maxX=Math.max(maxX,point.x);maxY=Math.max(maxY,point.y);}
       }
       if(count>1024||maxX-minX>2048||maxY-minY>2048)throw canvasDocumentsError("INVALID_INK","Use at most 1024 total points inside a 2048 × 2048 region.");
-      canvasAgentAssertToolExecution(execution);save();
+      canvasAgentAssertToolExecution(execution);const restoreMutation=canvasAgentBeginMutation(execution);try {save();
       for(const entry of args.strokes){
         if(entry.points.length===1)dot(entry.points[0],false,entry.width,false,entry.color);
         else for(let index=1;index<entry.points.length;index++)stroke(entry.points[index-1],entry.points[index],false,entry.width,false,entry.color);
       }
       canvasDocumentsEndEdit(doc,"draw_ink");
+      }finally{restoreMutation();}
       return {applied:true,revision:doc.revision,strokeCount:args.strokes.length};
     }
     if(args.action==="erase_ink") {
@@ -884,7 +976,7 @@
     }
     canvasAgentAssertToolExecution(execution);
     if(args.baseRevision!==(canvasDocumentsIsActive(doc)?state.userRevision:doc.revision))throw canvasDocumentsError("REVISION_CONFLICT","The Canvas changed while preparing the edit. Read canvas.json and retry.");
-    canvasDocumentsBeginEdit(doc);
+    const restoreMutation=canvasDocumentsBeginEdit(doc,execution,[args.objectId]);try {
     if(args.action==="delete") {
       const collection=object.kind==="widget"?"widgets":object.kind==="text"?"textBoxes":"images",container=canvasDocumentsIsActive(doc)?state:doc.stored.item;
       if(canvasDocumentsIsActive(doc)&&object.kind==="widget")unmountWidget(object.item);
@@ -892,6 +984,7 @@
     } else if(replacement){Object.assign(object.item,replacement);if(!canvasDocumentsIsActive(doc)){delete object.item.image;replacement.image.close();}}
     else throw canvasDocumentsError("UNSUPPORTED_OPERATION","This Canvas action is not supported.");
     canvasDocumentsEndEdit(doc,args.action,args.objectId);return {applied:true,objectId:args.objectId,revision:doc.revision};
+    }finally{restoreMutation();}
   }
   // First-party Agent calls enter the same document executor as MCP. The
   // existing Agent socket is the authority: this does not opt in a public MCP
@@ -1001,15 +1094,16 @@
       const objects=canvasDocumentsObjects(doc),ids=objects.map(o=>o.item.id);
       if(new Set(ids).size!==ids.length)throw canvasDocumentsError("OBJECT_ID_CONFLICT","This Canvas contains duplicate object identities. Preserve its source and repair the identities before writing.");
       if(object&&[...session.artifacts].some(([id,value])=>id!==args.artifactId&&value.objectId===object.item.id))throw canvasDocumentsError("OBJECT_ID_CONFLICT","Two artifacts refer to the same object. Use a new artifact identity to preserve the existing content.");
-      if(object&&!canvasDocumentsSourceEditable(object))throw canvasDocumentsError("READ_ONLY_FILE","Professional Diagram and private plugin source editing is unavailable. Existing content is preserved.");
+      if(object&&(!canvasDocumentsSourceEditable(object)||!canvasDocumentsSourceEditable(object,execution)))throw canvasDocumentsError("READ_ONLY_FILE","Source editing is unavailable for this Widget in the current task. Existing content is preserved.");
     }
     const work=async()=>{
       canvasAgentAssertToolExecution(execution);
       const revisionBefore=canvasDocumentsIsActive(doc)?state.userRevision:doc.revision;
+      const noteSourcesBefore=typeof noteCardWidget==='function'?new Map(canvasDocumentsObjects(doc).filter(o=>o.kind==='widget'&&noteCardWidget(o.item)).map(o=>[o.item.id,o.item.copyText])):new Map();
       if(args.completion)canvasDocumentsMessageEntries(doc,session,args.completion.handledMessageIds||[]);
       let result;
       if(name==="mcp_list_files") {
-        const path=canvasDocumentsPath(args.path||""),files=canvasDocumentsFilePaths(doc).filter(file=>(!path||file.path===path||file.path.startsWith(path+"/"))&&(!args.region||!file.bounds||intersection(file.bounds,args.region))),offset=args.offset||0,limit=args.limit||60;
+        const path=canvasDocumentsPath(args.path||""),files=canvasDocumentsFilePaths(doc,execution).filter(file=>(!path||file.path===path||file.path.startsWith(path+"/"))&&(!args.region||!file.bounds||intersection(file.bounds,args.region))),offset=args.offset||0,limit=args.limit||60;
         return {documentId:doc.id,entries:files.slice(offset,offset+limit),total:files.length,nextOffset:offset+limit<files.length?offset+limit:null};
       }
       if(name==="mcp_read_file")return canvasDocumentsReadFile(doc,args);
@@ -1041,12 +1135,17 @@
         }
       } else result=canvasDocumentsIsActive(doc)?await mcpExecute(name,args,execution):await canvasDocumentsBackground(doc,name,args,execution);
       if(["mcp_present_widget","mcp_draw","mcp_plot","mcp_patch_file","mcp_edit_canvas","mcp_upload_image","mcp_place_image"].includes(name)) {
+        if(typeof noteLibraryUpsertWidget==='function') {
+          for(const object of canvasDocumentsObjects(doc))if(object.kind==='widget'&&noteCardWidget(object.item))await noteLibraryUpsertWidget(object.item,{document:{documentId:doc.id,documentTitle:doc.title,locator:doc.locator||null},sourceChanged:noteSourcesBefore.has(object.item.id)&&noteSourcesBefore.get(object.item.id)!==object.item.copyText});
+          await noteLibraryPersist();
+          canvasAgentAssertToolExecution(execution);
+        }
         if((canvasDocumentsIsActive(doc)?state.userRevision:doc.revision)!==revisionBefore&&!doc.unseen){doc.unseen=1;canvasDocumentsRender();}
         result={...result,applied:true};
         if(name==="mcp_present_widget"&&result.objectId) {
-          const sourcePath=`objects/${result.objectId}/widget.html`;
+          const scene=args.sourceFormat==="penecho-scene+json",sourcePath=`objects/${result.objectId}/${scene?"widget.source":"widget.html"}`;
           const source=canvasDocumentsFile(doc,sourcePath);
-          if(source!==args.html||canvasDocumentsObjects(doc).filter(o=>o.item.id===result.objectId).length!==1)throw canvasDocumentsError("WRITE_VERIFICATION_FAILED","The stored Widget does not match this write. Read its source before retrying.");
+          if(source!==(scene?args.copyText:args.html)||canvasDocumentsObjects(doc).filter(o=>o.item.id===result.objectId).length!==1)throw canvasDocumentsError("WRITE_VERIFICATION_FAILED","The stored Widget does not match this write. Read its source before retrying.");
           result={...result,sourcePath,contentHash:await canvasAgentHash(source)};
         }
         if(args.capture===true) {
@@ -1127,6 +1226,7 @@
     try{if(canvasDocumentsIsActive(doc))await canvasDocumentsPark();else await canvasDocumentsPersist(doc);}catch(error){message.status="error";canvasDocumentsReport(error,()=>canvasDocumentsRetryMessage(doc,message));}
   }
   function canvasDocumentsRender() {
+    canvasDocumentsRememberActive();
     const root=document.getElementById("canvasWorkspace"),doc=canvasDocuments.records.get(canvasDocuments.activeId);
     if(doc)doc.title=(typeof currentCanvasDisplayName==="function"?currentCanvasDisplayName():state.currentSnapshotName)||doc.title;
     window.PenEchoStudioNavigator?.workspaceChanged?.();
@@ -1165,28 +1265,98 @@
   document.getElementById("canvasWorkspaceClose")?.addEventListener("click",()=>{const documentId=canvasDocumentsCurrent().id;canvasDocumentsUiAction(()=>requestCanvasTransition({type:"close",documentId}));});
   document.getElementById("canvasWorkspaceRetry")?.addEventListener("click",()=>{const retry=canvasDocuments.retry;if(retry)canvasDocumentsUiAction(retry);});
 
-  // Each automatically opened workspace has its own browser draft collection.
-  // Signing in changes Cloud capabilities, never this storage namespace.
-  if(window.PENECHO_CONFIG?.browserDraftId) {
-    let draftReady=false,writing=null,lastRevision=-1;
-    const flush=async()=>{
-      if(writing)return writing;
-      if(!draftReady||canvasDocuments.switching||snapshotLoadInProgress)return;
-      const revision=state.userRevision;
-      if(revision===lastRevision)return;
-      writing=canvasDocumentsPark().then(()=>{lastRevision=revision;}).finally(()=>{writing=null;});
-      return writing;
-    };
-    window.PenEchoBrowserDraft={
-      async open(){
-        await canvasDocumentsReady();
-        const saved=[...canvasDocuments.records.values()].filter(doc=>doc.stored&&!canvasDocumentsIsEmptyPlaceholder(doc)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
-        if(saved)await canvasDocumentsShow(saved.id);
-        draftReady=true;
-      },
-      flush,
-      async signIn(){await flush();location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname+location.search)}`);}
-    };
-    setInterval(()=>{void flush().catch(error=>canvasDocumentsReport(error,flush));},3000);
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)void flush().catch(error=>canvasDocumentsReport(error,flush));});
+  // Recovery drafts persist settled edits without accepting AI previews or
+  // committing an editor/selection on the user's behalf. Saved Canvas files
+  // and their explicit Save revision remain separate from this recovery copy.
+  var canvasDocumentsDraft = { ready:false, opening:null, writing:null, timer:0, savedKey:"", activeId:null, commitVersion:0 };
+  function canvasDocumentsDraftStorageKey() {
+    return "penecho-workspace-active" + (window.PENECHO_CONFIG?.browserDraftId ? `:${window.PENECHO_CONFIG.browserDraftId}` : "");
   }
+  function canvasDocumentsRememberActive() {
+    if (!canvasDocumentsDraft?.ready || canvasDocumentsDraft.activeId === canvasDocuments.activeId) return;
+    canvasDocumentsDraft.activeId = canvasDocuments.activeId;
+    try { sessionStorage.setItem(canvasDocumentsDraftStorageKey(), canvasDocuments.activeId || ""); } catch {}
+  }
+  function canvasDocumentsDraftKey() { return `${canvasDocuments.activeId}:${state.userRevision}:${canvasDocumentsDraft.commitVersion}`; }
+  function canvasDocumentsDraftBusy() {
+    return Boolean(canvasDocuments.switching || snapshotLoadInProgress || typeof snapshotSaveInProgress !== "undefined" && snapshotSaveInProgress
+      || state.drawing || state.widgetGesture || state.imageGesture || state.selectionGesture || state.areaEraseGesture
+      || state.pending || state.pendingWidget || state.widgetEdit || state.imageEdit || state.animationEdit
+      || state.selection || state.textEditors?.size || state.agentMutationHistory);
+  }
+  function canvasDocumentsDraftHasContent() {
+    return Boolean(tiles.size || state.widgets.length || state.images.length || state.textBoxes.length
+      || state.animations.length || state.preservedSnapshotAnimations?.length || state.history.length || state.future.length);
+  }
+  async function canvasDocumentsStartDraft(restore = true) {
+    if (canvasDocumentsDraft.ready) return;
+    if (canvasDocumentsDraft.opening) return canvasDocumentsDraft.opening;
+    canvasDocumentsDraft.opening = (async () => {
+      const revision = state.userRevision, epoch = canvasDocuments.epoch;
+      let activeId = "";
+      try { activeId = sessionStorage.getItem(canvasDocumentsDraftStorageKey()) || ""; } catch {}
+      await canvasDocumentsReady();
+      if (restore && revision === state.userRevision && epoch === canvasDocuments.epoch
+        && !canvasDocumentsDraftHasContent() && !canvasDocumentsDraftBusy()) {
+        // A tab restores its own active document. Browser drafts also support
+        // reopening their explicit, namespaced URL in a fresh tab.
+        const saved = canvasDocuments.records.get(activeId) || (window.PENECHO_CONFIG?.browserDraftId
+          ? [...canvasDocuments.records.values()].filter(doc => doc.stored && !canvasDocumentsIsEmptyPlaceholder(doc)).sort((a,b) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0))[0] : null);
+        if (saved?.stored) {
+          await canvasDocumentsShow(saved.id);
+          canvasDocumentsDraft.savedKey = canvasDocumentsDraftKey();
+        }
+      }
+      canvasDocumentsDraft.ready = true;
+      canvasDocumentsRememberActive();
+      canvasDocumentsScheduleDraft(false);
+    })().finally(() => { canvasDocumentsDraft.opening = null; });
+    return canvasDocumentsDraft.opening;
+  }
+  function canvasDocumentsScheduleDraft(committed = true) {
+    if (!canvasDocumentsDraft?.ready || window.PENECHO_CONFIG?.runtime === "viewer") return;
+    // AI commits and coalesced Widget changes can save history without changing
+    // userRevision. Track them separately from the user-edit conflict guard.
+    if (committed) canvasDocumentsDraft.commitVersion++;
+    canvasDocumentsRememberActive();
+    clearTimeout(canvasDocumentsDraft.timer);
+    canvasDocumentsDraft.timer = setTimeout(() => { void canvasDocumentsFlushDraft().catch(error => canvasDocumentsReport(error, canvasDocumentsFlushDraft)); }, 750);
+  }
+  async function canvasDocumentsFlushDraft() {
+    if (!canvasDocumentsDraft?.ready || window.PENECHO_CONFIG?.runtime === "viewer") return;
+    if (canvasDocumentsDraft.writing) return canvasDocumentsDraft.writing;
+    canvasDocumentsRememberActive();
+    const key = canvasDocumentsDraftKey();
+    if (canvasDocumentsDraftBusy() || key === canvasDocumentsDraft.savedKey || !canvasDocumentsDraftHasContent()) return;
+    const doc = canvasDocumentsCurrent(), epoch = canvasDocuments.epoch, revision = state.userRevision;
+    canvasDocumentsDraft.writing = (async () => {
+      canvasDocumentsSyncExtension(doc);
+      const item = canvasDocumentsActiveSnapshot(), tileEntries = await Promise.all([...tiles].map(async ([k,c]) => ({ k, blob:await canvasBlob(c) })));
+      // A stroke, document switch or edit during encoding invalidates the copy.
+      if (epoch !== canvasDocuments.epoch || key !== canvasDocumentsDraftKey() || canvasDocumentsDraftBusy()) return;
+      doc.stored = { item, tileEntries }; doc.revision = revision; doc.savedRevision = state.snapshotSavedRevision;
+      doc.undo = state.history; doc.redo = state.future; doc.hasUserHistory = true;
+      doc.agentDraft = typeof canvasAgentInput !== "undefined" ? canvasAgentInput.value : "";
+      await canvasDocumentsPersist(doc);
+      if (epoch === canvasDocuments.epoch && key === canvasDocumentsDraftKey()) canvasDocumentsDraft.savedKey = key;
+    })().finally(() => { canvasDocumentsDraft.writing = null; });
+    return canvasDocumentsDraft.writing;
+  }
+  function canvasDocumentsDraftUnsaved() {
+    if (window.PENECHO_CONFIG?.runtime === "viewer") return false;
+    if (state.textEditors?.size || state.pending || state.pendingWidget || state.widgetEdit || state.imageEdit || state.animationEdit || state.selection || state.drawing) return true;
+    return canvasDocumentsDraftHasContent() && canvasDocumentsDraftKey() !== canvasDocumentsDraft?.savedKey;
+  }
+  setInterval(() => { void canvasDocumentsFlushDraft().catch(error => canvasDocumentsReport(error, canvasDocumentsFlushDraft)); }, 3000);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) void canvasDocumentsFlushDraft().catch(error => canvasDocumentsReport(error, canvasDocumentsFlushDraft)); });
+  addEventListener("pagehide", () => { void canvasDocumentsFlushDraft().catch(() => {}); });
+  addEventListener("beforeunload", event => {
+    if (!canvasDocumentsDraftUnsaved()) return;
+    void canvasDocumentsFlushDraft().catch(() => {});
+    event.preventDefault(); event.returnValue = "";
+  });
+  if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
+    open:() => canvasDocumentsStartDraft(true),
+    flush:canvasDocumentsFlushDraft,
+    async signIn() { await canvasDocumentsFlushDraft(); location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`); }
+  };

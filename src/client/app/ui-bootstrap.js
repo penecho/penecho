@@ -1,17 +1,230 @@
 // Pointer and control bindings, portable snapshots, and application startup.
+  // Observe the panels themselves: they can close by Escape, outside click,
+  // timeout, or a tool change, and may be reparented for toolbar positioning.
+  const toolbarHintObserver = new MutationObserver(() => syncCanvasHintVisibility());
+  for (const panel of document.querySelectorAll("#eraserToolMenu, #inkColorPopover, #aiColorPopover, #autoDelayPopover, #effortPopover")) {
+    toolbarHintObserver.observe(panel, { attributes:true, attributeFilter:["hidden"] });
+  }
+  for (const type of ["beforetoggle", "toggle"]) document.querySelector("#penSizePopover")?.addEventListener(type, event => {
+    canvasHintNativePopoverOpen = event.newState === "open";
+    syncCanvasHintVisibility();
+  });
+  const toolbarAssistLayer = document.querySelector("#smartSuggestLayer");
+  if (toolbarAssistLayer) toolbarHintObserver.observe(toolbarAssistLayer, { childList:true, subtree:true, attributes:true, attributeFilter:["data-mode"] });
   document.addEventListener("pointerdown", unselectTextEditorsOutside, true);
   document.addEventListener("focusin", unselectTextEditorsOutside, true);
   window.addEventListener("blur", unselectTextEditorsOutside);
   const ERASER_TOOL_MENU_MS = 5000;
+  const lassoHintButton = document.querySelector("#lassoToolBtn");
+  let lassoToolHintTimer = null;
+  let lassoToolPointer = null, lassoPreviewCancelledPointer = null;
+  function matchesLassoPointer(point, event) {
+    return point && point.x === event.clientX && point.y === event.clientY;
+  }
+  function stopLassoButtonAnimation() {
+    clearTimeout(lassoToolHintTimer);
+    lassoHintButton?.classList.remove("lasso-preview", "lasso-shimmer");
+  }
+  function previewLassoButton(event) {
+    if (event.pointerType === "touch") return;
+    lassoToolPointer = { x:event.clientX, y:event.clientY };
+    // Tool layout changes can re-enter the button without moving the pointer.
+    if (matchesLassoPointer(lassoPreviewCancelledPointer, event)) return;
+    lassoPreviewCancelledPointer = null;
+    lassoHintButton.classList.add("lasso-preview");
+    clearTimeout(lassoToolHintTimer);
+    lassoToolHintTimer = setTimeout(() => showLassoGuidance("canvasHintLassoDiscover"), 400);
+  }
+  lassoHintButton?.addEventListener("pointerenter", previewLassoButton);
+  lassoHintButton?.addEventListener("pointermove", event => {
+    if (event.pointerType === "touch") return;
+    lassoToolPointer = { x:event.clientX, y:event.clientY };
+    if (lassoPreviewCancelledPointer) previewLassoButton(event);
+  });
+  lassoHintButton?.addEventListener("pointerleave", event => {
+    stopLassoButtonAnimation();
+    if (!matchesLassoPointer(lassoPreviewCancelledPointer, event)) lassoPreviewCancelledPointer = null;
+  });
+  for (const type of ["pointerdown", "click", "blur"]) lassoHintButton?.addEventListener(type, stopLassoButtonAnimation);
+  lassoHintButton?.addEventListener("focus", () => {
+    if (lassoHintButton.matches(":focus-visible")) {
+      lassoHintButton.classList.add("lasso-preview");
+      showLassoGuidance("canvasHintLassoDiscover");
+    }
+  });
+  // Lasso discovery. The button keeps a "new" dot until the first real lasso,
+  // shimmers once per session (at most LASSO_NUDGE_MAX times) after enough
+  // writing to be worth circling, and the pen's side button lassos from any
+  // tool, returning to that tool when the selection closes.
+  const LASSO_DISCOVERY_KEY = "penecho-lasso-discovery-v1", LASSO_NUDGE_STROKES = 10, LASSO_NUDGE_MAX = 3;
+  const lassoDiscovery = (() => {
+    try { return { uses:0, nudges:0, ...JSON.parse(localStorage.getItem(LASSO_DISCOVERY_KEY) || "{}") }; }
+    catch { return { uses:0, nudges:0 }; }
+  })();
+  let lassoNudgeStrokes = 0, lassoNudgedThisSession = false, lassoPenButtonReturn = null, lassoPenButtonContextUntil = 0;
+  function saveLassoDiscovery() {
+    try { localStorage.setItem(LASSO_DISCOVERY_KEY, JSON.stringify(lassoDiscovery)); }
+    catch {}
+  }
+  function syncLassoDiscoveryBadge() {
+    if (!lassoHintButton) return;
+    if (lassoDiscovery.uses > 0) delete lassoHintButton.dataset.lassoDiscovery;
+    else lassoHintButton.dataset.lassoDiscovery = "new";
+  }
+  function playLassoShimmer() {
+    if (!lassoHintButton || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    lassoHintButton.classList.remove("lasso-shimmer");
+    void lassoHintButton.offsetWidth;
+    lassoHintButton.classList.add("lasso-shimmer");
+  }
+  lassoHintButton?.addEventListener("animationend", event => {
+    if (event.animationName === "lasso-shimmer") lassoHintButton.classList.remove("lasso-shimmer");
+  });
+  function showLassoHintWithFallback(key, values = null) {
+    showCanvasHint({ key, values });
+    if (canvasHint && !canvasHint.hidden && canvasHint.scrollWidth > canvasHint.clientWidth) showCanvasHint({ key:`${key}Compact`, values });
+  }
+  function noteLassoCaptured() {
+    const first = !lassoDiscovery.uses;
+    lassoDiscovery.uses = (lassoDiscovery.uses || 0) + 1;
+    saveLassoDiscovery();
+    syncLassoDiscoveryBadge();
+    if (first || lassoPenButtonReturn && lassoDiscovery.uses <= 3) showLassoHintWithFallback("canvasHintLassoCaptured");
+  }
+  function noteInkForLassoNudge() {
+    if (lassoDiscovery.uses || lassoNudgedThisSession || lassoDiscovery.nudges >= LASSO_NUDGE_MAX || state.viewMode || state.mode !== "pen") return;
+    if (++lassoNudgeStrokes < LASSO_NUDGE_STROKES) return;
+    lassoNudgedThisSession = true;
+    lassoDiscovery.nudges = (lassoDiscovery.nudges || 0) + 1;
+    saveLassoDiscovery();
+    // Wait for a pause in writing so the cue never lands mid-stroke, and let
+    // the Suggest Bar settle first.
+    let idleSince = 0;
+    const show = () => {
+      if (state.viewMode || state.mode !== "pen" || state.selection || lassoDiscovery.uses) return;
+      if (state.drawing) idleSince = 0;
+      else idleSince ||= performance.now();
+      if (!idleSince || performance.now() - idleSince < 1600) { setTimeout(show, 200); return; }
+      playLassoShimmer();
+      showLassoHintWithFallback("canvasHintLassoNudge", { shortcut:"V" });
+    };
+    setTimeout(show, 200);
+  }
+  syncLassoDiscoveryBadge();
+  function canvasPenButtonLasso(event) {
+    return event?.pointerType === "pen" && (Number(event.button) === 2 || (Number(event.buttons) & 2) === 2);
+  }
+  function beginPenButtonLasso(event) {
+    const returnMode = canvasToolMode(state.mode);
+    if (state.viewMode || !["pen", "eraser", "area-eraser", "text"].includes(returnMode) || state.pending || state.pendingWidget || state.selection) return false;
+    const input = captureDrawingInput(event);
+    if (!valid(input.point)) return false;
+    if (!selectCanvasToolMode("select")) return false;
+    lassoPenButtonReturn = returnMode;
+    lassoPenButtonContextUntil = performance.now() + 1500;
+    deselectAnimation();
+    handleSelectionPointerDown(event, input.point);
+    watchPenButtonLasso();
+    return true;
+  }
+  // After a side-button lasso, writing outside the selection closes it and
+  // goes straight back to the previous tool instead of starting a new lasso.
+  function finishPenButtonLassoOutside(event) {
+    const selection = state.selection, returnMode = lassoPenButtonReturn;
+    if (!returnMode || event.pointerType === "touch" || canvasPenButtonLasso(event) || state.mode !== "select") return false;
+    if (selection?.phase !== "active" || selectionAIBusy(selection) || selectionHit(selection, event)) return false;
+    commitSelection();
+    lassoPenButtonReturn = null;
+    return selectCanvasToolMode(returnMode);
+  }
+  function watchPenButtonLasso() {
+    setTimeout(() => {
+      const returnMode = lassoPenButtonReturn;
+      if (!returnMode) return;
+      // Another tool was chosen meanwhile: keep it.
+      if (state.mode !== "select") { lassoPenButtonReturn = null; return; }
+      if (state.selection || state.selectionGesture || state.pending || state.pendingWidget || state.drawing) { watchPenButtonLasso(); return; }
+      lassoPenButtonReturn = null;
+      selectCanvasToolMode(returnMode);
+    }, 250);
+  }
+  // A side-button press can also raise a context menu on release.
+  window.addEventListener("contextmenu", event => {
+    if (performance.now() < lassoPenButtonContextUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+  const WIDGET_TOUCH_DOUBLE_TAP_MS = 400;
+  const WIDGET_TOUCH_DOUBLE_TAP_PX = 24;
   let eraserToolMenuTimer = 0;
-  // Derive rejection from live strokes, never a remembered Pencil mode.
+  const CANVAS_PALM_RELEASE_MS = 700;
+  const CANVAS_TOUCH_PAN_START_PX = 8;
+  const canvasPalmRejectedTouches = new Set();
+  let canvasPalmLastPenAt = -Infinity;
+  // Keep pen ownership through hover and short gaps between strokes. A rejected
+  // contact cannot become navigation until it lifts and starts a new gesture.
   function canvasPencilWritingActive() {
     return state.drawing?.pointerType === "pen" || canvasAgent.inkStroke?.pointerType === "pen";
   }
+  function canvasExplicitTouchNavigation() {
+    return state.mode === "hand" || state.viewMode || state.spacePan;
+  }
+  function canvasTouchLooksLikePalm(event) {
+    const width = Number(event.width) || 1, height = Number(event.height) || 1;
+    // Contact geometry is in CSS pixels; unsupported hardware reports 1.
+    return Math.max(width, height) >= 40 || Math.min(width, height) >= 28;
+  }
+  function cancelCanvasPalmTouch(pointerId) {
+    canvasPalmRejectedTouches.add(pointerId);
+    state.pointers.delete(pointerId);
+    canvasAgentNavigationPointerDidEnd(pointerId);
+    state.touches.delete(pointerId);
+    state.widgetTouchLastTap = null;
+    if (state.handToolbarTap?.id === pointerId) state.handToolbarTap = null;
+    if (state.widgetActivationTap?.id === pointerId) state.widgetActivationTap = null;
+    if (state.textTap?.id === pointerId) state.textTap = null;
+    if (state.areaEraseGesture?.id === pointerId) cancelAreaEraseGesture();
+    finishHandObjectFocus({ pointerId });
+    finishWidgetRefineTouch(`canvas-touch:${pointerId}`);
+    if (state.panGesture?.id === pointerId || state.touchGesture?.ids.includes(pointerId)) {
+      state.panGesture = null;
+      state.touchGesture = null;
+      finishCanvasNavigationPreview();
+      resetCanvasCursor();
+      setNavigating(false);
+    }
+  }
+  function observeCanvasPenForPalmRejection(event) {
+    if (event.pointerType !== "pen" || !canvasNavigationSurface(event.target)) return;
+    canvasPalmLastPenAt = performance.now();
+    if (event.type === "pointerdown" || !canvasExplicitTouchNavigation()) {
+      for (const pointerId of state.touches.keys()) cancelCanvasPalmTouch(pointerId);
+    }
+  }
   function rejectTouchDuringPencilWriting(event) {
-    if (event.pointerType !== "touch" || !canvasPencilWritingActive()) return;
+    if (event.pointerType !== "touch") return;
+    const ending = ["pointerup", "pointercancel", "lostpointercapture"].includes(event.type),
+      rejected = canvasPalmRejectedTouches.has(event.pointerId),
+      canvasTouch = canvasNavigationSurface(event.target),
+      penNearby = performance.now() - canvasPalmLastPenAt < CANVAS_PALM_RELEASE_MS;
+    if (!rejected && (ending || !canvasPencilWritingActive()
+        && (!canvasTouch || !canvasTouchLooksLikePalm(event) && (!penNearby || canvasExplicitTouchNavigation())))) return;
+    cancelCanvasPalmTouch(event.pointerId);
+    if (ending && event.type !== "lostpointercapture") canvasPalmRejectedTouches.delete(event.pointerId);
     event.preventDefault();
     event.stopImmediatePropagation();
+  }
+  function resetCanvasPalmRejection(event) {
+    if (event.type === "visibilitychange" && !document.hidden) return;
+    for (const pointerId of state.touches.keys()) cancelCanvasPalmTouch(pointerId);
+    canvasPalmRejectedTouches.clear();
+    canvasPalmLastPenAt = -Infinity;
+  }
+  function canvasPanMovementReady(event) {
+    if (event.pointerType !== "touch") return true;
+    const gesture = state.panGesture;
+    if (!gesture || gesture.started) return Boolean(gesture);
+    if (Math.hypot(event.clientX - gesture.last.x, event.clientY - gesture.last.y) < CANVAS_TOUCH_PAN_START_PX) return false;
+    gesture.started = true;
+    return true;
   }
   function finishInterruptedPencilWriting(event) {
     if (event.type === "visibilitychange" && !document.hidden) return;
@@ -32,9 +245,14 @@
     const ink = canvasAgent.inkStroke;
     if (ink?.pointerType === "pen" && (all || ink.pointerId === event.pointerId)) canvasAgentFinishInkStroke();
   }
-  for (const type of ["pointerdown", "pointermove"]) {
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+    window.addEventListener(type, observeCanvasPenForPalmRejection, true);
+  }
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture"]) {
     window.addEventListener(type, rejectTouchDuringPencilWriting, { capture:true, passive:false });
   }
+  for (const type of ["blur", "pagehide"]) window.addEventListener(type, resetCanvasPalmRejection);
+  document.addEventListener("visibilitychange", resetCanvasPalmRejection);
   for (const type of ["pointerdown", "pointerup", "pointercancel", "lostpointercapture", "pointermove", "blur", "pagehide"]) {
     window.addEventListener(type, finishInterruptedPencilWriting, true);
   }
@@ -64,6 +282,7 @@
     setSpacePan(false);
     state.viewTool = "hand";
     state.widgetActivationTap = null;
+    state.widgetTouchLastTap = null;
     state.viewMode = enabled;
     state.pointers.clear();
     state.canvasAgentNavigationPointerIds.clear();
@@ -131,6 +350,7 @@
     const forceEraser = options.forceEraser === true;
     if (state.selectedAnimationId) acceptAnimationEdit();
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!forceEraser && typeof assistShapePointerDown === "function" && assistShapePointerDown(e, point)) return;
     if (!forceEraser && state.mode === "hand") {
       state.panGesture = {
         id: e.pointerId,
@@ -194,6 +414,7 @@
     clearTimeout(state.timer);
     state.timer = 0;
     hideWidgetRefineHint();
+    if (state.imageEdit || state.selectedImageId) acceptImageEdit({ restoreMode:false });
     releaseWidgetsForDrawing();
     const erasing = forceEraser || state.mode === "eraser";
     if (erasing) clearWidgetRefineCandidate();
@@ -220,6 +441,8 @@
       erase: erasing,
       dirtyMaskTouched:erasing ? new Set() : null,
     };
+    if (typeof smartSuggestDrawingStarted === "function") smartSuggestDrawingStarted(state.drawing);
+    if (!erasing) noteInkForLassoNudge();
     noteCanvasChromeInteraction();
     view.classList.add("is-drawing");
     updateCanvasPointerPreview(e, p);
@@ -255,6 +478,7 @@
     return false;
   }
   function handleCanvasPointerDown(e) {
+    if (e.pointerType !== "touch" || state.mode !== "pen" && !canvasLassoToolActive() || state.viewMode || state.spacePan || e.altKey) state.widgetTouchLastTap = null;
     if (e.target?.closest?.(".canvas-widget")?.dataset.widgetId === state.interactingWidgetId) return;
     view.classList.remove("is-wheel-navigating");
     state.handToolbarTap = null;
@@ -265,7 +489,10 @@
           ? { kind:"widget", object:resizeTarget.widget }
           : handObjectToolbarTargetAtPoint(point);
       if (target) state.handToolbarTap = { id:e.pointerId, target, x:e.clientX, y:e.clientY };
-      else hideHandObjectToolbar({ all:true, animate:false });
+      else {
+        selectViewerWidget(null);
+        hideHandObjectToolbar({ all:true, animate:false });
+      }
     }
     if (e.pointerType === "touch" && canvasPencilWritingActive()) return;
     if (e.pointerType === "mouse" && ![0, 1].includes(e.button)) return;
@@ -293,7 +520,14 @@
       setNavigating(true);
       return;
     }
-    if (state.interactingWidgetId && !state.spacePan) setWidgetInteraction(null);
+    if (state.interactingWidgetId && !state.spacePan) {
+      state.widgetTouchLastTap = null;
+      // The first press outside a live in-place Widget only ends interaction,
+      // so leaving a Widget never leaves a stray stroke behind.
+      const inPlace = state.widgetInteractionInPlace === true;
+      setWidgetInteraction(null);
+      if (inPlace) return;
+    }
     finishStaleWidgetHostGesture(e);
     if (e.pointerType === "pen") {
       state.touches.clear();
@@ -301,13 +535,16 @@
       state.panGesture = null;
     }
     if (Date.now() < state.textInputBlockedUntil) return;
+    // Pointer input deliberately returns keyboard ownership to the Canvas.
+    // preventDefault above suppresses the browser's normal focus transfer.
+    if (e.target === screen) screen.focus({ preventScroll:true });
     state.canvasAgentNavigationPointerIds.add(e.pointerId);
     try {
       screen.setPointerCapture(e.pointerId);
     } catch {}
     calibrateScreenClientRatio(e, false);
     const penEraser = canvasPenEraserActive(e),
-      handPoint = !penEraser && !state.spacePan && ["hand", "select"].includes(state.mode) ? clientPoint(e) : null;
+      handPoint = !penEraser && !state.spacePan && !canvasLassoToolActive() && ["hand", "select"].includes(state.mode) ? clientPoint(e) : null;
     beginCanvasWidgetGestureResetTap(e, handPoint);
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (handPoint && e.pointerType !== "touch" && beginHandObjectResize(e, handPoint)) {
@@ -321,13 +558,17 @@
       beginCanvasPointerAction(e, input.point, { forceEraser:true, inputTransform:input.inputTransform });
       return;
     }
+    if (canvasPenButtonLasso(e) && beginPenButtonLasso(e)) return;
+    finishPenButtonLassoOutside(e);
     if (e.pointerType === "touch") {
       const touchPoint = clientPoint(e),
-        touchWidget = valid(touchPoint) ? widgetAtRefinePoint(touchPoint) : null;
-      if (touchWidget) {
-        if (state.mode !== "select") showCanvasHint("canvasHintWidgetTouchHand");
-        if (state.mode === "pen") beginWidgetRefineTouch(`canvas-touch:${e.pointerId}`, touchWidget);
-      }
+        touchTarget = valid(touchPoint) ? handObjectToolbarTargetAtPoint(touchPoint) : null;
+      if (touchTarget?.kind === "widget" && state.mode !== "select") showCanvasHint("canvasHintWidgetTouchHand");
+      if (touchTarget && (state.mode === "pen" || canvasLassoToolActive() && touchTarget.kind === "widget")
+          && !state.touches.size && !e.altKey && widgetHeaderHoverAllowed()) {
+        state.handToolbarTap = { id:e.pointerId, target:touchTarget, x:e.clientX, y:e.clientY, headerOnly:true, startedAt:Date.now() };
+        if (touchTarget.kind !== "widget") state.widgetTouchLastTap = null;
+      } else state.widgetTouchLastTap = null;
       state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
       if (state.touches.size >= 2) {
@@ -384,12 +625,17 @@
       x2 = Math.max(d.bbox.x + d.bbox.w, p.x),
       y2 = Math.max(d.bbox.y + d.bbox.h, p.y);
     d.bbox = { x:x1, y:y1, w:x2 - x1, h:y2 - y1 };
+    if (typeof smartSuggestDrawingMoved === "function") smartSuggestDrawingMoved(d);
     return true;
   }
   screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    if (typeof assistShapePointerMove === "function" && assistShapePointerMove(e)) return;
     const handTap = state.handToolbarTap;
-    if (handTap && Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) > 6) state.handToolbarTap = null;
+    if (handTap && Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) > 6) {
+      state.handToolbarTap = null;
+      state.widgetTouchLastTap = null;
+    }
     if (e.pointerType === "touch" && !state.touches.has(e.pointerId)) return;
     if (state.viewMode) {
       if (!state.pointers.has(e.pointerId)) return;
@@ -404,7 +650,7 @@
         updateTouchGesture();
         return;
       }
-      if (state.panGesture?.id === e.pointerId && old) {
+      if (state.panGesture?.id === e.pointerId && old && canvasPanMovementReady(e)) {
         moveCanvas(e.clientX - old.x, e.clientY - old.y);
         state.panGesture.last = { x:e.clientX, y:e.clientY };
         setNavigating(true);
@@ -419,7 +665,7 @@
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType === "touch") state.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (state.panGesture?.id === e.pointerId && (e.pointerType !== "touch" || state.touches.size < 2)) {
-      if (old) {
+      if (old && canvasPanMovementReady(e)) {
         moveCanvas(e.clientX - old.x, e.clientY - old.y);
         state.panGesture.last = { x:e.clientX, y:e.clientY };
         setNavigating(true);
@@ -467,7 +713,7 @@
         distance = Math.hypot(e.clientX - tap.startX, e.clientY - tap.startY);
       if (distance > 8) {
         state.textTap = null;
-        state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY } };
+        state.panGesture = { id: e.pointerId, last: { x: e.clientX, y: e.clientY }, started:true };
         setNavigating(true);
       } else return;
     }
@@ -484,11 +730,38 @@
     const handTap = state.handToolbarTap;
     if (handTap?.id === e.pointerId) {
       state.handToolbarTap = null;
-      if (e.type === "pointerup" && !state.viewMode && state.mode === "hand" && !state.spacePan && state.touches.size <= 1
-          && Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) <= 6) showHandObjectToolbar(handTap.target.kind, handTap.target.object);
+      if (e.type !== "pointerup" || state.viewMode || state.spacePan || state.touches.size > 1
+          || Math.hypot(e.clientX - handTap.x, e.clientY - handTap.y) > 6) {
+        state.widgetTouchLastTap = null;
+        return;
+      }
+      if (handTap.headerOnly) {
+        // Finger taps reveal the existing controls of every editable object.
+        // Hosted Widgets keep the passive header used by mouse hover.
+        const previous = state.widgetTouchLastTap;
+        state.widgetTouchLastTap = null;
+        if ((state.mode === "pen" || canvasLassoToolActive() && handTap.target.kind === "widget") && widgetHeaderHoverAllowed()) {
+          if (handTap.target.kind === "widget") {
+            const widget = handTap.target.object, now = Date.now();
+            if (e.pointerType === "touch" && !widget.pending && now - handTap.startedAt <= WIDGET_TOUCH_DOUBLE_TAP_MS) {
+              if (previous?.widget === widget && now - previous.time <= WIDGET_TOUCH_DOUBLE_TAP_MS
+                  && Math.hypot(e.clientX - previous.x, e.clientY - previous.y) <= WIDGET_TOUCH_DOUBLE_TAP_PX
+                  && enterWidgetInteraction(widget)) return;
+              state.widgetTouchLastTap = { widget, time:now, x:e.clientX, y:e.clientY };
+            }
+            showWidgetHeader(widget, null);
+          }
+          else showHandObjectToolbar(handTap.target.kind, handTap.target.object);
+        }
+      } else if (state.mode === "hand") {
+        if (!selectViewerWidget(handTap.target.kind === "widget" ? handTap.target.object : null)) {
+          showHandObjectToolbar(handTap.target.kind, handTap.target.object);
+        }
+      }
     }
   }
   function end(e) {
+    if (typeof assistShapePointerUp === "function" && assistShapePointerUp(e)) return;
     finishHandCanvasTap(e);
     const activation = state.widgetActivationTap;
     if (activation?.id === e.pointerId) {
@@ -566,7 +839,10 @@
       return;
     }
     if (state.selectionGesture?.id === e.pointerId) {
+      const lassoing = state.selectionGesture.hit === "lasso";
       finishSelectionGesture(e);
+      if (lassoing && state.selection?.phase === "active") noteLassoCaptured();
+      if (lassoPenButtonReturn) lassoPenButtonContextUntil = performance.now() + 600;
       return;
     }
     if (state.textTap?.id === e.pointerId) {
@@ -604,6 +880,13 @@
   }
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
+  screen.addEventListener("lostpointercapture", (event) => {
+    if (state.handToolbarTap?.id === event.pointerId) {
+      state.handToolbarTap = null;
+      state.widgetTouchLastTap = null;
+    }
+  });
+  window.addEventListener("blur", () => { state.widgetTouchLastTap = null; state.handToolbarTap = null; });
   // Capture releases even when an overlay consumes the event or capture is lost.
   window.addEventListener("pointermove", finishReleasedWidgetGesture, true);
   for (const type of ["pointerup", "pointercancel", "lostpointercapture", "blur"]) {
@@ -708,6 +991,11 @@
       eraserMode = ["eraser", "area-eraser"].includes(mode),
       button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
     if (!button) return false;
+    // A retained hover or keyboard focus must not restart the old tool's cue.
+    if (document.body?.getAttribute("data-canvas-mode") !== mode) {
+      lassoPreviewCancelledPointer = lassoToolPointer;
+      stopLassoButtonAnimation();
+    }
     document.body?.setAttribute("data-canvas-mode", mode);
     if (typeof canvasAgentScheduleToolbarLayout === "function") canvasAgentScheduleToolbarLayout();
     view.classList.toggle("hand-mode", mode === "hand");
@@ -722,6 +1010,7 @@
   }
   function setCanvasMode(mode, options) {
     options ||= {};
+    state.widgetTouchLastTap = null;
     if (mode !== state.mode || state.interactingWidgetId) setWidgetInteraction(null, { restoreTool:false });
     const eraserMode = ["eraser", "area-eraser"].includes(mode),
       button = eraserMode ? eraserToolButton : document.querySelector(`[data-mode="${mode}"]`);
@@ -813,12 +1102,13 @@
       const hintKey = {
         pen:[shortcutHints.agent, shortcutHints.save, shortcutHints.undoRedo, "canvasHintMcp"],
         hand:["canvasHintHand", "canvasHintHandAlt", shortcutHints.agent, shortcutHints.library, shortcutHints.fullscreen],
-        select:["canvasHintLasso", state.widgets.length ? (widgetInteractionPresentation() === "maximized" ? "canvasHintWidgetFullscreen" : "canvasHintWidgetInline") : "canvasHintLassoAlt", shortcutHints.undoRedo],
+        select:["canvasHintLasso", "canvasHintLassoAlt", shortcutHints.undoRedo],
         text:["canvasHintText", "canvasHintTextAlt", shortcutHints.save],
         eraser:["canvasHintEraser", "canvasHintEraserAlt"],
         "area-eraser":["canvasHintAreaEraser", "canvasHintAreaEraserAlt", shortcutHints.undoRedo, shortcutHints.settings],
       }[mode];
-      if (hintKey) showCanvasHint(hintKey);
+      if (mode === "select") showLassoCanvasHint(shortcutHints.undoRedo);
+      else if (hintKey) showCanvasHint(hintKey);
     }
     if (deferredSelectionCommit) queueMicrotask(() => {
       if (state.mode === mode && state.selection && !selectionAIBusy(state.selection)) commitSelection();
@@ -831,6 +1121,19 @@
     mode = canvasToolMode(mode);
     if (!mode) return false;
     const previous = canvasToolMode(state.mode);
+    if (mode === "select") {
+      // An explicit Lasso choice ends object placement before accepting ink
+      // input. Internal setCanvasMode calls keep the placement lifecycle intact.
+      if (state.pending) acceptPending({ restoreMode:false });
+      if (state.pendingWidget) acceptPendingWidget({ restoreMode:false });
+      if (state.pending || state.pendingWidget) return false;
+      state.aiDraftReturnMode = null;
+      state.imageHandReturnMode = null;
+      if (state.widgetEdit) acceptWidgetEdit();
+      if (state.imageEdit) acceptImageEdit({ restoreMode:false });
+      if (state.animationEdit) acceptAnimationEdit();
+      hideHandObjectToolbar({ all:true, animate:false });
+    }
     setCanvasMode(mode, options);
     if (state.mode !== mode) return false;
     if (previous && previous !== mode) state.previousToolMode = previous;
@@ -1064,6 +1367,8 @@
   document.querySelector("#aiFont").onchange = (e) => {
     setAiFont(e.target.value);
   };
+  document.querySelector("#illustrationStyle")?.addEventListener("change", event => setIllustrationStyle(event.target.value));
+  document.querySelector("#illustrationBackground")?.addEventListener("change", event => setIllustrationBackground(event.target.value));
   function colorOrbitFor(control) {
     const id = control?.querySelector(".color-orb-trigger")?.getAttribute("aria-controls");
     return id ? document.getElementById(id) : null;
@@ -1468,6 +1773,7 @@
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
+  document.querySelector("#historyCanvasNav").onclick = openHistoryCanvas;
   document.querySelector("#historyClose").onclick = closeHistoryPanel;
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = () => {
@@ -1616,6 +1922,7 @@
             clearTextEditors();
             state.userRevision++;
             state.snapshotLoadGeneration++;
+            const dirtyBefore = captureDirtyHistoryState();
             invalidateRecognition();
             state.historyBefore.clear();
             clearSharpOverlays();
@@ -1624,6 +1931,7 @@
             recordWidgetsBefore();
             recordImagesBefore();
             recordTextBoxesBefore();
+            state.dirtyHistoryBefore = dirtyBefore;
             state.animations = [];
             state.selectedAnimationId = null;
             state.animationGesture = null;
@@ -1696,8 +2004,8 @@
   settingsConnectionList?.addEventListener("click", handleConnectionAction);
   settingsConnectionQuickList?.addEventListener("click", handleConnectionAction);
   document.getElementById("settingsHostedList")?.addEventListener("click", handleConnectionAction);
-  document.getElementById("settingsHostedRefresh")?.addEventListener("click", () => void loadCanvasSettings());
-  window.addEventListener("penecho:cloud-account-changed", () => void loadHostedModels({ accountChanged:true }));
+  document.getElementById("settingsHostedRefresh")?.addEventListener("click", () => { void loadHostedModels({ force:true }); void loadCanvasSettings(); });
+  window.addEventListener("penecho:cloud-account-changed", event => { if (event.detail?.changed !== false) void loadHostedModels({ accountChanged:true }); });
   void loadHostedModels();
   settingsEffortToggle?.addEventListener("click", () => settingsEffortOptions.hidden ? showSettingsEffortOptions() : hideSettingsEffortOptions());
   settingsEffort?.addEventListener("pointerdown", showSettingsEffortOptions);
@@ -1755,6 +2063,7 @@
     updateTraceToggle();
   });
   settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsCanvasHintsToggle.addEventListener("click", () => setCanvasHintsEnabled(!state.canvasHintsEnabled));
   settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpen));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
@@ -1767,6 +2076,8 @@
     maybeShowChangelog(true);
   });
   window.addEventListener("keydown", (event) => {
+    // Native modal dialogs own Escape before the Settings surface beneath them.
+    if (event.key === "Escape" && document.querySelector("dialog:modal")) return;
     if (event.key === "Escape" && settings.open) {
       event.preventDefault();
       event.stopPropagation();
@@ -1929,7 +2240,7 @@
   if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
-  if(window.PENECHO_CONFIG?.runtime!=="viewer")void canvasDocumentsReady().catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsReady()));
+  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
   requestAnimationFrame(() => {
     if (window.PENECHO_CONFIG?.runtime !== "viewer") void loadCanvasSettings().finally(maybeStartOnboarding);
   });

@@ -80,7 +80,7 @@
   brand.href = live ? "/?public=1" : config.communityUrl || "/community.html";
   brand.title = copy.backTitle;
   brand.setAttribute("aria-label", copy.backTitle);
-  brand.innerHTML = "<span>Pen<strong>Echo</strong></span>";
+  brand.innerHTML = "<span class=\"viewer-brand-mark\" aria-hidden=\"true\"></span><span>Pen<strong>Echo</strong></span>";
   const actions = document.createElement("div");
   actions.className = "viewer-actions";
   topbar.append(brand, actions);

@@ -187,7 +187,7 @@ function replaceHarness({ onDigestStart = null } = {}) {
     canvasAgentWaitForSourceCommit:async () => {},
     canvasAgentAssertToolExecution:() => {},
     canvasAgentAssertRevision:() => {},
-    canvasAgentMutationIdle:() => {},
+    canvasAgentMutationIdle:() => {},canvasAgentBeginMutation:()=>()=>{},
     canvasAgentObject:id => id === widget.id ? { kind:"widget", item:state.widgets[0] } : null,
     canvasAgentToolError:(code, message) => Object.assign(Error(message), { code }),
     canvasAgentWidgetPluginAllowed:() => true,
@@ -210,6 +210,14 @@ function replaceHarness({ onDigestStart = null } = {}) {
   });
   return { state, widget, replace, trace, saveKinds, digestStartedPromise, releaseDigest };
 }
+
+test("derived Widget execution rejects source replacement before hashes or mutations", async () => {
+  for(const sourceOnly of [false,true]){
+    const h=replaceHarness(),before=JSON.stringify(h.widget),execution={assistContext:{owner:{inputTarget:{widget:h.widget,variant:{}}}}};
+    await assert.rejects(h.replace({objectId:h.widget.id,...(sourceOnly?{expectedSourceHash:'irrelevant'}:{expectedHash:'irrelevant'}),command:{tool:'html_widget',pluginId:'general',html:'<p>Changed</p>'}},execution),{code:'READ_ONLY_SOURCE'});
+    assert.equal(JSON.stringify(h.widget),before);assert.deepEqual(h.trace,[]);
+  }
+});
 
 test("source-only replace can consume receipt.sourceHash repeatedly without global revision and preserves geometry changed during hash", async () => {
   const client = clientFunctions();

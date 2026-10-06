@@ -471,7 +471,6 @@
         histories.delete(canvasKey);
       }
       for(const history of histories.values()){
-        if(history.canvasKey.startsWith("draft:")&&history.canvasKey!==state.canvasAgentCanvasKey)continue;
         const identity=studioNavigatorCanvasIdentity(history.canvasKey),item=studioNavigatorCanvasGroupSnapshot(history);
         groups.set(history.canvasKey,{...history,location:identity?.location||"",item,name:studioNavigatorCanvasGroupName(history),savedAt:Number(item?.updatedAt||item?.createdAt)||0});
       }
@@ -615,6 +614,12 @@
       renderStudioWorkHistory();
       return true;
     }
+    function previewStudioConversation(conversation) {
+      studioNavigatorPendingConversation=null;
+      studioNavigator.removeAttribute("aria-busy");
+      if(canvasAgentPanel.hidden)openCanvasAgent({focus:false,connect:false});
+      return canvasAgentPreviewStoredConversation(conversation);
+    }
     async function openStudioConversation(group,conversation,control) {
       closeStudioNavigatorAfterCompactAction();
       const pending={canvasKey:group.canvasKey,conversationId:conversation.id,canvasName:group.name,conversationName:conversation.title||t("canvasAgentHistoryUntitled")};
@@ -623,20 +628,17 @@
       control.disabled=true;
       try{
         if(group.canvasKey===state.canvasAgentCanvasKey)return await openStudioConversationOnCurrentCanvas(pending);
-        const identity=studioNavigatorCanvasIdentity(group.canvasKey);
-        if(!identity)throw Error(t("studioNavigatorCanvasUnavailable"));
-        const loaded=await requestLoadSnapshot(identity.id,identity.location);
-        if(!loaded&&!document.querySelector("#newCanvasDialog").open){
-          studioNavigatorPendingConversation=null;
-          studioNavigator.removeAttribute("aria-busy");
-          setStatus(t("studioNavigatorCanvasUnavailable"));
+        if(group.documentId){
+          await canvasDocumentsShow(group.documentId,null,{markSeen:false});
+          return await openStudioConversationOnCurrentCanvas(pending);
         }
+        const identity=studioNavigatorCanvasIdentity(group.canvasKey);
+        if(!identity)return previewStudioConversation(conversation);
+        const loaded=await requestLoadSnapshot(identity.id,identity.location);
+        if(!loaded&&!document.querySelector("#newCanvasDialog").open)return previewStudioConversation(conversation);
         return loaded;
       }catch(error){
-        studioNavigatorPendingConversation=null;
-        studioNavigator.removeAttribute("aria-busy");
-        setStatus(`${t("snapshotError")}${String(error?.message||error)}`);
-        return false;
+        return previewStudioConversation(conversation);
       }finally{control.disabled=false;}
     }
     function studioNavigatorCanvasDidLoad(identity) {

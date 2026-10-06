@@ -47,7 +47,7 @@ function flatten(root) {
   return out;
 }
 
-function boot({ pathname = `/canvas/${CANVAS_ID}`, baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout } = {}) {
+function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout } = {}) {
   const topRow = new FakeElement("div");
   topRow.className = "top-row";
   const brand = new FakeElement("div");
@@ -72,8 +72,10 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, baseURI = "https://cloud.pene
   const routeUpdates = [];
   const location = {
     pathname,
+    search,
+    hash,
     origin:"https://cloud.penecho.test",
-    href:`https://cloud.penecho.test${pathname}`,
+    href:`https://cloud.penecho.test${pathname}${search}${hash}`,
     assign(url) { redirects.push(url); },
     replace(url) { replacements.push(url); },
   };
@@ -81,7 +83,12 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, baseURI = "https://cloud.pene
   const taken = [];
   const saveEchoCalls = [];
   const windowObject = {
-    history:{ state:null, replaceState(state, title, url) { routeUpdates.push(url); location.pathname = url; } },
+    history:{ state:null, replaceState(state, title, url) {
+      routeUpdates.push(url);
+      const target = new URL(url, location.href);
+      Object.assign(location, { href:target.href, pathname:target.pathname, search:target.search, hash:target.hash });
+      this.state = state;
+    } },
     PENECHO_CONFIG:{ runtime:"cloud", remoteCanvasNativeReads:nativeReads },
     PenEchoCloudProjects:{
       openCanvas:openCanvas || (async (id) => { opened.push(id); }),
@@ -132,6 +139,49 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, baseURI = "https://cloud.pene
 async function flush(rounds = 8) {
   for (let index = 0; index < rounds; index++) await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("a confirmed Cloud identity updates the address without reopening and preserves browser modes", async () => {
+  let activeId = CANVAS_ID;
+  const run = boot({ nativeReads:true, currentCanvasId:() => activeId, search:"?mcp=1&playground=liveclay", hash:"#notes" });
+  await flush();
+  const historyState = { selectedPanel:"canvas" };
+  run.window.history.state = historyState;
+  activeId = SAVED_CANVAS_ID;
+  run.window.dispatchEvent({ type:"penecho:live-share-context-changed" });
+  assert.deepEqual(run.routeUpdates, [`/canvas/${SAVED_CANVAS_ID}?mcp=1&playground=liveclay#notes`]);
+  assert.equal(run.window.history.state, historyState);
+  run.window.dispatchEvent({ type:"penecho:live-share-context-changed" });
+  assert.equal(run.routeUpdates.length, 1, "saving the same identity does not replace history again");
+  assert.deepEqual(run.opened, [CANVAS_ID]);
+  assert.deepEqual(run.redirects, []);
+  assert.deepEqual(run.replacements, []);
+  assert.equal(run.gate.hidden, true);
+});
+
+test("a new draft stays put until saved and subsequent Canvas switches follow the active Cloud identity", async () => {
+  let activeId = null;
+  const run = boot({ nativeReads:true, currentCanvasId:() => activeId });
+  await flush();
+  run.window.dispatchEvent({ type:"penecho:live-share-context-changed" });
+  assert.deepEqual(run.routeUpdates, []);
+  for (const id of [SAVED_CANVAS_ID, SWITCHED_CANVAS_ID, SAVED_CANVAS_ID]) {
+    activeId = id;
+    run.window.dispatchEvent({ type:"penecho:live-share-context-changed" });
+  }
+  assert.deepEqual(run.routeUpdates, [SAVED_CANVAS_ID, SWITCHED_CANVAS_ID, SAVED_CANVAS_ID].map(id => `/canvas/${id}`));
+  assert.deepEqual(run.opened, [CANVAS_ID]);
+});
+
+test("a local or unconfirmed Canvas cannot replace the Cloud address", async () => {
+  let activeId = null;
+  const run = boot({ nativeReads:true, currentCanvasId:() => activeId });
+  await flush();
+  for (const id of [null, "local-draft", "../../other", "00000000-0000-0000-0000-000000000000"]) {
+    activeId = id;
+    run.window.dispatchEvent({ type:"penecho:live-share-context-changed" });
+  }
+  assert.deepEqual(run.routeUpdates, []);
+});
 
 test("share auto-fill uses the selected hosted model without waiting for any linked device", async () => {
   for (const nativeReads of [false, true]) {

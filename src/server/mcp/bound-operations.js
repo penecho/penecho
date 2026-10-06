@@ -372,6 +372,7 @@ async function executeBoundOperation({name,args,session,canvasCall,flushUpdate =
       artifactId:args.artifactId,
       title:args.title,
       html:args.html,
+      ...(["penecho-scene+json","penecho-note-card+json"].includes(args.sourceFormat) ? {sourceFormat:args.sourceFormat,frameworkVersion:args.frameworkVersion,copyText:args.copyText,copyLabel:args.copyLabel} : {}),
       capture:args.capture===true,
       ...(args.quality?{quality:args.quality}:{}),
       ...(args.requestId ? {requestId:args.requestId}:{}),
