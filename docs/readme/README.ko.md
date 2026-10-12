@@ -10,7 +10,7 @@
 <p align="center">질문, 스케치, 메모를 가져오세요. PenEcho의 내장 AI나 Codex, Claude Code, 모든 MCP 클라이언트가 바로 옆에 다이어그램, 문서, 작동하는 위젯으로 답을 보여줍니다.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.2-087f83" alt="Release v1.4.2"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>

@@ -89,6 +89,13 @@ result before any model is set up.
 7. The result bar (`#exampleDone`) shows what was learned, the next untried
    example and "Start my own canvas".
 
+Examples that need a model (Canvas AI or Agent) check for one first. Without
+a connection the coachmark says so and offers **Set up AI**, and tapping the
+step (or sending the Agent prompt) opens Settings → AI & connections instead of
+running. This matters for notes: with no model, Organize as Note falls back to
+a local card that only holds the captured photo or ink, which would not show
+what the feature does. Instant examples always run.
+
 The Agent example opens the panel before laying out the ink, keeps it open
 (first ink would otherwise auto-hide it), fills the composer and points the
 coachmark at Send. It does not record Suggest strokes.

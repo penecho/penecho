@@ -10,7 +10,7 @@
 <p align="center">Traga uma pergunta, um rascunho ou suas anotações. A IA integrada do PenEcho, o Codex, o Claude Code ou qualquer cliente MCP mostra a resposta logo ao lado, em diagramas, documentos e widgets funcionais.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.2-087f83" alt="Release v1.4.2"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>

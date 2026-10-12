@@ -131,3 +131,35 @@ test("a click on an example card opens it, including inside the grouped dialog",
   context.exampleCardClick({ target });
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["open", "code-bug"]]);
 });
+
+test("examples that need a model ask for one instead of showing a stand-in result", () => {
+  const ready = functionSource(moduleSource, "exampleModelReady");
+  assert.match(ready, /route === "instant"\) return true/);
+  assert.match(ready, /canvasAgentExecutionAvailable\(\)/);
+  assert.match(ready, /hasSelectedAiConnection\(\)/);
+  const started = functionSource(moduleSource, "exampleCanvasesActionStarted");
+  assert.ok(started.indexOf("exampleModelReady") < started.indexOf('session.status = "running"'), "no try is recorded without a model");
+  assert.match(started, /openExampleAiSetup\(\);\s*return true;/, "the local photo-only note is never offered as the example's result");
+  const submitted = functionSource(moduleSource, "exampleAgentSubmitted");
+  assert.match(submitted, /preventDefault\(\)[\s\S]*stopImmediatePropagation\(\)[\s\S]*openExampleAiSetup/);
+  assert.match(functionSource(moduleSource, "openExampleAiSetup"), /#settingsNavConnections/);
+  const { document } = parseHTML(html);
+  const setup = document.querySelector("#exampleCoachSetup");
+  assert.ok(setup && setup.hasAttribute("hidden") && setup.getAttribute("data-pe-button") === "primary");
+});
+
+test("Agent examples require a selected model even when the execution service is available", () => {
+  let connected = false, available = true;
+  const context = vm.createContext({ hasSelectedAiConnection:() => connected, canvasAgentExecutionAvailable:() => available });
+  vm.runInContext(functionSource(moduleSource, "exampleModelReady"), context);
+  assert.equal(context.exampleModelReady({ route:"instant" }), true);
+  assert.equal(context.exampleModelReady({ route:"ai" }), false);
+  assert.equal(context.exampleModelReady({ route:"agent" }), false);
+  connected = true;
+  assert.equal(context.exampleModelReady({ route:"ai" }), true);
+  assert.equal(context.exampleModelReady({ route:"agent" }), true);
+  available = false;
+  assert.equal(context.exampleModelReady({ route:"agent" }), false);
+  assert.equal(context.exampleModelReady({ route:"ai" }), true);
+  assert.equal(context.exampleModelReady({ route:"instant" }), true);
+});

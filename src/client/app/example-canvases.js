@@ -27,6 +27,7 @@
     exampleCoachTip = document.querySelector("#exampleCoachTip"),
     exampleCoachAll = document.querySelector("#exampleCoachAll"),
     exampleCoachHide = document.querySelector("#exampleCoachHide"),
+    exampleCoachSetup = document.querySelector("#exampleCoachSetup"),
     exampleDone = document.querySelector("#exampleDone"),
     exampleDoneTitle = document.querySelector("#exampleDoneTitle"),
     exampleDoneBody = document.querySelector("#exampleDoneBody"),
@@ -232,6 +233,20 @@
     exampleSaveProgress(EXAMPLES.setGoal(exampleProgress(), goal));
   }
 
+  // Instant examples run locally. The others only teach anything when a model
+  // produces the real result; without one, Notes would fall back to a card that
+  // just holds the photo and the Agent would refuse.
+  function exampleModelReady(scenario) {
+    if (!scenario || scenario.route === "instant") return true;
+    if (scenario.route === "agent" && typeof canvasAgentExecutionAvailable === "function" && !canvasAgentExecutionAvailable()) return false;
+    return typeof hasSelectedAiConnection !== "function" || hasSelectedAiConnection();
+  }
+  function openExampleAiSetup() {
+    closeExamplesDialog();
+    if (!settings.open) openSettings();
+    requestAnimationFrame(() => document.querySelector("#settingsNavConnections")?.click());
+    setStatus(exampleCopy("Connect an AI model, then tap the highlighted step again.", "请先连接 AI 模型，再点击高亮的步骤。"));
+  }
   function exampleSessionCurrent() {
     const session = exampleCanvases.session;
     return session && canvasDocumentsCurrent()?.id === session.documentId ? session : null;
@@ -406,6 +421,11 @@
       endExampleSession();
       return false;
     }
+    // Without a model this example cannot show its real result; set one up first.
+    if (!exampleModelReady(scenario) && !(id === "plot" && scenario.graph) && !(id === "diagram" && scenario.architecture)) {
+      openExampleAiSetup();
+      return true;
+    }
     session.status = "running";
     if (target) target.example = true;
     hideExampleCoach();
@@ -455,9 +475,15 @@
       finishExample(session);
     }, 600);
   }
-  function exampleAgentSubmitted() {
+  function exampleAgentSubmitted(event) {
     const session = exampleSessionCurrent();
     if (!session || session.status !== "waiting" || EXAMPLES.get(session.id)?.route !== "agent") return;
+    if (!exampleModelReady(EXAMPLES.get(session.id))) {
+      event?.preventDefault();
+      event?.stopImmediatePropagation();
+      openExampleAiSetup();
+      return;
+    }
     session.status = "running";
     hideExampleCoach();
     exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), session.id));
@@ -504,7 +530,12 @@
       suggestOff = scenario.route !== "agent" && !smartSuggestActive();
     exampleCoachKicker.textContent = `${exampleGoalLabel(scenario.category)} · ${exampleCopy(`${number} of ${group.length}`, `${number}/${group.length}`)} · ${exampleFeatureLabel(scenario.feature)}`;
     exampleCoachTitle.textContent = exampleText(scenario.title);
-    exampleCoachBody.textContent = suggestOff ? exampleCopy("Suggestions are turned off. Turn them on in Settings, or tap the AI button to try this example.", "建议已关闭。请在设置中开启，或点击 AI 按钮体验此示例。") : exampleText(scenario.coach);
+    const needsModel = !exampleModelReady(scenario) && !scenario.graph && !scenario.architecture;
+    exampleCoachBody.textContent = needsModel
+      ? exampleCopy("This example needs an AI model to produce the real result, and none is connected yet. Set one up, then try it.", "此示例需要 AI 模型才能生成真实结果，目前尚未连接。请先设置，再来体验。")
+      : suggestOff ? exampleCopy("Suggestions are turned off. Turn them on in Settings, or tap the AI button to try this example.", "建议已关闭。请在设置中开启，或点击 AI 按钮体验此示例。") : exampleText(scenario.coach);
+    exampleCoachSetup.hidden = !needsModel;
+    exampleCoachSetup.textContent = exampleCopy("Set up AI", "设置 AI");
     exampleCoachTip.textContent = exampleText(scenario.tip);
     exampleCoachTip.hidden = !scenario.tip || scenario.route === "agent";
     exampleCoachAll.textContent = exampleCopy("All examples", "全部示例");
@@ -532,7 +563,9 @@
     const target = exampleCoachTarget(session, scenario);
     if (!target?.rect || !TOUR.rectHasArea(target.rect)) { exampleCoach.hidden = true; return; }
     const wasHidden = exampleCoach.hidden;
-    if (wasHidden) renderExampleCoach();
+    // Connecting a model while the coachmark is up swaps "Set up AI" for the steps.
+    const ready = exampleModelReady(scenario);
+    if (wasHidden || exampleCanvases.coachReady !== ready) { exampleCanvases.coachReady = ready; renderExampleCoach(); }
     exampleCoach.hidden = false;
     const card = pageLayoutRect(exampleCoach),
       position = TOUR.placeCoachmark(target.rect, { width:card.width, height:card.height }, featureTourViewport(), target.placement, { margin:12, gap:14, arrowMargin:22 }),
@@ -579,6 +612,7 @@
     });
     exampleCoachAll?.addEventListener("click", openExamplesDialog);
     exampleCoachHide?.addEventListener("click", () => { exampleCanvases.coachHidden = true; hideExampleCoach(); });
+    exampleCoachSetup?.addEventListener("click", openExampleAiSetup);
     exampleCoach?.addEventListener("keydown", event => { if (event.key === "Escape") { exampleCanvases.coachHidden = true; hideExampleCoach(); } });
     for (const element of [exampleCoach, exampleDone]) element?.addEventListener("pointerdown", event => event.stopPropagation());
     exampleDoneNext?.addEventListener("click", () => { const next = exampleDone.dataset.nextId; if (next) void openExampleCanvas(next); });
