@@ -168,6 +168,7 @@
     return ranked.sort((a, b) => b.score - a.score);
   }
   function widgetAssistHeaderSuggestions(widget) {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return [];
     if (!smartSuggest.enabled) return [];
     return widgetAssistSuggestions(widget)
       .filter(item => item.score >= WIDGET_ASSIST_HEADER_MIN_SCORE)

@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-<h1 align="center">Думайте на холсте вместе с любым ИИ.</h1>
+<h1 align="center">ИИ, который не только рассказывает, но и показывает.</h1>
 
-<p align="center">Рисуйте от руки. Встроенный агент PenEcho, Codex, Claude Code или любой MCP-клиент создаст рядом с заметками схемы, документы и работающие виджеты.</p>
+<p align="center">Принесите вопрос, набросок или заметки. Встроенный ИИ PenEcho, Codex, Claude Code или любой MCP-клиент покажет ответ прямо рядом — в виде схем, документов и работающих виджетов.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>

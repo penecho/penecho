@@ -189,6 +189,16 @@
     background: var(--pe-selected, var(--studio-accent-soft));
     box-shadow: none;
   }
+  /* The current tool reads like the Share action: filled accent, white glyph. */
+  body[data-theme="studio"] .primary-tools :is(#pe-button-contract, button)[data-mode]:is(.active, [aria-pressed="true"]),
+  body[data-theme="studio"] .primary-tools :is(#pe-button-contract, #canvasViewBtn)[aria-pressed="true"] {
+    color: #fff;
+    border-color: transparent;
+    background: var(--pe-accent, var(--studio-accent));
+    box-shadow: none;
+  }
+  body[data-theme="studio"] .primary-tools :is(#pe-button-contract, button)[data-mode]:is(.active, [aria-pressed="true"]):hover,
+  body[data-theme="studio"] .primary-tools :is(#pe-button-contract, #canvasViewBtn)[aria-pressed="true"]:hover { color: #fff; background: var(--pe-accent-strong, var(--studio-accent-strong)); }
   body[data-theme="studio"] .primary-tools #auto.active {
     color: var(--pe-accent-label, var(--studio-accent-strong));
     border-color: color-mix(in srgb, var(--studio-accent) 26%, transparent);
@@ -2130,4 +2140,143 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 @media (prefers-reduced-motion: reduce) {
   body[data-theme="studio"] #canvasAgentPanel[data-status="running"] .canvas-agent-heading small::before,
   body[data-theme="studio"] #canvasAgentPanel .canvas-agent-tool.running > .canvas-agent-tool-head::before { animation: none; }
+}
+
+/* ------------------------------------------------------------------
+   Companion view (mode=companion)
+   An AI client's side pane opens the Canvas in its minimal view: one 44px
+   title row, a 44px tool rail and the Canvas. The conversation beside it is
+   the agent, so PenEcho's own AI and Agent chrome stays out of the way. The
+   full view is the complete Canvas in the same document and tab.
+   ------------------------------------------------------------------ */
+.companion-rail, .companion-view-toggle { display: none; }
+.companion-canvas-target[hidden] { display: none !important; }
+.companion-canvas-target { flex: 0 1 auto; max-width: 160px; min-width: 0; height: 28px; padding: 0 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: 6px; color: var(--studio-muted); background: transparent; font: 500 11px/1.2 system-ui; cursor: pointer; }
+.companion-canvas-target[data-matches="false"] { color: #96601a; background: #fff5df; }
+.companion-canvas-menu { position: fixed; inset: 92px auto auto 52px; width: min(310px, calc(100vw - 64px)); max-height: calc(100dvh - 112px); box-sizing: border-box; overflow: auto; margin: 0; padding: 14px; color: var(--studio-text, #202333); background: var(--studio-panel, white); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 12px; box-shadow: 0 8px 30px #18223820; font: 13px/1.5 system-ui; }
+.companion-canvas-menu p { margin: 6px 0 12px; color: var(--studio-muted, #687082); font-size: 12px; }
+.companion-canvas-row { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 8px; padding: 9px; border: 0; border-radius: 7px; text-align: left; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+.companion-canvas-row:hover, .companion-canvas-row[aria-current] { background: var(--studio-toolbar, #f3f4f6); }
+.companion-canvas-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.companion-canvas-row small { flex-shrink: 0; color: var(--studio-accent, #4f46e5); font-size: 11px; }
+.companion-canvas-menu button:focus-visible, .companion-canvas-target:focus-visible { outline: 2px solid var(--studio-accent, #4f46e5); outline-offset: -2px; }
+#companionCanvasError { color: #a32c36; }
+@media(max-width:560px) { .companion-canvas-target { max-width: 100px; } }
+.companion-rail[hidden], .companion-view-toggle[hidden] { display: none !important; }
+:root[data-penecho-companion] body .topbar #companionViewToggle:not([hidden]) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: auto; height: 28px; min-height: 28px; flex: 0 0 auto; order: 3;
+  box-sizing: border-box; padding: 0 9px;
+  color: var(--studio-text, #20242c); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 6px;
+  background: var(--studio-panel, #ffffff); box-shadow: none;
+  font: 500 12.5px/1 var(--pe-font-ui, system-ui); white-space: nowrap; cursor: pointer;
+}
+:root[data-penecho-companion] body .topbar #companionViewToggle:hover { background: var(--studio-toolbar, #f3f4f6); }
+:root[data-penecho-companion] body .topbar #companionViewToggle:focus-visible { outline: 2px solid var(--studio-accent, #4f46e5); outline-offset: 2px; }
+:root[data-penecho-companion] .companion-view-toggle svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+:root[data-penecho-companion="minimal"] .companion-view-compact,
+:root[data-penecho-companion="full"] .companion-view-expand { display: none; }
+
+:root[data-penecho-companion="minimal"] body .topbar {
+  display: block; height: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 0;
+  border-bottom: 1px solid var(--studio-hairline, #e8e8ec); background: var(--studio-titlebar, #fafafb);
+}
+:root[data-penecho-companion="minimal"] body .topbar > .top-row {
+  position: relative; display: flex; width: 100%; height: 43px; min-height: 43px; box-sizing: border-box;
+  align-items: center; flex-wrap: nowrap; gap: 6px; padding: 0 8px 0 10px; border: 0; overflow: visible;
+}
+:root[data-penecho-companion="minimal"] body .topbar > .toolbar,
+:root[data-penecho-companion="minimal"] body .topbar :is(.brand, .canvas-file-actions, #cloudAccountBtn, #settingsBtn) { display: none; }
+:root[data-penecho-companion="minimal"] body .topbar .canvas-document-meta {
+  display: flex; flex: 1 1 auto; min-width: 0; order: 0; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0;
+}
+:root[data-penecho-companion="minimal"] body .topbar #canvasDocumentName { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; }
+:root[data-penecho-companion="minimal"] body .topbar #canvasDocumentNameLabel { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-penecho-companion="minimal"] body .topbar #canvasDocumentSaveState { flex: 0 0 auto; }
+:root[data-penecho-companion="minimal"] body .topbar #saveCanvasBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: auto; height: 28px; min-height: 28px; flex: 0 0 auto; margin-left: auto; box-sizing: border-box; padding: 0 11px;
+  color: #ffffff; border: 1px solid transparent; border-radius: 6px; background: var(--pe-accent, #4f46e5); box-shadow: none;
+  font: 500 12.5px/1 var(--pe-font-ui, system-ui); white-space: nowrap;
+}
+:root[data-penecho-companion="minimal"] body .topbar #saveCanvasBtn:hover:not(:disabled) { background: var(--pe-accent-strong, #4338ca); }
+:root[data-penecho-companion="minimal"] body .topbar #saveCanvasBtn:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: 2px; }
+:root[data-penecho-companion="minimal"] body .topbar #saveCanvasLabel { display: inline; }
+:root[data-penecho-companion="minimal"] body .topbar #saveCanvasBtn svg { width: 15px; height: 15px; flex: 0 0 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+:root[data-penecho-companion="minimal"] body .topbar #canvasMoreControl { display: block; flex: 0 0 auto; order: 4; }
+/* Messages float under the title row; the idle status takes no room. */
+:root[data-penecho-companion="minimal"] body .topbar #aiStatusArea {
+  position: absolute; z-index: 44; top: 50px; right: 8px; left: 52px; order: 5;
+  display: flex; min-width: 0; justify-content: center; gap: 6px; margin: 0; pointer-events: none;
+}
+:root[data-penecho-companion="minimal"] body .topbar #aiStatusArea > * { pointer-events: auto; }
+:root[data-penecho-companion="minimal"] body .topbar #status {
+  min-width: 0; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--studio-line, #e3e4e8); border-radius: 999px; background: var(--studio-panel, #ffffff);
+  box-shadow: var(--pe-shell-float-shadow, 0 6px 14px rgba(17, 24, 39, .14));
+}
+:root[data-penecho-companion="minimal"] body .topbar #status:is(:empty, [data-status-key="ready"]) { display: none; }
+
+:root[data-penecho-companion="minimal"] body .canvas-frame > .companion-rail:not([hidden]) {
+  position: relative; z-index: 46; display: flex; width: 44px; min-width: 44px; flex: 0 0 44px; box-sizing: border-box;
+  flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none;
+  border-right: 1px solid var(--studio-line, #e3e4e8); background: var(--studio-titlebar, #fafafb);
+}
+.companion-rail::-webkit-scrollbar { display: none; }
+.companion-rail-button {
+  position: relative; display: grid; width: 34px; height: 34px; min-height: 34px; flex: 0 0 34px; place-items: center;
+  box-sizing: border-box; padding: 0; color: var(--studio-muted, #687082); border: 1px solid transparent; border-radius: 8px;
+  background: transparent; cursor: pointer;
+}
+.companion-rail-button:hover:not(:disabled) { color: var(--studio-text, #20242c); background: var(--studio-accent-softer, #f0f1fb); }
+.companion-rail-button:is([aria-pressed="true"], [aria-expanded="true"]) { color: var(--pe-accent-label, var(--studio-accent, #4f46e5)); background: var(--pe-selected, var(--studio-accent-soft, #e7e8fb)); }
+.companion-rail-mcp.companion-rail-button[aria-pressed="true"]:not([aria-expanded="true"]) { color: var(--studio-muted, #687082); background: transparent; }
+.companion-rail-button:disabled { color: #b4b8c2; background: transparent; cursor: default; }
+.companion-rail-button:focus-visible { outline: 2px solid var(--studio-accent, #4f46e5); outline-offset: 1px; }
+.companion-rail-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.companion-rail-divider { width: 20px; height: 1px; flex: 0 0 1px; margin: 4px 0; background: var(--studio-line, #e3e4e8); }
+.companion-rail-dot { position: absolute; right: 5px; bottom: 5px; width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; box-shadow: 0 0 0 2px var(--studio-titlebar, #fafafb); }
+.companion-rail-mcp:is([data-state="connected"], [data-state="updating"]) .companion-rail-dot { background: #16a34a; }
+.companion-rail-mcp:is([data-state="connecting"], [data-state="retrying"], [data-state="signin"]) .companion-rail-dot { background: #d97706; }
+.companion-rail-mcp[data-state="failed"] .companion-rail-dot { background: #dc2626; }
+@media (pointer: coarse) {
+  .companion-rail-button { width: 40px; height: 40px; min-height: 40px; flex-basis: 40px; }
+}
+@media (forced-colors: active) {
+  .companion-rail-button:is([aria-pressed="true"], [aria-expanded="true"]) { outline: 2px solid Highlight; }
+  .companion-rail-dot { background: CanvasText !important; }
+}
+
+/* The recent-work navigator opens over the Canvas, beside the rail. */
+:root[data-penecho-companion="minimal"] body .canvas-frame > .studio-navigator {
+  position: absolute; z-index: 47; top: 0; bottom: 0; left: 44px;
+  width: min(320px, calc(100% - 56px)); min-width: 0; max-width: none; flex: none; margin: 0;
+  box-shadow: var(--pe-shell-float-shadow, 0 6px 14px rgba(17, 24, 39, .14));
+}
+:root[data-penecho-companion="minimal"] body:not(.studio-navigator-open) .canvas-frame > .studio-navigator { display: none; }
+:root[data-penecho-companion="minimal"] body .canvas-frame::after { left: 44px; right: 0; }
+
+/* The rail replaces duplicate navigation; signed-in AI keeps its normal UI. */
+:root[data-penecho-companion="minimal"] body :is(#canvasZoomControls, #canvasNavigationLock, #canvasFitContents, #canvasWelcome, #canvasAgentControl) { display: none !important; }
+:root[data-penecho-guest-ai="true"] body :is(#aiEmbodiment, #auto, #canvasAutoPausedNotice, #assistAgentMini, #smartSuggestLayer, .pen-intel-layer, #smartSuggestToggle) { display: none !important; }
+/* Hidden docked panels must not leak into the compact viewport on interaction. */
+:root[data-penecho-companion="minimal"] body:not(.canvas-agent-open) .canvas-frame > .canvas-agent-panel,
+:root[data-penecho-companion="minimal"] body .canvas-frame > .canvas-agent-panel[hidden] { display: none !important; }
+.canvas-hint-signin { margin-left: 8px; padding: 0; border: 0; background: transparent; color: var(--studio-accent, #4f46e5); font: inherit; text-decoration: underline; cursor: pointer; pointer-events: auto; }
+.canvas-hint-signin:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+:root[data-penecho-companion="minimal"] body #canvasHint:has(.canvas-hint-signin) {
+  position: fixed; z-index: 48; top: auto; right: auto; bottom: 12px; left: calc(50% + 22px);
+  width: max-content; max-width: calc(100vw - 64px); box-sizing: border-box;
+  padding: 6px 10px; overflow: visible; white-space: normal; text-align: center;
+  transform: translateX(-50%); border-radius: 12px;
+  color: var(--studio-muted, #687082); background: var(--studio-panel, #ffffff);
+}
+:root[data-penecho-companion="minimal"] body .canvas-welcome { inset: 0; }
+:root[data-penecho-companion="minimal"] body #mcpCanvasNotice { bottom: 12px; }
+:root[data-penecho-companion="minimal"] body main > footer { min-height: 24px; flex-basis: 24px; }
+@media (max-width: 560px) {
+  :root[data-penecho-companion="minimal"] body #coords { display: none; }
+  :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentSaveLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :root[data-penecho-companion] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
+  :root[data-penecho-companion] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }

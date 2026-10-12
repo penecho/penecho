@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-<h1 align="center">Piensa en un lienzo con cualquier IA.</h1>
+<h1 align="center">IA que muestra, no solo explica.</h1>
 
-<p align="center">Dibuja a mano. El Agent integrado de PenEcho, Codex, Claude Code o cualquier cliente MCP convierte tus ideas en diagramas, documentos y widgets funcionales junto a tus notas.</p>
+<p align="center">Trae una pregunta, un boceto o tus notas. La IA integrada de PenEcho, Codex, Claude Code o cualquier cliente MCP te muestra la respuesta justo al lado, con diagramas, documentos y widgets funcionales.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>

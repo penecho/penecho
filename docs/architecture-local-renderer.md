@@ -16,6 +16,16 @@ The architecture object requires `version:1`, `title`, `nodes` and `edges`; the 
 It converts the semantic object into a small HTML envelope. It does **not** load
 ELK or run layout on the server.
 
+Canvas AI (for example the Make diagram suggestion) uses the same objects. The
+model returns `{tool:"html_widget",pluginId:"general",…,architecture:{…}}` (or
+`sequence`/`workflow`), described by `LOCAL_DIAGRAM_CONTRACT_PROMPT` in
+`src/server/main.js`. `normalizedLocalDiagramCommand` validates it with the same
+schema module, builds the same envelope and asks the model once to correct an
+invalid object. Service dependency graphs, network or deployment topology and
+data lineage are architecture diagrams too. Graphviz DOT and Cytoscape JSON are
+no longer offered for new Professional Diagrams; saved widgets in those formats
+still render and can be refined.
+
 The envelope is persisted as the existing virtual
 `objects/<objectId>/widget.html`. Its `application/json` script marked
 `data-architecture-source` is the editable canonical source; it is not a physical

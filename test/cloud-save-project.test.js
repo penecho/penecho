@@ -19,10 +19,10 @@ function harness({ selected = "all", libraryError = null, saveError = null, proj
     window:{ PENECHO_CONFIG:{ runtime:"cloud", browserCanvasEditing:true }, dispatchEvent(event){ events.push({ type:event.type, id:context.state.currentSnapshotId, location:context.state.currentSnapshotLocation }); } },
     sessionStorage:{ getItem:() => selected, setItem(){} },
     document:{ querySelector:() => ({ value:"" }) },
-    state:{ snapshotLocation:"cloud", currentSnapshotId:null, currentSnapshotLocation:null, userRevision:1, images:[], textBoxes:[], preservedSnapshotAnimations:[], animations:[] },
+    state:{ snapshotLocation:"cloud", currentSnapshotId:null, currentSnapshotLocation:null, userRevision:1, images:[], textBoxes:[], preservedSnapshotAnimations:[], animations:[], widgets:[] },
     crypto:{ randomUUID:() => "new-local-id" }, Event,
     tiles:new Map(), authenticatedApiHeaders:() => ({}),
-    selectionAIBusy:() => false, pluginEnabled:() => false,
+    selectionAIBusy:() => false, pluginEnabled:() => false, visibleWidgets:() => [],
     t:key => key === "snapshotLibraryLoadFailed" ? "Could not load {location}. Select the location to try again." : key,
     serializedAnimations:() => [], serializedWidgets:() => [], storedTextBoxes:() => [], storedImages:() => [],
     snapshotCanvasObjectExtensions:() => ({}), canvasAgentCanvasDidPersist(){}, setStatusKey(){},
@@ -41,7 +41,7 @@ function harness({ selected = "all", libraryError = null, saveError = null, proj
     finalizeCanvasForSnapshot = async () => {};
     prepareVisibleWidgetSnapshots = async () => {};
     cloudSnapshotPreviewBlob = async () => null;
-    serverSnapshotPayload = async item => ({ name:item.name, projectId:item.projectId });
+    serverSnapshotPayload = async item => ({ name:item.name, projectId:item.projectId, widgets:item.widgets });
     refreshSnapshots = async () => {};
   `, context);
   return { context, requests, events, run:code => vm.runInContext(code, context) };
@@ -55,6 +55,21 @@ test("a first Cloud save resolves Uncategorized without opening Library", async 
   assert.equal(h.context.state.currentSnapshotProjectId, DEFAULT);
   assert.equal(h.context.state.currentSnapshotRevisionId, REVISION);
   assert.deepEqual(h.events, [{ type:"penecho:live-share-context-changed", id:CANVAS, location:"cloud" }]);
+});
+
+test("restored Widget source saves before its plugin becomes visible", async () => {
+  const h = harness();
+  const widget = { id:"widget-1", pluginId:"html", html:"<h1>Keep this draft</h1>" };
+  h.context.state.widgets.push(widget);
+  h.context.serializedWidgets = () => h.context.state.widgets;
+  assert.equal(await h.context.saveSnapshot({ location:"cloud", name:"Restored MCP draft" }), CANVAS);
+  assert.deepEqual(h.requests.at(-1).body.bundle.widgets, [widget]);
+});
+
+test("an actually empty Canvas still skips saving", async () => {
+  const h = harness();
+  assert.equal(await h.context.saveSnapshot({ location:"cloud", name:"Empty" }), null);
+  assert.deepEqual(h.requests, []);
 });
 
 test("first save keeps an explicitly selected project and replaces a stale selection with Uncategorized", async () => {

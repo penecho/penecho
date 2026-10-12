@@ -39,7 +39,7 @@ function fixture(runtime = "cloud", config = {}) {
   for (const name of ["settingsProvider", "settingsApiKey", "settingsApiSaved", "settingsDeepSeekSearchApiKey",
     "settingsTavilyApiKey", "settingsEffort", "settingsMaxTokens", "settingsAgentTurnLimit", "settingsTimeout",
     "settingsAutoDelay", "settingsImageFormat", "settingsTraceLimit"]) c[name] = { dataset:{} };
-  for (const name of ["aiConnectionScope", "aiConnectionStorageKey", "selectedAiConnectionId", "storeAiConnectionSelection", "aiConnectionSelectionError", "aiRequestHeaders",
+  for (const name of ["canvasGuestAiRestricted", "aiConnectionScope", "aiConnectionStorageKey", "selectedAiConnectionId", "storeAiConnectionSelection", "aiConnectionSelectionError", "aiRequestHeaders",
     "syncLocalConnectionSelection", "hasSelectedAiConnection", "promptForAiConnectionSelection", "requireAiConnectionSelection", "closeSettings", "loadHostedModels", "loadHostedModelsOnce",
     "loadCanvasSettings", "performCanvasSettingsLoad"]) {
     const match = new RegExp(`  (?:async )?function ${name}\\(`).exec(source);

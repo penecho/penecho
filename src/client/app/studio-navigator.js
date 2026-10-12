@@ -378,6 +378,10 @@
       if (!studioNavigatorIsOpen() || studioNavigatorIsMcpDocked()) return false;
       const target=event?.target;
       if (target && (studioNavigator.contains(target) || studioNavigatorToggle.contains(target))) return false;
+      // A rail proxy is the same toggle: closing on pointerdown/focusin here
+      // would make its forwarded click reopen the navigator.
+      const forwarded = target?.closest?.("[data-shell-forward]")?.dataset.shellForward;
+      if (forwarded?.split(",").some(selector => selector.trim() === "#studioNavigatorToggle")) return false;
       setStudioNavigatorOpen(false);
       return true;
     }

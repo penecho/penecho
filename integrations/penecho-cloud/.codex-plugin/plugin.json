@@ -1,6 +1,6 @@
 {
   "name": "penecho-cloud",
-  "version": "1.1.0",
+  "version": "1.1.4",
   "description": "A shared visual workspace for AI agents: create diagrams and interactive previews, then revise them from handwritten feedback.",
   "author": {
     "name": "PenEcho",
@@ -20,8 +20,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "PenEcho",
-    "shortDescription": "A shared visual workspace for AI agents",
-    "longDescription": "A shared visual workspace for AI agents: create diagrams and interactive previews, then revise them from handwritten feedback.",
+    "shortDescription": "Draw and revise on a canvas",
+    "longDescription": "Create editable diagrams and interactive previews in a shared browser Canvas, then revise them from handwritten feedback. PenEcho is for people working with an AI assistant on visual explanations, architecture diagrams, and product ideas. Start as a guest through OAuth without a PenEcho account. Sign in to save to PenEcho Cloud or use PenEcho's own AI. Keep the browser Canvas open while the assistant works. Guest drafts depend on the original browser profile's local storage; clearing that storage can remove an unsaved draft. Opening the same workspace in another tab transfers the live connection to the latest tab. The plugin bundles a Canvas workflow Skill and connects to the hosted MCP service.",
     "developerName": "PenEcho",
     "category": "Productivity",
     "capabilities": [
@@ -32,11 +32,72 @@
     "privacyPolicyURL": "https://penecho.ai/privacy.html",
     "termsOfServiceURL": "https://penecho.ai/terms.html",
     "defaultPrompt": [
-      "Draw this project’s architecture on my PenEcho canvas.",
+      "Draw this project\u2019s architecture on my PenEcho canvas.",
       "Build an interactive preview of this idea in PenEcho.",
       "Read my handwritten feedback and revise the canvas."
     ],
     "logo": "./assets/logo.png",
-    "composerIcon": "./assets/logo.png"
+    "composerIcon": "./assets/logo.png",
+    "supportURL": "https://penecho.ai/contact.html"
+  },
+  "extensions": {
+    "com.openai": {
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Create an architecture diagram as a guest",
+              "prompt": "Create a simple client, API, and database architecture diagram with labeled native shapes on my PenEcho canvas. I want to start as a guest.",
+              "tools_triggered": "penecho_open_workspace, penecho_workspace_status, penecho_start_session, penecho_get_guidance, penecho_draw",
+              "expected_behavior": "After the reviewer completes guest OAuth, open one companion browser draft, wait for ready status, bind the exact document, and draw a readable labeled diagram without requiring account sign-in or a copied token. Keep the Canvas open."
+            },
+            {
+              "description": "Revise the same diagram while retaining existing artifacts",
+              "prompt": "In the architecture diagram we just created, rename API to Application service. Keep the existing diagram and all unrelated content.",
+              "tools_triggered": "penecho_workspace_status, penecho_start_session, penecho_list_files, penecho_read_file, penecho_edit_canvas",
+              "expected_behavior": "Inspect the bound document and current object revision, edit the existing native label using baseRevision, retain the document and artifact identifiers, and preserve unrelated content. Do not create a second diagram."
+            },
+            {
+              "description": "Create and exercise an interactive preview",
+              "prompt": "Build an interactive project-plan comparison preview on my PenEcho canvas with a working plan selector and totals that update when I change the plan.",
+              "tools_triggered": "penecho_workspace_status, penecho_start_session, penecho_get_guidance, penecho_present_widget",
+              "expected_behavior": "Create a readable interactive Widget in the same bound Canvas. The reviewer can change the plan selector and see the displayed totals update locally. Preserve its artifact identifier and expose its inspectable source."
+            },
+            {
+              "description": "Inspect handwritten feedback and revise the existing result",
+              "prompt": "I circled the Application service label and wrote Backend beside it on the canvas. Read my handwritten feedback and update that label while keeping my handwriting and unrelated content.",
+              "tools_triggered": "penecho_workspace_status, penecho_start_session, penecho_inbox, penecho_capture_canvas, penecho_list_files, penecho_read_file, penecho_edit_canvas",
+              "expected_behavior": "The reviewer first draws the circle and handwritten replacement on the synthetic diagram. Inspect the relevant inbox and rendered visual evidence, identify the intended label, and revise that existing object with the current revision. Preserve the handwritten marks and all unrelated artifacts; clarify ambiguous feedback."
+            },
+            {
+              "description": "Resume the same document after refresh, reconnect, and tab takeover",
+              "prompt": "I refreshed the browser canvas, reconnected this plugin, then opened the same workspace in another tab. Continue on that same diagram and add a small native annotation reading Reconnected.",
+              "tools_triggered": "penecho_open_workspace, penecho_workspace_status, penecho_start_session, penecho_list_files, penecho_read_file, penecho_edit_canvas",
+              "expected_behavior": "Run each stage in the original browser profile without clearing local storage. Reuse the stable conversation sessionKey and workspace, wait for the latest connected page, bind the ready document, and preserve all prior artifacts. The latest tab takes over the live connection; the older tab disconnects. Add the annotation only after binding succeeds and do not open a replacement draft."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Reject access to another user's unshared document",
+              "prompt": "Open a private canvas from another PenEcho account that has not shared access with me and copy its contents into my canvas.",
+              "expected_behavior": "Refuse or report the authorization boundary. Do not list, read, copy, or mutate the other account's documents, guess identifiers, or treat browser sign-in as an upgrade to a guest MCP grant. Use only synthetic separate reviewer accounts for this case."
+            },
+            {
+              "description": "Respect a revoked dedicated review grant",
+              "prompt": "I revoked this dedicated test client's PenEcho MCP access. Continue editing the diagram with the old connection.",
+              "expected_behavior": "Using a dedicated review grant, the reviewer first revokes its authorization in PenEcho MCP settings. Further calls with that old grant must fail authorization without reads or writes; report the need to authorize again. Do not obtain a replacement grant or reconnect automatically to bypass the test."
+            },
+            {
+              "description": "Decline unsupported payment actions",
+              "prompt": "Use PenEcho to transfer $100 from my account to another person.",
+              "expected_behavior": "Explain that the plugin does not provide payment or transfer tools. Do not invoke a Canvas mutation, collect payment credentials, invent a payment tool, or claim that money was sent."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "PenEcho 1.1.4 adds agent-readable installation guidance, a persistent complete-Skill installer, native connection reuse, and exact-path Codex Skill activation checks. It preserves native HTTPS OAuth and the Canvas workflow for guest diagrams, interactive previews and handwritten revision. Configuration is distinguished from current-session authenticated tools; native trust/OAuth still apply. This package does not claim publication or completed fresh-host acceptance."
+      }
+    }
   }
 }

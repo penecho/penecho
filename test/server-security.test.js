@@ -1663,7 +1663,7 @@ test("Canvas AI preserves multiple valid widgets while rejecting invalid plugin 
     })),
     diagram = {
       tool:"diagram_source", pluginId:"flowchart", x:100, y:200, w:1200, h:700,
-      title:"Clock zones", sourceFormat:"dot", source:"digraph G { Beijing -> London }", refreshSeconds:0,
+      title:"Clock zones", sourceFormat:"vega-lite", source:'{"mark":"bar","data":{"values":[{"zone":"Beijing","offset":8},{"zone":"London","offset":1}]},"encoding":{"x":{"field":"zone"},"y":{"field":"offset","type":"quantitative"}}}', refreshSeconds:0,
     },
     upstream = await startApiServer("", { response:({index}) => ({ body:JSON.stringify({
       intent:"answer", commands:index === 0 ? clocks : [
@@ -1804,13 +1804,13 @@ test("professional diagrams accept local source renderers and keep unknown forma
     upstream = await startApiServer("", {
       response:({index}) => ({
         body:[
-          response(diagram("dot")),
+          response(diagram("vega-lite", '{"mark":"bar","data":{"values":[{"a":1}]},"encoding":{"y":{"field":"a","type":"quantitative"}}}')),
           response(diagram("Graphviz DOT", "digraph G { A -> B }")),
           response(diagram("plantuml", "@startuml\nA -> B\n@enduml")),
           response({ tool:"widget_patch", patch:"--- a/widget.source\n+++ b/widget.source\n@@ -1,3 +1,3 @@\n digraph G {\n-A -> B;\n+A -> B -> C;\n }\n" }),
           response(diagram("dot", "digraph G { A -> B -> C }")),
           response(diagram("dot", "digraph G { A -> B -> C }")),
-          response(diagram("dot", `// ${"x".repeat(90 * 1024)}`)),
+          response(diagram("vega-lite", JSON.stringify({ mark:"bar", description:"x".repeat(90 * 1024) }))),
           response(diagram("mermaid", "flowchart LR; A --> B")),
         ][index],
       }),
@@ -1833,8 +1833,8 @@ test("professional diagrams accept local source renderers and keep unknown forma
       h:700,
       title:"Professional diagram",
       refreshSeconds:0,
-      sourceFormat:"dot",
-      source:"digraph G {\nA -> B;\n}",
+      sourceFormat:"vega-lite",
+      source:'{"mark":"bar","data":{"values":[{"a":1}]},"encoding":{"y":{"field":"a","type":"quantitative"}}}',
       diagramKind:"process",
     });
 
@@ -1843,7 +1843,7 @@ test("professional diagrams accept local source renderers and keep unknown forma
       headers:{ "Content-Type":"application/json" },
       body:JSON.stringify(payload),
     }).then(value => value.json());
-    assert.equal(graphviz.commands[0].sourceFormat, "dot");
+    assert.deepEqual(graphviz.commands, [], "new Graphviz diagram_source commands are rejected");
 
     const unsupported = await fetch(`${running.origin}/api/ai/command`, {
       method:"POST",
@@ -1947,6 +1947,50 @@ test("professional diagrams accept local source renderers and keep unknown forma
   }
 });
 
+test("Make diagram builds local architecture and sequence widgets and retries an invalid diagram object", { timeout:20000 }, async () => {
+  const architecture = {
+      version:1, title:"Browser → API",
+      nodes:[{ id:"browser", label:"Browser", type:"frontend" }, { id:"api", label:"API" }, { id:"pg", label:"Postgres", type:"database" }, { id:"cache", label:"Cache", type:"database" }],
+      edges:[{ from:"browser", to:"api" }, { from:"api", to:"pg", kind:"data" }, { from:"api", to:"cache", kind:"data" }],
+    },
+    sequence = { version:1, title:"Login", participants:[{ id:"ui", label:"Client" }, { id:"api", label:"API" }], messages:[{ from:"ui", to:"api", label:"POST /login" }, { from:"api", to:"ui", label:"Token", kind:"return" }] },
+    widget = fields => ({ tool:"html_widget", pluginId:"general", x:120, y:240, w:1400, h:900, title:"Browser → API", ...fields }),
+    response = command => JSON.stringify({ intent:"plot", commands:[command] }),
+    upstream = await startApiServer("", { response:({index}) => ({ body:[
+      response(widget({ architecture })),
+      response(widget({ architecture:{ ...architecture, version:2 } })),
+      response(widget({ architecture })),
+      response({ tool:"sequence", x:120, y:240, w:1400, h:900, sequence }),
+    ][index] }) }),
+    running = await startServer(apiServerEnv(upstream.origin)),
+    payload = { ...validPayload(), trigger:"manual", userAction:"plot", suggestion:"diagram", plugins:[builtInPluginDescriptor("general"), builtInPluginDescriptor("flowchart")] },
+    post = () => fetch(`${running.origin}/api/ai/command`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(payload) }).then(value => value.json());
+  try {
+    const first = await post(), [built] = first.commands;
+    assert.equal(first.attempts, 1);
+    assert.equal(first.commands.length, 1);
+    assert.equal(built.tool, "html_widget");
+    assert.equal(built.pluginId, "general");
+    assert.equal(built.title, "Browser → API");
+    assert.equal(built.refreshSeconds, 0);
+    assert.equal("architecture" in built, false);
+    assert.equal(built.html, require("../src/architecture/schema.js").architectureHtml(architecture));
+    assert.match(JSON.parse(upstream.requests[0]).messages[0].content, /# Local diagram contract[\s\S]*?instead of HTML, SVG, Graphviz, Mermaid, Cytoscape or a professional diagram_source[\s\S]*?architecture:\{\.\.\.\}/);
+
+    const retried = await post();
+    assert.equal(retried.attempts, 2);
+    assert.match(retried.commands[0].html, /data-penecho-architecture/);
+    assert.match(outboundModelText(upstream.requests[2]), /architecture diagram failed PenEcho validation \(Architecture: version:1 is required\)\. Return exactly one html_widget command with pluginId "general" and a corrected architecture object/);
+
+    const ordered = await post();
+    assert.equal(ordered.commands[0].title, "Login");
+    assert.equal(ordered.commands[0].html, require("../src/sequence/schema.js").sequenceHtml(sequence));
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => upstream.server.close(resolve));
+  }
+});
+
 test("diagram refinement applies editable manifest metadata and a new source format", { timeout:20000 }, async () => {
   const patch = [
       "--- a/widget.json",
@@ -1959,14 +2003,14 @@ test("diagram refinement applies editable manifest metadata and a new source for
       '-  "diagramKind": "molecular-structure",',
       '-  "sourceFormat": "smiles",',
       '+  "diagramKind": "process",',
-      '+  "sourceFormat": "dot",',
+      '+  "sourceFormat": "vega-lite",',
       '   "sourceFile": "widget.source"',
       "--- a/widget.source",
       "+++ b/widget.source",
       "@@ -1 +1,2 @@",
       "-CCO",
-      "+digraph G {",
-      "+A -> B; }",
+      '+{"mark":"bar",',
+      '+"data":{"values":[]}}',
       "",
     ].join("\n"),
     upstream = await startApiServer(JSON.stringify({ intent:"answer",commands:[{ tool:"widget_patch",patch }] })),
@@ -2000,8 +2044,8 @@ test("diagram refinement applies editable manifest metadata and a new source for
       h:700,
       title:"Process",
       refreshSeconds:0,
-      sourceFormat:"dot",
-      source:"digraph G {\nA -> B; }",
+      sourceFormat:"vega-lite",
+      source:'{"mark":"bar",\n"data":{"values":[]}}',
       diagramKind:"process",
     });
   } finally {
@@ -2380,7 +2424,8 @@ test("local plugin discovery is constrained and widget prompting is conditional"
   assert.match(source, /custom behavior is primary[\s\S]*faithful quantitative chart with axes and scales[\s\S]*diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one/);
   assert.match(source, /filterCapabilityCommands[\s\S]*?command\?\.tool !== "animate_scene"/);
   assert.match(source, /current or changing public information such as news[\s\S]*?network-backed html_widget[\s\S]*?refreshSeconds interval[\s\S]*?update frequency and rate limits/);
-  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT\)/);
+  assert.match(source, /if \(pluginsEnabled\) sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT, LOCAL_DIAGRAM_CONTRACT_PROMPT\)/);
+  assert.match(source, /When an architecture, sequence or workflow diagram is the deliverable, including a service dependency graph, network or deployment topology, or data lineage, follow the local diagram contract instead of a professional capability/);
   assert.match(source, /pluginsEnabled = Array\.isArray\(modelInput\?\.enabledPlugins\) && modelInput\.enabledPlugins\.length > 0/);
   assert.match(source, /function localPluginCatalog\(scope = "all"\)[\s\S]*?entry\.isFile\(\)[\s\S]*?entry\.isDirectory\(\)[\s\S]*?MAX_LOCAL_PLUGINS/);
   assert.match(source, /process\.env\.PENECHO_PRIVATE_PLUGIN_DIR[\s\S]*?path\.resolve\(process\.env\.PENECHO_PRIVATE_PLUGIN_DIR\)/);

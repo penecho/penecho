@@ -121,3 +121,41 @@ test("the server converts a model rig into the user's ink and rejects redrawn sc
   // Without sketch ink the ordinary scene path is unchanged.
   assert.ok(context.normalizedSceneCommand(redraw,{}));
 });
+// The puppet Widget has no frame and its draw-in intro starts with every stroke
+// hidden; a frame that never plays must still show the user's sketch.
+function mountPuppet({visible}) {
+  const source=fs.readFileSync("public/scene-runtime.js","utf8"),start=source.indexOf("  function mountPuppet(scene)"),
+    created=[],timers=[],frames=[];
+  const context=vm.createContext({SVG_NS:"svg",root:{style:{},append(){}},color:v=>v,PALETTE:{ink:"#111"},reducedMotion:false,
+    document:{createElementNS:(ns,tag)=>{const element={tag,style:{},setAttribute(){},append(){},insertBefore(){},getBBox:()=>({x:0,y:0,width:90,height:80})};created.push(element);return element;}},
+    listen(){},notifyUpdated(){},createControls:()=>({sync(){}}),setTimeout:(callback,ms)=>timers.push({callback,ms}),
+    requestAnimationFrame:callback=>frames.push(callback),cancelAnimationFrame(){},
+    IntersectionObserver:class{constructor(callback){this.callback=callback;}observe(){if(visible)this.callback([{isIntersecting:true}]);}disconnect(){}}});
+  vm.runInContext(source.slice(start,source.indexOf("\n  try {",start)),context);
+  const ink=puppet.sketchInk(records,scope),scene=SCENE.validate(puppet.widgetCommand(puppet.fallbackRig(ink),ink).scene).scene;
+  context.mountPuppet(scene);
+  // Ink paths come first; hop accents (dust puffs) follow.
+  const paths=created.filter(element=>element.tag==="path").slice(0,scene.ink.length);
+  return {timers,frames,hidden:()=>paths.filter(path=>path.style.visibility==="hidden").length,total:paths.length};
+}
+test("a puppet that cannot start playback promptly still shows the sketch and starts",()=>{
+  // Never reported visible: the strokes wait for the intro, then appear and play.
+  const stalled=mountPuppet({visible:false});
+  assert.equal(stalled.hidden(),stalled.total);assert.equal(stalled.frames.length,0);
+  assert.equal(stalled.timers.length,1);assert.ok(stalled.timers[0].ms<=1000);
+  stalled.timers[0].callback();
+  assert.equal(stalled.hidden(),0);assert.equal(stalled.frames.length,1);
+  // Visible but no frame has run yet (a throttled frame): the sketch appears.
+  const throttled=mountPuppet({visible:true});
+  assert.equal(throttled.frames.length,1);
+  throttled.timers[0].callback();
+  assert.equal(throttled.hidden(),0);
+  // A running intro is left alone.
+  const playing=mountPuppet({visible:true});
+  let now=1000;
+  for(let index=0;index<4;index++){const frame=playing.frames.shift();frame(now);now+=30;}
+  const drawing=playing.hidden();
+  assert.ok(drawing>0&&drawing<playing.total,"the intro is drawing the strokes in");
+  playing.timers[0].callback();
+  assert.equal(playing.hidden(),drawing);
+});

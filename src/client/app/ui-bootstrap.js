@@ -1090,7 +1090,9 @@
     if (mode === "hand" && options.showHint && !state.busy) {
       showHandStatusHint("hand-mode", ["handAutoAIManual", "handAutoAIResume"]);
     }
-    if (options.showHint) {
+    if (options.showHint && mode === "pen" && canvasGuestAiRestricted()) {
+      showCanvasGuestAiHint();
+    } else if (options.showHint) {
       const shortcutHints = {
         agent:keyboardShortcutCanvasHint("focus-agent", "canvasHintShortcutAgent"),
         save:keyboardShortcutCanvasHint("save-canvas", "canvasHintShortcutSave"),
@@ -1565,6 +1567,8 @@
   document.querySelector("#rejectBatch").onclick = rejectPending;
   document.querySelector("#acceptBatch").onclick = acceptPending;
   document.querySelector("#auto").onclick = () => {
+    // Guests cannot run PenEcho AI; never store a preference they cannot see.
+    if (canvasGuestAiRestricted()) return;
     if (state.auto) setAutoEnabled(false);
     else setAutoEnabled(true, true);
   };
@@ -1768,8 +1772,8 @@
       if (pointerActivated) requestAnimationFrame(() => fullscreenButton.blur());
     }
   };
-  document.querySelector("#newCanvasBtn").onclick = () => canvasDocumentsUiAction(openNewCanvasDialog);
-  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvas;
+  document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
+  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
@@ -1778,7 +1782,7 @@
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = () => {
     closeHistorySavePanel();
-    void saveCurrentCanvas();
+    void saveCurrentCanvasFromUser();
   };
   document.querySelector("#historySave").onclick = () => {
     closeHistorySavePanel();
@@ -1876,7 +1880,7 @@
     if (event.key === "Enter") {
       event.preventDefault();
       closeHistorySavePanel();
-      void saveCurrentCanvas();
+      void saveCurrentCanvasFromUser();
     }
   });
   document.querySelector("#newSnapshotName").addEventListener("keydown", (event) => {
@@ -2062,9 +2066,9 @@
     settings.requestTrace = !settings.requestTrace;
     updateTraceToggle();
   });
-  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.autoPreference));
   settingsCanvasHintsToggle.addEventListener("click", () => setCanvasHintsEnabled(!state.canvasHintsEnabled));
-  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpen));
+  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpenPreference));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {
@@ -2219,6 +2223,55 @@
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
+  });
+  // Companion view controller. The minimal view keeps the narrow rail and
+  // hides PenEcho's own Agent and AI chrome; the full view is the complete
+  // Canvas. Both show the same document in this tab, and switching is reversible.
+  const companionViewToggle = document.querySelector("#companionViewToggle"),
+    companionRail = document.querySelector("#companionRail");
+  function canvasCompanionCopy(en, zh) { return state.language === "zh" ? zh : en; }
+  function renderCanvasCompanionView() {
+    if (!CANVAS_COMPANION_REQUESTED) return;
+    const minimal = canvasCompanionMinimal(),
+      label = minimal ? canvasCompanionCopy("Show full Canvas", "显示完整画布") : canvasCompanionCopy("Show compact Canvas", "显示精简画布");
+    document.documentElement.dataset.penechoCompanion = canvasCompanionView;
+    if (companionRail) {
+      companionRail.hidden = !minimal;
+      companionRail.setAttribute("aria-label", canvasCompanionCopy("Canvas tools", "画布工具"));
+    }
+    if (companionViewToggle) {
+      companionViewToggle.hidden = false;
+      companionViewToggle.setAttribute("aria-label", label);
+      companionViewToggle.title = label;
+      const text = document.querySelector("#companionViewLabel");
+      if (text) text.textContent = minimal ? canvasCompanionCopy("Full Canvas", "完整画布") : canvasCompanionCopy("Compact", "精简");
+    }
+  }
+  function setCanvasCompanionView(view) {
+    if (!CANVAS_COMPANION_REQUESTED) return false;
+    canvasCompanionView = view === "full" ? "full" : "minimal";
+    try { sessionStorage.setItem(canvasCompanionViewKey(), canvasCompanionView); } catch {}
+    if (canvasCompanionMinimal()) {
+      if (document.body.classList.contains("canvas-agent-open")) closeCanvasAgent({ focus:false, animate:false });
+      window.PenEchoStudioNavigator?.setOpen?.(false, { restoreAgent:false });
+    }
+    renderCanvasCompanionView();
+    window.dispatchEvent(new CustomEvent("penecho:companion-view", { detail:{ view:canvasCompanionView } }));
+    return true;
+  }
+  if (CANVAS_COMPANION_REQUESTED) {
+    companionViewToggle?.addEventListener("click", () => setCanvasCompanionView(canvasCompanionMinimal() ? "full" : "minimal"));
+    window.addEventListener("penecho:languagechange", renderCanvasCompanionView);
+    // Agent visibility and authentication never change the companion layout.
+    // Only the explicit view toggle may expand the left navigation.
+    // Pointer first: the AI's interactive previews stay usable; the rail switches to the pen.
+    if (canvasCompanionMinimal()) selectCanvasToolMode("hand");
+    renderCanvasCompanionView();
+  }
+  window.PenEchoCompanion = Object.freeze({
+    requested:() => CANVAS_COMPANION_REQUESTED,
+    view:() => canvasCompanionView,
+    setView:setCanvasCompanionView,
   });
   installDesktopMenuBridge();
   setPluginTemplate("simple");

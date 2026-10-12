@@ -583,6 +583,43 @@ test("MCP hello seeds the exact open document catalog and advertises catalog rep
   ]);
 });
 
+test('the latest scoped Canvas socket takes over and an older close cannot unregister its document',async t=>{
+ const service=createMcpService({server:new EventEmitter(),authorizeBrowser:()=>true,cloudRuntime:true});
+ t.after(()=>service.close());
+ const sockets=[],open=title=>{
+  const socket=new EventEmitter(),frames=[],closes=[];
+  Object.assign(socket,{readyState:WebSocket.OPEN,mcpExpectedCanvasId:'shared-workspace',ping(){},
+   send(raw){
+    const frame=JSON.parse(raw);frames.push(frame);
+    if(frame.type!=='call')return;
+    const result=frame.name==='mcp_start_session'?{sessionId:frame.arguments.sessionId,documentId:'retained-doc',revision:1}
+     :{artifactId:frame.arguments.artifactId,objectId:`${title}-ink`,objectIds:[`${title}-ink`],kind:'drawing',revision:2,feedbackCursor:0};
+    queueMicrotask(()=>socket.emit('message',Buffer.from(JSON.stringify({type:'result',requestId:frame.requestId,ok:true,result}))));
+   },
+   close(code,reason){closes.push({code,reason});this.readyState=WebSocket.CLOSED;},
+   terminate(){this.readyState=WebSocket.CLOSED;this.emit('close');},
+  });
+  sockets.push(socket);service.attachBrowser(socket);
+  socket.emit('message',Buffer.from(JSON.stringify({type:'hello',canvasId:'shared-workspace',title,documents:[{documentId:'retained-doc',title:'Retained draft',active:true}]})));
+  return {socket,frames,closes};
+ };
+ const owner=crypto.randomUUID(),args={instanceId:service.instanceId,canvasId:'shared-workspace',documentId:'retained-doc',sessionKey:'stable-conversation',client:'Codex',title:'Test'};
+ const first=open('first'),previous=await service.callTool(owner,'penecho_start_session',args);
+ const latest=open('latest');
+ assert.deepEqual(first.closes,[{code:4001,reason:'Canvas connection replaced'}]);
+ assert.equal(latest.frames[0].type,'ready');
+ await assert.rejects(service.callTool(owner,'penecho_inspect_session',{sessionId:previous.sessionId}),{code:'canvas_disconnected'});
+ const started=await service.callTool(owner,'penecho_start_session',args);
+ assert.equal(started.documentId,'retained-doc');
+ first.socket.emit('close');
+ assert.deepEqual(service.listCanvases().map(item=>item.documentId),['retained-doc']);
+ const drawn=await service.callTool(owner,'penecho_draw',{sessionId:started.sessionId,artifactId:'after-takeover',requestId:'draw-after-takeover',title:'Takeover check',items:[{id:'line',type:'line',points:[{x:10,y:10},{x:100,y:100}]}]});
+ assert.equal(drawn.objectId,'latest-ink');
+ assert.equal(first.frames.filter(frame=>frame.name==='mcp_draw').length,0);
+ assert.equal(latest.frames.filter(frame=>frame.name==='mcp_draw').length,1);
+ for(const socket of sockets)socket.terminate();
+});
+
 test("authenticated LAN browser status is allowed while configuration and private RPC stay local", async () => {
   const stateDirectory = tempDirectory(), server = http.createServer(), checkedAddresses = [];
   const service = createMcpService({

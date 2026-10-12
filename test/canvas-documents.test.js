@@ -23,33 +23,38 @@ function clientFunction(file, name) {
   assert.fail(`unterminated ${name}`);
 }
 
+const memoryDbWriteQueues = new WeakMap();
 function memoryDb(records, control) {
   return {
     transaction(_name, mode) {
       const tx = { error: null };
+      let initializing=false,working=null,writes=0;
+      const checkWrite=()=>{if(control.persistFailures>0){control.persistFailures--;throw Error("simulated persistence failure");}};
       tx.objectStore = () => ({
-        getAll: () => ({ value: [...records.values()] }),
-        get: id => ({ value: records.get(id) }),
-        put: value => {
-          queueMicrotask(() => {
-            if (control.persistFailures > 0) {
-              control.persistFailures -= 1;
-              tx.error = Error("simulated persistence failure");
-              tx.onerror?.();
-              return;
-            }
-            records.set(value.id, structuredClone(value));
-            control.persistWrites += 1;
-            tx.oncomplete?.();
-          });
+        getAll:()=>{
+          if(mode==='readonly')return {value:[...records.values()]};
+          // Initial draft claims use getAll plus an optional put in one read/write
+          // transaction. Serialize these across the shared store, as IndexedDB does.
+          initializing=true;const request={},previous=memoryDbWriteQueues.get(records)||Promise.resolve();
+          let release;const settlement=new Promise(resolve=>{release=resolve;});
+          memoryDbWriteQueues.set(records,previous.then(()=>settlement));
+          previous.then(()=>{
+            working=new Map(records);request.result=[...working.values()];
+            try {
+              request.onsuccess?.();records.clear();for(const [key,value] of working)records.set(key,value);
+              control.persistWrites+=writes;tx.oncomplete?.();
+            }catch(error){tx.error=error;tx.onerror?.();}
+            finally{release();}
+          });return request;
         },
-        delete: id => {
-          records.delete(id);
-          queueMicrotask(() => tx.oncomplete?.());
-          return { value: undefined };
+        get:id=>({value:records.get(id)}),
+        put:value=>{
+          if(initializing){checkWrite();working.set(value.id,structuredClone(value));writes++;return;}
+          queueMicrotask(()=>{try{checkWrite();records.set(value.id,structuredClone(value));control.persistWrites++;tx.oncomplete?.();}catch(error){tx.error=error;tx.onerror?.();}});
         },
+        delete:id=>{records.delete(id);queueMicrotask(()=>tx.oncomplete?.());return {value:undefined};},
       });
-      if (mode === "readonly") queueMicrotask(() => tx.oncomplete?.());
+      if(mode==='readonly')queueMicrotask(()=>tx.oncomplete?.());
       return tx;
     },
   };
@@ -78,7 +83,7 @@ function harness(options = {}) {
     document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {}, hidden: false, createElement: () => ({}) },
     window: { PENECHO_CONFIG: options.browserDraftId ? { browserDraftId: options.browserDraftId } : {}, navigator: options.navigator, dispatchEvent: () => true }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
     addEventListener: (type, fn) => { listeners[type] = fn; },
-    requestResult: async request => request.value,
+    requestResult: async request => Object.hasOwn(request,"value")?request.value:new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);}),
     indexedDB: { open: () => { throw Error("unexpected IndexedDB open"); } },
     allSnapshots: async () => options.snapshots || [],
     fetch: async url => ({ ok: true, json: async () => ({ canvases: options.remote?.[String(url)] || [] }) }),
@@ -2053,10 +2058,67 @@ test('the same browser draft opens in two windows despite a held browser lock',a
  const navigator={locks:{request:async(_name,_options,callback)=>{requests++;if(held)return callback(null);held=true;return callback({});}}};
  const first=harness({records,browserDraftId:'shared-draft',navigator});
  const second=harness({records,browserDraftId:'shared-draft',navigator});
+ for(const h of [first,second]){h.state.currentSnapshotName='';h.state.currentSnapshotBundleExtensions={};}
  await Promise.all([first.context.window.PenEchoBrowserDraft.open(),second.context.window.PenEchoBrowserDraft.open()]);
+ for(const h of [first,second])clearTimeout(h.context.canvasDocumentsDraft.timer);
  assert.equal(requests,0);
  assert.ok(first.canvasDocuments.activeId);
- assert.ok(second.canvasDocuments.activeId);
+ assert.equal(second.canvasDocuments.activeId,first.canvasDocuments.activeId,'simultaneous first opens restore one atomically persisted document');
+ assert.notEqual(first.canvasDocuments.activeId,'shared-draft','workspace identifiers are not document identifiers');
+ assert.equal(records.size,1);
+ for(const h of [first,second])assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),[first.canvasDocuments.activeId]);
+});
+
+test('an unedited browser draft retains its document identity on reload and in a fresh tab',async()=>{
+ const records=new Map(),session=new Map(),blank=values=>{
+  const h=harness({records,browserDraftId:'blank-draft'});
+  h.state.currentSnapshotName='';h.state.currentSnapshotBundleExtensions={};
+  h.context.sessionStorage={getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)};
+  return h;
+ };
+ const original=blank(session);await original.context.window.PenEchoBrowserDraft.open();clearTimeout(original.context.canvasDocumentsDraft.timer);
+ const documentId=original.canvasDocuments.activeId;
+ assert.equal(records.get(documentId).browserDraftInitial,true);
+ assert.equal(original.context.canvasDocumentsDraftHasContent(),false);
+ for(const values of [session,new Map()]){
+  const h=blank(values);await h.context.window.PenEchoBrowserDraft.open();clearTimeout(h.context.canvasDocumentsDraft.timer);
+  assert.equal(h.canvasDocuments.activeId,documentId);
+  assert.deepEqual(Array.from(h.context.canvasDocumentsCatalog(),entry=>entry.documentId),[documentId]);
+  assert.equal(h.context.canvasDocumentsDraftHasContent(),false);
+ }
+ assert.equal(records.size,1,'reloads do not create additional stored blank documents');
+ await original.context.canvasDocumentsPark();assert.equal(records.get(documentId).browserDraftInitial,true,'normal persistence retains the durable initial identity');
+ const ordinary=harness({records});ordinary.state.currentSnapshotName='';ordinary.state.currentSnapshotBundleExtensions={};
+ await ordinary.canvasDocumentsReady();
+ assert.equal(ordinary.canvasDocuments.records.has(documentId),false,'the marker does not exempt an ordinary website placeholder from filtering');
+});
+
+test('browser draft MCP opens a transport only after durable identity initialization and restoration',async()=>{
+ for(const scenario of ['open','storage-failure','cancel']){
+  const h=harness({browserDraftId:`transport-${scenario}`});h.state.currentSnapshotName='';h.state.currentSnapshotBundleExtensions={};
+  const sockets=[];
+  class Socket extends EventTarget{
+   readyState=1;sent=[];
+   constructor(){super();assert.ok(h.records.has(h.canvasDocuments.activeId),'the document is durable before socket creation');sockets.push(this);}
+   close(){this.readyState=3;}
+   send(raw){this.sent.push(JSON.parse(raw));}
+  }
+  Object.assign(h.context,{mcpLocal:()=>true,mcpHeartbeat:()=>{},mcpRenderSettings:()=>{}});
+  h.context.window.PenEchoCloudMcpSocket=Socket;
+  if(scenario==='storage-failure')h.control.persistFailures=1;
+  const connecting=h.context.mcpConnect();assert.equal(sockets.length,0);
+  if(scenario==='cancel')h.context.mcpDisconnect();
+  await connecting;clearTimeout(h.context.canvasDocumentsDraft.timer);
+  if(scenario!=='open'){
+   assert.equal(sockets.length,0);
+   if(scenario==='storage-failure'){assert.equal(h.records.size,0);assert.equal(h.context.canvasDocumentsDraft.ready,false);assert.match(h.canvasDocuments.error,/persistence failure/);}
+   continue;
+  }
+  assert.equal(sockets.length,1);sockets[0].dispatchEvent(new Event('open'));
+  assert.equal(sockets[0].sent[0].type,'hello');
+  assert.deepEqual(sockets[0].sent[0].documents.map(entry=>entry.documentId),[h.canvasDocuments.activeId]);
+  h.context.mcpDisconnect();
+ }
 });
 
 test("structured scenes retain editable JSON and geometry across patches and background persistence", async () => {
@@ -2250,4 +2312,45 @@ test('native Note animation file patches preserve source and geometry, reject in
  await assert.rejects(h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:'stale',requestId:'stale-note-animation',patch:patchText(file,read.content,'null\n')},{}),{code:'SOURCE_CONFLICT'});
  await h.canvasDocumentsExecute('mcp_patch_file',{...args,expectedHash:read.contentHash,requestId:'remove-note-animation',patch:patchText(file,read.content,'null\n')},{});
  assert.equal(widget.widgetAnimation,null);assert.ok(!widget.html.includes('data-penecho-widget-animation'));assert.equal(widget.copyText,source);assert.equal((await h.canvasDocumentsExecute('mcp_read_file',args,{})).content,'null\n');
+});
+
+
+test('guest Save stores a tab-scoped intent only after draft persistence, and resumes it once', async () => {
+  const h=harness({browserDraftId:'save-workspace'}),values=new Map(),events=[];
+  h.context.sessionStorage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+  Object.assign(h.context.location,{pathname:'/canvas/draft/save-workspace',search:'?mcp=1&mode=companion',assign:url=>events.push(url)});
+  h.context.window.PENECHO_CONFIG.guestCanvas=true;
+  h.context.canvasDocumentsSettleDraft=async()=>events.push('persist');
+  h.context.setStatus=()=>{};
+  const documentId=h.canvasDocumentsCurrent().id;
+  await h.context.saveCurrentCanvasFromUser();
+  assert.equal(events[0],'persist');
+  assert.equal(new URL(events[1],'https://example.test').searchParams.get('returnTo'),'/canvas/draft/save-workspace?mcp=1&mode=companion');
+  assert.equal(JSON.parse(values.get('penecho-browser-draft-intent:save-workspace')).documentId,documentId);
+  let saves=0;h.context.saveCurrentCanvas=async()=>{saves++;};h.context.window.PENECHO_CONFIG.guestCanvas=false;
+  await Promise.all([h.context.window.PenEchoBrowserDraft.resumeIntent(),h.context.window.PenEchoBrowserDraft.resumeIntent()]);
+  assert.equal(saves,1);
+});
+
+test('ordinary login has no save intent and persistence failure cannot leave the draft', async () => {
+  const h=harness({browserDraftId:'save-workspace'}),values=new Map(),navigations=[];
+  h.context.sessionStorage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+  Object.assign(h.context.location,{pathname:'/canvas/draft/save-workspace',search:'?mode=companion',assign:url=>navigations.push(url)});
+  h.context.setStatus=()=>{};h.context.canvasDocumentsSettleDraft=async()=>{};
+  await h.context.window.PenEchoBrowserDraft.signIn();assert.equal(values.size,0);assert.equal(navigations.length,1);
+  h.context.canvasDocumentsSettleDraft=async()=>{throw Error('storage full');};
+  assert.equal(await h.context.window.PenEchoBrowserDraft.signIn({intent:'save'}),false);
+  assert.equal(navigations.length,1);assert.equal(values.size,0);
+});
+
+test('canceled, expired and different-document save intents never create a Cloud copy', async () => {
+  for(const scenario of ['guest','expired','different-document']){
+    const h=harness({browserDraftId:'save-workspace'}),values=new Map();
+    h.context.sessionStorage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+    h.context.setStatus=()=>{};let saves=0;h.context.saveCurrentCanvas=async()=>{saves++;};
+    h.context.window.PENECHO_CONFIG.guestCanvas=scenario==='guest';
+    const documentId=h.canvasDocumentsCurrent().id;
+    values.set('penecho-browser-draft-intent:save-workspace',JSON.stringify({action:'save',documentId:scenario==='different-document'?'another':documentId,createdAt:Date.now()-(scenario==='expired'?31*60*1000:0)}));
+    assert.equal(await h.context.window.PenEchoBrowserDraft.resumeIntent(),false);assert.equal(saves,0);assert.equal(values.size,0);
+  }
 });

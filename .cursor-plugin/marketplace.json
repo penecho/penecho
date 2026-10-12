@@ -7,7 +7,8 @@
     {
       "name": "penecho-cloud",
       "source": "./integrations/penecho-cloud",
-      "description": "A shared visual workspace for AI agents."
+      "description": "A shared visual workspace for AI agents.",
+      "version": "1.1.4"
     }
   ]
 }

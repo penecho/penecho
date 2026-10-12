@@ -13,6 +13,44 @@
   const nativeWebSocket = window.WebSocket;
   const cloudRuntime = window.PENECHO_CONFIG?.runtime === "cloud";
   const nativeCloudCanvasReadsEnabled = window.PENECHO_CONFIG?.remoteCanvasNativeReads === true;
+  // Download the opening document while the remaining parser-blocking scripts
+  // load. Persistence takes this response once and retains its normal validation.
+  if (requestedCanvasId && !isBrowserDraft && nativeCloudCanvasReadsEnabled) {
+    let controller = null, early = null, expiry = null, active = true;
+    const release = () => {
+      clearTimeout(expiry);
+      window.removeEventListener?.("pagehide", cancel);
+    };
+    const cancel = () => {
+      if (!active) return;
+      active = false;
+      if (window.PenEchoEarlyCloudSnapshot === early) window.PenEchoEarlyCloudSnapshot = null;
+      release();
+      controller?.abort();
+    };
+    try {
+      controller = new AbortController();
+      const response = Promise.resolve(nativeFetch(`/api/cloud/canvases/${encodeURIComponent(requestedCanvasId)}`, {
+        credentials:"same-origin", cache:"no-store", headers:csrfHeaders(), signal:controller.signal,
+      }));
+      // The app may not be initialized when the request rejects.
+      response.catch(() => {});
+      early = { id:requestedCanvasId, response, cancel, take() {
+        if (!active || window.PenEchoEarlyCloudSnapshot !== early) return null;
+        active = false;
+        window.PenEchoEarlyCloudSnapshot = null;
+        release();
+        return response;
+      } };
+      window.PenEchoEarlyCloudSnapshot = early;
+      expiry = setTimeout(cancel, 60_000);
+      expiry?.unref?.();
+      window.addEventListener("pagehide", cancel, { once:true });
+    } catch {
+      // Prefetch setup must never prevent the regular Canvas gate from opening.
+      cancel();
+    }
+  }
   const deviceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const widgetPaintReadyFrames = new WeakSet();
   const widgetPaintReadyWaiters = new Set();
@@ -446,7 +484,9 @@
   }
 
   function syncCloudCanvasUrl(canvasId = window.PenEchoCloudProjects?.currentCanvasId?.()) {
-    if (!deviceIdPattern.test(String(canvasId || ""))) return;
+    // A browser draft URL is the MCP workspace address. Saving to Cloud keeps
+    // it, so reloads and the AI client still reach the same workspace.
+    if (isBrowserDraft || !deviceIdPattern.test(String(canvasId || ""))) return;
     const url = new URL(location.href);
     const pathname = `/canvas/${canvasId}`;
     if (url.pathname === pathname) return;
@@ -458,6 +498,11 @@
   window.addEventListener("penecho:live-share-context-changed", () => syncCloudCanvasUrl());
 
   async function openRequestedCanvas() {
+    // This gate runs before the remaining parser-blocking Canvas scripts. Give
+    // their downloads time to finish before timing the runtime initialization.
+    if (document.readyState === "loading") {
+      await new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once:true }));
+    }
     if(isBrowserDraft){
       if(window.PENECHO_CONFIG.browserDraftBlocked)throw Error(zh?"此 MCP 连接属于另一个账号。请切换到授权账号后重新打开。":"This MCP connection belongs to another account. Switch to the authorized account and reopen it.");
       const deadline=Date.now()+15000;
@@ -597,6 +642,8 @@
         if(new URLSearchParams(location.search).get('mcp')==='1')window.dispatchEvent(new CustomEvent('penecho:open-cloud-mcp'));
         await window.PenEchoPlayground?.start();
         gate.hidden = true;
+        // Continue a Save that asked a guest to sign in, once the draft is visible.
+        if(isBrowserDraft)void window.PenEchoBrowserDraft?.resumeIntent?.();
       } catch (error) {
         gate.dataset.state = "error";
         title.textContent = copy.failed;

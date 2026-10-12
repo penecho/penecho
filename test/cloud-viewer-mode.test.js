@@ -156,7 +156,7 @@ test("the viewer removes edit guidance, the canvas seam, and the duplicate actio
 test("Widget hosts stay same-origin in Viewer and Cloud while the local app keeps loopback isolation", (t) => {
   const canvas = read("src/client/app/canvas-runtime.js"),
     source = functionSource(canvas, "widgetHostUrl"),
-    resolveHost = (runtime, pageUrl, connect = []) => {
+    resolveHost = (runtime, pageUrl, connect = [], id = "general") => {
       const page = new URL(pageUrl),
         canvasRoot = runtime === "cloud" || runtime === "viewer" ? "/canvas/" : "/";
       return vm.runInNewContext(`(${source})`, {
@@ -165,7 +165,7 @@ test("Widget hosts stay same-origin in Viewer and Cloud while the local app keep
         configuredAccessSession:"",
         location:{ origin:page.origin },
         window:{ PENECHO_CONFIG:{ runtime } },
-      })({ id:"general", connect });
+      })({ id, connect });
     };
 
   for (const page of [
@@ -185,6 +185,10 @@ test("Widget hosts stay same-origin in Viewer and Cloud while the local app keep
   assert.equal(cloudHost.origin, "http://127.0.0.1:18082");
   assert.equal(cloudHost.searchParams.get("remote-canvas"), "1");
   assert.equal(cloudHost.searchParams.has("parent-origin"), false);
+  // Graphviz, BPMN, Vega-Lite and the other diagram renderers load pinned CDN modules.
+  for (const runtime of ["cloud", "viewer"])
+    assert.equal(new URL(resolveHost(runtime, "https://penecho.ai/canvas/community/2c01", [], "flowchart")).searchParams.get("public-https"), "1", runtime);
+  assert.equal(new URL(resolveHost("cloud", "https://penecho.ai/canvas/community/2c01", ["https://api.open-meteo.com"], "weather")).searchParams.has("public-https"), false);
 
   const local127 = new URL(resolveHost("device", "http://127.0.0.1:18081/"));
   assert.equal(local127.origin, "http://localhost:18081");

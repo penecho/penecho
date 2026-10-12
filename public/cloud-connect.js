@@ -1797,14 +1797,71 @@
     return shell;
   }
 
-  async function liveShareDialog({ kind, widgetId = null }) {
+  // Social targets only receive the active public link and text the owner can
+  // review; the destination site still asks them to confirm the post.
+  const X_MARK = "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z";
+  const LINKEDIN_MARK = "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.125 2.062 2.062 0 0 1 0 4.125zM7.119 20.452H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z";
+  function liveSharePublicUrl(share) {
+    const value = typeof share?.url === "string" ? share.url.trim() : "";
+    if (!value) return "";
+    try {
+      const url = new URL(value, `${cloudOrigin()}/`);
+      return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    } catch {
+      return "";
+    }
+  }
+  function liveShareSocialLinks(publicUrl, postText) {
+    const text = String(postText || "").trim();
+    return {
+      x:`https://x.com/intent/tweet?${new URLSearchParams(text ? { text, url:publicUrl } : { url:publicUrl })}`,
+      // LinkedIn's share endpoint only accepts the URL; the dialog copies the text.
+      linkedin:`https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url:publicUrl })}`,
+    };
+  }
+  function liveSharePostWithLink(postText, publicUrl) {
+    const text = String(postText || "").trim();
+    return text ? `${text}\n${publicUrl}` : publicUrl;
+  }
+  function liveShareSubject(kind, noteKind) {
+    if (kind === "canvas") return { title:["Share Canvas", "分享 Canvas"], ref:["this Canvas", "此 Canvas"], post:["A Canvas I made with PenEcho", "我用 PenEcho 制作的 Canvas"] };
+    if (noteKind === "card") return { title:["Share knowledge card", "分享知识卡片"], ref:["this knowledge card", "此知识卡片"], post:["A knowledge card I made with PenEcho", "我用 PenEcho 制作的知识卡片"] };
+    if (noteKind === "note") return { title:["Share work note", "分享工作笔记"], ref:["this work note", "此工作笔记"], post:["A work note I made with PenEcho", "我用 PenEcho 制作的工作笔记"] };
+    return { title:["Share Widget", "分享 Widget"], ref:["this Widget", "此 Widget"], post:["A Widget I made with PenEcho", "我用 PenEcho 制作的 Widget"] };
+  }
+  function liveShareDefaultPost(name, subject, zh) {
+    const title = String(name || "").replace(/\s+/g, " ").trim().slice(0, 120);
+    if (title) return zh ? `${title} — 用 PenEcho 制作` : `${title} — made with PenEcho`;
+    return subject.post[zh ? 1 : 0];
+  }
+  function liveShareNativeAvailable(data) {
+    if (typeof navigator.share !== "function") return false;
+    try {
+      return typeof navigator.canShare !== "function" || navigator.canShare(data) !== false;
+    } catch {
+      return false;
+    }
+  }
+  function currentCanvasShareName() {
+    const name = String(document.getElementById("canvasDocumentNameLabel")?.textContent || "").trim();
+    return /^(untitled canvas|未命名画布)$/i.test(name) ? "" : name;
+  }
+  function brandIcon(path) {
+    const svg = lineIcon([path]);
+    svg.setAttribute("class", "live-share-brand");
+    return svg;
+  }
+
+  async function liveShareDialog({ kind, widgetId = null, sourceName = "", noteKind = "" }) {
     const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
     const bridge = window.PenEchoCloudProjects;
     const sourceId = widgetId ? bridge?.shareWidgetId(widgetId) : null;
     if (widgetId && !sourceId) return;
     const emptyCanvas = kind === "canvas" && bridge?.hasShareableContent?.() === false;
-    let canvasId = bridge?.currentCanvasId(), currentShare = null, busy = false;
-    const shell = dialogShell({ title:text(`Share ${kind === "widget" ? "Widget" : "Canvas"}`, `分享 ${kind === "widget" ? "Widget" : "Canvas"}`) });
+    const subject = liveShareSubject(kind, noteKind), thisItem = text(...subject.ref);
+    const name = String((kind === "canvas" ? currentCanvasShareName() : sourceName) || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    let canvasId = bridge?.currentCanvasId(), currentShare = null, busy = false, nativeSharing = false, renderedUrl = "";
+    const shell = dialogShell({ title:text(...subject.title), subtitle:name });
     // Canonical #dialogs M / single sequential form; existing shell owns focus.
     shell.dialog.className = "penecho-live-share-dialog";
     shell.dialog.querySelector(".cloud-dialog-mark")?.remove();
@@ -1813,14 +1870,52 @@
     shell.dialog.querySelector(".cloud-dialog-identity").className="";
     shell.dialog.querySelector(".cloud-dialog-heading").className="";
     shell.body.className = ""; shell.body.dataset.peRegion = "body";
-    const note = el("p", {text:text("Anyone with the link can view this content and future changes saved to Cloud, with no expiry. Visitors can copy it to their own space to edit. Sharing does not publish to Echoes or keep a separate snapshot.", "任何持有链接的人都能查看此内容及之后保存到云端的改动，链接没有有效期。访客可复制到自己的空间编辑。分享不会发布到 Echoes，也不保留独立快照。")});
+    const idBase = shell.dialog.getAttribute("aria-labelledby");
+    // Public scope, ongoing updates and revocation stay visible in both states.
+    const scopeItem = (lead, detail) => el("li", {}, [el("strong", {text:lead}), el("span", {text:detail})]);
+    const scope = el("ul", {class:"live-share-scope","aria-label":text("What sharing means","分享说明")}, [
+      scopeItem(text("Public link","公开链接"), text(`Anyone with the link can view ${thisItem} and copy it to edit in their own space. No sign-in needed, no expiry.`, `任何持有链接的人都能查看${thisItem}，并可复制到自己的空间编辑。无需登录，没有有效期。`)
+        + (kind === "widget" ? text(` Only ${thisItem} is shared, not the rest of the Canvas.`, `只分享${thisItem}，不含画布上的其他内容。`) : "")),
+      scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
+      scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts. PenEcho never posts or publishes to Echoes for you.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。PenEcho 不会替你发帖，也不会发布到 Echoes。")),
+    ]);
     const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
     const emptyMessage = text("Add content to the Canvas before sharing.","请先在画布上添加内容，再开启分享。");
     const status = el("p", {role:"status","aria-live":"polite",text:emptyCanvas ? emptyMessage : ""});
-    const field = el("label", {"data-pe-region":"field"}, [el("span",{text:text("Share link","分享链接")})]);
-    const link = el("input", {readonly:"","data-pe-control":"input","aria-label":text("Share link","分享链接")}); field.append(link); field.hidden=true;
+    const link = el("input", {id:`${idBase}-link`,readonly:"","data-pe-control":"input","aria-label":text("Public link","公开链接"),onfocus:() => link.select()});
+    const viewPage = el("a", {class:"live-share-view",target:"_blank",rel:"noopener noreferrer","data-pe-button":"ghost","data-pe-density":"compact",text:cloudT("viewPublicPage")});
+    const linkRow = el("div", {class:"live-share-label-row"}, [
+      el("label", {class:"live-share-label",for:`${idBase}-link`,text:text("Public link","公开链接")}),
+      el("span", {class:"live-share-live",text:text("On","已开启")}),
+    ]);
+    const field = el("div", {class:"live-share-link","data-pe-region":"field"}, [linkRow, link]);
+    const xTarget = el("a", {class:"live-share-target","data-share-target":"x",target:"_blank",rel:"noopener noreferrer",referrerpolicy:"no-referrer","data-pe-button":"secondary","data-pe-density":"standard","aria-label":text("Post on X (opens in a new tab)","发到 X（在新标签页打开）")}, [brandIcon(X_MARK), el("span", {text:"X"})]);
+    const linkedInTarget = el("a", {class:"live-share-target","data-share-target":"linkedin",target:"_blank",rel:"noopener noreferrer",referrerpolicy:"no-referrer","data-pe-button":"secondary","data-pe-density":"standard","aria-label":text("Share on LinkedIn (opens in a new tab)","分享到 LinkedIn（在新标签页打开）")}, [brandIcon(LINKEDIN_MARK), el("span", {text:"LinkedIn"})]);
+    const systemShare = el("button", {type:"button",class:"live-share-target","data-share-target":"system","data-pe-button":"secondary","data-pe-density":"standard","aria-label":text("More sharing options","更多分享方式")}, [lineIcon(["M12 15V3","m7 8 5-5 5 5","M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"]), el("span", {text:text("More…","更多…")})]);
+    const targets = el("div", {class:"live-share-targets",role:"group","aria-labelledby":`${idBase}-targets`});
+    const targetsField = el("div", {class:"live-share-targets-field"}, [el("span", {class:"live-share-label",id:`${idBase}-targets`,text:text("Share to","分享到")}), targets]);
+    // A roomy draft: each destination applies its own length rules when posting.
+    const post = el("textarea", {id:`${idBase}-post`,class:"live-share-post",rows:"3",maxlength:"2000","data-pe-control":"input","aria-describedby":`${idBase}-post-hint`});
+    post.value = liveShareDefaultPost(name, subject, zh);
+    const copyPost = el("button", {type:"button",class:"live-share-copy-post","data-pe-button":"secondary","data-pe-density":"compact",text:text("Copy post","复制帖子"),title:text("Copy this text with the public link","复制这段文字和公开链接")});
+    const postField = el("div", {class:"live-share-post-field"}, [
+      el("div", {class:"live-share-label-row"}, [el("label", {class:"live-share-label",for:`${idBase}-post`,text:text("Post text","帖子文字")}), copyPost]),
+      post,
+      el("small", {id:`${idBase}-post-hint`,text:text("X, More…, and Copy post use this text; you can still edit it on the destination before posting. LinkedIn accepts only the link, so this text is copied for you to paste there.","X、“更多…”和“复制帖子”会使用这段文字，发布前仍可在目标网站修改。LinkedIn 只接收链接，因此会复制这段文字，方便你在那里粘贴。")}),
+    ]);
+    // These targets share a link only; offer the existing export for a picture.
+    const exportControl = kind === "canvas" ? document.getElementById("exportPngBtn") : null;
+    const exportButton = exportControl ? el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"compact",text:text("Export PNG","导出 PNG")}) : null;
+    const imageNote = el("p", {class:"live-share-image-note"}, [
+      el("span", {text:kind === "canvas"
+        ? text("These options share a link only; no image is attached. To include a picture, export a PNG and attach it to your post yourself.","这些方式只分享链接，不会附带图片。如需配图，请导出 PNG，再自行添加到帖子中。")
+        : text(`These options share a link only; no image is attached. To include a picture of ${thisItem}, save it with the download-image button on its toolbar and attach it yourself.`,`这些方式只分享链接，不会附带图片。如需${thisItem}的图片，请用其工具栏上的下载图片按钮保存，再自行添加到帖子中。`)}),
+      exportButton,
+    ]);
+    // Link first, then the reviewed text, then where to send it.
+    const active = el("div", {class:"live-share-active"}, [field, postField, targetsField, imageNote]);
     const enable = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
-    const revoke = el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"standard",text:text("Turn off sharing","关闭分享")});
+    const revoke = el("button", {type:"button",class:"live-share-revoke","data-pe-button":"danger","data-pe-density":"standard",text:text("Turn off sharing","关闭分享")});
     const footer = el("footer", {"data-pe-region":"footer"}, [revoke,enable]);
     // A short checklist shows what sharing still needs, in order.
     const steps = el("ol", {class:"live-share-steps","aria-label":text("Before you share","分享前的步骤")});
@@ -1838,38 +1933,123 @@
       if (kind === "canvas") items.push(shareStep("content", !emptyCanvas, text("Canvas has content","画布已有内容"), emptyCanvas ? text("Draw or add something first.","请先画点什么或添加内容。") : text("Ready to share.","可以分享。")));
       items.push(shareStep("account", signedIn, text("Sign in to PenEcho Cloud","登录 PenEcho Cloud"), text("Share links are hosted by your Cloud account.","分享链接由你的云端账户托管。")));
       items.push(shareStep("cloud", saved, text("Save to Cloud","保存到云端"), saved ? text("Saved. Later saves to this Cloud Canvas update the link.","已保存。之后保存到这份云端 Canvas 会更新链接。") : "", saved ? null : storageNote));
-      items.push(shareStep("link", linked, text("Turn on the link","开启链接"), linked ? text("Sharing is on.","已开启分享。") : text("Anyone with the link can view it.","任何持有链接的人都可以查看。")));
+      items.push(shareStep("link", linked, text("Turn on the link","开启链接"), linked ? text("Sharing is on.","已开启分享。") : text("Then copy the link, or post it on X, LinkedIn, or anywhere else.","之后可复制链接，或发到 X、LinkedIn 等任意平台。")));
       const current = items.find((item) => item.dataset.state !== "done");
       if (current) current.dataset.state = "current";
       steps.replaceChildren(...items);
     }
-    shell.body.append(note,steps,field,status); shell.dialog.append(footer);
+    shell.body.append(active,scope,steps,status); shell.dialog.append(footer);
     const selection = sourceId ? {widgetId:sourceId} : {};
     const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
-    function render() {
-      field.hidden=!currentShare; revoke.hidden=!currentShare;
-      storageNote.hidden=Boolean(canvasId);
-      link.value=currentShare ? new URL(currentShare.url,cloudOrigin()).href : "";
-      enable.textContent=currentShare ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
-      enable.disabled=busy || emptyCanvas; revoke.disabled=busy;
-      renderSteps();
+    function setStatus(message, tone = "") {
+      status.textContent = message;
+      if (tone) status.dataset.tone = tone;
+      else delete status.dataset.tone;
     }
-    async function run(action) { if(busy)return; busy=true;status.textContent=text("Working…","正在处理…");render();try{await action();}catch(error){status.textContent=error.message;}finally{busy=false;render();} }
+    // Outbound controls exist only while the share is active and its URL is valid.
+    function renderTargets() {
+      const url = liveSharePublicUrl(currentShare);
+      if (url !== renderedUrl) {
+        renderedUrl = url;
+        targets.replaceChildren(...(url ? [xTarget, linkedInTarget] : []));
+        if (url) linkRow.append(viewPage); else viewPage.remove();
+      }
+      copyPost.disabled = busy || !url;
+      if (!url) return;
+      const links = liveShareSocialLinks(url, post.value);
+      xTarget.setAttribute("href", links.x);
+      linkedInTarget.setAttribute("href", links.linkedin);
+      viewPage.setAttribute("href", url);
+      for (const node of [xTarget, linkedInTarget, viewPage]) node.setAttribute("aria-disabled", String(busy));
+      if (liveShareNativeAvailable({ url })) { if (systemShare.parentNode !== targets) targets.append(systemShare); }
+      else systemShare.remove();
+      systemShare.disabled = busy || nativeSharing;
+    }
+    function render() {
+      const shared = Boolean(currentShare), url = liveSharePublicUrl(currentShare);
+      active.hidden=!shared; steps.hidden=shared; revoke.hidden=!shared;
+      storageNote.hidden=Boolean(canvasId);
+      link.value=url;
+      shell.dialog.dataset.liveShare = shared ? "on" : "off";
+      enable.textContent=shared ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
+      enable.disabled=busy || (shared ? !url : emptyCanvas); revoke.disabled=busy;
+      renderSteps();
+      renderTargets();
+    }
+    // Disabled or hidden controls drop focus; keep keyboard users in the dialog.
+    function restoreFocus() {
+      const focused = document.activeElement;
+      if (!shell.overlay.isConnected || enable.disabled) return;
+      if (!focused || focused === document.body || focused.hidden || focused.disabled || !shell.dialog.contains?.(focused)) enable.focus({ preventScroll:true });
+    }
+    async function run(action) { if(busy)return; busy=true;setStatus(text("Working…","正在处理…"));render();try{await action();}catch(error){setStatus(error.message,"error");}finally{busy=false;render();restoreFocus();} }
     enable.addEventListener("click",()=>run(async()=>{
       if(!accountSignedIn()){closeOverlay(shell.overlay);state.cloudSection="account";await openCloud();return;}
-      if(currentShare){await copyText(link.value);status.textContent=text("Link copied.","链接已复制。");return;}
+      if(currentShare){await copyText(link.value);setStatus(text("Link copied.","链接已复制。"));return;}
       canvasId=await bridge.saveForShare(widgetId);
       currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify(selection)})).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
-      status.textContent=text("Sharing is on.","已开启分享。");
+      setStatus(text("Sharing is on. Copy the link or choose where to share.","已开启分享。可复制链接，或选择分享网站。"));
     }));
     revoke.addEventListener("click",()=>run(async()=>{
       await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;
       rememberLiveShare(canvasId, sourceId || "", null);
-      status.textContent=text("Sharing is off. The old link no longer works. Copies already saved by visitors remain theirs.","已关闭分享，旧链接已失效。访客之前保存的副本仍归访客所有。");
+      setStatus(text("Sharing is off. The link no longer works, including in posts. Copies visitors already saved remain theirs.","已关闭分享，链接已失效，包括已发帖子中的链接。访客之前保存的副本仍归访客所有。"));
     }));
+    post.addEventListener("input", renderTargets);
+    // Links open from the click itself, so popup blockers and desktop routing apply normally.
+    xTarget.addEventListener("click", (event) => {
+      if (busy || !renderedUrl) { event.preventDefault(); return; }
+      setStatus(text("X opened in a new tab. Review the post there before publishing.","已在新标签页打开 X，请在那里确认后再发布。"));
+    });
+    linkedInTarget.addEventListener("click", (event) => {
+      if (busy || !renderedUrl) { event.preventDefault(); return; }
+      const message = post.value.trim();
+      if (!message) { setStatus(text("LinkedIn opened in a new tab with your link.","已在新标签页打开 LinkedIn 并附上链接。")); return; }
+      // Start copying before the new tab takes focus from this page.
+      copyText(message).then(
+        () => setStatus(text("LinkedIn opened in a new tab. Your post text is copied; paste it there.","已在新标签页打开 LinkedIn，帖子文字已复制，请粘贴到那里。")),
+        () => setStatus(text("LinkedIn opened in a new tab. Copy the post text above and paste it there.","已在新标签页打开 LinkedIn。请复制上方的帖子文字并粘贴到那里。")),
+      );
+    });
+    viewPage.addEventListener("click", (event) => { if (busy || !renderedUrl) event.preventDefault(); });
+    // For any site or chat: the reviewed text plus the public link, copied in this click.
+    copyPost.addEventListener("click", () => {
+      if (busy || !renderedUrl) return;
+      const hasText = Boolean(post.value.trim());
+      copyText(liveSharePostWithLink(post.value, renderedUrl)).then(
+        () => setStatus(hasText ? text("Post text and link copied. Paste them anywhere.","已复制帖子文字和链接，可粘贴到任意位置。") : text("Link copied. Paste it anywhere.","链接已复制，可粘贴到任意位置。")),
+        () => setStatus(text("Could not copy. Select the text and copy it yourself.","无法复制，请手动选择文字后复制。"), "error"),
+      );
+    });
+    systemShare.addEventListener("click", () => {
+      if (busy || nativeSharing || !renderedUrl) return;
+      const message = post.value.trim(), data = { title:name || text(...subject.title), url:renderedUrl, ...(message ? { text:message } : {}) };
+      let pending;
+      // navigator.share must start inside this click to keep the user activation.
+      try { pending = Promise.resolve(navigator.share(data)); } catch (error) { pending = Promise.reject(error); }
+      nativeSharing = true;
+      renderTargets();
+      pending.then(
+        () => setStatus(text("Shared.","已分享。")),
+        (error) => error?.name === "AbortError"
+          ? setStatus(text("Sharing was cancelled.","已取消分享。"))
+          : setStatus(text("The share sheet could not open. Copy the link instead.","无法打开系统分享，请改为复制链接。"), "error"),
+      ).finally(() => { nativeSharing = false; renderTargets(); });
+    });
+    exportButton?.addEventListener("click", () => {
+      const control = document.getElementById("exportPngBtn");
+      if (!control || control.disabled) { setStatus(text("A PNG export is already running.","PNG 正在导出。")); return; }
+      control.click();
+      setStatus(text("Exporting PNG. Attach the downloaded file to your post.","正在导出 PNG。下载完成后，可将文件添加到帖子中。"));
+    });
     render();
-    if(canvasId && accountSignedIn()) await run(async()=>{currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;rememberLiveShare(canvasId, sourceId || "", currentShare);status.textContent=emptyCanvas ? emptyMessage : "";});
+    if(canvasId && accountSignedIn()) await run(async()=>{
+      currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;
+      rememberLiveShare(canvasId, sourceId || "", currentShare);
+      if (currentShare && !liveSharePublicUrl(currentShare)) setStatus(text("The public link could not be read. Turn sharing off and on again.","无法读取公开链接，请关闭后重新开启分享。"),"error");
+      else setStatus(emptyCanvas && !currentShare ? emptyMessage : "");
+    });
   }
 
   function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {
@@ -2932,7 +3112,7 @@
     if (actionName === "share" || actionName === "echo") {
       await refreshStatus();
       if (actionName === "echo") shareDialog({ kind:"widget", widgetId });
-      else await liveShareDialog({ kind:"widget", widgetId });
+      else await liveShareDialog({ kind:"widget", widgetId, sourceName:typeof event.detail?.title === "string" ? event.detail.title : "", noteKind:event.detail?.noteKind });
       return;
     }
     if (state.favoriteWidgetOperations.has(widgetId)) return;

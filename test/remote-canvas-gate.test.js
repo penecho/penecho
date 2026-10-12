@@ -42,20 +42,24 @@ class FakeElement {
 
 function flatten(root) {
   const out = [];
+  if (!root) return out;
   const walk = (node) => { out.push(node); for (const child of node.children || []) walk(child); };
   walk(root);
   return out;
 }
 
-function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout } = {}) {
+function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseURI = "https://cloud.penecho.test/canvas/", language = "en-US", respond, openCanvas, takeFurther, saveEcho, currentCanvasId, widgetFrames = [], nativeReads = false, fetchResponse, statusTimeout, readyState = "complete", cookie = "", runtime = "cloud", browserDraftId } = {}) {
   const topRow = new FakeElement("div");
   topRow.className = "top-row";
   const brand = new FakeElement("div");
   brand.className = "brand";
   topRow.append(brand);
+  const documentListeners = new Map();
   const document = {
+    readyState,
+    addEventListener:(type, handler) => documentListeners.set(type, handler),
     baseURI,
-    cookie:"",
+    get cookie() { return typeof cookie === "function" ? cookie() : cookie; },
     body:new FakeElement("body"),
     createElement:(tag) => new FakeElement(tag),
     querySelector:(selector) => {
@@ -89,7 +93,8 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
       Object.assign(location, { href:target.href, pathname:target.pathname, search:target.search, hash:target.hash });
       this.state = state;
     } },
-    PENECHO_CONFIG:{ runtime:"cloud", remoteCanvasNativeReads:nativeReads },
+    PENECHO_CONFIG:{ runtime, remoteCanvasNativeReads:nativeReads, browserDraftId },
+    PenEchoBrowserDraft:{ open:async () => {} },
     PenEchoCloudProjects:{
       openCanvas:openCanvas || (async (id) => { opened.push(id); }),
       saveEcho:async (name) => {
@@ -105,6 +110,7 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
     if (!windowListeners.has(type)) windowListeners.set(type, new Set());
     windowListeners.get(type).add(handler);
   };
+  windowObject.removeEventListener = (type, handler) => windowListeners.get(type)?.delete(handler);
   windowObject.requestAnimationFrame = (callback) => setImmediate(() => callback(Date.now()));
   windowObject.dispatchEvent = (event) => {
     for (const handler of windowListeners.get(event.type) || []) handler(event);
@@ -130,6 +136,7 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
   vm.runInNewContext(gateScript, context, { filename:"public/remote-canvas.js" });
   const gate = document.body.children[0];
   return { gate, brand, window:windowObject, redirects, replacements, routeUpdates, fetchCalls, opened, taken, saveEchoCalls,
+    finishScripts:() => { document.readyState = "interactive"; documentListeners.get("DOMContentLoaded")?.(); },
     back:topRow.children[0],
     title:flatten(gate).find((el) => el.id === "remoteCanvasTitle"),
     detail:flatten(gate).find((el) => el.className === "remote-canvas-detail"),
@@ -139,6 +146,86 @@ function boot({ pathname = `/canvas/${CANVAS_ID}`, search = "", hash = "", baseU
 async function flush(rounds = 8) {
   for (let index = 0; index < rounds; index++) await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("Cloud opening waits for parser-blocking scripts before starting runtime initialization", async () => {
+  const run = boot({ nativeReads:true, readyState:"loading" });
+  await flush();
+  assert.equal(run.gate.dataset.state, "opening");
+  assert.deepEqual(run.opened, []);
+  const earlyReads = run.fetchCalls.filter(call => call.url === `/api/cloud/canvases/${CANVAS_ID}`);
+  assert.equal(earlyReads.length, 1, "the document downloads before DOMContentLoaded");
+  assert.equal(earlyReads[0].options.cache, "no-store");
+  assert.equal(earlyReads[0].options.credentials, "same-origin");
+  run.finishScripts();
+  await flush();
+  assert.deepEqual(run.opened, [CANVAS_ID]);
+  assert.equal(run.gate.hidden, true);
+});
+
+test("unused early Cloud reads expire or cancel on pagehide", async () => {
+  for (const cause of ["expiry", "pagehide"]) {
+    let expire;
+    const run = boot({ nativeReads:true, readyState:"loading", cookie:"penecho_csrf=session%20token",
+      statusTimeout:(callback, delay) => {
+        if (delay === 60_000) { expire = callback; return null; }
+        return setTimeout(callback, delay);
+      },
+    });
+    const early = run.window.PenEchoEarlyCloudSnapshot;
+    assert.equal(early.id, CANVAS_ID);
+    const request = run.fetchCalls[0];
+    assert.equal(request.options.headers.get("x-penecho-csrf"), "session token");
+    if (cause === "expiry") expire();
+    else run.window.dispatchEvent({ type:"pagehide" });
+    assert.equal(run.window.PenEchoEarlyCloudSnapshot, null);
+    assert.equal(request.options.signal.aborted, true);
+    assert.equal(early.take(), null);
+    run.finishScripts();
+    await flush();
+  }
+});
+
+test("taking an early Cloud response once releases its unused-read cancellation", async () => {
+  let expire;
+  const run = boot({ nativeReads:true, readyState:"loading", statusTimeout:(callback, delay) => {
+    if (delay === 60_000) { expire = callback; return null; }
+    return setTimeout(callback, delay);
+  } });
+  const early = run.window.PenEchoEarlyCloudSnapshot;
+  assert.equal(early.take(), early.response);
+  assert.equal(early.take(), null);
+  expire();
+  run.window.dispatchEvent({ type:"pagehide" });
+  assert.equal(run.fetchCalls[0].options.signal.aborted, false, "consumption can finish after the prefetch expiry");
+  run.finishScripts();
+  await flush();
+});
+
+test("early reads leave non-native, draft, community, and local Canvas flows unchanged", async () => {
+  for (const options of [
+    { nativeReads:false },
+    { nativeReads:true, pathname:`/canvas/community/${COMMUNITY_ID}` },
+    { nativeReads:true, browserDraftId:SAVED_CANVAS_ID },
+    { nativeReads:true, runtime:"local" },
+  ]) {
+    const run = boot(options);
+    assert.equal(run.window.PenEchoEarlyCloudSnapshot, undefined);
+    assert.equal(run.fetchCalls.some(call => /^\/api\/cloud\/canvases\//.test(call.url)), false);
+    await flush();
+  }
+});
+
+test("early read setup failure does not stop remote Canvas initialization", async () => {
+  let firstRead = true;
+  const run = boot({ nativeReads:true, cookie:() => {
+    if (firstRead) { firstRead = false; throw Error("cookie access unavailable"); }
+    return "";
+  } });
+  await flush();
+  assert.equal(run.window.PenEchoEarlyCloudSnapshot, undefined);
+  assert.deepEqual(run.opened, [CANVAS_ID]);
+  assert.equal(run.gate.hidden, true);
+});
 
 test("a confirmed Cloud identity updates the address without reopening and preserves browser modes", async () => {
   let activeId = CANVAS_ID;
@@ -235,7 +322,7 @@ test("local share auto-fill preserves connection errors and never retries with a
     const response = await run.window.fetch("/api/community/metadata", { method:"POST", headers:{ "x-penecho-connection":CURRENT_CANVAS_ID }, body:'{"kind":"widget"}' });
     assert.equal(response.status, status);
     assert.deepEqual(await response.json(), error);
-    const calls = run.fetchCalls.filter(call => !call.url.startsWith("/api/v1/remote-canvas/status"));
+    const calls = run.fetchCalls.filter(call => !call.url.startsWith("/api/v1/remote-canvas/status") && call.url !== `/api/cloud/canvases/${CANVAS_ID}`);
     assert.equal(calls.length, 1);
     assert.ok(calls[0].url.startsWith("/api/v1/remote-canvas/http?"));
     assert.equal(calls[0].options.headers.get("x-penecho-connection"), CURRENT_CANVAS_ID);
@@ -789,11 +876,12 @@ for (const mode of ["online", "offline", "absent", "denied"]) {
 test("Widget parent refuses foreign origin and unowned frames", async () => {
   const source = { postMessage:() => {} }, run = boot({ nativeReads:true });
   await flush();
+  const initialFetchCount = run.fetchCalls.length;
   const message = { type:"penecho-widget-host-public-fetch", requestId:"widget-fetch-1", url:"https://example.org/data" };
   run.window.dispatchMessage(message, source);
   run.window.dispatchMessage(message, source, "https://other.test");
   await flush();
-  assert.equal(run.fetchCalls.length, 1);
+  assert.equal(run.fetchCalls.length, initialFetchCount, "untrusted frames cannot start a public-data request");
 });
 
 test("Cloud-native editing adds pinned device capabilities while retaining Cloud ownership", async () => {

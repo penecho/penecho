@@ -2,12 +2,10 @@
   const DIAGRAM_RUNTIME = (() => {
     const VERSION = "penecho-diagram-source-v1";
     const FORMATS = Object.freeze([
-      { id:"dot", label:"Graphviz DOT", aliases:["dot", "graphviz", "graphviz-dot", "graphviz dot"] },
       { id:"bpmn-xml", label:"BPMN XML", aliases:["bpmn", "bpmn-xml", "bpmn2", "bpmn-2.0-xml"] },
       { id:"vega-lite", label:"Vega-Lite JSON", aliases:["vega-lite", "vegalite", "vega-lite-json"] },
       { id:"geojson", label:"GeoJSON", aliases:["geojson", "geo-json"] },
       { id:"smiles", label:"SMILES", aliases:["smiles"] },
-      { id:"cytoscape-json", label:"Cytoscape JSON", aliases:["cytoscape", "cytoscape-json", "cytoscape-elements-json"] },
     ]);
     const aliases = new Map();
     for (const format of FORMATS)
@@ -16,12 +14,22 @@
     function normalizeFormat(value) {
       return aliases.get(String(value || "").trim().toLowerCase()) || "";
     }
+    // Saved widgets keep these renderers; new diagrams cannot choose them.
+    const LEGACY_FORMATS = Object.freeze([
+      { id:"dot", label:"Graphviz DOT" },
+      { id:"mermaid", label:"Mermaid" },
+      { id:"cytoscape-json", label:"Cytoscape JSON" },
+    ]);
     function formatRecord(value) {
       const id = normalizeFormat(value);
       return FORMATS.find((format) => format.id === id) || null;
     }
+    function storedFormatRecord(value) {
+      const id = String(value || "").trim().toLowerCase();
+      return formatRecord(id) || LEGACY_FORMATS.find((format) => format.id === id) || null;
+    }
     function copyLabel(value) {
-      return `Copy ${formatRecord(value)?.label || String(value || "source").trim()}`;
+      return `Copy ${storedFormatRecord(value)?.label || String(value || "source").trim()}`;
     }
     function scriptValue(value) {
       return JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -217,6 +225,10 @@
         catch { throw Error(`${format} source is not valid JSON`); }
       };
       async function renderDot() {
+        // Graphviz is WebAssembly. A host policy without 'wasm-unsafe-eval' leaves
+        // viz.js waiting forever, so report it before downloading the module.
+        try { await WebAssembly.compile(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)); }
+        catch { throw Error("This Canvas host does not allow WebAssembly, which Graphviz needs."); }
         const { instance } = await import("https://cdn.jsdelivr.net/npm/@viz-js/viz@3.9.0/lib/viz-standalone.mjs"),
           viz = await instance(),
           initial = responsiveDotSource(source, stage.clientWidth, stage.clientHeight),
@@ -491,8 +503,8 @@
       }
     }
     function documentFor({ sourceFormat, source, title, diagramKind }) {
-      const legacyMermaid = String(sourceFormat).trim().toLowerCase() === "mermaid",
-        format = formatRecord(sourceFormat) || (legacyMermaid ? { id:"mermaid", label:"Mermaid" } : null);
+      const format = storedFormatRecord(sourceFormat),
+        legacyMermaid = format?.id === "mermaid";
       if (!format || typeof source !== "string" || !source.trim() || new TextEncoder().encode(source).length > 100 * 1024) return "";
       const config = {
         sourceFormat:format.id,

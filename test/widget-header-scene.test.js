@@ -167,7 +167,7 @@ test("the server turns a scene command into a host-rendered General widget and r
   assert.equal(normalize({ tool:"write_text", text:"hi" }).tool, "write_text");
   assert.match(server, /:invalidScene\?`Your scene failed PenEcho validation/);
   assert.match(server, /SCENE_CONTRACT_PROMPT = fs\.readFileSync\(path\.join\(__dirname, "scene-contract\.md"\)/);
-  assert.match(server, /sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT\)/);
+  assert.match(server, /sections\.push\(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT, LOCAL_DIAGRAM_CONTRACT_PROMPT\)/);
   for (const route of ["/scene-spec.js", "/scene-runtime.js", "/scene-vendor/anime.js", "/scene-vendor/matter.js", "/scene-vendor/zdog.js"]) assert.ok(server.includes(`["${route}"`), route);
 });
 

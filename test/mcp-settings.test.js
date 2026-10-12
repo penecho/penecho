@@ -9,7 +9,7 @@ function harness(fetchImpl) {
   const ui={status:"",page:null,hints:[]},storage=new Map(),listeners={};
   const context=vm.createContext({document:{createElement:tag=>({tagName:tag,value:"",textContent:"",setAttribute(key,value){this[key]=value;}}),getElementById:id=>nodes.get(id)||null,querySelectorAll:selector=>selector==='input[name="mcpClient"]'?clientInputs:[]},state:{language:"en"},window:{PENECHO_CONFIG:{}},WebSocket:{OPEN:1,CONNECTING:0},URL,AbortSignal,AbortController,setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timer.unref();return timer;},clearTimeout,performance,addEventListener(type,listener){listeners[type]=listener;},
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},setStatus:value=>{ui.status=value;},showCanvasHint:key=>ui.hints.push(key),openSettings(){},selectSettingsPage:value=>{ui.page=value;},
-    location:{protocol:"http:",host:"localhost:3921"},canvasClientId:()=>"canvas-test",
+    location:{protocol:"http:",host:"localhost:3921"},canvasClientId:()=>"canvas-test",canvasCompanionMinimal:()=>false,
     authenticatedApiHeaders:headers=>({...headers,"X-PenEcho-Session":"test-page-session"}),
     fetch:async(url,options)=>{requests.push({url,options});return fetchImpl(url,options);},writeClipboardText:async text=>{clipboard.push(text);return true;},t:key=>key,
   });

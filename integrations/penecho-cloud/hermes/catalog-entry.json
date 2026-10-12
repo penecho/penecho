@@ -1,13 +1,13 @@
 {
   "name": "penecho",
   "repo": "https://github.com/penecho/penecho",
-  "subdir": "integrations/penecho-cloud",
-  "description": "Create editable diagrams and interactive previews in browser drafts, with a bundled Canvas skill and OAuth MCP connection. Guest access available. The portable package uses npx and mcp-remote 0.1.38; Node.js 20+ is required.",
+  "subdir": "integrations/penecho-cloud/hermes/portable",
+  "description": "Create editable diagrams and interactive previews in browser drafts, with the Canvas Skill and OAuth MCP connection. This Hermes compatibility package uses pinned mcp-remote 0.1.38 and requires Node.js 20+/npx.",
   "maintainer": "penecho",
   "tier": "community",
   "category": "tools",
-  "docs_url": "https://github.com/penecho/penecho/tree/main/integrations/penecho-cloud",
-  "version": "1.1.0",
+  "docs_url": "https://github.com/penecho/penecho/tree/main/integrations/penecho-cloud/hermes/portable",
+  "version": "1.1.4",
   "platforms": [],
   "capabilities": {
     "provides_tools": [],

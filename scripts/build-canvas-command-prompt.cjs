@@ -26,6 +26,7 @@ const fs = require("node:fs"), path = require("node:path"), crypto = require("no
 const { NORMALIZE_TYPESET_POLICY } = require("./typeset.js");
 const NOTE_CARD = require("../../public/note-card.js");
 const SCENE = require("../../public/scene-spec.js"), DRAW = require("../../public/draw.js");
+const ARCHITECTURE = require("../architecture/schema.js"), SEQUENCE = require("../sequence/schema.js"), WORKFLOW = require("../workflow/schema.js");
 const SKETCH_PUPPET = require("../shared/sketch-puppet.js");
 const ILLUSTRATION_STYLE = require("../shared/illustration-style.js");
 const FINISH_DRAWING = require("../shared/finish-drawing.js");

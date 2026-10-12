@@ -9,6 +9,7 @@ function fixture(fetch) {
   const statuses=[], logs=[];
   const state={userRevision:1,recognitionGeneration:1,aiColor:"#000000",dirty:{...packed.changedBox},hotspotTrail:[],reasoningEffort:"medium",theme:"studio",aiRequestTimeoutMs:1000,widgets:[],images:[]};
   const context=vm.createContext({state,fetch,AbortController,TextDecoder,setTimeout,clearTimeout,
+    canvasGuestAiRestricted:()=>false,
     SIZE:20000,MAX_VISIBLE_WIDGETS:100,MAX_VISIBLE_IMAGES:100,AI_REJECTED:"rejected",AI_SUPERSEDED:"superseded",AI_CANCELLED:"cancelled",
     clearWidgetRefineCandidate(){},refreshWidgetRefineHoverCandidate(){},pluginEnabled:()=>false,pluginRequestPayload:()=>({}),aiRequestHeaders:headers=>headers,requireAiConnectionSelection:()=>true,
     selectedAiConnectionId:()=>"connection-a",aiConnectionScope:()=>"scope-a",promptForAiConnectionSelection:()=>true,
@@ -366,4 +367,18 @@ test("starting Agent preserves a running Stroke request and background Agent doe
   h.context.canvasAgentBeginRequest();
   assert.equal(h.state.activeAI,active);assert.equal(active.controller.signal.aborted,false);
   assert.equal(h.context.canvasAgentSuppressesAutomaticAI(),false);
+});
+
+
+test("anonymous Canvas AI preserves ink without connection prompts or model requests", async()=>{
+  for (const action of ["auto","assist","answer"]) {
+    const h=fixture(()=>assert.fail("anonymous drawing must not request a model"));
+    h.context.canvasGuestAiRestricted=()=>true;
+    h.context.requireAiConnectionSelection=()=>assert.fail("do not open connection configuration");
+    let hints=0;h.context.showCanvasGuestAiHint=()=>hints++;
+    const dirty=h.state.dirty;h.state.autoEligible=true;
+    assert.equal(await h.context.requestAI(action),false);
+    assert.equal(h.state.dirty,dirty);assert.equal(h.state.autoEligible,false);
+    assert.equal(hints,action==="auto"?0:1);
+  }
 });

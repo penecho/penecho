@@ -15,6 +15,6 @@ const entry=JSON.parse(fs.readFileSync(path.join(dir,'hermes/catalog-entry.json'
 const output=path.join(root,'dist','penecho-marketplaces',manifest.version);fs.mkdirSync(output,{recursive:true});
 // JSON is a YAML 1.2 document; using it preserves strings without escaping ambiguities.
 fs.writeFileSync(path.join(output,'penecho.yaml'),JSON.stringify(entry,null,2)+'\n');
-fs.writeFileSync(path.join(output,'hermes-pack.yaml'),JSON.stringify({name:'penecho',version:manifest.version,plugins:[{repo:entry.repo,ref:sha,subdir:relative}]},null,2)+'\n');
+fs.writeFileSync(path.join(output,'hermes-pack.yaml'),JSON.stringify({name:'penecho',version:manifest.version,plugins:[{repo:entry.repo,ref:sha,subdir:entry.subdir}]},null,2)+'\n');
 fs.copyFileSync(path.join(dir,'hermes/optional-mcps/penecho/manifest.yaml'),path.join(output,'mcp-manifest.yaml'));
 console.log(`Prepared marketplace files at ${output}. Push/tag the same commit before submitting; this command does not publish anything.`);

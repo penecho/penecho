@@ -8706,7 +8706,16 @@ body.assist-agent-minimized #canvasAgentPanel {display:none;}
 .note-category-nav-item > span:not(.note-chip-icon) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-category-nav-item small { flex: none; color: var(--pe-ink-3, #666d7d); font-size: 12px; }
 #historyPanel .note-category-nav-item:hover, #historyPanel .note-category-add:hover { background: var(--pe-hover, rgba(15, 23, 42, .06)); }
-#historyPanel .note-category-nav-item[aria-current="page"], #historyPanel .note-tag-nav-item[aria-pressed="true"] { color: var(--pe-accent-label, #4f46e5); background: var(--pe-selected, #eceef3); }
+#historyPanel .note-category-nav-item[aria-current="page"] { color: var(--pe-accent-label, #4f46e5); background: var(--pe-selected, #eceef3); }
+.note-tag-sidebar[hidden] { display: none; }
+.note-category-sidebar .note-category-heading { min-height: 30px; padding-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pe-ink-3, #666d7d); }
+.note-category-nav.note-tag-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; overflow: visible; }
+#historyPanel .note-tag-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 28px; padding: 3px 11px; color: var(--pe-ink-2, #596170); border: 1px solid var(--pe-line, #e2e5eb); border-radius: 999px; background: var(--pe-surface, #fff); font: 400 13px/1.3 var(--pe-font-ui, system-ui); cursor: pointer; }
+#historyPanel .note-tag-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#historyPanel .note-tag-chip:hover { color: var(--pe-ink-1, #1f2937); border-color: var(--pe-line-strong, #c9ced8); }
+#historyPanel .note-tag-chip[aria-pressed="true"] { color: var(--pe-accent-label, #4f46e5); border-color: var(--pe-accent, #4f46e5); background: color-mix(in srgb, var(--pe-accent, #4f46e5) 10%, transparent); font-weight: 600; }
+#historyPanel .note-tag-chip.note-tag-more { color: var(--pe-ink-3, #666d7d); border-style: dashed; background: transparent; }
+.note-tag-chip:focus-visible { outline: 2px solid var(--pe-accent, #6354ff); outline-offset: 1px; }
 .note-category-nav-item:focus-visible, .note-category-add:focus-visible { outline: 2px solid var(--pe-accent, #6354ff); outline-offset: -2px; }
 .note-category-sidebar .note-category-form { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 2px; padding: 8px; border-radius: 10px; }
 .note-category-sidebar .note-category-form input[type="text"] { width: 100%; min-width: 0; flex: 1 0 100%; }

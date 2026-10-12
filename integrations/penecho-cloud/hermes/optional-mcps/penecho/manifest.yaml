@@ -16,10 +16,11 @@ suggest:
 post_install: |
   Complete PenEcho authorization once.
   Hermes stores the MCP credentials automatically; no pairing code or API key is required.
-  Sign in to PenEcho, open a Canvas, and enable Settings → MCP → Cloud MCP.
-  Ask your agent to list available PenEcho canvases, then create or revise content
-  in the one you select. Bind once with penecho_start_session and retain the
-  sessionKey, sessionId and documentId when resuming.
+  Choose anonymous use to preview without an account. Ask the agent to open a
+  companion workspace with penecho_open_workspace, open its launch URL once,
+  read penecho_workspace_status, and bind its exact startSession target. Retain
+  sessionKey, sessionId and documentId when resuming. An explicitly selected
+  existing Canvas keeps its manual selection/opt-in workflow.
   Keep the Canvas browser open while editing. Saving to Cloud and PenEcho Agent require sign-in.
   Native MCP catalog installation includes MCP tools and server instructions. For the
-  bundled Canvas skill as well, install the PenEcho portable plugin package.
+  bundled Canvas skill as well, install the separate PenEcho Hermes portable compatibility package.

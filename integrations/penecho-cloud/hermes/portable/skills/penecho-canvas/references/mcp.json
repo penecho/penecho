@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "penecho-cloud": {
+      "type": "http",
+      "url": "https://penecho.ai/mcp"
+    }
+  }
+}

@@ -1528,17 +1528,25 @@
   function noteLibraryTagRender() {
     const panel = noteCards.panel;
     if (!panel?.tagNav) return;
-    const focused = panel.tagNav.contains(document.activeElement) ? document.activeElement.dataset.tagId : null,
-      tags = [...panel.page.tags];
+    const LIMIT = 12, focused = panel.tagNav.contains(document.activeElement) ? document.activeElement.dataset.tagId : null,
+      tags = [...panel.page.tags].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
     if (panel.tag && !tags.some(tag => tag.id === panel.tag)) tags.push({ id:panel.tag, label:panel.tag, count:0 });
+    // The most used tags come first; the active tag stays visible while the rest are collapsed.
+    const shown = panel.tagsExpanded || tags.length <= LIMIT ? tags : tags.filter((tag, index) => index < LIMIT || tag.id === panel.tag);
+    panel.tagSidebar.hidden = !tags.length;
     panel.tagNav.textContent = "";
-    for (const tag of [{ id:"", label:noteCopy("All tags", "全部标签"), count:panel.page.tagTotal ?? panel.page.totalSaved ?? 0 }, ...tags]) {
-      const button = noteChip(tag.label, tag.id ? "#" : "▦", "note-category-nav-item note-tag-nav-item", () => noteLibraryChooseTag(tag.id)), count = document.createElement("small");
+    for (const tag of shown) {
+      const button = noteChip(`#${tag.label}`, "", "note-tag-chip", () => noteLibraryChooseTag(tag.id), noteCopy(`${tag.label} · ${tag.count} cards`, `${tag.label} · ${tag.count} 张`));
       button.dataset.tagId = tag.id;
       button.setAttribute("aria-pressed", String(panel.tag === tag.id));
-      count.textContent = String(tag.count); button.append(count); panel.tagNav.append(button);
+      panel.tagNav.append(button);
     }
-    if (focused !== null) panel.tagNav.querySelector(`[data-tag-id="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});
+    if (tags.length > LIMIT) {
+      const more = noteChip(panel.tagsExpanded ? noteCopy("Show less", "收起") : noteCopy(`+${tags.length - shown.length} more`, `+${tags.length - shown.length} 更多`), "", "note-tag-chip note-tag-more", () => { panel.tagsExpanded = !panel.tagsExpanded; noteLibraryTagRender(); panel.tagNav.querySelector(".note-tag-more")?.focus({preventScroll:true}); });
+      more.setAttribute("aria-expanded", String(Boolean(panel.tagsExpanded)));
+      panel.tagNav.append(more);
+    }
+    if (focused) panel.tagNav.querySelector(`[data-tag-id="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});
   }
   function noteLibraryCategoryRender(entries, categories, counts) {
     const panel = noteCards.panel;
@@ -1832,7 +1840,8 @@
         widget = matches.find(item => item.id === entry.objectId) || matches[0];
       if (!widget) throw Error(noteCopy("The original note is no longer on its canvas. Add the library copy to the current canvas, then share it.", "原笔记已不在画布中。请先将资料库副本添加到当前画布，再分享。"));
       closeNoteLibrary({ library:true });
-      window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } }));
+      // The title and kind only label the share dialog; the Widget id selects what is shared.
+      window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id, title:String(entry.note?.title || ""), noteKind:entry.note?.style === "card" ? "card" : "note" } }));
     } catch (error) {
       const message = String(error?.message || error);
       if (noteCards.panel === panel && panel) panel.status.textContent = message;

@@ -1,0 +1,20 @@
+{
+  "name": "penecho",
+  "interface": {
+    "displayName": "PenEcho"
+  },
+  "plugins": [
+    {
+      "name": "penecho-cloud",
+      "source": {
+        "source": "local",
+        "path": "./integrations/penecho-cloud"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

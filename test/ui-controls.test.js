@@ -2891,9 +2891,9 @@ test("Save canvas exposes non-blocking progress and completion feedback", () => 
   assert.match(app, /showHistoryNoticeKey\("snapshotSaving", "busy", 0\)/);
   assert.match(app, /selectionBusyKey = selectionAIStatusKey\(\)/);
   assert.match(app, /showHistoryNoticeKey\(id \? "snapshotSaved" : selectionBusy \? selectionBusyKey : "emptyCanvas"/);
-  assert.match(app, /historySaveCurrent"\)\.onclick = \(\) => \{[\s\S]*?closeHistorySavePanel\(\)[\s\S]*?saveCurrentCanvas\(\)/);
+  assert.match(app, /historySaveCurrent"\)\.onclick = \(\) => \{[\s\S]*?closeHistorySavePanel\(\)[\s\S]*?saveCurrentCanvasFromUser\(\)/);
   assert.match(app, /historySave\"\)\.onclick = \(\) => \{[\s\S]*?closeHistorySavePanel\(\)[\s\S]*?saveSnapshotFromHistory\(\)/);
-  assert.match(app, /historyName"\)\.addEventListener\("keydown"[\s\S]*?event\.key === "Enter"[\s\S]*?closeHistorySavePanel\(\)[\s\S]*?saveCurrentCanvas\(\)/);
+  assert.match(app, /historyName"\)\.addEventListener\("keydown"[\s\S]*?event\.key === "Enter"[\s\S]*?closeHistorySavePanel\(\)[\s\S]*?saveCurrentCanvasFromUser\(\)/);
   assert.match(closeSavePanel, /panel\.open = false[\s\S]*?focusSummary/);
   assert.match(app, /historySavePanel\.addEventListener\("focusout"[\s\S]*?!historySavePanel\.contains\(document\.activeElement\)[\s\S]*?closeHistorySavePanel\(\)/);
   assert.match(app, /historySavePanel\.open[\s\S]*?!historySavePanel\.contains\(event\.target\)[\s\S]*?closeHistorySavePanel\(\)/);
@@ -3702,6 +3702,31 @@ test("Studio title bar exposes document identity, explicit save state, and a bla
     assert.match(core, new RegExp(`\\b${key}:\\s*"`));
     assert.match(zh, new RegExp(`\\b${key}:\\s*"`));
   }
+});
+
+test("Studio navigator rail toggle closes on the second click without reopening during pointerdown or focus", () => {
+  const navigator = read("src/client/app/studio-navigator.js");
+  let open = false, compact = true;
+  const panel = {}, original = {}, proxy = { dataset:{ shellForward:"#studioNavigatorToggle" } },
+    nestedIcon = { closest:() => proxy }, outside = { closest:() => null };
+  const [collapse, toggle] = Function("studioNavigatorIsCompact", "studioNavigatorIsOpen", "studioNavigatorIsMcpDocked", "studioNavigator", "studioNavigatorToggle", "setStudioNavigatorOpen",
+    `${functionSource(navigator,"collapseStudioNavigatorForWorkspaceFocus")}\n${functionSource(navigator,"toggleStudioWorkspaceNavigator")}\nreturn [collapseStudioNavigatorForWorkspaceFocus,toggleStudioWorkspaceNavigator];`)(
+    () => compact, () => open, () => false,
+    { contains:target => target === panel }, { contains:target => target === original, dataset:{} }, value => { open = value; });
+  const click = target => {
+    collapse({ target, type:"pointerdown" });
+    collapse({ target, type:"focusin" });
+    toggle();
+  };
+  click(nestedIcon); assert.equal(open,true);
+  click(nestedIcon); assert.equal(open,false);
+  click(nestedIcon); assert.equal(open,true);
+  assert.equal(collapse({ target:panel }),false); assert.equal(open,true);
+  assert.equal(collapse({ target:original }),false); assert.equal(open,true);
+  assert.equal(collapse({ target:outside }),true); assert.equal(open,false);
+  open = true; compact = false;
+  assert.equal(collapse({ target:outside }),false); assert.equal(open,true);
+  toggle(); assert.equal(open,false);
 });
 
 test("Studio navigator groups recent Agent sessions by canvas and opens the bound canvas first", () => {

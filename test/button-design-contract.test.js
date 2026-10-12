@@ -16,7 +16,7 @@ const ALLOWED_BUTTONS = new Set([
 test("every static product button uses a defined PenEcho control contract", () => {
   const html = read("public/index.html"), { document } = parseHTML(html);
   // These controls are styled by their owning Studio component.
-  const componentControls = "#canvasDocumentSaveState,#aiToolbarRun,#penSizeTrigger,#studioNavigatorOpenToggle,#studioNavigatorOpenMore,#studioNavigatorNewChat,#canvasAutoPausedNotice,#mcpStatusFollow,#mcpStatusConnect,#mcpStatusSettings,#mcpStatusPower,#canvasWelcomeDraw,#canvasWelcomeAgent,#canvasWelcomeMcp,#canvasAgentSignIn,[data-shell-forward],[data-effort],[data-grid-style]";
+  const componentControls = "#canvasDocumentSaveState,#aiToolbarRun,#penSizeTrigger,#studioNavigatorOpenToggle,#studioNavigatorOpenMore,#studioNavigatorNewChat,#canvasAutoPausedNotice,#mcpStatusFollow,#mcpStatusConnect,#mcpStatusSettings,#mcpStatusPower,#canvasWelcomeDraw,#canvasWelcomeAgent,#canvasWelcomeMcp,#canvasAgentSignIn,#companionRail button,#companionCanvasTarget,[data-shell-forward],[data-effort],[data-grid-style]";
   const uncovered = [];
   for (const button of document.querySelectorAll("button")) {
     if (["aiOrb","canvasAgentSend","canvasAgentStop"].includes(button.id)) continue;

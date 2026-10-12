@@ -12,24 +12,41 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 test("diagram runtime exposes the exact source-first capability registry", () => {
   assert.deepEqual(runtime.FORMATS.map((format) => format.id), [
-    "dot",
     "bpmn-xml",
     "vega-lite",
     "geojson",
     "smiles",
-    "cytoscape-json",
   ]);
-  assert.equal(runtime.normalizeFormat("Graphviz DOT"), "dot");
   assert.equal(runtime.normalizeFormat("BPMN"), "bpmn-xml");
   assert.equal(runtime.normalizeFormat("PlantUML"), "");
 });
 
-test("diagram runtime generates an isolated lazy renderer document", () => {
+test("saved Cytoscape sources render without reopening the new-diagram capability", () => {
+  for (const format of ["cytoscape-json", "cytoscape", "cytoscape-elements-json"]) {
+    assert.equal(runtime.supports(format), false, format);
+    assert.equal(runtime.normalizeFormat(format), "", format);
+  }
+  const source = '{"elements":[{"data":{"id":"a","label":"A"}}]}', html = runtime.documentFor({ sourceFormat:"cytoscape-json", source, title:"Saved network" });
+  assert.match(html, /cytoscape@3\.30\.4/);
+  assert.ok(html.includes(Buffer.from(source,"utf8").toString("base64")));
+  assert.equal(runtime.copyLabel("cytoscape-json"), "Copy Cytoscape JSON");
+});
+
+test("saved Graphviz sources render without reopening the new-diagram capability", () => {
+  for (const format of ["dot", "Graphviz DOT", "graphviz"]) {
+    assert.equal(runtime.supports(format), false, format);
+    assert.equal(runtime.normalizeFormat(format), "", format);
+  }
   const source = "digraph G { Client -> API; }", html = runtime.documentFor({sourceFormat:"dot",source,title:"Client path"});
   assert.match(html, /@viz-js/);
   assert.ok(html.includes(Buffer.from(source,"utf8").toString("base64")));
   assert.match(html, /Client path/);
   assert.doesNotMatch(html, /mermaid@|renderMermaid/);
+  assert.equal(runtime.copyLabel("dot"), "Copy Graphviz DOT");
+  // Canvas AI keeps a legacy format only when refining a saved widget of that format.
+  assert.match(read("src/client/app/ai-runtime.js"), /legacyFormat = widgetEditTarget\?\.widgetType === "diagram_source" && !runtime\?\.supports\(widgetEditTarget\.sourceFormat\)[\s\S]*?runtime\?\.normalizeFormat\(c\.sourceFormat\) \|\| \(legacyFormat && canonicalStoredDiagramFormat\(c\.sourceFormat\) === legacyFormat/);
+  // A host policy without 'wasm-unsafe-eval' must fail fast instead of loading forever.
+  assert.match(html, /WebAssembly\.compile\([\s\S]*?does not allow WebAssembly[\s\S]*?import\("https:\/\/cdn\.jsdelivr\.net\/npm\/@viz-js\/viz@3\.9\.0/);
 });
 
 test("saved Mermaid sources render without reopening the new-diagram capability", () => {

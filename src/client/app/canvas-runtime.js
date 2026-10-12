@@ -1587,7 +1587,9 @@
     }
     if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
     if (runtime === "cloud" || runtime === "viewer") url.searchParams.set("remote-canvas", "1");
-    if ((runtime === "cloud" || runtime === "viewer") && manifest.id === "general") url.searchParams.set("public-https", "1");
+    // General HTML and Professional Diagram renderers load pinned CDN code; data
+    // plugins stay limited to the origins their manifest declares.
+    if ((runtime === "cloud" || runtime === "viewer") && (manifest.id === "general" || manifest.id === "flowchart")) url.searchParams.set("public-https", "1");
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -4873,7 +4875,13 @@
         shared:liveShared,
         baseWidth:28,
         iconOnly:true,
-        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
+        activate:() => {
+          const note = typeof noteCardWidget === "function" && noteCardWidget(widget) ? noteCardSource(widget) : null;
+          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{
+            action:"share", widgetId:widget.id, title:String(note?.title || widget.title || ""),
+            ...(note ? { noteKind:note.style === "card" ? "card" : "note" } : {}),
+          } }));
+        },
       });
     }
     if (options.download) items.push({

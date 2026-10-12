@@ -19,12 +19,18 @@ function harness({activeId="source", widgets=[note("widget-1", "note-a")], recor
 }
 test("sharing the selected library note reuses its Widget action without editing source",async()=>{
   const h=harness(),before=JSON.stringify(h.state);
-  await h.run();
+  await h.run({note:{title:"Cell membranes",style:"card"}});
   assert.equal(JSON.stringify(h.state),before);
   assert.equal(h.events.length,1);
   assert.equal(h.events[0].type,"penecho:community-widget-action");
-  assert.deepEqual(JSON.parse(JSON.stringify(h.events[0].detail)),{action:"share",widgetId:"widget-1"});
+  assert.deepEqual(JSON.parse(JSON.stringify(h.events[0].detail)),{action:"share",widgetId:"widget-1",title:"Cell membranes",noteKind:"card"});
   assert.equal(h.noteCards.panel,null);
+});
+test("the share dialog label follows the note kind and tolerates an untitled entry",async()=>{
+  const work=harness();await work.run({note:{title:"Weekly sync",style:"note"}});
+  assert.deepEqual(JSON.parse(JSON.stringify(work.events[0].detail)),{action:"share",widgetId:"widget-1",title:"Weekly sync",noteKind:"note"});
+  const untitled=harness();await untitled.run();
+  assert.deepEqual(JSON.parse(JSON.stringify(untitled.events[0].detail)),{action:"share",widgetId:"widget-1",title:"",noteKind:"note"});
 });
 test("a parked source is restored before resolving colliding Widget ids",async()=>{
   const h=harness({activeId:"other",records:["source"],widgets:[note("widget-1","private-other-note")],show:async()=>{

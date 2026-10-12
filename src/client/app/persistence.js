@@ -325,7 +325,8 @@
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
-    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
+    // Every guest save entry (button, Mod+S, menu) resumes the save after sign-in.
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn({ intent:"save" });return;}
     const location = state.currentSnapshotLocation || (window.PENECHO_CONFIG?.browserCanvasEditing ? "cloud" : state.snapshotLocation),
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
@@ -1310,7 +1311,9 @@
     if (!SNAPSHOT_LOCATIONS.has(location)) throw Error("Invalid snapshot location");
     if (overwriteId && state.currentSnapshotLocation !== location) throw Error(t("noCurrentSnapshot"));
     await finalizeCanvasForSnapshot();
-    if (!allowEmpty && !tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    // Restored Widget source is saveable content even while its renderer or
+    // plugin manifest is still loading after an authentication round trip.
+    if (!allowEmpty && !tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !state.widgets.length) {
       setStatusKey("emptyCanvas");
       return null;
     }
@@ -1472,12 +1475,25 @@
     };
   }
   async function readCloudSnapshot(id, onProgress = null) {
-    const response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+    const early = window.PENECHO_CONFIG?.runtime === "cloud"
+      && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true
+      && !window.PENECHO_CONFIG?.browserDraftId ? window.PenEchoEarlyCloudSnapshot : null;
+    let response = null;
+    if (early?.id === id) {
+      // Taking clears the unused-read timeout before consuming the response body.
+      const pending = early.take();
+      if (pending) {
+        try { response = await pending; } catch {}
+      }
+    } else early?.cancel();
+    // Only a network rejection of the early request retries here. HTTP failures
+    // keep their response and follow the existing authorization/error handling.
+    if (!response) response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
-      }),
-      body = await snapshotApiResponse(response, onProgress);
+      });
+    const body = await snapshotApiResponse(response, onProgress);
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
       metadata = {...snapshotItems.find((item) => item.id === id),...(body.canvas?.id===id ? body.canvas : {})};

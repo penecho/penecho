@@ -1,0 +1,172 @@
+/* Example canvases: welcome cards, the examples dialog, the coachmark beside
+   the highlighted suggestion and the result bar. Uses the PenEcho tokens. */
+
+/* Welcome: examples lead, the three start actions become a compact row. */
+body[data-theme="studio"] .canvas-welcome-examples {
+  display: grid;
+  width: min(760px, 100%);
+  gap: 10px;
+  margin-top: 18px;
+  text-align: left;
+  pointer-events: auto;
+}
+body[data-theme="studio"] .canvas-welcome-examples[hidden] { display: none; }
+.canvas-welcome-examples-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.canvas-welcome-examples-head > span:first-child { color: var(--pe-ink, #20242c); font-size: 13px; font-weight: 600; line-height: 1.3; }
+.canvas-welcome-examples-progress { color: var(--pe-ink-3, #626b78); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.canvas-welcome-examples-head > button { margin-left: auto; }
+.canvas-welcome-example-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) { padding-bottom: clamp(40px, 6vw, 120px); }
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) .canvas-welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) .canvas-welcome-actions > :is(#pe-button-contract, button) {
+  flex-direction: row;
+  align-items: center;
+  min-height: 0;
+  height: 32px;
+  gap: 8px;
+  padding: 0 12px 0 6px;
+  border-radius: 8px;
+}
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) .canvas-welcome-actions > :is(#pe-button-contract, button) > svg { width: 22px; height: 22px; flex-basis: 22px; margin: 0; padding: 4px; }
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) .canvas-welcome-actions > button > strong { font-size: 13px; white-space: nowrap; }
+body[data-theme="studio"] .canvas-welcome:has(> .canvas-welcome-examples:not([hidden])) .canvas-welcome-actions > button > :is(span, kbd, .welcome-link) { display: none; }
+
+/* Goal picker: a segmented control; the pressed goal reorders the examples. */
+.example-goals { display: inline-flex; flex-wrap: wrap; justify-self: start; gap: 2px; padding: 2px; border-radius: var(--pe-control-radius, 5px); background: var(--pe-surface-muted, #f2f3f6); }
+.example-goals > button { height: 26px; padding: 0 10px; color: var(--pe-ink-2, #4e5764); border: 0; border-radius: 4px; background: transparent; font: 500 12.5px/26px var(--pe-font-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif); cursor: pointer; }
+.example-goals > button:hover { color: var(--pe-ink, #20242c); }
+.example-goals > button[aria-pressed="true"] { color: var(--pe-ink, #20242c); background: var(--pe-surface, #ffffff); box-shadow: 0 1px 2px rgba(17, 24, 39, .12); }
+.example-goals > button:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: 1px; }
+
+/* One example: a drawing of its own ink, then what you get to try. */
+.example-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--pe-ink, #20242c);
+  border: 1px solid var(--pe-line, rgba(31, 36, 45, .14));
+  border-radius: 10px;
+  background: var(--pe-surface, #ffffff);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.example-card[hidden] { display: none; }
+.example-card:hover { border-color: var(--pe-line-strong, rgba(31, 36, 45, .22)); }
+.example-card:focus-visible { outline: 0; border-color: var(--pe-accent, #4f46e5); box-shadow: 0 0 0 2px var(--pe-accent-focus, rgba(79, 70, 229, .28)); }
+.example-card-preview { display: flex; height: 64px; align-items: center; justify-content: center; padding: 8px 12px; box-sizing: border-box; background: var(--pe-surface-muted, #f2f3f6); }
+.example-card-preview svg { width: 100%; height: 100%; fill: none; stroke: var(--pe-ink, #20242c); stroke-width: 1.6px; stroke-linecap: round; stroke-linejoin: round; }
+.example-card-preview img { width: 100%; height: 100%; object-fit: cover; object-position: top; border-radius: 4px; }
+.example-card[data-tried="true"] .example-card-preview :is(svg, img) { opacity: .55; }
+.example-card-copy { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; min-width: 0; }
+.example-card-copy > strong,
+body[data-theme="studio"] .canvas-welcome .example-card-copy > strong { color: var(--pe-ink, #20242c); font-size: 13px; font-weight: 500; line-height: 1.3; letter-spacing: normal; text-wrap: auto; }
+.example-card-copy > span { display: -webkit-box; overflow: hidden; color: var(--pe-ink-3, #626b78); font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.example-card-meta { margin-top: 4px; color: var(--pe-ink-3, #626b78); font-size: 11.5px; font-weight: 500; }
+.example-card[data-tried="true"] .example-card-meta { color: var(--pe-success, #277a4c); }
+
+@media (max-width: 900px) {
+  .canvas-welcome-example-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  body[data-theme="studio"] .canvas-welcome-examples { margin-top: 10px; }
+  .canvas-welcome-examples-progress { display: none; }
+  .canvas-welcome-example-list .example-card-copy > span { display: none; }
+}
+
+/* Navigator footer shows progress next to its Examples entry. */
+.example-nav-progress { margin-left: auto; color: var(--pe-ink-3, #626b78); font-size: 11px; font-weight: 500; }
+
+/* Examples dialog. */
+.examples-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
+  padding: 0;
+  overflow: auto;
+  color: var(--pe-ink, #20242c);
+  border: 1px solid var(--pe-line-strong, rgba(31, 36, 45, .22));
+  border-radius: 16px;
+  background: var(--pe-surface, #ffffff);
+  box-shadow: 0 14px 30px rgba(17, 24, 39, .2);
+}
+.examples-dialog::backdrop { background: rgba(0, 0, 0, .22); }
+.examples-dialog-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: 16px; padding: 20px 20px 12px; }
+.examples-dialog-copy h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; line-height: 1.3; }
+.examples-dialog-copy p { margin: 0; max-width: 56ch; color: var(--pe-ink-2, #4e5764); font-size: 13px; line-height: 1.45; }
+.examples-dialog-progress { display: grid; gap: 6px; padding-top: 4px; color: var(--pe-ink-2, #4e5764); font-size: 11.5px; font-weight: 500; }
+.examples-dialog-progress progress { width: 160px; height: 3px; border: 0; border-radius: 2px; background: var(--pe-surface-pressed, #e9ebef); appearance: none; }
+.examples-dialog-progress progress::-webkit-progress-bar { border-radius: 2px; background: var(--pe-surface-pressed, #e9ebef); }
+.examples-dialog-progress progress::-webkit-progress-value { border-radius: 2px; background: var(--pe-accent, #4f46e5); }
+.examples-dialog-progress progress::-moz-progress-bar { border-radius: 2px; background: var(--pe-accent, #4f46e5); }
+.examples-dialog > .example-goals { margin: 0 20px 14px; }
+.examples-dialog-list { display: grid; gap: 18px; padding: 0 20px 20px; }
+.examples-dialog-group h3 { margin: 0 0 8px; color: var(--pe-ink-2, #4e5764); font-size: 12px; font-weight: 600; line-height: 1.3; }
+.examples-dialog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); gap: 12px; }
+.examples-dialog-list .example-card-preview { height: 84px; }
+@media (max-width: 620px) {
+  .examples-dialog-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .examples-dialog-progress { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Coachmark beside the highlighted suggestion. Positioned by the app. */
+.example-coach {
+  position: fixed;
+  z-index: 70;
+  width: min(300px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  color: var(--pe-ink, #20242c);
+  border: 1px solid var(--pe-line, rgba(31, 36, 45, .14));
+  border-radius: 10px;
+  background: var(--pe-surface, #ffffff);
+  box-shadow: 0 6px 14px rgba(17, 24, 39, .14);
+}
+.example-coach[hidden] { display: none; }
+.example-coach-arrow { position: absolute; left: calc(var(--example-coach-arrow, 40px) - 6px); width: 12px; height: 12px; background: inherit; border: inherit; transform: rotate(45deg); }
+.example-coach[data-placement="bottom"] .example-coach-arrow { top: -7px; border-right: 0; border-bottom: 0; }
+.example-coach[data-placement="top"] .example-coach-arrow { bottom: -7px; border-top: 0; border-left: 0; }
+.example-coach:is([data-placement="left"], [data-placement="right"], [data-placement="center"]) .example-coach-arrow { display: none; }
+.example-coach-kicker { display: block; margin-bottom: 4px; color: var(--pe-accent-label, #3730a3); font-size: 11.5px; font-weight: 600; }
+.example-coach h2 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.example-coach p { margin: 0; color: var(--pe-ink-2, #4e5764); font-size: 12.5px; line-height: 1.45; }
+.example-coach p + p { margin-top: 6px; color: var(--pe-ink-3, #626b78); font-size: 11.5px; }
+.example-coach-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+
+/* Result bar: what was learned, then the next example or your own canvas. */
+.example-done {
+  position: fixed;
+  z-index: 60;
+  top: calc(var(--studio-toolbar-height, 48px) + 12px);
+  left: 50%;
+  display: flex;
+  width: min(680px, calc(100vw - 32px));
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  color: var(--pe-ink, #20242c);
+  border: 1px solid var(--pe-line-strong, rgba(31, 36, 45, .22));
+  border-radius: 10px;
+  background: var(--pe-surface, #ffffff);
+  box-shadow: 0 6px 14px rgba(17, 24, 39, .14);
+  transform: translateX(-50%);
+}
+.example-done[hidden] { display: none; }
+.example-done-copy { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.example-done-copy strong { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.example-done-copy span { color: var(--pe-ink-2, #4e5764); font-size: 12px; line-height: 1.4; }
+.example-done-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+@media (max-width: 700px) {
+  .example-done { flex-wrap: wrap; }
+  .example-done-actions { width: 100%; justify-content: flex-end; }
+}
+html.viewer-mode :is(.example-coach, .example-done) { display: none; }

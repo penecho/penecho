@@ -10,6 +10,29 @@
     if (element) element.dataset.peHit = "choice";
     return element;
   }
+  // An AI client opened this Canvas beside its conversation (mode=companion).
+  // Minimal and full views present the same document in this tab. The choice
+  // lives in sessionStorage only and never changes stored Canvas preferences.
+  const CANVAS_COMPANION_REQUESTED = (() => {
+    try { return window.PENECHO_CONFIG?.runtime !== "viewer" && new URLSearchParams(location.search).get("mode") === "companion"; }
+    catch { return false; }
+  })();
+  function canvasCompanionViewKey() {
+    return `penecho-companion-view:${window.PENECHO_CONFIG?.browserDraftId || location.pathname}`;
+  }
+  let canvasCompanionView = "";
+  if (CANVAS_COMPANION_REQUESTED) {
+    try { canvasCompanionView = sessionStorage.getItem(canvasCompanionViewKey()) === "full" ? "full" : "minimal"; }
+    catch { canvasCompanionView = "minimal"; }
+    document.documentElement.dataset.penechoCompanion = canvasCompanionView;
+  }
+  function canvasCompanionMinimal() {
+    return canvasCompanionView === "minimal";
+  }
+  function canvasGuestAiRestricted() {
+    return window.PENECHO_CONFIG?.guestCanvas === true;
+  }
+  if (canvasGuestAiRestricted()) document.documentElement.dataset.penechoGuestAi = "true";
   const SIZE = 20000,
     TILE = 512,
     DIRTY_MASK_SCALE = 0.25,
@@ -1121,6 +1144,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintShortcutFullscreen: "{shortcut} Toggle fullscreen",
       canvasHintShortcutSettings: "{shortcut} Open Settings",
       canvasHintMcp: "Settings → MCP: connect an AI client.",
+      canvasHintGuestAi: "Draw freely. Sign in to use AI.",
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
       canvasHintHand: "Drag to pan · click an object to select",
       canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
@@ -2222,10 +2246,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selection: null,
       selectionGesture: null,
       hotspotTrail: [],
-      auto: initialAutoEnabled,
+      // Anonymous drafts never run PenEcho AI. Signed-in companion views keep
+      // normal AI preferences, without opening the Agent panel on arrival.
+      autoPreference: initialAutoEnabled,
+      get auto() { return this.autoPreference && !canvasGuestAiRestricted(); },
+      set auto(value) { this.autoPreference = Boolean(value); },
       summonEnabled: initialSummonEnabled,
       canvasHintsEnabled: initialCanvasHintsEnabled,
-      canvasAgentAutoOpen: initialCanvasAgentAutoOpen,
+      canvasAgentAutoOpenPreference: initialCanvasAgentAutoOpen,
+      get canvasAgentAutoOpen() { return this.canvasAgentAutoOpenPreference && !canvasCompanionMinimal(); },
+      set canvasAgentAutoOpen(value) { this.canvasAgentAutoOpenPreference = Boolean(value); },
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
@@ -2494,6 +2524,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         content.append(keycap);
       } else content.append(part);
     }
+    if (state.canvasHintKey === "canvasHintGuestAi") {
+      const signIn = document.createElement("button");
+      signIn.type = "button";
+      signIn.className = "canvas-hint-signin";
+      signIn.textContent = state.language === "zh" ? "登录" : "Sign in";
+      signIn.addEventListener("click", () => void window.PenEchoBrowserDraft?.signIn());
+      content.append(signIn);
+    }
     canvasHint.replaceChildren(content);
     if (restart) syncCanvasHintVisibility(true);
   }
@@ -2509,6 +2547,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.canvasHintKey = choice.key;
     state.canvasHintValues = choice.values || null;
     renderCanvasHint(true);
+  }
+  let canvasGuestAiHintSeen = false;
+  function showCanvasGuestAiHint({ explicit = false } = {}) {
+    if (!canvasGuestAiRestricted()) return false;
+    if (explicit || !canvasGuestAiHintSeen) {
+      canvasGuestAiHintSeen = true;
+      showCanvasHint("canvasHintGuestAi");
+    }
+    return true;
   }
   let lassoFirstUseHintSeen = false;
   function showLassoGuidance(key) {
@@ -2864,7 +2911,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function maybeStartFeatureTour(retry = false) {
-    if(window.PENECHO_CONFIG?.browserDraftId)return false;
+    if(window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)return false;
     if (featureTour.active || changelog.active || (featureTour.autoChecked && !retry)) return false;
     featureTour.autoChecked = true;
     const progress = readFeatureTourProgress(),
@@ -2919,7 +2966,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } catch {}
   }
   function maybeShowChangelog(force = false) {
-    if(window.PENECHO_CONFIG?.browserDraftId&&!force)return false;
+    if((window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)&&!force)return false;
     if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
     hideAutoDelayControl();
     hideEffortControl();
@@ -4001,12 +4048,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateSettingsPanel() {
     if (!settingsPanel) return;
     selectSettingsPage(settings.activePage);
-    settingsAutoToggle.classList.toggle("on", state.auto);
-    settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    settingsAutoToggle.classList.toggle("on", state.autoPreference);
+    settingsAutoToggle.setAttribute("aria-checked", String(state.autoPreference));
     settingsCanvasHintsToggle.classList.toggle("on", state.canvasHintsEnabled);
     settingsCanvasHintsToggle.setAttribute("aria-checked", String(state.canvasHintsEnabled));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
@@ -4071,9 +4118,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function setCanvasAgentAutoOpen(enabled) {
     state.canvasAgentAutoOpen = Boolean(enabled);
-    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpen));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
+    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpenPreference));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
   }
   function setCanvasHintsEnabled(enabled) {
     state.canvasHintsEnabled = Boolean(enabled);
@@ -4117,8 +4164,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       delaySelect.value = seconds;
     }
     if (settingsAutoToggle) {
-      settingsAutoToggle.classList.toggle("on", state.auto);
-      settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+      settingsAutoToggle.classList.toggle("on", state.autoPreference);
+      settingsAutoToggle.setAttribute("aria-checked", String(state.autoPreference));
     }
   }
   function positionToolbarPopover(controlSelector, popoverSelector, options) {

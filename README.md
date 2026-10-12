@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-<h1 align="center">Think on a canvas, with any AI.</h1>
+<h1 align="center">AI that shows, not just tells.</h1>
 
-<p align="center">Sketch by hand. PenEcho's built-in Agent — or Codex, Claude Code and any MCP<br>client — turns it into diagrams, documents and working widgets right beside your<br>notes.</p>
+<p align="center">Bring a question, a sketch, or your notes. PenEcho's built-in AI — or Codex, Claude Code and any MCP client — shows you the answer as diagrams, documents and working widgets, right beside your work.</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Join Discord"></a>
@@ -139,13 +139,34 @@ Keep talking in the agent you already use. PenEcho gives the work a place to liv
 
 3. Ask: *“Show the architecture we discussed on my PenEcho canvas.”*
 
+### Cloud Canvas beside your chat: one paste, no install
+
+Paste this into Claude Code, Codex, Cursor or another MCP agent:
+
+```text
+Set up PenEcho Canvas for me:
+1. Download https://penecho.ai/downloads/penecho-cloud-plugin.zip, unzip it, and follow its INSTALL.md for the app you are running in.
+2. Add the PenEcho MCP server https://penecho.ai/mcp. If it needs authorization, open the authorization page once; I'll choose "Continue as guest".
+3. Confirm the PenEcho tools respond, then tell me it's ready.
+From now on, when I ask you to draw, diagram or show something on a canvas, use PenEcho and open the canvas beside our chat.
+```
+
+Then just ask:
+
+- *“Draw this project's architecture on the canvas.”*
+- *“Turn our login flow into a sequence diagram on the canvas.”*
+- *“Make an interactive binary-search demo on the canvas.”*
+- *“Read my handwritten notes on the canvas and revise the diagram.”*
+
+The canvas opens beside your chat: in Codex's right panel, the Claude desktop browser pane, or your default browser. No account is needed; choose **Continue as guest** if asked. Sign in only when you want to save to Cloud. MCP uses no PenEcho credits. Claude Chat and Cowork install through the app's own plugin upload or connector settings ([`.plugin` file](integrations/penecho-cloud/penecho-cloud.plugin)). See [installation details](integrations/penecho-cloud/INSTALL.md).
+
 <p align="center">
   <a href="docs/assets/mcp-spatial-example.webp"><img src="docs/assets/mcp-spatial-example.webp" alt="An architecture discussion from Claude Code with handwritten annotations on a PenEcho canvas" width="760"></a>
 </p>
 <p align="center"><em>An architecture discussion from Claude Code, annotated by hand on the canvas.</em></p>
 
 > [!NOTE]
-> Agents only see canvases you turn on. Local MCP stays on your computer; Cloud MCP is a separate signed-in connection for Cloud canvases. [MCP guide →](docs/mcp-setup.md)
+> Agents only see canvases you turn on. Local MCP stays on your computer; Cloud MCP uses separate OAuth authorization and supports guest browser drafts. [MCP guide →](docs/mcp-setup.md)
 
 ## Diagram gallery
 

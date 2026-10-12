@@ -87,12 +87,14 @@
   // Local Assist (instant predictions, shapes, tools) needs only the setting;
   // PenEchoLLM re-ranking additionally needs a configured relay.
   function smartSuggestActive() {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return false;
     return Boolean(SMART_SUGGEST && smartSuggestLayer && (smartSuggest.enabled || state.selection?.phase === "active"));
   }
   function smartSuggestRemote() {
     return smartSuggest.enabled && smartSuggestActive() && smartSuggest.available && !suggestionAccessBlocked();
   }
   function suggestionAccessBlocked() {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return true;
     const access=smartSuggest.access;
     return Boolean(access?.reason && (!access.resetsAt || access.resetsAt>Date.now()));
   }
@@ -1047,7 +1049,8 @@
   }
   // The user's own tap on ordinary ink counts twice as much as a ranking.
   function assistLearnInstantTap(id, target) {
-    if (!id || !target || target.selection || target.followUp || target.accept || target.deletion || target.widgetRefine) return;
+    // Example canvases highlight a chosen action; those taps are not preferences.
+    if (!id || !target || target.selection || target.followUp || target.accept || target.deletion || target.widgetRefine || target.example) return;
     const cluster = smartSuggestCluster();
     if (!cluster || cluster.selection || cluster.result || cluster.strokes?.at(-1)?.id !== target.strokes?.at(-1)?.id) return;
     assistLearnInstant(cluster, { [id]:1 }, 2);
@@ -1336,7 +1339,8 @@
     const deletion = assistDeletionDetails(cluster), widgetRefine = assistWidgetRefineTarget(cluster);
     const view = {...assistAnswerView(SMART_SUGGEST.rankActions({ local, answers:jev?.answers, cooldown:smartSuggest.cooldown, now:performance.now(), exclude:[...(analysis.rough.length && !deletion && !widgetRefine ? [] : ["snap_shapes"]), ...(widgetRefine ? [] : ["refine"])] })),routing,deletion,widgetRefine};
     view.noteScope = assistNoteScope(cluster);
-    return view;
+    // Example canvases lead with, and highlight, the action they teach.
+    return typeof exampleCanvasesAssistView === "function" ? exampleCanvasesAssistView(view, cluster) : view;
   }
   function assistSuggestBlocked() {
     const selected = smartSuggest.selection && smartSuggest.selection === state.selection && state.selection.phase === "active";
@@ -2292,6 +2296,8 @@
       target = assistFollowUpTarget(target.previous, target.box);
       target.routing = routing;
     }
+    // An example canvas may run its own action, such as its known graph.
+    if (action && typeof exampleCanvasesActionStarted === "function" && await exampleCanvasesActionStarted(id, target)) return;
     if (!action) return;
     if (typeof assistLearnInstantTap === "function") assistLearnInstantTap(id, target);
     if (id === "refine") { executeAssistWidgetRefinement(target.widgetRefine); return; }
@@ -2613,6 +2619,7 @@
     return Number.isFinite(until) ? Math.max(now, until) : 0;
   }
   function refreshSmartSuggestAvailability({ force = false, reason = "manual" } = {}) {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return Promise.resolve();
     const explicit = force || reason === "manual" || reason === "input" && smartSuggest.enabled, availability = smartSuggest.availability, now = Date.now(),
       retryUnavailable = explicit && !smartSuggest.available;
     if (!SMART_SUGGEST || document.visibilityState === "hidden" || (!smartSuggest.enabled && !explicit && reason !== "init" && reason !== "account" && !(reason === "visible" && !availability.checkedAt))) return Promise.resolve();

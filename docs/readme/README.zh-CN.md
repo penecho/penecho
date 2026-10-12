@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-<h1 align="center">在画布上思考，与任何 AI 协作。</h1>
+<h1 align="center">不只告诉你，更让你看明白。</h1>
 
-<p align="center">随手画下想法。PenEcho 内置 Agent，或 Codex、Claude Code 及任何 MCP 客户端，都能在笔记旁生成图表、文档和可运行的组件。</p>
+<p align="center">带上一个问题、一张草图或几行笔记。PenEcho 内置 AI，或 Codex、Claude Code 及任何 MCP 客户端，都会在旁边用图表、文档和可操作的组件，把答案展示给你看。</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>
@@ -138,6 +138,27 @@ npm start
    ```
 
 3. 试着说：*“把刚才讨论的架构展示到我的 PenEcho 画布上。”*
+
+### 云端画布：粘贴一次，无需安装
+
+把下面这段话粘贴到 Claude Code、Codex、Cursor 或其他 MCP Agent：
+
+```text
+请帮我安装 PenEcho 画布：
+1. 下载 https://penecho.ai/downloads/penecho-cloud-plugin.zip，解压后按其中 INSTALL.md 的说明，为你当前所在的应用完成安装。
+2. 添加 PenEcho MCP 服务 https://penecho.ai/mcp。如需授权，打开一次授权页面，我会选择「以访客身份继续」。
+3. 确认 PenEcho 工具可以正常调用后告诉我。
+之后当我让你在画布上画图、做图解或演示时，请使用 PenEcho，并在对话旁边打开画布。
+```
+
+然后直接说：
+
+- *“在画布上画出这个项目的架构图。”*
+- *“把登录流程画成时序图，放到画布上。”*
+- *“在画布上做一个可以操作的二分查找演示。”*
+- *“读一下我在画布上的手写批注，然后修改这张图。”*
+
+画布会在对话旁边打开：Codex 的右侧面板、Claude 桌面版的浏览器面板，或你的默认浏览器。无需注册账号，需要授权时选择**以访客身份继续**即可；只有想保存到云端时才需要登录。MCP 不消耗 PenEcho 积分。[安装说明 →](../../integrations/penecho-cloud/INSTALL.md)
 
 <p align="center"><a href="../assets/mcp-spatial-example.webp"><img src="../assets/mcp-spatial-example.webp" alt="与 AI 讨论架构，在 PenEcho 画布上并排查看方案并用手写标注提出反馈" width="760"></a></p>
 <p align="center"><em>Claude Code 讨论的架构，可在画布上直接手写批注。</em></p>

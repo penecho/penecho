@@ -23,3 +23,20 @@ test("the shared command input carries authoritative attention and native plot g
   assert.match(prompt.activeSystemPrompt(),/Never use JavaScript code, Math.sin, Math.PI/);
   assert.deepEqual(JSON.parse(prompt.modelRequestText(input)).latestInput,input.latestInput);
 });
+
+test("the shared command result renders software structure graphs locally and refuses retired diagram formats",()=>{
+  const payload={userAction:"plot",suggestion:"diagram",uiTheme:"studio",changedBox:{x:80,y:120,w:600,h:400},sourceRect:{x:0,y:0,w:2000,h:1500},visibleRect:{x:0,y:0,w:4000,h:3000},captureRect:{x:0,y:0,w:2000,h:1500},atlasSize:{w:2000,h:1500},imageScale:1,plugins:[{id:"general",name:"General",document:"test"},{id:"flowchart",name:"Professional Diagrams",document:"test"}]},
+    geometry={x:100,y:100,w:1400,h:900},
+    run=command=>prompt.canvasCommandResult({intent:"plot",commands:[command]},payload).commands,
+    dependencies={version:1,title:"Service dependencies",nodes:[{id:"web",label:"Web",type:"frontend"},{id:"orders",label:"Orders"},{id:"pg",label:"Postgres",type:"database"},{id:"kafka",label:"Kafka",type:"messagebus"}],edges:[{from:"web",to:"orders"},{from:"orders",to:"pg",kind:"data"},{from:"orders",to:"kafka",label:"events"}]};
+  const [built]=run({tool:"html_widget",pluginId:"general",...geometry,title:"Service dependencies",architecture:dependencies});
+  assert.equal(built.pluginId,"general");
+  assert.equal(built.html,require("../src/architecture/schema.js").architectureHtml(dependencies));
+  for(const sourceFormat of ["dot","Graphviz DOT","cytoscape-json","cytoscape"])
+    assert.deepEqual(run({tool:"diagram_source",pluginId:"flowchart",...geometry,title:"Graph",sourceFormat,source:"{}"}),[],sourceFormat);
+  assert.equal(run({tool:"diagram_source",pluginId:"flowchart",...geometry,title:"Chart",sourceFormat:"vega-lite",source:'{"mark":"bar"}'})[0].sourceFormat,"vega-lite");
+  const system=prompt.activeSystemPrompt(false,false,true);
+  assert.match(system,/# Local diagram contract[\s\S]*?service or module dependency graph, a network or deployment topology, a data flow or data lineage graph/);
+  assert.match(system,/biological pathways or causal and clinical networks, are not local diagrams: use the Visual Explainer route, or General HTML with inline SVG here/);
+  assert.match(system,/Dependency graphs point each edge from the dependent to its dependency[\s\S]*?Lineage uses database nodes for datasets and tables/);
+});

@@ -35,6 +35,7 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/mcp-runtime.js",
     "src/client/app/document-identity.js",
     "src/client/app/canvas-documents.js",
+    "src/client/app/companion-canvases.js",
     "src/client/app/studio-navigator.js",
     "src/client/app/keyboard-shortcuts.js",
     "src/client/app/canvas-navigation.js",
@@ -47,6 +48,7 @@ test("the browser application preserves its ordered source dependencies", () => 
     "src/client/app/pen-intelligence.js",
     "src/client/app/canvas-index.js",
     "src/client/app/note-cards.js",
+    "src/client/app/example-canvases.js",
     "src/client/app/living-ink.js",
     "src/client/app/ui-bootstrap.js",
   ]);

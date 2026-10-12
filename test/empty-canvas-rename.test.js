@@ -242,6 +242,8 @@ function namedCanvasCopyHarness(location) {
     currentSnapshotHasExplicitName: true,
   });
   const widget = { id: "lesson", html: "<p>Lesson content</p>", x: 100, y: 100, w: 400, h: 400 };
+  // Widget source in state is saveable even before its renderer is visible.
+  h.state.widgets = [widget];
   h.context.visibleWidgets = () => [widget];
   h.context.serializedWidgets = () => [widget];
   return { ...h, original, widget };
@@ -485,7 +487,7 @@ test("a Cloud URL reload uses authoritative title metadata even without a Librar
 
 test('saving retains Widget source when preview capture is unavailable',async()=>{
  const h=harness(),widget={id:'animated-widget',html:'<canvas></canvas>',x:100,y:100,w:400,h:400};
- h.context.visibleWidgets=()=>[widget];h.context.serializedWidgets=()=>[widget];
+ h.state.widgets=[widget];h.context.visibleWidgets=()=>[widget];h.context.serializedWidgets=()=>[widget];
  h.context.prepareVisibleWidgetSnapshots=async(region,bestEffort)=>{
   if(!bestEffort)throw Error('snapshot timed out');
   return {total:1,captured:0,missing:1};

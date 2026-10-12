@@ -1,5 +1,13 @@
 # PenEcho MCP setup / 轻量 CLI 连接配置
 
+
+## Automatic Cloud companion workflow
+
+For the Cloud plugin, the default is `penecho_open_workspace` with one stable conversation `sessionKey`, followed by opening its returned single-use URL in the host's embedded side browser when available. Preserve `mode=companion`. If already connected, reuse the tab. Poll `penecho_workspace_status` with bounded retries and pass its exact `startSession` target to `penecho_start_session`; never select the latest unrelated browser. Guests can edit without a PenEcho account. Save opens account registration/sign-in in the same browser and resumes that explicit save once, preserving the document and workspace URL. A normal login does not save automatically. Cancel leaves the local draft intact.
+
+The installable Skill and host-specific packaging live in `integrations/penecho-cloud`. The complete plugin bundles native HTTPS MCP configuration: portable root `mcp.json` declares standard Streamable HTTP and its production URL for Codex, and `.mcp.json` declares native HTTP for Claude/Cursor. Repository catalogs point to this same native plugin directory; Hermes stdio compatibility lives separately under `hermes/portable/`. Native Cloud authorization uses endpoint OAuth discovery; choose OAuth/DCR in the supported submission portal rather than embedding unsupported server auth extensions. The standalone Skill automatically configures a missing connection through the host’s supported setup capability within installation/first-use authorization, then uses normal OAuth. It cannot add browser capabilities to a host. The manual/local connection instructions below apply when the user explicitly chooses that connection. A Cloud server lacking automatic workspace tools requires explicit Canvas selection on that same server; do not silently substitute a local server.
+
+
 PenEcho starts its built-in HTTPS MCP service with the application. The default AI configuration launches a small per-session stdio CLI which forwards directly to this HTTPS server. Each browser registers only after the user enables MCP in Settings. Local, LAN and authorized Linked Device browsers share the same document/session authorization rules. Starting the service does not authorize a browser or document.
 
 PenEcho 随应用启动 HTTPS MCP 服务。各 AI 客户端通过自己的标准 stdio 子进程调用小型 CLI，CLI 直连主机 HTTPS；没有共享 Gateway、开机服务或后台发现进程。浏览器须显式开启 MCP。
@@ -548,8 +556,8 @@ See [the automated acceptance record and commands](mcp-acceptance.md). The live 
 
 ## PenEcho Cloud MCP
 
-After Cloud sign-in, open **Cloud → MCP** (or **Dashboard → MCP**). Copy the standard Streamable HTTP installation prompt, choose OAuth or create a revocable access token, and select **Open MCP Canvas** to open a new page with MCP enabled. Cloud MCP requires no Linked Device; an existing device can connect to the same Canvas through Device Link.
+For automatic companion use, install the complete plugin or use the standalone Skill’s native HTTP setup and normal OAuth; anonymous authorization needs no Dashboard visit. For an explicitly selected manual/account workflow, sign in and open **Cloud → MCP** (or **Dashboard → MCP**), copy the standard Streamable HTTP installation prompt, choose OAuth or a revocable access token, and select **Open MCP Canvas** to open a new page with MCP enabled. Cloud MCP requires no Linked Device; an existing device can connect to the same Canvas through Device Link.
 
 MCP connections and Canvas operations are free and use no PenEcho credits. Paid model execution retains existing pricing. Idle HTTP clients reserve no MCP transport session, active calls are bounded, and browser disconnect recovery preserves document bindings.
 
-UAT endpoint: `https://internaltest.penecho.ai/mcp`. The production endpoint `https://penecho.ai/mcp` requires a separate production deployment.
+UAT endpoint: `https://internaltest.penecho.ai/mcp`. Production uses `https://penecho.ai/mcp`; UAT and production grants/configuration remain separate. A local package or server change is not proof that its matching behavior is deployed. Anonymous identity and refresh retention must align at ten years in the matching release.

@@ -480,6 +480,7 @@ window.PENECHO_LOCALES.zh = {
   canvasHintShortcutFullscreen: "{shortcut} 切换全屏",
   canvasHintShortcutSettings: "{shortcut} 打开设置",
   canvasHintMcp: "设置 → MCP：连接 AI 客户端。",
+  canvasHintGuestAi: "可以自由书写，登录后可使用 AI。",
   canvasHintMcpConnected: "MCP 已连接，AI 可编辑当前画布。",
   canvasHintHand: "拖动平移 · 点击对象可选中",
   canvasHintHandAlt: "{shortcut} 按住可临时平移",

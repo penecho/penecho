@@ -271,6 +271,13 @@
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    if (canvasGuestAiRestricted()) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+      state.autoEligible = false;
+      if (action !== "auto") showCanvasGuestAiHint({ explicit:true });
+      return false;
+    }
     const automatic = action === "auto",
       returnToHand = state.mode === "select" && !state.viewMode && !state.selection
         && !state.pending && !state.pendingWidget && !state.imageEdit && !state.animationEdit;
@@ -1107,7 +1114,9 @@
         if (c.tool === "diagram_source") {
           const runtime = diagramRuntime();
           const geometry = fitWidgetGeometry(c, visibleRect),
-            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || "",
+            // A saved Mermaid or Graphviz widget keeps its format when refined.
+            legacyFormat = widgetEditTarget?.widgetType === "diagram_source" && !runtime?.supports(widgetEditTarget.sourceFormat) ? canonicalStoredDiagramFormat(widgetEditTarget.sourceFormat) : "",
+            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || (legacyFormat && canonicalStoredDiagramFormat(c.sourceFormat) === legacyFormat ? legacyFormat : ""),
             diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "";
           if (widgetSlots <= 0 || !widgetPluginIds.has("flowchart") || c.pluginId !== "flowchart"
             || widgetEditTarget && (widgetEditTarget.pluginId !== "flowchart" || widgetEditTarget.widgetType !== "diagram_source")

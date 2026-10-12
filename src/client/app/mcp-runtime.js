@@ -299,6 +299,13 @@
   }
   function mcpPositionStatusPopover() {
     const panel=mcpEl("mcpStatusPopover"),button=mcpEl("mcpToolbarToggle");if(!panel||!button)return;
+    // The minimal companion view opens status from its left rail instead of the hidden toolbar.
+    const rail=mcpEl("companionRailMcp");
+    if(!button.getClientRects().length&&rail?.getClientRects().length){
+      const anchor=rail.getBoundingClientRect(),left=Math.round(anchor.right+8),top=Math.max(12,Math.round(anchor.top));
+      panel.style.left=`${left}px`;panel.style.top=`${top}px`;panel.style.maxWidth=`${Math.max(220,innerWidth-left-12)}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-top-12)}px`;return;
+    }
+    panel.style.maxWidth="";
     const rect=button.getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
   }
   let mcpStatusOpenAtPointerDown=false;
@@ -631,6 +638,7 @@
   }
   function mcpRenderSettings() {
     if(!mcpRuntime)return;
+    window.PenEchoCompanionCanvases?.changed?.();
     window.PenEchoMcpSettings?.setLocalStatus?.(mcpRuntime.status);
     document.querySelectorAll("[data-mcp-label]").forEach(node=>{const key=node.dataset.mcpLabel,text=mcpText(key);
       node.textContent=text;
@@ -812,7 +820,8 @@
   }
   function mcpRenderToolbar() {
     window.PenEchoMcpSettings?.setConnection({enabled:Boolean(mcpRuntime.wanted),connected:Boolean(mcpRuntime.ready),label:mcpAccessLabel()});
-    window.PenEchoStudioNavigator?.syncMcp?.(Boolean(mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN),{reveal:!mcpRuntime.reconnecting});
+    // The minimal companion view keeps its narrow rail; the navigator opens only on request.
+    window.PenEchoStudioNavigator?.syncMcp?.(Boolean(mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN),{reveal:!mcpRuntime.reconnecting&&!canvasCompanionMinimal()});
     mcpRenderReconnectStatus();
     const button=mcpEl("mcpToolbarToggle");if(!button)return;
     const ui=mcpUiState(),connected=ui.connected,opening=ui.opening,sessions=mcpLiveSessions();
@@ -913,6 +922,12 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   }
   function mcpConnect(reconnecting=false) {
     if(!mcpLocal()||mcpRuntime.pageHidden)return;
+    if(window.PENECHO_CONFIG?.browserDraftId&&typeof canvasDocumentsStartDraft==="function"&&!canvasDocumentsDraft.ready){
+      mcpRuntime.wanted=true;const generation=mcpRuntime.generation;
+      // A scoped Cloud draft must restore its durable document identity before
+      // any transport can publish hello, including direct/reconnect entry points.
+      return canvasDocumentsStartDraft(true).then(()=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted&&!mcpRuntime.pageHidden)mcpConnect(reconnecting);}).catch(error=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted)canvasDocumentsReport(error,()=>mcpConnect(reconnecting));});
+    }
     mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.wanted=true;mcpRuntime.reconnecting=reconnecting;
     mcpRuntime.browserId=mcpRuntime.browserId||window.PENECHO_CONFIG?.browserDraftId||canvasClientId();
     const generation=mcpRuntime.generation;
@@ -928,6 +943,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(message.type==="dispose-session"){mcpDisposeSession(message.sessionId);return;}
       if(message.type==="lan-status-changed"){void mcpLanRefresh();return;}
       if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.reconnecting=false;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();void mcpSyncWakeLock();return;}
+      if(message.type==="workspace-selection"){if(message.workspaceId===window.PENECHO_CONFIG?.browserDraftId)window.PenEchoCompanionCanvases?.refresh?.();return;}
       if(message.type==="pong"){mcpRuntime.lastPong=Date.now();return;}
       if(message.type==="cancel"){mcpRuntime.controllers.get(message.requestId)?.abort(Object.assign(Error("The MCP request was cancelled."),{code:"REQUEST_CANCELLED"}));return;}
       if(message.type!=="call")return;
@@ -1211,9 +1227,10 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});
   addEventListener("pointerdown",event=>{
-    if(mcpEl("mcpToolbarToggle")?.contains(event.target))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
+    if([mcpEl("mcpToolbarToggle"),mcpEl("companionRailMcp")].some(control=>control?.contains(event.target)))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
   },true);
   mcpEl("mcpToolbarToggle")?.addEventListener("click",mcpOpenStatus);
+  mcpEl("companionRailMcp")?.addEventListener("click",mcpOpenStatus);
   mcpEl("mcpStatusPopover")?.addEventListener("toggle",event=>mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded",String(event.newState==="open")));
   addEventListener("resize",()=>{if(mcpEl("mcpStatusPopover")?.matches(":popover-open"))mcpPositionStatusPopover();});
   mcpEl("mcpStatusPower")?.addEventListener("click",()=>{

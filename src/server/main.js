@@ -63,6 +63,7 @@ const PLUGIN_FORMAT = require("../../public/plugins.js");
 const DRAW = require("../../public/draw.js");
 const SCENE = require("../../public/scene-spec.js");
 const NOTE_CARD = require("../../public/note-card.js");
+const ARCHITECTURE = require("../architecture/schema.js"), SEQUENCE = require("../sequence/schema.js"), WORKFLOW = require("../workflow/schema.js");
 const APP_PACKAGE = require("../../package.json");
 let sharp = null;
 try { sharp = require("sharp"); } catch {}
@@ -245,11 +246,8 @@ const BUILTIN_PLUGIN_IDS = new Set([
   "earthquakes", "exchange-rates", "flowchart", "general", "github-pulse", "image-search",
   "natural-events", "space-weather", "stocks", "tech-news", "weather",
 ]);
+// Formats offered for new Professional Diagrams; see legacyDiagramSourceFormat.
 const DIAGRAM_SOURCE_FORMAT_ALIASES = new Map([
-  ["dot", "dot"],
-  ["graphviz", "dot"],
-  ["graphviz-dot", "dot"],
-  ["graphviz dot", "dot"],
   ["bpmn", "bpmn-xml"],
   ["bpmn-xml", "bpmn-xml"],
   ["bpmn2", "bpmn-xml"],
@@ -260,9 +258,6 @@ const DIAGRAM_SOURCE_FORMAT_ALIASES = new Map([
   ["geojson", "geojson"],
   ["geo-json", "geojson"],
   ["smiles", "smiles"],
-  ["cytoscape", "cytoscape-json"],
-  ["cytoscape-json", "cytoscape-json"],
-  ["cytoscape-elements-json", "cytoscape-json"],
 ]);
 const WIDGET_RENDERING_POLICY = "An html_widget is direct content on a zoomable canvas, not a dashboard card. Layout and typography must be designed together for the widget's declared width and height. Use responsive sizing, such as clamp() with container- or viewport-relative units, and maintain a clear but restrained visual hierarchy. Match the current uiTheme and nearby Canvas visual language when they are available, including palette, typography, spacing, density, line weight, and shape language; during refinement, preserve the existing widget style unless the user asks to change it. Width-only or height-only resizing changes the layout viewport: reflow or regroup for its new aspect ratio instead of merely scaling a fixed-size wide or tall scene, and keep SVG or professional-graphic bounds tight on every side with only slight padding. Primary content should be prominent without crowding the layout; body text and labels must remain comfortably readable at normal canvas scale. Unless the user requests otherwise, use roughly clamp(36px,1.2cqw,52px) for body text, at least 28px for secondary text, and clamp(52px,2cqw,80px) for headings; these are zoomable-canvas widget pixels, so ordinary browser defaults such as 14–16px are too small. Do not fix overflow by making text excessively small, and do not use oversized text that causes wrapping, clipping, overlap, or wasted space. Prefer reflowing, regrouping, shortening secondary copy, or choosing a more appropriate widget size. Before returning, verify the longest labels and every section at the actual widget dimensions. For SVG, size text relative to its viewBox, not browser defaults. Keep html, body, the outermost layout, and the visualization backdrop transparent by default, with no outer background, border, corner radius, or box shadow, so the result blends into the canvas. Use the smallest necessary opaque or translucent backing only when it materially improves contrast, legibility, semantic grouping, or media presentation, or when the user explicitly requests one. Keep user-facing text natively selectable and do not globally disable text selection. Use high-contrast text and avoid dense tables, tiny legends, and decorative chrome.";
 const PLUGIN_AUTHORING_SYSTEM = `You edit one PenEcho plugin capability contract written as Markdown with YAML frontmatter. The document and its optional plugin CSS are injected into the canvas model only while that plugin is enabled; they tell the model when the capability applies, what data and base components are available, and how to return exactly one html_widget command. The browser, not PenEcho, executes generated HTML in a sandbox. PenEcho automatically retries eligible public HTTPS GET requests through a bounded server channel when ordinary browser fetch throws because of CORS or network failure; it never supplies credentials or an HTML template.
@@ -1132,14 +1127,29 @@ const PLUGIN_SYSTEM_PROMPT = `Enabled plugin bundles appear in modelInput.enable
 
 Plugin styles are injected automatically after third-party styles and are not repeated in html. Reuse their classes, variables, palettes and density controls. Preserve an existing widget's visual language during refinement. For new widgets, follow the current uiTheme and nearby Canvas style when compatible, selecting the closest plugin palette and density rather than inventing unrelated chrome. Generated HTML may freely use inline JavaScript and may load arbitrary HTTPS third-party scripts, ES modules, styles, fonts, images or data endpoints when they materially improve syntax compatibility, layout or rendering; no library or professional source-format whitelist exists. For an HTML widget with semantic source, prefer rendering that source with an appropriate browser library loaded on demand inside that widget, following any matching plugin renderer contract first. Use mature, fixed, documented browser entries; never use latest tags, guess internal /lib or /dist paths, or invent library APIs. Prefer no dependency when native HTML/SVG/Canvas plus plugin CSS is sufficient. Resources load only with the widget that references them. Do not use frames, forms, cookies or storage. Never include secrets. Public HTTPS reference links are allowed, but must use target="_blank" and rel="noopener noreferrer" and must never navigate the widget itself. Use ordinary fetch with credentials:"omit" for public HTTPS data; the widget runtime automatically handles eligible CORS and direct-network failures through PenEcho, so no CORS workaround is needed. Use crossorigin="anonymous" for cross-origin assets where applicable. Reflow on resize and notify the snapshot bridge after the initial stable render and meaningful changes; wait for visible assets and library rendering before notifying, but never clear a successful render because a non-rendering follow-up fails. Network widgets own refresh timers and visible loading/error/last-update states.`;
 
-const PLUGIN_ROUTING_PROMPT = `Apply the Explain presentation rule before these defaults: purely textual explanations use native text/math, and explanations involving graphics require one General HTML Widget with graphics and explanatory text. General HTML is otherwise always available as a fallback, not the default drawing route. Choose exactly one command path by the defining deliverable, not by trigger words, and never return speculative alternatives. First prefer native draw for freehand completion, lines, shapes and static illustrations, and plot_function for function graphs including surface:true for z=f(x,y). Do not switch to HTML merely because a drawing has more than 10 marks or many curve points. This response mode does not expose the PenEcho Agent Visual Explainer tool, so use General HTML as its explicit compatibility fallback for understanding-, organizing-, and planning-first visual compositions. For animation, a step-by-step animated explanation, a 2D physics simulation or a 3D illustration, use the General HTML Motion scene path (sourceFormat penecho-scene+json with a compact scene object) instead of hand-written HTML whenever its vocabulary fits; write HTML only for behavior the scene vocabulary cannot express. For 3D illustrations, choose engine:"3d" and send shapes, not renderer code. Scene commands still use the html_widget envelope, but PenEcho generates the HTML; omit html and copyText. Use hand-written General HTML when custom behavior is primary and outside built-in capabilities: custom interaction, live or refreshing data, or a browser-native tool. Simple hover, responsive reflow, decorative motion, or wanting manual layout control is not enough to make behavior primary. Use a specialized professional capability when the required artifact needs established notation, a faithful quantitative chart with axes and scales, compatibility with a domain tool, or reusable editable professional source. Words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
+const PLUGIN_ROUTING_PROMPT = `Apply the Explain presentation rule before these defaults: purely textual explanations use native text/math, and explanations involving graphics require one General HTML Widget with graphics and explanatory text. General HTML is otherwise always available as a fallback, not the default drawing route. Choose exactly one command path by the defining deliverable, not by trigger words, and never return speculative alternatives. First prefer native draw for freehand completion, lines, shapes and static illustrations, and plot_function for function graphs including surface:true for z=f(x,y). Do not switch to HTML merely because a drawing has more than 10 marks or many curve points. This response mode does not expose the PenEcho Agent Visual Explainer tool, so use General HTML as its explicit compatibility fallback for understanding-, organizing-, and planning-first visual compositions. For animation, a step-by-step animated explanation, a 2D physics simulation or a 3D illustration, use the General HTML Motion scene path (sourceFormat penecho-scene+json with a compact scene object) instead of hand-written HTML whenever its vocabulary fits; write HTML only for behavior the scene vocabulary cannot express. For 3D illustrations, choose engine:"3d" and send shapes, not renderer code. Scene commands still use the html_widget envelope, but PenEcho generates the HTML; omit html and copyText. Use hand-written General HTML when custom behavior is primary and outside built-in capabilities: custom interaction, live or refreshing data, or a browser-native tool. Simple hover, responsive reflow, decorative motion, or wanting manual layout control is not enough to make behavior primary. Use a specialized professional capability when the required artifact needs established notation, a faithful quantitative chart with axes and scales, compatibility with a domain tool, or reusable editable professional source. Words such as diagram, chart, architecture, model, structure, process, flow, or draw do not by themselves justify one. When an architecture, sequence or workflow diagram is the deliverable, including a service dependency graph, network or deployment topology, or data lineage, follow the local diagram contract instead of a professional capability or hand-written HTML unless the user names a professional format. When an enabled professional capability declares a PenEcho local renderer for the chosen format, return only its diagram_source with complete professional source; PenEcho owns the HTML and rendering. When the professional source format has no PenEcho local renderer, return a faithful human-readable html_widget visualization and include the complete professional source in copyText. Unless the user explicitly requests raw source or raw data as the visible result, never make JSON, XML, YAML, code, or a source dump the widget's primary view. For requests that depend on current or changing public information such as news, prefer a network-backed html_widget that fetches at runtime and uses a refreshSeconds interval appropriate to the source's update frequency and rate limits. Do not approximate a visual by splitting it into many write_text commands.`;
 
 // The Motion scene contract is part of the always-enabled General HTML path.
 // It lives beside the server because the plugin document has a fixed size cap.
 const SCENE_CONTRACT_PROMPT = fs.readFileSync(path.join(__dirname, "scene-contract.md"), "utf8").trim();
+// Architecture, sequence and workflow diagrams share the semantic schemas that
+// MCP and PenEcho Agent use; the browser owns their layout and export.
+const LOCAL_DIAGRAM_CONTRACT_PROMPT = `# Local diagram contract (General HTML)
+
+When the deliverable is a software, system or cloud architecture, a service or module dependency graph, a network or deployment topology, a data flow or data lineage graph, an ordered exchange of messages between participants, or a workflow/process with steps and decisions, return one semantic diagram object instead of HTML, SVG, Graphviz, Mermaid, Cytoscape or a professional diagram_source. PenEcho validates it, then lays it out, routes it, styles it and exports SVG/PNG locally. Use a professional format only when the user names one, such as C4, BPMN, UML or PlantUML. Node-link networks outside software and data systems, such as biological pathways or causal and clinical networks, are not local diagrams: use the Visual Explainer route, or General HTML with inline SVG here. Return exactly one command:
+
+\`{tool:"html_widget",pluginId:"general",x,y,w,h,title,architecture:{...}}\` (or \`sequence:{...}\` or \`workflow:{...}\`)
+
+Pass exactly one object, never a string, and omit html, sourceFormat and copyText. Provide semantics only: no coordinates, columns, CSS, SVG or routing. Preserve the user's labels, arrows, grouping and order; do not invent components, messages, branches, returns or parallel work. Every object has version:1 and a short title. IDs start with a letter and use letters, digits, _ or -; they are unique and every reference must exist. Optional on every type: description, details:[{title,domain?,items:string[]}] below the diagram, notes:string[] for scope, and domains:[{id,label,color?}] with colors blue|teal|orange|purple|green|slate, reused through domain on items for matching color.
+
+- architecture (system structure; up to 60 nodes and 120 edges; prefer at most 20 nodes): nodes:[{id,label,subtitle?,domain?,group?,type?,details?:string[]}] with type frontend|backend|database|cloud|security|messagebus|external (default backend); edges:[{from,to,id?,label?,kind?,bidirectional?}] with kind call|data|config|optional|return (default call); groups?:[{id,label,domain?,parent?}] only for real process, deployment or trust boundaries, never empty or cyclic; direction? RIGHT|DOWN. Show actual relationships: if A calls B and B reads S, draw A→B and B→S. Dependency graphs point each edge from the dependent to its dependency. Topology uses groups for networks, zones, regions or clusters and cloud, security or external types for gateways, firewalls and outside systems. Lineage uses database nodes for datasets and tables, backend nodes for jobs, kind:data edges in flow order and direction RIGHT.
+- sequence (ordered messages): participants left to right (1-16) [{id,label,subtitle?,type?,domain?,details?}] with the architecture node types; messages in time order (1-120) [{id?,from,to,label,kind?,note?,details?}] with kind call|return|async (default call), from===to for a self-call. Optional activations:[{participant,from,to}] and fragments:[{kind,label,from,to,branches?:[{from,label}]}] with kind alt|opt|loop|par|critical; their from/to are inclusive message IDs, so give those messages ids. Fragments are disjoint or strictly nested.
+- workflow (what happens next): nodes (1-60) [{id,label,type,subtitle?,domain?,group?,details?}] with required type start|process|decision|fork|join|end; edges [{from,to,id?,label?,kind?}] with kind flow|loop (default flow). A decision has at least two outgoing edges with distinct condition labels; a fork has at least two outgoing edges and a join at least two incoming; any other node has at most one outgoing edge. Start has no incoming and end no outgoing edge. Every cycle marks its returning edge kind:loop with a retry condition label. Edges have one direction.
+
+Example: \`{tool:"html_widget",pluginId:"general",x:120,y:80,w:1400,h:900,title:"Request path",architecture:{version:1,title:"Request path",nodes:[{id:"client",label:"Browser",type:"frontend"},{id:"api",label:"API"},{id:"db",label:"Postgres",type:"database"}],edges:[{from:"client",to:"api",label:"HTTPS"},{from:"api",to:"db",label:"Read/write",kind:"data"}]}}\``;
 function systemPromptBase(animationEnabled = false, pluginsEnabled = false) {
   const sections = [ACTIVE_SYSTEM_PROMPT_BASE];
-  if (pluginsEnabled) sections.push(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT);
+  if (pluginsEnabled) sections.push(PLUGIN_ROUTING_PROMPT, PLUGIN_SYSTEM_PROMPT, SCENE_CONTRACT_PROMPT, LOCAL_DIAGRAM_CONTRACT_PROMPT);
   return sections.join("\n\n");
 }
 
@@ -1827,6 +1837,12 @@ function exactWidgetParentOrigin(value) {
 function normalizedDiagramSourceFormat(value) {
   return DIAGRAM_SOURCE_FORMAT_ALIASES.get(String(value || "").trim().toLowerCase()) || "";
 }
+// Saved Mermaid, Graphviz and Cytoscape widgets keep their renderer and can be
+// refined, but new diagrams cannot choose them.
+function legacyDiagramSourceFormat(value) {
+  const format = String(value || "").trim().toLowerCase();
+  return format === "mermaid" || format === "dot" || format === "cytoscape-json" ? format : "";
+}
 function validPluginDescriptor(plugin) {
   if (!plugin || typeof plugin !== "object" || Array.isArray(plugin)) return false;
   const connect = plugin.connect;
@@ -1896,7 +1912,7 @@ function canonicalWidgetEdit(value, plugins) {
     || !box || typeof value.title !== "string" || !value.title.trim() || value.title.length > 120
     || sourceFormat.length > 80 || diagramKind.length > 80 || frameworkVersion.length > 120 || !(refreshSeconds === 0 || Number.isInteger(refreshSeconds) && refreshSeconds >= 60 && refreshSeconds <= 86400)
     || (widgetType === "diagram_source" ? Buffer.byteLength(source, "utf8") > MAX_DIAGRAM_SOURCE_BYTES : !sourceMirrorsHtml && source.length > (sceneWidget ? SCENE.MAX_SOURCE_BYTES : NOTE_CARD.isNoteFormat(sourceFormat) ? NOTE_CARD.MAX_SOURCE_CHARS : sourceFormat === "penecho-graph" ? 40000 : MAX_WIDGET_COPY_TEXT_LENGTH)) || html.length > (NOTE_CARD.isNoteFormat(sourceFormat) ? NOTE_CARD.MAX_DOCUMENT_CHARS : MAX_WIDGET_HTML_LENGTH) || copyLabel.length > 80
-    || widgetType === "diagram_source" && (plugin.id !== "flowchart" || !source.trim() || !normalizedDiagramSourceFormat(sourceFormat) && sourceFormat !== "mermaid")
+    || widgetType === "diagram_source" && (plugin.id !== "flowchart" || !source.trim() || !normalizedDiagramSourceFormat(sourceFormat) && (!sourceFormat || legacyDiagramSourceFormat(sourceFormat) !== sourceFormat))
     || widgetType === "html_widget" && !html.trim()) return false;
   return {
     mode:"replace",
@@ -2910,11 +2926,45 @@ function normalizedNoteCommand(command, context = {}) {
     html:NOTE_CARD.documentFor(note),
   };
 }
+// Architecture, sequence and workflow diagrams are host-rendered General widgets
+// too: the model sends the semantic object MCP uses, and PenEcho builds the
+// document that the browser lays out with its local renderer.
+const LOCAL_DIAGRAM_DOCUMENTS = Object.freeze({ architecture:ARCHITECTURE.architectureHtml, sequence:SEQUENCE.sequenceHtml, workflow:WORKFLOW.workflowHtml });
+function normalizedLocalDiagramCommand(command, context = {}) {
+  if (!command || typeof command !== "object") return command;
+  const kinds = Object.keys(LOCAL_DIAGRAM_DOCUMENTS).filter(kind => command.tool === kind || command.tool === "html_widget" && command[kind] !== undefined);
+  if (!kinds.length) return command;
+  const kind = kinds[0];
+  context.localDiagramKind = kind;
+  if (kinds.length > 1) {
+    context.localDiagramError = "Send exactly one of architecture, sequence or workflow.";
+    return null;
+  }
+  let raw = command[kind] !== undefined ? command[kind] : command.source;
+  if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch { raw = null; } }
+  let html;
+  try { html = LOCAL_DIAGRAM_DOCUMENTS[kind](raw); }
+  catch (error) {
+    context.localDiagramError = String(error?.message || error).slice(0, 300);
+    return null;
+  }
+  const { architecture:_architecture, sequence:_sequence, workflow:_workflow, source:_source, sourceFormat:_sourceFormat, frameworkVersion:_frameworkVersion, copyText:_copyText, copyLabel:_copyLabel, diagramKind:_diagramKind, ...rest } = command;
+  return {
+    ...rest,
+    tool:"html_widget",
+    pluginId:"general",
+    title:optionalWidgetText(command.title,120,true) || String(raw.title).slice(0, 120),
+    refreshSeconds:0,
+    html,
+  };
+}
 function filterPluginCommands(commands, plugins = [], preserveWidgets = false, widgetGeometry = null, context = {}) {
   const pluginById = new Map(plugins.map(plugin => [plugin.id, plugin])),
     accepted = [];
   for (const originalCommand of commands) {
-    const noteCommand = normalizedNoteCommand(originalCommand, context);
+    const diagramCommand = normalizedLocalDiagramCommand(originalCommand, context);
+    if (!diagramCommand) continue;
+    const noteCommand = normalizedNoteCommand(diagramCommand, context);
     if (!noteCommand) continue;
     const rawCommand = normalizedSceneCommand(noteCommand, context);
     if (!rawCommand) continue;
@@ -2925,7 +2975,9 @@ function filterPluginCommands(commands, plugins = [], preserveWidgets = false, w
     const command=pluginCommandWithDefaults(rawCommand,pluginById,context);
     if (command.tool === "diagram_source") {
       const geometry = fitWidgetGeometry(command, widgetGeometry),
-        sourceFormat = normalizedDiagramSourceFormat(command.sourceFormat),
+        editedFormat = context.widgetEdit?.widgetType === "diagram_source" ? legacyDiagramSourceFormat(context.widgetEdit.sourceFormat) : "",
+        sourceFormat = normalizedDiagramSourceFormat(command.sourceFormat)
+          || (editedFormat && legacyDiagramSourceFormat(command.sourceFormat) === editedFormat ? editedFormat : ""),
         diagramKind = optionalWidgetText(command.diagramKind,80,true);
       if (!pluginById.has("flowchart") || command.pluginId !== "flowchart" || !geometry || !sourceFormat
         || typeof command.source !== "string" || !command.source.trim()
@@ -3065,7 +3117,7 @@ function plotFallback(result,changedBox){
   return{tool:"plot_function",x,y,w,h,expression};
 }
 
-const MIME = { ".html":"text/html; charset=utf-8", ".js":"application/javascript; charset=utf-8", ".css":"text/css; charset=utf-8", ".md":"text/markdown; charset=utf-8", ".svg":"image/svg+xml", ".png":"image/png" };
+const MIME = { ".html":"text/html; charset=utf-8", ".js":"application/javascript; charset=utf-8", ".css":"text/css; charset=utf-8", ".md":"text/markdown; charset=utf-8", ".svg":"image/svg+xml", ".png":"image/png", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".webp":"image/webp" };
 function pluginAuthoringPrompt(document, styles="", instructions="") {
   return `Improve the PenEcho plugin bundle below. Resolve structural or safety errors and make it specific enough that a canvas model can generate the requested HTML without receiving an HTML template. Treat any short natural-language sentence in the draft as the capability brief, not as a finished prompt. Understand the Markdown and CSS together: document the reusable CSS classes and variables that generated widgets should use, keep CSS scoped to widget content, and avoid repeating those base styles in generated HTML. For the simple air-quality brief ("我需要根据地点, 显示空气质量"), fill in a concrete public browser-CORS data source, exact geocoding and air-quality URLs, parameters and JSON fields, then explain how the generated inline HTML uses the user's place, encodes query values, fetches the URLs, presents readable important values, and refreshes. Do not add an HTML implementation or a JSON API template.${instructions ? `\n\nRequested changes:\n${instructions}` : ""}\n\n<plugin-bundle-json>\n${JSON.stringify({ document, styles })}\n</plugin-bundle-json>`;
 }
@@ -4348,12 +4400,13 @@ ${WIDGET_PATCH_FORMAT_POLICY}`,
       if(payload.widgetEdit)traceAttemptLocalValidation(requestTrace,attempts,model.result.commands.length>0,widgetPatchValidation.reason);
       const invalidTextLayout=hasInvalidTextLayout(model.result),invalidDraw=hasInvalidDrawCommand(model.result),manualEmpty=payload.userAction!=="auto"&&commandsForAction(model.result,payload.userAction).length===0,plotMissing=payload.userAction==="plot"&&!hasVisualCommand(model.result),
         invalidScene=(Boolean(pluginCommandContext.sceneError)||Boolean(payload.sketchInk))&&!payload.widgetEdit&&!model.result.commands.some(command=>command?.tool==="html_widget"),
-        invalidNote=Boolean(pluginCommandContext.noteError)&&!payload.widgetEdit&&!model.result.commands.some(command=>command?.tool==="html_widget");
-      if(payload.userAction!=="normalize"&&(invalidTextLayout||invalidDraw||manualEmpty||plotMissing||invalidScene||invalidNote)){
-        const reason=payload.widgetEdit&&manualEmpty?widgetPatchValidation.reason||"widget-patch-rejected":invalidScene?"invalid-scene":invalidNote?"invalid-note":invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
+        invalidNote=Boolean(pluginCommandContext.noteError)&&!payload.widgetEdit&&!model.result.commands.some(command=>command?.tool==="html_widget"),
+        invalidLocalDiagram=Boolean(pluginCommandContext.localDiagramError)&&!payload.widgetEdit&&!model.result.commands.some(command=>command?.tool==="html_widget");
+      if(payload.userAction!=="normalize"&&(invalidTextLayout||invalidDraw||manualEmpty||plotMissing||invalidScene||invalidNote||invalidLocalDiagram)){
+        const reason=payload.widgetEdit&&manualEmpty?widgetPatchValidation.reason||"widget-patch-rejected":invalidLocalDiagram?"invalid-local-diagram":invalidScene?"invalid-scene":invalidNote?"invalid-note":invalidTextLayout?"invalid-text-layout":invalidDraw?"invalid-draw-command":manualEmpty?"empty-commands":"plot-without-visual";
         log({type:"ai-retry",requestId,ip,action:payload.userAction,reason});
         const safePatchReason=/^[a-z0-9-]+(?::[A-Za-z0-9_.-]{1,64})?$/.test(widgetPatchValidation.reason||"")?widgetPatchValidation.reason:"widget-patch-rejected",
-          retry=invalidNote?`Your note card failed PenEcho validation: ${pluginCommandContext.noteError}. Return exactly one html_widget command with pluginId "general", sourceFormat "${NOTE_CARD.FORMAT}" and a corrected note object. No prose.`:invalidScene&&payload.sketchInk?`Your response did not contain a valid Animate sketch puppet rig${pluginCommandContext.sceneError?`: ${pluginCommandContext.sceneError}`:""}. Return exactly one html_widget command with pluginId "general", sourceFormat "penecho-scene+json" and scene {"engine":"puppet","subject":...,"parts":[{"id","ink":[stroke indices or "i:a-b"],"parent","pivot":[x,y],"motion":[{"type","amp","period","phase"}]}]} following the Animate sketch contract. No prose.`:invalidScene?`Your scene failed PenEcho validation: ${pluginCommandContext.sceneError}. Return exactly one html_widget command with pluginId "general", sourceFormat "penecho-scene+json" and a corrected scene object that follows the Motion scene contract. No prose.`:payload.widgetEdit?`Your widget patch failed local validation: ${safePatchReason}. Re-read the original virtual files and return the required final JSON with exactly one widget_patch command. Use only widgetEdit.patchFiles paths and existing widget.json keys. Copy context and removed lines character-for-character. Use one standard ---/+++ section per changed file with complete, correctly counted, ordered, non-overlapping hunks. The patch field must contain only the bare unified diff: no prose, fences, metadata, wrappers, unlisted files or full widget command.`:invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild it once and verify that types and items have equal lengths, every coordinate is an integer, each item matches the documented native draw encoding, and all geometry stays inside the canvas. Keep the native draw route for static drawings and Finish drawing. Use at most 64 items, 2048 numeric item values in total and 256 points per path; Finish drawing uses at most 48 items. Repair the invalid encoding without changing the requested content to HTML.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For z=f(x,y), return plot_function with surface:true. For static drawings prefer native draw; for supported 3D/animation/physics return a compact scene object without html. Use hand-written HTML only when built-in renderers cannot express the requirements. Do not answer with prose or draw_formula alone.":manualEmpty?MANUAL_EMPTY_RETRY:REINSPECTION_RETRY;
+          retry=invalidLocalDiagram?`Your ${pluginCommandContext.localDiagramKind} diagram failed PenEcho validation (${pluginCommandContext.localDiagramError}). Return exactly one html_widget command with pluginId "general" and a corrected ${pluginCommandContext.localDiagramKind} object that follows the local diagram contract. Omit html. No prose.`:invalidNote?`Your note card failed PenEcho validation: ${pluginCommandContext.noteError}. Return exactly one html_widget command with pluginId "general", sourceFormat "${NOTE_CARD.FORMAT}" and a corrected note object. No prose.`:invalidScene&&payload.sketchInk?`Your response did not contain a valid Animate sketch puppet rig${pluginCommandContext.sceneError?`: ${pluginCommandContext.sceneError}`:""}. Return exactly one html_widget command with pluginId "general", sourceFormat "penecho-scene+json" and scene {"engine":"puppet","subject":...,"parts":[{"id","ink":[stroke indices or "i:a-b"],"parent","pivot":[x,y],"motion":[{"type","amp","period","phase"}]}]} following the Animate sketch contract. No prose.`:invalidScene?`Your scene failed PenEcho validation: ${pluginCommandContext.sceneError}. Return exactly one html_widget command with pluginId "general", sourceFormat "penecho-scene+json" and a corrected scene object that follows the Motion scene contract. No prose.`:payload.widgetEdit?`Your widget patch failed local validation: ${safePatchReason}. Re-read the original virtual files and return the required final JSON with exactly one widget_patch command. Use only widgetEdit.patchFiles paths and existing widget.json keys. Copy context and removed lines character-for-character. Use one standard ---/+++ section per changed file with complete, correctly counted, ordered, non-overlapping hunks. The patch field must contain only the bare unified diff: no prose, fences, metadata, wrappers, unlisted files or full widget command.`:invalidDraw?"Your previous response contained a draw command that PenEcho cannot render. Rebuild it once and verify that types and items have equal lengths, every coordinate is an integer, each item matches the documented native draw encoding, and all geometry stays inside the canvas. Keep the native draw route for static drawings and Finish drawing. Use at most 64 items, 2048 numeric item values in total and 256 points per path; Finish drawing uses at most 48 items. Repair the invalid encoding without changing the requested content to HTML.":plotMissing?"Perform a second independent inspection using focusInset for transcription if available. The user explicitly selected plot. Return at least one renderable visual command. For a single-variable function, return plot_function with an ASCII expression using explicit multiplication such as 3*x. For z=f(x,y), return plot_function with surface:true. For static drawings prefer native draw; for supported 3D/animation/physics return a compact scene object without html. Use hand-written HTML only when built-in renderers cannot express the requirements. Do not answer with prose or draw_formula alone.":manualEmpty?MANUAL_EMPTY_RETRY:REINSPECTION_RETRY;
         model=await requestModel(retry);
         if (providerSnapshot.local) ensureCurrentLocalRequest(localRun);
         saveLatestModelExchange(requestId,attempts,modelInput,retry,model);

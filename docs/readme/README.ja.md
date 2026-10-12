@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-<h1 align="center">どんな AI とも、キャンバスで考える。</h1>
+<h1 align="center">語るだけじゃない。見せてくれる AI。</h1>
 
-<p align="center">手でスケッチ。PenEcho の内蔵 Agent や Codex、Claude Code、あらゆる MCP クライアントが、メモのそばに図、文書、動くウィジェットを作ります。</p>
+<p align="center">質問、スケッチ、メモを持ってきてください。PenEcho の内蔵 AI や Codex、Claude Code、あらゆる MCP クライアントが、すぐ横に図や文書、動くウィジェットで答えを見せてくれます。</p>
 
 <p align="center">
-  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.0-087f83" alt="Release v1.4.0"></a>
+  <a href="https://github.com/penecho/penecho/releases/latest"><img src="https://img.shields.io/badge/release-v1.4.1-087f83" alt="Release v1.4.1"></a>
   <a href="https://www.npmjs.com/package/penecho"><img src="https://img.shields.io/badge/npm-penecho-cb3837" alt="npm penecho"></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only"></a>
   <a href="https://discord.gg/3jrPJ3mXdX"><img src="https://img.shields.io/badge/discord-join-5865f2" alt="Discord"></a>

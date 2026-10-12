@@ -5078,7 +5078,7 @@
     const mini=document.getElementById("assistAgentMini");if(mini)mini.hidden=true;
     document.body.classList.remove("assist-agent-minimized");
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
-    if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
+    if(window.PENECHO_CONFIG?.guestCanvas){showCanvasGuestAiHint({ explicit:true });return;}
     if (!canvasAgentAvailable()) return;
     restoreCanvasAgentAfterNavigation();
     restoreCanvasChromeMaterial();

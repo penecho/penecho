@@ -1831,6 +1831,29 @@ if (typeof module === "object" && module.exports) module.exports = PenEchoIllust
     if (element) element.dataset.peHit = "choice";
     return element;
   }
+  // An AI client opened this Canvas beside its conversation (mode=companion).
+  // Minimal and full views present the same document in this tab. The choice
+  // lives in sessionStorage only and never changes stored Canvas preferences.
+  const CANVAS_COMPANION_REQUESTED = (() => {
+    try { return window.PENECHO_CONFIG?.runtime !== "viewer" && new URLSearchParams(location.search).get("mode") === "companion"; }
+    catch { return false; }
+  })();
+  function canvasCompanionViewKey() {
+    return `penecho-companion-view:${window.PENECHO_CONFIG?.browserDraftId || location.pathname}`;
+  }
+  let canvasCompanionView = "";
+  if (CANVAS_COMPANION_REQUESTED) {
+    try { canvasCompanionView = sessionStorage.getItem(canvasCompanionViewKey()) === "full" ? "full" : "minimal"; }
+    catch { canvasCompanionView = "minimal"; }
+    document.documentElement.dataset.penechoCompanion = canvasCompanionView;
+  }
+  function canvasCompanionMinimal() {
+    return canvasCompanionView === "minimal";
+  }
+  function canvasGuestAiRestricted() {
+    return window.PENECHO_CONFIG?.guestCanvas === true;
+  }
+  if (canvasGuestAiRestricted()) document.documentElement.dataset.penechoGuestAi = "true";
   const SIZE = 20000,
     TILE = 512,
     DIRTY_MASK_SCALE = 0.25,
@@ -2942,6 +2965,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasHintShortcutFullscreen: "{shortcut} Toggle fullscreen",
       canvasHintShortcutSettings: "{shortcut} Open Settings",
       canvasHintMcp: "Settings → MCP: connect an AI client.",
+      canvasHintGuestAi: "Draw freely. Sign in to use AI.",
       canvasHintMcpConnected: "MCP connected: your AI can edit this canvas.",
       canvasHintHand: "Drag to pan · click an object to select",
       canvasHintHandAlt: "{shortcut} Hold to pan temporarily",
@@ -4043,10 +4067,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       selection: null,
       selectionGesture: null,
       hotspotTrail: [],
-      auto: initialAutoEnabled,
+      // Anonymous drafts never run PenEcho AI. Signed-in companion views keep
+      // normal AI preferences, without opening the Agent panel on arrival.
+      autoPreference: initialAutoEnabled,
+      get auto() { return this.autoPreference && !canvasGuestAiRestricted(); },
+      set auto(value) { this.autoPreference = Boolean(value); },
       summonEnabled: initialSummonEnabled,
       canvasHintsEnabled: initialCanvasHintsEnabled,
-      canvasAgentAutoOpen: initialCanvasAgentAutoOpen,
+      canvasAgentAutoOpenPreference: initialCanvasAgentAutoOpen,
+      get canvasAgentAutoOpen() { return this.canvasAgentAutoOpenPreference && !canvasCompanionMinimal(); },
+      set canvasAgentAutoOpen(value) { this.canvasAgentAutoOpenPreference = Boolean(value); },
       widgetShadowEnabled: initialWidgetShadowEnabled,
       summonAnchor: null,
       timer: 0,
@@ -4315,6 +4345,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         content.append(keycap);
       } else content.append(part);
     }
+    if (state.canvasHintKey === "canvasHintGuestAi") {
+      const signIn = document.createElement("button");
+      signIn.type = "button";
+      signIn.className = "canvas-hint-signin";
+      signIn.textContent = state.language === "zh" ? "登录" : "Sign in";
+      signIn.addEventListener("click", () => void window.PenEchoBrowserDraft?.signIn());
+      content.append(signIn);
+    }
     canvasHint.replaceChildren(content);
     if (restart) syncCanvasHintVisibility(true);
   }
@@ -4330,6 +4368,15 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.canvasHintKey = choice.key;
     state.canvasHintValues = choice.values || null;
     renderCanvasHint(true);
+  }
+  let canvasGuestAiHintSeen = false;
+  function showCanvasGuestAiHint({ explicit = false } = {}) {
+    if (!canvasGuestAiRestricted()) return false;
+    if (explicit || !canvasGuestAiHintSeen) {
+      canvasGuestAiHintSeen = true;
+      showCanvasHint("canvasHintGuestAi");
+    }
+    return true;
   }
   let lassoFirstUseHintSeen = false;
   function showLassoGuidance(key) {
@@ -4685,7 +4732,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return true;
   }
   function maybeStartFeatureTour(retry = false) {
-    if(window.PENECHO_CONFIG?.browserDraftId)return false;
+    if(window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)return false;
     if (featureTour.active || changelog.active || (featureTour.autoChecked && !retry)) return false;
     featureTour.autoChecked = true;
     const progress = readFeatureTourProgress(),
@@ -4740,7 +4787,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } catch {}
   }
   function maybeShowChangelog(force = false) {
-    if(window.PENECHO_CONFIG?.browserDraftId&&!force)return false;
+    if((window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)&&!force)return false;
     if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
     hideAutoDelayControl();
     hideEffortControl();
@@ -5822,12 +5869,12 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   function updateSettingsPanel() {
     if (!settingsPanel) return;
     selectSettingsPage(settings.activePage);
-    settingsAutoToggle.classList.toggle("on", state.auto);
-    settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+    settingsAutoToggle.classList.toggle("on", state.autoPreference);
+    settingsAutoToggle.setAttribute("aria-checked", String(state.autoPreference));
     settingsCanvasHintsToggle.classList.toggle("on", state.canvasHintsEnabled);
     settingsCanvasHintsToggle.setAttribute("aria-checked", String(state.canvasHintsEnabled));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
     summonToggle.classList.toggle("on", state.summonEnabled);
     summonToggle.setAttribute("aria-checked", String(state.summonEnabled));
     settingsWidgetShadowToggle.classList.toggle("on", state.widgetShadowEnabled);
@@ -5892,9 +5939,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function setCanvasAgentAutoOpen(enabled) {
     state.canvasAgentAutoOpen = Boolean(enabled);
-    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpen));
-    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpen);
-    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpen));
+    localStorage.setItem("penecho-canvas-agent-auto-open", String(state.canvasAgentAutoOpenPreference));
+    settingsCanvasAgentAutoOpenToggle.classList.toggle("on", state.canvasAgentAutoOpenPreference);
+    settingsCanvasAgentAutoOpenToggle.setAttribute("aria-checked", String(state.canvasAgentAutoOpenPreference));
   }
   function setCanvasHintsEnabled(enabled) {
     state.canvasHintsEnabled = Boolean(enabled);
@@ -5938,8 +5985,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       delaySelect.value = seconds;
     }
     if (settingsAutoToggle) {
-      settingsAutoToggle.classList.toggle("on", state.auto);
-      settingsAutoToggle.setAttribute("aria-checked", String(state.auto));
+      settingsAutoToggle.classList.toggle("on", state.autoPreference);
+      settingsAutoToggle.setAttribute("aria-checked", String(state.autoPreference));
     }
   }
   function positionToolbarPopover(controlSelector, popoverSelector, options) {
@@ -8808,7 +8855,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     if (configuredAccessSession) url.searchParams.set("access-session", configuredAccessSession);
     if (runtime === "cloud" || runtime === "viewer") url.searchParams.set("remote-canvas", "1");
-    if ((runtime === "cloud" || runtime === "viewer") && manifest.id === "general") url.searchParams.set("public-https", "1");
+    // General HTML and Professional Diagram renderers load pinned CDN code; data
+    // plugins stay limited to the origins their manifest declares.
+    if ((runtime === "cloud" || runtime === "viewer") && (manifest.id === "general" || manifest.id === "flowchart")) url.searchParams.set("public-https", "1");
     for (const origin of manifest.connect) url.searchParams.append("connect", origin);
     return url.href;
   }
@@ -12094,7 +12143,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         shared:liveShared,
         baseWidth:28,
         iconOnly:true,
-        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } })),
+        activate:() => {
+          const note = typeof noteCardWidget === "function" && noteCardWidget(widget) ? noteCardSource(widget) : null;
+          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{
+            action:"share", widgetId:widget.id, title:String(note?.title || widget.title || ""),
+            ...(note ? { noteKind:note.style === "card" ? "card" : "note" } : {}),
+          } }));
+        },
       });
     }
     if (options.download) items.push({
@@ -14716,7 +14771,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function saveCurrentCanvas() {
     if (snapshotSaveInProgress) return;
-    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn();return;}
+    // Every guest save entry (button, Mod+S, menu) resumes the save after sign-in.
+    if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn({ intent:"save" });return;}
     const location = state.currentSnapshotLocation || (window.PENECHO_CONFIG?.browserCanvasEditing ? "cloud" : state.snapshotLocation),
       overwriteId = state.currentSnapshotId && state.currentSnapshotLocation === location ? state.currentSnapshotId : null,
       requestedName = document.querySelector("#historyName")?.value.trim(),
@@ -15701,7 +15757,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!SNAPSHOT_LOCATIONS.has(location)) throw Error("Invalid snapshot location");
     if (overwriteId && state.currentSnapshotLocation !== location) throw Error(t("noCurrentSnapshot"));
     await finalizeCanvasForSnapshot();
-    if (!allowEmpty && !tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !visibleWidgets().length) {
+    // Restored Widget source is saveable content even while its renderer or
+    // plugin manifest is still loading after an authentication round trip.
+    if (!allowEmpty && !tiles.size && !state.images.length && !state.textBoxes.length && !state.preservedSnapshotAnimations.length && (!pluginEnabled("animation") || !state.animations.length) && !state.widgets.length) {
       setStatusKey("emptyCanvas");
       return null;
     }
@@ -15863,12 +15921,25 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     };
   }
   async function readCloudSnapshot(id, onProgress = null) {
-    const response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+    const early = window.PENECHO_CONFIG?.runtime === "cloud"
+      && window.PENECHO_CONFIG?.remoteCanvasNativeReads === true
+      && !window.PENECHO_CONFIG?.browserDraftId ? window.PenEchoEarlyCloudSnapshot : null;
+    let response = null;
+    if (early?.id === id) {
+      // Taking clears the unused-read timeout before consuming the response body.
+      const pending = early.take();
+      if (pending) {
+        try { response = await pending; } catch {}
+      }
+    } else early?.cancel();
+    // Only a network rejection of the early request retries here. HTTP failures
+    // keep their response and follow the existing authorization/error handling.
+    if (!response) response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
-      }),
-      body = await snapshotApiResponse(response, onProgress);
+      });
+    const body = await snapshotApiResponse(response, onProgress);
     if (!body?.bundle || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid Canvas");
     const parsed = await readSnapshotBundle(body.bundle),
       metadata = {...snapshotItems.find((item) => item.id === id),...(body.canvas?.id===id ? body.canvas : {})};
@@ -19019,6 +19090,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function requestAI(action, packedOverride = null, requestOptions = null) {
     requestOptions = requestOptions || {};
+    if (canvasGuestAiRestricted()) {
+      clearTimeout(state.timer);
+      state.timer = 0;
+      state.autoEligible = false;
+      if (action !== "auto") showCanvasGuestAiHint({ explicit:true });
+      return false;
+    }
     const automatic = action === "auto",
       returnToHand = state.mode === "select" && !state.viewMode && !state.selection
         && !state.pending && !state.pendingWidget && !state.imageEdit && !state.animationEdit;
@@ -19855,7 +19933,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
         if (c.tool === "diagram_source") {
           const runtime = diagramRuntime();
           const geometry = fitWidgetGeometry(c, visibleRect),
-            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || "",
+            // A saved Mermaid or Graphviz widget keeps its format when refined.
+            legacyFormat = widgetEditTarget?.widgetType === "diagram_source" && !runtime?.supports(widgetEditTarget.sourceFormat) ? canonicalStoredDiagramFormat(widgetEditTarget.sourceFormat) : "",
+            sourceFormat = runtime?.normalizeFormat(c.sourceFormat) || (legacyFormat && canonicalStoredDiagramFormat(c.sourceFormat) === legacyFormat ? legacyFormat : ""),
             diagramKind = typeof c.diagramKind === "string" ? c.diagramKind.trim() : "";
           if (widgetSlots <= 0 || !widgetPluginIds.has("flowchart") || c.pluginId !== "flowchart"
             || widgetEditTarget && (widgetEditTarget.pluginId !== "flowchart" || widgetEditTarget.widgetType !== "diagram_source")
@@ -26875,7 +26955,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const mini=document.getElementById("assistAgentMini");if(mini)mini.hidden=true;
     document.body.classList.remove("assist-agent-minimized");
     const options=arguments[0]||{},connect=options.connect!==false,animate=options.animate!==false;
-    if(window.PENECHO_CONFIG?.guestCanvas){setStatus(state.language==="zh"?"登录后即可使用 PenEcho Agent，当前草稿会保留。":"Sign in to use PenEcho Agent. Your browser draft will be kept.");return;}
+    if(window.PENECHO_CONFIG?.guestCanvas){showCanvasGuestAiHint({ explicit:true });return;}
     if (!canvasAgentAvailable()) return;
     restoreCanvasAgentAfterNavigation();
     restoreCanvasChromeMaterial();
@@ -27838,6 +27918,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function mcpPositionStatusPopover() {
     const panel=mcpEl("mcpStatusPopover"),button=mcpEl("mcpToolbarToggle");if(!panel||!button)return;
+    // The minimal companion view opens status from its left rail instead of the hidden toolbar.
+    const rail=mcpEl("companionRailMcp");
+    if(!button.getClientRects().length&&rail?.getClientRects().length){
+      const anchor=rail.getBoundingClientRect(),left=Math.round(anchor.right+8),top=Math.max(12,Math.round(anchor.top));
+      panel.style.left=`${left}px`;panel.style.top=`${top}px`;panel.style.maxWidth=`${Math.max(220,innerWidth-left-12)}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-top-12)}px`;return;
+    }
+    panel.style.maxWidth="";
     const rect=button.getBoundingClientRect();panel.style.left=`${Math.max(12,Math.min(rect.right-400,innerWidth-Math.min(400,innerWidth-24)-12))}px`;panel.style.top=`${Math.min(rect.bottom+10,Math.max(12,innerHeight-160))}px`;panel.style.maxHeight=`${Math.max(120,innerHeight-rect.bottom-22)}px`;
   }
   let mcpStatusOpenAtPointerDown=false;
@@ -28170,6 +28257,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function mcpRenderSettings() {
     if(!mcpRuntime)return;
+    window.PenEchoCompanionCanvases?.changed?.();
     window.PenEchoMcpSettings?.setLocalStatus?.(mcpRuntime.status);
     document.querySelectorAll("[data-mcp-label]").forEach(node=>{const key=node.dataset.mcpLabel,text=mcpText(key);
       node.textContent=text;
@@ -28351,7 +28439,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   function mcpRenderToolbar() {
     window.PenEchoMcpSettings?.setConnection({enabled:Boolean(mcpRuntime.wanted),connected:Boolean(mcpRuntime.ready),label:mcpAccessLabel()});
-    window.PenEchoStudioNavigator?.syncMcp?.(Boolean(mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN),{reveal:!mcpRuntime.reconnecting});
+    // The minimal companion view keeps its narrow rail; the navigator opens only on request.
+    window.PenEchoStudioNavigator?.syncMcp?.(Boolean(mcpRuntime.ready&&mcpRuntime.socket?.readyState===WebSocket.OPEN),{reveal:!mcpRuntime.reconnecting&&!canvasCompanionMinimal()});
     mcpRenderReconnectStatus();
     const button=mcpEl("mcpToolbarToggle");if(!button)return;
     const ui=mcpUiState(),connected=ui.connected,opening=ui.opening,sessions=mcpLiveSessions();
@@ -28452,6 +28541,12 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   }
   function mcpConnect(reconnecting=false) {
     if(!mcpLocal()||mcpRuntime.pageHidden)return;
+    if(window.PENECHO_CONFIG?.browserDraftId&&typeof canvasDocumentsStartDraft==="function"&&!canvasDocumentsDraft.ready){
+      mcpRuntime.wanted=true;const generation=mcpRuntime.generation;
+      // A scoped Cloud draft must restore its durable document identity before
+      // any transport can publish hello, including direct/reconnect entry points.
+      return canvasDocumentsStartDraft(true).then(()=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted&&!mcpRuntime.pageHidden)mcpConnect(reconnecting);}).catch(error=>{if(generation===mcpRuntime.generation&&mcpRuntime.wanted)canvasDocumentsReport(error,()=>mcpConnect(reconnecting));});
+    }
     mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.wanted=true;mcpRuntime.reconnecting=reconnecting;
     mcpRuntime.browserId=mcpRuntime.browserId||window.PENECHO_CONFIG?.browserDraftId||canvasClientId();
     const generation=mcpRuntime.generation;
@@ -28467,6 +28562,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(message.type==="dispose-session"){mcpDisposeSession(message.sessionId);return;}
       if(message.type==="lan-status-changed"){void mcpLanRefresh();return;}
       if(message.type==="ready"){mcpRuntime.reconnectDelay=1000;mcpRuntime.reconnecting=false;mcpRuntime.ready=true;mcpRuntime.connectionLost=false;mcpRuntime.heartbeatSupported=message.heartbeat===true;mcpRuntime.catalogSupported=message.catalog===true;mcpRuntime.lastPong=Date.now();mcpRenderSettings();if(!reconnecting)showCanvasHint("canvasHintMcpConnected");void mcpLanOpened();if(typeof canvasDocuments!=="undefined"){const doc=canvasDocumentsCurrent();mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;canvasDocuments.error=null;canvasDocuments.retry=null;canvasDocumentsRender();}mcpPublishCanvasCatalog();void mcpSyncWakeLock();return;}
+      if(message.type==="workspace-selection"){if(message.workspaceId===window.PENECHO_CONFIG?.browserDraftId)window.PenEchoCompanionCanvases?.refresh?.();return;}
       if(message.type==="pong"){mcpRuntime.lastPong=Date.now();return;}
       if(message.type==="cancel"){mcpRuntime.controllers.get(message.requestId)?.abort(Object.assign(Error("The MCP request was cancelled."),{code:"REQUEST_CANCELLED"}));return;}
       if(message.type!=="call")return;
@@ -28750,9 +28846,10 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
   addEventListener("penecho:close-mcp",()=>mcpCancelReconnect());
   addEventListener("penecho:show-mcp-settings",()=>{openSettings();selectSettingsPage("mcp");window.PenEchoMcpSettings?.select("cloud");});
   addEventListener("pointerdown",event=>{
-    if(mcpEl("mcpToolbarToggle")?.contains(event.target))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
+    if([mcpEl("mcpToolbarToggle"),mcpEl("companionRailMcp")].some(control=>control?.contains(event.target)))mcpStatusOpenAtPointerDown=!!mcpEl("mcpStatusPopover")?.matches(":popover-open");
   },true);
   mcpEl("mcpToolbarToggle")?.addEventListener("click",mcpOpenStatus);
+  mcpEl("companionRailMcp")?.addEventListener("click",mcpOpenStatus);
   mcpEl("mcpStatusPopover")?.addEventListener("toggle",event=>mcpEl("mcpToolbarToggle")?.setAttribute("aria-expanded",String(event.newState==="open")));
   addEventListener("resize",()=>{if(mcpEl("mcpStatusPopover")?.matches(":popover-open"))mcpPositionStatusPopover();});
   mcpEl("mcpStatusPower")?.addEventListener("click",()=>{
@@ -29914,6 +30011,9 @@ var canvasDocumentIdentity = (() => {
   }
   function canvasDocumentsIsEmptyPlaceholder(doc) {
     const meta=doc.metadata||doc,item=doc.stored?.item,workspace=doc.workspace||(doc.metadata?item?.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]||{}:canvasDocumentsWorkspaceData(doc));
+    // The first document in an explicit browser draft is a durable MCP target,
+    // even before its first edit. Ordinary website placeholders stay disposable.
+    if(window.PENECHO_CONFIG?.browserDraftId&&doc.browserDraftInitial===true)return false;
     // Only positively identified, unused blank pages are disposable. Saved,
     // named, bound, edited or partially recovered documents remain open.
     if(!item||!Array.isArray(doc.stored.tileEntries)||doc.stored.tileEntries.length)return false;
@@ -29934,16 +30034,39 @@ var canvasDocumentIdentity = (() => {
     request.onupgradeneeded=()=>request.result.createObjectStore("documents",{keyPath:"id"});
     canvasDocuments.db=await canvasDocumentsBound(requestResult(request));return canvasDocuments.db;
   }
+  async function canvasDocumentsInitializeBrowserDraft(db,active) {
+    if(!window.PENECHO_CONFIG?.browserDraftId)return;
+    let activeId="";try{activeId=sessionStorage.getItem(canvasDocumentsDraftStorageKey())||"";}catch{}
+    // A read/write transaction serializes simultaneous first opens across tabs.
+    // Persist an actual document, rather than deriving its ID from a workspace
+    // URL: another browser profile must not impersonate a missing original draft.
+    await canvasDocumentsBound(new Promise((resolve,reject)=>{
+      const tx=db.transaction("documents","readwrite"),store=tx.objectStore("documents"),request=store.getAll();
+      request.onsuccess=()=>{
+        const items=request.result.filter(item=>!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata)&&item.stored),
+          saved=items.find(item=>item.id===activeId)||items.filter(item=>item.browserDraftInitial===true||!canvasDocumentsIsEmptyPlaceholder(item)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
+        if(saved){if(saved.browserDraftInitial!==true&&!items.some(item=>item.browserDraftInitial===true))store.put({...saved,browserDraftInitial:true});return;}
+        const metadata=canvasDocumentsMetadata(active),workspace=canvasDocumentsWorkspaceData(active);
+        store.put({id:active.id,metadata,workspace,browserDraftInitial:true,revision:active.revision,savedRevision:0,firstSeenAt:active.firstSeenAt,
+          stored:{item:{version:2,id:null,name:active.title,theme:state.theme,widgets:[],textBoxes:[],images:[],animations:[],bundleExtensions:{[CANVAS_DOCUMENT_EXTENSION]:metadata,[CANVAS_WORKSPACE_EXTENSION]:workspace}},tileEntries:[]}});
+      };
+      tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not store the browser draft. Free device storage, then retry."));
+    }));
+  }
   async function canvasDocumentsReady() {
     const active=canvasDocumentsCurrent();
     if(state.canvasAgentCanvasKey?.startsWith("draft:"))canvasAgentCanvasDidPersist("workspace",active.id);
     if(!canvasDocuments.ready)canvasDocuments.ready=(async()=>{
-      const db=await canvasDocumentsDb(),items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
+      const db=await canvasDocumentsDb();await canvasDocumentsInitializeBrowserDraft(db,active);
+      const items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
       const conversationKeys=new Set(typeof canvasAgentStoredHistoryGroups==="function"?canvasAgentStoredHistoryGroups().map(group=>group.canvasKey):[]);
       const candidates=new Map();
       for(const item of items) {
         const meta=!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata);
-        if(meta&&canvasDocuments.records.has(meta.documentId))canvasDocumentsRestoreFirstSeenAt(canvasDocuments.records.get(meta.documentId),item);
+        if(meta&&canvasDocuments.records.has(meta.documentId)){
+          const doc=canvasDocuments.records.get(meta.documentId);canvasDocumentsRestoreFirstSeenAt(doc,item);
+          if(window.PENECHO_CONFIG?.browserDraftId&&item.browserDraftInitial===true){doc.browserDraftInitial=true;doc.stored||=item.stored;}
+        }
         if(meta&&!canvasDocuments.records.has(meta.documentId)&&(!canvasDocumentsIsEmptyPlaceholder(item)||conversationKeys.has(`workspace:${meta.documentId}`)))candidates.set(meta.documentId,{item,meta});
       }
       const available=Math.max(0,CANVAS_DOCUMENT_LIMIT-canvasDocuments.records.size);
@@ -29951,6 +30074,7 @@ var canvasDocumentIdentity = (() => {
         const doc=canvasDocumentsRecord(meta,item.stored);canvasDocumentsRestoreFirstSeenAt(doc,item);canvasDocumentsRestoreWorkspace(doc,item.workspace);
         doc.revision=item.revision||1;doc.savedRevision=item.savedRevision||0;doc.unseen=canvasDocumentsUnseen(item.unseen);doc.locator=item.locator||null;doc.savedAt=canvasDocumentsSavedAt(item.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(item.stored?.item):0);doc.agentDraft=typeof item.agentDraft==="string"?item.agentDraft.slice(0,16000):"";
         doc.hasUserHistory=Boolean(item.hasUserHistory||conversationKeys.has(`workspace:${doc.id}`));
+        doc.browserDraftInitial=Boolean(window.PENECHO_CONFIG?.browserDraftId&&item.browserDraftInitial===true);
         canvasDocuments.records.set(doc.id,doc);
       }
       canvasDocumentsRender();
@@ -29961,7 +30085,7 @@ var canvasDocumentIdentity = (() => {
     const db=await canvasDocumentsAwait(()=>canvasDocumentsDb(),execution);
     if(execution)canvasAgentAssertToolExecution(execution);
     beforeWrite?.();
-    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed};
+    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed,...(doc.browserDraftInitial?{browserDraftInitial:true}:{})};
     if(execution?.kind!=="mcp") {
       await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(payload);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
       return;
@@ -30956,6 +31080,7 @@ var canvasDocumentIdentity = (() => {
     if(doc)doc.title=(typeof currentCanvasDisplayName==="function"?currentCanvasDisplayName():state.currentSnapshotName)||doc.title;
     window.PenEchoStudioNavigator?.workspaceChanged?.();
     if(typeof mcpPublishCanvasCatalog==="function")mcpPublishCanvasCatalog();
+    window.PenEchoCompanionCanvases?.changed?.();
     if(!root||!doc)return;
     root.hidden=false;
     const close=document.getElementById("canvasWorkspaceClose");
@@ -31080,11 +31205,195 @@ var canvasDocumentIdentity = (() => {
     void canvasDocumentsFlushDraft().catch(() => {});
     event.preventDefault(); event.returnValue = "";
   });
+  // A guest draft signs in or registers in this same tab. returnTo keeps the
+  // exact workspace URL, including mode=companion. An explicit Save leaves a
+  // short-lived intent for this tab that is resumed once, signed in, for the
+  // same document; Cloud documents are never created without that Save.
+  const BROWSER_DRAFT_INTENT_TTL_MS = 30 * 60 * 1000;
+  function canvasDocumentsIntentKey() {
+    return `penecho-browser-draft-intent:${window.PENECHO_CONFIG?.browserDraftId || ""}`;
+  }
+  function canvasDocumentsTakeIntent(now = Date.now()) {
+    let intent = null;
+    try {
+      intent = JSON.parse(sessionStorage.getItem(canvasDocumentsIntentKey()) || "null");
+      sessionStorage.removeItem(canvasDocumentsIntentKey());
+    } catch { return null; }
+    const age = now - Number(intent?.createdAt);
+    return intent?.action === "save" && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
+  }
+  async function canvasDocumentsSettleDraft(timeoutMs = 5000, { finalize = false } = {}) {
+    if (canvasDocumentsDraft.opening) await canvasDocumentsDraft.opening;
+    // Leaving the page must not drop an open editor or selection.
+    if (finalize) await finalizeCanvasForSnapshot();
+    const deadline = Date.now() + timeoutMs;
+    while (canvasDocumentsDraftBusy()) {
+      if (Date.now() >= deadline) throw canvasDocumentsError("CANVAS_BUSY", canvasDocumentsCopy("The Canvas is still updating. Try again in a moment; your draft is kept.", "画布仍在更新，请稍后重试；草稿会保留。"));
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await canvasDocumentsFlushDraft();
+    if (canvasDocumentsDraft.ready && canvasDocumentsDraftUnsaved()) throw canvasDocumentsError("DRAFT_NOT_SAVED", canvasDocumentsCopy("The browser draft could not be stored. Try again before signing in.", "无法保存浏览器草稿，请重试后再登录。"));
+  }
+  async function canvasDocumentsResumeIntent() {
+    const intent = canvasDocumentsTakeIntent();
+    if (!intent) return false;
+    if (window.PENECHO_CONFIG?.guestCanvas) {
+      setStatus(canvasDocumentsCopy("Sign-in was not completed. Your draft is kept in this browser; choose Save again when ready.", "未完成登录。草稿仍保留在此浏览器中，准备好后可再次保存。"));
+      return false;
+    }
+    if (intent.documentId && intent.documentId !== canvasDocuments.activeId) {
+      setStatus(canvasDocumentsCopy("Signed in. Open the Canvas you were saving and choose Save.", "已登录。请打开要保存的画布，然后选择保存。"));
+      return false;
+    }
+    await saveCurrentCanvas();
+    return true;
+  }
+  function saveCurrentCanvasFromUser() {
+    if (window.PENECHO_CONFIG?.guestCanvas && window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:"save" });
+    return saveCurrentCanvas();
+  }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
     open:() => canvasDocumentsStartDraft(true),
     flush:canvasDocumentsFlushDraft,
-    async signIn() { await canvasDocumentsFlushDraft(); location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`); }
+    resumeIntent:() => canvasDocumentsResumeIntent().catch(error => { setStatus(String(error?.message || error)); return false; }),
+    async signIn({ intent = "" } = {}) {
+      // A draft that cannot be stored keeps the user here, with nothing lost.
+      try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
+      catch (error) { setStatus(String(error?.message || error)); return false; }
+      if (intent === "save") {
+        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:"save", documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
+      }
+      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+    }
   };
+  // Returning with Back from the sign-in page restores this page from cache.
+  addEventListener("pageshow", event => { if (event.persisted && window.PenEchoBrowserDraft) void window.PenEchoBrowserDraft.resumeIntent(); });
+  // Companion navigation selects a target for the next MCP attachment. It never
+  // retargets an existing session or treats a background document show as consent.
+  const companionCanvases = { status:null, busy:false, error:"", refresh:null, signature:"", timer:0 };
+  function companionCanvasesEnabled() {
+    return CANVAS_COMPANION_REQUESTED && Boolean(window.PENECHO_CONFIG?.browserDraftId);
+  }
+  function companionCanvasesCopy(en, zh) { return state.language === "zh" ? zh : en; }
+  async function companionCanvasesRequest(path, body) {
+    const response = await fetch(`/api/v1/mcp/workspaces/${encodeURIComponent(window.PENECHO_CONFIG.browserDraftId)}/${path}`, {
+      method:body ? "POST" : "GET", credentials:"same-origin", cache:"no-store",
+      headers:body ? { "Content-Type":"application/json" } : {},
+      ...(body ? { body:JSON.stringify(body) } : {}), signal:AbortSignal.timeout(12000),
+    });
+    const result = await response.json();
+    if (!response.ok) throw Object.assign(Error(result.message || companionCanvasesCopy("Could not connect to this Canvas. Try again.", "暂时无法连接此画布，请重试。")), { code:result.error });
+    return result;
+  }
+  async function companionCanvasesRefresh() {
+    if (!companionCanvasesEnabled()) return;
+    if (companionCanvases.refresh) return companionCanvases.refresh;
+    companionCanvases.refresh = companionCanvasesRequest("documents").then(status => {
+      companionCanvases.status = status;
+      return status;
+    }).finally(() => { companionCanvases.refresh = null; renderCompanionCanvases(); });
+    return companionCanvases.refresh;
+  }
+  function companionCanvasesChanged() {
+    if (!companionCanvasesEnabled()) return;
+    renderCompanionCanvases();
+    const signature = JSON.stringify([Boolean(mcpRuntime.ready), canvasDocumentsCatalog().map(doc => [doc.documentId, doc.title])]);
+    if (signature === companionCanvases.signature) return;
+    companionCanvases.signature = signature;
+    clearTimeout(companionCanvases.timer);
+    if (mcpRuntime.ready && !companionCanvases.busy) companionCanvases.timer = setTimeout(() => {
+      void companionCanvasesRefresh().catch(error => { companionCanvases.error = error.message; renderCompanionCanvases(); });
+    }, 150);
+  }
+  async function companionCanvasesSelect(documentId) {
+    // Wait only for the just-published catalog; never substitute another doc.
+    let status;
+    mcpPublishCanvasCatalog(true);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      status = await companionCanvasesRefresh();
+      if (status?.canvases.some(doc => doc.documentId === documentId)) break;
+      if (attempt === 4) throw Error(companionCanvasesCopy("This Canvas is kept here, but MCP is still reconnecting. Select it again once connected.", "画布已保留，但 MCP 仍在连接。连接后请再次选择。"));
+      await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+    companionCanvases.status = await companionCanvasesRequest("selection", {
+      documentId, expectedRevision:status.selectionRevision, requestId:crypto.randomUUID(),
+    });
+  }
+  async function companionCanvasesChoose(documentId, { create = false } = {}) {
+    if (!companionCanvasesEnabled() || companionCanvases.busy) return;
+    companionCanvases.busy = true; companionCanvases.error = ""; renderCompanionCanvases();
+    try {
+      // Establish the original binding before creating the next document.
+      const status = await companionCanvasesRefresh();
+      if (!status?.canvases.length) throw Error(companionCanvasesCopy("Wait for MCP to connect, then try again.", "请等待 MCP 连接完成后重试。"));
+      if (create) {
+        const previous = canvasDocuments.activeId;
+        await openNewCanvasDialog();
+        documentId = canvasDocuments.activeId;
+        if (!documentId || documentId === previous) return;
+        const title = companionCanvasesCopy(`Canvas ${canvasDocuments.records.size}`, `画布 ${canvasDocuments.records.size}`);
+        applyCurrentCanvasGeneratedName(title);
+        canvasDocumentsRender();
+      } else await canvasDocumentsShow(documentId);
+      await window.PenEchoBrowserDraft.flush();
+      await companionCanvasesSelect(documentId);
+      document.getElementById("companionCanvasMenu")?.hidePopover();
+      selectCanvasToolMode("hand");
+      setStatus(companionCanvasesCopy("MCP target switched. Existing sessions stay on their original canvases.", "已切换 MCP 目标，已有会话仍保留在各自的画布。"));
+    } catch (error) {
+      companionCanvases.error = String(error.message || error);
+      // The new document is retained even if its connection update fails.
+      document.getElementById("companionCanvasMenu")?.showPopover();
+    } finally { companionCanvases.busy = false; renderCompanionCanvases(); }
+  }
+  function renderCompanionCanvases() {
+    if (!companionCanvasesEnabled()) return;
+    const menu = document.getElementById("companionCanvasMenu"), list = document.getElementById("companionCanvasList"),
+      target = document.getElementById("companionCanvasTarget"), current = canvasDocuments.activeId,
+      selected = companionCanvases.status?.selectedDocumentId,
+      docs = canvasDocumentsCatalog(), selectedDoc = docs.find(doc => doc.documentId === selected),
+      disabled = companionCanvases.busy || canvasDocuments.switching;
+    if (!menu || !list || !target) return;
+    document.getElementById("companionCanvasNew").disabled = disabled;
+    document.getElementById("companionCanvasNew").title = companionCanvasesCopy("New Canvas and MCP target", "新建画布并设为 MCP 目标");
+    document.getElementById("companionCanvasNew").setAttribute("aria-label", companionCanvasesCopy("New canvas", "新建画布"));
+    document.getElementById("companionCanvasSwitch").setAttribute("aria-label", companionCanvasesCopy(`Switch canvas (${docs.length})`, `切换画布（${docs.length}）`));
+    target.hidden = !canvasCompanionMinimal();
+    target.textContent = !mcpRuntime.ready ? companionCanvasesCopy("MCP · Reconnecting", "MCP · 连接中")
+      : selected === current ? companionCanvasesCopy("MCP · This canvas", "MCP · 当前画布")
+      : `MCP → ${selectedDoc?.title || companionCanvasesCopy("Choose canvas", "选择画布")}`;
+    target.title = selectedDoc ? `MCP → ${selectedDoc.title}` : target.textContent;
+    target.dataset.matches = String(selected === current);
+    document.getElementById("companionCanvasMenuTitle").textContent = companionCanvasesCopy("Canvases", "画布");
+    document.getElementById("companionCanvasMenuHelp").textContent = companionCanvasesCopy("Choose a Canvas for your next MCP request. Existing sessions keep their own Canvas.", "选择下一步 MCP 使用的画布。已有会话保留在各自的画布。");
+    const error = document.getElementById("companionCanvasError");
+    error.textContent = companionCanvases.error; error.hidden = !companionCanvases.error;
+    const signature = JSON.stringify([docs, current, selected, disabled, state.language]);
+    if (list.dataset.signature === signature) return;
+    list.dataset.signature = signature;
+    list.replaceChildren(...docs.map(doc => {
+      const button = document.createElement("button"), name = document.createElement("span"), detail = document.createElement("small");
+      button.type = "button"; button.className = "companion-canvas-row"; button.dataset.documentId = doc.documentId;
+      button.disabled = disabled;
+      if (doc.documentId === current) button.setAttribute("aria-current", "page");
+      name.textContent = doc.title; name.title = doc.title;
+      detail.textContent = doc.documentId === selected ? companionCanvasesCopy("MCP target", "MCP 目标")
+        : doc.active ? companionCanvasesCopy("Viewing", "正在查看") : "";
+      button.append(name, detail);
+      button.addEventListener("click", () => void companionCanvasesChoose(doc.documentId));
+      return button;
+    }));
+  }
+  if (companionCanvasesEnabled()) {
+    window.PenEchoCompanionCanvases = { changed:companionCanvasesChanged, refresh:() => void companionCanvasesRefresh().catch(() => {}), create:() => companionCanvasesChoose(null, { create:true }) };
+    document.getElementById("companionCanvasNew")?.addEventListener("click", () => void window.PenEchoCompanionCanvases.create());
+    document.getElementById("companionCanvasMenu")?.addEventListener("toggle", event => {
+      if (event.newState === "open") void companionCanvasesRefresh().catch(error => { companionCanvases.error = error.message; renderCompanionCanvases(); });
+    });
+    window.addEventListener("focus", () => { if (mcpRuntime.ready) void companionCanvasesRefresh().catch(() => {}); });
+    window.addEventListener("penecho:languagechange", renderCompanionCanvases);
+    window.addEventListener("penecho:companion-view", renderCompanionCanvases);
+  }
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
@@ -31465,6 +31774,10 @@ var canvasDocumentIdentity = (() => {
       if (!studioNavigatorIsOpen() || studioNavigatorIsMcpDocked()) return false;
       const target=event?.target;
       if (target && (studioNavigator.contains(target) || studioNavigatorToggle.contains(target))) return false;
+      // A rail proxy is the same toggle: closing on pointerdown/focusin here
+      // would make its forwarded click reopen the navigator.
+      const forwarded = target?.closest?.("[data-shell-forward]")?.dataset.shellForward;
+      if (forwarded?.split(",").some(selector => selector.trim() === "#studioNavigatorToggle")) return false;
       setStudioNavigatorOpen(false);
       return true;
     }
@@ -34044,12 +34357,14 @@ var canvasDocumentIdentity = (() => {
   // Local Assist (instant predictions, shapes, tools) needs only the setting;
   // PenEchoLLM re-ranking additionally needs a configured relay.
   function smartSuggestActive() {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return false;
     return Boolean(SMART_SUGGEST && smartSuggestLayer && (smartSuggest.enabled || state.selection?.phase === "active"));
   }
   function smartSuggestRemote() {
     return smartSuggest.enabled && smartSuggestActive() && smartSuggest.available && !suggestionAccessBlocked();
   }
   function suggestionAccessBlocked() {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return true;
     const access=smartSuggest.access;
     return Boolean(access?.reason && (!access.resetsAt || access.resetsAt>Date.now()));
   }
@@ -35004,7 +35319,8 @@ var canvasDocumentIdentity = (() => {
   }
   // The user's own tap on ordinary ink counts twice as much as a ranking.
   function assistLearnInstantTap(id, target) {
-    if (!id || !target || target.selection || target.followUp || target.accept || target.deletion || target.widgetRefine) return;
+    // Example canvases highlight a chosen action; those taps are not preferences.
+    if (!id || !target || target.selection || target.followUp || target.accept || target.deletion || target.widgetRefine || target.example) return;
     const cluster = smartSuggestCluster();
     if (!cluster || cluster.selection || cluster.result || cluster.strokes?.at(-1)?.id !== target.strokes?.at(-1)?.id) return;
     assistLearnInstant(cluster, { [id]:1 }, 2);
@@ -35293,7 +35609,8 @@ var canvasDocumentIdentity = (() => {
     const deletion = assistDeletionDetails(cluster), widgetRefine = assistWidgetRefineTarget(cluster);
     const view = {...assistAnswerView(SMART_SUGGEST.rankActions({ local, answers:jev?.answers, cooldown:smartSuggest.cooldown, now:performance.now(), exclude:[...(analysis.rough.length && !deletion && !widgetRefine ? [] : ["snap_shapes"]), ...(widgetRefine ? [] : ["refine"])] })),routing,deletion,widgetRefine};
     view.noteScope = assistNoteScope(cluster);
-    return view;
+    // Example canvases lead with, and highlight, the action they teach.
+    return typeof exampleCanvasesAssistView === "function" ? exampleCanvasesAssistView(view, cluster) : view;
   }
   function assistSuggestBlocked() {
     const selected = smartSuggest.selection && smartSuggest.selection === state.selection && state.selection.phase === "active";
@@ -36249,6 +36566,8 @@ var canvasDocumentIdentity = (() => {
       target = assistFollowUpTarget(target.previous, target.box);
       target.routing = routing;
     }
+    // An example canvas may run its own action, such as its known graph.
+    if (action && typeof exampleCanvasesActionStarted === "function" && await exampleCanvasesActionStarted(id, target)) return;
     if (!action) return;
     if (typeof assistLearnInstantTap === "function") assistLearnInstantTap(id, target);
     if (id === "refine") { executeAssistWidgetRefinement(target.widgetRefine); return; }
@@ -36570,6 +36889,7 @@ var canvasDocumentIdentity = (() => {
     return Number.isFinite(until) ? Math.max(now, until) : 0;
   }
   function refreshSmartSuggestAvailability({ force = false, reason = "manual" } = {}) {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return Promise.resolve();
     const explicit = force || reason === "manual" || reason === "input" && smartSuggest.enabled, availability = smartSuggest.availability, now = Date.now(),
       retryUnavailable = explicit && !smartSuggest.available;
     if (!SMART_SUGGEST || document.visibilityState === "hidden" || (!smartSuggest.enabled && !explicit && reason !== "init" && reason !== "account" && !(reason === "visible" && !availability.checkedAt))) return Promise.resolve();
@@ -37317,6 +37637,7 @@ var canvasDocumentIdentity = (() => {
     return ranked.sort((a, b) => b.score - a.score);
   }
   function widgetAssistHeaderSuggestions(widget) {
+    if (globalThis.PENECHO_CONFIG?.guestCanvas) return [];
     if (!smartSuggest.enabled) return [];
     return widgetAssistSuggestions(widget)
       .filter(item => item.score >= WIDGET_ASSIST_HEADER_MIN_SCORE)
@@ -40274,17 +40595,25 @@ var canvasDocumentIdentity = (() => {
   function noteLibraryTagRender() {
     const panel = noteCards.panel;
     if (!panel?.tagNav) return;
-    const focused = panel.tagNav.contains(document.activeElement) ? document.activeElement.dataset.tagId : null,
-      tags = [...panel.page.tags];
+    const LIMIT = 12, focused = panel.tagNav.contains(document.activeElement) ? document.activeElement.dataset.tagId : null,
+      tags = [...panel.page.tags].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
     if (panel.tag && !tags.some(tag => tag.id === panel.tag)) tags.push({ id:panel.tag, label:panel.tag, count:0 });
+    // The most used tags come first; the active tag stays visible while the rest are collapsed.
+    const shown = panel.tagsExpanded || tags.length <= LIMIT ? tags : tags.filter((tag, index) => index < LIMIT || tag.id === panel.tag);
+    panel.tagSidebar.hidden = !tags.length;
     panel.tagNav.textContent = "";
-    for (const tag of [{ id:"", label:noteCopy("All tags", "全部标签"), count:panel.page.tagTotal ?? panel.page.totalSaved ?? 0 }, ...tags]) {
-      const button = noteChip(tag.label, tag.id ? "#" : "▦", "note-category-nav-item note-tag-nav-item", () => noteLibraryChooseTag(tag.id)), count = document.createElement("small");
+    for (const tag of shown) {
+      const button = noteChip(`#${tag.label}`, "", "note-tag-chip", () => noteLibraryChooseTag(tag.id), noteCopy(`${tag.label} · ${tag.count} cards`, `${tag.label} · ${tag.count} 张`));
       button.dataset.tagId = tag.id;
       button.setAttribute("aria-pressed", String(panel.tag === tag.id));
-      count.textContent = String(tag.count); button.append(count); panel.tagNav.append(button);
+      panel.tagNav.append(button);
     }
-    if (focused !== null) panel.tagNav.querySelector(`[data-tag-id="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});
+    if (tags.length > LIMIT) {
+      const more = noteChip(panel.tagsExpanded ? noteCopy("Show less", "收起") : noteCopy(`+${tags.length - shown.length} more`, `+${tags.length - shown.length} 更多`), "", "note-tag-chip note-tag-more", () => { panel.tagsExpanded = !panel.tagsExpanded; noteLibraryTagRender(); panel.tagNav.querySelector(".note-tag-more")?.focus({preventScroll:true}); });
+      more.setAttribute("aria-expanded", String(Boolean(panel.tagsExpanded)));
+      panel.tagNav.append(more);
+    }
+    if (focused) panel.tagNav.querySelector(`[data-tag-id="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});
   }
   function noteLibraryCategoryRender(entries, categories, counts) {
     const panel = noteCards.panel;
@@ -40578,7 +40907,8 @@ var canvasDocumentIdentity = (() => {
         widget = matches.find(item => item.id === entry.objectId) || matches[0];
       if (!widget) throw Error(noteCopy("The original note is no longer on its canvas. Add the library copy to the current canvas, then share it.", "原笔记已不在画布中。请先将资料库副本添加到当前画布，再分享。"));
       closeNoteLibrary({ library:true });
-      window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id } }));
+      // The title and kind only label the share dialog; the Widget id selects what is shared.
+      window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{ action:"share", widgetId:widget.id, title:String(entry.note?.title || ""), noteKind:entry.note?.style === "card" ? "card" : "note" } }));
     } catch (error) {
       const message = String(error?.message || error);
       if (noteCards.panel === panel && panel) panel.status.textContent = message;
@@ -40878,6 +41208,601 @@ var canvasDocumentIdentity = (() => {
     });
   }
   if (window.PENECHO_NOTE_CARD) noteCardsStart();
+  // Example canvases teach one feature each: a fresh canvas with handwritten
+  // ink, the suggestion to tap highlighted, and a short note on what it does.
+  const EXAMPLES = window.PENECHO_EXAMPLE_SCENARIOS || null,
+    EXAMPLE_INK = window.PENECHO_EXAMPLE_INK || null,
+    EXAMPLES_STORAGE_KEY = "penecho-examples-v1",
+    EXAMPLE_RESULT_TIMEOUT_MS = 180000,
+    EXAMPLE_WELCOME_COUNT = 4;
+  const exampleCanvases = { progress:null, session:null, opening:false, coachTimer:0, watchTimer:0, doneTimer:0, coachHidden:false, previews:new Map() };
+  const exampleWelcome = document.querySelector("#canvasWelcomeExamples"),
+    exampleWelcomeTitle = document.querySelector("#canvasWelcomeExamplesTitle"),
+    exampleWelcomeProgress = document.querySelector("#canvasWelcomeExamplesProgress"),
+    exampleWelcomeAll = document.querySelector("#canvasWelcomeExamplesAll"),
+    exampleWelcomeGoals = document.querySelector("#canvasWelcomeGoals"),
+    exampleWelcomeList = document.querySelector("#canvasWelcomeExampleList"),
+    examplesDialog = document.querySelector("#examplesDialog"),
+    examplesDialogTitle = document.querySelector("#examplesDialogTitle"),
+    examplesDialogDescription = document.querySelector("#examplesDialogDescription"),
+    examplesDialogProgress = document.querySelector("#examplesDialogProgress"),
+    examplesDialogMeter = document.querySelector("#examplesDialogMeter"),
+    examplesDialogGoals = document.querySelector("#examplesDialogGoals"),
+    examplesDialogList = document.querySelector("#examplesDialogList"),
+    examplesDialogClose = document.querySelector("#examplesDialogClose"),
+    exampleCoach = document.querySelector("#exampleCoach"),
+    exampleCoachKicker = document.querySelector("#exampleCoachKicker"),
+    exampleCoachTitle = document.querySelector("#exampleCoachTitle"),
+    exampleCoachBody = document.querySelector("#exampleCoachBody"),
+    exampleCoachTip = document.querySelector("#exampleCoachTip"),
+    exampleCoachAll = document.querySelector("#exampleCoachAll"),
+    exampleCoachHide = document.querySelector("#exampleCoachHide"),
+    exampleDone = document.querySelector("#exampleDone"),
+    exampleDoneTitle = document.querySelector("#exampleDoneTitle"),
+    exampleDoneBody = document.querySelector("#exampleDoneBody"),
+    exampleDoneNext = document.querySelector("#exampleDoneNext"),
+    exampleDoneOwn = document.querySelector("#exampleDoneOwn"),
+    exampleDoneClose = document.querySelector("#exampleDoneClose");
+
+  function exampleCopy(en, zh) { return state.language === "zh" ? zh : en; }
+  function exampleText(value) { return EXAMPLES ? EXAMPLES.localized(value, state.language) : ""; }
+  function examplesAvailable() {
+    const config = window.PENECHO_CONFIG || {};
+    return Boolean(EXAMPLES && EXAMPLE_INK) && config.runtime !== "viewer" && !config.guestCanvas && !CANVAS_COMPANION_REQUESTED;
+  }
+  function exampleGoalLabel(goal) {
+    return {
+      study:exampleCopy("Studying", "学习"),
+      code:exampleCopy("Coding", "编程"),
+      work:exampleCopy("Working", "工作"),
+      play:exampleCopy("Playing", "娱乐"),
+    }[goal] || "";
+  }
+  function exampleRouteLabel(route) {
+    return {
+      instant:exampleCopy("Instant", "即时"),
+      ai:exampleCopy("Uses AI", "使用 AI"),
+      agent:"PenEcho Agent",
+    }[route] || "";
+  }
+  function exampleFeatureLabel(feature) {
+    return {
+      functions:exampleCopy("Functions", "函数"),
+      "3d":exampleCopy("3D visual", "立体可视化"),
+      proof:exampleCopy("Check your work", "检查推导"),
+      drawing:exampleCopy("2D drawing", "平面绘画"),
+      visual:exampleCopy("Draw visual", "绘制视觉"),
+      animation:exampleCopy("Animation", "动画"),
+      diagram:exampleCopy("Diagrams", "图表"),
+      explorer:"Visual Explorer",
+      agent:"PenEcho Agent",
+      cards:exampleCopy("Knowledge cards", "知识卡片"),
+      notes:exampleCopy("Notes", "笔记"),
+      homework:exampleCopy("Homework", "作业"),
+      code:exampleCopy("Code review", "代码检查"),
+      prototype:exampleCopy("Prototype", "原型"),
+      plan:exampleCopy("Plan", "计划"),
+      data:exampleCopy("Data", "数据"),
+      game:exampleCopy("Mini game", "小游戏"),
+    }[feature] || "";
+  }
+
+  function exampleProgress() {
+    if (exampleCanvases.progress) return exampleCanvases.progress;
+    let raw = null;
+    try { raw = localStorage.getItem(EXAMPLES_STORAGE_KEY); } catch {}
+    exampleCanvases.progress = EXAMPLES ? EXAMPLES.parseProgress(raw) : null;
+    return exampleCanvases.progress;
+  }
+  function exampleSaveProgress(progress) {
+    exampleCanvases.progress = EXAMPLES.parseProgress(progress);
+    try { localStorage.setItem(EXAMPLES_STORAGE_KEY, EXAMPLES.serializeProgress(exampleCanvases.progress)); } catch {}
+    renderExamples();
+  }
+  function exampleTriedCount() { return exampleProgress()?.tried.length || 0; }
+  function exampleProgressText() {
+    const total = EXAMPLES?.SCENARIOS.length || 0, tried = exampleTriedCount();
+    return exampleCopy(`${tried} of ${total} tried`, `已体验 ${tried}/${total}`);
+  }
+  function exampleNextUntried(afterId) {
+    const tried = new Set(exampleProgress()?.tried || []), list = EXAMPLES.ordered(exampleProgress()?.goal),
+      start = Math.max(0, list.findIndex(scenario => scenario.id === afterId) + 1);
+    return [...list.slice(start), ...list.slice(0, start)].find(scenario => !tried.has(scenario.id) && scenario.id !== afterId) || null;
+  }
+
+  // A small drawing of the example's own ink, so each card shows what you get to try.
+  function examplePreview(scenario) {
+    if (scenario.image) {
+      const image = document.createElement("img");
+      image.src = scenario.image.src;
+      image.alt = "";
+      image.decoding = "async";
+      return image;
+    }
+    let markup = exampleCanvases.previews.get(scenario.id);
+    if (!markup) {
+      const strokes = EXAMPLES.strokes(scenario.id), box = EXAMPLE_INK.bounds(strokes),
+        pad = Math.max(box.width, box.height) * 0.06 + 4;
+      markup = { viewBox:`${-pad} ${-pad} ${box.width + pad * 2} ${box.height + pad * 2}`, points:strokes.map(stroke => stroke.map(point => `${point.x},${point.y}`).join(" ")) };
+      exampleCanvases.previews.set(scenario.id, markup);
+    }
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", markup.viewBox);
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    for (const points of markup.points) {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      line.setAttribute("points", points);
+      line.setAttribute("vector-effect", "non-scaling-stroke");
+      svg.append(line);
+    }
+    return svg;
+  }
+  function exampleCard(scenario, options = {}) {
+    const tried = exampleProgress()?.tried.includes(scenario.id),
+      button = document.createElement("button"),
+      preview = document.createElement("span"),
+      copy = document.createElement("span"),
+      meta = document.createElement("small"),
+      title = document.createElement("strong"),
+      description = document.createElement("span");
+    button.type = "button";
+    button.className = "example-card";
+    button.dataset.exampleId = scenario.id;
+    button.dataset.tried = tried ? "true" : "false";
+    preview.className = "example-card-preview";
+    preview.append(examplePreview(scenario));
+    copy.className = "example-card-copy";
+    title.textContent = exampleText(scenario.title);
+    description.textContent = exampleText(scenario.description);
+    meta.className = "example-card-meta";
+    const feature = exampleFeatureLabel(scenario.feature), route = exampleRouteLabel(scenario.route);
+    meta.textContent = [options.numbered ? feature : "", options.numbered && route === feature ? "" : route, tried ? exampleCopy("Tried", "已体验") : exampleCopy(`About ${scenario.seconds} s`, `约 ${scenario.seconds} 秒`)].filter(Boolean).join(" · ");
+    copy.append(title, description, meta);
+    button.append(preview, copy);
+    // A host that does not serve the example photo hides its card rather than
+    // offering an example that cannot open.
+    preview.querySelector("img")?.addEventListener("error", () => { button.hidden = true; }, { once:true });
+    button.setAttribute("aria-label", `${exampleText(scenario.title)}. ${exampleText(scenario.description)} ${meta.textContent}`);
+    return button;
+  }
+  function renderExampleGoals(host) {
+    if (!host) return;
+    const goal = exampleProgress()?.goal;
+    host.replaceChildren(...EXAMPLES.GOALS.map(id => {
+      const button = document.createElement("button");
+      button.type = "button";
+      peButton(button, "segment", "segment");
+      button.dataset.exampleGoal = id;
+      button.setAttribute("aria-pressed", goal === id ? "true" : "false");
+      button.textContent = exampleGoalLabel(id);
+      return button;
+    }));
+    host.setAttribute("aria-label", exampleCopy("What would you like to do first?", "你想先做什么？"));
+  }
+  function renderExampleWelcome() {
+    if (!exampleWelcome) return;
+    exampleWelcome.hidden = !examplesAvailable();
+    if (exampleWelcome.hidden) return;
+    const goal = exampleProgress()?.goal;
+    exampleWelcomeTitle.textContent = goal ? exampleCopy(`Examples for ${exampleGoalLabel(goal).toLowerCase()}`, `${exampleGoalLabel(goal)}示例`) : exampleCopy("New here? Pick what you do, or try one of these", "第一次使用？选择你的场景，或先试试这些");
+    exampleWelcomeProgress.textContent = exampleProgressText();
+    exampleWelcomeAll.textContent = exampleCopy("All examples", "全部示例");
+    renderExampleGoals(exampleWelcomeGoals);
+    const progress = exampleProgress();
+    exampleWelcomeList.replaceChildren(...EXAMPLES.welcome(progress?.goal, progress?.tried, EXAMPLE_WELCOME_COUNT).map(scenario => exampleCard(scenario)));
+  }
+  function renderExamplesDialog() {
+    if (!examplesDialog || !EXAMPLES) return;
+    const total = EXAMPLES.SCENARIOS.length;
+    examplesDialogTitle.textContent = exampleCopy(`Learn PenEcho in ${total} tries`, `${total} 个示例，快速上手 PenEcho`);
+    examplesDialogDescription.textContent = exampleCopy("Each example opens a ready canvas. Tap the highlighted suggestion and see the result. Most take under 30 seconds.", "每个示例都会打开一张准备好的画布。点击高亮的建议即可看到结果，大多不到 30 秒。");
+    examplesDialogProgress.textContent = exampleProgressText();
+    examplesDialogMeter.max = EXAMPLES.SCENARIOS.length;
+    examplesDialogMeter.value = exampleTriedCount();
+    examplesDialogClose.setAttribute("aria-label", exampleCopy("Close", "关闭"));
+    examplesDialogClose.title = exampleCopy("Close", "关闭");
+    renderExampleGoals(examplesDialogGoals);
+    // One section per category; the chosen one first.
+    const goal = exampleProgress()?.goal, goals = goal ? [goal, ...EXAMPLES.GOALS.filter(id => id !== goal)] : EXAMPLES.GOALS;
+    examplesDialogList.replaceChildren(...goals.map(id => {
+      const section = document.createElement("section"), heading = document.createElement("h3"), grid = document.createElement("div");
+      section.className = "examples-dialog-group";
+      section.dataset.exampleGroup = id;
+      heading.textContent = exampleGoalLabel(id);
+      grid.className = "examples-dialog-grid";
+      grid.append(...EXAMPLES.ordered(id).map(scenario => exampleCard(scenario, { numbered:true })));
+      section.append(heading, grid);
+      return section;
+    }));
+  }
+  function renderExampleEntries() {
+    const available = examplesAvailable();
+    for (const button of document.querySelectorAll("[data-open-examples]")) button.hidden = !available;
+    for (const label of document.querySelectorAll('[data-example-label="examples"]')) label.textContent = exampleCopy("Examples", "示例");
+    const progress = document.querySelector("#studioNavigatorExamplesProgress");
+    if (progress) progress.textContent = `${exampleTriedCount()}/${EXAMPLES.SCENARIOS.length}`;
+  }
+  function renderExamples() {
+    if (!EXAMPLES) return;
+    renderExampleEntries();
+    renderExampleWelcome();
+    if (examplesDialog?.open) renderExamplesDialog();
+    if (exampleCoach && !exampleCoach.hidden) renderExampleCoach();
+  }
+  function openExamplesDialog() {
+    if (!examplesDialog || !examplesAvailable()) return;
+    renderExamplesDialog();
+    if (!examplesDialog.open) examplesDialog.showModal();
+  }
+  function closeExamplesDialog() {
+    if (examplesDialog?.open) examplesDialog.close();
+  }
+  function chooseExampleGoal(goal) {
+    exampleSaveProgress(EXAMPLES.setGoal(exampleProgress(), goal));
+  }
+
+  function exampleSessionCurrent() {
+    const session = exampleCanvases.session;
+    return session && canvasDocumentsCurrent()?.id === session.documentId ? session : null;
+  }
+  function exampleCanvasIsEmpty() {
+    return !tiles.size && !state.images.length && !state.textBoxes.length && !visibleWidgets().length && !state.currentSnapshotId;
+  }
+  function exampleBox(points) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const point of points) { minX = Math.min(minX, point.x); minY = Math.min(minY, point.y); maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y); }
+    return { x:minX, y:minY, w:Math.max(1, maxX - minX), h:Math.max(1, maxY - minY) };
+  }
+  // Draws the example as real recorded strokes: one Undo step, ranked by Suggest
+  // like handwriting, and available as vectors to Finish drawing and Animate sketch.
+  function drawExampleInk(scenario, { suggest = true } = {}) {
+    // Measure the canvas as it is now; panels may have resized it this frame.
+    invalidateCanvasViewportMetrics();
+    const strokes = EXAMPLES.strokes(scenario.id), box = EXAMPLE_INK.bounds(strokes),
+      view = viewportRect() || { x:SIZE / 2 - 800, y:SIZE / 2 - 500, w:1600, h:1000 },
+      scale = Math.min(1 / state.scale, view.w * 0.5 / Math.max(1, box.width), view.h * 0.4 / Math.max(1, box.height)),
+      width = box.width * scale, height = box.height * scale,
+      x = view.x + (view.w - width) / 2, y = view.y + view.h * 0.34 - height / 2,
+      size = state.pen, color = state.inkColor;
+    smartSuggestSyncDocument();
+    const world = strokes.map(stroke => stroke.map(point => ({ x:x + point.x * scale, y:y + point.y * scale })));
+    for (const points of world) {
+      if (points.length === 1) dot(points[0], false, size, true, color);
+      for (let index = 1; index < points.length; index++) stroke(points[index - 1], points[index], false, size, true, color);
+    }
+    state.userRevision++;
+    // The Agent example keeps the panel open; first ink would otherwise hide it.
+    if (!suggest && typeof canvasAgentDidStartUserConversation === "function") canvasAgentDidStartUserConversation();
+    saveUserCanvasChange();
+    requestCommittedInkRender();
+    requestRender();
+    window.PenEchoStudioNavigator?.updateDocument?.();
+    const placed = { x, y, w:width, h:height };
+    // Agent examples are read from the canvas; the Suggest bar would compete with Send.
+    if (!suggest) {
+      if (typeof refreshDirtyHistoryAfter === "function") refreshDirtyHistoryAfter();
+      return placed;
+    }
+    const historyEntry = state.history.at(-1), now = performance.now();
+    for (const points of world) smartSuggestRecordStroke({ id:smartSuggest.nextStrokeId++, points, size, color, box:exampleBox(points), at:now, durationMs:240, historyEntry, exact:true });
+    smartSuggest.writingMs += world.length * 240;
+    smartSuggest.lastKey = "";
+    smartSuggest.jev = null;
+    smartSuggest.localReadyAt = now + ASSIST_LOCAL_DELAY_MS;
+    smartSuggest.inkReadyAt = smartSuggest.localReadyAt + SMART_SUGGEST_RANK_DELAY_MS;
+    // Undo/Redo restore the Suggest input recorded above with this history entry.
+    if (typeof refreshDirtyHistoryAfter === "function") refreshDirtyHistoryAfter();
+    scheduleAssist();
+    return placed;
+  }
+  // Photo examples go through the normal image import, so the photo is new
+  // input for Suggest exactly as if the person had added it themselves.
+  async function addExampleImage(scenario) {
+    const response = await fetch(scenario.image.src, { cache:"force-cache" });
+    if (!response.ok) throw Error(exampleCopy("The example photo could not be loaded.", "示例照片加载失败。"));
+    const blob = await response.blob(), before = state.images.length;
+    // Some hosts serve example files as octet-stream; the bytes are a known JPEG.
+    const type = blob.type?.startsWith("image/") ? blob.type : "image/jpeg";
+    await addImageFile(new File([blob], scenario.image.name, { type }));
+    const item = state.images.length > before ? state.images.at(-1) : null;
+    if (!item) throw Error(exampleCopy("The example photo could not be added.", "示例照片无法添加。"));
+    // Leave image editing so the suggestion bar is not held back.
+    if (state.imageEdit && typeof acceptImageEdit === "function") acceptImageEdit();
+    return imageBox(item);
+  }
+  // Centres the example ink in the visible canvas without changing the zoom.
+  function centerExampleView(box) {
+    invalidateCanvasViewportMetrics();
+    const { width, height } = canvasViewportMetrics();
+    if (!width || !height) return null;
+    state.panX = width / 2 - (box.x + box.w / 2) * state.scale;
+    state.panY = height * 0.36 - (box.y + box.h / 2) * state.scale;
+    requestRender();
+    return { panX:state.panX, panY:state.panY };
+  }
+  // Panels that open with a new canvas resize it after the ink lands, and the
+  // resize keeps the old centre. Recentre after each resize for a moment, until
+  // the person pans, zooms or draws.
+  function keepExampleCentred(box, session) {
+    const viewport = document.querySelector("#viewport");
+    if (!viewport || typeof ResizeObserver !== "function") return;
+    let timer = 0;
+    const stop = () => {
+      observer.disconnect();
+      clearTimeout(timer);
+      for (const type of ["pointerdown", "wheel"]) viewport.removeEventListener(type, stop, true);
+    };
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (exampleCanvases.session === session && exampleSessionCurrent() && !state.drawing) centerExampleView(box);
+      }, 60);
+    });
+    observer.observe(viewport);
+    for (const type of ["pointerdown", "wheel"]) viewport.addEventListener(type, stop, true);
+    setTimeout(stop, 2500);
+  }
+  async function openExampleCanvas(id) {
+    const scenario = EXAMPLES?.get(id);
+    if (!scenario || exampleCanvases.opening || !examplesAvailable()) return false;
+    exampleCanvases.opening = true;
+    try {
+      closeExamplesDialog();
+      hideExampleDone();
+      endExampleSession();
+      // An empty, unsaved canvas is reused; anything else stays open in the workspace.
+      if (!exampleCanvasIsEmpty() && await openNewCanvasDialog() === false) return false;
+      applyCurrentCanvasGeneratedName(`${exampleCopy("Example", "示例")} · ${exampleText(scenario.title)}`);
+      if (state.mode !== "pen") setCanvasMode("pen", { preserveSelection:true });
+      const agent = scenario.route === "agent" && canvasAgentReadyForExample();
+      // Open the Agent first so the ink is laid out in the space it leaves.
+      if (agent) await openExampleAgentPanel();
+      const box = scenario.image ? await addExampleImage(scenario) : drawExampleInk(scenario, { suggest:scenario.route !== "agent" });
+      exampleCanvases.session = { id:scenario.id, documentId:canvasDocumentsCurrent().id, box, status:"waiting", baseline:"", deadline:0 };
+      exampleCanvases.coachHidden = false;
+      if (agent) fillExampleAgentPrompt(scenario);
+      centerExampleView(box);
+      keepExampleCentred(box, exampleCanvases.session);
+      startExampleCoach();
+      return true;
+    } catch (error) {
+      setStatus(error?.message || String(error));
+      return false;
+    } finally {
+      exampleCanvases.opening = false;
+    }
+  }
+  function canvasAgentReadyForExample() {
+    return typeof canvasAgentAvailable !== "function" || canvasAgentAvailable();
+  }
+  async function openExampleAgentPanel() {
+    if (canvasAgentPanel.hidden || !document.body.classList.contains("canvas-agent-open")) openCanvasAgent({ focus:false });
+    // A new canvas may have just started opening the panel too; let it finish
+    // resizing the canvas before the view is measured.
+    await new Promise(resolve => setTimeout(resolve, 360));
+  }
+  function fillExampleAgentPrompt(scenario) {
+    if (!exampleSessionCurrent() || canvasAgentInput.disabled) return;
+    canvasAgentInput.value = exampleText(scenario.prompt);
+    canvasAgentInput.dispatchEvent(new Event("input", { bubbles:true }));
+    canvasAgentInput.focus({ preventScroll:true });
+    canvasAgentInput.setSelectionRange?.(canvasAgentInput.value.length, canvasAgentInput.value.length);
+  }
+  function endExampleSession() {
+    clearInterval(exampleCanvases.watchTimer);
+    exampleCanvases.watchTimer = 0;
+    exampleCanvases.session = null;
+    hideExampleCoach();
+  }
+
+  // Suggest hook: on an example canvas, the example's action leads and is highlighted.
+  function exampleCanvasesAssistView(view, cluster) {
+    const session = exampleSessionCurrent();
+    if (!session || session.status !== "waiting" || cluster?.result || cluster?.selection || !view?.items) return view;
+    const id = EXAMPLES.get(session.id)?.action;
+    if (!id || !SMART_SUGGEST?.actionById(id)) return view;
+    const target = [...view.items, ...(view.more || [])].find(item => item.id === id) || { id, source:"local" },
+      items = [target, ...view.items.filter(item => item.id !== id)].slice(0, Math.max(1, view.items.length)),
+      more = [...view.items, ...(view.more || [])].filter(item => item.id !== id && !items.includes(item));
+    return { ...view, items, more, confident:true };
+  }
+  // Executor hook: returns true when the example handled the action itself.
+  async function exampleCanvasesActionStarted(id, target) {
+    const session = exampleSessionCurrent();
+    if (!session || session.status !== "waiting") return false;
+    const scenario = EXAMPLES.get(session.id);
+    if (id !== scenario.action) {
+      endExampleSession();
+      return false;
+    }
+    session.status = "running";
+    if (target) target.example = true;
+    hideExampleCoach();
+    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), scenario.id));
+    // Instant examples insert their known result: a graph, or the local
+    // architecture diagram of the sketched boxes.
+    if (id === "plot" && scenario.graph || id === "diagram" && scenario.architecture) {
+      let visible = null;
+      try { visible = viewportRect(); } catch {}
+      const anchor = target?.box || session.box,
+        spec = scenario.graph
+          ? SMART_SUGGEST.graphWidgetCommand(scenario.graph, { language:state.language, anchor, visible, canvasSize:SIZE })
+          : { tool:"html_widget", pluginId:"general", ...SMART_SUGGEST.graphPlacement({}, { anchor, visible, canvasSize:SIZE }), title:scenario.architecture.title, refreshSeconds:0,
+            html:EXAMPLES.architectureDocument(scenario.architecture, state.language) };
+      if (spec) {
+        hideAssist(scenario.graph ? "example-graph" : "example-diagram");
+        await insertAssistWidget(spec, { place:"beside" });
+        consumeDirtyInputScope({ x:session.box.x - 24, y:session.box.y - 24, w:session.box.w + 48, h:session.box.h + 48 });
+        smartSuggestInputConsumed(smartSuggest.strokes.at(-1)?.id || 0);
+        finishExample(session);
+        return true;
+      }
+    }
+    watchExampleResult(session);
+    return false;
+  }
+  function exampleSignature() {
+    return [state.widgets.length, state.images.length, state.textBoxes.length, state.history.length, state.animations?.length || 0].join("|");
+  }
+  function exampleBusy() {
+    return Boolean(state.activeAI) || smartSuggest.bar?.mode === "working" || Boolean(canvasAgent.running || canvasAgent.requestPending);
+  }
+  // A result has landed once the canvas changed and nothing is still running.
+  function watchExampleResult(session) {
+    clearInterval(exampleCanvases.watchTimer);
+    session.baseline = exampleSignature();
+    session.deadline = performance.now() + EXAMPLE_RESULT_TIMEOUT_MS;
+    exampleCanvases.watchTimer = setInterval(() => {
+      if (exampleCanvases.session !== session || performance.now() > session.deadline) {
+        clearInterval(exampleCanvases.watchTimer);
+        exampleCanvases.watchTimer = 0;
+        return;
+      }
+      if (!exampleSessionCurrent() || exampleBusy() || exampleSignature() === session.baseline) return;
+      clearInterval(exampleCanvases.watchTimer);
+      exampleCanvases.watchTimer = 0;
+      finishExample(session);
+    }, 600);
+  }
+  function exampleAgentSubmitted() {
+    const session = exampleSessionCurrent();
+    if (!session || session.status !== "waiting" || EXAMPLES.get(session.id)?.route !== "agent") return;
+    session.status = "running";
+    hideExampleCoach();
+    exampleSaveProgress(EXAMPLES.markTried(exampleProgress(), session.id));
+    watchExampleResult(session);
+  }
+  function finishExample(session) {
+    session.status = "done";
+    // Results are live. In Pen a press on a Widget draws, so switch to Hand and
+    // let the person use the new graph, card or widget straight away.
+    if (exampleSessionCurrent() === session && state.mode !== "hand") setCanvasMode("hand", { preserveSelection:true, skipDraftFinalize:true, preserveWidgetRefinement:true });
+    showExampleDone(EXAMPLES.get(session.id));
+  }
+
+  function showExampleDone(scenario) {
+    if (!exampleDone || !scenario) return;
+    const next = exampleNextUntried(scenario.id), total = EXAMPLES.SCENARIOS.length, tried = exampleTriedCount();
+    exampleDone.dataset.exampleId = scenario.id;
+    exampleDone.dataset.documentId = canvasDocumentsCurrent()?.id || "";
+    exampleDone.dataset.nextId = next?.id || "";
+    exampleDoneTitle.textContent = tried >= total ? exampleCopy(`You tried all ${total} examples`, `${total} 个示例都体验过了`) : `${exampleCopy(`You tried “${exampleText(scenario.title)}”`, `已体验“${exampleText(scenario.title)}”`)} · ${exampleProgressText()}`;
+    exampleDoneBody.textContent = [exampleText(scenario.learned), exampleText(scenario.tip)].filter(Boolean).join(" ");
+    exampleDoneNext.hidden = !next;
+    exampleDoneNext.textContent = next ? `${exampleCopy("Next", "下一个")}: ${exampleText(next.title)}` : "";
+    exampleDoneOwn.textContent = exampleCopy("Start my own canvas", "新建我的画布");
+    exampleDoneClose.setAttribute("aria-label", exampleCopy("Close", "关闭"));
+    exampleDoneClose.title = exampleCopy("Close", "关闭");
+    exampleDone.hidden = false;
+    // The bar belongs to its example canvas; switching canvases dismisses it.
+    clearInterval(exampleCanvases.doneTimer);
+    exampleCanvases.doneTimer = setInterval(() => {
+      if (exampleDone.hidden || canvasDocumentsCurrent()?.id !== exampleDone.dataset.documentId) hideExampleDone();
+    }, 800);
+  }
+  function hideExampleDone() {
+    clearInterval(exampleCanvases.doneTimer);
+    exampleCanvases.doneTimer = 0;
+    if (exampleDone) exampleDone.hidden = true;
+  }
+
+  function renderExampleCoach() {
+    const session = exampleCanvases.session, scenario = session && EXAMPLES.get(session.id);
+    if (!scenario) return;
+    const group = EXAMPLES.ordered(scenario.category), number = group.indexOf(scenario) + 1,
+      suggestOff = scenario.route !== "agent" && !smartSuggestActive();
+    exampleCoachKicker.textContent = `${exampleGoalLabel(scenario.category)} · ${exampleCopy(`${number} of ${group.length}`, `${number}/${group.length}`)} · ${exampleFeatureLabel(scenario.feature)}`;
+    exampleCoachTitle.textContent = exampleText(scenario.title);
+    exampleCoachBody.textContent = suggestOff ? exampleCopy("Suggestions are turned off. Turn them on in Settings, or tap the AI button to try this example.", "建议已关闭。请在设置中开启，或点击 AI 按钮体验此示例。") : exampleText(scenario.coach);
+    exampleCoachTip.textContent = exampleText(scenario.tip);
+    exampleCoachTip.hidden = !scenario.tip || scenario.route === "agent";
+    exampleCoachAll.textContent = exampleCopy("All examples", "全部示例");
+    exampleCoachHide.textContent = exampleCopy("Got it", "知道了");
+  }
+  function exampleInkScreenRect(box) {
+    const viewportElement = document.querySelector("#viewport"), frame = viewportElement ? pageLayoutRect(viewportElement) : null;
+    if (!frame) return null;
+    const left = frame.left + box.x * state.scale + state.panX, top = frame.top + box.y * state.scale + state.panY,
+      width = box.w * state.scale, height = box.h * state.scale;
+    return { left, top, right:left + width, bottom:top + height, width, height };
+  }
+  function exampleCoachTarget(session, scenario) {
+    if (scenario.route === "agent") {
+      const send = document.querySelector("#canvasAgentSend");
+      return send && !canvasAgentPanel.hidden ? { rect:pageLayoutRect(send), placement:"top" } : null;
+    }
+    const chip = document.querySelector(`#smartSuggestLayer:not([hidden]) .assist-bar[data-mode="suggest"] [data-suggestion="${scenario.action}"]`);
+    if (chip?.getClientRects().length) return { rect:pageLayoutRect(chip), placement:"bottom" };
+    return smartSuggestActive() ? null : { rect:exampleInkScreenRect(session.box), placement:"bottom" };
+  }
+  function positionExampleCoach() {
+    const session = exampleSessionCurrent(), scenario = session && EXAMPLES.get(session.id);
+    if (!scenario || session.status !== "waiting" || exampleCanvases.coachHidden || state.viewMode || featureTour.active || examplesDialog?.open) { if (exampleCoach) exampleCoach.hidden = true; return; }
+    const target = exampleCoachTarget(session, scenario);
+    if (!target?.rect || !TOUR.rectHasArea(target.rect)) { exampleCoach.hidden = true; return; }
+    const wasHidden = exampleCoach.hidden;
+    if (wasHidden) renderExampleCoach();
+    exampleCoach.hidden = false;
+    const card = pageLayoutRect(exampleCoach),
+      position = TOUR.placeCoachmark(target.rect, { width:card.width, height:card.height }, featureTourViewport(), target.placement, { margin:12, gap:14, arrowMargin:22 }),
+      style = runtimeElementStyle(exampleCoach, "example-coach");
+    style?.setProperty("left", `${Math.round(position.x)}px`);
+    style?.setProperty("top", `${Math.round(position.y)}px`);
+    style?.setProperty("--example-coach-arrow", `${Math.round(position.arrowOffset)}px`);
+    exampleCoach.dataset.placement = position.placement;
+  }
+  function startExampleCoach() {
+    clearInterval(exampleCanvases.coachTimer);
+    renderExampleCoach();
+    exampleCanvases.coachTimer = setInterval(() => {
+      if (!exampleCanvases.session || exampleCanvases.session.status !== "waiting") { hideExampleCoach(); return; }
+      positionExampleCoach();
+    }, 200);
+  }
+  function hideExampleCoach() {
+    clearInterval(exampleCanvases.coachTimer);
+    exampleCanvases.coachTimer = 0;
+    if (exampleCoach) exampleCoach.hidden = true;
+  }
+
+  function exampleCardClick(event) {
+    const goal = event.target.closest?.("button[data-example-goal]");
+    if (goal) { chooseExampleGoal(goal.dataset.exampleGoal); return; }
+    const card = event.target.closest?.("[data-example-id]");
+    if (card) void openExampleCanvas(card.dataset.exampleId);
+  }
+  if (EXAMPLES) {
+    exampleWelcome?.addEventListener("click", exampleCardClick);
+    // The welcome sits over the canvas: keep presses on its controls from drawing.
+    exampleWelcome?.addEventListener("pointerdown", event => { if (event.target.closest?.("button")) event.stopPropagation(); });
+    exampleWelcomeAll?.addEventListener("click", openExamplesDialog);
+    examplesDialog?.addEventListener("click", event => {
+      if (event.target === examplesDialog) { closeExamplesDialog(); return; }
+      exampleCardClick(event);
+    });
+    examplesDialogClose?.addEventListener("click", closeExamplesDialog);
+    for (const button of document.querySelectorAll("[data-open-examples]")) button.addEventListener("click", () => {
+      const menu = button.closest("#canvasMoreMenu");
+      if (menu) { menu.hidden = true; document.querySelector("#canvasMoreBtn")?.setAttribute("aria-expanded", "false"); }
+      openExamplesDialog();
+    });
+    exampleCoachAll?.addEventListener("click", openExamplesDialog);
+    exampleCoachHide?.addEventListener("click", () => { exampleCanvases.coachHidden = true; hideExampleCoach(); });
+    exampleCoach?.addEventListener("keydown", event => { if (event.key === "Escape") { exampleCanvases.coachHidden = true; hideExampleCoach(); } });
+    for (const element of [exampleCoach, exampleDone]) element?.addEventListener("pointerdown", event => event.stopPropagation());
+    exampleDoneNext?.addEventListener("click", () => { const next = exampleDone.dataset.nextId; if (next) void openExampleCanvas(next); });
+    exampleDoneOwn?.addEventListener("click", () => { hideExampleDone(); endExampleSession(); canvasDocumentsUiAction(openNewCanvasDialog); });
+    exampleDoneClose?.addEventListener("click", hideExampleDone);
+    document.querySelector("#canvasAgentForm")?.addEventListener("submit", exampleAgentSubmitted, true);
+    window.addEventListener("penecho:languagechange", renderExamples);
+    renderExamples();
+  }
+  window.PenEchoExamples = Object.freeze({
+    open:id => openExampleCanvas(id),
+    openDialog:openExamplesDialog,
+    progress:() => ({ ...exampleProgress() }),
+  });
   // Keep existing Ink Lab widgets editable, undoable and exportable.
   // Creation tools and automatic suggestions have been removed from Canvas.
   const livingInkModel = window.PENECHO_LIVING_INK_MODEL, livingInkRuntime = window.PENECHO_LIVING_INK,
@@ -41996,7 +42921,9 @@ var canvasDocumentIdentity = (() => {
     if (mode === "hand" && options.showHint && !state.busy) {
       showHandStatusHint("hand-mode", ["handAutoAIManual", "handAutoAIResume"]);
     }
-    if (options.showHint) {
+    if (options.showHint && mode === "pen" && canvasGuestAiRestricted()) {
+      showCanvasGuestAiHint();
+    } else if (options.showHint) {
       const shortcutHints = {
         agent:keyboardShortcutCanvasHint("focus-agent", "canvasHintShortcutAgent"),
         save:keyboardShortcutCanvasHint("save-canvas", "canvasHintShortcutSave"),
@@ -42471,6 +43398,8 @@ var canvasDocumentIdentity = (() => {
   document.querySelector("#rejectBatch").onclick = rejectPending;
   document.querySelector("#acceptBatch").onclick = acceptPending;
   document.querySelector("#auto").onclick = () => {
+    // Guests cannot run PenEcho AI; never store a preference they cannot see.
+    if (canvasGuestAiRestricted()) return;
     if (state.auto) setAutoEnabled(false);
     else setAutoEnabled(true, true);
   };
@@ -42674,8 +43603,8 @@ var canvasDocumentIdentity = (() => {
       if (pointerActivated) requestAnimationFrame(() => fullscreenButton.blur());
     }
   };
-  document.querySelector("#newCanvasBtn").onclick = () => canvasDocumentsUiAction(openNewCanvasDialog);
-  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvas;
+  document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
+  document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
@@ -42684,7 +43613,7 @@ var canvasDocumentIdentity = (() => {
   document.querySelector("#historyBackdrop").onclick = closeHistoryPanel;
   document.querySelector("#historySaveCurrent").onclick = () => {
     closeHistorySavePanel();
-    void saveCurrentCanvas();
+    void saveCurrentCanvasFromUser();
   };
   document.querySelector("#historySave").onclick = () => {
     closeHistorySavePanel();
@@ -42782,7 +43711,7 @@ var canvasDocumentIdentity = (() => {
     if (event.key === "Enter") {
       event.preventDefault();
       closeHistorySavePanel();
-      void saveCurrentCanvas();
+      void saveCurrentCanvasFromUser();
     }
   });
   document.querySelector("#newSnapshotName").addEventListener("keydown", (event) => {
@@ -42968,9 +43897,9 @@ var canvasDocumentIdentity = (() => {
     settings.requestTrace = !settings.requestTrace;
     updateTraceToggle();
   });
-  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.auto));
+  settingsAutoToggle.addEventListener("click", () => setAutoEnabled(!state.autoPreference));
   settingsCanvasHintsToggle.addEventListener("click", () => setCanvasHintsEnabled(!state.canvasHintsEnabled));
-  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpen));
+  settingsCanvasAgentAutoOpenToggle.addEventListener("click", () => setCanvasAgentAutoOpen(!state.canvasAgentAutoOpenPreference));
   settingsWidgetShadowToggle.addEventListener("click", () => setWidgetShadowEnabled(!state.widgetShadowEnabled));
   summonToggle.addEventListener("click", () => setSummonEnabled(!state.summonEnabled));
   settingsTourButton.addEventListener("click", () => {
@@ -43125,6 +44054,55 @@ var canvasDocumentIdentity = (() => {
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
+  });
+  // Companion view controller. The minimal view keeps the narrow rail and
+  // hides PenEcho's own Agent and AI chrome; the full view is the complete
+  // Canvas. Both show the same document in this tab, and switching is reversible.
+  const companionViewToggle = document.querySelector("#companionViewToggle"),
+    companionRail = document.querySelector("#companionRail");
+  function canvasCompanionCopy(en, zh) { return state.language === "zh" ? zh : en; }
+  function renderCanvasCompanionView() {
+    if (!CANVAS_COMPANION_REQUESTED) return;
+    const minimal = canvasCompanionMinimal(),
+      label = minimal ? canvasCompanionCopy("Show full Canvas", "显示完整画布") : canvasCompanionCopy("Show compact Canvas", "显示精简画布");
+    document.documentElement.dataset.penechoCompanion = canvasCompanionView;
+    if (companionRail) {
+      companionRail.hidden = !minimal;
+      companionRail.setAttribute("aria-label", canvasCompanionCopy("Canvas tools", "画布工具"));
+    }
+    if (companionViewToggle) {
+      companionViewToggle.hidden = false;
+      companionViewToggle.setAttribute("aria-label", label);
+      companionViewToggle.title = label;
+      const text = document.querySelector("#companionViewLabel");
+      if (text) text.textContent = minimal ? canvasCompanionCopy("Full Canvas", "完整画布") : canvasCompanionCopy("Compact", "精简");
+    }
+  }
+  function setCanvasCompanionView(view) {
+    if (!CANVAS_COMPANION_REQUESTED) return false;
+    canvasCompanionView = view === "full" ? "full" : "minimal";
+    try { sessionStorage.setItem(canvasCompanionViewKey(), canvasCompanionView); } catch {}
+    if (canvasCompanionMinimal()) {
+      if (document.body.classList.contains("canvas-agent-open")) closeCanvasAgent({ focus:false, animate:false });
+      window.PenEchoStudioNavigator?.setOpen?.(false, { restoreAgent:false });
+    }
+    renderCanvasCompanionView();
+    window.dispatchEvent(new CustomEvent("penecho:companion-view", { detail:{ view:canvasCompanionView } }));
+    return true;
+  }
+  if (CANVAS_COMPANION_REQUESTED) {
+    companionViewToggle?.addEventListener("click", () => setCanvasCompanionView(canvasCompanionMinimal() ? "full" : "minimal"));
+    window.addEventListener("penecho:languagechange", renderCanvasCompanionView);
+    // Agent visibility and authentication never change the companion layout.
+    // Only the explicit view toggle may expand the left navigation.
+    // Pointer first: the AI's interactive previews stay usable; the rail switches to the pen.
+    if (canvasCompanionMinimal()) selectCanvasToolMode("hand");
+    renderCanvasCompanionView();
+  }
+  window.PenEchoCompanion = Object.freeze({
+    requested:() => CANVAS_COMPANION_REQUESTED,
+    view:() => canvasCompanionView,
+    setView:setCanvasCompanionView,
   });
   installDesktopMenuBridge();
   setPluginTemplate("simple");

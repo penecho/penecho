@@ -189,6 +189,9 @@
   }
   function canvasDocumentsIsEmptyPlaceholder(doc) {
     const meta=doc.metadata||doc,item=doc.stored?.item,workspace=doc.workspace||(doc.metadata?item?.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]||{}:canvasDocumentsWorkspaceData(doc));
+    // The first document in an explicit browser draft is a durable MCP target,
+    // even before its first edit. Ordinary website placeholders stay disposable.
+    if(window.PENECHO_CONFIG?.browserDraftId&&doc.browserDraftInitial===true)return false;
     // Only positively identified, unused blank pages are disposable. Saved,
     // named, bound, edited or partially recovered documents remain open.
     if(!item||!Array.isArray(doc.stored.tileEntries)||doc.stored.tileEntries.length)return false;
@@ -209,16 +212,39 @@
     request.onupgradeneeded=()=>request.result.createObjectStore("documents",{keyPath:"id"});
     canvasDocuments.db=await canvasDocumentsBound(requestResult(request));return canvasDocuments.db;
   }
+  async function canvasDocumentsInitializeBrowserDraft(db,active) {
+    if(!window.PENECHO_CONFIG?.browserDraftId)return;
+    let activeId="";try{activeId=sessionStorage.getItem(canvasDocumentsDraftStorageKey())||"";}catch{}
+    // A read/write transaction serializes simultaneous first opens across tabs.
+    // Persist an actual document, rather than deriving its ID from a workspace
+    // URL: another browser profile must not impersonate a missing original draft.
+    await canvasDocumentsBound(new Promise((resolve,reject)=>{
+      const tx=db.transaction("documents","readwrite"),store=tx.objectStore("documents"),request=store.getAll();
+      request.onsuccess=()=>{
+        const items=request.result.filter(item=>!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata)&&item.stored),
+          saved=items.find(item=>item.id===activeId)||items.filter(item=>item.browserDraftInitial===true||!canvasDocumentsIsEmptyPlaceholder(item)).sort((a,b)=>(b.firstSeenAt||0)-(a.firstSeenAt||0))[0];
+        if(saved){if(saved.browserDraftInitial!==true&&!items.some(item=>item.browserDraftInitial===true))store.put({...saved,browserDraftInitial:true});return;}
+        const metadata=canvasDocumentsMetadata(active),workspace=canvasDocumentsWorkspaceData(active);
+        store.put({id:active.id,metadata,workspace,browserDraftInitial:true,revision:active.revision,savedRevision:0,firstSeenAt:active.firstSeenAt,
+          stored:{item:{version:2,id:null,name:active.title,theme:state.theme,widgets:[],textBoxes:[],images:[],animations:[],bundleExtensions:{[CANVAS_DOCUMENT_EXTENSION]:metadata,[CANVAS_WORKSPACE_EXTENSION]:workspace}},tileEntries:[]}});
+      };
+      tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not store the browser draft. Free device storage, then retry."));
+    }));
+  }
   async function canvasDocumentsReady() {
     const active=canvasDocumentsCurrent();
     if(state.canvasAgentCanvasKey?.startsWith("draft:"))canvasAgentCanvasDidPersist("workspace",active.id);
     if(!canvasDocuments.ready)canvasDocuments.ready=(async()=>{
-      const db=await canvasDocumentsDb(),items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
+      const db=await canvasDocumentsDb();await canvasDocumentsInitializeBrowserDraft(db,active);
+      const items=await canvasDocumentsBound(requestResult(db.transaction("documents","readonly").objectStore("documents").getAll()));
       const conversationKeys=new Set(typeof canvasAgentStoredHistoryGroups==="function"?canvasAgentStoredHistoryGroups().map(group=>group.canvasKey):[]);
       const candidates=new Map();
       for(const item of items) {
         const meta=!item.closed&&canvasDocumentIdentity.normalizeMetadata(item.metadata);
-        if(meta&&canvasDocuments.records.has(meta.documentId))canvasDocumentsRestoreFirstSeenAt(canvasDocuments.records.get(meta.documentId),item);
+        if(meta&&canvasDocuments.records.has(meta.documentId)){
+          const doc=canvasDocuments.records.get(meta.documentId);canvasDocumentsRestoreFirstSeenAt(doc,item);
+          if(window.PENECHO_CONFIG?.browserDraftId&&item.browserDraftInitial===true){doc.browserDraftInitial=true;doc.stored||=item.stored;}
+        }
         if(meta&&!canvasDocuments.records.has(meta.documentId)&&(!canvasDocumentsIsEmptyPlaceholder(item)||conversationKeys.has(`workspace:${meta.documentId}`)))candidates.set(meta.documentId,{item,meta});
       }
       const available=Math.max(0,CANVAS_DOCUMENT_LIMIT-canvasDocuments.records.size);
@@ -226,6 +252,7 @@
         const doc=canvasDocumentsRecord(meta,item.stored);canvasDocumentsRestoreFirstSeenAt(doc,item);canvasDocumentsRestoreWorkspace(doc,item.workspace);
         doc.revision=item.revision||1;doc.savedRevision=item.savedRevision||0;doc.unseen=canvasDocumentsUnseen(item.unseen);doc.locator=item.locator||null;doc.savedAt=canvasDocumentsSavedAt(item.savedAt)||(doc.locator?canvasDocumentsSnapshotSavedAt(item.stored?.item):0);doc.agentDraft=typeof item.agentDraft==="string"?item.agentDraft.slice(0,16000):"";
         doc.hasUserHistory=Boolean(item.hasUserHistory||conversationKeys.has(`workspace:${doc.id}`));
+        doc.browserDraftInitial=Boolean(window.PENECHO_CONFIG?.browserDraftId&&item.browserDraftInitial===true);
         canvasDocuments.records.set(doc.id,doc);
       }
       canvasDocumentsRender();
@@ -236,7 +263,7 @@
     const db=await canvasDocumentsAwait(()=>canvasDocumentsDb(),execution);
     if(execution)canvasAgentAssertToolExecution(execution);
     beforeWrite?.();
-    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed};
+    const payload={id:doc.id,metadata:canvasDocumentsMetadata(doc),stored:doc.stored,workspace:canvasDocumentsWorkspaceData(doc),revision:doc.revision,savedRevision:doc.savedRevision,savedAt:doc.savedAt,firstSeenAt:doc.firstSeenAt,unseen:canvasDocumentsUnseen(doc.unseen),locator:doc.locator||null,agentDraft:String(doc.agentDraft||"").slice(0,16000),hasUserHistory:Boolean(doc.hasUserHistory),closed,...(doc.browserDraftInitial?{browserDraftInitial:true}:{})};
     if(execution?.kind!=="mcp") {
       await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").put(payload);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not save the workspace. Free device storage, then retry."));}));
       return;
@@ -1231,6 +1258,7 @@
     if(doc)doc.title=(typeof currentCanvasDisplayName==="function"?currentCanvasDisplayName():state.currentSnapshotName)||doc.title;
     window.PenEchoStudioNavigator?.workspaceChanged?.();
     if(typeof mcpPublishCanvasCatalog==="function")mcpPublishCanvasCatalog();
+    window.PenEchoCompanionCanvases?.changed?.();
     if(!root||!doc)return;
     root.hidden=false;
     const close=document.getElementById("canvasWorkspaceClose");
@@ -1355,8 +1383,66 @@
     void canvasDocumentsFlushDraft().catch(() => {});
     event.preventDefault(); event.returnValue = "";
   });
+  // A guest draft signs in or registers in this same tab. returnTo keeps the
+  // exact workspace URL, including mode=companion. An explicit Save leaves a
+  // short-lived intent for this tab that is resumed once, signed in, for the
+  // same document; Cloud documents are never created without that Save.
+  const BROWSER_DRAFT_INTENT_TTL_MS = 30 * 60 * 1000;
+  function canvasDocumentsIntentKey() {
+    return `penecho-browser-draft-intent:${window.PENECHO_CONFIG?.browserDraftId || ""}`;
+  }
+  function canvasDocumentsTakeIntent(now = Date.now()) {
+    let intent = null;
+    try {
+      intent = JSON.parse(sessionStorage.getItem(canvasDocumentsIntentKey()) || "null");
+      sessionStorage.removeItem(canvasDocumentsIntentKey());
+    } catch { return null; }
+    const age = now - Number(intent?.createdAt);
+    return intent?.action === "save" && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
+  }
+  async function canvasDocumentsSettleDraft(timeoutMs = 5000, { finalize = false } = {}) {
+    if (canvasDocumentsDraft.opening) await canvasDocumentsDraft.opening;
+    // Leaving the page must not drop an open editor or selection.
+    if (finalize) await finalizeCanvasForSnapshot();
+    const deadline = Date.now() + timeoutMs;
+    while (canvasDocumentsDraftBusy()) {
+      if (Date.now() >= deadline) throw canvasDocumentsError("CANVAS_BUSY", canvasDocumentsCopy("The Canvas is still updating. Try again in a moment; your draft is kept.", "画布仍在更新，请稍后重试；草稿会保留。"));
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await canvasDocumentsFlushDraft();
+    if (canvasDocumentsDraft.ready && canvasDocumentsDraftUnsaved()) throw canvasDocumentsError("DRAFT_NOT_SAVED", canvasDocumentsCopy("The browser draft could not be stored. Try again before signing in.", "无法保存浏览器草稿，请重试后再登录。"));
+  }
+  async function canvasDocumentsResumeIntent() {
+    const intent = canvasDocumentsTakeIntent();
+    if (!intent) return false;
+    if (window.PENECHO_CONFIG?.guestCanvas) {
+      setStatus(canvasDocumentsCopy("Sign-in was not completed. Your draft is kept in this browser; choose Save again when ready.", "未完成登录。草稿仍保留在此浏览器中，准备好后可再次保存。"));
+      return false;
+    }
+    if (intent.documentId && intent.documentId !== canvasDocuments.activeId) {
+      setStatus(canvasDocumentsCopy("Signed in. Open the Canvas you were saving and choose Save.", "已登录。请打开要保存的画布，然后选择保存。"));
+      return false;
+    }
+    await saveCurrentCanvas();
+    return true;
+  }
+  function saveCurrentCanvasFromUser() {
+    if (window.PENECHO_CONFIG?.guestCanvas && window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:"save" });
+    return saveCurrentCanvas();
+  }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
     open:() => canvasDocumentsStartDraft(true),
     flush:canvasDocumentsFlushDraft,
-    async signIn() { await canvasDocumentsFlushDraft(); location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`); }
+    resumeIntent:() => canvasDocumentsResumeIntent().catch(error => { setStatus(String(error?.message || error)); return false; }),
+    async signIn({ intent = "" } = {}) {
+      // A draft that cannot be stored keeps the user here, with nothing lost.
+      try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
+      catch (error) { setStatus(String(error?.message || error)); return false; }
+      if (intent === "save") {
+        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:"save", documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
+      }
+      location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+    }
   };
+  // Returning with Back from the sign-in page restores this page from cache.
+  addEventListener("pageshow", event => { if (event.persisted && window.PenEchoBrowserDraft) void window.PenEchoBrowserDraft.resumeIntent(); });

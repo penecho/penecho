@@ -879,7 +879,7 @@
       });
       return out;
     }
-    let elapsed = 0, last = 0, frame = 0, running = false, localSpeed = 1;
+    let elapsed = 0, last = 0, frame = 0, running = false, started = false, localSpeed = 1;
     function draw(dt = 0) {
       const time = Math.max(0, elapsed - introDuration), envelope = reducedMotion ? 0 : smooth(time / rampDuration);
       if (introOn) {
@@ -935,7 +935,7 @@
       get localSpeed() { return localSpeed; },
       playing:() => running,
       fraction:() => 0,
-      play() { if (running || reducedMotion) return; running = true; last = 0; frame = requestAnimationFrame(tick); controls?.sync(); },
+      play() { if (running || reducedMotion) return; running = started = true; last = 0; frame = requestAnimationFrame(tick); controls?.sync(); },
       pause() { running = false; cancelAnimationFrame(frame); controls?.sync(); },
       toggle() { running ? this.pause() : this.play(); },
       replay() { elapsed = 0; spinAngles.clear(); draw(0); this.play(); controls?.sync(); },
@@ -944,7 +944,9 @@
     };
     const controls = scene.controls ? createControls(player) : null;
     listen(player);
-    if (reducedMotion) elapsed = introDuration;
+    // The draw-in intro starts with every stroke hidden, and the Widget has no
+    // frame of its own: a scene that is not playing shows the finished drawing.
+    if (reducedMotion || !scene.autoplay) elapsed = introDuration;
     draw(0);
     controls?.sync();
     if (!reducedMotion && scene.autoplay) {
@@ -953,6 +955,14 @@
           if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); player.play(); }
         });
         observer.observe(root);
+        // A throttled frame or a visibility report that never arrives must not
+        // leave the user's sketch invisible: show it and start anyway.
+        setTimeout(() => {
+          if (elapsed > 0) return;
+          elapsed = introDuration;
+          draw(0);
+          if (!started) { observer.disconnect(); player.play(); }
+        }, 700);
       } else player.play();
     }
     notifyUpdated();

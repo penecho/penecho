@@ -1,5 +1,13 @@
 # Instructions for configuring PenEcho MCP
 
+
+## Automatic Cloud companion workflow
+
+For the Cloud plugin, the default is `penecho_open_workspace` with one stable conversation `sessionKey`, followed by opening its returned single-use URL in the host's embedded side browser when available. Preserve `mode=companion`. If already connected, reuse the tab. Poll `penecho_workspace_status` with bounded retries and pass its exact `startSession` target to `penecho_start_session`; never select the latest unrelated browser. Guests can edit without a PenEcho account. Save opens account registration/sign-in in the same browser and resumes that explicit save once, preserving the document and workspace URL. A normal login does not save automatically. Cancel leaves the local draft intact.
+
+The installable Skill and host-specific packaging live in `integrations/penecho-cloud`. The complete plugin bundles native HTTPS MCP configuration: portable root `mcp.json` declares standard Streamable HTTP and its production URL for Codex, and `.mcp.json` declares native HTTP for Claude/Cursor. Repository catalogs point to this same native plugin directory; Hermes stdio compatibility lives separately under `hermes/portable/`. Native Cloud authorization uses endpoint OAuth discovery; choose OAuth/DCR in the supported submission portal rather than embedding unsupported server auth extensions. The standalone Skill automatically configures a missing connection through the host’s supported setup capability within installation/first-use authorization, then uses normal OAuth. It cannot add browser capabilities to a host. The manual/local connection instructions below apply when the user explicitly chooses that connection. A Cloud server lacking automatic workspace tools requires explicit Canvas selection on that same server; do not silently substitute a local server.
+
+
 Give the following prompt to the AI responsible for setup. Supply the private trust bundle through a secure file, not the conversation transcript. The current tool schemas and live guidance remain the authority for operations; detailed presentation and feedback contracts are in [MCP setup](mcp-setup.md).
 
 ## Copy-paste prompt

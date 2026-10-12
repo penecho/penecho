@@ -39,7 +39,7 @@
     // Host-rendered scenes: the model writes a small scene source; these pinned
     // MIT engines render it. Only the engine a scene needs is loaded.
     sceneSpecUrl = new URL("scene-spec.js?v=2", location.href).href,
-    sceneRuntimeUrl = new URL("scene-runtime.js?v=2", location.href).href,
+    sceneRuntimeUrl = new URL("scene-runtime.js?v=3", location.href).href,
     sceneEngineUrls = Object.freeze({
       motion:new URL("scene-vendor/anime.js?v=4.5.0", location.href).href,
       physics:new URL("scene-vendor/matter.js?v=0.20.0", location.href).href,

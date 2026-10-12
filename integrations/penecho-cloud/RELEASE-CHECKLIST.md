@@ -1,57 +1,48 @@
-# PenEcho 1.1.0 自动 MCP 画布：发布与市场提交
+# PenEcho 1.1.4 distribution release checklist
 
-本次交付是源代码和提交材料；未部署生产、未推送、未提交市场审核。正式 Canvas 源码来自 `penecho_071_version`，Cloud 中的 Canvas 客户端和 MCP runtime 必须用官方同步脚本更新。
+Production MCP at `https://penecho.ai/mcp` already exists. This checklist describes a local distribution candidate, not a claim that this change is deployed, pushed, approved or published. Canonical Canvas source is `penecho_071_version`; Cloud mirrors must use the official synchronization process.
 
-## 用户流程与边界
+## Expected workflow
 
-The general MCP instructions and Canvas skill use the Canvas 1.3.3 contract. The browser-workspace and guest flows documented below are plugin development material, not general MCP instructions or a default connection workflow. Design plugin onboarding separately before publishing it.
+The plugin bundles native HTTPS MCP configuration and the Canvas Skill. Standalone Skill installation/first use also authorizes automatic setup of its missing connection, without an extra conversational permission question; host approvals and OAuth consent still apply. Explicit destinations/current workspaces take precedence, then a current user-selected UAT testing workflow, then production for ordinary untargeted work. An installed UAT copy alone does not choose UAT.
 
-无需输入配对码、无需 OAuth 后再填 Token。手动 PAT 是高级替代配置，不是默认流程。画布内容在浏览器中渲染和保留；浏览器关闭时无法继续渲染。侧栏或外部浏览器由宿主决定。注册账户的 PAT 不因这些操作变化；主动重置/撤销才失效。
+Anonymous OAuth opens a companion browser draft without a Dashboard visit, toggle or copied token. Reuse the same workspace, document and browser. Renew an expired 120-second launch ticket automatically with the same key and tab, at most twice per opening attempt. Browser sign-in retains the guest MCP grant and companion layout. Save-triggered sign-in resumes the explicit save once; ordinary sign-in does not save. Website AI/saving unlock independently of guest MCP authorization.
 
-匿名浏览器登录后原草稿不变，可以手动保存到 Cloud；不会自动在项目中创建文档。匿名 OAuth 凭证不被提升为账户权限。需要账户 MCP 权限时由客户端再次启动账户授权，自动保存新凭证，不让用户复制 Token。
+Prefer supported live reload/reconnect after setup and continue the task. Codex opens beside the chat through exposed `open_in_codex` with `placement: "right"`. Claude desktop uses `preview_start` only when actually exposed with existing-URL support; other hosts use their actual opener. Do not invent browser/reload capabilities or universally require a new chat.
 
-## 上线前
+## Release gates
 
-1. 保留并核对正式仓库已有改动。Canvas 执行 `npm run build:client`、相关测试和 `npm run check:client`。
-2. Cloud 执行官方同步，至少包含本次改动的 `app.js,cloud-connect.js,mcp-cloud-transport.js,remote-canvas.js` 和 `src/server/mcp/service.js`，用对应 `--check --only=...` 确认无漂移。不能手改镜像。
-3. Cloud 需要既有 MCP 授权表及 070 永久 Token 迁移；本次复用该表，没有新表。生产使用持久 PostgreSQL、Redis 集群路由以及稳定的 `PROVIDER_ENCRYPTION_KEY_BASE64`，不得因部署重置密钥。
-4. 开启 `CLOUD_NATIVE_CANVAS_ENABLED=true`；内置 Agent 是否开启遵循已有生产配置和账户计费规则。反向代理允许 `/api/v1/mcp/workspaces/:id/canvas` WebSocket。不要把 `/canvas/draft/*` 或 workspace config/redeem API 做公开缓存。
-5. Cloud 执行 `node --test test/cloud-mcp.test.mjs test/mcp-workspaces.test.mjs test/mcp-cluster.test.mjs test/mcp-images.test.mjs`；浏览器验收执行 `PLAYWRIGHT_MODULE=/absolute/path/to/playwright node tools/mcp-workspace-smoke.mjs`。后者只启动本机内存测试站点。
-6. 先部署服务端和同步后的客户端，再发布插件 1.1.0。旧版生产没有 open_workspace 工具，不能提前向用户发布新 Skill。
-7. 在 UAT/prod 分别实际完成一次匿名和账户 OAuth、生成图形、登录保存、关闭后重连、多窗口绑定和撤销。当前本机测试不等于生产或客户端市场验收。
+1. Preserve canonical uncommitted work. For runtime changes, build/test canonical Canvas and synchronize official generated outputs into Cloud; verify synchronization with its supported check mode.
+2. Anonymous identity and refresh retention must both be ten years in the matching server release. Verify configured/deployed policy and expiry boundaries; do not keep the earlier one-day identity / thirty-day refresh mismatch. Long-duration fresh-host reconnection is a separate acceptance item.
+3. Preserve existing OAuth storage, signing/encryption keys, PostgreSQL/Redis routing, grants and revocation. Website login must not upgrade guest grants or transfer account credentials to the agent.
+4. Run focused Skill setup and packaging tests. Validate Claude plugin and root marketplace with `--strict`; validate the Skill metadata. Check the effective root portable `mcp.json` uses standard Streamable HTTP and its production URL, contains no command/args/unsupported server extensions, and is the same in the GitHub directory and main archive. Rebuild `penecho-canvas.zip`, `penecho-cloud-plugin.zip`, its byte-equivalent `penecho-cloud.plugin`, and separate `penecho-hermes-plugin.zip` from canonical source using `python3 scripts/package-penecho-cloud.py`.
+5. On fresh Codex and Claude hosts, install the complete plugin and the standalone Skill separately; verify configuration, OAuth, live tool discovery, one-tab opening and supported reload. Also verify pasted-Skill and non-CLI connector setup using that host’s actual UI.
+6. Test anonymous and account OAuth, handwritten feedback, ordinary login, explicit Save, two documents/windows, refresh/reconnect, expired launch renewal and revocation against each selected environment. Local tests do not prove deployed or marketplace acceptance.
+7. Publish only a matching verified release and stay within the current user authorization. The current request authorizes official Codex directory submission; it does not by itself authorize pushing source, deploying runtime changes, or other production operations. Complete the required review materials and portal checks before claiming a submission.
 
-## 提交文件
+## Submission paths
 
-| 目标 | 文件与入口 | 额外要求 |
+| Target | Package/entrypoint | Remaining requirement |
 | --- | --- | --- |
-| Codex / OpenAI | `.codex-plugin/plugin.json` + `.mcp.json` + `skills/penecho-canvas/SKILL.md`；服务 `https://penecho.ai/mcp` | 官方 With MCP 提交流程；开发者身份、域名验证、隐私/条款、功能测试与审核 |
-| Cursor | `.cursor-plugin/plugin.json` + 共享 `.mcp.json`、Skill；仓库已有 `.cursor-plugin/marketplace.json` | 推送可访问源码后填写 Publisher 申请；审核不自动完成 |
-| Hermes MCP 目录 | `hermes/optional-mcps/penecho/manifest.yaml` | PR 到 NousResearch/hermes-agent 对应目录；原生 HTTP + OAuth，不依赖 Node 代理；该目录不自动安装独立 Skill |
-| Hermes 插件目录 | 根 `plugin.json` + `mcp.json` + `skills/`，以及 `hermes/catalog-entry.json` 生成的提交条目 | Portable 包包括 Skill 和 MCP；本机 Hermes 原生 portable HTTP 缺少 OAuth 开关，所以包中固定使用 `mcp-remote@0.1.38`（Node.js 20+ / npx）。说明依赖，不承诺零本地依赖 |
-| MCP Registry | `server.json` | 使用 `io.github.penecho/cloud`，验证 GitHub namespace，再用官方发布工具；Registry 收录不等于其他市场收录 |
+| Codex / OpenAI | Root portable `plugin.json` + native `mcp.json` with endpoint OAuth discovery; `.codex-plugin/plugin.json` overlay; repository-root `.agents/plugins/marketplace.json`; `skills/` | Inspect the portal's imported authentication from native `mcp.json` and endpoint discovery (OAuth dynamic client registration, resource `https://penecho.ai/mcp`, scope `canvas:access`); complete developer/domain checks, real demo recording, secure reviewer access and execution of the packaged 5 positive / 3 negative cases. See [SUBMISSION.md](SUBMISSION.md). |
+| Claude Code | Repository-root `.claude-plugin/marketplace.json` named `penecho`; entry `penecho-cloud` points to `./integrations/penecho-cloud` | Validate marketplace and plugin locally; include the entry in the published revision before remote install. Local validation is not publication. |
+| Cursor | `.cursor-plugin/plugin.json`, shared `.mcp.json`, `skills/`; repository-root `.cursor-plugin/marketplace.json` | Publish accessible source and complete publisher review. |
+| Hermes MCP catalog | `hermes/optional-mcps/penecho/manifest.yaml` | Native HTTP/OAuth; catalog entry does not install the standalone Skill. |
+| Hermes portable plugin | Generated `hermes/portable/` (`plugin.json`, compatibility `mcp.json`, identical `skills/`); `penecho-hermes-plugin.zip`; `hermes/catalog-entry.json` | Uses pinned `mcp-remote@0.1.38` with Node.js 20+/npx because the reviewed portable loader lacks native OAuth configuration. Keep this compatibility path scoped to Hermes. |
+| MCP Registry | `server.json`, namespace `io.github.penecho/cloud` | Verify namespace and use official publishing tools; Registry inclusion is separate from other marketplaces. |
 
-Hermes 的 OAuth 兼容桥只处理协议和凭证，不运行 PenEcho 桌面。npm 发布包 0.1.38 已核对，完整性为 `sha512-w+JU4U3CfG29TawXR4JLNQ9d1Un5nT8AGI65f/juCaqUdF/V6fS7wE4o7xNPbB8X58o46hRXEJgYglQMAKQs4w==`。不要改用 `@latest`。凭证由桥保存在 `~/.mcp-auth`，文件以 0600 创建，不放进 Skill、仓库或命令行。Hermes MCP 目录与 portable 插件应择一配置 MCP，避免重复连接。
+For a future authorized committed release, run `node scripts/prepare-penecho-marketplaces.cjs --sha=<40-character-release-commit>`. It verifies the committed package version and clean package contents, derives the portable subdirectory from the Hermes entry, and emits pinned Hermes material under `dist/penecho-marketplaces/1.1.4/`; it does not publish. Never invent a SHA or approval. Select either Hermes catalog MCP or portable MCP configuration to avoid duplicates; bridge credentials stay in the host credential store, outside this package.
 
-Hermes 插件目录要求真实发布和固定 40 位提交 SHA。完成本次代码提交后执行：
+The root portable manifest currently has no `extensions.com.openai`, so the official importer reads listing/review/publication from `.codex-plugin/plugin.json`. A root `com.openai` object would replace the overlay settings rather than merge them. The Codex overlay contains the bounded subtitle, required listing URLs/assets, release notes, and 5 positive / 3 negative planned cases. The required accessible demo recording and secure reviewer setup remain outside this local package; no placeholder recording or credentials are bundled.
 
-```sh
-node scripts/prepare-penecho-marketplaces.cjs --sha=<完整发布提交SHA>
-```
+## Acceptance evidence
 
-脚本确认该提交包含同版本完整插件，输出到 `dist/penecho-marketplaces/1.1.0/`：`penecho.yaml`（提交到 `plugin-catalog/`）、`hermes-pack.yaml`（带 monorepo subdir 的安装包）、`mcp-manifest.yaml`。不伪造 SHA、不自动发布。推送并发布同一 SHA 的 tag/release，再提市场 PR。也可用 `hermes plugins install https://github.com/penecho/penecho#integrations/penecho-cloud --ref <SHA>` 安装已推送的指定版本。
+Codex CLI `0.162.0-alpha.2` actual plugin loading rejected server-level `extensions` and dropped that MCP entry. The standard Streamable HTTP transport/URL form loaded `penecho-cloud` successfully. Keep unsupported auth-extension fields out of the delivered native manifest; use endpoint OAuth discovery and verify the portal's actual imported authentication configuration. Do not claim it is configured before inspection. This loader check does not establish authenticated tools or a complete fresh-host Canvas workflow.
 
-## 审核用例
+Record source, generated outputs, test results, host/version, artifact checksums, committed/pushed revision and each deployed environment separately. Earlier local Plugin Creator/Hermes checks and regression counts are historical evidence, not fresh 1.1.4 or production acceptance. Server/workspace tests live in Cloud `test/mcp-workspaces.test.mjs` and `tools/mcp-workspace-smoke.mjs`; run the appropriate matching-release checks when runtime work is authorized.
 
-正向：①匿名首次授权生成图；②已有账户一次授权自动连接；③同一会话重复请求复用草稿；④两会话两窗口各自修改；⑤登录后保留内容并手动保存 Cloud；⑥刷新后恢复同一文档和 artifact；⑦用户明确选择现有画布时继续原有流程。
+Positive checks: anonymous initial diagram; account authorization; repeated request reuses draft; two conversations stay isolated; same-tab ordinary login and explicit Save; reload restores document/artifacts; explicit existing/local/UAT target remains selected; expired ticket automatically renews in the same tab; supported live reload continues the task.
 
-反向：①跨用户/跨工作区 ticket 与 cookie 不能使用；②过期或重复消费的启动 ticket 失败；③跨站 POST 和未授权 WebSocket 被拒绝；④撤销 grant 后新请求立即失败；⑤匿名新建额度达到阈值提示重试/登录，但既有会话不被撤销；⑥新窗口或活动文档变化不能让旧会话落到另一个文档；⑦匿名画布登录后 MCP 仍不能读取其他 Cloud 文档；⑧账号 A 的工作区不能在登录 B 账号的浏览器中建立连接。
+Negative checks: ticket cannot cross workspace/user/profile or be reused; cross-site POST/unauthorized WebSocket fail; revocation blocks new calls; bounded guest admission preserves existing work; document selection cannot redirect old handles; guest MCP cannot read other account documents after browser login; account A cannot bind in account B’s browser; stale installed UAT copy cannot hijack production.
 
-## 验证记录与后续
-
-- Codex Plugin Creator 本地校验通过。
-- 当前安装的 Hermes `plugins doctor` / `plugins validate` 通过；其实际 portable loader 识别一个 Skill 和 MCP 配置。它不代表市场审核或远程生产连接已经通过。
-- Canvas 相关回归 1,019 项通过，Cloud 相关回归 45 项通过；真实发布版 `mcp-remote@0.1.38` 已完成服务发现、PKCE、自动凭证持久化和工具调用。
-- 服务端协议/隔离测试与真实 Chromium 草稿流程见 Cloud `test/mcp-workspaces.test.mjs`、`tools/mcp-workspace-smoke.mjs` 和 `docs/testing/mcp-workspace/`。
-- PostgreSQL/Redis 多节点的生产容量、原生 Codex/Hermes 授权窗口、侧栏打开行为仍需在发布候选环境验收。不得在申请中标记未运行的项目为通过。
-
-官方参考（核对日期 2026-09-23）：[OpenAI 提交](https://developers.openai.com/plugins/deploy/submission)、[OpenAI OAuth](https://developers.openai.com/plugins/build/auth)、[Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)、[Hermes 插件](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins)、[Hermes 插件目录](https://hermes-agent.nousresearch.com/docs/user-guide/features/plugin-catalog)、[Agent Plugins MCP](https://agent-plugins.org/plugin-authors/mcp-servers)、[MCP Registry](https://modelcontextprotocol.io/registry/quickstart)。
+References: [OpenAI Skill building](https://learn.chatgpt.com/docs/build-skills), [OpenAI app-server](https://learn.chatgpt.com/docs/app-server), [Claude MCP](https://code.claude.com/docs/en/mcp), [Hermes plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins), [MCP Registry](https://modelcontextprotocol.io/registry/quickstart).

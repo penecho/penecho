@@ -408,6 +408,24 @@
     scheduleDockLayout();
   }
 
+  // Companion rail buttons forward clicks (data-shell-forward) and mirror the
+  // label and state of the same existing controls, which remain the owners.
+  const MIRRORED_ATTRIBUTES = ["aria-label", "title", "aria-pressed", "aria-expanded", "data-state"];
+  for (const button of document.querySelectorAll("[data-shell-mirror]")) {
+    const target = document.querySelector(button.dataset.shellMirror);
+    if (!target) continue;
+    const sync = () => {
+      for (const name of MIRRORED_ATTRIBUTES) {
+        const value = target.getAttribute(name);
+        if (value === null) button.removeAttribute(name);
+        else if (button.getAttribute(name) !== value) button.setAttribute(name, value);
+      }
+      button.disabled = Boolean(target.disabled);
+    };
+    new MutationObserver(sync).observe(target, { attributes:true, attributeFilter:[...MIRRORED_ATTRIBUTES, "disabled"] });
+    sync();
+  }
+
   applyCopy();
   new MutationObserver(applyCopy).observe(document.documentElement, { attributes:true, attributeFilter:["lang"] });
 })();
