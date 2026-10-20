@@ -30,7 +30,7 @@ function boot({ language = "en", status = signedIn, canvasId = CANVAS_ID, canvas
     if (holdRequests?.[method]) await holdRequests[method];
     if (failRequests?.[method]) return json({ message:failRequests[method] }, 500);
     const key = `${match[1]}:${match[2] || (options.body ? JSON.parse(options.body).widgetId || "" : "")}`;
-    if (method === "POST") shares.set(key, { url:`/canvas/share/${key.endsWith(":") ? "canvas-token" : "widget-token"}` });
+    if (method === "POST") shares.set(key, { ...shares.get(key), ...(JSON.parse(options.body).public !== undefined ? {public:JSON.parse(options.body).public,moderation:{state:"pending"}} : {}), url:`/canvas/share/${key.endsWith(":") ? "canvas-token" : "widget-token"}` });
     if (method === "DELETE") shares.delete(key);
     return json({ share:shares.get(key) || null });
   };
@@ -82,7 +82,7 @@ test("opening an inactive share explains the public scope and offers no outbound
   assert.ok(h.button("Save and enable sharing"));
   assert.equal(h.button("Turn off sharing").hidden, true);
   const scope = h.dialog().querySelector(".live-share-scope").textContent;
-  for (const phrase of [/Anyone with the link can view this Canvas/, /later save to this Cloud Canvas appear at the same link/, /Turn sharing off at any time and the link stops working/, /never posts or publishes to Echoes/]) assert.match(scope, phrase);
+  for (const phrase of [/Anyone with the link can view this Canvas/, /later save to this Cloud Canvas appear at the same link/, /Turn sharing off at any time and the link stops working/, /Public discovery is optional and requires review/]) assert.match(scope, phrase);
 });
 
 test("enabling saves before sharing, then offers encoded X, LinkedIn, and public page links", async () => {
@@ -95,7 +95,7 @@ test("enabling saves before sharing, then offers encoded X, LinkedIn, and public
   assert.equal(h.dialog().dataset.liveShare, "on");
   assert.match(h.status().textContent, /Sharing is on/);
   const publicUrl = `${ORIGIN}/canvas/share/canvas-token`;
-  assert.equal(h.dialog().querySelector("input").value, publicUrl);
+  assert.equal(h.dialog().querySelector("input[readonly]").value, publicUrl);
   const x = decode(h.target("x").getAttribute("href")), linkedin = decode(h.target("linkedin").getAttribute("href"));
   assert.deepEqual(x, { endpoint:"https://x.com/intent/tweet", params:{ text:"R&D #1: 50% + “growth” 🚀 — made with PenEcho", url:publicUrl } });
   assert.deepEqual(linkedin, { endpoint:"https://www.linkedin.com/sharing/share-offsite/", params:{ url:publicUrl } });
@@ -105,7 +105,7 @@ test("enabling saves before sharing, then offers encoded X, LinkedIn, and public
     assert.equal(link.getAttribute("aria-disabled"), "false");
   }
   assert.equal(h.target("system"), null, "no system share without navigator.share");
-  assert.deepEqual([...h.dialog().querySelector(".live-share-active").children].map((node) => node.className), ["live-share-link", "live-share-post-field", "live-share-targets-field", "live-share-image-note"], "text is reviewed before choosing a destination");
+  assert.deepEqual([...h.dialog().querySelector(".live-share-active").children].map((node) => node.className), ["live-share-link", "live-share-more"], "text is reviewed before choosing a destination");
   assert.equal(h.dialog().querySelector("textarea").getAttribute("maxlength"), "2000", "drafts are not cut to a guessed X limit");
 
   const post = h.dialog().querySelector("textarea");
@@ -267,7 +267,7 @@ test("failed enabling and unreadable links never expose outbound targets", async
   const unreadable = boot({ shares:new Map([[`${CANVAS_ID}:`, { url:"javascript:alert(1)" }]]) });
   await unreadable.openCanvas();
   assert.equal(unreadable.outbound().length, 0);
-  assert.equal(unreadable.dialog().querySelector("input").value, "");
+  assert.equal(unreadable.dialog().querySelector("input[readonly]").value, "");
   assert.equal(unreadable.button("Copy link").disabled, true);
   assert.equal(unreadable.button("Turn off sharing").hidden, false, "the owner can still revoke it");
   assert.match(unreadable.status().textContent, /could not be read/);
@@ -291,4 +291,28 @@ test("Chinese copy names the target and drafts the post in Chinese", async () =>
   assert.equal(h.dialog().querySelector("textarea").value, "细胞膜 — 用 PenEcho 制作");
   assert.equal(h.target("x").getAttribute("aria-label"), "发到 X（在新标签页打开）");
   assert.ok(h.button("关闭分享"));
+});
+
+
+test("public discovery is explicit, scoped to the Widget, and can be withdrawn without revoking its link", async()=>{
+  const h=boot();await h.openWidget();
+  const toggle=h.dialog().querySelector('.live-share-public-toggle');assert.equal(Boolean(toggle.checked),false);
+  toggle.checked=true;toggle.dispatchEvent(new h.window.Event('change'));
+  assert.deepEqual(h.writes(),[],'choosing public before enabling does not publish');
+  await h.click(h.button('Save and enable sharing'));
+  assert.deepEqual(h.writes()[0].body,{widgetId:SOURCE_ID,public:true});
+  assert.match(h.dialog().querySelector('.live-share-public-status').textContent,/Pending review/);
+  toggle.checked=false;toggle.dispatchEvent(new h.window.Event('change'));await settle();
+  assert.deepEqual(h.writes().at(-1).body,{widgetId:SOURCE_ID,public:false});
+  assert.equal(h.dialog().dataset.liveShare,'on');assert.equal(h.target('x').hidden,false);
+});
+
+test("public toggle rolls back on a failed request and refuses to save a switched Canvas",async()=>{
+  const h=boot({shares:new Map([[`${CANVAS_ID}:`,{url:'/canvas/share/canvas-token'}]]),failRequests:{POST:'Offline'}});
+  await h.openCanvas();const toggle=h.dialog().querySelector('.live-share-public-toggle');
+  toggle.checked=true;toggle.dispatchEvent(new h.window.Event('change'));await settle();
+  assert.equal(toggle.checked,false);assert.match(h.status().textContent,/Offline/);
+  const writes=h.writes().length;h.bridge.currentCanvasId=()=>SOURCE_ID;
+  toggle.checked=true;toggle.dispatchEvent(new h.window.Event('change'));await settle();
+  assert.equal(h.writes().length,writes);assert.match(h.status().textContent,/Reopen Share/);
 });

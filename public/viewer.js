@@ -20,7 +20,7 @@
     takeFurtherUrl: `/canvas/community/${itemId}`,
   };
 
-  if (live) Object.assign(config, { artifactUrl:`/api/v1/shares/${itemId}`, previewUrl:null, communityUrl:"/", signupUrl:`/auth.html?returnTo=${encodeURIComponent(location.pathname + "?edit=1")}`, dashboardUrl:"/dashboard.html#projects", takeFurtherUrl:location.pathname + "?edit=1" });
+  if (live) Object.assign(config, { artifactUrl:`/api/v1/shares/${itemId}${new URLSearchParams(location.search).get("public")==="1"?"?public=1":""}`, previewUrl:null, communityUrl:"/", signupUrl:`/auth.html?returnTo=${encodeURIComponent(location.pathname + "?edit=1")}`, dashboardUrl:"/dashboard.html#projects", takeFurtherUrl:location.pathname + "?edit=1" });
 
   const COPY = {
     en: {

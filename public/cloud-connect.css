@@ -704,3 +704,15 @@ body[data-theme="studio"] .penecho-live-share-dialog [role="status"][data-tone="
 @media (pointer: coarse) {
   :is(#pe-button-contract, .penecho-live-share-dialog .live-share-target, .penecho-live-share-dialog > footer > [data-pe-button]) { height:44px; min-height:44px; }
 }
+
+/* Public discovery belongs to the existing share form. */
+.penecho-live-share-dialog .live-share-public{padding:16px;border:1px solid var(--pe-border,#dce2e5);border-radius:12px;background:var(--pe-surface-subtle,#f7f9fb)}
+.penecho-live-share-dialog .live-share-public label{display:flex;align-items:center;gap:10px;cursor:pointer}
+.penecho-live-share-dialog .live-share-public small{display:block;margin-top:8px;color:var(--pe-text-secondary,#61707c);line-height:1.5}
+.penecho-live-share-dialog .live-share-public-status{margin:10px 0 0;font-size:13px;line-height:1.5}
+
+.penecho-live-share-dialog .live-share-public-toggle{width:18px;min-width:18px;height:18px;flex:0 0 18px;margin:0}
+.penecho-live-share-dialog .live-share-public label strong{flex:1;min-width:0}
+.penecho-live-share-dialog .live-share-more summary{cursor:pointer;font-weight:500;padding:8px 0}
+.penecho-live-share-dialog .live-share-more[open]{display:grid;gap:14px}
+.penecho-live-share-dialog .live-share-more[open]>*+*{margin-top:14px}

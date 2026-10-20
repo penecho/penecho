@@ -4861,10 +4861,6 @@
           } }));
         },
       });
-      items.push({
-        key:`widget:${widget.id}:tool-echo`, kind:"echo", label:"Echo", baseWidth:28, iconOnly:true,
-        activate:() => window.dispatchEvent(new CustomEvent("penecho:community-widget-action", {detail:{action:"echo",widgetId:widget.id}})),
-      });
       const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,

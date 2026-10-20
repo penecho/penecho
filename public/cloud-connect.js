@@ -47,7 +47,7 @@
       favoriteCanvasesHint:"Public Canvases in Favorites",
       favoriteWidgets:"Favorite Widgets",
       favoriteWidgetsHint:"Add one to this Canvas",
-      explore:"Echoes",
+      explore:"Public shares",
       exploreHint:"Browse public Canvases and Widgets.",
       cloudNavLibrary:"Library",
       cloudAccount:"Cloud account",
@@ -130,9 +130,9 @@
       loadingFavorites:"Loading favorites…",
       loadMoreFavorites:"Load more",
       retryFavorites:"Retry",
-      noFavorites:"No favorites yet. Favorite a Craft in Echoes to keep it here.",
-      noFavoriteCanvases:"No favorite Canvases yet. Favorite one in Echoes to keep it here.",
-      noFavoriteWidgets:"No favorite Widgets yet. Favorite one in Echoes or from a Canvas.",
+      noFavorites:"No favorites yet. Favorite a Craft in Public shares to keep it here.",
+      noFavoriteCanvases:"No favorite Canvases yet. Favorite one in Public shares to keep it here.",
+      noFavoriteWidgets:"No favorite Widgets yet. Favorite one in Public shares or from a Canvas.",
       byAuthor:"by {name}",
       creator:"PenEcho creator",
       addToCanvas:"Add to this Canvas",
@@ -263,7 +263,7 @@
       favoriteCanvasesHint:"收藏中的公开画布",
       favoriteWidgets:"收藏的组件",
       favoriteWidgetsHint:"加入当前画布",
-      explore:"Echoes",
+      explore:"公开分享",
       exploreHint:"浏览公开画布与组件。",
       cloudNavLibrary:"内容库",
       cloudAccount:"Cloud 账户",
@@ -346,9 +346,9 @@
       loadingFavorites:"正在加载收藏…",
       loadMoreFavorites:"加载更多",
       retryFavorites:"重试",
-      noFavorites:"还没有收藏。可在 Echoes 中收藏后回到这里使用。",
-      noFavoriteCanvases:"还没有收藏的画布。可在 Echoes 中收藏后回到这里打开。",
-      noFavoriteWidgets:"还没有收藏的组件。可在 Echoes 或画布中收藏。",
+      noFavorites:"还没有收藏。可在 公开分享中收藏后回到这里使用。",
+      noFavoriteCanvases:"还没有收藏的画布。可在 公开分享中收藏后回到这里打开。",
+      noFavoriteWidgets:"还没有收藏的组件。可在 公开分享或画布中收藏。",
       byAuthor:"作者：{name}",
       creator:"PenEcho 创作者",
       addToCanvas:"加入当前画布",
@@ -1852,7 +1852,7 @@
     return svg;
   }
 
-  async function liveShareDialog({ kind, widgetId = null, sourceName = "", noteKind = "" }) {
+  async function liveShareDialog({ kind, widgetId = null, sourceName = "", noteKind = "", publicIntent = false }) {
     const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
     const bridge = window.PenEchoCloudProjects;
     const sourceId = widgetId ? bridge?.shareWidgetId(widgetId) : null;
@@ -1877,7 +1877,14 @@
       scopeItem(text("Public link","公开链接"), text(`Anyone with the link can view ${thisItem} and copy it to edit in their own space. No sign-in needed, no expiry.`, `任何持有链接的人都能查看${thisItem}，并可复制到自己的空间编辑。无需登录，没有有效期。`)
         + (kind === "widget" ? text(` Only ${thisItem} is shared, not the rest of the Canvas.`, `只分享${thisItem}，不含画布上的其他内容。`) : "")),
       scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
-      scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts. PenEcho never posts or publishes to Echoes for you.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。PenEcho 不会替你发帖，也不会发布到 Echoes。")),
+      scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts. Public discovery is optional and requires review.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。可自行选择公开展示，审核通过后才会出现在公开分享页面。")),
+    ]);
+    const publicToggle=el("input",{type:"checkbox",class:"live-share-public-toggle","data-pe-control":"checkbox","aria-describedby":`${idBase}-public-help`});
+    publicToggle.checked=publicIntent;
+    const publicHelp=el("small",{id:`${idBase}-public-help`,text:text("Optional. After review, people can discover this share on PenEcho. Saved changes are reviewed again. Turn this off to remove it from discovery; the link stays available.","可选。审核通过后，其他人可在 PenEcho 发现此分享；保存改动后会重新审核。关闭此选项可停止公开展示，分享链接仍可使用。")});
+    const publicStatus=el("p",{class:"live-share-public-status","aria-live":"polite"});
+    const publicField=el("section",{class:"live-share-public"},[
+      el("label",{"data-pe-hit":"choice"},[publicToggle,el("strong",{text:text("Share publicly","公开展示")})]),publicHelp,publicStatus,
     ]);
     const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
     const emptyMessage = text("Add content to the Canvas before sharing.","请先在画布上添加内容，再开启分享。");
@@ -1913,7 +1920,10 @@
       exportButton,
     ]);
     // Link first, then the reviewed text, then where to send it.
-    const active = el("div", {class:"live-share-active"}, [field, postField, targetsField, imageNote]);
+    const moreSharing=el("details",{class:"live-share-more"},[
+      el("summary",{text:text("Share to X, LinkedIn, or another app","分享到 X、LinkedIn 或其他应用")}),postField,targetsField,imageNote,
+    ]);
+    const active = el("div", {class:"live-share-active"}, [field, moreSharing]);
     const enable = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
     const revoke = el("button", {type:"button",class:"live-share-revoke","data-pe-button":"danger","data-pe-density":"standard",text:text("Turn off sharing","关闭分享")});
     const footer = el("footer", {"data-pe-region":"footer"}, [revoke,enable]);
@@ -1938,7 +1948,7 @@
       if (current) current.dataset.state = "current";
       steps.replaceChildren(...items);
     }
-    shell.body.append(active,scope,steps,status); shell.dialog.append(footer);
+    shell.body.append(publicField,active,scope,steps,status); shell.dialog.append(footer);
     const selection = sourceId ? {widgetId:sourceId} : {};
     const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
     function setStatus(message, tone = "") {
@@ -1973,6 +1983,15 @@
       shell.dialog.dataset.liveShare = shared ? "on" : "off";
       enable.textContent=shared ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
       enable.disabled=busy || (shared ? !url : emptyCanvas); revoke.disabled=busy;
+      publicToggle.disabled=busy || (emptyCanvas && !currentShare?.public);
+      if(currentShare)publicToggle.checked=currentShare.public===true;
+      const state=currentShare?.public ? currentShare.moderation?.state || 'pending' : '';
+      publicStatus.textContent=state==='approved'?text("Visible in Public shares.","已在公开分享页面展示。")
+        : state==='blocked'?text("Not listed: this content does not meet the public-sharing guidelines. You can edit the content and save again.","未公开展示：内容不符合公开分享要求。可修改内容后重新保存。")
+        : state==='review'?text("Not listed: this content needs further review. Try a simpler, self-contained version.","未公开展示：此内容暂时无法完成审核。可调整为内容完整、无需外部资源的版本。")
+        : state==='error'?text("Review temporarily unavailable. We will retry automatically; this share is not listed yet.","审核暂时不可用，系统会自动重试；此分享尚未公开展示。")
+        : state?text("Pending review. This share is not listed yet.","等待审核，暂未公开展示。") : '';
+      publicStatus.hidden=!state;
       renderSteps();
       renderTargets();
     }
@@ -1987,12 +2006,25 @@
       if(!accountSignedIn()){closeOverlay(shell.overlay);state.cloudSection="account";await openCloud();return;}
       if(currentShare){await copyText(link.value);setStatus(text("Link copied.","链接已复制。"));return;}
       canvasId=await bridge.saveForShare(widgetId);
-      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify(selection)})).share;
+      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,...(publicToggle.checked?{public:true}:{})})})).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
       setStatus(text("Sharing is on. Copy the link or choose where to share.","已开启分享。可复制链接，或选择分享网站。"));
     }));
+    publicToggle.addEventListener("change",()=>{
+      const requested=publicToggle.checked;
+      if(!currentShare)return;
+      void run(async()=>{
+        if(requested) {
+          if(bridge.currentCanvasId()!==canvasId)throw Error(text("Reopen Share on the Canvas you want to share.","请在要分享的画布上重新打开分享窗口。"));
+          const savedId=await bridge.saveForShare(widgetId);
+          if(savedId!==canvasId)throw Error(text("The Canvas changed. Reopen Share.","画布已切换，请重新打开分享窗口。"));
+        }
+        currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,public:requested})})).share;
+        setStatus(requested?text("Submitted for public review.","已提交公开展示审核。") : text("Removed from public discovery. Your link still works.","已停止公开展示，分享链接仍可使用。"));
+      });
+    });
     revoke.addEventListener("click",()=>run(async()=>{
-      await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;
+      await api(endpoint(),{method:"DELETE",body:JSON.stringify(selection)});currentShare=null;publicToggle.checked=false;
       rememberLiveShare(canvasId, sourceId || "", null);
       setStatus(text("Sharing is off. The link no longer works, including in posts. Copies visitors already saved remain theirs.","已关闭分享，链接已失效，包括已发帖子中的链接。访客之前保存的副本仍归访客所有。"));
     }));
@@ -2050,155 +2082,22 @@
       if (currentShare && !liveSharePublicUrl(currentShare)) setStatus(text("The public link could not be read. Turn sharing off and on again.","无法读取公开链接，请关闭后重新开启分享。"),"error");
       else setStatus(emptyCanvas && !currentShare ? emptyMessage : "");
     });
+    async function refreshPublicReview() {
+      if(!shell.overlay.isConnected)return;
+      const previous=currentShare;
+      if(!busy && previous?.public && ['pending','error'].includes(previous.moderation?.state)) {
+        try {
+          const response=await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""));
+          if(!busy && shell.overlay.isConnected && currentShare===previous) {if(previous.moderation?.state!==response.share?.moderation?.state)setStatus('');currentShare=response.share;render();}
+        } catch { /* Preserve the last known state; the next poll may recover. */ }
+      }
+      if(shell.overlay.isConnected)setTimeout(refreshPublicReview,5000);
+    }
+    setTimeout(refreshPublicReview,5000);
   }
 
-  function shareDialog({ kind, widgetId = null, favoriteAfterShare = false }) {
-    if (!accountSignedIn()) {
-      browserSignInMessage(cloudT("shareSignInRequired"));
-      state.cloudSection = "account";
-      void openCloud();
-      return;
-    }
-    const title = cloudT("shareTitle"), bridge=window.PenEchoCommunityCanvas;
-    const kindLabel = cloudT(kind === "widget" ? "widgetKind" : "canvasKind");
-    const shell = dialogShell({ title, subtitle:cloudT("shareSubtitle"), share:true });
-    const name = el("input", { type:"text", maxlength:"160", required:"", "aria-required":"true", placeholder:cloudT(kind === "widget" ? "widgetNamePlaceholder" : "canvasNamePlaceholder") });
-    const description = el("textarea", { rows:"3", maxlength:"1200", required:"", "aria-required":"true", placeholder:cloudT("shareDescriptionPlaceholder") });
-    const nameError = el("small", { class:"cloud-field-error", role:"alert", text:cloudT("publishNameRequired") });
-    const descriptionError = el("small", { class:"cloud-field-error", role:"alert", text:cloudT("publishDescriptionRequired") });
-    nameError.hidden = descriptionError.hidden = true;
-    const category = el("select", {}, [el("option", { value:"", text:cloudT("selectCategory") }), ...CATEGORIES.map(value => el("option", { value, text:cloudT(CATEGORY_LABEL_KEYS[value]) }))]);
-    category.value = "";
-    const tags = el("input", { type:"text", maxlength:"260", placeholder:cloudT("shareTagsPlaceholder") }),tagCount=el("small", { class:"cloud-tag-count", text:cloudT("tagCount", { count:0 }) });
-    const status = el("span", { class:"cloud-share-status", role:"status", "aria-live":"polite", text:cloudT("generatingPreview") }),previewImage=el("img", { alt:cloudT("automaticSharePreview", { kind:kindLabel }) }),previewPanel=el("div", { class:"cloud-share-preview", "aria-busy":"true" }, [previewImage]);
-    const autoFill=el("button", { class:"cloud-button cloud-ai-fill", type:"button", text:cloudT("autoFillCurrentAi"), disabled:"" });
-    const contribution = el("textarea", { rows:"3", maxlength:"500", placeholder:cloudT("contributionPlaceholder") });
-    const continuation = el("textarea", { rows:"3", maxlength:"500", placeholder:cloudT("continuationPlaceholder") });
-    const permission = el("input", { type:"checkbox", "data-pe-control":"checkbox" });
-    const permissionLabel = el("label", { class:"cloud-publication-consent", "data-pe-hit":"choice" }, [permission, el("span", {}, [
-      document.createTextNode(cloudT("publicationAgreementBeforeLink")),
-      el("a", { class:"cloud-publication-link", href:new URL("/terms.html#public-crafts",`${cloudOrigin()}/`).toString(), target:"_blank", rel:"noopener" }, [
-        document.createTextNode(cloudT("publicationAgreementLink")),
-        el("span", { class:"cloud-external-link-mark", "aria-hidden":"true", text:"↗" }),
-      ]),
-      document.createTextNode(cloudT("publicationAgreementAfterLink")),
-    ])]);
-    let artifact=null,lineage=null,draftKey=null,publish=null,publishing=false,validationAttempted=false;
-    function parsedTags(){const seen=new Set();return tags.value.split(",").map(value=>value.trim()).filter(value=>{const key=value.toLocaleLowerCase();if(!value||seen.has(key))return false;seen.add(key);return true;});}
-    function tagIssue(){const values=parsedTags();if(values.length>8)return cloudT("tagLimit");if(values.some(value=>value.length>32))return cloudT("tagLength");if(values.some(value=>!/^\p{L}[\p{L}\p{N} ._+-]*$/u.test(value)&&!/^\p{N}[\p{L}\p{N} ._+-]*$/u.test(value)))return cloudT("tagStart");return "";}
-    function updatePublishAvailability(){if(publish)publish.disabled=!artifact||publishing;}
-    function setRequiredError(input, error, invalid){input.setAttribute("aria-invalid",String(invalid));error.hidden=!invalid;}
-    function validateRequiredFields({ focus = false } = {}) {
-      const missingName=!name.value.trim(),missingDescription=!description.value.trim();
-      setRequiredError(name,nameError,missingName);
-      setRequiredError(description,descriptionError,missingDescription);
-      if (focus && (missingName || missingDescription)) (missingName ? name : description).focus();
-      return !missingName && !missingDescription;
-    }
-    function refreshTagCount(){const values=parsedTags(),issue=tagIssue();tagCount.textContent=issue||cloudT("tagCount", { count:values.length });tagCount.classList.toggle("error",Boolean(issue));updatePublishAvailability();}
-    function draftPayload(){return{name:name.value,description:description.value,category:category.value,tags:tags.value,contribution:contribution.value};}
-    function saveDraft(){if(!draftKey)return;try{sessionStorage.setItem(draftKey,JSON.stringify(draftPayload()));}catch{}}
-    function restoreDraft(){if(!draftKey)return false;try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||"null");if(!saved||typeof saved!=="object")return false;name.value=String(saved.name||"").slice(0,160);description.value=String(saved.description||"").slice(0,1200);category.value=CATEGORIES.includes(saved.category)?saved.category:"";tags.value=String(saved.tags||"").slice(0,260);contribution.value=String(saved.contribution||"").slice(0,500);continuation.value="";refreshTagCount();return true;}catch{return false;}}
-    function clearDraft(){if(!draftKey)return;try{sessionStorage.removeItem(draftKey);}catch{}}
-    for(const input of [name,description,tags,contribution,continuation])input.addEventListener("input",()=>{if(validationAttempted&&(input===name||input===description))validateRequiredFields();saveDraft();updatePublishAvailability();});
-    category.addEventListener("change",()=>{saveDraft();updatePublishAvailability();});
-    tags.addEventListener("input",refreshTagCount);
-    shell.body.append(el("div", { class:"cloud-share-note", text:cloudT("shareNote", { kind:kindLabel }) }),previewPanel);
-    shell.body.append(el("div", { class:"cloud-share-ai-row" }, [autoFill,el("span", { text:cloudT("usesCurrentAi") })]),field(cloudT("nameLabel"), el("div", { class:"cloud-required-field" }, [name,nameError])), field(cloudT("descriptionLabel"), el("div", { class:"cloud-required-field" }, [description,descriptionError])), field(cloudT("categoryLabel"), category),field(cloudT("tagsLabel"), el("div", { class:"cloud-tags-input" }, [tags,tagCount])));
-    shell.body.append(field(cloudT("continuationLabel"),continuation));
-    publish = el("button", { class:"cloud-button primary", type:"button", text:cloudT(favoriteAfterShare ? "publishAndSave" : "publishStroke"), onclick:async () => {
-      publishing = true;
-      updatePublishAvailability();
-      status.className = "cloud-share-status";
-      status.textContent = cloudT("validatingUploading");
-      try {
-        if (!artifact) throw new Error(cloudT("waitPreview"));
-        validationAttempted=true;
-        if (!validateRequiredFields({ focus:true })) throw new Error(!name.value.trim()?cloudT("publishNameRequired"):cloudT("publishDescriptionRequired"));
-        const payload = {
-          kind,
-          name:name.value.trim(),
-          description:description.value.trim(),
-          category:category.value,
-          tags:parsedTags(),
-          artifact,
-          parentItemId:lineage?.parentItemId || null,
-          contributionNote:lineage ? contribution.value.trim() : "",
-          continuationPrompt:continuation.value.trim(),
-          publicationTermsAccepted:permission.checked,
-          publicationRightsAccepted:permission.checked,
-          modelTrainingAccepted:permission.checked,
-          publicationTermsVersion:PUBLICATION_TERMS_VERSION,
-        };
-        if (!payload.name) throw new Error(cloudT("publishNameRequired"));
-        if (!payload.description) throw new Error(cloudT("publishDescriptionRequired"));
-        if (!CATEGORIES.includes(payload.category)) throw new Error(cloudT("publishCategoryRequired"));
-        if (tagIssue()) throw new Error(tagIssue());
-        if (!permission.checked) throw new Error(cloudT("publishAgreementRequired"));
-        status.textContent = cloudT(lineage ? "addingLineage" : "publishingFirstStep");
-        const result=await publishCommunityArtifact(payload);
-        if (!result.item?.id) throw new Error(cloudT("publishedCraftMissing"));
-        clearDraft();
-        let originError=null,favoriteError=null;
-        try { await bridge.markPublishedOrigin?.(kind, artifact, result.item); }
-        catch (error) { originError=error; }
-        if (favoriteAfterShare) {
-          try { await api(`/api/cloud/community/${result.item.id}/favorite`, { method:"POST", body:"{}" }); }
-          catch (error) { favoriteError=error; }
-        }
-        closeOverlay(shell.overlay);
-        publishedCraftDialog({ item:{ ...result.item, name:result.item.name || payload.name }, kind, kindLabel, artifact, bridge, originError, favoriteError, favoriteAfterShare });
-      } catch (error) {
-        status.className = "cloud-share-status error";
-        status.textContent = error.message || cloudT("shareFailed");
-        publishing = false;
-        updatePublishAvailability();
-      }
-    } });
-    shell.body.append(permissionLabel, el("div", { class:"cloud-share-actions" }, [status, el("button", { class:"cloud-button", type:"button", text:cloudT("cancel"), onclick:() => closeOverlay(shell.overlay) }), publish]));
-    publish.disabled=true;
-    autoFill.addEventListener("click",async()=>{
-      autoFill.disabled=true;
-      status.className="cloud-share-status";
-      status.textContent=cloudT("askingAi");
-      try{
-        const metadata=await bridge.suggestMetadata({kind,artifact,current:{name:name.value,description:description.value,category:category.value,tags:parsedTags(),continuationPrompt:continuation.value}});
-        name.value=metadata.name;
-        description.value=metadata.description;
-        category.value=CATEGORIES.includes(metadata.category)?metadata.category:"productivity";
-        tags.value=(metadata.tags||[]).slice(0,8).join(", ");
-        continuation.value=String(metadata.continuationPrompt||continuation.value).slice(0,500);
-        refreshTagCount();
-        if(validationAttempted)validateRequiredFields();
-        saveDraft();
-        status.className="cloud-share-status success";
-        status.textContent=cloudT("listingOptimized");
-      }catch(error){status.className="cloud-share-status error";status.textContent=error.message||cloudT("aiAutoFillFailed");}
-      finally{autoFill.disabled=!artifact;}
-    });
-    queueMicrotask(async()=>{
-      try{
-        if(!bridge)throw new Error(cloudT("communityBridgeNotReady"));
-        artifact=kind==="widget"?await bridge.widgetArtifact(widgetId):await bridge.canvasArtifact();
-        lineage=bridge.lineageForArtifact?.(kind,artifact)||null;
-        const draftIdentity=lineage?.parentItemId||(kind==="widget"?artifact.widget?.id:artifact.name)||"current";
-        draftKey=`penecho.community.publish.${kind}.${String(draftIdentity).slice(0,180)}`;
-        if(lineage){
-          shell.body.insertBefore(field(cloudT("contributionLabel"),contribution),permissionLabel);
-          const parentStep=Number.isInteger(lineage.parentGeneration)?cloudT("stepNumber", { number:lineage.parentGeneration+1 }):cloudT("publishedStep"), parentName=lineage.parentName?` “${lineage.parentName}”`:"";
-          shell.body.insertBefore(el("div", { class:"cloud-lineage-notice", text:cloudT("lineageNotice", { step:parentStep, name:parentName }) }),contribution.closest("label"));
-        }
-        const preview=artifact.communityPreview,base64=preview?.dataBase64;
-        if(!base64)throw new Error(cloudT("automaticPreviewMissing"));
-        previewImage.src=`data:image/webp;base64,${base64}`;
-        previewPanel.setAttribute("aria-busy","false");
-        const recovered=restoreDraft();
-        updatePublishAvailability();
-        autoFill.disabled=false;
-        status.textContent=cloudT(recovered?"previewRestored":"previewReady");
-      }catch(error){previewPanel.classList.add("error");previewPanel.setAttribute("aria-busy","false");status.className="cloud-share-status error";status.textContent=error.message||cloudT("sharingUnavailable");}
-    });
-    permission.addEventListener("change",updatePublishAvailability);
+  function shareDialog({kind,widgetId=null}) {
+    return liveShareDialog({kind,widgetId,publicIntent:true});
   }
 
   async function takeFurther(itemId, importOptions = null) {
@@ -2337,7 +2236,7 @@
     if (!craftsEchoesLink) return;
     craftsEchoesLink.setAttribute("href", new URL("/community.html", `${cloudOrigin()}/`).toString());
     const label = craftsEchoesLink.querySelector?.(".crafts-echoes-label");
-    if (label) label.textContent = savedT("browseEchoes", "Browse Echoes");
+    if (label) label.textContent = savedT("browseEchoes", "Browse public shares");
   }
 
   function selectCraftKind(kind, focus = false) {
@@ -3040,7 +2939,7 @@
   }
 
   if (libraryFavoritesAvailable()) {
-    // "Browse Echoes" belongs to the Library navigation.
+    // "Browse public shares" belongs to the Library navigation.
     const librarySidebar = libraryPanel.querySelector(".history-library-sidebar");
     if (craftsEchoesLink && librarySidebar) librarySidebar.append(craftsEchoesLink);
     libraryFavoritesNav?.addEventListener("click", () => openFavorites());
