@@ -345,11 +345,11 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.match(zh, /tourLassoBody:[^\n]*AI 只接收选中的内容[^\n]*拖动或缩放选区可以移动或缩放笔迹[^\n]*Widget 保持原位/);
   assert.doesNotMatch(app, /tourAnimationPlugin/);
   assert.doesNotMatch(zh, /控制动态图讲解/);
-  assert.match(app, /tourFavoritesBody:[^\n]*Echoes favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
-  assert.match(zh, /tourFavoritesBody:[^\n]*Echoes[^\n]*收藏组件[^\n]*收藏画布/);
-  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*separate Craft to Echoes/);
-  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*独立的 Echo 按钮[^\n]*Echoes/);
-  assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or Widgets/);
+  assert.match(app, /tourFavoritesBody:[^\n]*saved favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
+  assert.match(zh, /tourFavoritesBody:[^\n]*收藏[^\n]*收藏组件[^\n]*收藏画布/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*Share publicly[^\n]*after review/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*公开展示[^\n]*审核通过/);
+  assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or publicly shared Widgets/);
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);
   assert.match(zh, /双指.*缩放/);

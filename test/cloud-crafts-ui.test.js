@@ -82,7 +82,7 @@ test("toolbar ships a left-navigation Favorites workbench with list and grid vie
   assert.match(locale, /savedCraftsTitle: "收藏"/);
   assert.match(locale, /savedCraftsSubtitle: "画布与组件"/);
   assert.match(locale, /savedGridView: "网格视图"/);
-  assert.match(locale, /browseEchoes: "浏览 Echoes"/);
+  assert.match(locale, /browseEchoes: "浏览公开分享"/);
   assert.match(locale, /savedCount: "\{count\} 个收藏"/);
   assert.match(locale, /savedSourceSynced: "云端 \+ 本机"/);
   assert.match(locale, /savedRemoveConfirmTitle: "从收藏中移除？"/);

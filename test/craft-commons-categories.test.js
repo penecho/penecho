@@ -33,19 +33,12 @@ test("Cloud Connect share categories keep every original and append the three Cr
     guidance:"categoryGuidance", collaboration:"categoryCollaboration", learning:"categoryLearning",
   });
 
-  // Every category is rendered through the bilingual Cloud copy table.
-  assert.match(cloudConnect, /CATEGORIES\.map\(value => el\("option", \{ value, text:cloudT\(CATEGORY_LABEL_KEYS\[value\]\) \}\)\)/);
+  // Legacy category metadata stays readable, but unified live sharing no longer
+  // asks users to classify a separate publication.
   assert.deepEqual(categories.map((value) => labelKeys[value]), Object.values(labelKeys));
+  const share = cloudConnect.slice(cloudConnect.indexOf("async function liveShareDialog"), cloudConnect.indexOf("async function takeFurther"));
+  assert.doesNotMatch(share, /CATEGORIES|continuationPrompt|contributionNote/);
 
-  // Draft restore, publish validation, and AI auto-fill all guard on the same
-  // widened list. The button itself remains clickable so validation can explain
-  // any missing required field instead of silently doing nothing.
-  assert.ok((cloudConnect.match(/CATEGORIES\.includes\(/g) || []).length >= 3);
-
-  // Sharing requires an explicit choice: the select opens on a placeholder and
-  // validation rejects the placeholder until a real category is picked.
-  assert.match(cloudConnect, /el\("option", \{ value:"", text:cloudT\("selectCategory"\) \}\)/);
-  assert.match(cloudConnect, /!CATEGORIES\.includes\(payload\.category\)\) throw new Error\(cloudT\("publishCategoryRequired"\)\)/);
 });
 
 test("Cloud Connect keeps Echoes beside Projects and favorites", () => {

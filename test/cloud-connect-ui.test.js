@@ -647,170 +647,7 @@ function selectCloudSection(overlay, section) {
   return control;
 }
 
-async function publishCraftFromShareDialog(run, kind, { continuationText="Continue with the next useful detail.", beforePublish = null } = {}) {
-  if (kind === "canvas") run.echoButton.click();
-  else await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"echo", widgetId:"widget-1" } });
-  await run.flush();
-  const overlay = run.overlay();
-  assert.ok(overlay?.isConnected, `expected the ${kind} share dialog to open`);
-  beforePublish?.(overlay);
-  const controls = flatten(overlay);
-  const title = controls.find((node) => node.tagName === "INPUT" && ["Widget name", "Canvas name"].includes(node.getAttribute("placeholder")));
-  const description = controls.find((node) => node.tagName === "TEXTAREA" && node.getAttribute("placeholder") === "A short, useful introduction");
-  title.value = `${kind === "widget" ? "Widget" : "Canvas"} title`;
-  title.dispatch("input");
-  description.value = "A concise description of this published Craft.";
-  description.dispatch("input");
-  const category = controls.find((node) => node.tagName === "SELECT");
-  category.value = "productivity";
-  category.dispatch("change");
-  const continuation = controls.find((node) => node.getAttribute("placeholder")?.includes("next Crafter"));
-  continuation.value = continuationText;
-  continuation.dispatch("input");
-  for (const checkbox of controls.filter((node) => node.getAttribute("type") === "checkbox")) {
-    checkbox.checked = true;
-    checkbox.dispatch("change");
-  }
-  const publish = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Publish this stroke");
-  assert.equal(publish?.disabled, false, "completed publication fields enable the publish action");
-  publish.click();
-  await run.flush();
-  const resultOverlay = run.overlay();
-  assert.equal(overlay.isConnected, false, "the publication form closes after a successful publish");
-  assert.ok(resultOverlay?.isConnected, "a separate publication result dialog opens");
-  assert.notEqual(resultOverlay, overlay);
-  return resultOverlay;
-}
-
-test("the next-Crafter Echo prompt is optional in English and Chinese", async () => {
-  const run = boot({
-    status:deviceStatus(),
-    publishItem:{ id:"123e4567-e89b-42d3-a456-426614174099", kind:"canvas", name:"Optional prompt" },
-    canvasShareArtifact:{ name:"Optional prompt", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-  });
-  await run.flush();
-  let publicationForm;
-  await publishCraftFromShareDialog(run, "canvas", { continuationText:"", beforePublish:(overlay) => { publicationForm = overlay; } });
-  const publicationRequest = run.fetchCalls.find((call) => call.url === "/api/cloud/community/share" && call.options.method === "POST");
-  assert.equal(JSON.parse(publicationRequest.options.body).continuationPrompt, "");
-  assert.ok(publicationForm.textContent.includes("What should the next Crafter Echo? (optional)"));
-  assert.doesNotMatch(publicationForm.textContent, /Tell the next Crafter what to Echo/);
-
-  const zh = boot({ status:deviceStatus(), language:"zh-CN" });
-  await zh.flush();
-  zh.echoButton.click();
-  await zh.flush();
-  assert.ok(zh.overlay().textContent.includes("下一位创作者应该 Echo 什么？（可选）"));
-});
-
-test("a continuation contribution is optional but its parent lineage is preserved", async () => {
-  const parentItemId="123e4567-e89b-42d3-a456-426614174090",run=boot({
-    status:deviceStatus(),
-    lineage:{ parentItemId, parentName:"Original", parentGeneration:0 },
-    publishItem:{ id:"123e4567-e89b-42d3-a456-426614174091", kind:"canvas", name:"Continuation" },
-    canvasShareArtifact:{ name:"Continuation", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-  });
-  await run.flush();
-  let publicationForm;
-  await publishCraftFromShareDialog(run,"canvas",{ beforePublish:(overlay)=>{publicationForm=overlay;} });
-  const request=run.fetchCalls.find((call)=>call.url==="/api/cloud/community/share"&&call.options.method==="POST"),payload=JSON.parse(request.options.body);
-  assert.equal(payload.parentItemId,parentItemId);
-  assert.equal(payload.contributionNote,"");
-  assert.ok(publicationForm.textContent.includes("Your contribution to this Craft (optional)"));
-});
-
-test("Cloud runtime publishes an Echo through reserve, artifact upload, and completion", async () => {
-  const item={id:"123e4567-e89b-42d3-a456-426614174092",kind:"canvas",name:"Cloud protocol"};
-  const artifact={bundleVersion:2,mode:"snapshot",formatVersion:1,manifest:{format:"penecho-raster-tiles"},assets:[],communityPreview:{contentType:"image/webp",dataBase64:"AA==",width:800,height:500}};
-  const run=boot({
-    runtime:"cloud",
-    remoteCloudStatus:{accountId:"account-1",accountName:"Remote User",deviceOnline:false,deviceReady:false},
-    publishItem:item,
-    canvasShareArtifact:artifact,
-  });
-  await publishCraftFromShareDialog(run,"canvas");
-
-  const legacy=run.fetchCalls.find((call)=>call.url==="/api/cloud/community/share");
-  const reservation=run.fetchCalls.find((call)=>call.url==="/api/v1/community/items"&&call.options.method==="POST");
-  const upload=run.fetchCalls.find((call)=>call.url==="https://storage.test/community-upload"&&call.options.method==="PUT");
-  const completion=run.fetchCalls.find((call)=>call.url===`/api/v1/community/items/${item.id}/complete`&&call.options.method==="POST");
-  assert.equal(legacy,undefined,"Cloud publication must not call the local-only aggregate endpoint");
-  assert.ok(reservation);assert.ok(upload);assert.ok(completion);
-  const bytes=Buffer.from(JSON.stringify(artifact)),body=JSON.parse(reservation.options.body);
-  assert.equal(body.priceCredits,0);
-  assert.equal(body.formatVersion,1);
-  assert.equal(body.artifact.sizeBytes,bytes.length);
-  assert.equal(body.artifact.contentType,"application/json");
-  assert.equal(body.artifact.sha256,createHash("sha256").update(bytes).digest("hex"));
-  assert.deepEqual(Buffer.from(upload.options.body),bytes);
-  assert.deepEqual(plain(upload.options.headers),{"content-type":"application/json"});
-});
-
-test("the optional next-Crafter Echo prompt always opens empty", async () => {
-  const draftKey = "penecho.community.publish.canvas.Draft identity";
-  const sessionStorageEntries = {
-    [draftKey]:JSON.stringify({
-      name:"Recovered title",
-      description:"Recovered description",
-      category:"productivity",
-      tags:"planning",
-      continuation:"Old suggestion must not return",
-    }),
-  };
-  const run = boot({
-    status:deviceStatus(),
-    canvasShareArtifact:{ name:"Draft identity", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-    sessionStorageEntries,
-  });
-  await run.flush();
-  run.echoButton.click();
-  await run.flush();
-
-  const controls = flatten(run.overlay());
-  const title = controls.find((node) => node.tagName === "INPUT" && node.getAttribute("placeholder") === "Canvas name");
-  const continuation = controls.find((node) => node.getAttribute("placeholder")?.includes("next Crafter"));
-  assert.equal(title.value, "Recovered title", "ordinary publication draft fields still recover");
-  assert.equal(continuation.value, "", "legacy or previous optional suggestions never prefill a new publication form");
-
-  continuation.value = "A suggestion entered during this opening";
-  continuation.dispatch("input");
-  assert.equal(Object.hasOwn(JSON.parse(sessionStorageEntries[draftKey]), "continuation"), false, "the optional suggestion is not persisted as draft state");
-});
-
-test("new publication forms keep title and description empty and block incomplete publishing", async () => {
-  const run = boot({
-    status:deviceStatus(),
-    publishItem:{ id:"123e4567-e89b-42d3-a456-426614174098", kind:"canvas", name:"Should not publish" },
-    canvasShareArtifact:{ name:"Artifact title must not prefill", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-  });
-  await run.flush();
-  run.echoButton.click();
-  await run.flush();
-
-  const overlay=run.overlay(),controls=flatten(overlay);
-  const title=controls.find((node)=>node.tagName==="INPUT"&&node.getAttribute("placeholder")==="Canvas name");
-  const description=controls.find((node)=>node.tagName==="TEXTAREA"&&node.getAttribute("placeholder")==="A short, useful introduction");
-  const publish=controls.find((node)=>node.tagName==="BUTTON"&&node.textContent==="Publish this stroke");
-  assert.equal(title.value, "");
-  assert.equal(description.value, "");
-  assert.equal(title.getAttribute("required"), "");
-  assert.equal(description.getAttribute("required"), "");
-  assert.equal(publish.disabled, false, "the publish action remains available so it can explain missing fields");
-
-  publish.click();
-  await run.flush();
-  assert.ok(overlay.textContent.includes("Enter a title before publishing."));
-  assert.equal(title.getAttribute("aria-invalid"), "true");
-  assert.equal(run.fetchCalls.some((call)=>call.url==="/api/cloud/community/share"), false);
-
-  title.value="A clear title";
-  title.dispatch("input");
-  publish.click();
-  await run.flush();
-  assert.ok(overlay.textContent.includes("Enter a description before publishing."));
-  assert.equal(description.getAttribute("aria-invalid"), "true");
-  assert.equal(run.fetchCalls.some((call)=>call.url==="/api/cloud/community/share"), false);
-});
+// Unified sharing behavior is exercised against a real DOM in live-share-dialog.test.js.
 
 test("signed-in users enable Linked Device without a pairing code", async () => {
   const run=boot({status:deviceStatus({configured:false,enabled:false,state:"disconnected",id:null,name:null})});
@@ -861,55 +698,6 @@ test("signed-in account and configured device expose actions on their own pages"
   assert.ok(!overlay.textContent.includes("Signing out removes"));
   assert.ok(!overlay.textContent.includes("Link settings"));
   assert.ok(!overlay.textContent.includes("Removing the link stops"));
-});
-
-test("sharing while signed out explains the requirement and opens Cloud sign-in", async () => {
-  const run = boot({ status:signedOutStatus() });
-  await run.flush();
-
-  run.echoButton.click();
-  await run.flush();
-
-  const overlay = run.overlay();
-  assert.ok(overlay?.isConnected, "the Cloud Center opens instead of an unusable publication form");
-  assert.ok(overlay.textContent.includes("Please sign in to PenEcho Cloud before sharing."));
-  assert.ok(flatten(overlay).some((node) => node.tagName === "BUTTON" && node.textContent === "Sign in with browser"));
-  assert.ok(!overlay.textContent.includes("Preserve this moment"));
-});
-
-test("publication uses one consolidated PenEcho agreement link in browsers and desktop apps", async () => {
-  for (const options of [
-    { cloudOrigin:"https://internaltest.penecho.ai" },
-    { cloudOrigin:"https://penecho.ai", rendererDesktopBridge:true },
-  ]) {
-    const run = boot({ status:deviceStatus(), ...options });
-    await run.flush();
-    run.echoButton.click();
-    await run.flush();
-
-    const overlay = run.overlay();
-    const checkboxes = flatten(overlay).filter((node) => node.getAttribute("type") === "checkbox");
-    const agreement = flatten(overlay).find((node) => node.tagName === "A" && node.className === "cloud-publication-link");
-    assert.equal(checkboxes.length, 1, "one agreement replaces the two overlapping confirmations");
-    assert.ok(agreement);
-    assert.equal(checkboxes[0].getAttribute("data-pe-control"), "checkbox");
-    assert.equal(checkboxes[0].parentNode.getAttribute("data-pe-hit"), "choice");
-    assert.equal(agreement.getAttribute("href"), `${options.cloudOrigin}/terms.html#public-crafts`);
-    assert.equal(agreement.getAttribute("target"), "_blank");
-    assert.equal(agreement.getAttribute("rel"), "noopener");
-    assert.equal(agreement.dataset.peButton, undefined, "the inline agreement link must not receive button styling");
-    assert.equal(agreement.children.at(-1)?.textContent, "↗");
-    assert.equal(agreement.children.at(-1)?.getAttribute("aria-hidden"), "true");
-    assert.match(cloudCss, /\.cloud-publication-consent\s*\{[^}]*align-items:\s*center[^}]*gap:\s*8px/);
-    assert.match(cloudCss, /\.cloud-publication-consent\s*\{[^}]*padding:\s*\.65rem \.7rem/, "the consent panel retains the symmetric inset introduced by the Studio layout");
-    assert.doesNotMatch(cloudCss, /\.cloud-publication-consent\s*\{[^}]*padding-inline-start:\s*0/);
-    assert.match(cloudCss, /\.cloud-publication-consent input\s*\{[^}]*flex:\s*0 0 15px[^}]*margin:\s*0/);
-    assert.match(cloudCss, /\.cloud-publication-consent \.cloud-publication-link\s*\{[^}]*border:\s*0[^}]*background:\s*transparent/);
-    assert.doesNotMatch(overlay.textContent, /Public Craft ML License|CC BY-SA 4\.0|embedded source under MIT|including its open-license and model-training terms/);
-    const preview = flatten(overlay).find((node) => node.className === "cloud-share-preview");
-    assert.ok(preview);
-    assert.equal(preview.children.length, 1, "the preview contains only the image, without a dark metadata strip");
-  }
 });
 
 test("a linked device remains visible and controllable when the Cloud account is signed out", async () => {
@@ -1221,8 +1009,8 @@ test("Cloud Center uses History-style vertical navigation with Account and Link 
   const tablist = flatten(overlay).find((node) => node.getAttribute("role") === "tablist");
   assert.equal(tablist.getAttribute("aria-orientation"), "vertical");
   const explore = flatten(overlay).find((node) => node.tagName === "A" && node.className.includes("cloud-explore-link"));
-  assert.ok(explore, "Echoes remains a Cloud navigation link");
-  assert.equal(explore.textContent, "Echoes ↗");
+  assert.ok(explore, "Public shares remains a Cloud navigation link");
+  assert.equal(explore.textContent, "Public shares ↗");
   assert.equal(explore.getAttribute("href"), "https://internaltest.penecho.ai/community.html");
   assert.equal(explore.getAttribute("target"), "_blank");
   assert.equal(explore.getAttribute("rel"), "noopener");
@@ -1326,7 +1114,7 @@ test("Cloud Center keeps the concise account and device copy bilingual", async (
   selectCloudSection(overlay, "device");
   assert.ok(overlay.textContent.includes("登录后即可一键启用 Linked Device。"));
   assert.deepEqual(flatten(overlay).filter((node) => node.getAttribute("role") === "tab").map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects", "favorites"]);
-  assert.ok(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "Echoes ↗"));
+  assert.ok(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "公开分享 ↗"));
   assert.ok(!overlay.textContent.includes("Sign in for private projects"));
 });
 
@@ -1977,128 +1765,14 @@ test("stale repeat favorite requests stay selected and never turn an existing Wi
   assert.equal(run.fetchCalls.filter((call) => call.options.method === "DELETE").length, 0);
 });
 
-test("share dialog and all category labels use the Chinese Cloud copy", async () => {
-  const run = boot({ status:deviceStatus(), language:"zh-CN" });
-  await run.flush();
-  run.echoButton.click();
-  await run.flush();
-
-  const overlay = run.overlay();
-  assert.ok(overlay?.isConnected, "expected the share dialog to open");
-  assert.ok(overlay.textContent.includes("保存这一刻"));
-  assert.ok(overlay.textContent.includes("使用当前 AI 自动填写"));
-  assert.ok(overlay.textContent.includes("我有权发布此作品"));
-  assert.ok(overlay.textContent.includes("《发布协议》"));
-  assert.ok(!overlay.textContent.includes("包括开放许可与模型训练条款"));
-  assert.ok(overlay.textContent.includes("发布此笔触"));
-  assert.ok(overlay.textContent.includes("预览已就绪"));
-
-  const category = flatten(overlay).find((node) => node.tagName === "SELECT");
-  assert.deepEqual(category.children.map((option) => option.textContent), [
-    "选择分类…", "教育", "效率", "数据", "设计", "开发", "科学", "商业", "生活方式", "其他", "分享与指导", "协作共创", "学习笔记",
-  ]);
-  const controls = flatten(overlay);
-  assert.ok(controls.some((node) => node.getAttribute("placeholder") === "画布名称"));
-  assert.ok(controls.some((node) => node.getAttribute("placeholder") === "写一段简短、实用的介绍"));
-  assert.doesNotMatch(overlay.textContent, /Preserve this moment|Select a category|Auto-fill with current AI|I have the right to publish/);
-});
-
-test("published Canvas closes the publication form and opens a link-first result dialog", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174021", kind:"canvas", name:"Roadmap", description:"Plan the next release.", shareUrl:"/community/123e4567-e89b-42d3-a456-426614174021" };
-  const shareCalls = [];
-  const run = boot({
-    status:deviceStatus(),
-    publishItem:item,
-    canvasShareArtifact:{ name:"Roadmap", communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } },
-    navigatorOverrides:{ share:async (payload) => { shareCalls.push(payload); } },
-  });
-  await run.flush();
-  const overlay = await publishCraftFromShareDialog(run, "canvas");
-  const publicationRequest = run.fetchCalls.find((call) => call.url === "/api/cloud/community/share" && call.options.method === "POST");
-  const publication = JSON.parse(publicationRequest.options.body);
-  assert.equal(publication.publicationTermsAccepted, true);
-  assert.equal(publication.publicationRightsAccepted, true);
-  assert.equal(publication.modelTrainingAccepted, true, "the consolidated agreement satisfies the existing server contract");
-  assert.ok(overlay.textContent.includes("Published to Echoes"));
-  assert.doesNotMatch(overlay.textContent, /Publish this stroke|Auto-fill with current AI/);
-  assert.match(cloudCss, /\.penecho-cloud-dialog\.publish-success\s*\{[^}]*--penecho-dialog-surface:\s*color-mix\(in srgb, var\(--studio-panel, #ffffff\) 88%, transparent\)[^}]*max-width:\s*560px/);
-  const actions = flatten(overlay).filter((node) => node.tagName === "BUTTON" || node.tagName === "A");
-  const linkIndex = actions.findIndex((node) => node.textContent === "Share as link");
-  const imageIndex = actions.findIndex((node) => node.textContent === "Share as image");
-  assert.ok(linkIndex >= 0 && imageIndex > linkIndex, "link sharing is the first share action");
-
-  actions[linkIndex].click();
-  await run.flush();
-  assert.equal(shareCalls.length, 1);
-  assert.equal(shareCalls[0].title, "Roadmap");
-  assert.equal(shareCalls[0].text, "View and Echo this Canvas on PenEcho.");
-  assert.equal(shareCalls[0].url, "https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174021");
-  assert.ok(overlay.textContent.includes("Link shared."));
-});
-
-test("published image sharing copies a responsive linked image embed and prevents duplicate actions", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174023", kind:"canvas", name:'Launch "plan" <safe>' };
-  let releaseCopy;
-  const clipboardWrites = [];
-  const run = boot({
-    status:deviceStatus(),
-    publishItem:item,
-    navigatorOverrides:{ clipboard:{ writeText:(value) => new Promise((resolve) => { clipboardWrites.push(String(value)); releaseCopy=resolve; }) } },
-  });
-  await run.flush();
-  const overlay = await publishCraftFromShareDialog(run, "canvas");
-  const shareLink = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as link");
-  const shareImage = flatten(overlay).find((node) => node.tagName === "BUTTON" && node.textContent === "Share as image");
-  shareImage.click();
-  assert.equal(shareLink.disabled, true);
-  assert.equal(shareImage.disabled, true);
-  assert.equal(clipboardWrites.length, 1);
-  assert.equal(clipboardWrites[0], '<a href="https://internaltest.penecho.ai/community/123e4567-e89b-42d3-a456-426614174023" target="_blank" rel="noopener noreferrer"><img src="https://internaltest.penecho.ai/api/v1/community/items/123e4567-e89b-42d3-a456-426614174023/social-card.png" alt="Launch &quot;plan&quot; &lt;safe&gt; — PenEcho Echoes" width="1200" height="630" loading="lazy" decoding="async" style="max-width:100%;height:auto"></a>');
-  releaseCopy();
-  await run.flush();
-  assert.equal(shareLink.disabled, false);
-  assert.equal(shareImage.disabled, false);
-  assert.ok(overlay.textContent.includes("Linked image embed code copied."));
-});
-
-test("published Widget exposes the same bilingual link and image actions", async () => {
-  const item = { id:"123e4567-e89b-42d3-a456-426614174022", kind:"widget", name:"计时器" };
-  const run = boot({ status:deviceStatus(), language:"zh-CN", publishItem:item, widgetShareArtifact:{ widget:{ id:"widget-1", title:"计时器" }, communityPreview:{ contentType:"image/webp", dataBase64:"AA==", width:800, height:500 } } });
-  await run.flush();
-  await run.window.dispatch("penecho:community-widget-action", { detail:{ action:"echo", widgetId:"widget-1" } });
-  await run.flush();
-  const form = run.overlay(), controls = flatten(form);
-  const title = controls.find((node) => node.tagName === "INPUT" && node.getAttribute("placeholder") === "组件名称");
-  const description = controls.find((node) => node.tagName === "TEXTAREA" && node.getAttribute("placeholder") === "写一段简短、实用的介绍");
-  title.value = "计时器"; title.dispatch("input");
-  description.value = "一个清晰、可复用的计时组件。"; description.dispatch("input");
-  const category = controls.find((node) => node.tagName === "SELECT");
-  category.value = "productivity"; category.dispatch("change");
-  for (const checkbox of controls.filter((node) => node.getAttribute("type") === "checkbox")) { checkbox.checked = true; checkbox.dispatch("change"); }
-  controls.find((node) => node.tagName === "BUTTON" && node.textContent === "发布此笔触").click();
-  await run.flush();
-
-  const result = run.overlay();
-  assert.equal(form.isConnected, false);
-  assert.ok(result.textContent.includes("已发布到 Echoes"));
-  const shareLink = flatten(result).find((node) => node.tagName === "BUTTON" && node.textContent === "分享链接");
-  const shareImage = flatten(result).find((node) => node.tagName === "BUTTON" && node.textContent === "分享为图片");
-  assert.ok(shareLink && shareImage);
-  shareImage.click();
-  await run.flush();
-  assert.match(run.clipboardWrites.at(-1), /<a href="https:\/\/internaltest\.penecho\.ai\/community\/123e4567-e89b-42d3-a456-426614174022"/);
-  assert.match(run.clipboardWrites.at(-1), /<img src="https:\/\/internaltest\.penecho\.ai\/api\/v1\/community\/items\/123e4567-e89b-42d3-a456-426614174022\/social-card\.png"/);
-  assert.ok(result.textContent.includes("带链接的图片嵌入代码已复制。"));
-});
-
 test("share and widget-favorite flows do not embed user-facing English outside Cloud copy", () => {
   const shareSource = cloudScript.slice(cloudScript.indexOf("function shareDialog"), cloudScript.indexOf("async function takeFurther"));
+  assert.match(shareSource, /return liveShareDialog/);
+  assert.match(shareSource, /publicIntent:true/);
   const favoriteSource = cloudScript.slice(cloudScript.indexOf("async function toggleWidgetFavorite"), cloudScript.indexOf("async function syncLocalFavorites"));
   assert.doesNotMatch(shareSource, /Preserve this moment|Generating preview|Use no more than 8 tags|Enter a name before publishing|Craft published safely|Copy link|Preview ready\.|Could not generate the preview/);
   assert.doesNotMatch(shareSource, /creativecommons\.org|opensource\.org|public-craft-training|Public Craft ML License/);
-  assert.match(shareSource, /new URL\("\/terms\.html#public-crafts",`\$\{cloudOrigin\(\)\}\/`\)/);
   assert.doesNotMatch(favoriteSource, /This PenEcho version does not support widget favorites|"Untitled Widget"/);
-  assert.match(shareSource, /CATEGORIES\.map\(value => el\("option", \{ value, text:cloudT\(CATEGORY_LABEL_KEYS\[value\]\) \}\)\)/);
   assert.match(favoriteSource, /throw new Error\(cloudT\("favoriteUnsupported"\)\)/);
 });
 

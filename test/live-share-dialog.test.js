@@ -316,3 +316,50 @@ test("public toggle rolls back on a failed request and refuses to save a switche
   toggle.checked=true;toggle.dispatchEvent(new h.window.Event('change'));await settle();
   assert.equal(h.writes().length,writes);assert.match(h.status().textContent,/Reopen Share/);
 });
+
+for (const language of ['en', 'zh-CN']) {
+  test(`public Canvas sharing uses the live link without a separate publication form (${language})`, async () => {
+    const h = boot({language});
+    await h.openCanvas();
+    const toggle = h.dialog().querySelector('.live-share-public-toggle');
+    assert.equal(Boolean(toggle.checked), false);
+    assert.equal(h.dialog().querySelector('select'), null, 'no legacy publication category');
+    assert.equal(h.dialog().querySelector('.live-share-more').hasAttribute('open'), false);
+    assert.match(h.dialog().textContent, language === 'en' ? /Share publicly/ : /公开展示/);
+    toggle.checked = true;
+    toggle.dispatchEvent(new h.window.Event('change'));
+    assert.deepEqual(h.writes(), []);
+    await h.click(h.button(language === 'en' ? 'Save and enable sharing' : '保存并开启分享'));
+    assert.deepEqual(h.writes()[0].body, {public:true});
+    assert.deepEqual(h.steps(), ['save canvas', 'POST share']);
+    assert.equal(h.dialog().dataset.liveShare, 'on');
+    assert.match(h.dialog().querySelector('input[readonly]').value, /\/canvas\/share\/canvas-token$/);
+    assert.equal(h.calls.some(call => call.url.includes('/community/')), false);
+    await h.click(h.button(language === 'en' ? 'Turn off sharing' : '关闭分享'));
+    assert.equal(Boolean(toggle.checked), false);
+    assert.equal(h.dialog().dataset.liveShare, 'off');
+  });
+
+  test(`public review states are readable without publishing on open (${language})`, async () => {
+    const expected = language === 'en'
+      ? {pending:/Pending review/, approved:/Visible in Public shares/, blocked:/does not meet/, review:/further review/, error:/temporarily unavailable/}
+      : {pending:/等待审核/, approved:/已在公开分享页面展示/, blocked:/不符合公开分享要求/, review:/暂时无法完成审核/, error:/审核暂时不可用/};
+    for (const [state, message] of Object.entries(expected)) {
+      const h = boot({language, shares:new Map([[`${CANVAS_ID}:`, {url:'/canvas/share/canvas-token', public:true, moderation:{state}}]])});
+      await h.openCanvas();
+      assert.equal(h.dialog().querySelector('.live-share-public-toggle').checked, true);
+      assert.match(h.dialog().querySelector('.live-share-public-status').textContent, message);
+      assert.deepEqual(h.writes(), [], 'reading review status never submits content');
+    }
+  });
+}
+
+test('legacy Widget Echo action opens unified sharing with public intent but waits for confirmation', async () => {
+  const h = boot();
+  await h.openWidget({action:'echo'});
+  assert.equal(h.dialog().querySelector('.live-share-public-toggle').checked, true);
+  assert.deepEqual(h.writes(), []);
+  await h.click(h.button('Save and enable sharing'));
+  assert.deepEqual(h.writes()[0].body, {widgetId:SOURCE_ID, public:true});
+  assert.equal(h.calls.some(call => call.url.includes('/community/')), false);
+});

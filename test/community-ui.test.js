@@ -8,7 +8,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", () => {
+test("Cloud Center exposes concise Projects, Favorites, and Public shares navigation", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
@@ -53,13 +53,10 @@ test("Cloud Center exposes concise Projects, Favorites, and Echoes navigation", 
   assert.match(cloud, /projects\.find\(\(project\) => project\.id === state\.selectedProjectId\)/);
   assert.match(cloud, /base-revision-required/);
 
-  for (const key of ["cloudSubtitle", "signOutHost", "removeThisLink", "autoFillCurrentAi", "shareNote", "publishedDialogTitle", "shareAsLink", "shareAsImage"]) {
+  for (const key of ["cloudSubtitle", "signOutHost", "removeThisLink", "publishedDialogTitle", "shareAsLink", "shareAsImage"]) {
     assert.match(cloud, new RegExp(`cloudT\\("${key}"`));
   }
   assert.match(cloud, /PUBLICATION_TERMS_VERSION = "2026-08-12"/);
-  assert.match(cloud, /continuationPrompt/);
-  assert.match(cloud, /contributionNote/);
-  assert.match(cloud, /parentItemId/);
   assert.match(cloud, /window\.PenEchoCommunityUI/);
   assert.doesNotMatch(cloud.replace(/priceCredits:0,/g, ""), /priceCredits|Credit price|field\("Pricing"|price_low|price_high|Free \+ paid|Paid with credits/);
 
