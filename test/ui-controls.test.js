@@ -308,8 +308,15 @@ test("canvas connection editor uses editable Kimi and MiniMax presets without co
   assert.match(css, /\.connection-manager > header button\s*\{[^}]*height:\s*32px[^}]*color:\s*var\(--ink\)[^}]*background:\s*transparent/);
   assert.match(html, /id="summonToggleLabel"[^>]*data-i18n="settingsSummonSection"/);
   assert.doesNotMatch(html, /settingsSummonEnabled|settingsSummonDescription/);
-  assert.equal((html.match(/class="settings-links"/g) || []).length, 1, "web Settings keeps the download and GitHub links");
-  assert.match(app, /if \(window\.penechoDesktop\) document\.querySelector\("\.settings-links"\)\?\.remove\(\)/);
+  assert.equal((html.match(/id="settingsDownloadLinks"/g) || []).length, 1, "download links have their own desktop-removal target");
+  const {document} = require("linkedom").parseHTML(html);
+  const desktopCleanup = app.split("\n").find(line => line.includes('if (window.penechoDesktop) document.querySelector("#settingsDownloadLinks")'));
+  assert.ok(desktopCleanup);
+  vm.runInNewContext(desktopCleanup, {window:{penechoDesktop:{}}, document});
+  assert.equal(document.querySelector("#settingsDownloadLinks"), null);
+  assert.ok(document.querySelector('#settingsPageAbout a[href="https://github.com/sponsors/penecho"]'), "desktop cleanup preserves sponsorship");
+  assert.ok(document.querySelector('#settingsPageAbout a[href="https://penecho.ai/sponsors.html#commercial"]'), "desktop cleanup preserves licensing");
+  assert.match(app, /if \(window\.penechoDesktop\) document\.querySelector\("#settingsDownloadLinks"\)\?\.remove\(\)/);
   assert.doesNotMatch(css, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.settings-panel/);
   for (const key of ["settingsApiRegion", "settingsApiService", "settingsApiServiceCoding"]) {
     assert.match(app, new RegExp(`${key}:`));

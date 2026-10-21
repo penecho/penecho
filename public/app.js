@@ -43896,7 +43896,7 @@ var canvasDocumentIdentity = (() => {
     if (!settingsEffortCombobox?.contains(event.target)) hideSettingsEffortOptions();
     if (!document.querySelector("#settingsApiModelCombobox")?.contains(event.target)) hideApiModelOptions();
   });
-  if (window.penechoDesktop) document.querySelector(".settings-links")?.remove();
+  if (window.penechoDesktop) document.querySelector("#settingsDownloadLinks")?.remove();
   settingsProvider?.addEventListener("change", () => {
     updateSettingsProviderFields();
     selectDefaultConnectionEffort();
