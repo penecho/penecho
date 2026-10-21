@@ -24,10 +24,6 @@
 </p>
 
 <p align="center">
-  <a href="https://buymeacoffee.com/penecho"><img src="docs/assets/support-penecho.svg" alt="Support PenEcho open source — buy us a coffee to help fund development, testing, and documentation" width="820"></a>
-</p>
-
-<p align="center">
   <a href="#new-in-1-4">What's new in 1.4</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#connect-your-ai-agent-mcp">Connect your AI (MCP)</a> ·
@@ -243,13 +239,24 @@ These recommendations balance answer quality against the latency of PenEcho's re
 
 ## Support PenEcho
 
-Help keep PenEcho's open-source canvas improving. Your support funds development, bug fixes, cross-platform testing, accessibility, and documentation.
+Help keep the canvas open. Your support funds development, bug fixes, cross-platform testing, accessibility, and documentation.
 
-<p align="center">
-  <a href="https://github.com/sponsors/penecho"><img src="https://img.shields.io/badge/GitHub_Sponsors-Support_PenEcho-db61a2?style=for-the-badge&amp;logo=githubsponsors&amp;logoColor=white" alt="Support PenEcho on GitHub Sponsors" height="32"></a>
-</p>
+[**Sponsor on GitHub →**](https://github.com/sponsors/penecho) · [Buy us a coffee](https://buymeacoffee.com/penecho)
 
-Choose [Buy Me a Coffee](https://buymeacoffee.com/penecho) for a quick thank-you, or [GitHub Sponsors](https://github.com/sponsors/penecho) for monthly or one-time support. Contributions support open-source maintenance; they do not purchase a commercial license, dedicated support, or guaranteed features.
+### Business sponsors
+
+Build with us. **$200/month** includes your linked logo on the PenEcho website, this README, and the sponsor list accessible from App Settings while your sponsorship is active. [Become a Business Sponsor](https://github.com/sponsors/penecho) · [View supporters and benefits](https://penecho.ai/sponsors.html)
+
+### Commercial licensing
+
+Need to integrate PenEcho into a proprietary product? One-time payments purchase a **one-year commercial license from the payment date**, for one legal entity and one product:
+
+| Plan | One-time price | Monthly active users of PenEcho features |
+| --- | ---: | --- |
+| Commercial License | $1,000 | Up to and including 10,000 |
+| Commercial License — Scale | $10,000 | More than 10,000 |
+
+[Read license terms and the upgrade policy](COMMERCIAL-LICENSE.md) before choosing a commercial-license tier. PenEcho remains available under AGPL-3.0-only; ordinary sponsorships and coffee contributions do not purchase a commercial license. Hosting, AI credits, and dedicated support are separate.
 
 ## Community
 
