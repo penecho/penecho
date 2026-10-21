@@ -22,7 +22,7 @@ MAU counts distinct people using PenEcho features per calendar month, including 
 
 Cloud hosting, AI credits, custom development, and dedicated support are not included. AGPL-compliant use remains available independently.
 
-Read the full license terms before payment: [insert the published immutable COMMERCIAL-LICENSE.md link].
+Read the full license terms before payment: https://github.com/penecho/penecho/blob/2ef6bcc75e03b6b31f4d47abc0fbb12a1f418afe/COMMERCIAL-LICENSE.md.
 
 Welcome message: Thank you! Send the payment reference, legal entity name, product name and URL (if available) through https://penecho.ai/contact.html. We will confirm the license record with its payment-based start and expiry dates. Do not send bank details or end-user data.
 
@@ -34,6 +34,6 @@ Starts when payment succeeds and expires on the next calendar anniversary. No au
 
 Cloud hosting, AI credits, custom development, and dedicated support are not included. AGPL-compliant use remains available independently. We will not list you publicly without your consent.
 
-Read the full license terms before payment: [insert the published immutable COMMERCIAL-LICENSE.md link].
+Read the full license terms before payment: https://github.com/penecho/penecho/blob/2ef6bcc75e03b6b31f4d47abc0fbb12a1f418afe/COMMERCIAL-LICENSE.md.
 
 Welcome message: Thank you! Send the payment reference, legal entity name, product name and URL (if available) through https://penecho.ai/contact.html. We will confirm the license record with its payment-based start and expiry dates. Do not send bank details or end-user data.
