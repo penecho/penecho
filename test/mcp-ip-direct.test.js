@@ -71,7 +71,9 @@ test("real HTTPS fixed-IP and discovery sessions have independent authentication
   const directTools=(await request(status,message("tools/list"),{session:direct,token:fixed.accessToken})).body.result.tools;
   assert.ok(directTools.length);assert.match(directTools.find(tool=>tool.name==="penecho_upload_image").description,/direct HTTPS/);
   const discoveryTools=(await request(status,message("tools/list"),{session:discovery})).body.result.tools;
-  assert.match(discoveryTools.find(tool=>tool.name==="penecho_upload_image").description,/client.js/);
+  const discoveryUpload=discoveryTools.find(tool=>tool.name==="penecho_upload_image");
+  assert.deepEqual(discoveryUpload,require("../src/server/mcp/schema.js").TOOLS.find(tool=>tool.name==="penecho_upload_image"));
+  assert.match(discoveryUpload.inputSchema.properties.source.description,/client\.js --upload-image/);
   const skill=await request(status,message("resources/read",{uri:"penecho://guidance/skill"}),{session:direct,token:fixed.accessToken});
   assert.match(skill.body.result.contents[0].text,/no discovery connector is needed/);
   assert.equal((await request(status,message("initialize"),{token:"bad"})).status,401);

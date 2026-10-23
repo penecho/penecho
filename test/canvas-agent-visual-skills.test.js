@@ -86,7 +86,7 @@ test("scientific visual skills stay out of the cold prompt and return complete s
   assert.equal(calls.length, 2);
   const firstRequest = JSON.parse(calls[0].prompt), secondRequest = JSON.parse(calls[1].prompt);
   const schema = firstRequest.availableTools.find(tool => tool.name === "penecho_get_guidance");
-  assert.match(schema.description,/authoring guidance/);
+  assert.equal(schema.description, require("../src/server/mcp/schema.js").TOOLS.find(tool => tool.name === "penecho_get_guidance").description);
   assert.deepEqual(schema.parameters.properties.id.enum,require("../src/server/mcp/authoring-guidance.js").GUIDANCE_IDS);
   assert.deepEqual(schema.parameters.required,["id"]);
   assert.match(calls[0].systemPrompt,/Load relevant guidance on demand/);
