@@ -1033,9 +1033,10 @@ class CloudConnector {
     return this.cloudRequest(`/api/v1/device-sync/projects/${encodeURIComponent(projectId)}`, { method:"DELETE" });
   }
 
-  // The account's Cloud project for a folder, shared with Cloud's agents in it.
-  folderProject(folder, { signal } = {}) {
-    return this.cloudRequest("/api/v1/device-sync/folder-projects", { method:"POST", body:{ folder }, signal });
+  // The account's Cloud project for a folder on this computer; project is the
+  // folder's link, shared with Cloud's agents here.
+  folderProject(folder, { signal, project } = {}) {
+    return this.cloudRequest("/api/v1/device-sync/folder-projects", { method:"POST", body:{ folder, ...(project ? { project } : {}) }, signal });
   }
 
   folderProjectTabs(folder, change) {

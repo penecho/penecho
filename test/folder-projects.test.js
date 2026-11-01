@@ -134,3 +134,33 @@ test("a save made while a Canvas moves follows it to Cloud, a full Cloud library
   assert.deepEqual(flaky.cloudCalls.filter(call => call[0] === "create").map(call => call[1]), ["Two", "One", "One"], "newest first; only the one that failed is tried again");
   assert.equal(flaky.canvases.size, 0);
 });
+
+test("signed in, a folder page opens the Cloud project of the folder's link on this computer, and keeps the link it is given", async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "penecho-folder-link-"));
+  t.after(() => fs.rmSync(directory, { recursive:true, force:true }));
+  const folder = path.join(directory, "work", "app"), file = path.join(folder, ".penecho", "project.json"), own = "own-link-".padEnd(43, "x"), agent = "agent-link-".padEnd(43, "y");
+  fs.mkdirSync(folder, { recursive:true });
+  const asked = [];
+  let otherSignIn = false;
+  const service = createFolderProjects({ directory, origin:() => "http://127.0.0.1:4000", listCanvases:() => [],
+    library:{ project:() => null, createProject:({ name }) => ({ id:"project-1localxx", name }), list:() => [] },
+    cloud:{ signedIn:() => true, accountId:() => "account-1", origin:() => "https://penecho.ai", tabs:async () => ({}),
+      project:async (requested, options = {}) => {
+        asked.push(options.project || null);
+        if (options.project && otherSignIn) throw Object.assign(Error("This project belongs to another PenEcho sign-in."), { status:403, code:"project_other_identity" });
+        return { name:"app", cloudProjectId:CLOUD_PROJECT, revision:1, tabs:[], closed:[], project:{ name:"app", token:own } };
+      } } });
+  const { workspaceId } = await service.open({ folder });
+  // No link yet: the app opens its own project here and keeps its link for Cloud's agents.
+  await service.pageConfig(workspaceId);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).projects["https://penecho.ai"], { project:own, name:"app" });
+  assert.equal(fs.readFileSync(path.join(folder, ".penecho", ".gitignore"), "utf8"), "*\n");
+  // A Cloud agent's link in the folder: the app opens that project.
+  fs.writeFileSync(file, JSON.stringify({ projects:{ "https://penecho.ai":{ project:agent, name:"app" }, "http://127.0.0.1:4000":{ project:"z".repeat(43), name:"app" } } }));
+  await service.pageConfig(workspaceId);
+  // Another sign-in's link: the app keeps to its own project and leaves the link alone.
+  otherSignIn = true;
+  await service.pageConfig(workspaceId);
+  assert.deepEqual(asked, [null, agent, agent, null]);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).projects["https://penecho.ai"].project, agent);
+});

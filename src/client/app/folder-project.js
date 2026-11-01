@@ -47,6 +47,9 @@
     if (!Array.isArray(view?.tabs) || folderProject.view && view.revision < folderProject.view.revision) return;
     folderProject.view = view;
     folderProjectExpiry(view.expiresAt);
+    // A page whose folder joined another project on this computer saves there from now on.
+    const config = window.PENECHO_CONFIG?.folderProject;
+    if (config?.cloudProjectId && typeof view.cloudProjectId === "string" && view.cloudProjectId && view.cloudProjectId !== config.cloudProjectId) config.cloudProjectId = view.cloudProjectId;
     for (const move of view.moved || []) {
       const doc = folderProjectDoc(move.from);
       if (doc) await folderProjectRelocate(doc, move);

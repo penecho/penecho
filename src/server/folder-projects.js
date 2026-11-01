@@ -97,6 +97,45 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
       message:"Open url once, in the host's embedded side browser if one is available, otherwise in the default browser. Once the page shows, call penecho_open_workspace again with the same folder for the start arguments." };
   }
 
+  // Signed in, the folder's Cloud project is the one on this computer: Cloud's
+  // agents here keep its link in .penecho/project.json, and so does this app.
+  function folderLink(folder) {
+    const origin = cloud.origin?.();
+    if (!origin || !path.isAbsolute(folder)) return null;
+    try {
+      const entry = JSON.parse(fs.readFileSync(path.join(folder, ".penecho", "project.json"), "utf8"))?.projects?.[origin];
+      return typeof entry?.project === "string" && entry.project.length >= 20 && entry.project.length <= 100 ? entry.project : null;
+    } catch { return null; }
+  }
+  function keepFolderLink(folder, link) {
+    const origin = cloud.origin?.();
+    if (!origin || !link?.token || !path.isAbsolute(folder) || folderLink(folder)) return;
+    try {
+      if (!fs.statSync(folder).isDirectory()) return;
+      const metadata = path.join(folder, ".penecho"), file = path.join(metadata, "project.json");
+      fs.mkdirSync(metadata, { recursive:true });
+      let stored = {};
+      try { stored = JSON.parse(fs.readFileSync(file, "utf8")) || {}; } catch {}
+      fs.writeFileSync(file, `${JSON.stringify({ ...stored, projects:{ ...stored.projects, [origin]:{ project:link.token, name:link.name } } }, null, 2)}\n`);
+      if (!fs.existsSync(path.join(metadata, ".gitignore"))) fs.writeFileSync(path.join(metadata, ".gitignore"), "*\n");
+    } catch {}
+  }
+  // A link this account cannot use (another sign-in's) leaves the app on its own project.
+  async function withFolderLink(folder, request) {
+    const link = folderLink(folder);
+    try { return await request(link ? { project:link } : {}); }
+    catch (error) {
+      if (!link || !["project_other_identity", "project_not_found"].includes(error?.code)) throw error;
+      return request({});
+    }
+  }
+  async function cloudProject(folder, signal) {
+    const view = await withFolderLink(folder, link => cloud.project(folder, { signal, ...link }));
+    keepFolderLink(folder, view?.project);
+    return view;
+  }
+  const cloudTabs = (folder, change) => withFolderLink(folder, link => cloud.tabs(folder, { ...change, ...link }));
+
   // What the folder page loads with: its project, fixed until the page opens again.
   const libraryCanvases = project => project.localProjectId && library.project(project.localProjectId) ? library.list().filter(canvas => canvas.projectId === project.localProjectId) : [];
   async function pageConfig(id) {
@@ -106,7 +145,7 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
     // opens there, and the page then keeps them in Cloud.
     if (cloud.signedIn() && !libraryCanvases(project).length) {
       try {
-        const view = await cloud.project(project.folder, AbortSignal.timeout(CLOUD_TIMEOUT_MS));
+        const view = await cloudProject(project.folder, AbortSignal.timeout(CLOUD_TIMEOUT_MS));
         if (WORKSPACE_ID.test(view?.cloudProjectId || "")) { store = { kind:"cloud", accountId:cloud.accountId(), cloudProjectId:view.cloudProjectId }; folderProject = { name:view.name || project.name, cloudProjectId:view.cloudProjectId }; }
       } catch {}
     } else {
@@ -143,13 +182,13 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
   const movedView = project => Object.entries(project.moved || {}).map(([from, entry]) => ({ from, to:entry.to, revisionId:entry.revisionId }));
   async function projectView(id) {
     const remote = cloudStore(id);
-    if (remote) return { ...await cloud.project(remote.folder), moved:movedView(remote) };
+    if (remote) return { ...await cloudProject(remote.folder), moved:movedView(remote) };
     const { project, projectId } = localStore(id);
     return localView(project, projectId);
   }
   async function updateTabs(id, { open:opened, close } = {}) {
     const remote = cloudStore(id);
-    if (remote) return cloud.tabs(remote.folder, { ...(opened ? { open:opened } : {}), ...(close ? { close } : {}) });
+    if (remote) return cloudTabs(remote.folder, { ...(opened ? { open:opened } : {}), ...(close ? { close } : {}) });
     const { projectId } = localStore(id), valid = value => value === undefined || LOCAL_CANVAS_ID.test(value);
     if (!valid(opened) || !valid(close) || !opened && !close) throw failure(400, "invalid_request", "Send the canvasId to open or close.");
     if (opened && library.canvas(opened)?.projectId !== projectId) throw failure(409, "document_unavailable", "Only Canvases saved in this folder's project can be its tabs.");
@@ -200,7 +239,7 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
   async function keepNow(id) {
     const project = record(id);
     if (!cloud.signedIn()) throw failure(401, "sign_in_required", "Sign in to keep this folder's Canvases in your Cloud library.");
-    const view = await cloud.project(project.folder), cloudProjectId = view?.cloudProjectId;
+    const view = await cloudProject(project.folder), cloudProjectId = view?.cloudProjectId;
     if (!WORKSPACE_ID.test(cloudProjectId || "")) throw failure(502, "cloud_project_unavailable", "PenEcho Cloud did not return this folder's project. Try again.");
     const tabs = project.tabs || [], order = canvas => tabs.includes(canvas.id) ? tabs.indexOf(canvas.id) : tabs.length;
     const canvases = libraryCanvases(project).sort((a, b) => order(a) - order(b) || b.updatedAt - a.updatedAt);
@@ -227,7 +266,7 @@ function createFolderProjects({ directory, library, cloud, origin, listCanvases,
     }
     // Its open tabs stay open, in their order.
     const moved = record(id).moved || {};
-    for (const canvasId of tabs) if (moved[canvasId]) await cloud.tabs(project.folder, { open:moved[canvasId].to }).catch(() => {});
+    for (const canvasId of tabs) if (moved[canvasId]) await cloudTabs(project.folder, { open:moved[canvasId].to }).catch(() => {});
     const remaining = libraryCanvases(project).length;
     if (project.localProjectId && !remaining && library.project(project.localProjectId)) library.removeProject(project.localProjectId);
     update(id, item => ({ ...item, store:{ kind:"cloud", accountId:cloud.accountId(), cloudProjectId }, localProjectId:remaining ? item.localProjectId : null, tabs:[],

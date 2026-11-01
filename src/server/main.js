@@ -4659,7 +4659,8 @@ const folderProjects = createFolderProjects({
   cloud:{
     signedIn:()=>Boolean(cloudConnector?.status().accountSession.signedIn),
     accountId:()=>cloudConnector?.status().account?.id||null,
-    project:(folder,signal)=>cloudConnector.folderProject(folder,{signal}),
+    origin:()=>cloudConnector?.status().origin||null,
+    project:(folder,options)=>cloudConnector.folderProject(folder,options),
     tabs:(folder,change)=>cloudConnector.folderProjectTabs(folder,change),
     room:async()=>{const {workspace}=await cloudConnector.library(new URLSearchParams({limit:"1",previews:"0"}));return Number(workspace?.storageLimitBytes)-Number(workspace?.storageUsedBytes)-Number(workspace?.storageReservedBytes||0);},
     createCanvas:({projectId,name,bundle})=>cloudConnector.createAndSaveCloudCanvas({projectId,name,bundle}),
