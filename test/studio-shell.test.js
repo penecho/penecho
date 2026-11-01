@@ -93,7 +93,7 @@ test("zoom buttons reuse the wheel zoom path and show the live scale", () => {
   assert.match(navigation, /#canvasZoomLevel'\)\?\.addEventListener\('click', \(\) => zoomCanvasBy\(1 \/ state\.scale\)\)/);
 });
 
-test("Cloud account lives in Settings and Favorites lives in the Library", () => {
+test("Cloud account lives in Settings, and the Library has no Favorites entry", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), app = read("public/app.js");
   assert.match(html, /id="settingsNavCloud"[^>]*data-settings-page-target="cloud"[^>]*aria-controls="settingsPageCloud"/);
   assert.match(html, /<section id="settingsPageCloud"[^>]*data-settings-page="cloud" hidden>\s*<div id="settingsCloudHost" class="settings-cloud-host"><\/div>/);
@@ -102,7 +102,7 @@ test("Cloud account lives in Settings and Favorites lives in the Library", () =>
   assert.match(cloud, /settingsCloudHost\.replaceChildren\(accountPanel\(renderCloudSettings, setRefreshing\), devicePanel\(renderCloudSettings\)\)/);
   // Device polling stops when another Settings page is selected.
   assert.match(cloud, /else stopDeviceConnectionWatch\(\);/);
-  assert.match(html, /id="historyFavoritesNav"[^>]*aria-controls="historyFavoritesView"/);
+  assert.doesNotMatch(html, /id="historyFavoritesNav"|data-shell-forward="#historyBtn,#historyFavoritesNav"/);
   assert.match(html, /<section id="historyFavoritesView" class="history-favorites-view"[^>]*hidden><\/section>/);
   assert.match(cloud, /craftsButton\?\.addEventListener\("click", openFavorites\)/);
   const css = read("public/studio-shell.css");

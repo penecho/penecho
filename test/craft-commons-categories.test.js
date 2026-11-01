@@ -41,9 +41,9 @@ test("Cloud Connect share categories keep every original and append the three Cr
 
 });
 
-test("Cloud Connect keeps Projects and favorites, with no Echoes feed", () => {
+test("Cloud Connect keeps Projects, with no Echoes feed or Favorites", () => {
   assert.match(cloudConnect, /\["projects", "cloudProjects"\]/);
-  assert.match(cloudConnect, /\["favorites", "favorites"\]/);
+  assert.doesNotMatch(cloudConnect, /\["favorites", "favorites"\]/);
   assert.doesNotMatch(cloudConnect, /cloud-explore-link|\/community\.html/);
   assert.doesNotMatch(cloudConnect, /text:cloudT\(hint\)/);
 });

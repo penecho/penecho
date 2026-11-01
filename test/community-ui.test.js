@@ -8,14 +8,14 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Cloud Center exposes concise Projects and Favorites navigation, with no public feed", () => {
+test("Cloud Center exposes concise Projects navigation, with no public feed or Favorites", () => {
   const html = read("public/index.html"), cloud = read("public/cloud-connect.js"), css = read("public/cloud-connect.css"), main = read("src/server/main.js");
   assert.match(html, /id="settingsBtn"/);
   assert.match(html, /id="cloudAccountBtn"/);
   assert.match(html, /id="shareCanvasBtn"/);
 
   assert.match(cloud, /function cloudT\(key, replacements = \{\}\)/);
-  assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\["favorites", "favorites"\],\s*\]/);
+  assert.match(cloud, /const definitions = \[\s*\["projects", "cloudProjects"\],\s*\]/);
   assert.match(cloud, /if \(state\.cloudSection === "favorites"\) return cloudFavoritesPanel\(setRefreshing\)/);
   assert.match(cloud, /\["all", "all"\],\s*\["canvas", "canvases"\],\s*\["widget", "widgets"\]/);
   assert.doesNotMatch(cloud, /cloud-explore-link|\/community\.html|cloudT\("explore"\)/);

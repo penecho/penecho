@@ -4864,28 +4864,6 @@
       });
     }
     if (options.community && window.PenEchoCommunityUI) {
-      const favoriteLabelKey = widget.favoriteBusy ? "favoriteWidgetSaving" : widget.favorite ? "unfavoriteWidget" : "favoriteWidget";
-      items.push({
-        key:`widget:${widget.id}:tool-favorite`,
-        kind:"favorite",
-        label:window.PenEchoCommunityUI.label?.(favoriteLabelKey) || "Favorite",
-        baseWidth:28,
-        iconOnly:true,
-        pressed:widget.favorite === true,
-        busy:widget.favoriteBusy === true,
-        activate:() => {
-          if (widget.favoriteBusy) return;
-          window.dispatchEvent(new CustomEvent("penecho:community-widget-action", { detail:{
-            action:"favorite",
-            widgetId:widget.id,
-            favorite:widget.favorite === true,
-            favoriteArtifactSha256:widget.favoriteArtifactSha256 || null,
-            sourceWidgetId:widget.favoriteSourceId,
-            favoriteCloudId:widget.favoriteCloudId || null,
-            favoriteCommunityItemId:widget.favoriteCommunityItemId || null,
-          } }));
-        },
-      });
       const liveShared = window.PenEchoLiveShareStatus?.widgetShared?.(widget.id, widget.shareSourceId) === true;
       items.push({
         key:`widget:${widget.id}:tool-share`,

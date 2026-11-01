@@ -2640,7 +2640,7 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(css, /#viewport:is\(\.is-drawing, \.canvas-navigation-previewing\)[^}]*\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*backdrop-filter:\s*none/);
   assert.match(css, /#viewport:is\(\.is-drawing, \.canvas-navigation-previewing\)[^}]*\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*animation:\s*none[^}]*translate:\s*none/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.object-chrome-button\.refine\.solo-widget-tool[^}]*\{[^}]*animation:\s*none[^}]*translate:\s*none/);
-  assert.match(app, /kind:"favorite"[\s\S]*?baseWidth:28,[\s\S]*?iconOnly:true/);
+  assert.doesNotMatch(app, /kind:"favorite"/);
   assert.match(app, /kind:"share"[\s\S]*?baseWidth:28,[\s\S]*?iconOnly:true/);
   assert.match(syncChrome, /classList\.toggle\("icon-only", Boolean\(spec\.iconOnly \|\| \(spec\.objectToolbarItem && !\["interact", "askagent", "suggest", "refine"\]\.includes\(spec\.kind\)\)\)\)/);
   assert.match(syncChrome, /classList\.toggle\("widget-chrome-control", Boolean\(spec\.widgetTool \|\| spec\.objectToolbar \|\| spec\.objectToolbarItem\)\)/);
@@ -2648,8 +2648,6 @@ test("widget AI refinement is discoverable near ink and replaces only its locked
   assert.match(syncChrome, /attachedWidgetShells = new Set\(\)[\s\S]*?spec\.objectToolbar && spec\.object\?\.shell[\s\S]*?classList\.toggle\("object-toolbar-attached", attachedWidgetShells\.has\(widget\.shell\)\)/);
   assert.match(syncChrome, /selectedWidgetMaterialRecord = \{ spec, position \}[\s\S]*?syncSelectedWidgetMaterial\(selectedWidgetMaterialRecord\)/);
   assert.match(functionSource(app, "syncSelectedWidgetMaterial"), /widgetStackIndex = state\.widgets\.length \+ \(state\.pendingWidget \? 2 : 1\)[\s\S]*?spec\.object\.styleRule\.style\.zIndex = String\(widgetStackIndex\)[\s\S]*?setProperty\("z-index", String\(widgetStackIndex\)\)/);
-  assert.match(app, /favoriteLabelKey = widget\.favoriteBusy \? "favoriteWidgetSaving" : widget\.favorite \? "unfavoriteWidget" : "favoriteWidget"/);
-  assert.match(app, /kind:"favorite"[\s\S]*?pressed:widget\.favorite === true,[\s\S]*?busy:widget\.favoriteBusy === true/);
   assert.match(functionSource(app, "createObjectChromeButton"), /kind === "move" \|\| kind === "toolbar" \|\| button\.disabled/);
   assert.match(syncChrome, /classList\.toggle\("is-favorite", Boolean\(spec\.kind === "favorite" && spec\.pressed\)\)/);
   assert.match(syncChrome, /button\.disabled = Boolean\(spec\.busy\)/);
