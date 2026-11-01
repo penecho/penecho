@@ -363,12 +363,12 @@ test("Remote Canvas brand doubles as the way back to the console", () => {
   assert.equal(project.redirects[0], "/dashboard.html");
 
   const community = boot({ pathname:`/canvas/community/${COMMUNITY_ID}` });
-  assert.equal(community.brand.title, "Back to Echoes");
+  assert.equal(community.brand.title, "Back to PenEcho");
   community.brand.listeners.get("click")({ });
-  assert.equal(community.redirects[0], "/community.html");
+  assert.equal(community.redirects[0], "/");
 
   const zhCommunity = boot({ pathname:`/canvas/community/${COMMUNITY_ID}`, language:"zh-CN" });
-  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回 Echoes");
+  assert.equal(zhCommunity.brand.getAttribute("aria-label"), "返回 PenEcho");
   assert.doesNotMatch(gateScript, /remote-canvas-back/);
 });
 

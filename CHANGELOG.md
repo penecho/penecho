@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+- **Collaborate:** one click starts a link anyone can draw on with you, live, with no account. A link stays 7 days after its last change unless you sign in and save; stopping it ends it for everyone.
+- **Share and PDF:** view-only links update live as you work, and any Canvas downloads as a PDF.
+- **Folder projects:** AI agents working in one folder share one page (`penecho_open_workspace` with the folder), its Canvases are tabs, and each saves itself a few seconds after a change, taking in newer saves from other pages without losing either edit. Unnamed Canvases are named from their content.
+- **Where they are kept:** signed out, in a project of this computer's Library named after the folder; signed in, in your Cloud project for the folder, and signing in moves the Library's Canvases there.
+- **One-line agent setup:** "Set up PenEcho for me by following https://penecho.ai/agents.md".
+- **Tell us what's next:** after upgrading, PenEcho asks once what to improve next.
+
 ## 1.4.0
 
 - **Smart Assist:** context-aware actions for handwriting, text and images, with quick answers, visual creation and follow-up questions.

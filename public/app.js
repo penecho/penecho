@@ -2251,6 +2251,7 @@ if (typeof module === "object" && module.exports) module.exports = PenEchoPdf;
     changelogLayer = document.querySelector("#changelogLayer"),
     changelogDialog = document.querySelector("#changelogDialog"),
     changelogCloseButton = document.querySelector("#changelogClose"),
+    researchForm = document.querySelector("#researchForm"),
     settingsLayer = document.querySelector("#settingsLayer"),
     settingsBackdrop = document.querySelector("#settingsBackdrop"),
     settingsPanel = document.querySelector("#settingsPanel"),
@@ -2487,7 +2488,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       canvasZoomReset: "Zoom to 100%",
       canvasMoreActions: "More canvas actions",
       canvasMoreShort: "More",
-      canvasEchoPublish: "Publish to Echoes",
+      canvasEchoPublish: "Publish publicly",
       libraryFavorites: "Favorites",
       libraryFavoritesTitle: "Favorite Canvases and Widgets",
       canvasWheelZoom: "Use scrolling to zoom",
@@ -2672,12 +2673,33 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       changelogDialog: "PenEcho release notes",
       changelogClose: "Close release notes",
       changelogBadge: "What's new",
-      changelogTitle: "Smarter help, reusable notes",
-      changelogAssist: "Smart Assist suggests useful next steps for handwriting, text and images, with quick actions and your own follow-up questions.",
-      changelogLasso: "Circle handwriting, images or part of a Widget to solve, visualize, animate or organize just the selected content.",
-      changelogNotesCards: "Turn canvas content into reusable notes and knowledge cards. Browse, search and bring saved notes into other canvases.",
-      changelogWidgetRefine: "Refine Widgets with written feedback and contextual actions, with clearer controls and better content fitting.",
-      changelogCanvasPolish: "Improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP make working on the canvas smoother.",
+      changelogTitle: "Collaborate live, one project per folder",
+      changelogCollaborate: "Collaborate: one click starts a link anyone can draw on with you, live. No account needed; the link stays 7 days after the last change unless you save.",
+      changelogShare: "Share a view-only link that updates live, and download any Canvas as a PDF.",
+      changelogFolders: "Folder projects: AI agents working in one folder share one page. Each Canvas is a tab and saves itself a few seconds after a change.",
+      changelogLibrary: "Signed out, a folder's Canvases stay in this computer's Library. Sign in and they move to your Cloud project, with the same tabs.",
+      changelogSetup: "Set up any AI agent with one line: “Set up PenEcho for me by following https://penecho.ai/agents.md”.",
+      researchTitle: "What should we improve next?",
+      researchImproveLegend: "Pick up to three",
+      researchDrawing: "Drawing and handwriting",
+      researchAi: "AI that understands my Canvas",
+      researchAgents: "Working with my AI agent",
+      researchCollaboration: "Collaboration and sharing",
+      researchProjects: "Folder projects and saving",
+      researchDiagrams: "Diagrams and visual explanations",
+      researchSpeed: "Speed and reliability",
+      researchSetup: "Desktop app and setup",
+      researchUseLegend: "You mostly use PenEcho",
+      researchUseAgent: "With an AI coding agent",
+      researchUseThinking: "To sketch and think on my own",
+      researchUseTeaching: "To teach or explain",
+      researchUseTogether: "To work with others",
+      researchTextPlaceholder: "Anything else? Tell us in your own words.",
+      researchSend: "Send",
+      researchSending: "Sending…",
+      researchThanks: "Thank you. We read every answer.",
+      researchEmpty: "Choose an answer or write a note first.",
+      researchFailed: "Couldn't send right now. Try again in a moment.",
       settingsTitle: "Settings",
       settingsClose: "Close settings",
       settingsSubtitle: "Choose a category, then adjust its settings without leaving this window.",
@@ -3380,7 +3402,6 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedView: "View",
       savedListView: "List view",
       savedGridView: "Grid view",
-      browseEchoes: "Browse public shares",
       savedCount: "{count} favorites",
       savedLoading: "Loading favorites…",
       savedRefreshing: "Refreshing…",
@@ -4453,7 +4474,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   const AI_SUPERSEDED = "AI_SUPERSEDED";
   const FEATURE_TOUR_STORAGE_KEY = "penecho-tour-progress";
   const CHANGELOG_STORAGE_KEY = "penecho-changelog-seen";
-  const CHANGELOG_VERSION = "1.4.0";
+  const CHANGELOG_VERSION = "1.5.0";
+  const RESEARCH_STORAGE_KEY = "penecho-research-asked";
   // Keep seen IDs stable. Add a new ID (or bump its -vN suffix) to show only that feature to returning users.
   const FEATURE_TOUR_STEPS = Object.freeze([
     { id: "core-effort-v1", targets: ["#aiEffortButton"], titleKey: "tourEffortTitle", bodyKey: "tourEffortBody", placement: "bottom", radius: 8 },
@@ -5079,9 +5101,54 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       localStorage.setItem(CHANGELOG_STORAGE_KEY, CHANGELOG_VERSION);
     } catch {}
   }
+  // People who used an earlier version are asked, once, what to improve next.
+  function researchDue() {
+    if (window.PENECHO_CONFIG?.runtime === "cloud" || window.PENECHO_CONFIG?.runtime === "viewer") return false;
+    try {
+      const seen = localStorage.getItem(CHANGELOG_STORAGE_KEY);
+      return Boolean(seen) && seen !== CHANGELOG_VERSION && localStorage.getItem(RESEARCH_STORAGE_KEY) !== CHANGELOG_VERSION;
+    } catch {
+      return false;
+    }
+  }
+  function markResearchAsked() {
+    try {
+      localStorage.setItem(RESEARCH_STORAGE_KEY, CHANGELOG_VERSION);
+    } catch {}
+  }
+  // Three choices at most: a fourth is not taken.
+  function limitResearchChoices(event) {
+    if (event.target?.name === "improve" && event.target.checked && researchForm.querySelectorAll('input[name="improve"]:checked').length > 3) event.target.checked = false;
+  }
+  async function sendResearch(event) {
+    event.preventDefault();
+    const status = researchForm.querySelector("#researchStatus"), send = researchForm.querySelector("#researchSend"),
+      improve = [...researchForm.querySelectorAll('input[name="improve"]:checked')].map((input) => input.value),
+      use = researchForm.querySelector('input[name="use"]:checked')?.value || "",
+      text = researchForm.querySelector("#researchText").value.trim();
+    if (!improve.length && !use && !text) {
+      status.textContent = t("researchEmpty");
+      return;
+    }
+    send.disabled = true;
+    status.textContent = t("researchSending");
+    try {
+      const response = await fetch("/api/research", { method:"POST", credentials:"same-origin", headers:authenticatedApiHeaders({ "Content-Type":"application/json" }), body:JSON.stringify({ improve, use, text, language:state.language }) });
+      if (!response.ok) throw Error(`HTTP ${response.status}`);
+      for (const control of researchForm.querySelectorAll("input, textarea")) control.disabled = true;
+      send.hidden = true;
+      status.textContent = t("researchThanks");
+    } catch {
+      send.disabled = false;
+      status.textContent = t("researchFailed");
+    }
+  }
   function maybeShowChangelog(force = false) {
     if((window.PENECHO_CONFIG?.browserDraftId||CANVAS_COMPANION_REQUESTED)&&!force)return false;
     if (!changelogLayer || !changelogDialog || changelog.active || featureTour.active || !pluginPopover.hidden || (!force && changelogSeen())) return false;
+    const research = !force && researchDue();
+    if (researchForm) researchForm.hidden = !research;
+    if (research) markResearchAsked();
     hideAutoDelayControl();
     hideEffortControl();
     hidePluginControl();
@@ -5120,12 +5187,14 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       return true;
     }
     if (event.key !== "Tab") return false;
-    const focusable = [changelogCloseButton].filter((button) => button && !button.disabled && !button.hidden),
-      current = focusable.indexOf(document.activeElement),
-      next = event.shiftKey ? (current <= 0 ? focusable.length - 1 : current - 1) : current < 0 || current === focusable.length - 1 ? 0 : current + 1;
-    event.preventDefault();
+    // Focus stays in the dialog: Tab moves through its controls, wrapping at the ends.
+    const focusable = [...changelogDialog.querySelectorAll("button, input, textarea")].filter((control) => !control.disabled && !control.closest("[hidden]") && control.getClientRects().length),
+      first = focusable[0], last = focusable.at(-1), active = document.activeElement, outside = active === changelogDialog || !changelogDialog.contains(active);
     event.stopPropagation();
-    focusable[next]?.focus();
+    if (!focusable.length || outside || active === (event.shiftKey ? first : last)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first)?.focus();
+    }
     return true;
   }
   if (configurationBody && canvasSettingsForm) configurationBody.append(canvasSettingsForm);
@@ -45848,9 +45917,12 @@ var canvasDocumentIdentity = (() => {
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
-    if (event.target === changelogLayer) closeChangelog();
+    // An open question waits for its answer or the close button.
+    if (event.target === changelogLayer && researchForm?.hidden !== false) closeChangelog();
   });
   changelogLayer.addEventListener("keydown", handleChangelogKeydown);
+  researchForm?.addEventListener("change", limitResearchChoices);
+  researchForm?.addEventListener("submit", sendResearch);
   settingsButton.addEventListener("click", () => {
     if (settings.open) closeSettings();
     else openSettings();

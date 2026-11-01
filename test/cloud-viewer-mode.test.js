@@ -69,8 +69,8 @@ test("the viewer localizes its actions and responsively frames Widgets and compl
   const js = read("public/viewer.js"), css = read("public/viewer.css"), canvas = read("src/client/app/canvas-runtime.js"),
     persistence = read("src/client/app/persistence.js"), bootstrap = read("src/client/app/ui-bootstrap.js");
   assert.equal((js.match(/takeFurther:"Echo"/g) || []).length, 2);
-  assert.match(js, /backTitle:"Back to Echoes"/);
-  assert.match(js, /backTitle:"返回 Echoes"/);
+  assert.match(js, /backTitle:"Back to PenEcho"/);
+  assert.match(js, /backTitle:"返回 PenEcho"/);
   assert.match(js, /penecho-site-language/);
   assert.match(js, /penecho:languagechange/);
   assert.match(js, /fitViewport:true/);

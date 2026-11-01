@@ -1977,9 +1977,12 @@
   tourSkipButton.addEventListener("click", skipFeatureTour);
   changelogCloseButton.addEventListener("click", closeChangelog);
   changelogLayer.addEventListener("pointerdown", (event) => {
-    if (event.target === changelogLayer) closeChangelog();
+    // An open question waits for its answer or the close button.
+    if (event.target === changelogLayer && researchForm?.hidden !== false) closeChangelog();
   });
   changelogLayer.addEventListener("keydown", handleChangelogKeydown);
+  researchForm?.addEventListener("change", limitResearchChoices);
+  researchForm?.addEventListener("submit", sendResearch);
   settingsButton.addEventListener("click", () => {
     if (settings.open) closeSettings();
     else openSettings();

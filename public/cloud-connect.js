@@ -47,7 +47,6 @@
       favoriteCanvasesHint:"Public Canvases in Favorites",
       favoriteWidgets:"Favorite Widgets",
       favoriteWidgetsHint:"Add one to this Canvas",
-      explore:"Public shares",
       exploreHint:"Browse public Canvases and Widgets.",
       cloudNavLibrary:"Library",
       cloudAccount:"Cloud account",
@@ -216,9 +215,9 @@
       publicLinkCopied:"Public link copied.",
       viewPublicPage:"View public page ↗",
       done:"Done",
-      publicCommonsTitle:"Your Craft is now part of Echoes",
+      publicCommonsTitle:"Your Craft is now public",
       publicCommunityLink:"Public community link",
-      publishedDialogTitle:"Published to Echoes",
+      publishedDialogTitle:"Published",
       publishedDialogSubtitle:"Share this Craft or open its public page.",
       shareAsLink:"Share as link",
       shareAsImage:"Share as image",
@@ -263,7 +262,6 @@
       favoriteCanvasesHint:"收藏中的公开画布",
       favoriteWidgets:"收藏的组件",
       favoriteWidgetsHint:"加入当前画布",
-      explore:"公开分享",
       exploreHint:"浏览公开画布与组件。",
       cloudNavLibrary:"内容库",
       cloudAccount:"Cloud 账户",
@@ -432,9 +430,9 @@
       publicLinkCopied:"公开链接已复制。",
       viewPublicPage:"查看公开页面 ↗",
       done:"完成",
-      publicCommonsTitle:"你的创作现已加入 Echoes",
+      publicCommonsTitle:"你的创作现已公开",
       publicCommunityLink:"公开社区链接",
-      publishedDialogTitle:"已发布到 Echoes",
+      publishedDialogTitle:"已发布",
       publishedDialogSubtitle:"分享此 Craft，或打开公开页面。",
       shareAsLink:"分享链接",
       shareAsImage:"分享为图片",
@@ -527,7 +525,7 @@
   function linkedImageEmbed(item, name) {
     const href = htmlAttribute(communityUrl(item));
     const src = htmlAttribute(communitySocialCardUrl(item));
-    const alt = htmlAttribute(`${String(name || item?.name || "PenEcho Craft")} — PenEcho Echoes`);
+    const alt = htmlAttribute(`${String(name || item?.name || "PenEcho Craft")} — PenEcho`);
     return `<a href="${href}" target="_blank" rel="noopener noreferrer"><img src="${src}" alt="${alt}" width="1200" height="630" loading="lazy" decoding="async" style="max-width:100%;height:auto"></a>`;
   }
 
@@ -1698,15 +1696,6 @@
       ];
       appendSection("mcp", "MCP");
       definitions.forEach(([value, label], index) => appendSection(value, label, "", index === 0 ? cloudT("cloudNavLibrary") : ""));
-      sections.append(el("a", {
-        class:"cloud-section-tab cloud-explore-link",
-        href:new URL("/community.html", `${cloudOrigin()}/`).toString(),
-        target:"_blank",
-        rel:"noopener",
-        "data-cloud-section":"echoes",
-        "data-pe-button":"menu-item",
-        "data-pe-state":"default",
-      }, [el("span", { class:"cloud-nav-icon", "aria-hidden":"true" }), el("span", { class:"cloud-nav-copy" }, el("strong", { text:`${cloudT("explore")} ↗` }))]));
       sections.addEventListener("keydown", (event) => {
         if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key) || event.target?.getAttribute?.("role") !== "tab") return;
         const tabs = [...sections.querySelectorAll('[role="tab"]')], current = tabs.indexOf(event.target);
@@ -2319,7 +2308,6 @@
   const craftsRefreshStatus = document.getElementById("craftsRefreshStatus");
   const craftsFilters = document.getElementById("craftsFilters");
   const craftsViewSwitch = document.getElementById("craftsViewSwitch");
-  const craftsEchoesLink = document.getElementById("craftsEchoesLink");
   const craftsRemoveDialog = document.getElementById("craftsRemoveDialog");
   const craftsRemoveTitle = document.getElementById("craftsRemoveTitle");
   const craftsRemoveDescription = document.getElementById("craftsRemoveDescription");
@@ -2403,13 +2391,6 @@
       option.button.title = label;
     }
     craftsViewSwitch?.setAttribute("aria-label", savedT("savedView", "View"));
-  }
-
-  function updateCraftsEchoesLink() {
-    if (!craftsEchoesLink) return;
-    craftsEchoesLink.setAttribute("href", new URL("/community.html", `${cloudOrigin()}/`).toString());
-    const label = craftsEchoesLink.querySelector?.(".crafts-echoes-label");
-    if (label) label.textContent = savedT("browseEchoes", "Browse public shares");
   }
 
   function selectCraftKind(kind, focus = false) {
@@ -3060,7 +3041,6 @@
     setCraftsOpen(true);
     updateCraftFilterTabs();
     updateCraftView();
-    updateCraftsEchoesLink();
     if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
     else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
     void refreshCraftsList({ reset:true });
@@ -3105,16 +3085,13 @@
     craftsPager = favoritePagerForKind(selectedCraftKind);
     updateCraftFilterTabs();
     updateCraftView();
-    updateCraftsEchoesLink();
     if (favoritePagerEntries(craftsPager).length) renderCraftsList(favoritePagerEntries(craftsPager));
     else craftsList.replaceChildren(el("p", { class:"crafts-empty", text:savedT("savedLoading", "Loading favorites…") }));
     void refreshCraftsList({ reset:true });
   }
 
   if (libraryFavoritesAvailable()) {
-    // "Browse public shares" belongs to the Library navigation.
     const librarySidebar = libraryPanel.querySelector(".history-library-sidebar");
-    if (craftsEchoesLink && librarySidebar) librarySidebar.append(craftsEchoesLink);
     libraryFavoritesNav?.addEventListener("click", () => openFavorites());
     librarySidebar?.addEventListener("click", (event) => {
       if (craftsInLibrary && event.target?.closest?.(".snapshot-location-options label, .history-project-nav-item, #historyProjectCreate, #historyRecentNav, #historyCanvasNav, #historyNotesNav")) setLibraryFavoritesView(false);

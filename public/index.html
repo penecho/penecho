@@ -994,11 +994,6 @@
             </button>
           </div>
         </section>
-        <a id="craftsEchoesLink" class="crafts-echoes-link" href="https://penecho.ai/community.html" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>
-          <span class="crafts-echoes-label" data-crafts-echoes-label data-i18n="browseEchoes">Browse Echoes</span>
-          <svg class="crafts-echoes-external" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
-        </a>
       </aside>
       <section class="crafts-workspace">
         <header class="crafts-head" data-pe-region="toolbar">
@@ -1693,23 +1688,49 @@
       <header class="changelog-header">
         <div class="changelog-heading">
           <span class="changelog-badge" data-i18n="changelogBadge">What's new</span>
-          <span class="changelog-version">1.4.0</span>
+          <span class="changelog-version">1.5.0</span>
         </div>
         <button id="changelogClose" class="changelog-close" type="button" data-i18n-aria="changelogClose" aria-label="Close release notes" data-i18n-title="changelogClose" title="Close release notes" data-pe-button="icon" data-pe-density="compact">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </header>
       <div class="changelog-scroll">
-        <h2 id="changelogTitle" data-i18n="changelogTitle">Smarter help, reusable notes</h2>
+        <h2 id="changelogTitle" data-i18n="changelogTitle">Collaborate live, one project per folder</h2>
         <section class="changelog-release">
           <ul>
-            <li data-i18n="changelogAssist">Smart Assist suggests useful next steps for handwriting, text and images, with quick actions and your own follow-up questions.</li>
-            <li data-i18n="changelogLasso">Circle handwriting, images or part of a Widget to solve, visualize, animate or organize just the selected content.</li>
-            <li data-i18n="changelogNotesCards">Turn canvas content into reusable notes and knowledge cards. Browse, search and bring saved notes into other canvases.</li>
-            <li data-i18n="changelogWidgetRefine">Refine Widgets with written feedback and contextual actions, with clearer controls and better content fitting.</li>
-            <li data-i18n="changelogCanvasPolish">Improved pen gestures, stroke deletion, navigation and collaboration with Agent and MCP make working on the canvas smoother.</li>
+            <li data-i18n="changelogCollaborate">Collaborate: one click starts a link anyone can draw on with you, live. No account needed; the link stays 7 days after the last change unless you save.</li>
+            <li data-i18n="changelogShare">Share a view-only link that updates live, and download any Canvas as a PDF.</li>
+            <li data-i18n="changelogFolders">Folder projects: AI agents working in one folder share one page. Each Canvas is a tab and saves itself a few seconds after a change.</li>
+            <li data-i18n="changelogLibrary">Signed out, a folder's Canvases stay in this computer's Library. Sign in and they move to your Cloud project, with the same tabs.</li>
+            <li data-i18n="changelogSetup">Set up any AI agent with one line: “Set up PenEcho for me by following https://penecho.ai/agents.md”.</li>
           </ul>
         </section>
+        <form id="researchForm" class="changelog-research" hidden>
+          <h3 data-i18n="researchTitle">What should we improve next?</h3>
+          <fieldset class="research-choices" id="researchImprove">
+            <legend data-i18n="researchImproveLegend">Pick up to three</legend>
+            <label><input type="checkbox" name="improve" value="drawing"><span data-i18n="researchDrawing">Drawing and handwriting</span></label>
+            <label><input type="checkbox" name="improve" value="ai"><span data-i18n="researchAi">AI that understands my Canvas</span></label>
+            <label><input type="checkbox" name="improve" value="agents"><span data-i18n="researchAgents">Working with my AI agent</span></label>
+            <label><input type="checkbox" name="improve" value="collaboration"><span data-i18n="researchCollaboration">Collaboration and sharing</span></label>
+            <label><input type="checkbox" name="improve" value="projects"><span data-i18n="researchProjects">Folder projects and saving</span></label>
+            <label><input type="checkbox" name="improve" value="diagrams"><span data-i18n="researchDiagrams">Diagrams and visual explanations</span></label>
+            <label><input type="checkbox" name="improve" value="speed"><span data-i18n="researchSpeed">Speed and reliability</span></label>
+            <label><input type="checkbox" name="improve" value="setup"><span data-i18n="researchSetup">Desktop app and setup</span></label>
+          </fieldset>
+          <fieldset class="research-choices" id="researchUse">
+            <legend data-i18n="researchUseLegend">You mostly use PenEcho</legend>
+            <label><input type="radio" name="use" value="agent"><span data-i18n="researchUseAgent">With an AI coding agent</span></label>
+            <label><input type="radio" name="use" value="thinking"><span data-i18n="researchUseThinking">To sketch and think on my own</span></label>
+            <label><input type="radio" name="use" value="teaching"><span data-i18n="researchUseTeaching">To teach or explain</span></label>
+            <label><input type="radio" name="use" value="together"><span data-i18n="researchUseTogether">To work with others</span></label>
+          </fieldset>
+          <textarea id="researchText" name="text" rows="3" maxlength="2000" data-pe-control="textarea" data-i18n-placeholder="researchTextPlaceholder" placeholder="Anything else? Tell us in your own words." data-i18n-aria="researchTextPlaceholder" aria-label="Anything else? Tell us in your own words."></textarea>
+          <div class="research-actions">
+            <p id="researchStatus" class="research-status" role="status" aria-live="polite"></p>
+            <button id="researchSend" type="submit" data-pe-button="primary" data-pe-density="standard" data-i18n="researchSend">Send</button>
+          </div>
+        </form>
       </div>
     </section>
   </div>

@@ -16,7 +16,7 @@
     itemKind: null, // discovered from the artifact payload itself
     artifactUrl: `/api/v1/community/items/${itemId}/view`,
     previewUrl: `/api/v1/community/items/${itemId}/preview`,
-    communityUrl: "/community.html",
+    communityUrl: "/?public=1",
     signupUrl: `/auth.html?returnTo=${encodeURIComponent(`/canvas/community/${itemId}`)}`,
     dashboardUrl: "/dashboard.html#community",
     takeFurtherUrl: `/canvas/community/${itemId}`,
@@ -34,7 +34,7 @@
       openDashboard:"Open console",
       previewOnly:"This Craft's full view needs a redemption. Showing the preview.",
       failed:"This Craft could not be opened.",
-      backTitle:"Back to Echoes",
+      backTitle:"Back to PenEcho",
       retry:"Try again",
       saving:"Saving a copy…",
       editHint:"Save a copy to your space and edit it",
@@ -48,7 +48,7 @@
       openDashboard:"打开控制台",
       previewOnly:"查看完整内容需要先赎回，正在展示预览图。",
       failed:"这个 Craft 暂时无法打开。",
-      backTitle:"返回 Echoes",
+      backTitle:"返回 PenEcho",
       retry:"重新加载",
       saving:"正在保存副本…",
       editHint:"保存副本到你的空间后编辑",
@@ -83,7 +83,7 @@
   // Live shares surface the site wordmark (same as the public header/404 page)
   // linking to the PenEcho homepage; ?public=1 keeps signed-in visitors on the
   // public site instead of bouncing to the dashboard.
-  brand.href = live ? "/?public=1" : config.communityUrl || "/community.html";
+  brand.href = live ? "/?public=1" : config.communityUrl || "/?public=1";
   brand.title = copy.backTitle;
   brand.setAttribute("aria-label", copy.backTitle);
   brand.innerHTML = "<span class=\"viewer-brand-mark\" aria-hidden=\"true\"></span><span>Pen<strong>Echo</strong></span>";

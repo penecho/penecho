@@ -600,6 +600,13 @@ body[data-theme="studio"] .canvas-agent-resource-group { min-height: 0; }
 body[data-theme="studio"] #canvasAgentProjectDescription { margin: 0; color: var(--pe-ink-2); }
 body[data-theme="studio"] .canvas-agent-project-dialog-head p { display: none; }
 body[data-theme="studio"] :is(.changelog-badge, .tour-badge, .canvas-agent-resource-count, .crafts-sidebar-section h3) { text-transform: none; letter-spacing: normal; }
+body[data-theme="studio"] .changelog-research { border-top-color: var(--pe-line); }
+body[data-theme="studio"] :is(.changelog-research h3, .research-choices label, .changelog-research textarea) { color: var(--pe-ink); font-family: var(--pe-font-ui, system-ui); }
+body[data-theme="studio"] :is(.research-choices legend, .research-status) { color: var(--pe-ink-2); font-family: var(--pe-font-ui, system-ui); }
+body[data-theme="studio"] :is(.research-choices label, .changelog-research textarea) { border-color: var(--pe-line); }
+body[data-theme="studio"] .changelog-research textarea { background: var(--pe-surface); }
+body[data-theme="studio"] .research-choices label:has(input:checked) { border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 10%, transparent); }
+body[data-theme="studio"] .research-choices label:has(input:focus-visible) { outline-color: var(--pe-accent); }
 :is(#pe-type-contract, body[data-theme="studio"]) .changelog-badge { color: var(--pe-ink); font-size: 17px; font-weight: 600; }
 :is(#pe-type-contract, body[data-theme="studio"]) :is(.tour-badge, .changelog-badge, .text-help-example h3, .plugin-option-section-title, .studio-navigator-section-label, .mcp-eyebrow, .cloud-environment span, .canvas-agent-resource-count, .canvas-agent-error-label) { text-transform: none; letter-spacing: normal; }
 
@@ -955,7 +962,6 @@ body[data-theme="studio"] .shell-library-link[aria-current="page"] {
   color: var(--pe-accent-label, var(--studio-accent-strong));
   background: var(--pe-selected);
 }
-body[data-theme="studio"] .history-library-sidebar > .crafts-echoes-link { margin-top: auto; }
 
 /* Settings → Account & Cloud hosts the Cloud account and Link device panels. */
 body[data-theme="studio"] .settings-cloud-host {

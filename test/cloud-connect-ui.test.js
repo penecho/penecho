@@ -1007,19 +1007,15 @@ test("Cloud Center uses History-style vertical navigation with Account and Link 
   assert.ok(tabs[1].textContent.includes("My PenEcho"), "the Link device entry exposes the configured device name");
   const tablist = flatten(overlay).find((node) => node.getAttribute("role") === "tablist");
   assert.equal(tablist.getAttribute("aria-orientation"), "vertical");
-  const explore = flatten(overlay).find((node) => node.tagName === "A" && node.className.includes("cloud-explore-link"));
-  assert.ok(explore, "Public shares remains a Cloud navigation link");
-  assert.equal(explore.textContent, "Public shares ↗");
-  assert.equal(explore.getAttribute("href"), "https://internaltest.penecho.ai/community.html");
-  assert.equal(explore.getAttribute("target"), "_blank");
-  assert.equal(explore.getAttribute("rel"), "noopener");
+  // Echoes is retired: the Cloud Center links to no public feed.
+  assert.equal(flatten(overlay).some((node) => node.tagName === "A" && node.className.includes("cloud-explore-link")), false);
   const navigation = flatten(overlay).find((node) => node.className.includes("cloud-navigation"));
   assert.ok(navigation, "the Cloud Center keeps a dedicated navigation column");
   const libraryHeading = tablist.children.find((node) => node.className === "cloud-nav-heading");
   assert.equal(libraryHeading?.textContent, "Library");
   assert.equal(libraryHeading?.getAttribute("role"), "presentation");
   assert.equal(tabs[2].getAttribute("data-nav-heading"), null, "the Library label must not live inside the selected Projects row");
-  assert.deepEqual(tablist.children.map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", null, "projects", "favorites", "echoes"]);
+  assert.deepEqual(tablist.children.map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", null, "projects", "favorites"]);
 });
 
 test("Link device navigation shows the live connection state with a semantic status dot", async () => {
@@ -1113,7 +1109,7 @@ test("Cloud Center keeps the concise account and device copy bilingual", async (
   selectCloudSection(overlay, "device");
   assert.ok(overlay.textContent.includes("登录后即可一键启用 Linked Device。"));
   assert.deepEqual(flatten(overlay).filter((node) => node.getAttribute("role") === "tab").map((node) => node.getAttribute("data-cloud-section")), ["account", "device", "mcp", "projects", "favorites"]);
-  assert.ok(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "公开分享 ↗"));
+  assert.equal(flatten(overlay).some((node) => node.tagName === "A" && node.textContent === "公开分享 ↗"), false);
   assert.ok(!overlay.textContent.includes("Sign in for private projects"));
 });
 
@@ -1443,7 +1439,6 @@ test("the toolbar Favorites picker switches between list and grid views without 
   assert.equal(run.craftsViewList.getAttribute("aria-pressed"), "true");
   assert.equal(run.craftsViewGrid.getAttribute("aria-pressed"), "false");
   assert.equal(run.craftsList.classList.contains("is-grid"), false);
-  assert.equal(run.craftsEchoesLink.getAttribute("href"), "https://internaltest.penecho.ai/community.html");
 
   run.craftsViewGrid.click();
   assert.equal(run.craftsViewGrid.getAttribute("aria-pressed"), "true");

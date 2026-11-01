@@ -1702,6 +1702,28 @@ function deleteSharedCanvas(id) {
   for(const target of [file,metadataFile])try{fs.unlinkSync(target)}catch(error){if(error.code!=="ENOENT")throw error}
   return {id};
 }
+const RESEARCH_IMPROVE = new Map([["drawing", "Drawing and handwriting"], ["ai", "AI that understands my Canvas"], ["agents", "Working with my AI agent"], ["collaboration", "Collaboration and sharing"],
+  ["projects", "Folder projects and saving"], ["diagrams", "Diagrams and visual explanations"], ["speed", "Speed and reliability"], ["setup", "Desktop app and setup"]]);
+const RESEARCH_USE = new Map([["agent", "With an AI coding agent"], ["thinking", "To sketch and think on my own"], ["teaching", "To teach or explain"], ["together", "To work with others"]]);
+// Sent through PenEcho Cloud's contact form, so no account is needed.
+async function sendResearchAnswers(input) {
+  const improve = Array.isArray(input?.improve) ? [...new Set(input.improve)].filter(key => RESEARCH_IMPROVE.has(key)).slice(0, 3) : [],
+    use = RESEARCH_USE.has(input?.use) ? input.use : "",
+    text = typeof input?.text === "string" ? input.text.trim().slice(0, 2000) : "";
+  if (!improve.length && !use && !text) throw Object.assign(new Error("Choose an answer or write a note."), { status:400 });
+  const version = APP_PACKAGE.version, body = [
+    `PenEcho ${version}: what should we improve next?`,
+    `Improve next: ${improve.map(key => RESEARCH_IMPROVE.get(key)).join("; ") || "-"}`,
+    `Mostly used: ${RESEARCH_USE.get(use) || "-"}`,
+    `App: ${process.env.PENECHO_DESKTOP_APP === "true" ? "desktop" : "npm"} ${version}, ${process.platform}, ${input?.language === "zh" ? "zh" : "en"}`,
+    ...(text ? ["", text] : []),
+  ].join("\n");
+  const response = await fetch(`${DEFAULT_CLOUD_ORIGIN}/api/v1/contact`, { method:"POST", redirect:"error", signal:AbortSignal.timeout(10000),
+    headers:{ "content-type":"application/json", accept:"application/json" },
+    body:JSON.stringify({ topic:"product-feedback", subject:`PenEcho ${version}: what to improve next`, body }) });
+  if (!response.ok) throw Object.assign(new Error("PenEcho could not send your answers. Try again later."), { status:502 });
+  return { sent:true };
+}
 function visibleCliDiagnostic(value) {
   return String(value || "").replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, " ").replace(/\s+/g, " ").trim().slice(0, 800);
 }
@@ -3506,6 +3528,13 @@ const server = http.createServer(async (req, res) => {
       return send(res,400,{error:error.message||"Could not update local access."});
     }
     return send(res,404,{error:"Not found"});
+  }
+  // Answers to "what should we improve next?" reach the team as product feedback.
+  if (req.method === "POST" && url.pathname === "/api/research") {
+    const researchError = browserRequestError(req);
+    if (researchError) return send(res, 403, { error:researchError });
+    try { return send(res, 202, await sendResearchAnswers(await readJson(req, 16 * 1024))); }
+    catch (error) { return send(res, Number.isInteger(error?.status) ? error.status : 502, { error:error?.message || "PenEcho could not send your answers." }); }
   }
   if (url.pathname.startsWith("/api/cloud/")) {
     const mutation=req.method!=="GET",localError=cloudBrowserRequestError(req,mutation);

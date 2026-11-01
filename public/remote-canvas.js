@@ -405,16 +405,16 @@
     offlineStatus:"Offline", onlineStatus:"Online",
   };
   if (isCommunityCraft) Object.assign(copy, zh ? {
-    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后即可 Echo 此创作", back:"返回 Echoes",
+    eyebrow:"公开 Craft", noHost:"连接 PenEcho 主机后即可 Echo 此创作", back:"返回 PenEcho",
     failed:"暂时无法继续这个 Craft", opening:"主机在线，正在导入这个 Craft…",
   } : {
-    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to Echo this Craft", back:"Back to Echoes",
+    eyebrow:"Public Craft", noHost:"Connect one PenEcho host to Echo this Craft", back:"Back to PenEcho",
     failed:"This Craft could not be continued right now", opening:"Host online. Importing this Craft…",
   });
 
   // The PenEcho brand in the top bar doubles as the way back: the toolbar stays
   // uncluttered and the escape hatch lives where users expect a home control.
-  const brandTarget = isCommunityCraft ? "/community.html" : "/dashboard.html";
+  const brandTarget = isCommunityCraft ? "/" : "/dashboard.html";
   const brand = document.querySelector(".brand");
   if (brand) {
     brand.setAttribute("data-home-link", "true");

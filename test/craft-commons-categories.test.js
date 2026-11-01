@@ -41,24 +41,22 @@ test("Cloud Connect share categories keep every original and append the three Cr
 
 });
 
-test("Cloud Connect keeps Echoes beside Projects and favorites", () => {
+test("Cloud Connect keeps Projects and favorites, with no Echoes feed", () => {
   assert.match(cloudConnect, /\["projects", "cloudProjects"\]/);
   assert.match(cloudConnect, /\["favorites", "favorites"\]/);
-  assert.match(cloudConnect, /class:"cloud-section-tab cloud-explore-link"/);
-  assert.match(cloudConnect, /href:new URL\("\/community\.html", `\$\{cloudOrigin\(\)\}\/`\)\.toString\(\)/);
-  assert.match(cloudConnect, /text:`\$\{cloudT\("explore"\)\} ↗`/);
+  assert.doesNotMatch(cloudConnect, /cloud-explore-link|\/community\.html/);
   assert.doesNotMatch(cloudConnect, /text:cloudT\(hint\)/);
 });
 
-test("Remote Canvas community back copy points to Echoes in both languages", () => {
-  assert.match(remoteCanvas, /back:"Back to Echoes"/);
-  assert.match(remoteCanvas, /back:"返回 Echoes"/);
+test("Remote Canvas community back copy points to PenEcho in both languages", () => {
+  assert.match(remoteCanvas, /back:"Back to PenEcho"/);
+  assert.match(remoteCanvas, /back:"返回 PenEcho"/);
   assert.doesNotMatch(remoteCanvas, /Back to Explore|返回探索|Craft Commons|共创广场/);
   // Non-community back copy is untouched.
   assert.match(remoteCanvas, /back:"Back to Projects"/);
   assert.match(remoteCanvas, /back:"返回项目"/);
   // The back affordance is now the clickable brand instead of a toolbar link.
-  assert.match(remoteCanvas, /const brandTarget = isCommunityCraft \? "\/community\.html" : "\/dashboard\.html";/);
+  assert.match(remoteCanvas, /const brandTarget = isCommunityCraft \? "\/" : "\/dashboard\.html";/);
   assert.match(remoteCanvas, /brand\.addEventListener\("click", \(\) => \{ location\.assign\(brandTarget\); \}\)/);
   assert.doesNotMatch(remoteCanvas, /remote-canvas-back/);
 });
