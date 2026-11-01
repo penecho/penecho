@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +42,9 @@ export function runCli(command, args, { interactive = false } = {}) {
     try { invocation = cliInvocation(command, args); } catch (error) { resolveResult({ status: null, error }); return; }
     const child = spawn(invocation.command, invocation.args, {
       shell: false,
+      // Claude Code reads .mcp.json from parent folders; the unpacked package has
+      // its own, which would read as a pending project connection.
+      cwd: tmpdir(),
       stdio: interactive ? 'inherit' : ['ignore', 'pipe', 'pipe'],
       ...(interactive ? {} : { timeout: 45000 }),
     });

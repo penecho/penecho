@@ -102,6 +102,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-lasso-v3",
       "core-image-v1",
       "core-fullscreen-v1",
+      "cloud-collaborate-v1",
       "cloud-share-canvas-v1",
       "cloud-workspace-v1",
       "canvas-agent-launcher-v2",
@@ -111,7 +112,7 @@ test("feature tour follows the requested concise order with stable targets", () 
       "core-navigation-v1",
     ];
   for (let index = 1; index < ordered.length; index++) assert.ok(app.indexOf(ordered[index - 1]) < app.indexOf(ordered[index]));
-  for (const selector of ["#aiEffortButton", "#craftsButton", "#historyBtn", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
+  for (const selector of ["#aiEffortButton", "#craftsButton", "#historyBtn", "#handToolBtn", "#lassoToolBtn", "#textToolBtn", "#imagePickerBtn", "#fullscreenBtn", "#collaborateCanvasBtn", "#shareCanvasBtn", "#cloudAccountBtn", "#canvasAgentToggle", "#canvasAgentPanel", "#aiOrb", "#aiStatusArea", "#viewport"])
     assert.match(app, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(app, /canvas-agent-panel-v2[^\n]*preview: "canvas-agent-panel"/);
   assert.match(app, /openCanvasAgent\(\{ focus:false, connect:false, animate:false \}\)/);
@@ -321,6 +322,8 @@ test("feature tour copy is complete in English and Chinese", () => {
       "tourFullscreenBody",
       "tourFavoritesTitle",
       "tourFavoritesBody",
+      "tourCollaborateTitle",
+      "tourCollaborateBody",
       "tourShareCanvasTitle",
       "tourShareCanvasBody",
       "tourCloudTitle",
@@ -347,8 +350,10 @@ test("feature tour copy is complete in English and Chinese", () => {
   assert.doesNotMatch(zh, /控制动态图讲解/);
   assert.match(app, /tourFavoritesBody:[^\n]*saved favorites[^\n]*favorite Widget[^\n]*favorite Canvas/);
   assert.match(zh, /tourFavoritesBody:[^\n]*收藏[^\n]*收藏组件[^\n]*收藏画布/);
-  assert.match(app, /tourShareCanvasBody:[^\n]*read-only link[^\n]*future saved changes[^\n]*Share publicly[^\n]*after review/);
-  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*之后保存的改动[^\n]*公开展示[^\n]*审核通过/);
+  assert.match(app, /tourCollaborateBody:[^\n]*draw on this Canvas with you[^\n]*collaboration link[^\n]*same time/);
+  assert.match(zh, /tourCollaborateBody:[^\n]*一起创作[^\n]*协作链接[^\n]*同时编辑/);
+  assert.match(app, /tourShareCanvasBody:[^\n]*view-only link[^\n]*as they happen[^\n]*Share publicly[^\n]*after review/);
+  assert.match(zh, /tourShareCanvasBody:[^\n]*只读链接[^\n]*实时看到[^\n]*公开展示[^\n]*审核通过/);
   assert.match(app, /tourCloudBody:[^\n]*private versioned Canvases[^\n]*favorite Canvases or publicly shared Widgets/);
   assert.match(zh, /tourCloudBody:[^\n]*私密画布[^\n]*收藏的画布或组件/);
   assert.match(zh, /请求进度|正在观察/);

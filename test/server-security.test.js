@@ -1353,9 +1353,9 @@ test("Canvas metadata-only lists validated document identity without content and
     const metadataResponse=await fetch(`${origin}/api/canvases?metadataOnly=1`),metadata=await metadataResponse.json();
     assert.equal(metadataResponse.status,200);
     const legacyEntry=metadata.canvases.find(item=>item.id===legacy.id),modernEntry=metadata.canvases.find(item=>item.id===base.id),invalidEntry=metadata.canvases.find(item=>item.id===invalidBase.id);
-    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.deepEqual(Object.keys(legacyEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","revisionId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(legacyEntry.documentId,null,"legacy snapshots without document identity remain valid");
-    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
+    assert.deepEqual(Object.keys(modernEntry).sort(),["animationCount","createdAt","documentId","hasPreview","id","imageCount","name","projectId","revisionId","textBoxCount","theme","tileCount","updatedAt","version","widgetCount"]);
     assert.equal(modernEntry.documentId,documentId);
     for (const [entry, version, widgetCount] of [[legacyEntry,1,0],[modernEntry,2,1],[invalidEntry,2,1]]) {
       assert.equal(entry.version,version);

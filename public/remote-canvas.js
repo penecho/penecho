@@ -4,7 +4,9 @@
   const isBrowserDraft = Boolean(window.PENECHO_CONFIG?.browserDraftId);
   const canvasMatch = location.pathname.match(/^\/canvas\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
   const communityMatch = location.pathname.match(/^\/canvas\/community\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch && !isBrowserDraft)) return;
+  // A share link that allows editing opens the shared Canvas in this editor.
+  const isLiveShare = Boolean(window.PENECHO_CONFIG?.liveShare?.token) && /^\/canvas\/(?:share|collaborate)\/[0-9a-f-]{36}\/?$/i.test(location.pathname);
+  if (window.PENECHO_CONFIG?.runtime !== "cloud" || (!canvasMatch && !communityMatch && !isBrowserDraft && !isLiveShare)) return;
   const requestedCanvasId = canvasMatch?.[1] || null;
   const requestedCommunityItemId = communityMatch?.[1] || null;
   const isCommunityCraft = Boolean(requestedCommunityItemId);
@@ -170,7 +172,8 @@
   window.addEventListener("message", (event) => {
     if (event.origin !== location.origin || !event.source || !event.data || typeof event.data !== "object") return;
     if (event.data.type === "penecho-widget-host-ready") {
-      widgetPaintReadyFrames.delete(event.source);
+      // Only a newly loaded document starts unpainted; a probe's answer keeps its paint.
+      if (!event.data.probe) widgetPaintReadyFrames.delete(event.source);
       notifyWidgetPaintReadyWaiters();
     } else if (event.data.type === "penecho-widget-capture-ready") {
       widgetPaintReadyFrames.add(event.source);
@@ -508,6 +511,14 @@
       const deadline=Date.now()+15000;
       while(!window.PenEchoBrowserDraft){if(Date.now()>deadline)throw Error("Canvas did not finish loading");await new Promise(resolve=>setTimeout(resolve,50));}
       return window.PenEchoBrowserDraft.open();
+    }
+    if (isLiveShare) {
+      const deadline = Date.now() + 15_000;
+      while (!window.PenEchoLiveCanvas?.openShare) {
+        if (Date.now() >= deadline) throw new Error("PenEcho Canvas did not finish loading.");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return window.PenEchoLiveCanvas.openShare();
     }
     const deadline = Date.now() + 15_000;
     while (isCommunityCraft ? !window.PenEchoCommunityUI?.takeFurther : !window.PenEchoCloudProjects?.openCanvas) {

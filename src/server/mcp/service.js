@@ -10,7 +10,7 @@ const path = require("node:path");
 const { WebSocket, WebSocketServer } = require("ws");
 const { GUIDANCE_VERSION } = require("./guidance.js");
 const { createMcpRequestTracer } = require("./request-trace.js");
-const { MAX_EVENTS_PER_UPDATE, McpBridgeError, validateToolArguments } = require("./schema.js");
+const { MAX_EVENTS_PER_UPDATE, McpBridgeError, TOOLS, validateToolArguments } = require("./schema.js");
 
 const MAX_HTTP_BODY_BYTES = 3 * 1024 * 1024;
 const MAX_WS_FRAME_BYTES = 12 * 1024 * 1024;
@@ -164,6 +164,8 @@ function createMcpService(options) {
   const businessOwnerLimit = options.businessOwnerLimit || MAX_OWNER_SESSIONS;
   const businessSessionLimit = options.businessSessionLimit || MAX_DIRECT_SESSIONS;
   const bindings = options.bindings || require("./conversation-bindings.js").conversationBindings(path.join(registryDirectory,"mcp","conversations"));
+  // Tools a host adds to this server, answered by the host itself: { tools, call(ownerId,name,args,options) }.
+  const hostTools = options.hostTools || null, hostToolNames = new Set((hostTools?.tools || []).map(tool => tool.name));
   function bindingCall(operation, signal, timeoutMs = bindingTimeoutMs) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -226,6 +228,7 @@ function createMcpService(options) {
   const direct = options.cloudRuntime ? {status:()=>({enabled:false}),close:async()=>{}} : require("./direct-http-service.js").createDirectHttpService({
     stateDirectory:path.join(registryDirectory,"mcp","server"),
     callTool:(ownerId,name,args,callOptions)=>callTool(ownerId,name,args,{...callOptions,direct:true}),
+    ...(hostTools?{tools:[...TOOLS,...hostTools.tools]}:{}),
     uploadImage:uploadRawImage,
     disposeOwner,onChange:notifyConnections,
     ...(options.lanAddresses?{getAddresses:options.lanAddresses}:{}),
@@ -747,6 +750,7 @@ function createMcpService(options) {
       finally {clearTimeout(timer);callOptions.signal?.removeEventListener("abort",abort);}
     }
     if (callOptions.signal?.aborted) throw bridgeError("request_cancelled","The MCP request was cancelled.",499);
+    if (hostToolNames.has(name)) return hostTools.call(ownerId,name,input,callOptions);
     const tracked = sessions.get(input?.sessionId);
     const session = tracked?.ownerId === ownerId && tracked.direct ? tracked : null;
     if (session) session.activeCalls++;

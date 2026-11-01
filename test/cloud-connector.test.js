@@ -1757,3 +1757,32 @@ test('explicit Linked Device enable repairs a disabled Cloud MCP route, but a la
   connector.disconnect();assert.equal(connector.status().cloudMcpEnabled,false);
   assert.equal(connector.configuration.deviceToken,'saved-device');
 });
+
+test("a link Canvas starts and ends without an account, and adopting it adds the account session", async () => {
+  const connector = Object.create(CloudConnector.prototype), originalFetch = global.fetch, requests = [];
+  const origin = "https://internaltest.penecho.ai", token = "0f8b7c1e-2d3a-4b5c-8d9e-0a1b2c3d4e5f", ownerKey = "k".repeat(43);
+  connector.configuration = null;
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers:{ "content-type":"application/json" } });
+  try {
+    global.fetch = async (url, options) => {
+      requests.push({ url, ...options });
+      if (url.endsWith("/adopt")) return json({ collaboration:{ token, url:`/canvas/collaborate/${token}` } });
+      if (options.method === "DELETE") return json({ ended:true });
+      if (options.body && JSON.parse(options.body).title === "Too big") return json({ message:"Payload Too Large" }, 413);
+      return json({ token, url:`/canvas/collaborate/${token}`, ownerKey, expiresAt:"2026-11-08T00:00:00.000Z" });
+    };
+    const started = await connector.linkRequest("/api/v1/live/links", { method:"POST", body:{ title:"Sketch", bundle:{} }, origin });
+    assert.deepEqual([started.origin, started.ownerKey], [origin, ownerKey]);
+    assert.equal(requests[0].url, `${origin}/api/v1/live/links`);
+    assert.equal(requests[0].headers.authorization, undefined, "no account credential is sent");
+    await assert.rejects(connector.linkRequest("/api/v1/live/links", { method:"POST", body:{ title:"Too big", bundle:{} }, origin }), /too large to collaborate on without an account/);
+    await connector.linkRequest(`/api/v1/live/links/${token}`, { method:"DELETE", ownerKey, origin });
+    assert.deepEqual([requests[2].method, requests[2].headers["x-penecho-owner-key"], requests[2].body], ["DELETE", ownerKey, undefined]);
+    for (const [pathname, method] of [["/api/v1/canvases", "POST"], [`/api/v1/live/links/${token}`, "POST"], ["/api/v1/live/links", "DELETE"]])
+      await assert.rejects(connector.linkRequest(pathname, { method, origin }), /Unsupported link Canvas request/);
+    connector.requireCloudAccount = () => ({ origin, accountToken:"account-session" });
+    await connector.cloudRequest(`/api/v1/live/links/${token}/adopt`, { method:"POST", body:{ canvasId:token }, headers:{ "x-penecho-owner-key":ownerKey } });
+    const adopt = requests.at(-1);
+    assert.deepEqual([adopt.headers.authorization, adopt.headers["x-penecho-owner-key"], JSON.parse(adopt.body)], ["Bearer account-session", ownerKey, { canvasId:token }]);
+  } finally { global.fetch = originalFetch; }
+});

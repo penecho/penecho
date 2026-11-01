@@ -218,6 +218,7 @@ function harness(options = {}) {
     functionSource("saveDeviceSnapshot"),
     functionSource("serverSnapshotPayload"),
     functionSource("saveServerSnapshot"),
+    functionSource("folderPageCanvasPath"),
     functionSource("saveCloudSnapshot"),
     functionSource("saveSnapshot"),
     functionSource("saveSnapshotFromHistory"),

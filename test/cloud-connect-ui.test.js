@@ -20,20 +20,19 @@ test("Cloud storage help stays concise in both languages", () => {
   assert.doesNotMatch(cloudScript, /Every successful save creates an immutable revision|每次成功保存都会创建不可变版本/);
 });
 
-test("an empty Canvas shows why live sharing is unavailable", async () => {
+test("an empty Canvas can be shared by link but not listed publicly", async () => {
   const run=boot({status:deviceStatus()});
   run.window.PenEchoCloudProjects.hasShareableContent=() => false;
   run.window.PenEchoCloudProjects.currentCanvasId=() => null;
-  run.window.PenEchoCloudProjects.saveForShare=async () => { throw Error("empty Canvas must not be saved"); };
   await run.flush();
   run.shareButton.click();
   await run.flush();
   const dialog=run.overlay();
   assert.ok(dialog);
   const enable=flatten(dialog).find(node => node.textContent === "Save to Cloud and share");
-  assert.equal(enable?.disabled,true);
-  assert.match(dialog.textContent,/Add content to the Canvas before sharing\./);
-  assert.equal(run.fetchCalls.some(call => call.url.includes("/share")),false);
+  assert.equal(enable?.disabled,false);
+  assert.doesNotMatch(dialog.textContent,/Add content to the Canvas before sharing/);
+  assert.equal(flatten(dialog).find(node => node.className === "live-share-public-toggle")?.disabled,true);
 });
 
 test("Canvas and Widget share icons follow confirmed live share state", async () => {
@@ -1899,7 +1898,7 @@ test("Cloud Center keeps narrow layouts and theme contrast token-driven", () => 
   assert.match(cloudCss, /\.cloud-button\.primary:hover:not\(:disabled\), \.cloud-button\.primary:focus-visible\s*\{[^}]*color:\s*var\(--ai-primary-ink\)/);
   assert.match(cloudCss, /\.penecho-cloud-dialog\s*\{[^}]*color-scheme:\s*light[^}]*--ai-bg:\s*color-mix\(in srgb, var\(--studio-shell, #f2f3f5\) 76%, var\(--studio-panel, #ffffff\)\)[^}]*--ai-surface:\s*var\(--studio-panel, #ffffff\)[^}]*--ai-accent:\s*var\(--studio-accent, #4f46e5\)[^}]*--ai-primary:\s*var\(--studio-accent-strong, #4338ca\)/);
   assert.match(cloudCss, /\.cloud-center \.cloud-dialog-titlebar\s*\{[^}]*background:\s*var\(--penecho-workbench-navigation-surface,[^}]*68%, transparent\)\)/);
-  assert.match(cloudCss, /\.cloud-share-canvas\s*\{\s*color:\s*var\(--studio-accent-strong, #4338ca\)/);
+  assert.match(cloudCss, /\.cloud-share-canvas, \.cloud-collaborate-canvas\s*\{\s*color:\s*var\(--studio-accent-strong, #4338ca\)/);
   assert.match(cloudCss, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation:\s*none/);
   assert.doesNotMatch(cloudCss, /body\[data-theme="(?:studio|research|arcane|scifi)"\] \.penecho-cloud-dialog/);
 });

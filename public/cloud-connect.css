@@ -23,7 +23,8 @@
 .cloud-account-label { line-height: 1.8; }
 .cloud-account-dot { background: #8b94a1; border: 2px solid var(--panel, #fff); border-radius: 50%; height: .55rem; width: .55rem; }
 .cloud-account-button[data-state="connected"] .cloud-account-dot { background: #10b981; }
-.cloud-share-canvas { color: var(--studio-accent-strong, #4338ca); }
+.cloud-share-canvas, .cloud-collaborate-canvas { color: var(--studio-accent-strong, #4338ca); }
+#collaborateCanvasBtn[data-collaborating="true"] svg circle,
 #shareCanvasBtn[data-live-shared="true"] svg circle,
 #canvasViewShareBtn[data-live-shared="true"] svg circle,
 .object-chrome-button.share.is-shared svg circle { fill: currentColor; }
@@ -705,8 +706,17 @@ body[data-theme="studio"] .penecho-live-share-dialog [role="status"][data-tone="
   :is(#pe-button-contract, .penecho-live-share-dialog .live-share-target, .penecho-live-share-dialog > footer > [data-pe-button]) { height:44px; min-height:44px; }
 }
 
+/* Share points to Collaborate for editing together. */
+.penecho-live-share-dialog .live-share-collaborate{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:0 0 16px;color:var(--pe-ink-2,var(--studio-muted,var(--muted)));font-size:12.5px}
+.penecho-collaborate-dialog .collaborate-lead{margin:0 0 16px;color:var(--pe-ink-2,var(--studio-muted,var(--muted)))}
+.penecho-collaborate-dialog .live-share-link[data-pe-region="field"]{margin:0 0 12px}
+.penecho-collaborate-dialog .collaborate-storage{margin:-8px 0 16px;color:var(--pe-ink-2,var(--studio-muted,var(--muted)));font-size:12.5px}
+.penecho-collaborate-dialog .collaborate-expiry{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;margin:12px 0 0;color:var(--pe-ink-2,var(--studio-muted,var(--muted)));font-size:12.5px}
+.penecho-collaborate-dialog .collaborate-expiry[hidden]{display:none}
+.penecho-collaborate-dialog .collaborate-expiry p{margin:0}
+.penecho-collaborate-dialog .collaborate-expiry-actions{display:flex;gap:4px}
 /* Public discovery belongs to the existing share form. */
-.penecho-live-share-dialog .live-share-public{padding:16px;border:1px solid var(--pe-border,#dce2e5);border-radius:12px;background:var(--pe-surface-subtle,#f7f9fb)}
+.penecho-live-share-dialog .live-share-public{margin:0 0 16px;padding:16px;border:1px solid var(--pe-border,#dce2e5);border-radius:12px;background:var(--pe-surface-subtle,#f7f9fb)}
 .penecho-live-share-dialog .live-share-public label{display:flex;align-items:center;gap:10px;cursor:pointer}
 .penecho-live-share-dialog .live-share-public small{display:block;margin-top:8px;color:var(--pe-text-secondary,#61707c);line-height:1.5}
 .penecho-live-share-dialog .live-share-public-status{margin:10px 0 0;font-size:13px;line-height:1.5}

@@ -8,9 +8,9 @@ const signedIn = { account:{ id:"account-1", name:"Test User" }, accountSession:
 const signedOut = { account:null, accountSession:{ signedIn:false }, device:{ configured:false }, browserSignIn:{ pending:false } };
 const settle = async (rounds = 6) => { for (let i = 0; i < rounds; i++) await new Promise((resolve) => setImmediate(resolve)); };
 
-function boot({ language = "en", status = signedIn, canvasId = CANVAS_ID, canvasName = "Untitled canvas", shares = new Map(), navigator = {}, holdRequests = null, failRequests = null, clipboardFails = false } = {}) {
+function boot({ language = "en", status = signedIn, canvasId = CANVAS_ID, canvasName = "Untitled canvas", shares = new Map(), collaborations = new Map(), collaborate = false, navigator = {}, holdRequests = null, failRequests = null, clipboardFails = false } = {}) {
   const { document, window } = parseHTML(`<!doctype html><html lang="${language}"><body>
-    <button id="cloudAccountBtn"><span class="cloud-account-label"></span></button><button id="shareCanvasBtn"></button><button id="exportPngBtn"></button>
+    <button id="cloudAccountBtn"><span class="cloud-account-label"></span></button>${collaborate ? '<button id="collaborateCanvasBtn"></button>' : ""}<button id="shareCanvasBtn"></button><button id="exportPngBtn"></button>
     <span id="canvasDocumentNameLabel">${canvasName}</span></body></html>`);
   // linkedom has no focus model; track it so focus recovery can be observed.
   let focused = document.body;
@@ -24,6 +24,13 @@ function boot({ language = "en", status = signedIn, canvasId = CANVAS_ID, canvas
     const method = options.method || "GET", target = String(url);
     calls.push({ method, url:target, body:options.body ? JSON.parse(options.body) : undefined });
     if (target === "/api/cloud/status" || target === "/api/cloud/account") return json(status);
+    const collaboration = target.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})\/collaboration$/i);
+    if (collaboration) {
+      order.push(`${method} collaboration`);
+      if (method === "POST") collaborations.set(collaboration[1], { token:"collab-token", url:"/canvas/collaborate/collab-token" });
+      if (method === "DELETE") collaborations.delete(collaboration[1]);
+      return json({ collaboration:collaborations.get(collaboration[1]) || null });
+    }
     const match = target.match(/^\/api\/cloud\/canvases\/([0-9a-f-]{36})\/share(?:\?widgetId=([0-9a-f-]{36}))?$/i);
     if (!match) return json({ error:"not found" }, 404);
     order.push(`${method} share`);
@@ -82,7 +89,73 @@ test("opening an inactive share explains the public scope and offers no outbound
   assert.ok(h.button("Save and enable sharing"));
   assert.equal(h.button("Turn off sharing").hidden, true);
   const scope = h.dialog().querySelector(".live-share-scope").textContent;
-  for (const phrase of [/Anyone with the link can view this Canvas/, /later save to this Cloud Canvas appear at the same link/, /Turn sharing off at any time and the link stops working/, /Public discovery is optional and requires review/]) assert.match(scope, phrase);
+  for (const phrase of [/Anyone with the link can view this Canvas/, /see changes as they happen, without waiting for a save/, /Turn sharing off at any time and the link stops working/, /Public discovery is optional and requires review/]) assert.match(scope, phrase);
+  assert.equal(h.dialog().querySelector('input[type="radio"]'), null, "a share link is always view-only");
+});
+
+test("one click on Collaborate saves the Canvas, gives it its own editing link and copies it; it can be stopped", async () => {
+  const h = boot({ collaborate:true });
+  await h.openCanvas();
+  assert.match(h.dialog().querySelector(".live-share-collaborate").textContent, /Want people to edit with you\?/);
+  await h.click(h.button("Collaborate"));
+  assert.equal(h.dialog().querySelector("h2").textContent, "Collaborate");
+  assert.match(h.dialog().textContent, /Everyone with the link can draw on this Canvas with you, live\./);
+  assert.deepEqual(h.order.filter(step => !step.startsWith("GET")), ["save canvas", "POST collaboration"], "the Canvas is saved before the link starts, with no second click");
+  assert.equal(h.dialog().querySelector("input[readonly]").value, `${ORIGIN}/canvas/collaborate/collab-token`);
+  assert.deepEqual(h.clipboard, [`${ORIGIN}/canvas/collaborate/collab-token`], "the link is copied");
+  assert.match(h.status().textContent, /Link copied/);
+  assert.equal(h.button("Open").hidden, false);
+  assert.equal(h.document.getElementById("collaborateCanvasBtn").dataset.collaborating, "true");
+  await h.click(h.button("Copy link"));
+  assert.deepEqual(h.clipboard, [`${ORIGIN}/canvas/collaborate/collab-token`, `${ORIGIN}/canvas/collaborate/collab-token`]);
+  assert.ok(h.dialog().contains(h.document.activeElement), "focus stays in the dialog after starting, so Escape still closes it");
+  await h.click(h.button("Stop collaborating"));
+  assert.equal(h.order.at(-1), "DELETE collaboration");
+  assert.ok(h.dialog().contains(h.document.activeElement), "focus stays in the dialog after stopping");
+  assert.match(h.status().textContent, /People with the link can no longer edit/);
+  assert.equal(h.document.getElementById("collaborateCanvasBtn").dataset.collaborating, "false");
+  assert.ok(h.button("Start collaborating"));
+});
+
+test("without an account, Collaborate starts a link Canvas that Cloud keeps 7 days after its last change", async () => {
+  const h = boot({ collaborate:true, status:signedOut, canvasId:null });
+  let linked = null;
+  const started = [];
+  h.bridge.linkBundle = async () => ({ bundleVersion:2, name:"Sketch" });
+  h.window.PenEchoLiveCanvas = {
+    link:() => linked,
+    startLink:async (title, bundle) => { started.push({ title, bundle }); linked = { token:"link-token", publicUrl:`${ORIGIN}/canvas/collaborate/link-token`, own:true }; return linked; },
+    endLink:async () => { started.push("end"); linked = null; },
+  };
+  h.window.PenEchoCanvasExport = { pdf:async () => { started.push("pdf"); } };
+  await settle();
+  h.document.getElementById("collaborateCanvasBtn").click();
+  await settle();
+  assert.deepEqual(started, [{ title:"Canvas", bundle:{ bundleVersion:2, name:"Sketch" } }], "one click starts it; an untitled Canvas is just called Canvas");
+  assert.deepEqual(h.clipboard, [`${ORIGIN}/canvas/collaborate/link-token`], "and copies its link");
+  assert.deepEqual(h.order, [], "nothing is saved to an account");
+  assert.equal(h.dialog().querySelector("input[readonly]").value, `${ORIGIN}/canvas/collaborate/link-token`);
+  assert.equal(h.dialog().querySelector(".collaborate-storage").hidden, true);
+  const expiry = h.dialog().querySelector(".collaborate-expiry");
+  assert.equal(expiry.hidden, false);
+  assert.match(expiry.textContent, /Kept 7 days after the last change\./);
+  assert.equal(h.document.getElementById("collaborateCanvasBtn").dataset.collaborating, "true");
+  await h.click(h.button("Download PDF"));
+  assert.equal(started.at(-1), "pdf");
+  const opened = [];
+  h.window.open = (url, target) => { opened.push([url, target]); return null; };
+  await h.click(h.button("Open"));
+  assert.deepEqual(opened, [[`${ORIGIN}/canvas/collaborate/link-token`, "_blank"]], "Open shows the shared page");
+  await h.click(h.button("Stop collaborating"));
+  assert.equal(started.at(-1), "end");
+  assert.match(h.status().textContent, /People with the link can no longer edit/);
+  assert.equal(h.document.getElementById("collaborateCanvasBtn").dataset.collaborating, "false");
+  await h.click(h.button("Start collaborating"));
+  // Keeping it needs an account: sign in first.
+  await h.click(h.button("Sign in to save"));
+  assert.equal(h.dialog(), null);
+  assert.ok(h.document.querySelector(".penecho-cloud-overlay"), "Cloud sign-in opens");
+  assert.deepEqual(h.order, [], "still nothing saved before sign-in");
 });
 
 test("enabling saves before sharing, then offers encoded X, LinkedIn, and public page links", async () => {

@@ -78,7 +78,7 @@ function harness(options = {}) {
   const context = vm.createContext({
     PenEchoCanvasFilePatch: require("../src/shared/canvas-file-patch"),
     SIZE: 32768, TILE: 512, MAX_HISTORY: 50, state, crypto: options.crypto || crypto.webcrypto,
-    TextEncoder, TextDecoder, Blob, URL, Event, structuredClone, queueMicrotask,
+    TextEncoder, TextDecoder, Blob, URL, Event, CustomEvent, structuredClone, queueMicrotask,
     AbortController, AbortSignal, setTimeout, clearTimeout, setInterval: () => 1, performance,
     document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {}, hidden: false, createElement: () => ({}) },
     window: { PENECHO_CONFIG: options.browserDraftId ? { browserDraftId: options.browserDraftId } : {}, navigator: options.navigator, dispatchEvent: () => true }, location: { origin: "http://127.0.0.1" }, WebSocket: { OPEN: 1 },
@@ -137,7 +137,7 @@ function harness(options = {}) {
   });
   const scripts = ["document-identity.js", "mcp-runtime.js", "canvas-documents.js"]
     .map(file => fs.readFileSync(path.join(ROOT, "src/client/app", file), "utf8")).join("\n");
-  vm.runInContext(`${clientFunction("core.js", "canvasClientId")}\n${["resetCanvasDefaultMode","snapshotCanvasObjectExtensions","restoreSnapshotCanvasObjectOrder","currentCanvasDisplayName","currentCanvasNeedsAgentName","applyCurrentCanvasGeneratedName"].map(name=>clientFunction("persistence.js",name)).join("\n")}\n${scripts}\nglobalThis.api={canvasDocumentIdentity,canvasDocuments,canvasDocumentsReady,canvasDocumentsCurrent,canvasDocumentsExternal,canvasDocumentsRecord,canvasDocumentsSaveMetadata,canvasDocumentsDidSave,canvasDocumentsExecute,canvasAgentDocumentOperation,canvasDocumentsQueueMessage,canvasDocumentsClose,mcpRuntime};`, context);
+  vm.runInContext(`${clientFunction("core.js", "canvasClientId")}\n${["resetCanvasDefaultMode","snapshotCanvasObjectExtensions","restoreSnapshotCanvasObjectOrder","currentCanvasDisplayName","currentCanvasNeedsAgentName","applyCurrentCanvasGeneratedName"].map(name=>clientFunction("persistence.js",name)).join("\n")}\n${scripts}\nglobalThis.api={canvasDocumentIdentity,canvasDocuments,canvasDocumentsReady,canvasDocumentsCurrent,canvasDocumentsExternal,canvasDocumentsRecord,canvasDocumentsSaveMetadata,canvasDocumentsDidSave,canvasDocumentsExecute,canvasAgentDocumentOperation,canvasDocumentsQueueMessage,canvasDocumentsClose,canvasDocumentsShow,canvasDocumentsOpenSaved,canvasDocumentsRefreshSaved,canvasDocumentsForget,canvasDocumentsDidSave,canvasDocumentsCopyStored,mcpRuntime};`, context);
   const primitiveSource=fs.readFileSync(path.join(ROOT,"src/client/app/mcp-primitives.js"),"utf8");
   vm.runInContext(primitiveSource.slice(0,primitiveSource.indexOf("  function mcpPrimitiveLayout")),context);
   context.api.canvasDocuments.db = memoryDb(records, control);
@@ -904,6 +904,100 @@ test("closing a Canvas does not block on inbox and revokes its session", async (
   assert.equal(h.mcpRuntime.sessions.get("closed-session").closed,true);
   await assert.rejects(h.canvasDocumentsExecute("mcp_update_session",{sessionId:"closed-session",summary:"late"},{}),{code:"SESSION_EXPIRED"});
   assert.equal(h.state.widgets.length,0);
+});
+
+test("a folder project's saved Canvas opens as a clean background tab, takes newer saves and leaves when closed elsewhere", async () => {
+  const metadata = documentId => ({ penechoDocument: { version: 1, documentId, title: documentId, bindings: [], locators: [], processor: { kind: "penecho" } } });
+  const copy = (name, revision) => ({ item: { name, currentRevisionId: revision, updatedAt: 1000, widgets: [{ id: "w1", x: 0, y: 0, w: 10, h: 10 }], textBoxes: [], images: [], animations: [], bundleExtensions: metadata("plan") }, tileEntries: [] });
+  const saved = new Map([["cloud:canvas-1", copy("Plan", "rev-1")]]);
+  const h = harness({ saved });
+  await h.canvasDocumentsReady();
+  const visible = h.canvasDocumentsCurrent();
+  const plan = await h.canvasDocumentsOpenSaved({ location: "cloud", id: "canvas-1" });
+  assert.deepEqual([plan.id, plan.title, plan.locator], ["plan", "Plan", { location: "cloud", id: "canvas-1" }]);
+  assert.equal(h.canvasDocuments.activeId, visible.id, "it opens behind the visible Canvas");
+  assert.equal(plan.revision, plan.savedRevision, "a saved copy starts with nothing unsaved");
+  assert.equal(h.records.get("plan").locator.id, "canvas-1");
+  assert.equal(await h.canvasDocumentsOpenSaved({ location: "cloud", id: "canvas-1" }), plan, "an open tab is reused");
+  assert.equal(h.canvasDocuments.records.size, 2);
+
+  // Another page saved it: a clean copy takes the newer save, and its old Undo goes.
+  saved.set("cloud:canvas-1", copy("Plan v2", "rev-2"));
+  plan.undo = [{ kind: "old" }];
+  assert.equal(await h.canvasDocumentsRefreshSaved(plan.id), true);
+  assert.deepEqual([plan.title, plan.stored.item.currentRevisionId, plan.undo.length], ["Plan v2", "rev-2", 0]);
+  plan.revision += 1;
+  assert.equal(await h.canvasDocumentsRefreshSaved(plan.id), false, "unsaved changes are never replaced");
+  assert.equal(await h.canvasDocumentsForget(plan.id), false, "or dropped");
+  plan.revision = plan.savedRevision;
+
+  // Closed on another page: dropped here unless an agent is using it or it is in front.
+  h.mcpRuntime.sessions.set("busy", { sessionId: "busy", documentId: plan.id, artifacts: new Map(), steps: [], events: [] });
+  assert.equal(await h.canvasDocumentsForget(plan.id), false);
+  h.mcpRuntime.sessions.get("busy").closed = true;
+  assert.equal(await h.canvasDocumentsForget(visible.id), false, "the visible Canvas stays");
+  assert.equal(await h.canvasDocumentsForget(plan.id), true);
+  assert.equal(h.canvasDocuments.records.has("plan"), false);
+  assert.equal(h.records.has("plan"), false, "and its stored copy is removed");
+});
+
+test("a merged save replaces the Canvas in front, keeping its Undo and tool, and the next save starts from the newer save", async () => {
+  const h = harness();
+  await h.canvasDocumentsReady();
+  const doc = h.canvasDocumentsCurrent();
+  doc.locator = { location: "cloud", id: "canvas-1" };
+  h.state.mode = "pen";
+  h.state.widgets.push({ id: "widget-1", x: 0, y: 0, w: 10, h: 10 });
+  const entry = { tiles: [], widgetsBefore: [], widgetsAfter: [{ id: "widget-1", x: 0, y: 0, w: 10, h: 10 }] };
+  h.state.history.push(entry);
+  const revision = h.state.userRevision, merged = (currentRevisionId, widgets) => ({ item: { version: 2, name: "Merged", currentRevisionId, widgets, textBoxes: [], images: [], animations: [], bundleExtensions: {}, manifestExtensions: {} }, tileEntries: [] });
+  await h.canvasDocumentsShow(doc.id, null, { replace: merged("rev-2", [{ id: "widget-1", x: 0, y: 0, w: 10, h: 10 }, { id: "widget-2", x: 50, y: 0, w: 10, h: 10 }]), clean: false });
+  assert.deepEqual(h.state.widgets.map(widget => widget.id), ["widget-1", "widget-2"]);
+  assert.equal(h.state.history[0], entry, "Undo is kept");
+  assert.equal(entry.rebased, true, "and undoes only what still holds its change");
+  assert.equal(h.state.mode, "pen", "the tool in use stays");
+  assert.ok(h.state.userRevision > revision);
+  assert.notEqual(h.state.snapshotSavedRevision, h.state.userRevision, "this page's own changes still need saving");
+  assert.equal(h.state.currentSnapshotRevisionId, "rev-2", "the next save starts from the newer save");
+  await h.canvasDocumentsShow(doc.id, null, { replace: merged("rev-3", []), clean: true });
+  assert.equal(h.state.snapshotSavedRevision, h.state.userRevision, "a newer save with nothing of this page's to add is saved already");
+  const metadata = { penechoDocument: { version: 1, documentId: "other", title: "Other", bindings: [], locators: [], processor: { kind: "penecho" } } };
+  const other = await harness({ saved: new Map([["cloud:canvas-9", { item: { name: "Other", widgets: [], textBoxes: [], images: [], animations: [], bundleExtensions: metadata }, tileEntries: [] }]]) });
+  await other.canvasDocumentsReady();
+  const background = await other.canvasDocumentsOpenSaved({ location: "cloud", id: "canvas-9" });
+  await assert.rejects(other.canvasDocumentsShow(background.id, null, { replace: merged("rev-4", []) }), { code: "CANVAS_CHANGED" }, "only the Canvas in front takes a merged save");
+});
+
+test("each tab remembers the save its changes start from", async () => {
+  const metadata = { penechoDocument: { version: 1, documentId: "plan", title: "Plan", bindings: [], locators: [], processor: { kind: "penecho" } } };
+  const h = harness({ saved: new Map([["cloud:canvas-1", { item: { name: "Plan", currentRevisionId: "rev-1", widgets: [{ id: "widget-1" }], textBoxes: [], images: [], animations: [], bundleExtensions: metadata }, tileEntries: [] }]]) });
+  await h.canvasDocumentsReady();
+  const plan = await h.canvasDocumentsOpenSaved({ location: "cloud", id: "canvas-1" });
+  assert.equal(plan.base.revisionId, "rev-1");
+  plan.stored.item.widgets.push({ id: "widget-2" });
+  assert.deepEqual(plan.base.stored.item.widgets.map(widget => widget.id), ["widget-1"], "an agent changing the background tab in place leaves its base alone");
+  const file = new Blob(["image"]);
+  plan.stored.item.images = [{ id: "image-1", blob: file }];
+  plan.base = { revisionId: "rev-1", stored: h.canvasDocumentsCopyStored(plan.stored) };
+  assert.equal(plan.base.stored.item.images[0].blob, file, "a copy keeps sharing each file, so images still compare by their bytes");
+  h.state.currentSnapshotRevisionId = "rev-9";
+  await h.canvasDocumentsDidSave({ name: "Visible", widgets: [], textBoxes: [], images: [], animations: [], bundleExtensions: {}, manifestExtensions: {} }, "cloud", "canvas-2", []);
+  const visible = h.canvasDocumentsCurrent();
+  assert.deepEqual([visible.base.revisionId, visible.base.stored === visible.stored], ["rev-9", true], "a save is the base of what follows");
+  assert.equal(visible.stored.item.currentRevisionId, "rev-9", "and its stored copy names the revision, for a reopened page");
+});
+
+test("closing a saved Canvas names it for the folder's other pages", async () => {
+  const metadata = { penechoDocument: { version: 1, documentId: "plan", title: "Plan", bindings: [], locators: [], processor: { kind: "penecho" } } };
+  const saved = new Map([["cloud:canvas-1", { item: { name: "Plan", widgets: [], textBoxes: [], images: [], animations: [], bundleExtensions: metadata }, tileEntries: [] }]]);
+  const h = harness({ saved }), events = [];
+  h.context.window.dispatchEvent = event => { events.push(event); return true; };
+  await h.canvasDocumentsReady();
+  const plan = await h.canvasDocumentsOpenSaved({ location: "cloud", id: "canvas-1" }, { show: true });
+  assert.equal(h.canvasDocuments.activeId, plan.id);
+  assert.equal(await h.canvasDocumentsClose(plan.id), true);
+  const closed = events.filter(event => event.type === "penecho:canvas-documents-closed");
+  assert.deepEqual(JSON.parse(JSON.stringify(closed.map(event => event.detail.locators))), [[{ location: "cloud", id: "canvas-1" }]]);
 });
 
 test("switching away from an off-canvas viewport preserves content and camera on every side", async () => {
@@ -2353,4 +2447,16 @@ test('canceled, expired and different-document save intents never create a Cloud
     values.set('penecho-browser-draft-intent:save-workspace',JSON.stringify({action:'save',documentId:scenario==='different-document'?'another':documentId,createdAt:Date.now()-(scenario==='expired'?31*60*1000:0)}));
     assert.equal(await h.context.window.PenEchoBrowserDraft.resumeIntent(),false);assert.equal(saves,0);assert.equal(values.size,0);
   }
+});
+
+test("signing in from a guest's folder page resumes by keeping its Canvases", async () => {
+  const h = harness({ browserDraftId: "draft-1" });
+  const stored = new Map([["penecho-browser-draft-intent:draft-1", JSON.stringify({ action: "keep", documentId: "visible-document", createdAt: Date.now() })]]);
+  h.context.sessionStorage = { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) };
+  let kept = 0;
+  h.context.window.PenEchoFolderProject = { keep: async () => { kept++; return true; } };
+  assert.equal(await h.context.window.PenEchoBrowserDraft.resumeIntent(), true);
+  assert.equal(kept, 1);
+  assert.equal(stored.size, 0, "the intent is used once");
+  assert.equal(await h.context.window.PenEchoBrowserDraft.resumeIntent(), false);
 });

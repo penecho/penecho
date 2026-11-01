@@ -35,7 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 const modules={"src/shared/canvas-file-patch.js":function(module,exports,require){
 "use strict";
 // Shared by the MCP precheck and the browser commit path; diff is MIT licensed.
-const { parsePatch, applyPatch } = ({parsePatch:require("node_modules/diff/libcjs/patch/parse.js").parsePatch,applyPatch:require("node_modules/diff/libcjs/patch/apply.js").applyPatch});
+const { parsePatch, applyPatch } = ({parsePatch:require("../../../node_modules/diff/libcjs/patch/parse.js").parsePatch,applyPatch:require("../../../node_modules/diff/libcjs/patch/apply.js").applyPatch});
 const MAX_FILE_BYTES = 800000;
 function bridgeError(code, message, status) { return Object.assign(new Error(message), {code, status}); }
 function patchParseDiagnostic(error) {
@@ -126,7 +126,7 @@ function applyCanvasFilePatch(source, patch, virtualPath) {
 module.exports = {validateCanvasFilePatch, applyCanvasFilePatch};
 
 },
-"node_modules/diff/libcjs/patch/parse.js":function(module,exports,require){
+"../../../node_modules/diff/libcjs/patch/parse.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parsePatch = parsePatch;
@@ -644,7 +644,7 @@ function parsePatch(uniDiff) {
 }
 
 },
-"node_modules/diff/libcjs/patch/apply.js":function(module,exports,require){
+"../../../node_modules/diff/libcjs/patch/apply.js":function(module,exports,require){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -652,10 +652,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.applyPatch = applyPatch;
 exports.applyPatches = applyPatches;
-const string_js_1 = require("node_modules/diff/libcjs/util/string.js");
-const line_endings_js_1 = require("node_modules/diff/libcjs/patch/line-endings.js");
-const parse_js_1 = require("node_modules/diff/libcjs/patch/parse.js");
-const distance_iterator_js_1 = __importDefault(require("node_modules/diff/libcjs/util/distance-iterator.js"));
+const string_js_1 = require("../../../node_modules/diff/libcjs/util/string.js");
+const line_endings_js_1 = require("../../../node_modules/diff/libcjs/patch/line-endings.js");
+const parse_js_1 = require("../../../node_modules/diff/libcjs/patch/parse.js");
+const distance_iterator_js_1 = __importDefault(require("../../../node_modules/diff/libcjs/util/distance-iterator.js"));
 /**
  * attempts to apply a unified diff patch.
  *
@@ -911,7 +911,7 @@ function applyPatches(uniDiff, options) {
 }
 
 },
-"node_modules/diff/libcjs/util/string.js":function(module,exports,require){
+"../../../node_modules/diff/libcjs/util/string.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.longestCommonPrefix = longestCommonPrefix;
@@ -1113,7 +1113,7 @@ function leadingAndTrailingWs(string, segmenter) {
 }
 
 },
-"node_modules/diff/libcjs/patch/line-endings.js":function(module,exports,require){
+"../../../node_modules/diff/libcjs/patch/line-endings.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.unixToWin = unixToWin;
@@ -1166,7 +1166,7 @@ function isWin(patch) {
 }
 
 },
-"node_modules/diff/libcjs/util/distance-iterator.js":function(module,exports,require){
+"../../../node_modules/diff/libcjs/util/distance-iterator.js":function(module,exports,require){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = default_1;
@@ -1820,6 +1820,290 @@ if (typeof module === "object" && module.exports) module.exports = PenEchoIllust
   scheduleActivityLogo();
 })();
 "use strict";
+// Download PDF for the Canvas, a Widget or a note, without a PDF library.
+// Each page embeds one JPEG (DCTDecode) drawn over white. Content longer than
+// A4 proportions is split along its long axis: pages keep the full content
+// width (or height, for wide content), and every page shares one scale that
+// fits an A4 sheet without enlarging small content beyond its natural size.
+var PenEchoPdf = (() => {
+  const A4_SHORT = 595.28, A4_LONG = 841.89,
+    POINTS_PER_CSS_PIXEL = 0.75,
+    MAX_PORTRAIT_ASPECT = Math.SQRT2,
+    MAX_LANDSCAPE_ASPECT = 2,
+    MAX_PAGES = 100,
+    MAX_TOTAL_PIXELS = 40 * 1000 * 1000,
+    MIN_PAGE_POINTS = 3,
+    MAX_PAGE_POINTS = 14400,
+    JPEG_QUALITY = 0.92,
+    // "%PDF-1.4" and a binary comment so transfers keep the file binary.
+    HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a];
+  const positive = (value, fallback) => Number.isFinite(value) && value > 0 ? value : fallback;
+  const pdfNumber = value => String(Math.round(value * 100) / 100);
+  const byteLength = part => part.byteLength ?? part.size;
+
+  // Balanced row cuts. `breakAt(preferred, low, high)` may move a cut to a
+  // quiet row inside [low, high]; the window keeps every remaining page within
+  // `cap`, so a moved cut never pushes a later page past the height limit.
+  function rowCuts(height, cap, count, breakAt) {
+    const cuts = [0];
+    let start = 0;
+    for (let left = count; left > 1; left--) {
+      const target = (height - start) / left;
+      let cut = Math.round(start + target);
+      if (typeof breakAt === "function") {
+        const low = Math.ceil(Math.max(start + target * 0.75, height - (left - 1) * cap)),
+          high = Math.floor(Math.min(start + cap, start + target * 1.15, height - (left - 1)));
+        let found = null;
+        if (low <= high) try { found = breakAt(Math.min(high, Math.max(low, cut)), low, high); } catch { found = null; }
+        if (Number.isFinite(found) && found >= low && found <= high) cut = Math.round(found);
+      }
+      cut = Math.min(height - (left - 1), Math.max(start + 1, cut));
+      cuts.push(cut);
+      start = cut;
+    }
+    cuts.push(height);
+    return cuts;
+  }
+
+  // Page layout for a width x height pixel image. Each page lists its source
+  // rectangle, its embedded image size and its page size in PDF points.
+  function planPages(width, height, options = {}) {
+    const W = Math.round(width), H = Math.round(height);
+    if (!(W >= 1 && H >= 1 && W <= 1e6 && H <= 1e6)) throw RangeError("The PDF content size is invalid.");
+    const portrait = positive(options.maxPortraitAspect, MAX_PORTRAIT_ASPECT),
+      landscape = positive(options.maxLandscapeAspect, MAX_LANDSCAPE_ASPECT),
+      maxPages = Math.max(1, Math.floor(positive(options.maxPages, MAX_PAGES))),
+      // Large content is downsampled so all pages together stay within the pixel budget.
+      pixelScale = Math.min(1, Math.sqrt(positive(options.maxTotalPixels, MAX_TOTAL_PIXELS) / (W * H)));
+    let columns = 1, rows = 1;
+    if (W > H * landscape) columns = Math.min(maxPages, Math.ceil(W / (H * landscape)));
+    else if (H > W * portrait) rows = Math.min(maxPages, Math.ceil(H / (W * portrait)));
+    const xs = Array.from({ length:columns + 1 }, (_, index) => Math.round(index * W / columns)),
+      ys = rows > 1 ? rowCuts(H, Math.max(W * portrait, H / rows), rows, options.breakAt) : [0, H],
+      // Split pages share one orientation; a single page follows its own shape.
+      tall = rows > 1 || (columns === 1 && H >= W),
+      sheetWidth = tall ? A4_SHORT : A4_LONG, sheetHeight = tall ? A4_LONG : A4_SHORT,
+      rects = [];
+    for (let row = 0; row < ys.length - 1; row++) for (let column = 0; column < xs.length - 1; column++) {
+      rects.push({ sx:xs[column], sy:ys[row], sw:xs[column + 1] - xs[column], sh:ys[row + 1] - ys[row] });
+    }
+    let scale = positive(options.pointsPerPixel, POINTS_PER_CSS_PIXEL);
+    for (const rect of rects) scale = Math.min(scale, sheetWidth / rect.sw, sheetHeight / rect.sh);
+    const shortest = Math.min(...rects.map(rect => Math.min(rect.sw, rect.sh))),
+      longest = Math.max(...rects.map(rect => Math.max(rect.sw, rect.sh)));
+    scale = Math.min(Math.max(scale, MIN_PAGE_POINTS / shortest), MAX_PAGE_POINTS / longest);
+    return {
+      columns, rows, pointsPerPixel:scale, pixelScale,
+      pages:rects.map(rect => ({
+        ...rect,
+        width:Math.max(1, Math.round(rect.sw * pixelScale)),
+        height:Math.max(1, Math.round(rect.sh * pixelScale)),
+        pageWidth:Math.round(rect.sw * scale * 100) / 100,
+        pageHeight:Math.round(rect.sh * scale * 100) / 100,
+      })),
+    };
+  }
+
+  // The row nearest `preferred` with no edge within `radius` rows of it, in
+  // RGBA pixel data. A page cut there passes between lines of text.
+  function quietRow(data, width, height, preferred, options = {}) {
+    const tolerance = options.tolerance ?? 10, radius = options.radius ?? 2, stride = width * 4,
+      calm = new Uint8Array(height);
+    for (let y = 1; y < height; y++) {
+      let quiet = 1;
+      for (let index = y * stride, end = index + stride; index < end; index++) {
+        if (Math.abs(data[index] - data[index - stride]) > tolerance) { quiet = 0; break; }
+      }
+      calm[y] = quiet;
+    }
+    const clear = y => {
+      for (let row = y - radius; row <= y + radius; row++) if (row < 1 || row >= height || !calm[row]) return false;
+      return true;
+    };
+    const start = Math.max(0, Math.min(height - 1, Math.round(preferred)));
+    for (let distance = 0; start - distance >= 0 || start + distance < height; distance++) {
+      if (start - distance >= 0 && clear(start - distance)) return start - distance;
+      if (distance && start + distance < height && clear(start + distance)) return start + distance;
+    }
+    return null;
+  }
+
+  // Dimensions from a baseline or progressive JPEG's frame header.
+  function jpegInfo(bytes) {
+    if (!(bytes instanceof Uint8Array) || bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw Error("The PDF page image is not a JPEG.");
+    let offset = 2;
+    while (offset + 3 < bytes.length) {
+      if (bytes[offset] !== 0xff) break;
+      const marker = bytes[offset + 1];
+      if (marker === 0xff) { offset++; continue; }
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) { offset += 2; continue; }
+      if (marker === 0xd9 || marker === 0xda) break;
+      const length = bytes[offset + 2] << 8 | bytes[offset + 3];
+      if (length < 2) break;
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+        if (offset + 9 >= bytes.length) break;
+        const precision = bytes[offset + 4], height = bytes[offset + 5] << 8 | bytes[offset + 6],
+          width = bytes[offset + 7] << 8 | bytes[offset + 8], components = bytes[offset + 9];
+        if (marker > 0xc2 || precision !== 8 || !width || !height || ![1, 3].includes(components)) throw Error("The PDF page image uses an unsupported JPEG format.");
+        return { width, height, components };
+      }
+      offset += 2 + length;
+    }
+    throw Error("The PDF page image size could not be read.");
+  }
+
+  // UTF-16BE with a byte order mark: any title, no escaping.
+  function textString(value) {
+    let hex = "FEFF";
+    for (let index = 0; index < value.length; index++) hex += value.charCodeAt(index).toString(16).toUpperCase().padStart(4, "0");
+    return `<${hex}>`;
+  }
+  function pdfDate(date) {
+    const pad = value => String(value).padStart(2, "0");
+    return `D:${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+  }
+
+  // PDF bytes as Blob parts. pages: [{ width, height (points), image:{ data
+  // (JPEG Uint8Array or Blob), width, height, components } }]. Objects: 1
+  // catalog, 2 page tree, 3 info, then page, contents and image per page.
+  function documentParts(pages, options = {}) {
+    if (!Array.isArray(pages) || !pages.length || pages.length > 1000) throw RangeError("A PDF needs between 1 and 1000 pages.");
+    const encoder = new TextEncoder(), parts = [], offsets = [];
+    let length = 0;
+    const add = part => { parts.push(part); length += byteLength(part); },
+      text = value => add(encoder.encode(value)),
+      object = (id, body) => { offsets[id] = length; text(`${id} 0 obj\n${body}\nendobj\n`); },
+      stream = (id, dictionary, data) => {
+        offsets[id] = length;
+        text(`${id} 0 obj\n<< ${dictionary ? `${dictionary} ` : ""}/Length ${byteLength(data)} >>\nstream\n`);
+        add(data);
+        text("\nendstream\nendobj\n");
+      };
+    const title = typeof options.title === "string" ? options.title.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 200) : "",
+      created = options.created instanceof Date && Number.isFinite(options.created.getTime()) ? options.created : new Date();
+    for (const [index, page] of pages.entries()) {
+      const image = page?.image, data = image?.data;
+      if (![page?.width, page?.height].every(value => Number.isFinite(value) && value >= 1 && value <= MAX_PAGE_POINTS)) throw RangeError(`PDF page ${index + 1} has an invalid size.`);
+      if (![image?.width, image?.height].every(value => Number.isInteger(value) && value > 0 && value <= 65535) || ![1, 3].includes(image.components)
+        || !data || !(byteLength(data) > 0)) throw TypeError(`PDF page ${index + 1} has an invalid image.`);
+      if (data instanceof Uint8Array) {
+        const info = jpegInfo(data);
+        if (info.width !== image.width || info.height !== image.height || info.components !== image.components) throw TypeError(`PDF page ${index + 1} image does not match its JPEG data.`);
+      }
+    }
+    add(Uint8Array.from(HEADER));
+    object(1, `<< /Type /Catalog /Pages 2 0 R${title ? " /ViewerPreferences << /DisplayDocTitle true >>" : ""} >>`);
+    object(2, `<< /Type /Pages /Kids [${pages.map((_, index) => `${4 + index * 3} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+    object(3, `<< /Producer (PenEcho)${title ? ` /Title ${textString(title)}` : ""} /CreationDate (${pdfDate(created)}) >>`);
+    pages.forEach((page, index) => {
+      const id = 4 + index * 3, name = `/Im${index + 1}`, size = `${pdfNumber(page.width)} ${pdfNumber(page.height)}`;
+      object(id, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${size}] /Resources << /XObject << ${name} ${id + 2} 0 R >> /ProcSet [/PDF /ImageB /ImageC] >> /Contents ${id + 1} 0 R >>`);
+      stream(id + 1, "", encoder.encode(`q\n${pdfNumber(page.width)} 0 0 ${pdfNumber(page.height)} 0 0 cm\n${name} Do\nQ\n`));
+      stream(id + 2, `/Type /XObject /Subtype /Image /Width ${page.image.width} /Height ${page.image.height} /ColorSpace /${page.image.components === 1 ? "DeviceGray" : "DeviceRGB"} /BitsPerComponent 8 /Filter /DCTDecode`, page.image.data);
+    });
+    const size = 4 + pages.length * 3, xref = length;
+    // Each cross-reference entry is exactly 20 bytes.
+    text(`xref\n0 ${size}\n0000000000 65535 f\r\n${offsets.slice(1, size).map(offset => `${String(offset).padStart(10, "0")} 00000 n\r\n`).join("")}`
+      + `trailer\n<< /Size ${size} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return parts;
+  }
+  function documentBytes(pages, options = {}) {
+    const parts = documentParts(pages, options);
+    if (!parts.every(part => part instanceof Uint8Array)) throw TypeError("Blob page images need documentParts().");
+    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+    let offset = 0;
+    for (const part of parts) { bytes.set(part, offset); offset += part.byteLength; }
+    return bytes;
+  }
+
+  function encodeJpeg(canvas, quality) {
+    return new Promise((resolve, reject) => canvas.toBlob(blob => blob?.type === "image/jpeg" ? resolve(blob) : reject(Error("This browser could not encode a PDF page.")), "image/jpeg", quality));
+  }
+  // Finds quiet rows on a reduced copy of the band being searched.
+  function bandBreaker(source, width, document) {
+    return (preferred, low, high) => {
+      const rows = high - low + 1;
+      if (rows < 8) return null;
+      const bandWidth = Math.min(width, 1600), bandHeight = Math.min(rows, 1200), canvas = document.createElement("canvas");
+      canvas.width = bandWidth;
+      canvas.height = bandHeight;
+      try {
+        const context = canvas.getContext("2d", { willReadFrequently:true });
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, bandWidth, bandHeight);
+        context.drawImage(source, 0, low, width, rows, 0, 0, bandWidth, bandHeight);
+        const row = quietRow(context.getImageData(0, 0, bandWidth, bandHeight).data, bandWidth, bandHeight, (preferred - low) * bandHeight / rows);
+        return row === null ? null : low + Math.round(row * rows / bandHeight);
+      } catch {
+        return null;
+      } finally {
+        canvas.width = canvas.height = 1;
+      }
+    };
+  }
+  // A rendered image or canvas as a PDF Blob. options: pointsPerPixel (natural
+  // size), title, opaque (a fully painted canvas may be encoded directly).
+  async function fromImage(source, options = {}) {
+    const document = options.document || globalThis.document,
+      width = source?.naturalWidth || source?.width, height = source?.naturalHeight || source?.height,
+      quality = positive(options.quality, JPEG_QUALITY),
+      plan = planPages(width, height, { ...options, breakAt:options.breakAt === undefined ? bandBreaker(source, Math.round(width), document) : options.breakAt }),
+      pages = [];
+    for (const page of plan.pages) {
+      let blob;
+      if (options.opaque === true && plan.pages.length === 1 && page.width === width && page.height === height && typeof source.toBlob === "function") blob = await encodeJpeg(source, quality);
+      else {
+        const canvas = document.createElement("canvas");
+        canvas.width = page.width;
+        canvas.height = page.height;
+        try {
+          const context = canvas.getContext("2d");
+          context.fillStyle = "#fff";
+          context.fillRect(0, 0, page.width, page.height);
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = "high";
+          context.drawImage(source, page.sx, page.sy, page.sw, page.sh, 0, 0, page.width, page.height);
+          blob = await encodeJpeg(canvas, quality);
+        } finally {
+          canvas.width = canvas.height = 1;
+        }
+      }
+      let info;
+      try { info = jpegInfo(new Uint8Array(await blob.slice(0, 65536).arrayBuffer())); }
+      catch { info = jpegInfo(new Uint8Array(await blob.arrayBuffer())); }
+      if (info.width !== page.width || info.height !== page.height) throw Error("A PDF page image has an unexpected size.");
+      pages.push({ width:page.pageWidth, height:page.pageHeight, image:{ data:blob, ...info } });
+    }
+    return new Blob(documentParts(pages, { title:options.title }), { type:"application/pdf" });
+  }
+  function saveFile(blob, name, document = globalThis.document) {
+    const url = URL.createObjectURL(blob), link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    try {
+      document.body.append(link);
+      link.click();
+    } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+  }
+  function filename(title, fallback = "penecho") {
+    const name = String(title || "")
+      .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, "-")
+      .replace(/[.\s]+$/g, "")
+      .trim()
+      .slice(0, 120);
+    return `${name || fallback}.pdf`;
+  }
+
+  return Object.freeze({
+    MAX_PAGES, MAX_TOTAL_PIXELS, POINTS_PER_CSS_PIXEL,
+    planPages, quietRow, jpegInfo, documentParts, documentBytes, fromImage, save:saveFile, filename,
+  });
+})();
+if (typeof module === "object" && module.exports) module.exports = PenEchoPdf;
+"use strict";
 (() => {
   function peButton(element, type = "secondary", density = "standard") {
     if (!element) return element;
@@ -2373,8 +2657,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       tourNotesCardsBody: "Use Organize as Note on selected content, then save the result to Notes & Cards. Open More → Notes & cards, or Library → Notes & cards, to read, search and add saved notes to another canvas. Saved notes remain available independently of their original canvas.",
       tourAssistTitle: "Choose your next step with Assist",
       tourAssistBody: "Pause after writing or adding text and images to see suggested actions near your content. Choose an action, open More for other options, or use Ask to write your own question. You can also lasso existing content to get suggestions for that selection.",
+      tourCollaborateTitle: "Collaborate live",
+      tourCollaborateBody: "Invite people to draw on this Canvas with you. Everyone with the collaboration link edits the same Canvas at the same time.",
       tourShareCanvasTitle: "Share this Canvas",
-      tourShareCanvasBody: "Share creates a read-only link to the latest Cloud Canvas. Anyone with the link can see future saved changes. Choose Share publicly to appear on PenEcho after review.",
+      tourShareCanvasBody: "Share creates a view-only link to this Cloud Canvas. People with the link see your changes as they happen. Choose Share publicly to appear on PenEcho after review.",
       tourCloudTitle: "Keep private work in PenEcho Cloud",
       tourCloudBody: "Open Cloud to sign in, save and reopen private versioned Canvases by project, and use favorite Canvases or publicly shared Widgets in your current Canvas.",
       tourManualAITitle: "Run Auto AI on demand",
@@ -3122,6 +3408,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       savedErrorOpen: "This Canvas could not be opened.",
       savedErrorToggle: "The favorite could not be updated. Try again shortly.",
       closeSavedCrafts: "Close Favorites",
+      collaborateCanvasAction: "Collaborate",
+      collaborateCanvas: "Collaborate live",
       shareCanvasAction: "Share",
       shareCanvasCloud: "Share Canvas",
       sharedCanvasCloud: "Canvas shared",
@@ -3709,6 +3997,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       widgetDownloading: "Preparing Widget image…",
       widgetDownloaded: "Widget image downloaded",
       widgetDownloadFailed: "Widget image could not be downloaded",
+      downloadPdf: "Download PDF",
+      pdfPreparing: "Preparing PDF…",
+      pdfDownloaded: "PDF downloaded",
+      pdfFailed: "PDF could not be created",
       favoriteWidget: "Favorite widget",
       favoriteWidgetSaving: "Saving favorite…",
       unfavoriteWidget: "Remove widget favorite",
@@ -4173,6 +4465,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     { id: "core-lasso-v3", targets: ["#lassoToolBtn"], titleKey: "tourLassoTitle", bodyKey: "tourLassoBody", placement: "bottom", radius: 7 },
     { id: "core-image-v1", targets: ["#imagePickerBtn"], titleKey: "tourImageTitle", bodyKey: "tourImageBody", placement: "bottom", radius: 7 },
     { id: "core-fullscreen-v1", targets: ["#fullscreenBtn"], titleKey: "tourFullscreenTitle", bodyKey: "tourFullscreenBody", placement: "bottom", radius: 7 },
+    { id: "cloud-collaborate-v1", targets: ["#collaborateCanvasBtn"], titleKey: "tourCollaborateTitle", bodyKey: "tourCollaborateBody", placement: "bottom", radius: 7 },
     { id: "cloud-share-canvas-v1", targets: ["#shareCanvasBtn"], titleKey: "tourShareCanvasTitle", bodyKey: "tourShareCanvasBody", placement: "bottom", radius: 7 },
     { id: "cloud-workspace-v1", targets: ["#cloudAccountBtn"], titleKey: "tourCloudTitle", bodyKey: "tourCloudBody", placement: "bottom", radius: 8 },
     { id: "mcp-canvas-v1", targets: ["#mcpToolbarToggle"], titleKey: "tourMcpTitle", bodyKey: "tourMcpBody", placement: "bottom", radius: 8, padding: 4 },
@@ -11915,6 +12208,30 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       .slice(0, 120);
     return `${title || "penecho-widget"}.png`;
   }
+  // A PDF of the complete Widget content. A note card renders from its note
+  // source, so the whole note is included, not only what fits on the card.
+  async function downloadWidgetPdf(widget) {
+    if (!widget || widget.pdfBusy) return false;
+    widget.pdfBusy = true;
+    syncObjectChrome();
+    setStatusKey("pdfPreparing");
+    try {
+      const note = typeof noteCardWidget === "function" && noteCardWidget(widget) ? noteCardSource(widget) : null,
+        snapshot = note ? await noteCardPdfSnapshot(note) : await requestWidgetSnapshot(widget, WIDGET_SNAPSHOT_TIMEOUT_MS, true, null, true, true),
+        pixels = snapshot?.image?.naturalWidth || snapshot?.image?.width;
+      if (!pixels) throw Error(t("widgetExportFailed"));
+      const blob = await PenEchoPdf.fromImage(snapshot.image, { title:widget.title || "", pointsPerPixel:snapshot.contentWidth > 0 ? PenEchoPdf.POINTS_PER_CSS_PIXEL * snapshot.contentWidth / pixels : undefined });
+      PenEchoPdf.save(blob, PenEchoPdf.filename(widget.title, "penecho-widget"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("pdfFailed")}: ${String(error?.message || error)}`);
+      return false;
+    } finally {
+      widget.pdfBusy = false;
+      syncObjectChrome();
+    }
+  }
   async function downloadWidgetImage(widget) {
     if (!widget || widget.downloadBusy) return false;
     widget.downloadBusy = true;
@@ -12031,6 +12348,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     echo:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
     share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/></svg>',
     download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v5h14v-5"/></svg>',
+    downloadpdf:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M12 10v7M9 14l3 3 3-3"/></svg>',
     notecategory:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5 11 5h8.5v8.5L12 21Z"/><circle cx="15.5" cy="9" r="1.6"/></svg>',
     notebookmark:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11v17L12 16.6l-5.5 3.9Z"/></svg>',
     notelibrary:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="7" height="9.5" rx="1.6"/><rect x="13.5" y="4.5" width="7" height="9.5" rx="1.6"/><path d="M3.5 18h17M3.5 21h11"/></svg>',
@@ -12156,11 +12474,19 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       iconOnly:true,
       busy:widget.downloadBusy === true,
       activate:() => void downloadWidgetImage(widget),
+    }, {
+      key:`widget:${widget.id}:tool-download-pdf`,
+      kind:"downloadpdf",
+      label:t("downloadPdf"),
+      baseWidth:28,
+      iconOnly:true,
+      busy:widget.pdfBusy === true,
+      activate:() => void downloadWidgetPdf(widget),
     });
     if (options.objectToolbarKey && !widget.pending) {
       if (typeof noteCardWidget === "function" && noteCardWidget(widget)) items.push(...noteCardToolbarItems(widget));
       items.push({key:`widget:${widget.id}:delete`, kind:"delete", label:t("widgetDelete"), baseWidth:28, iconOnly:true, activate:() => deleteWidget(widget)});
-      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "delete"];
+      const order = ["interact", "suggest", "refine", "notecategory", "notebookmark", "notelibrary", "favorite", "copy", "echo", "share", "download", "downloadpdf", "delete"];
       items.sort((a,b) => order.indexOf(a.kind)-order.indexOf(b.kind));
     }
     if (!items.length) return;
@@ -12419,6 +12745,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (kind === "favorite") return window.PenEchoCommunityUI?.label?.("favoriteWidget") || "Favorite Widget";
     if (kind === "share") return window.PenEchoCommunityUI?.label?.("shareWidget") || "Share Widget";
     if (kind === "download") return t("downloadWidget");
+    if (kind === "downloadpdf") return t("downloadPdf");
     return t("hand");
   }
   // The Refine panel replaces the former yes/no confirmation. It drops down
@@ -13076,6 +13403,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     positionImageSelectionMaterial();
     syncObjectChrome();
     syncWidgetInteractionStatus();
+    if (typeof liveCanvasPositionPresence === "function") liveCanvasPositionPresence();
   }
   function clientPoint(e) {
     const point = canvasClientPosition(e.clientX, e.clientY);
@@ -14540,6 +14868,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return cloudCanvasProjects.find((project) => project.systemKey === "uncategorized")?.id || cloudCanvasProjects[0]?.id || null;
   }
   function selectedCloudSaveProjectId() {
+    // A folder page saves into its folder's project (a guest's, or a signed-out app's, stays with its page).
+    if (window.PENECHO_CONFIG?.folderProject?.localProjectId) return window.PENECHO_CONFIG.folderProject.localProjectId;
+    const folderProject = window.PENECHO_CONFIG?.folderProject?.cloudProjectId || window.PENECHO_CONFIG?.folderProject?.guestProjectId;
+    if (folderProject !== CLOUD_ALL_PROJECTS_ID && validCloudProjectSelection(folderProject)) return folderProject;
     return selectedCloudProjectId === CLOUD_ALL_PROJECTS_ID ? cloudDefaultProjectId() : selectedCloudProjectId;
   }
   function snapshotLocationLabel(location = state.snapshotLocation) {
@@ -14766,6 +15098,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   async function saveCurrentCanvas() {
+    // A folder project page saves the way its autosave does, merging a newer save first.
+    if (window.PenEchoFolderProject?.enabled()) return window.PenEchoFolderProject.saveNow();
     if (snapshotSaveInProgress) return;
     // Every guest save entry (button, Mod+S, menu) resumes the save after sign-in.
     if(window.PENECHO_CONFIG?.guestCanvas){await window.PenEchoBrowserDraft?.signIn({ intent:"save" });return;}
@@ -15144,7 +15478,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       bottom = Math.ceil(ink.y + ink.h) + TILE;
     return { x, y, w: right - x, h: bottom - y };
   }
-  async function renderExportCanvas(selected = null, assertCurrent = null) {
+  async function renderExportCanvas(selected = null, assertCurrent = null, maxPixels = EXPORT_MAX_PIXELS) {
     const region = selected ? { ...selected.box } : exportRegion();
     if (!region) return null;
     // Only Widgets that the lasso itself touches contribute pixels. Lasso
@@ -15154,8 +15488,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!prepared.complete) throw widgetSnapshotsUnavailableError(prepared);
     if (prepared.failures.length) debug("widget-export-cached", { error:String(prepared.failures[0]?.message || prepared.failures[0]).slice(0, 300) });
     assertCurrent?.();
-    const scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h))),
-      canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
+    let scale = Math.min(CANVAS_DOWNLOAD_RESOLUTION_SCALE, EXPORT_MAX_DIMENSION / region.w, EXPORT_MAX_DIMENSION / region.h, Math.sqrt(EXPORT_MAX_PIXELS / (region.w * region.h)));
+    // A smaller pixel budget (Download PDF) renders less instead of downsampling later.
+    scale = Math.min(scale, Math.sqrt(maxPixels / (region.w * region.h)));
+    const canvas = offscreen(Math.max(1, Math.ceil(region.w * scale)), Math.max(1, Math.ceil(region.h * scale))),
       context = canvas.getContext("2d");
     const captureTime = performance.now();
     context.imageSmoothingEnabled = true;
@@ -15223,6 +15559,32 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       setStatusKey("exportComplete");
     } catch (error) {
       setStatus(`${t("exportError")}${error.message}`);
+    } finally {
+      if (canvas) canvas.width = canvas.height = 1;
+      for (const button of buttons) button.disabled = false;
+    }
+  }
+  // The PNG export's rendering, within the PDF pixel budget, split into pages.
+  // #exportPdfBtn runs it; other surfaces may click that control or call this.
+  async function exportCanvasPdf() {
+    const buttons = [document.querySelector("#exportPdfBtn"), document.querySelector("#exportPngBtn"), canvasViewDownloadButton].filter(Boolean);
+    if (buttons.some(button => button.disabled)) return false;
+    for (const button of buttons) button.disabled = true;
+    let canvas = null;
+    try {
+      setStatusKey("pdfPreparing");
+      canvas = await renderExportCanvas(null, null, PenEchoPdf.MAX_TOTAL_PIXELS);
+      if (!canvas) {
+        setStatusKey("emptyCanvas");
+        return false;
+      }
+      const blob = await PenEchoPdf.fromImage(canvas, { opaque:true, pointsPerPixel:PenEchoPdf.POINTS_PER_CSS_PIXEL / CANVAS_DOWNLOAD_RESOLUTION_SCALE, title:currentCanvasDisplayName() || "" });
+      PenEchoPdf.save(blob, exportFilename().replace(/\.png$/, ".pdf"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      setStatus(`${t("pdfFailed")}: ${String(error?.message || error)}`);
+      return false;
     } finally {
       if (canvas) canvas.width = canvas.height = 1;
       for (const button of buttons) button.disabled = false;
@@ -15433,9 +15795,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
   }
   function snapshotCanvasObjectExtensions() {
-    return { ...snapshotExtensionObject(state.currentSnapshotBundleExtensions), penechoObjectOrder:{
+    const { penechoLive, ...extensions } = snapshotExtensionObject(state.currentSnapshotBundleExtensions);
+    return { ...extensions, penechoObjectOrder:{
       version:1, frontKind:state.frontCanvasObjectKind, placedKind:state.frontPlacedCanvasObjectKind,
-    } };
+    }, ...(typeof liveCanvasSaveExtension === "function" ? liveCanvasSaveExtension() : {}) };
   }
   function restoreSnapshotCanvasObjectOrder(extensions) {
     const order = extensions?.penechoObjectOrder;
@@ -15575,7 +15938,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   // tool keep the restored objects read-only while fitViewerCanvas() frames
   // the complete artifact instead of its publishing-time pan/zoom.
   async function viewCommunityCanvasArtifact(artifact) {
-    if (window.PENECHO_CONFIG?.runtime !== "viewer") throw Error("Read-only Canvas viewing is unavailable in this runtime.");
+    if (window.PENECHO_CONFIG?.runtime !== "viewer" && !window.PENECHO_CONFIG?.liveShare) throw Error("Read-only Canvas viewing is unavailable in this runtime.");
     const parsed = await readSnapshotBundle(artifact),
       { item, tileEntries } = parsed,
       loadGeneration = ++state.snapshotLoadGeneration,
@@ -15713,29 +16076,50 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     });
     await snapshotApiResponse(response);
   }
-  async function saveCloudSnapshot(item, tileEntries, overwriteId) {
-    const bundle = await serverSnapshotPayload(item, tileEntries);
+  // A guest's folder project, and a signed-out app's, keep their Canvases with
+  // the folder page's server, not in a Cloud library.
+  function folderPageCanvasPath(id = "") {
+    const config = window.PENECHO_CONFIG || {};
+    return (config.folderProject?.guest || config.folderProject?.localProjectId) && config.browserDraftId ? `/api/v1/mcp/workspaces/${encodeURIComponent(config.browserDraftId)}/project/canvases${id ? `/${encodeURIComponent(id)}` : ""}` : "";
+  }
+  async function saveCloudSnapshot(item, tileEntries, overwriteId, options) {
+    const bundle = await serverSnapshotPayload(item, tileEntries), { baseRevisionId:knownBase, replace = false } = options || {};
     if (overwriteId) {
-      const existing = snapshotItems.find((entry) => entry.id === overwriteId),
-        baseRevisionId = existing?.currentRevisionId || state.currentSnapshotRevisionId || null,
-        response = await fetch(`/api/cloud/canvases/${encodeURIComponent(overwriteId)}/save`, {
+      const post = (baseRevisionId) => fetch(folderPageCanvasPath(overwriteId) ? `${folderPageCanvasPath(overwriteId)}/save` : `/api/cloud/canvases/${encodeURIComponent(overwriteId)}/save`, {
           method:"POST",
           credentials:"same-origin",
           headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
-          body:JSON.stringify({ baseRevisionId, bundle }),
-        }),
-        body = await snapshotApiResponse(response).catch(async (error) => {
-          if (error.status === 409) {
-            await refreshSnapshots();
-            throw Error(t("cloudCanvasConflict"));
-          }
-          throw error;
+          body:JSON.stringify({ baseRevisionId, bundle, ...(replace ? { replace:true } : {}) }),
         });
+      // A folder project's autosave names the save its changes start from; a
+      // newer save from another page comes back as a conflict to merge.
+      if (knownBase) {
+        const body = await snapshotApiResponse(await post(knownBase)).catch((error) => {
+          throw error.status === 409 ? Object.assign(Error(t("cloudCanvasConflict")), { code:"revision_conflict", status:409 }) : error;
+        });
+        return { id:overwriteId, revisionId:body?.revision?.id || null };
+      }
+      const existing = snapshotItems.find((entry) => entry.id === overwriteId);
+      let retried = false;
+      const attempt = async (baseRevisionId) => snapshotApiResponse(await post(baseRevisionId)).catch(async (error) => {
+        if (error.status === 409) {
+          await refreshSnapshots();
+          // Another live copy saved first. Live copies converge, so save on top of it once.
+          const latest = snapshotItems.find((entry) => entry.id === overwriteId)?.currentRevisionId;
+          if (!retried && latest && typeof liveCanvas === "object" && liveCanvas.target?.canvas === overwriteId && liveCanvas.status === "live") {
+            retried = true;
+            return attempt(latest);
+          }
+          throw Error(t("cloudCanvasConflict"));
+        }
+        throw error;
+      });
+      const body = await attempt(existing?.currentRevisionId || state.currentSnapshotRevisionId || null);
       return { id:overwriteId, revisionId:body?.revision?.id || null };
     }
     const projectId = item.projectId || selectedCloudSaveProjectId();
     if (!projectId) throw Error(t("snapshotLibraryLoadFailed").replace("{location}", snapshotLocationLabel("cloud")));
-    const response = await fetch(`/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
+    const response = await fetch(folderPageCanvasPath() || `/api/cloud/projects/${encodeURIComponent(projectId)}/save`, {
         method:"POST",
         credentials:"same-origin",
         headers:authenticatedApiHeaders({ "Content-Type":"application/json" }),
@@ -15745,7 +16129,10 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     if (!body?.canvas?.id || !body?.revision?.id) throw Error("PenEcho Cloud returned an invalid save confirmation");
     return { id:body.canvas.id, revisionId:body.revision.id };
   }
-  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation, allowEmpty = false } = {}) {
+  // autosave: { quiet } neither announces the save nor reloads the Library;
+  // { baseRevisionId, replace } save on top of a known Cloud save, replacing it.
+  async function saveSnapshot({ overwriteId = null, name = null, location = state.snapshotLocation, allowEmpty = false } = {}, autosave) {
+    const { quiet = false, baseRevisionId, replace = false } = autosave || {};
     if (selectionAIBusy()) {
       setStatusKey(selectionAIStatusKey());
       return null;
@@ -15762,7 +16149,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     // Every new Cloud save resolves its destination here. Deep links skip the
     // Library prefetch, and title/close/copy saves may never open the Library.
     // Fetch after any storage switch so it cannot clear the resolved projects.
-    if (location === "cloud" && !overwriteId) await cloudSnapshotItems();
+    if (location === "cloud" && !overwriteId && !(quiet && (window.PENECHO_CONFIG?.folderProject?.cloudProjectId || window.PENECHO_CONFIG?.folderProject?.guestProjectId || window.PENECHO_CONFIG?.folderProject?.localProjectId))) await cloudSnapshotItems();
     // Widget source is authoritative; preview failure must not prevent saving it.
     await prepareVisibleWidgetSnapshots(null, true);
     const savedUserRevision = state.userRevision,
@@ -15818,7 +16205,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       storedRevisionId = null;
     if (location === "server") await saveServerSnapshot(item, tileEntries, overwriteId);
     else if (location === "cloud") {
-      const saved = await saveCloudSnapshot(item, tileEntries, overwriteId);
+      const saved = await saveCloudSnapshot(item, tileEntries, overwriteId, { baseRevisionId, replace });
       storedId = saved.id;
       storedRevisionId = saved.revisionId;
     } else await saveDeviceSnapshot(item, tileEntries, overwriteId);
@@ -15836,10 +16223,16 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.snapshotSavedRevision = savedUserRevision;
     if(typeof canvasDocumentsDidSave==="function")await canvasDocumentsDidSave(item,location,storedId,tileEntries,savedRecoveryCommitVersion);
     canvasAgentCanvasDidPersist(location, storedId);
-    await refreshSnapshots();
-    window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
-    setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
+    if (quiet) {
+      const listed = snapshotItems.find((entry) => entry.id === storedId);
+      if (listed) Object.assign(listed, { name:item.name, updatedAt:item.updatedAt, currentRevisionId:storedRevisionId });
+    } else {
+      await refreshSnapshots();
+      window.PenEchoStudioNavigator?.refreshSource?.(location, { force:true });
+      setStatusKey(overwriteId ? "snapshotOverwritten" : "snapshotSaved");
+    }
     window.PenEchoStudioNavigator?.updateDocument?.();
+    if (typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("penecho:canvas-saved", { detail:{ location, id:storedId, projectId:item.projectId || null } }));
     window.dispatchEvent(new Event("penecho:live-share-context-changed"));
     return storedId;
   }
@@ -15930,7 +16323,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     } else early?.cancel();
     // Only a network rejection of the early request retries here. HTTP failures
     // keep their response and follow the existing authorization/error handling.
-    if (!response) response = await fetch(`/api/cloud/canvases/${encodeURIComponent(id)}`, {
+    if (!response) response = await fetch(folderPageCanvasPath(id) || `/api/cloud/canvases/${encodeURIComponent(id)}`, {
         credentials:"same-origin",
         cache:"no-store",
         headers:authenticatedApiHeaders(),
@@ -16379,13 +16772,24 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
   }
   async function saveLiveShareToCloud(widgetId = null) {
     await finalizeCanvasForSnapshot();
-    if (!widgetId && !canvasHasShareableContent()) throw Error(t("emptyCanvas"));
+    // An empty Canvas can be shared or opened for collaboration and filled in live.
     const currentId = state.currentSnapshotLocation === "cloud" ? state.currentSnapshotId : null;
     if (currentId && !widgetId && !canvasHasUnsavedChanges()) return currentId;
     setSnapshotLocation("cloud", { refresh:false });
     const id = await saveSnapshot({ location:"cloud", overwriteId:currentId, name:currentCanvasDisplayName(), allowEmpty:true });
     if (!id) throw Error("The Canvas could not be saved to Cloud.");
     return id;
+  }
+  // This Canvas as it is now, to start a link Canvas from it without an account.
+  async function liveLinkCanvasBundle() {
+    await finalizeCanvasForSnapshot();
+    const stamp = Date.now(), tileEntries = await Promise.all([...tiles].map(async ([k, canvas]) => ({ k, blob:await canvasBlob(canvas) })));
+    return serverSnapshotPayload({
+      version:2, id:`link-${crypto.randomUUID?.() || stamp}`, createdAt:stamp, updatedAt:stamp, name:currentCanvasDisplayName(), projectId:null, theme:state.theme,
+      view:{ scale:state.scale, panX:state.panX, panY:state.panY, navigationLocked:state.navigationLocked },
+      animations:serializedAnimations(), widgets:serializedWidgets(), textBoxes:storedTextBoxes(), images:storedImages(), preview:await snapshotPreviewBlob(),
+      bundleExtensions:snapshotCanvasObjectExtensions(), manifestExtensions:{},
+    }, tileEntries);
   }
   function canvasHasShareableContent() {
     return Boolean(tiles.size || state.images.length || state.textBoxes.length || state.preservedSnapshotAnimations.length || (pluginEnabled("animation") && state.animations.length) || visibleWidgets().length);
@@ -17952,7 +18356,9 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     const coalesced = options?.coalesceWidgetsInto;
     if (coalesced && state.history.at(-1) === coalesced && !state.future.length && state.widgetHistoryBefore
       && !state.historyBefore.size && !state.animationHistoryBefore && !state.imageHistoryBefore && !state.textBoxHistoryBefore) {
+      const previousWidgets = coalesced.widgetsAfter;
       coalesced.widgetsAfter = serializedWidgets();
+      if (typeof liveCanvasCaptureWidgets === "function") liveCanvasCaptureWidgets(previousWidgets, coalesced.widgetsAfter);
       state.widgetHistoryBefore = null;
       state.dirtyHistoryBefore = null;
       if (typeof refreshDirtyHistoryAfter === "function") refreshDirtyHistoryAfter(coalesced);
@@ -18004,6 +18410,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     state.textBoxHistoryBefore = null;
     if (state.history.length > MAX_HISTORY) state.history.shift();
     state.future = [];
+    if (typeof liveCanvasCapture === "function") liveCanvasCapture(entry);
     updateHistoryButtons();
     window.PenEchoStudioNavigator?.updateDocument?.();
     if (typeof canvasDocumentsScheduleDraft === "function") canvasDocumentsScheduleDraft();
@@ -18016,7 +18423,8 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     return canvasAgentDidCommitUserCanvasChange(save(options), { allowAutoHide:canvasSnapshotFinalizationDepth === 0 });
   }
   function applyHistory(entry, side, fallbackDirty = null) {
-    const changes = Array.isArray(entry) ? entry : entry?.tiles || [];
+    const live = typeof liveCanvasApplyHistory === "function" ? liveCanvasApplyHistory(entry, side) : null;
+    const changes = live ? [] : Array.isArray(entry) ? entry : entry?.tiles || [];
     for (const change of changes) {
       const value = change[side];
       if (value) tiles.set(change.k, cloneCanvas(value));
@@ -18025,12 +18433,13 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     }
     const animationState = !Array.isArray(entry) ? entry?.[side === "before" ? "animationsBefore" : "animationsAfter"] : null;
     if (animationState) restoreAnimations(animationState);
-    let objectsRestored = entry?.objectScope ? canvasHistoryRestoreObjects(entry,side) : null;
-    const widgetState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
+    const wholeLists = !Array.isArray(entry) && !entry?.objectScope && !live;
+    let objectsRestored = live ? live.objects : entry?.objectScope ? canvasHistoryRestoreObjects(entry,side) : null;
+    const widgetState = wholeLists ? entry?.[side === "before" ? "widgetsBefore" : "widgetsAfter"] : null;
     if (widgetState) restoreWidgets(widgetState);
-    const imageState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
+    const imageState = wholeLists ? entry?.[side === "before" ? "imagesBefore" : "imagesAfter"] : null;
     if (imageState) restoreImages(imageState);
-    const textBoxState = !Array.isArray(entry)&&!entry?.objectScope ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
+    const textBoxState = wholeLists ? entry?.[side === "before" ? "textBoxesBefore" : "textBoxesAfter"] : null;
     if (textBoxState) objectsRestored = restoreTextBoxes(textBoxState);
     restorePendingHistoryState(entry, side);
     const dirty = entry?.[side === "before" ? "dirtyBefore" : "dirtyAfter"] || fallbackDirty;
@@ -26413,7 +26822,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       catch(error){throw canvasAgentToolError("INVALID_NOTE_CARD",String(error?.message||error));}
     });
     const requested={widget:items.filter(item=>item?.type === "widget").length,text:items.filter(item=>item?.type === "text").length,image:items.filter(item=>["image","plot"].includes(item?.type)).length};
-    if(state.widgets.length+requested.widget>MAX_VISIBLE_WIDGETS||state.textBoxes.length+requested.text>MAX_VISIBLE_TEXT_BOXES||state.images.length+requested.image>MAX_VISIBLE_IMAGES)throw canvasAgentToolError("OBJECT_LIMIT","This transaction would exceed a visible canvas object limit.",{requested});
+    if(state.widgets.length+requested.widget>MAX_VISIBLE_WIDGETS||state.textBoxes.length+requested.text>MAX_VISIBLE_TEXT_BOXES||state.images.length+requested.image>MAX_VISIBLE_IMAGES)throw canvasAgentToolError("OBJECT_LIMIT","This Canvas is full. Continue on a new Canvas, or remove unused objects first.",{requested});
     if (!state.pluginCatalogLoaded) await loadPluginDocuments();
     const visible=viewportRect() || {x:SIZE/2-800,y:SIZE/2-600,w:1600,h:1200}, prepared=[],reserved=[];
     for (const raw of items) {
@@ -27592,7 +28001,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
       if(!record)throw Error('Canvas rejected the drawing geometry.');records.push({kind:item.kind,record,object});elements.set(item.id,{objectId:record.id,kind:item.kind,...(item.source?{source:item.source}:{}),...(item.renderKey?{renderKey:item.renderKey}:{})});
     }
     const removed=new Set([...old].filter(([id])=>!elements.has(id)).map(([,value])=>value.objectId));
-    for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('Canvas object limit reached. Remove unused objects before drawing.');
+    for(const [kind,key,max] of [['text','textBoxes',MAX_VISIBLE_TEXT_BOXES],['image','images',MAX_VISIBLE_IMAGES]])if(state[key].filter(item=>!removed.has(item.id)).length+records.filter(item=>item.kind===kind&&!item.object).length>max)throw Error('This Canvas is full. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or remove unused objects first.');
     // Prepare fully before one synchronous history transaction; never mark AI output as user feedback.
     if(textExecution?.kind==="mcp")state.nextTextBoxId=Math.max(state.nextTextBoxId,textExecution.nextTextBoxId);
     const restoreMutation=canvasAgentBeginMutation(execution,[...old.values()].map(item=>item.objectId));try {
@@ -28120,7 +28529,7 @@ User writes “我需要根据地点, 显示空气质量”, names a place, and 
     for(let column=0;column+width<=SIZE;column+=width+gap)columns.add(column);
     columns.add(SIZE-width);
     for(const column of columns){const slot=findSlot(column,0);if(slot)return slot;}
-    throw Error("No clear space remains for this work. Move the group or use another Canvas.");
+    throw Error("No clear space remains on this Canvas. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or move existing work.");
   }
   function mcpReadingWorldRect(doc=null) {
     const {stage,scale,panX,panY}=mcpPresentationViewport(doc);
@@ -28618,7 +29027,7 @@ Install a small PenEcho bootstrap skill in this Agent's supported local skill fo
       if(window.PENECHO_CONFIG?.browserDraftId&&[4001,4401].includes(event?.code)){
         mcpDisconnect();mcpRuntime.authRequired=false;mcpRuntime.connectionLost=true;
         mcpRuntime.connectionNotice=event.code===4001?"workspaceReplaced":"workspaceAccessRequired";
-        setStatus(mcpConnectionNotice());mcpRenderSettings();return;
+        setStatus(mcpConnectionNotice());mcpRenderSettings();window.PenEchoCompanionCanvases?.changed?.();return;
       }
       if(window.PENECHO_CONFIG?.runtime==="cloud"&&event?.code===4401){mcpDisconnect();mcpRuntime.authRequired=true;mcpRuntime.connectionLost=true;setStatus(mcpText("cloudSignInRequired"));mcpRenderSettings();return;}
       mcpDisconnect(true);
@@ -29816,6 +30225,140 @@ var canvasDocumentIdentity = (() => {
     parsePath,
   };
 })();
+  // Merging a newer save keeps both pages' edits. What this page changed since
+  // the save it started from (its base) is laid over the newer save: the pixels
+  // it changed, the object fields it changed, the objects it added or removed.
+  // Everything else comes from the newer save; where both changed the same
+  // pixel or field, this page's change wins. Without a known base nothing is
+  // removed: the newer save keeps all it has, and this page's ink and objects
+  // are laid over it.
+  const CANVAS_MERGE_KINDS = ["widgets", "images", "textBoxes"];
+  const CANVAS_MERGE_PREFIX = { widgets:"widget", images:"image", textBoxes:"text-box" };
+  // Which document this is and its agent sessions belong to this page's copy.
+  const CANVAS_MERGE_OWN_EXTENSIONS = new Set(["penechoDocument", "penechoWorkspace", "penechoObjectOrder"]);
+  function canvasMergeOps() {
+    const ops = typeof window === "object" ? window.PENECHO_LIVE_OPS : null;
+    if (!ops) throw Error("PenEcho could not load its merge rules. Reload the page.");
+    return ops;
+  }
+  function canvasMergeObjects(kind, base, local, remote) {
+    const ops = canvasMergeOps(), blobs = new Map(), keys = new Map(), known = Array.isArray(base);
+    // Images compare by the identity of their bytes, as live changes do.
+    const wire = item => {
+      if (kind === "images") {
+        const { blob, image, ...rest } = item;
+        if (!(blob instanceof Blob)) return { ...rest, src:rest.src || "" };
+        if (!keys.has(blob)) { keys.set(blob, `blob:${keys.size + 1}`); blobs.set(keys.get(blob), blob); }
+        return { ...rest, src:keys.get(blob) };
+      }
+      if (kind === "textBoxes") { const { image, ...rest } = item; return rest; }
+      return item;
+    };
+    const stored = value => kind === "images" ? (({ src, ...rest }) => ({ ...rest, blob:blobs.get(src) }))(value) : value;
+    // Each copy names image bytes differently, so a shared object compares without them.
+    const same = (a, b) => ops.equal(...[a, b].map(item => kind === "images" ? (({ src, ...rest }) => rest)(wire(item)) : wire(item)));
+    const baseIds = new Set((base || []).map(item => item.id)), localById = new Map(local.map(item => [item.id, item]));
+    const merged = new Map(remote.map(item => [item.id, item])), order = remote.map(item => item.id), renamed = new Map();
+    const changes = ops.diffObjects(kind, (base || []).map(wire), local.map(wire));
+    let next = 1 + Math.max(0, ...[...(base || []), ...local, ...remote].map(item => Number(/-(\d+)$/.exec(item.id)?.[1]) || 0)), changed = false;
+    for (const change of changes) {
+      if (change.t !== "obj") continue;
+      let id = change.id;
+      if (change.put && known && merged.has(id) && !baseIds.has(id)) {
+        // The newer save already holds this very object (a live change, or this
+        // page's own save whose answer was lost); otherwise both pages added an
+        // object under the same number, and this page's gets a new one.
+        if (same(merged.get(id), localById.get(id))) continue;
+        renamed.set(change.id, id = `${CANVAS_MERGE_PREFIX[kind]}-${next++}`);
+      }
+      const current = merged.get(id), result = ops.applyObjectOp(current ? wire(current) : null, change.put ? { ...change, id, put:{ ...change.put, id } } : { ...change, id });
+      if (result === undefined) continue;
+      changed = true;
+      if (result === null) { merged.delete(id); continue; }
+      merged.set(id, stored(result));
+      if (!order.includes(id)) order.push(id);
+    }
+    const present = order.filter(id => merged.has(id)), reorder = changes.find(change => change.t === "order");
+    const ids = reorder ? ops.applyOrder(present, reorder.ids.map(id => renamed.get(id) || id)) : present;
+    // Changed only if the newer save did not already hold all of this page's changes.
+    return { list:ids.map(id => merged.get(id)), changed:changed || ids.join("\n") !== remote.map(item => item.id).join("\n") };
+  }
+  // pixels(source) reads one tile, a stored { blob }, a { canvas } or { pixels },
+  // as RGBA bytes. Merged tiles come back as { pixels }; the others keep the
+  // newer save's own entry.
+  async function canvasMergeTiles({ base, local, remote, pixels }) {
+    const ops = canvasMergeOps(), size = ops.TILE * ops.TILE * 4, empty = new Uint8ClampedArray(size), merged = new Map(remote);
+    let changed = false;
+    for (const k of new Set([...(base?.keys() || []), ...local.keys()])) {
+      const from = base?.get(k), to = local.get(k);
+      if (from?.blob && from.blob === to?.blob) continue;
+      const before = base ? (from ? await pixels(from) : empty) : null, after = to ? await pixels(to) : empty;
+      const target = remote.get(k), out = target ? Uint8ClampedArray.from(await pixels(target)) : new Uint8ClampedArray(size);
+      let mine = false;
+      for (let i = 0; i < size; i += 4) {
+        // Faint edge pixels round differently after a save, so nearly equal is unchanged.
+        if (before ? ops.closePixel(before, i, after, i) : after[i + 3] === 0) continue;
+        if (ops.closePixel(out, i, after, i)) continue;
+        mine = true;
+        out[i] = after[i]; out[i + 1] = after[i + 1]; out[i + 2] = after[i + 2]; out[i + 3] = after[i + 3];
+      }
+      // Nothing of this page's in this tile, or the newer save holds it already.
+      if (!mine) continue;
+      changed = true;
+      let ink = false;
+      for (let i = 3; i < size && !ink; i += 4) ink = out[i] > 0;
+      if (ink) merged.set(k, { pixels:out });
+      else merged.delete(k);
+    }
+    return { tiles:merged, changed };
+  }
+  function canvasMergeItem(base, local, remote, objects) {
+    const ops = canvasMergeOps(), mine = field => base ? !ops.equal(base[field], local[field]) : local[field] !== undefined;
+    const pick = field => mine(field) ? local[field] : remote[field];
+    const own = Object.entries(local.bundleExtensions || {}).filter(([key]) => CANVAS_MERGE_OWN_EXTENSIONS.has(key));
+    return {
+      item:{ ...remote, ...objects, name:pick("name"), theme:pick("theme"), animations:pick("animations"), manifestExtensions:pick("manifestExtensions"),
+        preservedAssets:pick("preservedAssets"), view:local.view || remote.view, bundleExtensions:{ ...(remote.bundleExtensions || {}), ...Object.fromEntries(own) } },
+      changed:["name", "theme", "animations", "manifestExtensions"].some(field => base && mine(field)),
+    };
+  }
+  // base, local and remote are { item, tiles }, tiles a Map from tile key to its
+  // source. base is null when this page no longer knows what it started from.
+  async function canvasMergeSaves({ base, local, remote, pixels }) {
+    const objects = {};
+    let changed = false;
+    for (const kind of CANVAS_MERGE_KINDS) {
+      const result = canvasMergeObjects(kind, base ? base.item[kind] || [] : null, local.item[kind] || [], remote.item[kind] || []);
+      objects[kind] = result.list;
+      changed ||= result.changed;
+    }
+    const tiles = await canvasMergeTiles({ base:base?.tiles || null, local:local.tiles, remote:remote.tiles, pixels }), item = canvasMergeItem(base?.item || null, local.item, remote.item, objects);
+    return { item:item.item, tiles:tiles.tiles, changed:changed || tiles.changed || item.changed };
+  }
+  const canvasMergeTileMap = entries => new Map((entries || []).map(entry => [entry.k, entry]));
+  async function canvasMergePixels(source) {
+    if (source.pixels) return source.pixels;
+    let canvas = source.canvas;
+    if (!canvas) {
+      const image = await imageFromBlob(source.blob);
+      canvas = offscreen(TILE, TILE);
+      canvas.getContext("2d").drawImage(image, 0, 0);
+      image.close?.();
+    }
+    return canvas.getContext("2d", { willReadFrequently:true }).getImageData(0, 0, TILE, TILE).data;
+  }
+  // A merge result as a stored copy: tiles this page changed are encoded again.
+  async function canvasMergeStored(result) {
+    const tileEntries = await Promise.all([...result.tiles].map(async ([k, source]) => {
+      if (!source.pixels) return { k, blob:source.blob };
+      const canvas = offscreen(TILE, TILE);
+      canvas.getContext("2d").putImageData(new ImageData(source.pixels, TILE, TILE), 0, 0);
+      const blob = await canvasBlob(canvas);
+      canvas.width = canvas.height = 1;
+      return { k, blob };
+    }));
+    return { item:result.item, tileEntries };
+  }
   // One visible Canvas; inactive documents contain data, never hidden iframe trees.
   // Ordinary saves carry this extension in bundle V2. This is not version history.
   var canvasDocuments = { records:new Map(), activeId:null, ready:null, db:null, switching:false, epoch:0, firstSeenClock:0, error:null, retry:null, receipts:new Map(), write:Promise.resolve() };
@@ -30103,7 +30646,7 @@ var canvasDocumentIdentity = (() => {
     canvasDocuments.error=String(error?.message||error);canvasDocuments.retry=retry;canvasDocumentsRender();
   }
   function canvasDocumentsChanged(doc,kind,objectId=null) {
-    if(canvasDocumentsIsActive(doc))doc.revision=state.userRevision;else doc.revision++;
+    if(canvasDocumentsIsActive(doc))doc.revision=state.userRevision;else {doc.revision++;window.PenEchoFolderProject?.changed?.(doc.id);}
     doc.changes.push({cursor:++doc.changeSequence,kind,objectId,at:Date.now()});
     if(doc.changes.length>200)doc.changes.splice(0,doc.changes.length-200);
     doc.unseen=Math.min(Number.MAX_SAFE_INTEGER,canvasDocumentsUnseen(doc.unseen)+1);
@@ -30142,7 +30685,9 @@ var canvasDocumentIdentity = (() => {
     if(execution)canvasAgentAssertToolExecution(execution);
     const doc=canvasDocuments.records.get(id);
     if(!doc)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","This Canvas is not open. Resolve its saved location and retry.");
-    if(canvasDocumentsIsActive(doc)) { if(options.markSeen!==false&&doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc,false,execution);} return {documentId:id,active:true}; }
+    const replacing=options.replace||null;
+    if(canvasDocumentsIsActive(doc)&&!replacing) { if(options.markSeen!==false&&doc.unseen){doc.unseen=0;canvasDocumentsRender();await canvasDocumentsPersist(doc,false,execution);} return {documentId:id,active:true}; }
+    if(replacing&&!canvasDocumentsIsActive(doc))throw canvasDocumentsError("CANVAS_CHANGED","Only the Canvas in front can take a merged save.");
     if(canvasDocuments.switching||snapshotLoadInProgress||typeof snapshotSaveInProgress!=="undefined"&&snapshotSaveInProgress)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("A Canvas is opening or saving. Retry after it finishes.","画布正在打开或保存，完成后请重试。"));
     if(state.drawing||state.widgetGesture||state.imageGesture||state.selectionGesture)throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("Finish the current gesture, then retry switching Canvas.","请完成当前操作，再重试切换画布。"));
     if(typeof canvasAgent!=="undefined"&&(canvasAgent.running||canvasAgent.requestPending))throw canvasDocumentsError("CANVAS_BUSY",canvasDocumentsCopy("PenEcho Agent is working on this Canvas. Wait or use Stop, then retry switching.","PenEcho Agent 正在处理当前画布。请等待完成或点击停止，再重试切换。"));
@@ -30152,7 +30697,7 @@ var canvasDocumentIdentity = (() => {
     canvasDocuments.switching=true;canvasDocumentsRender();
     let decoded=null;
     try {
-      const previous=await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
+      const previous=replacing?canvasDocumentsReplacing(doc,replacing,options.clean===true):await canvasDocumentsAwait(()=>canvasDocumentsPark(execution),execution);
       if(execution)canvasAgentAssertToolExecution(execution);
       const revision=state.userRevision,targetRevision=doc.revision,epoch=canvasDocuments.epoch,stored=doc.stored||{item:{widgets:[],images:[],textBoxes:[],animations:[],theme:state.theme},tileEntries:[]};
       const current=()=>epoch===canvasDocuments.epoch&&revision===state.userRevision&&targetRevision===doc.revision&&!execution?.controller?.signal.aborted;
@@ -30200,13 +30745,23 @@ var canvasDocumentIdentity = (() => {
       mcpRuntime.feedback=doc.feedback;mcpRuntime.feedbackSequence=doc.feedbackSequence;
       restoreSnapshotCanvasObjectOrder(item.bundleExtensions);
       canvasDocumentsSyncExtension(doc);canvasDocumentsApplyView(item.view);
-      resetCanvasDefaultMode();
-      canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});
+      // A merged save changes only what the Canvas holds, not the tool or Agent in use.
+      if(!replacing){resetCanvasDefaultMode();canvasAgentCanvasDidChange(doc.locator||{id:doc.id,location:"workspace"},{clearProject:true});}
+      if(!replacing&&doc.locator&&!doc.base&&doc.revision===doc.savedRevision)doc.base={revisionId:item.currentRevisionId||null,stored};
       if(typeof canvasAgentInput!=="undefined"){canvasAgentInput.value=doc.agentDraft||"";canvasAgentResizeInput();canvasAgentSyncPromptSuggestions();}
       if(options.markSeen!==false)doc.unseen=0;canvasDocuments.error=null;canvasDocuments.retry=null;render();canvasAgentSyncAutomaticAIStatus();mcpRenderCanvasStatus();
       canvasDocumentsRetireEmptyPlaceholder(previous);
       window.PenEchoStudioNavigator?.updateDocument?.();window.dispatchEvent(new Event("penecho:live-share-context-changed"));await canvasDocumentsPersist(doc,false,execution);return {documentId:id,active:true};
     } finally {if(decoded?.size)releaseSnapshotTileCanvases(decoded);if(canvasDocuments.switchToken===switchToken){canvasDocuments.switching=false;canvasDocuments.switchToken=null;canvasDocumentsRender();}}
+  }
+  // The shown tab takes merged content in place. It keeps its Undo; entries
+  // made before then undo only what still holds their change.
+  function canvasDocumentsReplacing(doc,stored,clean) {
+    doc.undo=state.history;doc.redo=state.future;doc.agentDraft=typeof canvasAgentInput!=="undefined"?canvasAgentInput.value:"";
+    doc.feedback=mcpRuntime.feedback;doc.feedbackSequence=mcpRuntime.feedbackSequence;
+    for(const entry of [...doc.undo,...doc.redo])if(entry&&typeof entry==="object"&&!Array.isArray(entry))entry.rebased=true;
+    doc.stored=stored;doc.title=stored.item.name||doc.title;doc.revision=state.userRevision+1;if(clean)doc.savedRevision=doc.revision;
+    return null;
   }
   function canvasDocumentsApplyView(view) {
     if(view===null){state.viewInitialized=false;fit();}
@@ -30245,7 +30800,9 @@ var canvasDocumentIdentity = (() => {
       state.history=[];state.future=[];
     }
     await canvasDocumentsAdopt({...item,id:storedId,updatedAt:canvasDocumentsSavedAt(item.updatedAt)||Date.now()},location);
-    const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId},tileEntries};canvasDocumentsSyncExtension(doc);
+    // The stored copy names its Cloud revision, so a reopened page saves on top of it.
+    const doc=canvasDocumentsCurrent();doc.savedRevision=state.snapshotSavedRevision;doc.stored={item:{...item,id:storedId,currentRevisionId:state.currentSnapshotRevisionId||null},tileEntries};canvasDocumentsSyncExtension(doc);
+    doc.base={revisionId:state.currentSnapshotRevisionId||null,stored:doc.stored};
     const epoch=canvasDocuments.epoch,settled=Number.isSafeInteger(recoveryCommitVersion)&&recoveryCommitVersion===canvasDocumentsDraft.commitVersion&&state.userRevision===state.snapshotSavedRevision;
     // Save can leave userRevision unchanged, including an empty Canvas's first
     // name. Persist now rather than relying on the content-only recovery timer.
@@ -30403,7 +30960,7 @@ var canvasDocumentIdentity = (() => {
   }
   function canvasDocumentsCapacity(doc,kind,delta=1) {
     const limit=kind==="text"?50:100;
-    if(canvasDocumentsObjects(doc).filter(o=>o.kind===kind).length+delta>limit)throw canvasDocumentsError("OBJECT_LIMIT",canvasDocumentsCopy("This Canvas has reached its object limit. Remove an unused object or create another Canvas, then retry.","此画布的对象数量已达上限。请移除不用的对象，或新建画布后重试。"),{kind,limit,retryable:true});
+    if(canvasDocumentsObjects(doc).filter(o=>o.kind===kind).length+delta>limit)throw canvasDocumentsError("OBJECT_LIMIT",canvasDocumentsCopy("This Canvas is full. Continue on a new Canvas: penecho_open_canvas with create:true, then penecho_start_session with its documentId. Or remove unused objects and retry.","此画布已满。可新建画布继续：用 penecho_open_canvas（create:true）新建，再用它的 documentId 调用 penecho_start_session；或移除不用的对象后重试。"),{kind,limit,retryable:true});
   }
   function canvasDocumentsEndEdit(doc,kind,id=null) {
     if(canvasDocumentsIsActive(doc)){state.userRevision++;save();requestRender();canvasAgentSyncState();}
@@ -30521,6 +31078,8 @@ var canvasDocumentIdentity = (() => {
   // Rename metadata without capturing, saving or showing the Canvas content.
   async function canvasDocumentsRenameSaved(doc,title,execution) {
     if(!doc.locator)return false;
+    // A folder project's Canvas takes its new name with its next save.
+    if(window.PenEchoFolderProject?.renamed?.(doc))return true;
     const {id,location}=doc.locator,controller=new AbortController(),signal=execution?.controller?.signal;
     const abort=()=>controller.abort(signal.reason||canvasDocumentsError("REQUEST_CANCELLED","The rename was cancelled."));
     signal?.addEventListener("abort",abort,{once:true});if(signal?.aborted)abort();
@@ -30632,6 +31191,64 @@ var canvasDocumentIdentity = (() => {
     canvasAgentAssertToolExecution(execution);await canvasDocumentsPersist(doc,false,execution);
     if(args.show)await canvasDocumentsShow(doc.id,execution,{markSeen:false});
     canvasDocumentsRender();return {documentId:doc.id,title:doc.title,active:canvasDocumentsIsActive(doc),locator:doc.locator||null,created:args.create===true};
+  }
+  // A folder project's shared tabs: open one of its saved Canvases as a tab
+  // without switching to it, reusing a copy that is already open.
+  async function canvasDocumentsOpenSaved(locator,{show=false}={}) {
+    await canvasDocumentsReady();
+    let doc=[...canvasDocuments.records.values()].find(d=>d.locator?.location===locator.location&&d.locator?.id===locator.id);
+    if(!doc) {
+      if(canvasDocuments.records.size>=CANVAS_DOCUMENT_LIMIT)throw canvasDocumentsError("DOCUMENT_LIMIT",canvasDocumentsLimitMessage());
+      const stored=await canvasDocumentsBound(readSnapshot(locator.location,locator.id));
+      if(!stored)throw canvasDocumentsError("DOCUMENT_NOT_FOUND","The saved Canvas was not found at this location.");
+      const meta=canvasDocumentIdentity.normalizeMetadata(stored.item.bundleExtensions?.[CANVAS_DOCUMENT_EXTENSION])||{version:1,documentId:await canvasDocumentIdentity.legacyId(locator),title:stored.item.name||""};
+      doc=canvasDocuments.records.get(meta.documentId);
+      if(!doc) {
+        doc=canvasDocumentsRecord({...meta,title:stored.item.name||meta.title},stored);doc.locator=locator;doc.savedAt=canvasDocumentsSnapshotSavedAt(stored.item);doc.savedRevision=doc.revision;canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
+        doc.base={revisionId:stored.item.currentRevisionId||null,stored:canvasDocumentsCopyStored(stored)};
+        canvasDocuments.records.set(doc.id,doc);await canvasDocumentsPersist(doc);
+      }
+    }
+    if(show&&!canvasDocumentsIsActive(doc))await canvasDocumentsShow(doc.id,null,{markSeen:false});
+    canvasDocumentsRender();
+    return doc;
+  }
+  // The save a tab's changes start from (its base) is kept for merging a newer
+  // save. A background tab's stored copy changes in place, so its base is a copy;
+  // files stay shared, since merges tell images apart by the identity of their bytes.
+  function canvasDocumentsCopyStored(stored) {
+    const copy = value => value instanceof Blob ? value : Array.isArray(value) ? value.map(copy)
+      : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value;
+    return stored?.item ? { item:copy(stored.item), tileEntries:[...(stored.tileEntries || [])] } : null;
+  }
+  // A tab in front or being switched to, with unsaved changes, or in use by an
+  // agent is left as it is.
+  function canvasDocumentsBackgroundClean(doc) {
+    const item=doc?.stored?.item,blank=Boolean(item)&&!(doc.stored.tileEntries||[]).length&&![item.widgets,item.images,item.textBoxes].some(list=>list?.length);
+    return Boolean(doc)&&!canvasDocuments.switching&&!canvasDocumentsIsActive(doc)&&(blank||doc.revision===doc.savedRevision)&&![...mcpRuntime.sessions.values()].some(session=>session.documentId===doc.id&&!session.closed);
+  }
+  // A newer save of a background tab, made on another page of the folder,
+  // replaces this page's copy. Its Undo belonged to the older copy.
+  async function canvasDocumentsRefreshSaved(id) {
+    const doc=canvasDocuments.records.get(id);
+    if(!doc?.locator||!canvasDocumentsBackgroundClean(doc))return false;
+    const stored=await canvasDocumentsBound(readSnapshot(doc.locator.location,doc.locator.id)),revision=doc.revision;
+    if(!stored||canvasDocuments.records.get(id)!==doc||revision!==doc.revision||!canvasDocumentsBackgroundClean(doc))return false;
+    doc.stored=stored;doc.title=stored.item.name||doc.title;doc.savedAt=canvasDocumentsSnapshotSavedAt(stored.item);doc.savedRevision=doc.revision;doc.undo=[];doc.redo=[];
+    doc.base={revisionId:stored.item.currentRevisionId||null,stored:canvasDocumentsCopyStored(stored)};
+    canvasDocumentsRestoreWorkspace(doc,stored.item.bundleExtensions?.[CANVAS_WORKSPACE_EXTENSION]);
+    await canvasDocumentsPersist(doc);canvasDocumentsRender();
+    return true;
+  }
+  // Drops this page's copy of a tab that another page of the folder closed, or
+  // of a blank first page once the project's tabs are here.
+  async function canvasDocumentsForget(id) {
+    const doc=canvasDocuments.records.get(id);
+    if(!canvasDocumentsBackgroundClean(doc))return false;
+    const db=await canvasDocumentsDb();
+    await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");tx.objectStore("documents").delete(id);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error);}));
+    canvasDocuments.records.delete(id);canvasDocumentsRender();
+    return true;
   }
   async function canvasDocumentsOnce(store,key,args,work) {
     if(!key)return work();
@@ -31106,7 +31723,11 @@ var canvasDocumentIdentity = (() => {
       await canvasDocumentsBound(new Promise((resolve,reject)=>{const tx=db.transaction("documents","readwrite");for(const closingId of deleted)tx.objectStore("documents").delete(closingId);tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error("Could not close the Canvas. Retry."));}));
     }
     for(const session of mcpRuntime.sessions.values())if(closingIds.has(session.documentId))session.closed=true;
-    for(const closingId of closingIds)canvasDocuments.records.delete(closingId);canvasDocumentsRender();return true;
+    // A folder project closes the same tab on its other pages.
+    const closedLocators=[...closingIds].map(closingId=>canvasDocuments.records.get(closingId)?.locator).filter(Boolean);
+    for(const closingId of closingIds)canvasDocuments.records.delete(closingId);canvasDocumentsRender();
+    if(typeof window.dispatchEvent==="function"&&typeof CustomEvent==="function")window.dispatchEvent(new CustomEvent("penecho:canvas-documents-closed",{detail:{locators:closedLocators}}));
+    return true;
   }
   document.getElementById("canvasWorkspaceClose")?.addEventListener("click",()=>{const documentId=canvasDocumentsCurrent().id;canvasDocumentsUiAction(()=>requestCanvasTransition({type:"close",documentId}));});
   document.getElementById("canvasWorkspaceRetry")?.addEventListener("click",()=>{const retry=canvasDocuments.retry;if(retry)canvasDocumentsUiAction(retry);});
@@ -31160,6 +31781,7 @@ var canvasDocumentIdentity = (() => {
     return canvasDocumentsDraft.opening;
   }
   function canvasDocumentsScheduleDraft(committed = true) {
+    window.PenEchoFolderProject?.changed?.();
     if (!canvasDocumentsDraft?.ready || window.PENECHO_CONFIG?.runtime === "viewer") return;
     // AI commits and coalesced Widget changes can save history without changing
     // userRevision. Track them separately from the user-edit conflict guard.
@@ -31216,7 +31838,7 @@ var canvasDocumentIdentity = (() => {
       sessionStorage.removeItem(canvasDocumentsIntentKey());
     } catch { return null; }
     const age = now - Number(intent?.createdAt);
-    return intent?.action === "save" && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
+    return ["save", "keep"].includes(intent?.action) && age >= 0 && age < BROWSER_DRAFT_INTENT_TTL_MS ? intent : null;
   }
   async function canvasDocumentsSettleDraft(timeoutMs = 5000, { finalize = false } = {}) {
     if (canvasDocumentsDraft.opening) await canvasDocumentsDraft.opening;
@@ -31237,6 +31859,8 @@ var canvasDocumentIdentity = (() => {
       setStatus(canvasDocumentsCopy("Sign-in was not completed. Your draft is kept in this browser; choose Save again when ready.", "未完成登录。草稿仍保留在此浏览器中，准备好后可再次保存。"));
       return false;
     }
+    // Signed in from a guest's folder page: keep its Canvases in this account.
+    if (intent.action === "keep") return Boolean(await window.PenEchoFolderProject?.keep?.());
     if (intent.documentId && intent.documentId !== canvasDocuments.activeId) {
       setStatus(canvasDocumentsCopy("Signed in. Open the Canvas you were saving and choose Save.", "已登录。请打开要保存的画布，然后选择保存。"));
       return false;
@@ -31245,7 +31869,14 @@ var canvasDocumentIdentity = (() => {
     return true;
   }
   function saveCurrentCanvasFromUser() {
+    // A folder project saves by itself, a guest's too.
+    if (window.PenEchoFolderProject?.enabled()) return window.PenEchoFolderProject.saveNow();
     if (window.PENECHO_CONFIG?.guestCanvas && window.PenEchoBrowserDraft) return window.PenEchoBrowserDraft.signIn({ intent:"save" });
+    // Edits on a shared Canvas are already kept live; Save makes your own copy.
+    if (window.PENECHO_CONFIG?.liveShare && !state.currentSnapshotId) {
+      if (window.PENECHO_CONFIG.guestCanvas) { location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname)}`); return null; }
+      setStatus(canvasDocumentsCopy("Your edits are already shared live. Saving your own copy…", "你的改动已实时共享。正在保存你自己的副本…"));
+    }
     return saveCurrentCanvas();
   }
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoBrowserDraft = {
@@ -31256,8 +31887,8 @@ var canvasDocumentIdentity = (() => {
       // A draft that cannot be stored keeps the user here, with nothing lost.
       try { await canvasDocumentsSettleDraft(5000, { finalize:true }); }
       catch (error) { setStatus(String(error?.message || error)); return false; }
-      if (intent === "save") {
-        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:"save", documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
+      if (intent === "save" || intent === "keep") {
+        try { sessionStorage.setItem(canvasDocumentsIntentKey(), JSON.stringify({ action:intent, documentId:canvasDocuments.activeId, createdAt:Date.now() })); } catch {}
       }
       location.assign(`/auth.html?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
     }
@@ -31271,11 +31902,11 @@ var canvasDocumentIdentity = (() => {
     return CANVAS_COMPANION_REQUESTED && Boolean(window.PENECHO_CONFIG?.browserDraftId);
   }
   function companionCanvasesCopy(en, zh) { return state.language === "zh" ? zh : en; }
-  async function companionCanvasesRequest(path, body) {
+  async function companionCanvasesRequest(path, body, timeoutMs = 12000) {
     const response = await fetch(`/api/v1/mcp/workspaces/${encodeURIComponent(window.PENECHO_CONFIG.browserDraftId)}/${path}`, {
       method:body ? "POST" : "GET", credentials:"same-origin", cache:"no-store",
       headers:body ? { "Content-Type":"application/json" } : {},
-      ...(body ? { body:JSON.stringify(body) } : {}), signal:AbortSignal.timeout(12000),
+      ...(body ? { body:JSON.stringify(body) } : {}), signal:AbortSignal.timeout(timeoutMs),
     });
     const result = await response.json();
     if (!response.ok) throw Object.assign(Error(result.message || companionCanvasesCopy("Could not connect to this Canvas. Try again.", "暂时无法连接此画布，请重试。")), { code:result.error });
@@ -31319,9 +31950,12 @@ var canvasDocumentIdentity = (() => {
     if (!companionCanvasesEnabled() || companionCanvases.busy) return;
     companionCanvases.busy = true; companionCanvases.error = ""; renderCompanionCanvases();
     try {
+      // A window whose connection moved to another window still opens its
+      // Canvases; agents follow the selection made in the connected window.
+      const elsewhere = mcpRuntime.connectionNotice === "workspaceReplaced";
       // Establish the original binding before creating the next document.
-      const status = await companionCanvasesRefresh();
-      if (!status?.canvases.length) throw Error(companionCanvasesCopy("Wait for MCP to connect, then try again.", "请等待 MCP 连接完成后重试。"));
+      const status = elsewhere ? null : await companionCanvasesRefresh();
+      if (!elsewhere && !status?.canvases.length) throw Error(companionCanvasesCopy("Wait for MCP to connect, then try again.", "请等待 MCP 连接完成后重试。"));
       if (create) {
         const previous = canvasDocuments.activeId;
         await openNewCanvasDialog();
@@ -31332,10 +31966,10 @@ var canvasDocumentIdentity = (() => {
         canvasDocumentsRender();
       } else await canvasDocumentsShow(documentId);
       await window.PenEchoBrowserDraft.flush();
-      await companionCanvasesSelect(documentId);
+      if (!elsewhere) await companionCanvasesSelect(documentId);
       document.getElementById("companionCanvasMenu")?.hidePopover();
       selectCanvasToolMode("hand");
-      setStatus(companionCanvasesCopy("MCP target switched. Existing sessions stay on their original canvases.", "已切换 MCP 目标，已有会话仍保留在各自的画布。"));
+      if (!elsewhere) setStatus(companionCanvasesCopy("MCP target switched. Existing sessions stay on their original canvases.", "已切换 MCP 目标，已有会话仍保留在各自的画布。"));
     } catch (error) {
       companionCanvases.error = String(error.message || error);
       // The new document is retained even if its connection update fails.
@@ -31355,11 +31989,13 @@ var canvasDocumentIdentity = (() => {
     document.getElementById("companionCanvasNew").setAttribute("aria-label", companionCanvasesCopy("New canvas", "新建画布"));
     document.getElementById("companionCanvasSwitch").setAttribute("aria-label", companionCanvasesCopy(`Switch canvas (${docs.length})`, `切换画布（${docs.length}）`));
     target.hidden = !canvasCompanionMinimal();
-    target.textContent = !mcpRuntime.ready ? companionCanvasesCopy("MCP · Reconnecting", "MCP · 连接中")
+    target.textContent = mcpRuntime.connectionNotice === "workspaceReplaced" ? companionCanvasesCopy("MCP · Other window", "MCP · 其他窗口")
+      : !mcpRuntime.ready ? companionCanvasesCopy("MCP · Reconnecting", "MCP · 连接中")
       : selected === current ? companionCanvasesCopy("MCP · This canvas", "MCP · 当前画布")
       : `MCP → ${selectedDoc?.title || companionCanvasesCopy("Choose canvas", "选择画布")}`;
     target.title = selectedDoc ? `MCP → ${selectedDoc.title}` : target.textContent;
     target.dataset.matches = String(selected === current);
+    renderCompanionTabs(docs, current, disabled);
     document.getElementById("companionCanvasMenuTitle").textContent = companionCanvasesCopy("Canvases", "画布");
     document.getElementById("companionCanvasMenuHelp").textContent = companionCanvasesCopy("Choose a Canvas for your next MCP request. Existing sessions keep their own Canvas.", "选择下一步 MCP 使用的画布。已有会话保留在各自的画布。");
     const error = document.getElementById("companionCanvasError");
@@ -31380,6 +32016,80 @@ var canvasDocumentIdentity = (() => {
       return button;
     }));
   }
+  // + opens a new Canvas, or, when the folder's project has closed Canvases,
+  // a menu that also reopens one of them.
+  function companionTabMenu(anchor) {
+    const closed = window.PenEchoFolderProject?.closed() || [], menu = document.getElementById("companionTabMenu");
+    if (!closed.length || !menu) return void companionCanvasesChoose(null, { create:true });
+    const row = (text, run) => {
+      const button = document.createElement("button"), name = document.createElement("span");
+      button.type = "button"; button.className = "companion-canvas-row";
+      name.textContent = text; name.title = text; button.append(name);
+      button.addEventListener("click", () => { menu.hidePopover(); void run(); });
+      return button;
+    };
+    menu.replaceChildren(row(companionCanvasesCopy("New canvas", "新建画布"), () => companionCanvasesChoose(null, { create:true })), document.createElement("hr"),
+      ...closed.map(tab => row(tab.title, () => window.PenEchoFolderProject.reopen(tab.canvasId).catch(error => setStatus(String(error.message || error))))));
+    // Strict CSP: the position goes into a stylesheet rule, not a style attribute.
+    const rect = anchor.getBoundingClientRect(), position = runtimeElementStyle(menu, "companion-tab-menu");
+    position?.setProperty("top", `${Math.round(rect.bottom + 4)}px`);
+    menu.showPopover();
+    position?.setProperty("left", `${Math.round(Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8)))}px`);
+  }
+  // The side panel shows its Canvases as tabs; choosing one also makes it the
+  // MCP target, as the Canvases menu does.
+  function renderCompanionTabs(docs, current, disabled) {
+    const tabs = document.getElementById("companionTabs");
+    if (!tabs) return;
+    // Tabs keep the order they were opened in; the catalog lists the most recent first.
+    const opened = doc => canvasDocuments.records.get(doc.documentId)?.firstSeenAt || 0;
+    docs = [...docs].sort((a, b) => opened(a) - opened(b) || a.documentId.localeCompare(b.documentId));
+    tabs.hidden = !canvasCompanionMinimal() || !docs.length;
+    tabs.setAttribute("aria-label", companionCanvasesCopy("Canvases", "画布"));
+    // The folder's project names the strip.
+    const projectName = window.PENECHO_CONFIG?.folderProject?.name || "";
+    let label = tabs.querySelector(".companion-project");
+    if (projectName && !label) { label = document.createElement("span"); label.className = "companion-project"; tabs.prepend(label); }
+    if (label) { label.hidden = !projectName; label.textContent = projectName; label.title = projectName; }
+    // Buttons are kept and updated in place, so a click is never lost to a redraw.
+    let add = tabs.querySelector(".companion-tab-new"), close = tabs.querySelector(".companion-tab-close");
+    if (!add) {
+      add = document.createElement("button");
+      add.type = "button"; add.className = "companion-tab companion-tab-new"; add.textContent = "+";
+      add.addEventListener("click", () => companionTabMenu(add));
+    }
+    if (!close) {
+      close = document.createElement("button");
+      close.type = "button"; close.className = "companion-tab-close"; close.textContent = "×";
+      // A folder project's pending autosave goes first, so closing asks nothing.
+      close.addEventListener("click", () => {
+        const documentId = canvasDocuments.activeId;
+        canvasDocumentsUiAction(async () => { await window.PenEchoFolderProject?.flush?.(); return requestCanvasTransition({ type:"close", documentId }); });
+      });
+    }
+    add.disabled = close.disabled = disabled;
+    add.title = companionCanvasesCopy("New canvas", "新建画布"); add.setAttribute("aria-label", add.title);
+    close.title = companionCanvasesCopy("Close canvas", "关闭画布"); close.setAttribute("aria-label", close.title);
+    const kept = new Map([...tabs.querySelectorAll(".companion-tab[data-document-id]")].map(tab => [tab.dataset.documentId, tab]));
+    const order = label ? [label] : [];
+    for (const doc of docs) {
+      let tab = kept.get(doc.documentId);
+      if (!tab) {
+        tab = document.createElement("button");
+        tab.type = "button"; tab.className = "companion-tab"; tab.dataset.documentId = doc.documentId;
+        tab.addEventListener("click", () => { if (tab.dataset.documentId !== canvasDocuments.activeId) void companionCanvasesChoose(tab.dataset.documentId); });
+      }
+      if (tab.textContent !== doc.title) { tab.textContent = doc.title; tab.title = doc.title; }
+      tab.disabled = disabled;
+      if (doc.documentId === current) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
+      order.push(tab);
+      // The open tab carries its own close button.
+      if (doc.documentId === current) order.push(close);
+    }
+    order.push(add);
+    order.forEach((node, index) => { if (tabs.children[index] !== node) tabs.insertBefore(node, tabs.children[index] || null); });
+    for (const node of [...tabs.children]) if (!order.includes(node)) node.remove();
+  }
   if (companionCanvasesEnabled()) {
     window.PenEchoCompanionCanvases = { changed:companionCanvasesChanged, refresh:() => void companionCanvasesRefresh().catch(() => {}), create:() => companionCanvasesChoose(null, { create:true }) };
     document.getElementById("companionCanvasNew")?.addEventListener("click", () => void window.PenEchoCompanionCanvases.create());
@@ -31390,6 +32100,1274 @@ var canvasDocumentIdentity = (() => {
     window.addEventListener("penecho:languagechange", renderCompanionCanvases);
     window.addEventListener("penecho:companion-view", renderCompanionCanvases);
   }
+  // A folder's project keeps the Canvases open on every page of that folder.
+  // Saving a Canvas into the project opens it as a tab on the other pages,
+  // closing a tab closes it there too, and + reopens a closed one. Pages share
+  // saved copies only; edits reach the other pages when they are saved, which
+  // happens by itself a few seconds after each change.
+  const FOLDER_AUTOSAVE_MS = 3000;
+  const folderProject = { view:null, queue:Promise.resolve(), pending:null, opening:new Set(), started:false, retry:0,
+    autosaveTimer:0, savedKey:"", background:new Set(), failures:0, keeping:false, expiresAt:window.PENECHO_CONFIG?.folderProject?.expiresAt || null };
+  const FOLDER_GUEST_DAYS_MS = 7 * 86400000;
+  // A guest's project keeps its Canvases with the page until 7 days after its
+  // last change; signing in keeps them in that account. A signed-out app's
+  // project keeps them in that computer's Library.
+  function folderProjectGuest() { return Boolean(window.PENECHO_CONFIG?.folderProject?.guest); }
+  function folderProjectWithPage() { return folderProjectGuest() || Boolean(window.PENECHO_CONFIG?.folderProject?.localProjectId); }
+  function folderProjectTarget() { const project = window.PENECHO_CONFIG?.folderProject; return project?.cloudProjectId || project?.guestProjectId || project?.localProjectId || null; }
+  function folderProjectEnabled() {
+    return Boolean(window.PENECHO_CONFIG?.browserDraftId && folderProjectTarget());
+  }
+  function folderProjectExpiry(expiresAt) {
+    if (!folderProjectGuest() || expiresAt === undefined) return;
+    folderProject.expiresAt = expiresAt;
+    if (typeof liveCanvasRenderExpiry === "function") liveCanvasRenderExpiry();
+  }
+  const folderProjectLocator = canvasId => ({ location:"cloud", id:canvasId });
+  function folderProjectDoc(canvasId) {
+    return [...canvasDocuments.records.values()].find(doc => doc.locator?.location === "cloud" && doc.locator.id === canvasId) || null;
+  }
+  function folderProjectRun(work) {
+    const run = folderProject.queue.then(work, work);
+    folderProject.queue = run.catch(() => {});
+    return run;
+  }
+  function folderProjectRevision(doc) {
+    return canvasDocumentsIsActive(doc) ? state.currentSnapshotRevisionId : doc.stored?.item?.currentRevisionId || null;
+  }
+  // A Canvas kept in Cloud on sign-in stays open here, under its Cloud id.
+  function folderProjectRelocate(doc, { from, to, revisionId }) {
+    const projectId = folderProjectTarget(), item = stored => stored?.item && { ...stored, item:{ ...stored.item, id:to, projectId, currentRevisionId:revisionId } };
+    doc.locator = { location:"cloud", id:to };
+    doc.locators = [...(doc.locators || []).filter(locator => locator.location !== "cloud" || locator.id !== from), doc.locator].slice(-16);
+    if (doc.stored?.item) doc.stored = item(doc.stored);
+    if (doc.base) doc.base = { revisionId, stored:item(doc.base.stored) || doc.base.stored };
+    if (canvasDocumentsIsActive(doc)) Object.assign(state, { currentSnapshotId:to, currentSnapshotLocation:"cloud", currentSnapshotRevisionId:revisionId, currentSnapshotProjectId:projectId });
+    return canvasDocumentsPersist(doc);
+  }
+  async function folderProjectApply(view) {
+    if (!Array.isArray(view?.tabs) || folderProject.view && view.revision < folderProject.view.revision) return;
+    folderProject.view = view;
+    folderProjectExpiry(view.expiresAt);
+    for (const move of view.moved || []) {
+      const doc = folderProjectDoc(move.from);
+      if (doc) await folderProjectRelocate(doc, move);
+    }
+    for (const tab of view.tabs) {
+      const doc = folderProjectDoc(tab.canvasId);
+      try {
+        if (!doc) await canvasDocumentsOpenSaved(folderProjectLocator(tab.canvasId));
+        // Another page saved this tab since this page read it: the tab in front
+        // merges that save in, keeping its own changes; others take it.
+        else if (tab.revisionId && folderProjectRevision(doc) && tab.revisionId !== folderProjectRevision(doc)) {
+          if (canvasDocumentsIsActive(doc)) await folderProjectMergeActive(doc);
+          else await canvasDocumentsRefreshSaved(doc.id);
+        }
+      } catch (error) { if (error.code === "DOCUMENT_LIMIT") break; }
+    }
+    for (const tab of view.closed) {
+      const doc = !folderProject.opening.has(tab.canvasId) && folderProjectDoc(tab.canvasId);
+      if (doc) await canvasDocumentsForget(doc.id).catch(() => false);
+    }
+    // A page that starts on a blank Canvas shows the project's first tab instead.
+    const active = canvasDocumentsCurrent(), first = view.tabs[0];
+    if (!folderProject.started && first && !active.locator && !canvasDocumentsDraftHasContent() && !canvasDocumentsDraftBusy()
+      && ![...mcpRuntime.sessions.values()].some(session => session.documentId === active.id && !session.closed)) {
+      const doc = await canvasDocumentsOpenSaved(folderProjectLocator(first.canvasId), { show:true }).catch(() => null);
+      if (doc && canvasDocumentsIsActive(doc)) await canvasDocumentsForget(active.id).catch(() => false);
+    }
+    folderProject.started = true;
+    window.PenEchoCompanionCanvases?.changed?.();
+  }
+  function folderProjectSync() {
+    if (!folderProjectEnabled() || document.hidden) return Promise.resolve();
+    // Focus and visibility often arrive together; one queued sync serves both.
+    return folderProject.pending ||= folderProjectRun(async () => {
+      folderProject.pending = null;
+      await window.PenEchoBrowserDraft?.open();
+      // What the page opened with is saved already; only later changes autosave.
+      if (!folderProject.started && !folderProject.savedKey && !canvasHasUnsavedChanges()) folderProject.savedKey = canvasDocumentsDraftKey();
+      await folderProjectApply(await companionCanvasesRequest("project"));
+      // Opened signed in with Canvases still on this computer: keep them in Cloud.
+      if (window.PENECHO_CONFIG?.folderProject?.keep && !folderProject.keepStarted) { folderProject.keepStarted = true; void folderProjectKeep(); }
+    });
+  }
+  // A failed sync, such as a slow first load, retries soon and backs off to the
+  // minute-long cadence.
+  function folderProjectRefresh(delay = 2000) {
+    clearTimeout(folderProject.retry);
+    void folderProjectSync().catch(() => { folderProject.retry = setTimeout(() => folderProjectRefresh(Math.min(delay * 2, 60000)), delay); });
+  }
+  async function folderProjectChange(change) {
+    const canvasId = change.open || change.close;
+    if (change.open) folderProject.opening.add(canvasId);
+    try {
+      const view = await companionCanvasesRequest("project/tabs", change);
+      await folderProjectRun(() => folderProjectApply(view));
+      return view;
+    } finally { folderProject.opening.delete(canvasId); }
+  }
+  async function folderProjectReopen(canvasId) {
+    await folderProjectChange({ open:canvasId });
+    const doc = folderProjectDoc(canvasId) || await folderProjectRun(() => canvasDocumentsOpenSaved(folderProjectLocator(canvasId)));
+    if (companionCanvasesEnabled()) await companionCanvasesChoose(doc.id);
+    else await canvasDocumentsShow(doc.id);
+  }
+  // ---------- Autosave ----------
+  // A few seconds after a person or an agent changes a Canvas, it saves itself
+  // into the folder's project, replacing its previous save (no versions). A
+  // newer save from another page is merged in first, so both pages' edits are
+  // kept. Undo stays until the page closes.
+  function folderProjectChanged(documentId = null) {
+    if (!folderProjectEnabled()) return;
+    if (documentId) folderProject.background.add(documentId);
+    clearTimeout(folderProject.autosaveTimer);
+    folderProject.autosaveTimer = setTimeout(folderProjectAutosaveNow, FOLDER_AUTOSAVE_MS);
+  }
+  // A renamed Canvas saves its new name a few seconds later, like any change.
+  function folderProjectRenamed(doc) {
+    if (!folderProjectEnabled() || doc.locator?.location !== "cloud") return false;
+    if (canvasDocumentsIsActive(doc)) folderProject.savedKey = "";
+    else doc.revision = (doc.revision || 0) + 1;
+    folderProjectChanged(canvasDocumentsIsActive(doc) ? null : doc.id);
+    return true;
+  }
+  function folderProjectAutosaveNow() {
+    clearTimeout(folderProject.autosaveTimer);
+    return folderProjectRun(folderProjectAutosave).then(() => { folderProject.failures = 0; }, error => {
+      // A Canvas in use is tried again shortly; offline or a passing failure, waiting longer each time.
+      if (["CANVAS_BUSY", "CANVAS_CHANGED"].includes(error?.code)) { folderProjectChanged(); return; }
+      folderProject.failures++;
+      clearTimeout(folderProject.autosaveTimer);
+      folderProject.autosaveTimer = setTimeout(folderProjectAutosaveNow, Math.min(60000, FOLDER_AUTOSAVE_MS * 2 ** folderProject.failures));
+      if (folderProject.failures === 2) setStatus(String(error?.message || error));
+    });
+  }
+  // False while the Canvas is busy and its save waits.
+  async function folderProjectAutosave() {
+    if (!folderProjectEnabled() || window.PENECHO_CONFIG?.runtime === "viewer") return true;
+    const done = await folderProjectSaveActive();
+    for (const id of [...folderProject.background]) await folderProjectSaveBackground(id);
+    return done;
+  }
+  function folderProjectBusy() {
+    return snapshotSaveInProgress || snapshotLoadInProgress || canvasDocuments.switching || canvasDocumentsDraftBusy() || selectionAIBusy();
+  }
+  // Every save carries a name. An unnamed Canvas takes the title of its first
+  // titled content, such as an agent's drawing; otherwise the project's next
+  // "Canvas N".
+  function folderProjectNamed(value) {
+    const name = String(value || "").replace(/\s+/g, " ").trim().slice(0, 48).trim();
+    return /^(untitled canvas|未命名画布|mcp canvas)$/i.test(name) ? "" : name;
+  }
+  function folderProjectContentName(item) {
+    for (const widget of item?.widgets || []) if (folderProjectNamed(widget.title)) return folderProjectNamed(widget.title);
+    for (const image of item?.images || []) if (folderProjectNamed(image.sourceName)) return folderProjectNamed(String(image.sourceName).replace(/\.(png|jpe?g|webp|gif|svg)$/i, ""));
+    for (const box of item?.textBoxes || []) {
+      const line = String(box.text || "").split("\n").find(part => folderProjectNamed(part));
+      if (line) return folderProjectNamed(line);
+    }
+    return "";
+  }
+  function folderProjectNumberedName() {
+    const taken = new Set([...folderProject.view?.tabs || [], ...folderProject.view?.closed || [], ...canvasDocuments.records.values()].map(entry => entry.title));
+    for (let number = 1; ; number++) {
+      const name = canvasDocumentsCopy(`Canvas ${number}`, `画布 ${number}`);
+      if (!taken.has(name)) return name;
+    }
+  }
+  function folderProjectName(doc, item) {
+    const current = folderProjectNamed(canvasDocumentsIsActive(doc) ? currentCanvasDisplayName() : doc.title);
+    if (current) return current;
+    const name = folderProjectContentName(item) || folderProjectNumberedName();
+    if (canvasDocumentsIsActive(doc)) {
+      state.currentCanvasSuggestedName = name;
+      window.PenEchoStudioNavigator?.updateDocument?.();
+    }
+    doc.title = name;
+    if (doc.stored?.item) doc.stored.item.name = name;
+    canvasDocumentsRender();
+    return name;
+  }
+  async function folderProjectSaveActive() {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const doc = canvasDocumentsCurrent(), saved = state.currentSnapshotLocation === "cloud" && Boolean(state.currentSnapshotId);
+      if (!canvasHasUnsavedChanges() && (!saved || folderProject.savedKey === canvasDocumentsDraftKey())) return true;
+      // A new blank Canvas waits for its first content.
+      if (!saved && !canvasHasShareableContent()) return true;
+      if (folderProjectBusy()) { folderProjectChanged(); return false; }
+      // A saved Canvas whose revision this page lost takes in the current save first.
+      if (saved && !state.currentSnapshotRevisionId) { await folderProjectMergeActive(doc); continue; }
+      const revision = state.userRevision;
+      let conflict = false;
+      setHistorySaveBusy(true);
+      try {
+        const id = await saveSnapshot({ location:"cloud", overwriteId:saved ? state.currentSnapshotId : null, name:folderProjectName(doc, state), allowEmpty:saved },
+          { quiet:true, baseRevisionId:saved ? state.currentSnapshotRevisionId : undefined, replace:true });
+        if (id && state.userRevision === revision && canvasDocumentsIsActive(doc)) folderProject.savedKey = canvasDocumentsDraftKey();
+        if (id) folderProjectExpiry(Date.now() + FOLDER_GUEST_DAYS_MS);
+        return true;
+      } catch (error) {
+        // A Canvas cleared from the page's project (7 idle days for a guest, or
+        // deleted from the Library) is saved again from this page.
+        if (error.status === 404 && folderProjectWithPage() && saved) { Object.assign(state, { currentSnapshotId:null, currentSnapshotLocation:null, currentSnapshotRevisionId:null }); doc.locator = null; continue; }
+        if (error.code !== "revision_conflict") throw error;
+        conflict = true;
+      } finally { setHistorySaveBusy(false); }
+      if (conflict) await folderProjectMergeActive(doc);
+    }
+    throw Error("Other pages keep saving this Canvas. Your changes are kept here; it saves again shortly.");
+  }
+  // The tab in front takes a newer save of itself, laid under its own changes.
+  async function folderProjectMergeActive(doc) {
+    if (!doc.locator || !canvasDocumentsIsActive(doc)) return;
+    // Never on the user's behalf: an open AI preview, edit or selection waits.
+    if (folderProjectBusy()) throw Object.assign(Error("The Canvas is busy; its newer save is merged in shortly."), { code:"CANVAS_BUSY" });
+    const key = canvasDocumentsDraftKey(), remote = await readSnapshot(doc.locator.location, doc.locator.id);
+    if (!remote) throw Error("This Canvas is no longer in Cloud.");
+    // With nothing unsaved here, the newer save is taken as it is: a merge would
+    // only find differences in how this page re-serialized what it loaded.
+    let merged = { changed:false }, stored = remote;
+    if (canvasHasUnsavedChanges() || folderProject.savedKey !== key) {
+      const base = doc.base?.stored ? { item:doc.base.stored.item, tiles:canvasMergeTileMap(doc.base.stored.tileEntries) } : null;
+      const local = { item:canvasDocumentsActiveSnapshot(), tiles:new Map([...tiles].map(([k, canvas]) => [k, { canvas }])) };
+      merged = await canvasMergeSaves({ base, local, remote:{ item:remote.item, tiles:canvasMergeTileMap(remote.tileEntries) }, pixels:canvasMergePixels });
+      stored = await canvasMergeStored(merged);
+    }
+    // Anything drawn while merging would be lost; merge again from it.
+    if (key !== canvasDocumentsDraftKey() || !canvasDocumentsIsActive(doc)) throw Object.assign(Error("The Canvas changed while merging."), { code:"CANVAS_CHANGED" });
+    await canvasDocumentsShow(doc.id, null, { markSeen:false, replace:stored, clean:!merged.changed });
+    doc.base = { revisionId:remote.item.currentRevisionId || null, stored:canvasDocumentsCopyStored(remote) };
+    folderProject.savedKey = merged.changed ? "" : canvasDocumentsDraftKey();
+    if (merged.changed) folderProjectChanged();
+  }
+  // An agent changed a tab that is not in front: save its stored copy.
+  async function folderProjectSaveBackground(id) {
+    folderProject.background.delete(id);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const doc = canvasDocuments.records.get(id);
+      if (!doc?.stored?.item || canvasDocumentsIsActive(doc) || doc.revision === doc.savedRevision) return;
+      const revision = doc.revision, overwriteId = doc.locator?.location === "cloud" ? doc.locator.id : null, snapshot = canvasDocumentsCopyStored(doc.stored);
+      if (!overwriteId && !folderProjectStoredContent(snapshot)) return;
+      const projectId = snapshot.item.projectId || folderProjectTarget(), now = Date.now();
+      const item = { ...snapshot.item, id:overwriteId || `${now}-${crypto.randomUUID()}`, name:folderProjectName(doc, snapshot.item), createdAt:snapshot.item.createdAt || now, updatedAt:now, projectId,
+        // The thumbnail of a tab saved in the background stays until it is saved in front.
+        preview:snapshot.item.preview || doc.base?.stored?.item?.preview || await folderProjectBlankPreview(),
+        bundleExtensions:{ ...snapshot.item.bundleExtensions, [CANVAS_DOCUMENT_EXTENSION]:canvasDocumentsMetadata(doc), [CANVAS_WORKSPACE_EXTENSION]:canvasDocumentsWorkspaceData(doc) } };
+      const base = overwriteId ? snapshot.item.currentRevisionId || doc.base?.revisionId : null;
+      try {
+        // A saved tab whose revision is unknown takes in the current save first.
+        if (overwriteId && !base) throw Object.assign(Error("This Canvas's revision is unknown."), { code:"revision_conflict" });
+        const saved = await saveCloudSnapshot(item, snapshot.tileEntries, overwriteId, overwriteId ? { baseRevisionId:base, replace:true } : {});
+        const current = canvasDocuments.records.get(id);
+        if (current !== doc) return;
+        doc.locator = { location:"cloud", id:saved.id };
+        doc.locators = [...(doc.locators || []).filter(locator => locator.location !== "cloud" || locator.id !== saved.id), doc.locator].slice(-16);
+        doc.stored.item = { ...doc.stored.item, id:saved.id, projectId, currentRevisionId:saved.revisionId, updatedAt:now, preview:item.preview };
+        doc.base = { revisionId:saved.revisionId, stored:{ item:{ ...snapshot.item, id:saved.id, projectId, currentRevisionId:saved.revisionId, preview:item.preview }, tileEntries:snapshot.tileEntries } };
+        doc.savedRevision = revision; doc.savedAt = now;
+        await canvasDocumentsPersist(doc);
+        canvasDocumentsRender();
+        if (!overwriteId) window.dispatchEvent(new CustomEvent("penecho:canvas-saved", { detail:{ location:"cloud", id:saved.id, projectId } }));
+        if (doc.revision !== revision) folderProjectChanged(id);
+        folderProjectExpiry(Date.now() + FOLDER_GUEST_DAYS_MS);
+        return;
+      } catch (error) {
+        if (error.status === 404 && folderProjectWithPage() && overwriteId) { doc.locator = null; continue; }
+        if (error.code !== "revision_conflict") throw error;
+      }
+      const remote = await readSnapshot("cloud", overwriteId);
+      if (!remote) return;
+      const merged = await canvasMergeSaves({ base:doc.base?.stored ? { item:doc.base.stored.item, tiles:canvasMergeTileMap(doc.base.stored.tileEntries) } : null,
+        local:{ item:snapshot.item, tiles:canvasMergeTileMap(snapshot.tileEntries) }, remote:{ item:remote.item, tiles:canvasMergeTileMap(remote.tileEntries) }, pixels:canvasMergePixels });
+      const stored = await canvasMergeStored(merged);
+      if (canvasDocuments.records.get(id) !== doc || doc.revision !== revision || canvasDocumentsIsActive(doc)) { folderProjectChanged(id); return; }
+      doc.stored = stored; doc.base = { revisionId:remote.item.currentRevisionId || null, stored:canvasDocumentsCopyStored(remote) };
+      doc.revision++;
+    }
+  }
+  function folderProjectStoredContent(stored) {
+    return Boolean(stored.tileEntries.length || ["widgets", "images", "textBoxes"].some(kind => stored.item[kind]?.length));
+  }
+  async function folderProjectBlankPreview() {
+    const canvas = offscreen(640, 426), context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, 640, 426);
+    return canvasBlob(canvas, "image/png");
+  }
+  // Save now saves even an unchanged Canvas, merging a newer save first.
+  async function folderProjectSaveNow() {
+    folderProject.savedKey = "";
+    clearTimeout(folderProject.autosaveTimer);
+    showHistoryNoticeKey("snapshotSaving", "busy", 0);
+    try {
+      const done = await folderProjectRun(folderProjectAutosave), blank = !state.currentSnapshotId && !canvasHasShareableContent();
+      if (done) showHistoryNoticeKey(blank ? "emptyCanvas" : "snapshotSaved", blank ? "info" : "success");
+    } catch (error) {
+      showHistoryNotice(`${t("snapshotError")}${error.message}`, "error", { duration:5000 });
+      folderProjectChanged();
+    }
+  }
+  // Signed in from a guest's folder page, or in a local app whose folder page
+  // keeps its Canvases in that computer's Library: they move into this
+  // account's project for the folder, and the page reopens saving there.
+  async function folderProjectKeep() {
+    if (!folderProjectWithPage() || folderProject.keeping) return false;
+    folderProject.keeping = true;
+    try {
+      await window.PenEchoBrowserDraft?.flush?.();
+      // Nothing saves here while the Canvases move; their latest saves go with them.
+      const kept = await folderProjectRun(async () => { await folderProjectAutosave(); return companionCanvasesRequest("project/keep", {}, 120000); });
+      setStatus(companionCanvasesCopy(`Kept ${kept.kept} Canvas${kept.kept === 1 ? "" : "es"} in your Cloud library.`, `已将 ${kept.kept} 个画布保存到你的云端资料库。`));
+      location.reload();
+      return true;
+    } catch (error) {
+      setStatus(String(error?.message || error));
+      return false;
+    } finally { folderProject.keeping = false; }
+  }
+  if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoFolderProject = {
+    enabled:folderProjectEnabled,
+    guest:folderProjectGuest,
+    expiresAt:() => folderProjectGuest() ? folderProject.expiresAt : null,
+    keep:folderProjectKeep,
+    changed:folderProjectChanged,
+    renamed:folderProjectRenamed,
+    flush:() => folderProjectEnabled() ? folderProjectAutosaveNow() : Promise.resolve(),
+    saveNow:folderProjectSaveNow,
+    closed:() => folderProjectEnabled() && folderProject.view?.closed || [],
+    reopen:folderProjectReopen,
+    sync:folderProjectSync,
+  };
+  if (folderProjectEnabled()) {
+    // Saving into the project opens the Canvas on the folder's other pages.
+    window.addEventListener("penecho:canvas-saved", event => {
+      const { location, id, projectId } = event.detail || {};
+      if (location !== "cloud" || projectId !== folderProjectTarget()) return;
+      if (!folderProject.view?.tabs.some(tab => tab.canvasId === id)) void folderProjectChange({ open:id }).catch(() => {});
+    });
+    window.addEventListener("penecho:canvas-documents-closed", event => {
+      for (const locator of event.detail?.locators || []) {
+        if (locator.location === "cloud" && folderProject.view?.tabs.some(tab => tab.canvasId === locator.id)) void folderProjectChange({ close:locator.id }).catch(() => {});
+      }
+    });
+    // Signing in this app keeps a signed-out folder's Canvases in that account.
+    if (window.PENECHO_CONFIG?.folderProject?.localProjectId) window.addEventListener("penecho:cloud-account-changed", () => {
+      if (window.PenEchoCloudSettings?.cacheIdentity?.()) void folderProjectKeep();
+    });
+    // A Canvas shown or saved here is the starting point for the next autosave.
+    window.addEventListener("penecho:live-share-context-changed", () => { if (!canvasHasUnsavedChanges()) folderProject.savedKey = canvasDocumentsDraftKey(); });
+    // Leaving the page saves what is pending, as far as the browser allows.
+    document.addEventListener("visibilitychange", () => { if (document.hidden && folderProject.autosaveTimer) void folderProjectAutosaveNow(); });
+    window.addEventListener("focus", () => folderProjectRefresh());
+    document.addEventListener("visibilitychange", () => folderProjectRefresh());
+    setInterval(() => folderProjectRefresh(), 60000);
+    // The first sync waits for the page to finish starting.
+    setTimeout(() => folderProjectRefresh(), 0);
+  }
+  // Live Canvas: one Cloud Canvas that several people and agents edit at once.
+  // Each committed change (one history entry) travels as exact pixel patches
+  // and object field changes. Cloud orders all changes; every copy applies them
+  // in that order, so strokes drawn in the same tile at the same time are all
+  // kept. Saving stays separate and still writes Cloud revisions.
+  const LIVE_OPS = typeof window === "object" ? window.PENECHO_LIVE_OPS : null;
+  const LIVE_OBJECT_KINDS = ["widgets", "images", "textBoxes"];
+  const LIVE_ID_RANGE = 1000000;
+  const LIVE_PRESENCE_MS = 80;
+  const LIVE_CURSOR_IDLE_MS = 15000;
+  const LIVE_CHANGE_CHARS = 6000000;
+  const LIVE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const liveCanvas = {
+    target:null, socket:null, status:"off", role:null, you:null, slot:0, appliedSeq:0,
+    pending:[], encoding:Promise.resolve(), receiving:Promise.resolve(), confirmed:new Map(),
+    participants:new Map(), retries:0, retryTimer:0, epoch:0, presenceAt:0, lastFront:null,
+    layer:null, blobKeys:new WeakMap(), blobCount:0, idRanges:null, readOnly:false,
+    docLinks:new Map(), linkSeqs:new Map(), endedLinks:new Set(), adopting:null, expiresAt:null, expiry:null, audience:new Map(),
+  };
+  const liveCopy = (en, zh) => state.language === "zh" ? zh : en;
+  function liveCanvasActive() { return Boolean(liveCanvas.target) && Boolean(LIVE_OPS); }
+  function liveCanvasCanEdit() {
+    return liveCanvasActive() && !liveCanvas.readOnly && liveCanvas.role !== "viewer" && window.PENECHO_CONFIG?.runtime !== "viewer";
+  }
+  // The live sequence a saved Canvas contains; the room replays later changes.
+  function liveCanvasSequence(extensions) {
+    const seq = Number(extensions?.penechoLive?.seq);
+    return Number.isSafeInteger(seq) && seq > 0 ? seq : 0;
+  }
+  function liveCanvasSaveExtension() {
+    const id = state.currentSnapshotId, target = liveCanvas.target;
+    if (target?.canvas && target.canvas === id && liveCanvas.appliedSeq) return { penechoLive:{ version:1, seq:liveCanvas.appliedSeq } };
+    // A Canvas collaborating by a link keeps the link and its place in that room.
+    return target?.share && target.local ? { penechoLive:{ version:1, seq:liveCanvas.appliedSeq, link:target.share } } : {};
+  }
+
+  // ---------- Links started here ----------
+  // Collaborating needs no account: this Canvas starts a link Canvas on Cloud
+  // and stays joined to it. The link travels with the saved Canvas; the key
+  // that ends it stays in this browser. Cloud clears an unsaved link Canvas 7
+  // days after its last change; signing in and saving moves it to that Canvas.
+  const LIVE_LINKS_KEY = "penecho-live-links-v1";
+  function liveLinkKeys() {
+    try {
+      const value = JSON.parse(localStorage.getItem(LIVE_LINKS_KEY) || "{}");
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    } catch { return {}; }
+  }
+  function liveLinkKeep(token, entry) {
+    const all = liveLinkKeys();
+    if (entry) all[token] = entry; else delete all[token];
+    try { localStorage.setItem(LIVE_LINKS_KEY, JSON.stringify(all)); } catch {}
+  }
+  function liveActiveDocumentId() { return typeof canvasDocuments === "object" ? canvasDocuments.activeId || null : null; }
+  // The link this Canvas collaborates by: started here, or saved with it.
+  function liveCanvasLink() {
+    const docId = liveActiveDocumentId(), kept = liveLinkKeys();
+    const token = liveCanvas.docLinks.get(docId) || state.currentSnapshotBundleExtensions?.penechoLive?.link
+      || Object.keys(kept).find(key => docId && kept[key]?.docId === docId);
+    if (!LIVE_UUID.test(String(token || "")) || liveCanvas.endedLinks.has(token)) return null;
+    return { token, ...(kept[token] || {}), seq:Math.max(liveCanvas.linkSeqs.get(token) || 0, liveCanvasSequence(state.currentSnapshotBundleExtensions)) };
+  }
+  function liveLinkForget(token) {
+    liveLinkKeep(token, null);
+    for (const [docId, linked] of liveCanvas.docLinks) if (linked === token) liveCanvas.docLinks.delete(docId);
+    liveCanvas.linkSeqs.delete(token);
+  }
+  function liveRequestHeaders(extra = {}) {
+    // The local server needs this page's session, not an AI connection.
+    if (!["cloud", "viewer"].includes(window.PENECHO_CONFIG?.runtime)) return typeof authenticatedApiHeaders === "function" ? authenticatedApiHeaders({ accept:"application/json", ...extra }) : { accept:"application/json", ...extra };
+    const csrf = document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("penecho_csrf="))?.slice("penecho_csrf=".length) || "";
+    return { accept:"application/json", ...(csrf ? { "x-penecho-csrf":decodeURIComponent(csrf) } : {}), ...extra };
+  }
+  function liveLinkPath(suffix = "") { return `${["cloud", "viewer"].includes(window.PENECHO_CONFIG?.runtime) ? "/api/v1" : "/api/cloud"}/live/links${suffix}`; }
+  async function liveLinkRequest(suffix, { method = "POST", body, ownerKey } = {}) {
+    const response = await fetch(liveLinkPath(suffix), { method, credentials:"same-origin", cache:"no-store",
+      headers:liveRequestHeaders({ ...(body === undefined ? {} : { "content-type":"application/json" }), ...(ownerKey ? { "x-penecho-owner-key":ownerKey } : {}) }),
+      body:body === undefined ? undefined : JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(Error(payload.error_description || payload.message || payload.error || `HTTP ${response.status}`), { status:response.status });
+    return payload;
+  }
+  // Starts collaborating on this Canvas by a new link, without an account.
+  async function liveCanvasStartLink(title, bundle) {
+    const started = await liveLinkRequest("", { body:{ title:String(title || "Canvas").slice(0, 160), bundle } });
+    const publicUrl = started.publicUrl || new URL(started.url, location.origin).toString(), docId = liveActiveDocumentId();
+    liveLinkKeep(started.token, { ownerKey:started.ownerKey, publicUrl, docId, startedAt:Date.now() });
+    if (docId) liveCanvas.docLinks.set(docId, started.token);
+    liveCanvas.expiresAt = started.expiresAt || null;
+    liveCanvasStart({ share:started.token, local:true }, { have:0 });
+    liveCanvasRenderExpiry();
+    return { token:started.token, publicUrl, expiresAt:started.expiresAt };
+  }
+  // Ends this Canvas's link for everyone; the Canvas itself stays here.
+  async function liveCanvasEndLink() {
+    const link = liveCanvasLink();
+    if (!link?.ownerKey) throw Error(liveCopy("Only the person who started this link can stop it.", "只有发起此链接的人可以停止它。"));
+    if (liveCanvas.target?.share === link.token) liveCanvasStop();
+    liveCanvas.endedLinks.add(link.token);
+    try { await liveLinkRequest(`/${link.token}`, { method:"DELETE", ownerKey:link.ownerKey }); }
+    catch (error) { if (error.status !== 404) { liveCanvas.endedLinks.delete(link.token); liveCanvasSyncTarget(); throw error; } }
+    liveLinkForget(link.token);
+    liveCanvasRenderExpiry();
+  }
+  // Saved to Cloud by the person who started its link: the link becomes that
+  // Canvas's collaboration link, so everyone keeps working on it.
+  async function liveCanvasAdopt(link, canvasId) {
+    if (liveCanvas.adopting === link.token) return;
+    liveCanvas.adopting = link.token;
+    try {
+      const adopted = await liveLinkRequest(`/${link.token}/adopt`, { body:{ canvasId }, ownerKey:link.ownerKey });
+      const have = liveCanvas.target?.share === link.token ? liveCanvas.appliedSeq : link.seq;
+      liveLinkForget(link.token);
+      if (typeof window.dispatchEvent === "function") window.dispatchEvent(new CustomEvent("penecho:collaboration-adopted", { detail:{ canvasId, collaboration:adopted.collaboration } }));
+      liveCanvas.expiresAt = null;
+      liveCanvasStart({ canvas:canvasId }, { have });
+    } catch (error) {
+      setStatus(liveCopy(`Collaboration continues on its link. ${error.message}`, `协作仍通过原链接继续。${error.message}`));
+      liveCanvasStart({ share:link.token, local:true }, { have:link.seq });
+    } finally {
+      liveCanvas.adopting = null;
+      liveCanvasRenderExpiry();
+    }
+  }
+
+  // ---------- Encoding ----------
+  function liveTilePixels(canvas) {
+    return canvas ? canvas.getContext("2d", { willReadFrequently:true }).getImageData(0, 0, TILE, TILE).data : null;
+  }
+  async function liveDeflate(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function liveInflate(base64) {
+    const binary = atob(base64), bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  function liveBase64(bytes) {
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 32768) binary += String.fromCharCode(...bytes.subarray(index, index + 32768));
+    return btoa(binary);
+  }
+  function liveBlobDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || Error("Image could not be read"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  // Images compare by the identity of their bytes, not by their pixels.
+  function liveBlobKey(blob, blobs) {
+    if (!(blob instanceof Blob)) return "";
+    let key = liveCanvas.blobKeys.get(blob);
+    if (!key) liveCanvas.blobKeys.set(blob, key = `blob:${++liveCanvas.blobCount}`);
+    blobs?.set(key, blob);
+    return key;
+  }
+  function liveWireObject(kind, item, blobs = null) {
+    if (!item) return null;
+    if (kind === "images") {
+      const { image, blob, src, ...rest } = item;
+      return { ...rest, src:blob ? liveBlobKey(blob, blobs) : src || "" };
+    }
+    if (kind === "textBoxes") {
+      const { image, ...rest } = item;
+      return rest;
+    }
+    return item;
+  }
+  function liveWireList(kind, list, blobs) {
+    return (Array.isArray(list) ? list : []).map(item => liveWireObject(kind, item, blobs));
+  }
+  function liveCurrentWire(kind, item) {
+    if (!item) return null;
+    if (kind === "widgets") return serializedWidgets().find(widget => widget.id === item.id) || null;
+    if (kind === "images") return liveWireObject(kind, imageHistoryState().find(image => image.id === item.id));
+    return liveWireObject(kind, textBoxHistoryRecord(item));
+  }
+  async function liveResolveSources(op, blobs) {
+    if (op.t !== "obj" || op.k !== "images") return op;
+    const resolve = async value => {
+      if (!value || typeof value.src !== "string" || !value.src.startsWith("blob:")) return value;
+      const blob = blobs?.get(value.src);
+      return blob ? { ...value, src:await liveBlobDataUrl(blob) } : (({ src, ...rest }) => rest)(value);
+    };
+    const next = { ...op };
+    if (op.put) next.put = await resolve(op.put);
+    if (op.set) next.set = await resolve(op.set);
+    // Each copy names image bytes differently; Undo checks only geometry.
+    if (op.expect) next.expect = (({ src, ...rest }) => rest)(op.expect);
+    return next;
+  }
+
+  // ---------- Object IDs ----------
+  // Each participant creates objects in its own ID range, so new objects from
+  // different people never collide. Existing IDs keep their numbers.
+  function liveCanvasInstallIdRanges(slot) {
+    liveCanvasRemoveIdRanges();
+    const base = slot * LIVE_ID_RANGE, ranges = {};
+    for (const [singular, kind] of [["Widget", "widgets"], ["Image", "images"], ["TextBox", "textBoxes"], ["Animation", "animations"]]) {
+      const property = `next${singular}Id`, used = (state[kind] || []).map(item => Number(String(item.id).split("-").at(-1))).filter(id => id > base && id < base + LIVE_ID_RANGE);
+      let value = Math.max(base + 1, ...used.map(id => id + 1));
+      Object.defineProperty(state, property, { configurable:true, enumerable:true,
+        get:() => value,
+        set:next => { if (Number.isSafeInteger(next) && next > value && next < base + LIVE_ID_RANGE) value = next; } });
+      ranges[property] = true;
+    }
+    liveCanvas.idRanges = ranges;
+  }
+  function liveCanvasRemoveIdRanges() {
+    if (!liveCanvas.idRanges) return;
+    for (const property of Object.keys(liveCanvas.idRanges)) {
+      const kind = { nextWidgetId:"widgets", nextImageId:"images", nextTextBoxId:"textBoxes", nextAnimationId:"animations" }[property];
+      const next = Math.max(1, ...(state[kind] || []).map(item => Number(String(item.id).split("-").at(-1)) + 1).filter(Number.isSafeInteger));
+      Object.defineProperty(state, property, { configurable:true, enumerable:true, writable:true, value:next });
+    }
+    liveCanvas.idRanges = null;
+  }
+
+  // ---------- Capturing my changes ----------
+  function liveIndexPatch(patch) {
+    const lookup = new Int32Array(patch.w * patch.h).fill(-1);
+    for (let bit = 0, n = 0; bit < patch.w * patch.h; bit++) if (patch.mask[bit >> 3] & (1 << (bit & 7))) lookup[bit] = n++;
+    return lookup;
+  }
+  function liveRememberConfirmed(k, pixels) {
+    if (!liveCanvas.confirmed.has(k)) liveCanvas.confirmed.set(k, pixels ? Uint8ClampedArray.from(pixels) : new Uint8ClampedArray(TILE * TILE * 4));
+  }
+  // Called once for every committed history entry while this Canvas is live.
+  function liveCanvasCapture(entry) {
+    if (!entry || entry.liveCaptured || !liveCanvasCanEdit()) return;
+    entry.liveCaptured = true;
+    const patches = new Map();
+    for (const change of entry.tiles || []) {
+      const before = liveTilePixels(change.before), patch = LIVE_OPS.diffTile(before, liveTilePixels(change.after));
+      if (!patch) continue;
+      patches.set(change.k, patch);
+      liveRememberConfirmed(change.k, before);
+    }
+    entry.livePatches = patches;
+    const ops = [], blobs = new Map();
+    for (const kind of LIVE_OBJECT_KINDS) {
+      const before = entry[`${kind}Before`], after = entry[`${kind}After`];
+      if (before && after) ops.push(...LIVE_OPS.diffObjects(kind, liveWireList(kind, before, blobs), liveWireList(kind, after, blobs)));
+    }
+    const front = { frontKind:state.frontCanvasObjectKind, placedKind:state.frontPlacedCanvasObjectKind };
+    if (liveCanvas.lastFront && (front.frontKind !== liveCanvas.lastFront.frontKind || front.placedKind !== liveCanvas.lastFront.placedKind)) ops.push({ t:"meta", set:front });
+    liveCanvas.lastFront = front;
+    if (patches.size || ops.length) liveCanvasQueue({ patches, ops, blobs });
+  }
+  // A Widget interaction extends its open history entry instead of adding one.
+  function liveCanvasCaptureWidgets(before, after) {
+    if (!liveCanvasCanEdit() || !before || !after) return;
+    const ops = LIVE_OPS.diffObjects("widgets", before, after);
+    if (ops.length) liveCanvasQueue({ patches:new Map(), ops, blobs:new Map() });
+  }
+  function liveChangeId() {
+    return `${(liveCanvas.you?.id || "local").slice(0, 8)}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  function liveCanvasQueue({ patches, ops, blobs }) {
+    const change = { cid:liveChangeId(), patches, ops, blobs, wire:null, sent:null,
+      lookups:new Map([...patches].map(([k, patch]) => [k, liveIndexPatch(patch)])) };
+    liveCanvas.pending.push(change);
+    liveCanvas.encoding = liveCanvas.encoding.then(() => liveCanvasEncode(change)).then(() => liveCanvasSend(change))
+      .catch(error => debug("live-encode-failed", { error:String(error?.message || error).slice(0, 160) }));
+    liveCanvasRenderPresence();
+  }
+  async function liveCanvasEncode(change) {
+    const tiles = [];
+    for (const [k, patch] of change.patches)
+      tiles.push({ k, d:liveBase64(await liveDeflate(LIVE_OPS.packPatch({ x:patch.x, y:patch.y, w:patch.w, h:patch.h, mask:patch.mask, values:patch.values, ...(patch.expect ? { expect:patch.expect } : {}) }))) });
+    const ops = [];
+    for (let start = 0; start < tiles.length; start += LIVE_OPS.LIMITS.tilesPerOp) ops.push({ t:"ink", tiles:tiles.slice(start, start + LIVE_OPS.LIMITS.tilesPerOp) });
+    for (const op of change.ops) ops.push(await liveResolveSources(op, change.blobs));
+    change.wire = ops;
+    change.blobs = null;
+  }
+  function liveCanvasSend(change) {
+    const socket = liveCanvas.socket;
+    if (!change.wire || socket?.readyState !== 1 || liveCanvas.status !== "live" || change.sent === socket) return;
+    const text = JSON.stringify({ type:"change", cid:change.cid, ops:change.wire });
+    if (text.length > LIVE_CHANGE_CHARS) {
+      liveCanvas.pending.splice(liveCanvas.pending.indexOf(change), 1);
+      setStatus(liveCopy("This change is too large to share live. Save the Canvas to keep it.", "此改动过大，无法实时同步。请保存画布以保留它。"));
+      return;
+    }
+    change.sent = socket;
+    socket.send(text);
+  }
+
+  // ---------- Applying changes ----------
+  // The value my pending changes leave at one pixel, starting from `start`.
+  function liveReplayPending(k, i, start, out) {
+    out.set(start);
+    const x = (i / 4) % TILE, y = Math.floor(i / 4 / TILE);
+    for (const change of liveCanvas.pending) {
+      const patch = change.patches.get(k);
+      if (!patch || x < patch.x || y < patch.y || x >= patch.x + patch.w || y >= patch.y + patch.h) continue;
+      const n = change.lookups.get(k)[(y - patch.y) * patch.w + x - patch.x];
+      if (n < 0 || (patch.expect && !LIVE_OPS.closePixel(out, 0, patch.expect, n * 4))) continue;
+      out.set(patch.values.subarray(n * 4, n * 4 + 4));
+    }
+    return out;
+  }
+  function liveSetPixel(target, i, value) {
+    target[i] = value[0]; target[i + 1] = value[1]; target[i + 2] = value[2]; target[i + 3] = value[3];
+  }
+  // Someone else's ink lands in server order: underneath my unconfirmed changes
+  // and around a stroke I am drawing right now.
+  function liveApplyRemoteInk(k, patch) {
+    const parsed = LIVE_OPS.tileKey(k);
+    if (!parsed) return;
+    const canvas = tile(parsed.tx, parsed.ty, true), context = canvas.getContext("2d", { willReadFrequently:true }),
+      display = context.getImageData(0, 0, TILE, TILE), shown = display.data,
+      open = state.historyBefore.has(k), beforeCanvas = open ? state.historyBefore.get(k) : null,
+      before = open ? liveTilePixels(beforeCanvas) || new Uint8ClampedArray(TILE * TILE * 4) : null,
+      confirmed = liveCanvas.confirmed.get(k), scratch = new Uint8ClampedArray(4);
+    let changed = false;
+    for (let row = 0, n = 0; row < patch.h; row++) for (let column = 0; column < patch.w; column++) {
+      const bit = row * patch.w + column;
+      if (!(patch.mask[bit >> 3] & (1 << (bit & 7)))) continue;
+      const i = ((patch.y + row) * TILE + patch.x + column) * 4, j = n++ * 4, base = confirmed || before || shown;
+      if (patch.expect && !LIVE_OPS.closePixel(base, i, patch.expect, j)) continue;
+      const incoming = patch.values.subarray(j, j + 4);
+      let value = incoming;
+      if (confirmed) {
+        liveSetPixel(confirmed, i, incoming);
+        value = liveReplayPending(k, i, incoming, scratch);
+      }
+      if (before) {
+        const drawnNow = !LIVE_OPS.samePixel(before, i, shown, i);
+        liveSetPixel(before, i, value);
+        if (drawnNow) continue;
+      }
+      liveSetPixel(shown, i, value);
+      changed = true;
+    }
+    if (changed) context.putImageData(display, 0, 0);
+    if (open) {
+      const copy = beforeCanvas || offscreen(TILE, TILE);
+      const beforeData = new ImageData(before, TILE, TILE);
+      copy.getContext("2d").putImageData(beforeData, 0, 0);
+      state.historyBefore.set(k, copy);
+    }
+    liveSettleTile(k, canvas, parsed);
+  }
+  function liveSettleTile(k, canvas, { tx, ty }) {
+    invalidateSharpOverlays({ x:tx * TILE, y:ty * TILE, w:TILE, h:TILE });
+    const ink = inkBox(canvas, Math.min(TILE, SIZE - tx * TILE), Math.min(TILE, SIZE - ty * TILE));
+    if (ink) state.inkBounds.set(k, ink);
+    else if (!state.historyBefore.has(k)) {
+      tiles.delete(k);
+      state.inkBounds.delete(k);
+    } else state.inkBounds.delete(k);
+  }
+  function liveApplyLocalInk(k, patch) {
+    const parsed = LIVE_OPS.tileKey(k);
+    if (!parsed) return;
+    const canvas = tile(parsed.tx, parsed.ty, true), context = canvas.getContext("2d", { willReadFrequently:true }),
+      display = context.getImageData(0, 0, TILE, TILE);
+    if (liveCanvasCanEdit()) liveRememberConfirmed(k, display.data);
+    if (LIVE_OPS.applyTilePatch(display.data, patch)) context.putImageData(display, 0, 0);
+    liveSettleTile(k, canvas, parsed);
+  }
+  const LIVE_TRANSACTION_KEYS = { widgets:"widgetHistoryBefore", images:"imageHistoryBefore", textBoxes:"textBoxHistoryBefore" };
+  const LIVE_GEOMETRY = new Set(["x", "y", "w", "h", "contentW", "contentH"]);
+  // My unconfirmed object changes come after this one in server order.
+  function liveWithoutPending(op) {
+    const mine = liveCanvas.pending.flatMap(change => change.ops).filter(other => other.t === "obj" && other.k === op.k && other.id === op.id);
+    if (!mine.length || op.del) return op;
+    if (mine.some(other => other.del)) return null;
+    const fields = new Set(mine.flatMap(other => [...Object.keys(other.set || {}), ...(other.unset || []), ...Object.keys(other.put || {})]));
+    if (op.put) return op;
+    const set = op.set && Object.fromEntries(Object.entries(op.set).filter(([field]) => !fields.has(field))),
+      unset = op.unset?.filter(field => !fields.has(field));
+    if (!(set && Object.keys(set).length) && !unset?.length) return null;
+    return { ...op, ...(set && Object.keys(set).length ? { set } : { set:undefined }), ...(unset?.length ? { unset } : { unset:undefined }) };
+  }
+  async function liveCanvasPrepare(op) {
+    if (op.t === "ink") return { op, tiles:await Promise.all(op.tiles.map(async item => ({ k:item.k, patch:LIVE_OPS.unpackPatch(await liveInflate(item.d)) }))) };
+    if (op.t !== "obj" || op.del) return { op };
+    const source = op.put || op.set || {};
+    if (op.k === "images" && typeof source.src === "string" && source.src.startsWith("data:image/")) {
+      const blob = dataUrlBlob(source.src);
+      return { op, blob, image:await imageFromBlob(blob) };
+    }
+    if (op.k === "textBoxes" && (op.put || ["text", "fontSize", "fontFamily", "color", "maxWidth"].some(field => Object.hasOwn(source, field)))) {
+      const current = state.textBoxes.find(item => item.id === op.id), next = LIVE_OPS.applyObjectOp(liveCurrentWire("textBoxes", current), op);
+      const record = next ? await renderedTextBoxRecord(next, desiredCanvasTextRasterRatio()) : null;
+      return { op, image:record?.image || null, rendered:next };
+    }
+    return { op };
+  }
+  function liveObjectRecord(kind, next, previous, prepared) {
+    if (kind === "widgets") return widgetRecord(next);
+    if (kind === "images") {
+      const { src, ...fields } = next, blob = prepared?.blob || previous?.blob, image = prepared?.image || previous?.image;
+      return blob && image ? imageRecord({ ...fields, blob, image }) : null;
+    }
+    const image = prepared?.image && LIVE_OPS.equal(prepared.rendered, next) ? prepared.image : previous?.image;
+    if (!image) {
+      void renderedTextBoxRecord(next, desiredCanvasTextRasterRatio()).then(record => {
+        const item = state.textBoxes.find(box => box.id === next.id);
+        if (record && item && LIVE_OPS.equal(liveCurrentWire("textBoxes", item), next)) { item.image = record.image; requestRender(); }
+      }).catch(() => {});
+      return null;
+    }
+    return { ...next, image };
+  }
+  function liveRemoveObject(kind, index) {
+    const [item] = state[kind].splice(index, 1), singular = kind === "textBoxes" ? "TextBox" : kind === "widgets" ? "Widget" : "Image";
+    if (kind === "widgets") unmountWidget(item);
+    if (kind === "textBoxes") for (const editor of [...state.textEditors.values()]) if (editor.sourceTextBoxId === item.id) removeTextEditor(editor);
+    clearHandToolbarTarget(kind === "textBoxes" ? "text-box" : kind.slice(0, -1), item.id);
+    if (state[`selected${singular}Id`] === item.id) state[`selected${singular}Id`] = null;
+    const edit = kind === "widgets" ? "widgetEdit" : kind === "images" ? "imageEdit" : null;
+    if (edit && state[edit]?.id === item.id) state[edit] = null;
+  }
+  function livePatchTransaction(kind, op, prepared) {
+    const list = state[LIVE_TRANSACTION_KEYS[kind]];
+    if (!Array.isArray(list)) return;
+    const index = list.findIndex(item => item.id === op.id), next = LIVE_OPS.applyObjectOp(liveWireObject(kind, list[index]), op);
+    if (next === undefined) return;
+    if (next === null) { list.splice(index, 1); return; }
+    const previous = list[index], value = kind === "images" ? (({ src, ...fields }) => ({ ...fields, blob:prepared?.blob || previous?.blob, image:prepared?.image || previous?.image }))(next)
+      : kind === "textBoxes" ? { ...next, image:prepared?.image || previous?.image } : next;
+    if (index >= 0) list[index] = value;
+    else list.push(value);
+  }
+  function liveCommitObject(op, prepared, { remote = true } = {}) {
+    const kind = op.k, list = state[kind];
+    if (!LIVE_OBJECT_KINDS.includes(kind) || !Array.isArray(list)) return false;
+    const effective = remote ? liveWithoutPending(op) : op;
+    if (!effective) return false;
+    if (remote) livePatchTransaction(kind, effective, prepared);
+    const index = list.findIndex(item => item.id === op.id), previous = index >= 0 ? list[index] : null,
+      next = LIVE_OPS.applyObjectOp(liveCurrentWire(kind, previous), effective);
+    if (next === undefined) return false;
+    if (next === null) { liveRemoveObject(kind, index); return true; }
+    // Geometry alone moves a Widget without reloading its frame.
+    if (kind === "widgets" && previous && Object.keys(effective.set || {}).every(field => LIVE_GEOMETRY.has(field)) && !effective.unset && !effective.put) {
+      for (const field of Object.keys(effective.set)) previous[field] = next[field];
+      positionWidget(previous);
+      return true;
+    }
+    const record = liveObjectRecord(kind, next, previous, prepared);
+    if (!record) return false;
+    if (kind === "widgets" && previous) unmountWidget(previous);
+    if (index >= 0) list[index] = record;
+    else list.push(record);
+    if (kind === "widgets") {
+      if (pluginEnabled(record.pluginId)) mountWidget(record);
+      syncWidgetLayerOrder();
+    }
+    return true;
+  }
+  function liveCommitOrder(op) {
+    const list = state[op.k];
+    if (!LIVE_OBJECT_KINDS.includes(op.k) || !Array.isArray(list)) return;
+    const byId = new Map(list.map(item => [item.id, item]));
+    list.splice(0, list.length, ...LIVE_OPS.applyOrder(list.map(item => item.id), op.ids).map(id => byId.get(id)));
+    if (op.k === "widgets") syncWidgetLayerOrder();
+  }
+  function liveCommit(prepared, options) {
+    const { op } = prepared;
+    if (op.t === "ink") for (const item of prepared.tiles) options.remote ? liveApplyRemoteInk(item.k, item.patch) : liveApplyLocalInk(item.k, item.patch);
+    else if (op.t === "obj") liveCommitObject(op, prepared, options);
+    else if (op.t === "order") liveCommitOrder(op);
+    else if (op.t === "meta") {
+      restoreCanvasObjectFrontKinds(op.set.frontKind || state.frontCanvasObjectKind, op.set.placedKind || state.frontPlacedCanvasObjectKind);
+      liveCanvas.lastFront = { frontKind:state.frontCanvasObjectKind, placedKind:state.frontPlacedCanvasObjectKind };
+    }
+  }
+  function liveDocumentChanged() {
+    state.userRevision++;
+    requestRender();
+    window.PenEchoStudioNavigator?.updateDocument?.();
+    if (typeof canvasDocumentsScheduleDraft === "function") canvasDocumentsScheduleDraft();
+  }
+  async function liveCanvasApplyChange(message) {
+    if (message.seq <= liveCanvas.appliedSeq) return;
+    if (message.seq !== liveCanvas.appliedSeq + 1) { liveCanvasReconnect(0); return; }
+    // Decode everything first; the Canvas then changes in one step.
+    const prepared = [];
+    for (const op of Array.isArray(message.ops) ? message.ops : []) {
+      try { prepared.push(await liveCanvasPrepare(op)); }
+      catch (error) { debug("live-change-skipped", { error:String(error?.message || error).slice(0, 160) }); }
+    }
+    for (const item of prepared) {
+      try { liveCommit(item, { remote:true }); }
+      catch (error) { debug("live-change-skipped", { error:String(error?.message || error).slice(0, 160) }); }
+    }
+    liveCanvas.appliedSeq = message.seq;
+    const person = message.by?.participantId && liveCanvas.participants.get(message.by.participantId);
+    if (person) person.activeAt = Date.now();
+    liveDocumentChanged();
+  }
+  function liveCanvasAck({ seq, cid }) {
+    const index = liveCanvas.pending.findIndex(change => change.cid === cid);
+    if (index >= 0) {
+      const [change] = liveCanvas.pending.splice(index, 1);
+      for (const [k, patch] of change.patches) {
+        const confirmed = liveCanvas.confirmed.get(k);
+        if (confirmed) LIVE_OPS.applyTilePatch(confirmed, patch);
+        if (!liveCanvas.pending.some(other => other.patches.has(k))) liveCanvas.confirmed.delete(k);
+      }
+    }
+    liveCanvas.appliedSeq = Math.max(liveCanvas.appliedSeq, Number(seq) || 0);
+  }
+
+  // ---------- Undo and Redo ----------
+  // While live, Undo and Redo change only what this entry changed and nobody
+  // changed since; the result is shared like any other change.
+  // On a live Canvas, and for history made before a newer save was merged in,
+  // Undo and Redo change only what still holds the change, so they never remove
+  // what someone else added since.
+  function liveCanvasApplyHistory(entry, side) {
+    const live = liveCanvasCanEdit();
+    if (!entry || Array.isArray(entry) || !(live || entry.rebased) || !LIVE_OPS) return null;
+    const direction = side === "before" ? "undo" : "redo", patches = new Map();
+    for (const change of entry.tiles || []) {
+      let patch = entry.livePatches?.get(change.k);
+      if (!patch) {
+        patch = LIVE_OPS.diffTile(liveTilePixels(change.before), liveTilePixels(change.after));
+        if (!patch) continue;
+        (entry.livePatches ||= new Map()).set(change.k, patch);
+      }
+      const restore = LIVE_OPS.restorePatch(patch, direction);
+      liveApplyLocalInk(change.k, restore);
+      patches.set(change.k, restore);
+    }
+    const ops = [], blobs = new Map(), records = new Map();
+    for (const kind of LIVE_OBJECT_KINDS) {
+      const before = entry[`${kind}Before`], after = entry[`${kind}After`];
+      if (!before || !after) continue;
+      const [from, to] = side === "before" ? [after, before] : [before, after];
+      for (const item of to) records.set(`${kind}:${item.id}`, item);
+      ops.push(...LIVE_OPS.diffObjects(kind, liveWireList(kind, from, blobs), liveWireList(kind, to, blobs), { conditional:true }));
+    }
+    for (const op of ops) {
+      if (op.t === "order") { liveCommitOrder(op); continue; }
+      const record = records.get(`${op.k}:${op.id}`);
+      liveCommitObject(op, record ? { blob:record.blob, image:record.image, rendered:liveWireObject(op.k, record) } : null, { remote:false });
+    }
+    if (live && (patches.size || ops.length)) liveCanvasQueue({ patches, ops, blobs });
+    return { objects:null };
+  }
+
+  // ---------- Connection ----------
+  function liveCanvasSocketUrl() {
+    const target = liveCanvas.target, query = new URLSearchParams(target.canvas ? { canvas:target.canvas } : { share:target.share });
+    // Local PenEcho reaches Cloud through its own server, which holds the account session.
+    const path = window.PENECHO_CONFIG?.runtime === "cloud" || window.PENECHO_CONFIG?.runtime === "viewer" ? "/api/v1/live/socket" : "/api/cloud/live/socket";
+    return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${path}?${query}`;
+  }
+  function liveCanvasStart(target, { have = 0 } = {}) {
+    if (!LIVE_OPS || typeof WebSocket !== "function" || typeof CompressionStream !== "function") return false;
+    if (target.canvas && liveCanvas.target?.canvas === target.canvas || target.share && liveCanvas.target?.share === target.share) return true;
+    liveCanvasStop();
+    Object.assign(liveCanvas, { target, appliedSeq:Math.max(0, Number(have) || 0), status:"connecting", retries:0, readOnly:false,
+      lastFront:{ frontKind:state.frontCanvasObjectKind, placedKind:state.frontPlacedCanvasObjectKind } });
+    liveCanvas.epoch++;
+    liveCanvasConnect();
+    return true;
+  }
+  function liveCanvasStop() {
+    if (liveCanvas.target?.local) liveCanvas.linkSeqs.set(liveCanvas.target.share, liveCanvas.appliedSeq);
+    liveCanvas.epoch++;
+    clearTimeout(liveCanvas.retryTimer);
+    try { liveCanvas.socket?.close(1000, "Canvas closed"); } catch {}
+    Object.assign(liveCanvas, { target:null, socket:null, status:"off", role:null, you:null, slot:0, appliedSeq:0, pending:[], readOnly:false });
+    liveCanvas.confirmed.clear();
+    for (const person of liveCanvas.participants.values()) person.cursor?.remove();
+    liveCanvas.participants.clear();
+    liveCanvasRemoveIdRanges();
+    liveCanvasRenderPresence();
+  }
+  function liveCanvasConnect() {
+    const epoch = liveCanvas.epoch;
+    let socket;
+    try { socket = new WebSocket(liveCanvasSocketUrl()); }
+    catch { liveCanvasReconnect(); return; }
+    liveCanvas.socket = socket;
+    socket.addEventListener("open", () => {
+      if (epoch !== liveCanvas.epoch) return;
+      socket.send(JSON.stringify({ type:"hello", have:liveCanvas.appliedSeq, ...(liveCanvas.slot ? { slot:liveCanvas.slot } : {}) }));
+    });
+    socket.addEventListener("message", event => {
+      if (epoch !== liveCanvas.epoch) return;
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+      liveCanvas.receiving = liveCanvas.receiving.then(() => epoch === liveCanvas.epoch && liveCanvasReceive(message))
+        .catch(error => debug("live-receive-failed", { error:String(error?.message || error).slice(0, 160) }));
+    });
+    socket.addEventListener("close", event => {
+      if (epoch !== liveCanvas.epoch) return;
+      liveCanvas.socket = null;
+      if (event.code === 4403 || event.code === 4401) {
+        if (event.code === 4403 && liveCanvas.target?.share) liveCanvasLinkEnded();
+        else liveCanvasStop();
+        return;
+      }
+      liveCanvas.status = "offline";
+      liveCanvasRenderPresence();
+      // A link turned off while this page was away refuses the socket without a close code.
+      if (liveCanvas.target?.share && liveCanvas.retries) void liveCanvasCheckLink(liveCanvas.target.share);
+      liveCanvasReconnect();
+    });
+  }
+  // People editing by link must stop the moment the owner turns it off: the
+  // page reopens the link, which now says the link has ended.
+  function liveCanvasLinkEnded() {
+    const target = liveCanvas.target;
+    liveCanvasStop();
+    if (window.PENECHO_CONFIG?.liveShare) { liveCanvas.reloading = true; location.reload(); return; }
+    if (target?.local) {
+      // Stopped or cleared on Cloud: this copy stays here and stops updating.
+      liveCanvas.endedLinks.add(target.share);
+      liveLinkForget(target.share);
+      liveCanvasRenderExpiry();
+      setStatus(liveCopy("This collaboration has ended. Your Canvas stays here.", "此协作已结束，你的画布仍保留在这里。"));
+      return;
+    }
+    setStatus(liveCopy("Sharing was turned off. This Canvas no longer updates.", "分享已关闭，此画布不再更新。"));
+  }
+  async function liveCanvasCheckLink(token) {
+    try {
+      const response = await fetch(`/api/v1/shares/${encodeURIComponent(token)}`, { method:"HEAD", cache:"no-store" });
+      if ([404, 410].includes(response.status) && liveCanvas.target?.share === token) liveCanvasLinkEnded();
+    } catch {}
+  }
+  function liveCanvasReconnect(delay = null) {
+    if (!liveCanvas.target) return;
+    clearTimeout(liveCanvas.retryTimer);
+    const epoch = ++liveCanvas.epoch;
+    try { liveCanvas.socket?.close(1000, "Reconnecting"); } catch {}
+    liveCanvas.socket = null;
+    const wait = delay ?? Math.min(15000, 500 * 2 ** Math.min(5, liveCanvas.retries++));
+    liveCanvas.retryTimer = setTimeout(() => { if (epoch === liveCanvas.epoch) liveCanvasConnect(); }, wait);
+  }
+  async function liveCanvasReceive(message) {
+    if (message.type === "welcome") {
+      Object.assign(liveCanvas, { role:message.role, you:message.you, slot:message.you?.slot || liveCanvas.slot, status:"live", retries:0 });
+      if (message.reload) return liveCanvasReload();
+      if (window.PENECHO_CONFIG?.runtime !== "viewer" && liveCanvas.slot) liveCanvasInstallIdRanges(liveCanvas.slot);
+      for (const change of liveCanvas.pending) liveCanvasSend(change);
+      liveCanvasRenderPresence();
+    } else if (message.type === "change") await liveCanvasApplyChange(message);
+    else if (message.type === "ack") liveCanvasAck(message);
+    else if (message.type === "reject") {
+      // Cloud refused a change, so this copy no longer matches; start again from Cloud.
+      setStatus(message.message || liveCopy("A change could not be shared.", "一项改动无法同步。"));
+      if (["live_read_only", "live_room_full"].includes(message.code)) liveCanvas.readOnly = true;
+      else liveCanvasReload();
+    } else if (message.type === "access") {
+      // An editor page and a viewer page are different pages; open the right one.
+      if (message.role) location.reload();
+    } else if (message.type === "reload") liveCanvasReload();
+    else if (message.type === "here") liveCanvasPresent(message.participant);
+    else if (message.type === "gone") liveCanvasGone(message.participantId);
+    else if (message.type === "presence") liveCanvasMoved(message);
+    else if (message.type === "error" && message.message) setStatus(message.message);
+  }
+  function liveCanvasReload() {
+    if (liveCanvas.reloading) return;
+    // Local PenEcho reopens its own copy on reload, which cannot catch up with Cloud.
+    if (!["cloud", "viewer"].includes(window.PENECHO_CONFIG?.runtime) && !window.PENECHO_CONFIG?.liveShare) {
+      liveCanvasStop();
+      setStatus(liveCopy("This Canvas is out of step with Cloud. Close it and open it again from Cloud to keep working live.", "这块画布与云端不同步。请关闭后从云端重新打开，以继续实时协作。"));
+      return;
+    }
+    liveCanvas.reloading = true;
+    setStatus(liveCopy("Catching up with the shared Canvas…", "正在同步共享画布…"));
+    location.reload();
+  }
+  if (typeof window === "object") {
+    window.addEventListener("online", () => { if (liveCanvas.target && liveCanvas.status !== "live") liveCanvasReconnect(0); });
+    window.addEventListener("pagehide", () => { try { liveCanvas.socket?.close(1000, "Page closed"); } catch {} });
+  }
+
+  // ---------- People ----------
+  function liveCanvasPresent(participant) {
+    if (!participant?.id || participant.id === liveCanvas.you?.id) return;
+    const person = liveCanvas.participants.get(participant.id) || {};
+    liveCanvas.participants.set(participant.id, { ...person, ...participant, seenAt:Date.now() });
+    liveCanvasRenderPresence();
+  }
+  function liveCanvasGone(id) {
+    const person = liveCanvas.participants.get(id);
+    if (!person) return;
+    person.cursor?.remove();
+    liveCanvas.participants.delete(id);
+    liveCanvasRenderPresence();
+  }
+  function liveCanvasMoved(message) {
+    const person = liveCanvas.participants.get(message.participantId);
+    if (!person) return;
+    Object.assign(person, { point:message.point, pointAt:Date.now(), tool:message.tool || person.tool, seenAt:Date.now() });
+    liveCanvasPositionPresence();
+  }
+  function liveCanvasPointer(event) {
+    if (liveCanvas.status !== "live" || liveCanvas.socket?.readyState !== 1 || !liveCanvas.participants.size) return;
+    const now = performance.now();
+    if (now - liveCanvas.presenceAt < LIVE_PRESENCE_MS) return;
+    liveCanvas.presenceAt = now;
+    const point = clientPoint(event);
+    if (![point.x, point.y].every(Number.isFinite)) return;
+    liveCanvas.socket.send(JSON.stringify({ type:"presence", point, tool:state.mode }));
+  }
+  if (typeof view === "object" && view) view.addEventListener("pointermove", liveCanvasPointer, { passive:true });
+  function liveInitials(name) {
+    const words = String(name || "?").trim().split(/\s+/).filter(Boolean);
+    return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || "?").slice(0, 2)).toUpperCase();
+  }
+  function liveCanvasCursorLayer() {
+    if (liveCanvas.layer?.isConnected) return liveCanvas.layer;
+    if (typeof view !== "object" || !view) return null;
+    liveCanvas.layer = document.createElement("div");
+    liveCanvas.layer.className = "live-presence-layer";
+    liveCanvas.layer.setAttribute("aria-hidden", "true");
+    view.append(liveCanvas.layer);
+    return liveCanvas.layer;
+  }
+  function liveCanvasPositionPresence() {
+    if (!liveCanvas.participants.size) return;
+    const layer = liveCanvasCursorLayer();
+    if (!layer) return;
+    const metrics = canvasViewportMetrics(), now = Date.now();
+    for (const person of liveCanvas.participants.values()) {
+      if (!person.cursor) {
+        person.cursor = document.createElement("div");
+        person.cursor.className = "live-cursor";
+        person.cursor.style.setProperty("--live-color", person.color || "#2563eb");
+        const label = document.createElement("span");
+        label.textContent = person.name || "Guest";
+        person.cursor.append(label);
+        layer.append(person.cursor);
+      }
+      const visible = person.point && now - (person.pointAt || 0) < LIVE_CURSOR_IDLE_MS;
+      person.cursor.hidden = !visible;
+      if (!visible) continue;
+      const x = (person.point.x * state.scale + state.panX) / metrics.clientScaleX, y = (person.point.y * state.scale + state.panY) / metrics.clientScaleY;
+      person.cursor.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    }
+  }
+  function liveCanvasRenderPresence() {
+    const host = document.getElementById("liveParticipants");
+    if (!host) return;
+    const people = [...liveCanvas.participants.values()].sort((a, b) => (a.slot || 0) - (b.slot || 0));
+    host.hidden = !liveCanvas.target || (!people.length && liveCanvas.status === "live");
+    host.dataset.state = liveCanvas.status;
+    const shown = people.slice(0, 4).map(person => {
+      const avatar = document.createElement("span");
+      avatar.className = "live-avatar";
+      avatar.style.setProperty("--live-color", person.color || "#2563eb");
+      avatar.dataset.kind = person.kind || "person";
+      avatar.textContent = liveInitials(person.name);
+      avatar.title = person.name || "Guest";
+      return avatar;
+    });
+    if (people.length > 4) {
+      const more = document.createElement("span");
+      more.className = "live-avatar live-avatar-more";
+      more.textContent = `+${people.length - 4}`;
+      shown.push(more);
+    }
+    host.replaceChildren(...shown);
+    host.title = liveCanvas.status === "live" ? people.map(person => person.name).join(", ")
+      : liveCopy("Reconnecting to the shared Canvas…", "正在重新连接共享画布…");
+    liveCanvasPositionPresence();
+  }
+
+  // ---------- Opening ----------
+  // A Cloud Canvas opened by its owner is live; so is any Canvas opened from a
+  // share link. Other documents are not.
+  function liveCanvasSyncTarget() {
+    const config = window.PENECHO_CONFIG || {};
+    if (config.runtime === "viewer") return;
+    // A guest's folder Canvas is kept with its page, not in an account's library.
+    const id = state.currentSnapshotLocation === "cloud" && LIVE_UUID.test(String(state.currentSnapshotId || "")) && !window.PenEchoFolderProject?.guest?.() ? state.currentSnapshotId : null;
+    const link = config.liveShare ? null : liveCanvasLink();
+    if (link && id && link.ownerKey) void liveCanvasAdopt(link, id);
+    else if (link && !id) liveCanvasStart({ share:link.token, local:true }, { have:link.seq });
+    // A folder project's pages sync by saving; one of its Canvases goes live only
+    // while people collaborate on it or watch its share link.
+    else if (id && (!window.PenEchoFolderProject?.enabled?.() || liveCanvas.audience.has(id))) liveCanvasStart({ canvas:id }, { have:liveCanvasSequence(state.currentSnapshotBundleExtensions) });
+    else if (!(config.liveShare && liveCanvas.target?.share)) liveCanvasStop();
+    liveCanvasRenderExpiry();
+  }
+  if (typeof window === "object") window.addEventListener("penecho:live-share-context-changed", liveCanvasSyncTarget);
+  async function liveCanvasOpenShare() {
+    const share = window.PENECHO_CONFIG?.liveShare;
+    if (!share?.token) return false;
+    const response = await fetch(`/api/v1/shares/${encodeURIComponent(share.token)}`, { cache:"no-store", headers:{ accept:"application/json" } });
+    if (!response.ok) throw Error(response.status === 404 ? liveCopy("This collaboration has ended. Ask the owner for a new link.", "此协作已结束，可以请所有者发一个新链接。") : `HTTP ${response.status}`);
+    const payload = await response.json();
+    await viewCommunityCanvasArtifact(payload.artifact);
+    liveCanvas.expiresAt = payload.live?.expiresAt || null;
+    liveCanvasStart({ share:share.token }, { have:payload.live?.seq || 0 });
+    liveCanvasRenderExpiry();
+    return true;
+  }
+  // An unsaved link Canvas says when Cloud clears it, with the two ways to keep it.
+  function liveCanvasRenderExpiry() {
+    const host = document.getElementById("liveParticipants");
+    if (!host?.parentNode) return;
+    const target = liveCanvas.target, unsaved = target?.share && (target.local || window.PENECHO_CONFIG?.liveShare && liveCanvas.expiresAt);
+    // A guest's folder project shows when Cloud clears it, until someone signs in and keeps it.
+    const folderUntil = !unsaved && window.PenEchoFolderProject?.expiresAt?.();
+    let chip = document.getElementById("liveExpiry");
+    if (!unsaved && !folderUntil) { if (chip) chip.hidden = true; return; }
+    if (!chip) {
+      chip = document.createElement("button");
+      chip.id = "liveExpiry";
+      chip.type = "button";
+      chip.className = "live-expiry";
+      chip.dataset.peButton = "ghost";
+      chip.dataset.peDensity = "compact";
+      chip.addEventListener("click", liveCanvasExpiryMenu);
+      host.after(chip);
+    }
+    // Every change keeps it 7 more days, so a local copy counts from now.
+    const until = new Date(folderUntil || (target.local ? Date.now() + 7 * 86400000 : Date.parse(liveCanvas.expiresAt)));
+    const day = until.toLocaleDateString(state.language === "zh" ? "zh-CN" : undefined, { month:"short", day:"numeric" });
+    chip.hidden = false;
+    chip.textContent = liveCopy(`Until ${day}`, `保留至 ${day}`);
+    chip.title = folderUntil ? liveCopy("Cloud clears this folder's Canvases 7 days after their last change unless you sign in and keep them.", "此文件夹的画布在最后一次修改 7 天后会被云端清除，除非你登录并保留。")
+      : liveCopy("Cloud clears this shared Canvas 7 days after its last change unless someone signs in and saves it.", "此共享画布在最后一次修改 7 天后会被云端清除，除非有人登录并保存。");
+  }
+  function liveCanvasExpiryMenu(event) {
+    document.getElementById("liveExpiryMenu")?.remove();
+    const menu = document.createElement("div"), anchor = event.currentTarget.getBoundingClientRect();
+    menu.id = "liveExpiryMenu";
+    menu.className = "live-expiry-menu";
+    menu.setAttribute("role", "menu");
+    menu.dataset.peSurface = "menu";
+    const item = (label, action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("role", "menuitem");
+      button.dataset.peButton = "menu-item";
+      button.textContent = label;
+      button.addEventListener("click", () => { menu.remove(); action(); });
+      return button;
+    };
+    menu.append(
+      item(liveCopy("Download PDF", "下载 PDF"), () => {
+        const pdf = typeof exportCanvasPdf === "function" ? exportCanvasPdf : window.PenEchoCanvasExport?.pdf;
+        void Promise.resolve(pdf?.()).catch(error => setStatus(String(error?.message || error)));
+      }),
+      // The shared page saves its own way; the app saves this Canvas to the account it signs in to;
+      // a guest's folder page keeps all of its Canvases in that account.
+      window.PenEchoFolderProject?.guest?.() && !liveCanvas.target?.share
+        ? item(liveCopy("Sign in to keep", "登录以保留"), () => void window.PenEchoBrowserDraft?.signIn({ intent:"keep" }))
+        : item(liveCopy("Sign in to save", "登录以保存"), () => {
+          if (window.PENECHO_CONFIG?.liveShare) { if (typeof saveCurrentCanvasFromUser === "function") void saveCurrentCanvasFromUser(); }
+          else window.dispatchEvent(new CustomEvent("penecho:live-link-save"));
+        }),
+    );
+    Object.assign(menu.style, { position:"fixed", top:`${Math.round(anchor.bottom + 6)}px`, left:`${Math.round(anchor.left)}px`, zIndex:"1000" });
+    document.body.append(menu);
+    const close = closing => { if (!menu.contains(closing.target) && closing.target !== event.currentTarget) { menu.remove(); document.removeEventListener("pointerdown", close, true); } };
+    document.addEventListener("pointerdown", close, true);
+    menu.querySelector("button")?.focus();
+  }
+  // A comparable summary of what this copy shows, for diagnostics and tests.
+  function liveCanvasDigest() {
+    const ink = {};
+    for (const k of [...tiles.keys()].sort()) {
+      const pixels = liveTilePixels(tiles.get(k));
+      let count = 0, alpha = 0, red = 0, green = 0, blue = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const a = pixels[i + 3];
+        if (!a) continue;
+        count++; alpha += a; red += pixels[i] * a; green += pixels[i + 1] * a; blue += pixels[i + 2] * a;
+      }
+      if (count) ink[k] = { count, alpha, red:Math.round(red / 255), green:Math.round(green / 255), blue:Math.round(blue / 255) };
+    }
+    const personal = new Set(["src", "favoriteSourceId", "shareSourceId", "favorite", "favoriteArtifactSha256", "favoriteCloudId", "favoriteCommunityItemId"]);
+    const objects = kind => (state[kind] || []).map(item => Object.fromEntries(Object.entries(liveCurrentWire(kind, item) || {}).filter(([field]) => !personal.has(field))));
+    return { ink, widgets:objects("widgets"), images:objects("images"), textBoxes:objects("textBoxes") };
+  }
+  if (typeof window === "object") window.PenEchoLiveCanvas = {
+    start:(target, options) => liveCanvasStart(target, options),
+    // kind: "collaboration" or "share", as Cloud reports them for a Canvas.
+    audience:(canvasId, kind, on) => {
+      const kinds = liveCanvas.audience.get(canvasId) || new Set(), had = kinds.size > 0;
+      if (on) kinds.add(kind); else kinds.delete(kind);
+      if (kinds.size) liveCanvas.audience.set(canvasId, kinds); else liveCanvas.audience.delete(canvasId);
+      if (had !== kinds.size > 0) liveCanvasSyncTarget();
+    },
+    stop:liveCanvasStop,
+    startLink:liveCanvasStartLink,
+    endLink:liveCanvasEndLink,
+    link:() => { const link = liveCanvasLink(); return link ? { token:link.token, publicUrl:link.publicUrl || null, own:Boolean(link.ownerKey) } : null; },
+    openShare:liveCanvasOpenShare,
+    digest:liveCanvasDigest,
+    state:() => ({ status:liveCanvas.status, role:liveCanvas.role, appliedSeq:liveCanvas.appliedSeq, pending:liveCanvas.pending.length,
+      participants:[...liveCanvas.participants.values()].map(({ cursor, ...person }) => person) }),
+  };
 // Studio-only navigator for recent Agent conversations and saved canvases.
   {
     const STUDIO_NAVIGATOR_TAB_KEY = "penecho-studio-navigator-tab",
@@ -40029,10 +42007,14 @@ var canvasDocumentIdentity = (() => {
     const NOTE = noteCardRuntime();
     return `${NOTE.digest(entry.note)}:${NOTE.LOOK}:preview-900-webp96-v3:${noteCardMathRenderer() ? "math" : "plain"}`;
   }
-  async function noteLibrarySnapshot(note) {
-    const NOTE = noteCardRuntime(), html = noteCardDocument(note), frame = document.createElement("iframe"),
+  // `pdf` captures the whole note at high resolution: the card grows with its
+  // body instead of scrolling it, and the result carries its content size.
+  async function noteLibrarySnapshot(note, { pdf = false } = {}) {
+    const NOTE = noteCardRuntime(), card = noteCardDocument(note),
+      expanded = pdf ? card.replace("</head>", "<style>html,body{height:auto!important;overflow:visible!important;scrollbar-width:none!important}html::-webkit-scrollbar{display:none!important}.nc{position:relative!important;inset:auto!important;min-height:100vh}.nc-scroll{flex:1 0 auto!important}.nc-scroll::after{display:none!important}.nc-body{overflow:visible!important}</style></head>") : card,
+      html = expanded.length <= NOTE.MAX_DOCUMENT_CHARS ? expanded : card, frame = document.createElement("iframe"),
       hostUrl = widgetHostUrl({ id:"general", connect:[] }), hostOrigin = new URL(hostUrl).origin,
-      requestId = `note-preview-${canvasClientId()}`;
+      requestId = `note-${pdf ? "pdf" : "preview"}-${canvasClientId()}`;
     frame.title = note.title;
     frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
     frame.setAttribute("aria-hidden", "true");
@@ -40040,7 +42022,7 @@ var canvasDocumentIdentity = (() => {
     Object.assign(frame.style, { position:"fixed", left:"-20000px", top:"0", width:`${NOTE.CONTENT.w}px`, height:`${NOTE.CONTENT.h}px`, border:"0", pointerEvents:"none" });
     let receive, timer;
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
+      const snapshot = await new Promise((resolve, reject) => {
         let requested = false;
         receive = event => {
           if (event.source !== frame.contentWindow || event.origin !== hostOrigin) return;
@@ -40050,24 +42032,28 @@ var canvasDocumentIdentity = (() => {
             frame.contentWindow.postMessage({ type:"penecho-widget-state", active:true, selected:false, interactive:false, maximized:false, scaleX:1, scaleY:1 }, hostOrigin);
           } else if (message?.type === "penecho-widget-capture-ready" && !requested) {
             requested = true;
-            frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:NOTE.CONTENT.w, height:NOTE.CONTENT.h, waitForViewport:true, timeoutMs:10000 }, hostOrigin);
+            frame.contentWindow.postMessage({ type:"penecho-widget-snapshot-request", requestId, width:NOTE.CONTENT.w, height:NOTE.CONTENT.h, waitForViewport:true, timeoutMs:pdf ? 17000 : 10000, ...(pdf ? { highResolution:true, fullContent:true } : {}) }, hostOrigin);
           } else if (message?.requestId === requestId && message.type === "penecho-widget-snapshot") {
-            if (message.width !== NOTE.CONTENT.w || message.height !== NOTE.CONTENT.h || typeof message.dataUrl !== "string"
-              || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > 24 * 1024 * 1024) reject(Error("Invalid note preview snapshot."));
-            else resolve(message.dataUrl);
+            if ((pdf ? !(message.width > 0 && message.height > 0 && message.contentWidth >= NOTE.CONTENT.w && message.contentHeight >= NOTE.CONTENT.h) : message.width !== NOTE.CONTENT.w || message.height !== NOTE.CONTENT.h) || typeof message.dataUrl !== "string"
+              || !message.dataUrl.startsWith("data:image/png;base64,") || message.dataUrl.length > (pdf ? 64 : 24) * 1024 * 1024) reject(Error("Invalid note preview snapshot."));
+            else resolve(message);
           } else if (message?.requestId === requestId && message.type === "penecho-widget-snapshot-error") reject(Error(message.error || "Note preview capture failed."));
         };
-        timer = setTimeout(() => reject(Error("Note preview capture timed out.")), 15000);
+        timer = setTimeout(() => reject(Error("Note preview capture timed out.")), pdf ? 30000 : 15000);
         window.addEventListener("message", receive);
         frame.src = hostUrl;
         document.body.append(frame);
       });
-      return await decodeWidgetSnapshot(dataUrl);
+      const image = await decodeWidgetSnapshot(snapshot.dataUrl);
+      return pdf ? { image, contentWidth:snapshot.contentWidth, contentHeight:snapshot.contentHeight } : image;
     } finally {
       clearTimeout(timer);
       window.removeEventListener("message", receive);
       frame.remove();
     }
+  }
+  function noteCardPdfSnapshot(note) {
+    return noteLibrarySnapshot(note, { pdf:true });
   }
   async function noteEncodeThumbnail(image) {
     let canvas = offscreen(NOTE_THUMB_W, Math.round(NOTE_THUMB_W * noteCardRuntime().ASPECT));
@@ -40793,6 +42779,7 @@ var canvasDocumentIdentity = (() => {
       noteChip(noteCopy("Read", "单独浏览"), "↗", "note-detail-action primary", () => noteLibraryReadEntry(entry)),
       noteChip(noteCopy("Add to current canvas", "添加到当前画布"), "+", "note-detail-action", () => void noteLibraryAddToCanvas(entry)),
       share,
+      noteChip(t("downloadPdf"), "↓", "note-detail-action note-detail-pdf", event => void noteLibraryDownloadPdf(entry, event.currentTarget)),
     );
     secondary.append(
       noteChip(note.bookmarked ? noteCopy("Bookmarked", "已收藏") : noteCopy("Bookmark", "收藏"), note.bookmarked ? "★" : "☆", `note-detail-action${note.bookmarked ? " active" : ""}`, () => noteLibraryToggleBookmark(entry)),
@@ -40972,6 +42959,29 @@ var canvasDocumentIdentity = (() => {
     dialog.addEventListener("close", () => { observer.disconnect(); window.removeEventListener("message",receive); dialog.remove(); if (noteCards.reader === dialog) noteCards.reader = null; trigger?.focus(); }, {once:true});
     dialog.addEventListener("keydown", event => event.stopPropagation());
     document.body.append(dialog); noteCards.reader = dialog; dialog.showModal(); fit();
+  }
+  // Renders the library copy, so notes whose canvas is closed download too.
+  async function noteLibraryDownloadPdf(entry, button = null) {
+    if (noteCards.pdfBusy || !entry?.note) return false;
+    noteCards.pdfBusy = true;
+    if (button) button.disabled = true;
+    const panel = noteCards.panel;
+    setStatusKey("pdfPreparing");
+    try {
+      const snapshot = await noteCardPdfSnapshot(structuredClone(entry.note)), pixels = snapshot.image.naturalWidth || snapshot.image.width,
+        blob = await PenEchoPdf.fromImage(snapshot.image, { title:entry.note.title || "", pointsPerPixel:PenEchoPdf.POINTS_PER_CSS_PIXEL * snapshot.contentWidth / pixels });
+      PenEchoPdf.save(blob, PenEchoPdf.filename(entry.note.title, "penecho-note"));
+      setStatusKey("pdfDownloaded");
+      return true;
+    } catch (error) {
+      const message = `${t("pdfFailed")}: ${String(error?.message || error)}`;
+      if (noteCards.panel === panel && panel) panel.status.textContent = message;
+      setStatus(message);
+      return false;
+    } finally {
+      noteCards.pdfBusy = false;
+      if (button) button.disabled = false;
+    }
   }
   function noteLibraryRequestForget(entry) {
     if (document.querySelector(".note-remove-dialog")) return;
@@ -43636,6 +45646,12 @@ var canvasDocumentIdentity = (() => {
   document.querySelector("#newCanvasBtn").onclick = () => window.PenEchoCompanionCanvases ? void window.PenEchoCompanionCanvases.create() : canvasDocumentsUiAction(openNewCanvasDialog);
   document.querySelector("#saveCanvasBtn").onclick = saveCurrentCanvasFromUser;
   document.querySelector("#exportPngBtn").onclick = exportCanvasPng;
+  // A direct More-menu item: close the menu, then export.
+  document.querySelector("#exportPdfBtn").onclick = () => {
+    const menu = document.querySelector("#canvasMoreMenu");
+    if (menu && !menu.hidden) { menu.hidden = true; document.querySelector("#canvasMoreBtn")?.setAttribute("aria-expanded", "false"); }
+    return exportCanvasPdf();
+  };
   document.querySelector("#historyBtn").onclick = openHistoryPanel;
   document.querySelector("#historyRecentNav").onclick = openHistoryRecent;
   document.querySelector("#historyCanvasNav").onclick = openHistoryCanvas;
@@ -44076,15 +46092,20 @@ var canvasDocumentIdentity = (() => {
   });
   window.PenEchoCloudProjects = Object.freeze({
     currentExecutionScope:canvasAgentCloudExecutionScope,
-    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) ? state.currentSnapshotId : null,
+    // A Canvas kept with its folder page (a guest's, or a signed-out app's) is in
+    // no Cloud library, so it collaborates by a link that needs no account.
+    currentCanvasId:() => state.currentSnapshotLocation === "cloud" && /^[0-9a-f-]{36}$/i.test(String(state.currentSnapshotId || "")) && !folderPageCanvasPath() ? state.currentSnapshotId : null,
     saveEcho:saveEchoToCloud,
     saveForShare:saveLiveShareToCloud,
+    linkBundle:liveLinkCanvasBundle,
     hasShareableContent:canvasHasShareableContent,
     shareWidgetId:(id) => state.widgets.find(widget => widget.id === id)?.shareSourceId || null,
     openHistory:openCloudProjectHistory,
     openCanvas:openCloudCanvas,
     confirmExternalOpen:confirmExternalCanvasOpen,
   });
+  // Collaborate offers the same PDF as the More menu.
+  window.PenEchoCanvasExport = Object.freeze({ pdf:exportCanvasPdf });
   // Companion view controller. The minimal view keeps the narrow rail and
   // hides PenEcho's own Agent and AI chrome; the full view is the complete
   // Canvas. Both show the same document in this tab, and switching is reversible.
@@ -44154,7 +46175,10 @@ var canvasDocumentIdentity = (() => {
   if(window.PENECHO_CONFIG?.runtime!=="cloud")void window.PenEchoPlayground?.start().catch(error=>setStatus(String(error.message)));
   setNavigating(true);
   scheduleAIOrbIdle();
-  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
+  // A folder page of this app opens its draft and connects its agents, as the
+  // Cloud gate does for Cloud's folder pages.
+  const localFolderPage=Boolean(window.PENECHO_CONFIG?.browserDraftId)&&window.PENECHO_CONFIG?.runtime!=="cloud";
+  if(window.PENECHO_CONFIG?.runtime!=="viewer")void (localFolderPage ? canvasDocumentsStartDraft(true).then(()=>{if(new URLSearchParams(location.search).get("mcp")==="1")window.dispatchEvent(new CustomEvent("penecho:open-cloud-mcp"));}) : window.PENECHO_CONFIG?.browserDraftId ? canvasDocumentsReady() : canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")).catch(error=>canvasDocumentsReport(error,()=>canvasDocumentsStartDraft(window.PENECHO_CONFIG?.runtime!=="cloud")));
   requestAnimationFrame(() => {
     if (window.PENECHO_CONFIG?.runtime !== "viewer") void loadCanvasSettings().finally(maybeStartOnboarding);
   });

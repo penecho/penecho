@@ -12,6 +12,18 @@
   body[data-theme="studio"] .topbar #shareCanvasBtn:hover:not(:disabled) { color: #fff; background: var(--pe-accent-strong); border-color: transparent; }
   body[data-theme="studio"] .topbar #shareCanvasBtn:active:not(:disabled) { background: color-mix(in srgb, var(--pe-accent-strong) 80%, #000); }
   body[data-theme="studio"] .topbar #shareCanvasBtn:focus-visible { outline: 2px solid var(--pe-accent); outline-offset: 3px; }
+  /* Collaborate sits beside Share with its name showing, as the outlined companion. */
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    width: auto; height: 28px; min-height: 28px; flex: 0 0 auto; margin-right: 4px;
+    padding: 0 11px; border: 1px solid var(--pe-accent); border-radius: 5px;
+    color: var(--pe-accent-strong); background: transparent; box-shadow: none;
+    font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+  }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn .canvas-share-label { display: inline; }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn:hover:not(:disabled) { background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+  body[data-theme="studio"] .topbar #collaborateCanvasBtn:focus-visible { outline: 2px solid var(--pe-accent); outline-offset: 3px; }
 }
 
 /* PenEcho Studio shell — presentation layer loaded after every other stylesheet.
@@ -2186,7 +2198,50 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
   align-items: center; flex-wrap: nowrap; gap: 6px; padding: 0 8px 0 10px; border: 0; overflow: visible;
 }
 :root[data-penecho-companion="minimal"] body .topbar > .toolbar,
-:root[data-penecho-companion="minimal"] body .topbar :is(.brand, .canvas-file-actions, #cloudAccountBtn, #settingsBtn) { display: none; }
+:root[data-penecho-companion="minimal"] body .topbar :is(.brand, #cloudAccountBtn, #settingsBtn) { display: none; }
+/* The side panel keeps who is here, the clear-up date, Collaborate and Share; the other file actions live in Full Canvas. */
+:root[data-penecho-companion="minimal"] body .topbar .canvas-file-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; margin: 0; }
+:root[data-penecho-companion="minimal"] body .topbar .canvas-file-actions > :is(#newCanvasBtn, #exportPngBtn, #historyBtn) { display: none; }
+/* With room, Share and Collaborate keep their names, both outlined: Save stays the one filled button. */
+@media (min-width: 701px) {
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #shareCanvasBtn { min-width: 0; padding: 0 10px; color: var(--pe-accent-strong); border: 1px solid var(--pe-accent); background: transparent; }
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #shareCanvasBtn:hover:not(:disabled) { color: var(--pe-accent-strong); border-color: var(--pe-accent); background: color-mix(in srgb, var(--pe-accent) 8%, transparent); }
+  :root[data-penecho-companion="minimal"] body[data-theme="studio"] .topbar #collaborateCanvasBtn { margin-right: 0; padding: 0 10px; }
+}
+/* Open Canvases as tabs under the title row; + opens another. */
+.companion-tabs[hidden] { display: none !important; }
+:root[data-penecho-companion="minimal"] body .topbar > .companion-tabs {
+  display: flex; height: 32px; min-height: 32px; box-sizing: border-box; align-items: flex-end; gap: 2px; padding: 0 8px 0 10px;
+  overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--studio-line, #e3e4e8); background: var(--studio-titlebar, #fafafb);
+}
+.companion-tabs::-webkit-scrollbar { display: none; }
+.companion-tab {
+  flex: 0 1 auto; min-width: 44px; max-width: 180px; height: 28px; box-sizing: border-box; margin-bottom: -1px; padding: 0 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  color: var(--studio-muted, #687082); border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; background: transparent;
+  font: 500 12.5px/1 var(--pe-font-ui, system-ui);
+}
+.companion-tab[aria-current="page"] { color: var(--studio-text, #111827); border-color: var(--studio-line, #e3e4e8); background: var(--studio-panel, #ffffff); }
+.companion-tab:hover:not(:disabled):not([aria-current="page"]) { color: var(--studio-text, #111827); background: var(--studio-accent-softer, rgba(79, 70, 229, .06)); }
+.companion-tab:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -2px; }
+.companion-tab-new { flex: 0 0 28px; min-width: 28px; padding: 0; font-size: 17px; font-weight: 400; }
+.companion-tab[aria-current="page"] { padding-right: 26px; }
+.companion-tab-close {
+  position: relative; flex: 0 0 20px; width: 20px; height: 20px; margin: 0 0 4px -24px; padding: 0; cursor: pointer;
+  color: var(--studio-muted, #687082); border: 0; border-radius: 5px; background: transparent; font: 400 15px/1 var(--pe-font-ui, system-ui);
+}
+.companion-tab-close:hover:not(:disabled) { color: var(--studio-text, #111827); background: var(--studio-toolbar, #f3f4f6); }
+.companion-tab-close:focus-visible { outline: 2px solid var(--pe-accent, #4f46e5); outline-offset: -2px; }
+.companion-tab-menu { position: fixed; right: auto; bottom: auto; width: min(260px, calc(100vw - 16px)); max-height: min(360px, calc(100dvh - 96px)); box-sizing: border-box; overflow: auto; margin: 0; padding: 6px; color: var(--studio-text, #202333); background: var(--studio-panel, white); border: 1px solid var(--studio-line, #e3e4e8); border-radius: 10px; box-shadow: 0 8px 30px #18223820; font: 13px/1.5 system-ui; }
+.companion-tab-menu hr { height: 1px; margin: 4px 6px; border: 0; background: var(--studio-line, #e3e4e8); }
+.companion-tab-menu .companion-canvas-row { min-height: 36px; padding: 7px 9px; }
+.companion-tab-menu button:focus-visible { outline: 2px solid var(--studio-accent, #4f46e5); outline-offset: -2px; }
+.companion-project[hidden] { display: none; }
+.companion-project {
+  flex: 0 0 auto; align-self: center; max-width: 180px; margin-right: 6px; padding-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--studio-text, #111827); border-right: 1px solid var(--studio-line, #e3e4e8); font: 600 12.5px/1.6 var(--pe-font-ui, system-ui);
+}
+:root[data-penecho-companion="minimal"] body .topbar:has(> .companion-tabs:not([hidden])) #aiStatusArea { top: 82px; }
 :root[data-penecho-companion="minimal"] body .topbar .canvas-document-meta {
   display: flex; flex: 1 1 auto; min-width: 0; order: 0; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0;
 }
@@ -2276,6 +2331,7 @@ body[data-theme="studio"] #canvasAgentPanel #canvasAgentInput::placeholder { col
 :root[data-penecho-companion="minimal"] body main > footer { min-height: 24px; flex-basis: 24px; }
 @media (max-width: 560px) {
   :root[data-penecho-companion="minimal"] body #coords { display: none; }
+  :root[data-penecho-companion="minimal"] body .topbar #liveExpiry { display: none; }
   :root[data-penecho-companion="minimal"] body .topbar #canvasDocumentSaveLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   :root[data-penecho-companion] body .topbar #companionViewToggle:not([hidden]) { width: 28px; padding: 0; }
   :root[data-penecho-companion] body .topbar .companion-view-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

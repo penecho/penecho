@@ -6,8 +6,10 @@
   // The viewer shell is served at /canvas/view/:itemId on PenEcho Cloud.
   // Everything else (including the regular local app) never enters this mode.
   const match = location.pathname.match(/^\/canvas\/view\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i);
-  const liveMatch = location.pathname.match(/^\/canvas\/share\/([0-9a-f-]{36})\/?$/i);
-  if (!match && !liveMatch) return;
+  const liveMatch = location.pathname.match(/^\/canvas\/(?:share|collaborate)\/([0-9a-f-]{36})\/?$/i);
+  const collaboration = /^\/canvas\/collaborate\//i.test(location.pathname);
+  // A link that allows editing runs the editor, which opens the share itself.
+  if ((!match && !liveMatch) || window.PENECHO_CONFIG?.liveShare) return;
   const live = Boolean(liveMatch), itemId = (liveMatch || match)[1];
   const config = {
     itemId,
@@ -55,6 +57,10 @@
   if (live) {
     Object.assign(COPY.en,{loading:"Opening shared content…",takeFurther:"Edit in my space",copyFailed:"Could not save to your space. Please try again.",failed:"Shared content could not be loaded. Please try again later.",unavailable:"Sharing has been turned off, or this Canvas / Widget has been removed. You can ask the owner for a new link.",backTitle:"PenEcho home"});
     Object.assign(COPY.zh,{loading:"正在打开分享内容…",takeFurther:"在我的空间编辑",copyFailed:"暂时无法保存到你的空间，请重试。",failed:"分享内容暂时无法加载，请稍后重试。",unavailable:"分享已关闭，或此 Canvas / Widget 已被移除。你可以联系分享者获取新的链接。",backTitle:"PenEcho 首页"});
+  }
+  if (collaboration) {
+    COPY.en.unavailable = "This collaboration has ended. Ask the owner for a new link.";
+    COPY.zh.unavailable = "此协作已结束，可以请所有者发一个新链接。";
   }
   let accountState = { kind:"loading", account:null };
   function viewerLanguage() {
@@ -255,6 +261,8 @@
       const bridge = await waitForCanvasBridge();
       if (artifact?.format === "penecho-widget") await bridge.importWidget(artifact, null, { fitViewport:true });
       else await bridge.viewCanvas(artifact);
+      // A shared Canvas keeps following the changes people make after its last save.
+      if (live && payload?.live) window.PenEchoLiveCanvas?.start({ share:itemId }, { have:payload.live.seq || 0 });
       document.getElementById("handToolBtn")?.click();
       status.hidden = true;
       contentReady = true;

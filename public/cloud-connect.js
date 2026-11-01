@@ -500,7 +500,7 @@
   function runtimeApiPath(path, method = "GET") {
     if (!isCloudRuntime()) return path;
     const source = new URL(path, `${location.origin}/`), requestMethod = String(method || "GET").toUpperCase();
-    if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/share$/i.test(source.pathname)) return source.pathname.replace("/api/cloud/", "/api/v1/") + source.search;
+    if (/^\/api\/cloud\/canvases\/[0-9a-f-]{36}\/(?:share|collaboration)$/i.test(source.pathname)) return source.pathname.replace("/api/cloud/", "/api/v1/") + source.search;
     if (/^\/api\/cloud\/mcp(?:\/|$)/.test(source.pathname)) return source.pathname.replace("/api/cloud/mcp","/api/v1/mcp") + source.search;
     if (requestMethod === "GET" && source.pathname === "/api/cloud/library") return `/api/v1/library${source.search ? `${source.search}&` : "?"}previews=0`;
     if (requestMethod === "POST" && source.pathname === "/api/cloud/projects") return "/api/v1/projects";
@@ -769,7 +769,35 @@
   function rememberLiveShare(canvasId, widgetId, share) {
     const key = liveShareKey(canvasId, widgetId);
     liveShareStates.set(key, { shared:Boolean(share) });
+    if (!widgetId) window.PenEchoLiveCanvas?.audience?.(canvasId, "share", Boolean(share));
     notifyLiveShareChange();
+  }
+  // Collaborate has its own link, so its button keeps its own on/off state.
+  const collaborationStates = new Map();
+  const collaborateCanvasButton = document.getElementById("collaborateCanvasBtn");
+  function renderCollaborationStatus() {
+    if (!collaborateCanvasButton) return;
+    const canvasId = currentLiveShareCanvasId();
+    // A Canvas not in Cloud may collaborate by a link it started without an account.
+    collaborateCanvasButton.dataset.collaborating = String(canvasId ? Boolean(collaborationStates.get(liveShareKey(canvasId))?.on) : Boolean(window.PenEchoLiveCanvas?.link?.()));
+  }
+  function rememberCollaboration(canvasId, link) {
+    collaborationStates.set(liveShareKey(canvasId), { on:Boolean(link) });
+    window.PenEchoLiveCanvas?.audience?.(canvasId, "collaboration", Boolean(link));
+    renderCollaborationStatus();
+  }
+  function requestCollaborationStatus(canvasId) {
+    if (!collaborateCanvasButton || !canvasId || !accountSignedIn()) return;
+    const key = liveShareKey(canvasId);
+    if (collaborationStates.has(key) && !collaborationStates.get(key).failed) return;
+    const entry = { on:false };
+    collaborationStates.set(key, entry);
+    void api(`/api/cloud/canvases/${canvasId}/collaboration`).then(({ collaboration }) => {
+      if (collaborationStates.get(key) !== entry) return;
+      entry.on = Boolean(collaboration);
+      window.PenEchoLiveCanvas?.audience?.(canvasId, "collaboration", entry.on);
+      renderCollaborationStatus();
+    }).catch(() => { entry.failed = true; });
   }
   function requestLiveShareStatus(canvasId, widgetId = "") {
     if (!canvasId || !accountSignedIn()) return;
@@ -781,6 +809,7 @@
     void api(`/api/cloud/canvases/${canvasId}/share${suffix}`).then(({ share }) => {
       if (liveShareStates.get(key) !== entry) return;
       entry.shared = Boolean(share);
+      if (!widgetId) window.PenEchoLiveCanvas?.audience?.(canvasId, "share", entry.shared);
       notifyLiveShareChange();
     }).catch(() => { entry.failed = true; });
   }
@@ -788,15 +817,17 @@
     const canvasId = currentLiveShareCanvasId();
     const contextKey = canvasId ? liveShareKey(canvasId) : "";
     if (contextKey !== activeLiveShareContextKey) {
-      if (!contextKey) liveShareStates.clear();
+      if (!contextKey) { liveShareStates.clear(); collaborationStates.clear(); }
       activeLiveShareContextKey = contextKey;
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("penecho:live-share-status-changed"));
     }
     renderCanvasShareStatus();
+    renderCollaborationStatus();
     if (canvasId) {
       const key = liveShareKey(canvasId);
       if (liveShareStates.get(key)?.failed) liveShareStates.delete(key);
       requestLiveShareStatus(canvasId);
+      requestCollaborationStatus(canvasId);
     }
   }
   window.PenEchoLiveShareStatus = Object.freeze({
@@ -808,6 +839,15 @@
     },
   });
   window.addEventListener("penecho:live-share-context-changed", refreshCanvasShareStatus);
+  // A link started without an account moved to the Canvas just saved to Cloud.
+  window.addEventListener("penecho:collaboration-adopted", event => {
+    if (event.detail?.canvasId) rememberCollaboration(event.detail.canvasId, event.detail.collaboration || null);
+  });
+  // "Sign in to save" on a link Canvas: sign in first; signed in, Collaborate offers the save.
+  window.addEventListener("penecho:live-link-save", () => {
+    if (!accountSignedIn()) { state.cloudSection = "account"; void openCloud(); return; }
+    void collaborateDialog();
+  });
 
   function cloudDeviceConnectionStatus(status = state.status) {
     const device = status?.device || {};
@@ -1151,7 +1191,7 @@
       return accountSignedIn() && accountId ? `${cloudOrigin()}:${accountId}` : "";
     },
     signInState:()=>({active:state.browserSignIn.active,url:state.browserSignIn.authorizationUrl,message:state.browserSignIn.message}),
-    signIn:refresh=>window.PENECHO_CONFIG?.browserDraftId ? window.PenEchoBrowserDraft.signIn() : isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
+    signIn:refresh=>window.PENECHO_CONFIG?.browserDraftId && isCloudRuntime() ? window.PenEchoBrowserDraft.signIn() : isCloudRuntime() ? window.open(new URL('/auth.html',cloudOrigin()).toString(),'_blank','noopener') : beginCloudSignIn(refresh),
   };
 
   function devicePanel(render) {
@@ -1876,7 +1916,9 @@
     const scope = el("ul", {class:"live-share-scope","aria-label":text("What sharing means","分享说明")}, [
       scopeItem(text("Public link","公开链接"), text(`Anyone with the link can view ${thisItem} and copy it to edit in their own space. No sign-in needed, no expiry.`, `任何持有链接的人都能查看${thisItem}，并可复制到自己的空间编辑。无需登录，没有有效期。`)
         + (kind === "widget" ? text(` Only ${thisItem} is shared, not the rest of the Canvas.`, `只分享${thisItem}，不含画布上的其他内容。`) : "")),
-      scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
+      kind === "canvas"
+        ? scopeItem(text("Live","实时同步"), text("People with the link see changes as they happen, without waiting for a save.", "持有链接的人会实时看到改动，无需等待保存。"))
+        : scopeItem(text("Stays current","保持同步"), text("Changes you later save to this Cloud Canvas appear at the same link. No separate snapshot is kept.", "之后保存到这份云端 Canvas 的改动会出现在同一链接中，不保留独立快照。")),
       scopeItem(text("You stay in control","随时可关闭"), text("Turn sharing off at any time and the link stops working, including in posts. Public discovery is optional and requires review.", "可随时关闭分享，链接随即失效，包括已发帖子中的链接。可自行选择公开展示，审核通过后才会出现在公开分享页面。")),
     ]);
     const publicToggle=el("input",{type:"checkbox",class:"live-share-public-toggle","data-pe-control":"checkbox","aria-describedby":`${idBase}-public-help`});
@@ -1886,9 +1928,13 @@
     const publicField=el("section",{class:"live-share-public"},[
       el("label",{"data-pe-hit":"choice"},[publicToggle,el("strong",{text:text("Share publicly","公开展示")})]),publicHelp,publicStatus,
     ]);
+    // Share links are view-only; editing together lives under Collaborate.
+    const collaborateEntry = kind === "canvas" && collaborateCanvasButton ? el("p", {class:"live-share-collaborate"}, [
+      el("span", {text:text("Want people to edit with you?","想让别人和你一起编辑？")}),
+      el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact",text:text("Collaborate","协作"),onclick:() => { closeOverlay(shell.overlay); void collaborateDialog({ start:true }); }}),
+    ]) : null;
     const storageNote = el("p", {text:text("This Canvas must be saved to Cloud first. Future saves must go to this Cloud Canvas to update the link.", "需要先将此 Canvas 保存到云端。后续请继续保存到这份云端 Canvas，链接才会更新。")});
-    const emptyMessage = text("Add content to the Canvas before sharing.","请先在画布上添加内容，再开启分享。");
-    const status = el("p", {role:"status","aria-live":"polite",text:emptyCanvas ? emptyMessage : ""});
+    const status = el("p", {role:"status","aria-live":"polite"});
     const link = el("input", {id:`${idBase}-link`,readonly:"","data-pe-control":"input","aria-label":text("Public link","公开链接"),onfocus:() => link.select()});
     const viewPage = el("a", {class:"live-share-view",target:"_blank",rel:"noopener noreferrer","data-pe-button":"ghost","data-pe-density":"compact",text:cloudT("viewPublicPage")});
     const linkRow = el("div", {class:"live-share-label-row"}, [
@@ -1940,7 +1986,6 @@
     function renderSteps() {
       const signedIn = accountSignedIn(), saved = Boolean(canvasId), linked = Boolean(currentShare);
       const items = [];
-      if (kind === "canvas") items.push(shareStep("content", !emptyCanvas, text("Canvas has content","画布已有内容"), emptyCanvas ? text("Draw or add something first.","请先画点什么或添加内容。") : text("Ready to share.","可以分享。")));
       items.push(shareStep("account", signedIn, text("Sign in to PenEcho Cloud","登录 PenEcho Cloud"), text("Share links are hosted by your Cloud account.","分享链接由你的云端账户托管。")));
       items.push(shareStep("cloud", saved, text("Save to Cloud","保存到云端"), saved ? text("Saved. Later saves to this Cloud Canvas update the link.","已保存。之后保存到这份云端 Canvas 会更新链接。") : "", saved ? null : storageNote));
       items.push(shareStep("link", linked, text("Turn on the link","开启链接"), linked ? text("Sharing is on.","已开启分享。") : text("Then copy the link, or post it on X, LinkedIn, or anywhere else.","之后可复制链接，或发到 X、LinkedIn 等任意平台。")));
@@ -1948,7 +1993,7 @@
       if (current) current.dataset.state = "current";
       steps.replaceChildren(...items);
     }
-    shell.body.append(publicField,active,scope,steps,status); shell.dialog.append(footer);
+    shell.body.append(...(collaborateEntry ? [collaborateEntry] : []),publicField,active,scope,steps,status); shell.dialog.append(footer);
     const selection = sourceId ? {widgetId:sourceId} : {};
     const endpoint = () => `/api/cloud/canvases/${canvasId}/share`;
     function setStatus(message, tone = "") {
@@ -1982,7 +2027,8 @@
       link.value=url;
       shell.dialog.dataset.liveShare = shared ? "on" : "off";
       enable.textContent=shared ? text("Copy link","复制链接") : !accountSignedIn() ? text("Sign in / Register","登录 / 注册") : canvasId ? text("Save and enable sharing","保存并开启分享") : text("Save to Cloud and share","保存到云端并开启分享");
-      enable.disabled=busy || (shared ? !url : emptyCanvas); revoke.disabled=busy;
+      enable.disabled=busy || (shared && !url); revoke.disabled=busy;
+      // An empty Canvas can be shared by link; public listing needs content.
       publicToggle.disabled=busy || (emptyCanvas && !currentShare?.public);
       if(currentShare)publicToggle.checked=currentShare.public===true;
       const state=currentShare?.public ? currentShare.moderation?.state || 'pending' : '';
@@ -2006,7 +2052,7 @@
       if(!accountSignedIn()){closeOverlay(shell.overlay);state.cloudSection="account";await openCloud();return;}
       if(currentShare){await copyText(link.value);setStatus(text("Link copied.","链接已复制。"));return;}
       canvasId=await bridge.saveForShare(widgetId);
-      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,...(publicToggle.checked?{public:true}:{})})})).share;
+      currentShare=(await api(endpoint(),{method:"POST",body:JSON.stringify({...selection,...(publicToggle.checked&&!emptyCanvas?{public:true}:{})})})).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
       setStatus(text("Sharing is on. Copy the link or choose where to share.","已开启分享。可复制链接，或选择分享网站。"));
     }));
@@ -2080,7 +2126,7 @@
       currentShare=(await api(endpoint()+(sourceId?`?widgetId=${encodeURIComponent(sourceId)}`:""))).share;
       rememberLiveShare(canvasId, sourceId || "", currentShare);
       if (currentShare && !liveSharePublicUrl(currentShare)) setStatus(text("The public link could not be read. Turn sharing off and on again.","无法读取公开链接，请关闭后重新开启分享。"),"error");
-      else setStatus(emptyCanvas && !currentShare ? emptyMessage : "");
+      else setStatus("");
     });
     async function refreshPublicReview() {
       if(!shell.overlay.isConnected)return;
@@ -2094,6 +2140,133 @@
       if(shell.overlay.isConnected)setTimeout(refreshPublicReview,5000);
     }
     setTimeout(refreshPublicReview,5000);
+  }
+
+  // Collaborate opens the Canvas to editing by link. The link is separate from
+  // Share, and stopping it removes everyone who joined with it.
+  // One click on Collaborate starts it: the shared page is made from this Canvas
+  // and its link copied. No account is needed unless the user saves it.
+  async function collaborateDialog({ start:startNow = false } = {}) {
+    const zh = (document.documentElement.lang || "").startsWith("zh"), text = (en,cn) => zh ? cn : en;
+    const bridge = window.PenEchoCloudProjects, live = window.PenEchoLiveCanvas;
+    const name = String(currentCanvasShareName() || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    let canvasId = bridge?.currentCanvasId(), current = null, busy = false, linked = live?.link?.() || null;
+    // Without an account, or while a link started that way is still open, the
+    // Canvas collaborates by a link Cloud keeps for 7 days after its last change.
+    const byLink = () => !canvasId && (Boolean(linked) || !accountSignedIn());
+    const shell = dialogShell({ title:text("Collaborate","协作"), subtitle:name });
+    shell.dialog.className = "penecho-live-share-dialog penecho-collaborate-dialog";
+    shell.dialog.querySelector(".cloud-dialog-mark")?.remove();
+    Object.assign(shell.dialog.dataset, {peSurface:"form",peSize:"m",peLayout:"single",pePresentation:"modal",peMaterial:"opaque"});
+    const header = shell.dialog.querySelector("header"); header.className=""; header.dataset.peRegion = "header";
+    shell.dialog.querySelector(".cloud-dialog-identity").className="";
+    shell.dialog.querySelector(".cloud-dialog-heading").className="";
+    shell.body.className = ""; shell.body.dataset.peRegion = "body";
+    const idBase = shell.dialog.getAttribute("aria-labelledby");
+    const lead = el("p", {class:"collaborate-lead",text:text("Everyone with the link can draw on this Canvas with you, live.","持有链接的人可以和你实时一起创作这块画布。")});
+    // A Canvas kept on this computer becomes a Cloud Canvas; collaboration continues there.
+    const storageNote = el("p", {class:"collaborate-storage",text:text("Starting saves this Canvas to your PenEcho Cloud, and you keep working on the Cloud copy.","开始协作会把这块画布保存到你的 PenEcho 云端，之后在云端副本上继续创作。")});
+    const link = el("input", {id:`${idBase}-link`,readonly:"","data-pe-control":"input","aria-label":text("Collaboration link","协作链接"),onfocus:() => link.select()});
+    const field = el("div", {class:"live-share-link","data-pe-region":"field"}, [
+      el("div", {class:"live-share-label-row"}, [el("label", {class:"live-share-label",for:`${idBase}-link`,text:text("Collaboration link","协作链接")}), el("span", {class:"live-share-live",text:text("On","已开启")})]),
+      link,
+    ]);
+    const keep = el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact"});
+    const pdf = el("button", {type:"button","data-pe-button":"ghost","data-pe-density":"compact",text:text("Download PDF","下载 PDF")});
+    const expiry = el("div", {class:"collaborate-expiry"}, [el("p", {text:text("Kept 7 days after the last change.","最后一次修改后保留 7 天。")}), el("div", {class:"collaborate-expiry-actions"}, [keep, pdf])]);
+    const status = el("p", {role:"status","aria-live":"polite"});
+    const start = el("button", {type:"button","data-pe-button":"primary","data-pe-density":"standard"});
+    const open = el("button", {type:"button","data-pe-button":"secondary","data-pe-density":"standard",text:text("Open","打开")});
+    const stop = el("button", {type:"button",class:"live-share-revoke","data-pe-button":"danger","data-pe-density":"standard",text:text("Stop collaborating","停止协作")});
+    shell.body.append(lead, storageNote, field, expiry, status);
+    shell.dialog.append(el("footer", {"data-pe-region":"footer"}, [stop, open, start]));
+    const endpoint = () => `/api/cloud/canvases/${canvasId}/collaboration`;
+    function setStatus(message, tone = "") {
+      status.textContent = message;
+      if (tone) status.dataset.tone = tone;
+      else delete status.dataset.tone;
+    }
+    function render() {
+      const viaLink = byLink(), on = viaLink ? Boolean(linked) : Boolean(current);
+      const url = viaLink ? linked?.publicUrl || "" : liveSharePublicUrl(current);
+      field.hidden = !url; link.value = url; open.hidden = !url;
+      stop.hidden = !on || viaLink && !linked?.own;
+      storageNote.hidden = viaLink || Boolean(canvasId) || isCloudRuntime();
+      expiry.hidden = !viaLink || !on;
+      keep.textContent = accountSignedIn() ? text("Save to keep it","保存以保留") : text("Sign in to save","登录以保存");
+      shell.dialog.dataset.liveShare = on ? "on" : "off";
+      start.textContent = on ? text("Copy link","复制链接") : text("Start collaborating","开始协作");
+      start.disabled = busy || Boolean(on && !url); stop.disabled = busy; keep.disabled = busy; pdf.disabled = busy; open.disabled = busy;
+    }
+    // Disabled or hidden controls drop focus; keep keyboard users (and Escape) in the dialog.
+    function restoreFocus() {
+      const focused = document.activeElement;
+      if (!shell.overlay.isConnected || start.disabled) return;
+      if (!focused || focused === document.body || focused.hidden || focused.disabled || !shell.dialog.contains?.(focused)) start.focus({ preventScroll:true });
+    }
+    async function run(action) { if(busy)return; busy=true;setStatus(text("Working…","正在处理…"));render();try{await action();}catch(error){setStatus(error.message,"error");}finally{busy=false;render();restoreFocus();} }
+    const copied = text("Link copied. Send it to the people you want to work with.","链接已复制，发给想一起创作的人吧。");
+    async function startCollaborating() {
+      if (byLink()) {
+        if (!live?.startLink || !bridge?.linkBundle) throw Error(text("Live collaboration is unavailable here.","此处无法实时协作。"));
+        await live.startLink(name || text("Canvas","画布"), await bridge.linkBundle());
+        linked = live.link();
+        renderCollaborationStatus();
+      } else {
+        canvasId = await bridge.saveForShare(null);
+        current = (await api(endpoint(), { method:"POST", body:"{}" })).collaboration;
+        rememberCollaboration(canvasId, current);
+      }
+      render();
+      // The link is ready to paste; if the browser refuses the copy, Copy link is right there.
+      try { await copyText(link.value); setStatus(copied); }
+      catch { setStatus(text("Collaboration is on. Copy the link and send it.","已开启协作，复制链接发给对方即可。")); }
+    }
+    start.addEventListener("click", () => run(async () => {
+      if (byLink() ? linked : current) { await copyText(link.value); setStatus(copied); return; }
+      await startCollaborating();
+    }));
+    open.addEventListener("click", () => { if (link.value) window.open(link.value, "_blank", "noopener"); });
+    stop.addEventListener("click", () => run(async () => {
+      if (byLink()) {
+        await live.endLink();
+        linked = null;
+        renderCollaborationStatus();
+        setStatus(text("Collaboration stopped. People with the link can no longer edit.","已停止协作，持有链接的人不能再编辑。"));
+        return;
+      }
+      await api(endpoint(), { method:"DELETE", body:"{}" });
+      current = null;
+      rememberCollaboration(canvasId, null);
+      setStatus(text("Collaboration stopped. People with the link can no longer edit.","已停止协作，持有链接的人不能再编辑。"));
+    }));
+    // Saving to the signed-in account keeps the Canvas, and its link moves with it.
+    keep.addEventListener("click", () => run(async () => {
+      if (!accountSignedIn()) { closeOverlay(shell.overlay); state.cloudSection = "account"; await openCloud(); return; }
+      const adopted = new Promise(resolve => {
+        const done = event => { window.removeEventListener("penecho:collaboration-adopted", done); resolve(event.detail?.collaboration || null); };
+        window.addEventListener("penecho:collaboration-adopted", done);
+        setTimeout(() => done({}), 15000);
+      });
+      canvasId = await bridge.saveForShare(null);
+      current = await adopted;
+      linked = null;
+      if (!current) throw Error(text("Saved. Open Collaborate again to see the link.","已保存。请重新打开协作查看链接。"));
+      rememberCollaboration(canvasId, current);
+      setStatus(text("Saved to your Cloud. The same link keeps working.","已保存到你的云端，原链接继续有效。"));
+    }));
+    pdf.addEventListener("click", () => run(async () => {
+      if (!window.PenEchoCanvasExport?.pdf) throw Error(text("PDF download is unavailable here.","此处无法下载 PDF。"));
+      await window.PenEchoCanvasExport.pdf();
+      setStatus("");
+    }));
+    render();
+    if (canvasId && accountSignedIn()) await run(async () => {
+      current = (await api(endpoint())).collaboration;
+      rememberCollaboration(canvasId, current);
+      setStatus("");
+    });
+    if (startNow && !(byLink() ? linked : current)) await run(startCollaborating);
   }
 
   function shareDialog({kind,widgetId=null}) {
@@ -3003,6 +3176,7 @@
     void openCloud();
   });
   shareCanvasButton.addEventListener("click", async () => { await refreshStatus(); await liveShareDialog({ kind:"canvas" }); });
+  collaborateCanvasButton?.addEventListener("click", async () => { await refreshStatus(); await collaborateDialog({ start:true }); });
   document.getElementById("echoCanvasBtn")?.addEventListener("click", async () => { await refreshStatus(); shareDialog({kind:"canvas"}); });
   window.addEventListener("penecho:community-widget-action", async (event) => {
     const actionName = event.detail?.action;
