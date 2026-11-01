@@ -245,6 +245,14 @@ test("the tab strip keeps opening order, puts the close button on the open tab a
   assert.deepEqual(strip.names(), ["project", "B", "×", "C", "+"]);
 });
 
+test("every page of a folder shows its project's tabs in the project's order, then its other Canvases", () => {
+  const strip = tabStrip();
+  strip.context.window.PenEchoFolderProject.tabOrder = () => ["canvas-c", "canvas-a"];
+  strip.context.canvasDocuments.records = new Map([["a", { firstSeenAt: 1, locator: { location: "cloud", id: "canvas-a" } }], ["b", { firstSeenAt: 2 }], ["c", { firstSeenAt: 3, locator: { location: "cloud", id: "canvas-c" } }]]);
+  strip.render(["a", "b", "c"], "a");
+  assert.deepEqual(strip.names(), ["project", "C", "A", "×", "B", "+"], "this page opened A first, the project opened C first");
+});
+
 test("+ opens a new Canvas, or lists the project's closed Canvases to reopen", () => {
   const empty = tabStrip();
   empty.render(["a"], "a");

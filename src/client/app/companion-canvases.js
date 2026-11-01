@@ -144,9 +144,11 @@
   function renderCompanionTabs(docs, current, disabled) {
     const tabs = document.getElementById("companionTabs");
     if (!tabs) return;
-    // Tabs keep the order they were opened in; the catalog lists the most recent first.
-    const opened = doc => canvasDocuments.records.get(doc.documentId)?.firstSeenAt || 0;
-    docs = [...docs].sort((a, b) => opened(a) - opened(b) || a.documentId.localeCompare(b.documentId));
+    // Tabs keep the order they were opened in, a folder project's own on all its
+    // pages, then this page's other Canvases; the catalog lists the most recent first.
+    const opened = doc => canvasDocuments.records.get(doc.documentId)?.firstSeenAt || 0, project = window.PenEchoFolderProject?.tabOrder?.() || [];
+    const rank = doc => { const locator = canvasDocuments.records.get(doc.documentId)?.locator, index = locator?.location === "cloud" ? project.indexOf(locator.id) : -1; return index < 0 ? project.length : index; };
+    docs = [...docs].sort((a, b) => rank(a) - rank(b) || opened(a) - opened(b) || a.documentId.localeCompare(b.documentId));
     tabs.hidden = !canvasCompanionMinimal() || !docs.length;
     tabs.setAttribute("aria-label", companionCanvasesCopy("Canvases", "画布"));
     // The folder's project names the strip.

@@ -327,6 +327,7 @@
   if (window.PENECHO_CONFIG?.browserDraftId) window.PenEchoFolderProject = {
     enabled:folderProjectEnabled,
     guest:folderProjectGuest,
+    tabOrder:() => (folderProject.view?.tabs || []).map(tab => tab.canvasId),
     expiresAt:() => folderProjectGuest() ? folderProject.expiresAt : null,
     keep:folderProjectKeep,
     changed:folderProjectChanged,
